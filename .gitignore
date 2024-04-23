@@ -30,4 +30,12 @@
 *.exe
 *.out
 *.app
+
+# Cruft
 .DS_Store
+
+# Intermediates
+build/*
+
+# Ides
+.vscode/
