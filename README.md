@@ -1,13 +1,17 @@
 # YUP: Cross-Platform Application Development Library
 
+[![Prototype](./images/prototype_renderer.png)](https://youtube.com/shorts/3XC4hyDlrVs)
+
+## Disclaimer: The Project Is Still In Embryonic Stage
+
 ## Introduction
-YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application development, featuring state-of-the-art rendering and audio processing. Originating from a fork of JUCE7's ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license, YUP maintains the more permissive ISC license, ensuring that it remains a freely accessible and modifiable resource for developers worldwide.
+YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application development, featuring state-of-the-art rendering and audio processing. Originating from a fork of JUCE7's ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license, ensuring that it remains a freely accessible and modifiable resource for developers worldwide.
 
 ## Features
 YUP brings a suite of powerful features, including:
 - **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source Rive Renderer, backed by Metal, Direct3D, OpenGL and WebGPU.
 - **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more.
-- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux and  (with iOS and Android in the pipe).
+- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux (with Wasm, iOS and Android in the pipe).
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
 
