@@ -1,0 +1,96 @@
+#define VERTEX
+#define ENABLE_CLIP_RECT
+#define ENABLE_CLIPPING
+#define DRAW_INTERIOR_TRIANGLES
+#define ENABLE_ADVANCED_BLEND
+namespace p1111000
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_CLIPPING
+#undef DRAW_INTERIOR_TRIANGLES
+#undef ENABLE_ADVANCED_BLEND
+#undef VERTEX
+
+#define FRAGMENT
+#define ENABLE_CLIP_RECT
+#define ENABLE_NESTED_CLIPPING
+#define ENABLE_EVEN_ODD
+#define ENABLE_CLIPPING
+#define ENABLE_ADVANCED_BLEND
+#define ENABLE_HSL_BLEND_MODES
+#define DRAW_INTERIOR_TRIANGLES
+namespace p1111111
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_NESTED_CLIPPING
+#undef ENABLE_EVEN_ODD
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef ENABLE_HSL_BLEND_MODES
+#undef DRAW_INTERIOR_TRIANGLES
+#undef FRAGMENT
+
+#define VERTEX
+#define ENABLE_CLIP_RECT
+#define ENABLE_CLIPPING
+#define ENABLE_ADVANCED_BLEND
+namespace p0111000
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef VERTEX
+
+#define FRAGMENT
+#define ENABLE_CLIP_RECT
+#define ENABLE_EVEN_ODD
+#define ENABLE_CLIPPING
+#define ENABLE_NESTED_CLIPPING
+#define ENABLE_ADVANCED_BLEND
+#define ENABLE_HSL_BLEND_MODES
+namespace p0111111
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_EVEN_ODD
+#undef ENABLE_CLIPPING
+#undef ENABLE_NESTED_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef ENABLE_HSL_BLEND_MODES
+#undef FRAGMENT
+
+#define VERTEX
+#define ENABLE_CLIP_RECT
+#define ENABLE_CLIPPING
+#define ENABLE_ADVANCED_BLEND
+namespace m0111000
+{
+#include "draw_image_mesh.minified.glsl"
+}
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef VERTEX
+
+#define FRAGMENT
+#define ENABLE_CLIP_RECT
+#define ENABLE_HSL_BLEND_MODES
+#define ENABLE_CLIPPING
+#define ENABLE_ADVANCED_BLEND
+namespace m0111001
+{
+#include "draw_image_mesh.minified.glsl"
+}
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_HSL_BLEND_MODES
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef FRAGMENT
+

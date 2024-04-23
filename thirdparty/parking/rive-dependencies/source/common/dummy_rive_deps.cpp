@@ -1,0 +1,1 @@
+extern void dummy_rive_dependencies() {}
