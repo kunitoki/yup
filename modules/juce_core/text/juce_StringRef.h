@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -97,6 +98,13 @@ public:
     */
     StringRef (const String& string) noexcept;
 
+    /** Creates a StringRef from a String.
+        The StringRef object does NOT take ownership or copy the data from the std::string,
+        so you must ensure that the source string object is not modified or deleted during
+        the lifetime of the StringRef.
+    */
+    StringRef (const std::string& string);
+
     /** Creates a StringRef pointer to an empty string. */
     StringRef() noexcept;
 
@@ -120,6 +128,14 @@ public:
     bool operator== (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) == 0; }
     /** Compares this StringRef with a String. */
     bool operator!= (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) != 0; }
+    /** Compares this StringRef with a String. */
+    bool operator<  (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) < 0; }
+    /** Compares this StringRef with a String. */
+    bool operator<= (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) <= 0; }
+    /** Compares this StringRef with a String. */
+    bool operator>  (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) > 0; }
+    /** Compares this StringRef with a String. */
+    bool operator>= (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) >= 0; }
 
     /** Case-sensitive comparison of two StringRefs. */
     bool operator== (StringRef s) const noexcept                        { return text.compare (s.text) == 0; }
@@ -142,6 +158,14 @@ public:
 JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
 JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, StringRef string2) noexcept;
+/** Case-sensitive comparison of two strings. */
+JUCE_API bool JUCE_CALLTYPE operator<  (const String& string1, StringRef string2) noexcept;
+/** Case-sensitive comparison of two strings. */
+JUCE_API bool JUCE_CALLTYPE operator<= (const String& string1, StringRef string2) noexcept;
+/** Case-sensitive comparison of two strings. */
+JUCE_API bool JUCE_CALLTYPE operator>  (const String& string1, StringRef string2) noexcept;
+/** Case-sensitive comparison of two strings. */
+JUCE_API bool JUCE_CALLTYPE operator>= (const String& string1, StringRef string2) noexcept;
 
 inline String operator+ (String s1, StringRef s2)           { return s1 += String (s2.text); }
 inline String operator+ (StringRef s1, const String& s2)    { return String (s1.text) + s2; }

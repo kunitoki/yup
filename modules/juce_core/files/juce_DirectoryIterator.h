@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -39,12 +40,20 @@
 namespace juce
 {
 
+#ifndef DOXYGEN
+
 //==============================================================================
 /**
+    This class is now deprecated in favour of RangedDirectoryIterator.
+
     Searches through the files in a directory, returning each file that is found.
 
     A DirectoryIterator will search through a directory and its subdirectories using
     a wildcard filepattern match.
+
+    The iterator keeps track of directories that it has previously traversed, and will
+    skip any previously-seen directories in the case of cycles caused by symbolic links.
+    It is also possible to avoid following symbolic links altogether.
 
     If you may be scanning a large number of files, it's usually smarter to use this
     class than File::findChildFiles() because it allows you to stop at any time, rather
@@ -58,6 +67,7 @@ namespace juce
     It also provides an estimate of its progress, using a (highly inaccurate!) algorithm.
 
     @tags{Core}
+    @see RangedDirectoryIterator
 */
 class JUCE_API  DirectoryIterator  final
 {
@@ -78,20 +88,17 @@ public:
         }
         @endcode
 
-        @param directory    the directory to search in
-        @param isRecursive  whether all the subdirectories should also be searched
-        @param wildCard     the file pattern to match. This may contain multiple patterns
-                            separated by a semi-colon or comma, e.g. "*.jpg;*.png"
-        @param whatToLookFor    a value from the File::TypesOfFileToFind enum, specifying
-                                whether to look for files, directories, or both.
+        @see RangedDirectoryIterator
     */
+    [[deprecated ("This class is now deprecated in favour of RangedDirectoryIterator.")]]
     DirectoryIterator (const File& directory,
-                       bool isRecursive,
-                       const String& wildCard = "*",
-                       int whatToLookFor = File::findFiles);
-
-    /** Destructor. */
-    ~DirectoryIterator();
+                       bool recursive,
+                       const String& pattern = "*",
+                       int type = File::findFiles,
+                       File::FollowSymlinks follow = File::FollowSymlinks::yes)
+        : DirectoryIterator (directory, recursive, pattern, type, follow, nullptr)
+    {
+    }
 
     /** Moves the iterator along to the next file.
 
@@ -133,10 +140,42 @@ public:
     float getEstimatedProgress() const;
 
 private:
-    //==============================================================================
-    class NativeIterator
+    using KnownPaths = std::set<File>;
+
+    DirectoryIterator (const File& directory,
+                       bool recursive,
+                       const String& pattern,
+                       int type,
+                       File::FollowSymlinks follow,
+                       KnownPaths* seenPaths)
+            : wildCards (parseWildcards (pattern)),
+              fileFinder (directory, (recursive || wildCards.size() > 1) ? "*" : pattern),
+              wildCard (pattern),
+              path (File::addTrailingSeparator (directory.getFullPathName())),
+              whatToLookFor (type),
+              isRecursive (recursive),
+              followSymlinks (follow),
+              knownPaths (seenPaths)
     {
-    public:
+        // you have to specify the type of files you're looking for!
+        jassert ((whatToLookFor & (File::findFiles | File::findDirectories)) != 0);
+        jassert (whatToLookFor > 0 && whatToLookFor <= 7);
+
+        if (followSymlinks == File::FollowSymlinks::noCycles)
+        {
+            if (knownPaths == nullptr)
+            {
+                heapKnownPaths = std::make_unique<KnownPaths>();
+                knownPaths = heapKnownPaths.get();
+            }
+
+            knownPaths->insert (directory);
+        }
+    }
+
+    //==============================================================================
+    struct NativeIterator
+    {
         NativeIterator (const File& directory, const String& wildCard);
         ~NativeIterator();
 
@@ -145,16 +184,11 @@ private:
                    Time* modTime, Time* creationTime, bool* isReadOnly);
 
         class Pimpl;
-
-    private:
-        friend class DirectoryIterator;
-        friend struct ContainerDeletePolicy<Pimpl>;
-        ScopedPointer<Pimpl> pimpl;
+        std::unique_ptr<Pimpl> pimpl;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NativeIterator)
     };
 
-    friend struct ContainerDeletePolicy<NativeIterator::Pimpl>;
     StringArray wildCards;
     NativeIterator fileFinder;
     String wildCard, path;
@@ -163,13 +197,18 @@ private:
     const int whatToLookFor;
     const bool isRecursive;
     bool hasBeenAdvanced = false;
-    ScopedPointer<DirectoryIterator> subIterator;
+    std::unique_ptr<DirectoryIterator> subIterator;
     File currentFile;
+    File::FollowSymlinks followSymlinks = File::FollowSymlinks::yes;
+    KnownPaths* knownPaths = nullptr;
+    std::unique_ptr<KnownPaths> heapKnownPaths;
 
     static StringArray parseWildcards (const String& pattern);
     static bool fileMatches (const StringArray& wildCards, const String& filename);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DirectoryIterator)
 };
+
+#endif
 
 } // namespace juce

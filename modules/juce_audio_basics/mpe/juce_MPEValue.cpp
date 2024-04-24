@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -57,6 +58,18 @@ MPEValue MPEValue::from14BitInt (int value) noexcept
 {
     jassert (value >= 0 && value <= 16383);
     return { value };
+}
+
+MPEValue MPEValue::fromUnsignedFloat (float value) noexcept
+{
+    jassert (0.0f <= value && value <= 1.0f);
+    return { roundToInt (value * 16383.0f) };
+}
+
+MPEValue MPEValue::fromSignedFloat (float value) noexcept
+{
+    jassert (-1.0f <= value && value <= 1.0f);
+    return { roundToInt (((value + 1.0f) * 16383.0f) / 2.0f) };
 }
 
 //==============================================================================
@@ -98,14 +111,17 @@ bool MPEValue::operator!= (const MPEValue& other) const noexcept
     return ! operator== (other);
 }
 
+
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class MPEValueTests  : public UnitTest
+class MPEValueTests final : public UnitTest
 {
 public:
-    MPEValueTests() : UnitTest ("MPEValue class", "MIDI/MPE") {}
+    MPEValueTests()
+        : UnitTest ("MPEValue class", UnitTestCategories::midi)
+    {}
 
     void runTest() override
     {
@@ -134,26 +150,34 @@ public:
 
         beginTest ("zero/minimum value");
         {
-            expectValuesConsistent (MPEValue::from7BitInt (0),  0, 0, -1.0f, 0.0f);
-            expectValuesConsistent (MPEValue::from14BitInt (0), 0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::from7BitInt       (0),     0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::from14BitInt      (0),     0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::fromUnsignedFloat (0.0f),  0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::fromSignedFloat   (-1.0f), 0, 0, -1.0f, 0.0f);
         }
 
         beginTest ("maximum value");
         {
-            expectValuesConsistent (MPEValue::from7BitInt (127),    127, 16383, 1.0f, 1.0f);
-            expectValuesConsistent (MPEValue::from14BitInt (16383), 127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::from7BitInt       (127),   127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::from14BitInt      (16383), 127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::fromUnsignedFloat (1.0f),  127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::fromSignedFloat   (1.0f),  127, 16383, 1.0f, 1.0f);
         }
 
         beginTest ("centre value");
         {
-            expectValuesConsistent (MPEValue::from7BitInt (64),    64, 8192, 0.0f, 0.5f);
-            expectValuesConsistent (MPEValue::from14BitInt (8192), 64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::from7BitInt       (64),   64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::from14BitInt      (8192), 64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::fromUnsignedFloat (0.5f), 64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::fromSignedFloat   (0.0f), 64, 8192, 0.0f, 0.5f);
         }
 
         beginTest ("value halfway between min and centre");
         {
-            expectValuesConsistent (MPEValue::from7BitInt (32),    32, 4096, -0.5f, 0.25f);
-            expectValuesConsistent (MPEValue::from14BitInt (4096), 32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::from7BitInt       (32),    32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::from14BitInt      (4096),  32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::fromUnsignedFloat (0.25f), 32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::fromSignedFloat   (-0.5f), 32, 4096, -0.5f, 0.25f);
         }
     }
 
@@ -181,6 +205,6 @@ private:
 
 static MPEValueTests MPEValueUnitTests;
 
-#endif // JUCE_UNIT_TESTS
+#endif
 
 } // namespace juce

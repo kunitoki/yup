@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -48,9 +49,7 @@ namespace juce
 struct JUCE_API  AudioSourceChannelInfo
 {
     /** Creates an uninitialised AudioSourceChannelInfo. */
-    AudioSourceChannelInfo() noexcept
-    {
-    }
+    AudioSourceChannelInfo() = default;
 
     /** Creates an AudioSourceChannelInfo. */
     AudioSourceChannelInfo (AudioBuffer<float>* bufferToUse,
@@ -129,18 +128,18 @@ class JUCE_API  AudioSource
 protected:
     //==============================================================================
     /** Creates an AudioSource. */
-    AudioSource() noexcept      {}
+    AudioSource() = default;
 
 public:
     /** Destructor. */
-    virtual ~AudioSource()      {}
+    virtual ~AudioSource()      = default;
 
     //==============================================================================
     /** Tells the source to prepare for playing.
 
         An AudioSource has two states: prepared and unprepared.
 
-        The prepareToPlay() method is guaranteed to be called at least once on an 'unpreprared'
+        The prepareToPlay() method is guaranteed to be called at least once on an 'unprepared'
         source to put it into a 'prepared' state before any calls will be made to getNextAudioBlock().
         This callback allows the source to initialise any resources it might need when playing.
 

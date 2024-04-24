@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -41,34 +42,76 @@ namespace juce
 
 struct JSONParser
 {
-    static Result parseObjectOrArray (String::CharPointerType t, var& result)
-    {
-        t = t.findEndOfWhitespace();
+    JSONParser (String::CharPointerType text) : startLocation (text), currentLocation (text) {}
 
-        switch (t.getAndAdvance())
+    String::CharPointerType startLocation, currentLocation;
+
+    struct ErrorException
+    {
+        String message;
+        int line = 1, column = 1;
+
+        String getDescription() const   { return String (line) + ":" + String (column) + ": error: " + message; }
+        Result getResult() const        { return Result::fail (getDescription()); }
+    };
+
+    [[noreturn]] void throwError (juce::String message, String::CharPointerType location)
+    {
+        ErrorException e;
+        e.message = std::move (message);
+
+        for (auto i = startLocation; i < location && ! i.isEmpty(); ++i)
         {
-            case 0:      result = var(); return Result::ok();
-            case '{':    return parseObject (t, result);
-            case '[':    return parseArray  (t, result);
+            ++e.column;
+            if (*i == '\n')  { e.column = 1; e.line++; }
         }
 
-        return createFail ("Expected '{' or '['", &t);
+        throw e;
     }
 
-    static Result parseString (const juce_wchar quoteChar, String::CharPointerType& t, var& result)
+    void skipWhitespace()             { currentLocation = currentLocation.findEndOfWhitespace(); }
+    juce_wchar readChar()             { return currentLocation.getAndAdvance(); }
+    juce_wchar peekChar() const       { return *currentLocation; }
+    bool matchIf (char c)             { if (peekChar() == (juce_wchar) c) { ++currentLocation; return true; } return false; }
+    bool isEOF() const                { return peekChar() == 0; }
+
+    bool matchString (const char* t)
+    {
+        while (*t != 0)
+            if (! matchIf (*t++))
+                return false;
+
+        return true;
+    }
+
+    var parseObjectOrArray()
+    {
+        skipWhitespace();
+
+        if (matchIf ('{')) return parseObject();
+        if (matchIf ('[')) return parseArray();
+
+        if (! isEOF())
+            throwError ("Expected '{' or '['", currentLocation);
+
+        return {};
+    }
+
+    String parseString (const juce_wchar quoteChar)
     {
         MemoryOutputStream buffer (256);
 
         for (;;)
         {
-            auto c = t.getAndAdvance();
+            auto c = readChar();
 
             if (c == quoteChar)
                 break;
 
             if (c == '\\')
             {
-                c = t.getAndAdvance();
+                auto errorLocation = currentLocation;
+                c = readChar();
 
                 switch (c)
                 {
@@ -90,109 +133,87 @@ struct JSONParser
 
                         for (int i = 4; --i >= 0;)
                         {
-                            auto digitValue = CharacterFunctions::getHexDigitValue (t.getAndAdvance());
+                            auto digitValue = CharacterFunctions::getHexDigitValue (readChar());
 
                             if (digitValue < 0)
-                                return createFail ("Syntax error in unicode escape sequence");
+                                throwError ("Syntax error in unicode escape sequence", errorLocation);
 
                             c = (juce_wchar) ((c << 4) + static_cast<juce_wchar> (digitValue));
                         }
 
                         break;
                     }
+
+                    default:  break;
                 }
             }
 
             if (c == 0)
-                return createFail ("Unexpected end-of-input in string constant");
+                throwError ("Unexpected EOF in string constant", currentLocation);
 
             buffer.appendUTF8Char (c);
         }
 
-        result = buffer.toUTF8();
-        return Result::ok();
+        return buffer.toUTF8();
     }
 
-    static Result parseAny (String::CharPointerType& t, var& result)
+    var parseAny()
     {
-        t = t.findEndOfWhitespace();
-        auto t2 = t;
+        skipWhitespace();
+        auto originalLocation = currentLocation;
 
-        switch (t2.getAndAdvance())
+        switch (readChar())
         {
-            case '{':    t = t2; return parseObject (t, result);
-            case '[':    t = t2; return parseArray  (t, result);
-            case '"':    t = t2; return parseString ('"',  t, result);
-            case '\'':   t = t2; return parseString ('\'', t, result);
+            case '{':    return parseObject();
+            case '[':    return parseArray();
+            case '"':    return parseString ('"');
+            case '\'':   return parseString ('\'');
 
             case '-':
-                t2 = t2.findEndOfWhitespace();
-                if (! CharacterFunctions::isDigit (*t2))
-                    break;
-
-                t = t2;
-                return parseNumber (t, result, true);
+                skipWhitespace();
+                return parseNumber (true);
 
             case '0': case '1': case '2': case '3': case '4':
             case '5': case '6': case '7': case '8': case '9':
-                return parseNumber (t, result, false);
+                currentLocation = originalLocation;
+                return parseNumber (false);
 
             case 't':   // "true"
-                if (t2.getAndAdvance() == 'r' && t2.getAndAdvance() == 'u' && t2.getAndAdvance() == 'e')
-                {
-                    t = t2;
-                    result = var (true);
-                    return Result::ok();
-                }
+                if (matchString ("rue"))
+                    return var (true);
+
                 break;
 
             case 'f':   // "false"
-                if (t2.getAndAdvance() == 'a' && t2.getAndAdvance() == 'l'
-                      && t2.getAndAdvance() == 's' && t2.getAndAdvance() == 'e')
-                {
-                    t = t2;
-                    result = var (false);
-                    return Result::ok();
-                }
+                if (matchString ("alse"))
+                    return var (false);
+
                 break;
 
             case 'n':   // "null"
-                if (t2.getAndAdvance() == 'u' && t2.getAndAdvance() == 'l' && t2.getAndAdvance() == 'l')
-                {
-                    t = t2;
-                    result = var();
-                    return Result::ok();
-                }
+                if (matchString ("ull"))
+                    return {};
+
                 break;
 
             default:
                 break;
         }
 
-        return createFail ("Syntax error", &t);
+        throwError ("Syntax error", originalLocation);
     }
 
-private:
-    static Result createFail (const char* const message, const String::CharPointerType* location = nullptr)
+    var parseNumber (bool isNegative)
     {
-        String m (message);
-        if (location != nullptr)
-            m << ": \"" << String (*location, 20) << '"';
+        auto originalPos = currentLocation;
 
-        return Result::fail (m);
-    }
-
-    static Result parseNumber (String::CharPointerType& t, var& result, const bool isNegative)
-    {
-        auto oldT = t;
-
-        int64 intValue = t.getAndAdvance() - '0';
+        int64 intValue = readChar() - '0';
         jassert (intValue >= 0 && intValue < 10);
 
         for (;;)
         {
-            auto previousChar = t;
-            auto c = t.getAndAdvance();
+            auto lastPos = currentLocation;
+            auto c = readChar();
             auto digit = ((int) c) - '0';
 
             if (isPositiveAndBelow (digit, 10))
@@ -203,189 +224,105 @@ private:
 
             if (c == 'e' || c == 'E' || c == '.')
             {
-                t = oldT;
-                auto asDouble = CharacterFunctions::readDoubleValue (t);
-                result = isNegative ? -asDouble : asDouble;
-                return Result::ok();
+                currentLocation = originalPos;
+                auto asDouble = CharacterFunctions::readDoubleValue (currentLocation);
+                return var (isNegative ? -asDouble : asDouble);
             }
 
             if (CharacterFunctions::isWhitespace (c)
                  || c == ',' || c == '}' || c == ']' || c == 0)
             {
-                t = previousChar;
+                currentLocation = lastPos;
                 break;
             }
 
-            return createFail ("Syntax error in number", &oldT);
+            throwError ("Syntax error in number", lastPos);
         }
 
         auto correctedValue = isNegative ? -intValue : intValue;
 
-        if ((intValue >> 31) != 0)
-            result = correctedValue;
-        else
-            result = (int) correctedValue;
-
-        return Result::ok();
+        return (intValue >> 31) != 0 ? var (correctedValue)
+                                     : var ((int) correctedValue);
     }
 
-    static Result parseObject (String::CharPointerType& t, var& result)
+    var parseObject()
     {
         auto resultObject = new DynamicObject();
-        result = resultObject;
+        var result (resultObject);
         auto& resultProperties = resultObject->getProperties();
+        auto startOfObjectDecl = currentLocation;
 
         for (;;)
         {
-            t = t.findEndOfWhitespace();
-
-            auto oldT = t;
-            auto c = t.getAndAdvance();
+            skipWhitespace();
+            auto errorLocation = currentLocation;
+            auto c = readChar();
 
             if (c == '}')
                 break;
 
             if (c == 0)
-                return createFail ("Unexpected end-of-input in object declaration");
+                throwError ("Unexpected EOF in object declaration", startOfObjectDecl);
 
-            if (c == '"')
-            {
-                var propertyNameVar;
-                auto r = parseString ('"', t, propertyNameVar);
+            if (c != '"')
+                throwError ("Expected a property name in double-quotes", errorLocation);
 
-                if (r.failed())
-                    return r;
+            errorLocation = currentLocation;
+            Identifier propertyName (parseString ('"'));
 
-                const Identifier propertyName (propertyNameVar.toString());
+            if (! propertyName.isValid())
+                throwError ("Invalid property name", errorLocation);
 
-                if (propertyName.isValid())
-                {
-                    t = t.findEndOfWhitespace();
-                    oldT = t;
+            skipWhitespace();
+            errorLocation = currentLocation;
 
-                    auto c2 = t.getAndAdvance();
+            if (readChar() != ':')
+                throwError ("Expected ':'", errorLocation);
 
-                    if (c2 != ':')
-                        return createFail ("Expected ':', but found", &oldT);
+            resultProperties.set (propertyName, parseAny());
 
-                    resultProperties.set (propertyName, var());
-                    var* propertyValue = resultProperties.getVarPointer (propertyName);
+            skipWhitespace();
+            if (matchIf (',')) continue;
+            if (matchIf ('}')) break;
 
-                    auto r2 = parseAny (t, *propertyValue);
-
-                    if (r2.failed())
-                        return r2;
-
-                    t = t.findEndOfWhitespace();
-                    oldT = t;
-
-                    auto nextChar = t.getAndAdvance();
-
-                    if (nextChar == ',')
-                        continue;
-
-                    if (nextChar == '}')
-                        break;
-                }
-            }
-
-            return createFail ("Expected object member declaration, but found", &oldT);
+            throwError ("Expected ',' or '}'", currentLocation);
         }
 
-        return Result::ok();
+        return result;
     }
 
-    static Result parseArray (String::CharPointerType& t, var& result)
+    var parseArray()
     {
-        result = var (Array<var>());
-        auto* destArray = result.getArray();
+        auto result = var (Array<var>());
+        auto destArray = result.getArray();
+        auto startOfArrayDecl = currentLocation;
 
         for (;;)
         {
-            t = t.findEndOfWhitespace();
+            skipWhitespace();
 
-            auto oldT = t;
-            auto c = t.getAndAdvance();
-
-            if (c == ']')
+            if (matchIf (']'))
                 break;
 
-            if (c == 0)
-                return createFail ("Unexpected end-of-input in array declaration");
+            if (isEOF())
+                throwError ("Unexpected EOF in array declaration", startOfArrayDecl);
 
-            t = oldT;
-            destArray->add (var());
-            auto r = parseAny (t, destArray->getReference (destArray->size() - 1));
+            destArray->add (parseAny());
+            skipWhitespace();
 
-            if (r.failed())
-                return r;
+            if (matchIf (',')) continue;
+            if (matchIf (']')) break;
 
-            t = t.findEndOfWhitespace();
-            oldT = t;
-
-            auto nextChar = t.getAndAdvance();
-
-            if (nextChar == ',')
-                continue;
-
-            if (nextChar == ']')
-                break;
-
-            return createFail ("Expected object array item, but found", &oldT);
+            throwError ("Expected ',' or ']'", currentLocation);
         }
 
-        return Result::ok();
+        return result;
     }
 };
 
 //==============================================================================
 struct JSONFormatter
 {
-    static void write (OutputStream& out, const var& v,
-                       int indentLevel, bool allOnOneLine, int maximumDecimalPlaces)
-    {
-        if (v.isString())
-        {
-            out << '"';
-            writeString (out, v.toString().getCharPointer());
-            out << '"';
-        }
-        else if (v.isVoid())
-        {
-            out << "null";
-        }
-        else if (v.isUndefined())
-        {
-            out << "undefined";
-        }
-        else if (v.isBool())
-        {
-            out << (static_cast<bool> (v) ? "true" : "false");
-        }
-        else if (v.isDouble())
-        {
-            out << String (static_cast<double> (v), maximumDecimalPlaces);
-        }
-        else if (v.isArray())
-        {
-            writeArray (out, *v.getArray(), indentLevel, allOnOneLine, maximumDecimalPlaces);
-        }
-        else if (v.isObject())
-        {
-            if (auto* object = v.getDynamicObject())
-                object->writeAsJSON (out, indentLevel, allOnOneLine, maximumDecimalPlaces);
-            else
-                jassertfalse; // Only DynamicObjects can be converted to JSON!
-        }
-        else
-        {
-            // Can't convert these other types of object to JSON!
-            jassert (! (v.isMethod() || v.isBinaryData()));
-
-            out << v.toString();
-        }
-    }
-
     static void writeEscapedChar (OutputStream& out, const unsigned short value)
     {
         out << "\\u" << String::toHexString ((int) value).paddedLeft ('0', 4);
@@ -442,36 +379,39 @@ struct JSONFormatter
         out.writeRepeatedByte (' ', (size_t) numSpaces);
     }
 
-    static void writeArray (OutputStream& out, const Array<var>& array,
-                            int indentLevel, bool allOnOneLine, int maximumDecimalPlaces)
+    static void writeArray (OutputStream& out, const Array<var>& array, const JSON::FormatOptions& format)
     {
         out << '[';
 
         if (! array.isEmpty())
         {
-            if (! allOnOneLine)
+            if (format.getSpacing() == JSON::Spacing::multiLine)
                 out << newLine;
 
             for (int i = 0; i < array.size(); ++i)
             {
-                if (! allOnOneLine)
-                    writeSpaces (out, indentLevel + indentSize);
+                if (format.getSpacing() == JSON::Spacing::multiLine)
+                    writeSpaces (out, format.getIndentLevel() + indentSize);
 
-                write (out, array.getReference(i), indentLevel + indentSize, allOnOneLine, maximumDecimalPlaces);
+                JSON::writeToStream (out, array.getReference (i), format.withIndentLevel (format.getIndentLevel() + indentSize));
 
                 if (i < array.size() - 1)
                 {
-                    if (allOnOneLine)
-                        out << ", ";
-                    else
-                        out << ',' << newLine;
+                    out << ",";
+
+                    switch (format.getSpacing())
+                    {
+                        case JSON::Spacing::none: break;
+                        case JSON::Spacing::singleLine: out << ' '; break;
+                        case JSON::Spacing::multiLine: out << newLine; break;
+                    }
                 }
-                else if (! allOnOneLine)
+                else if (format.getSpacing() == JSON::Spacing::multiLine)
                     out << newLine;
             }
 
-            if (! allOnOneLine)
-                writeSpaces (out, indentLevel);
+            if (format.getSpacing() == JSON::Spacing::multiLine)
+                writeSpaces (out, format.getIndentLevel());
         }
 
         out << ']';
@@ -480,25 +420,87 @@ struct JSONFormatter
     enum { indentSize = 2 };
 };
 
+
+void JSON::writeToStream (OutputStream& out, const var& v, const FormatOptions& opt)
+{
+    if (v.isString())
+    {
+        out << '"';
+        JSONFormatter::writeString (out, v.toString().getCharPointer());
+        out << '"';
+    }
+    else if (v.isVoid())
+    {
+        out << "null";
+    }
+    else if (v.isUndefined())
+    {
+        out << "undefined";
+    }
+    else if (v.isBool())
+    {
+        out << (static_cast<bool> (v) ? "true" : "false");
+    }
+    else if (v.isDouble())
+    {
+        auto d = static_cast<double> (v);
+
+        if (juce_isfinite (d))
+        {
+            out << serialiseDouble (d);
+        }
+        else
+        {
+            out << "null";
+        }
+    }
+    else if (v.isArray())
+    {
+        JSONFormatter::writeArray (out, *v.getArray(), opt);
+    }
+    else if (v.isObject())
+    {
+        if (auto* object = v.getDynamicObject())
+            object->writeAsJSON (out, opt);
+        else
+            jassertfalse; // Only DynamicObjects can be converted to JSON!
+    }
+    else
+    {
+        // Can't convert these other types of object to JSON!
+        jassert (! (v.isMethod() || v.isBinaryData()));
+
+        out << v.toString();
+    }
+}
+
+String JSON::toString (const var& v, const FormatOptions& opt)
+{
+    MemoryOutputStream mo { 1024 };
+    writeToStream (mo, v, opt);
+    return mo.toUTF8();
+}
+
 //==============================================================================
 var JSON::parse (const String& text)
 {
     var result;
 
-    if (! parse (text, result))
-        result = var();
+    if (parse (text, result))
+        return result;
 
-    return result;
+    return {};
 }
 
 var JSON::fromString (StringRef text)
 {
-    var result;
+    try
+    {
+        return JSONParser (text.text).parseAny();
+    }
+    catch (const JSONParser::ErrorException&) {}
 
-    if (! JSONParser::parseAny (text.text, result))
-        result = var();
-
-    return result;
+    return {};
 }
 
 var JSON::parse (InputStream& input)
@@ -513,19 +515,28 @@ var JSON::parse (const File& file)
 
 Result JSON::parse (const String& text, var& result)
 {
-    return JSONParser::parseObjectOrArray (text.getCharPointer(), result);
+    try
+    {
+        result = JSONParser (text.getCharPointer()).parseObjectOrArray();
+    }
+    catch (const JSONParser::ErrorException& error)
+    {
+        return error.getResult();
+    }
+
+    return Result::ok();
 }
 
 String JSON::toString (const var& data, const bool allOnOneLine, int maximumDecimalPlaces)
 {
-    MemoryOutputStream mo (1024);
-    JSONFormatter::write (mo, data, 0, allOnOneLine, maximumDecimalPlaces);
-    return mo.toUTF8();
+    return toString (data, FormatOptions{}.withSpacing (allOnOneLine ? Spacing::singleLine : Spacing::multiLine)
+                                          .withMaxDecimalPlaces (maximumDecimalPlaces));
 }
 
 void JSON::writeToStream (OutputStream& output, const var& data, const bool allOnOneLine, int maximumDecimalPlaces)
 {
-    JSONFormatter::write (output, data, 0, allOnOneLine, maximumDecimalPlaces);
+    writeToStream (output, data, FormatOptions{}.withSpacing (allOnOneLine ? Spacing::singleLine : Spacing::multiLine)
+                                                .withMaxDecimalPlaces (maximumDecimalPlaces));
 }
 
 String JSON::escapeString (StringRef s)
@@ -537,22 +548,36 @@ String JSON::escapeString (StringRef s)
 
 Result JSON::parseQuotedString (String::CharPointerType& t, var& result)
 {
-    auto quote = t.getAndAdvance();
+    try
+    {
+        JSONParser parser (t);
+        auto quote = parser.readChar();
 
-    if (quote == '"' || quote == '\'')
-        return JSONParser::parseString (quote, t, result);
+        if (quote != '"' && quote != '\'')
+            return Result::fail ("Not a quoted string!");
 
-    return Result::fail ("Not a quoted string!");
+        result = parser.parseString (quote);
+        t = parser.currentLocation;
+    }
+    catch (const JSONParser::ErrorException& error)
+    {
+        return error.getResult();
+    }
+
+    return Result::ok();
 }
+
 
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class JSONTests  : public UnitTest
+class JSONTests final : public UnitTest
 {
 public:
-    JSONTests() : UnitTest ("JSON", "JSON") {}
+    JSONTests()
+        : UnitTest ("JSON", UnitTestCategories::json)
+    {}
 
     static String createRandomWideCharString (Random& r)
     {
@@ -618,7 +643,7 @@ public:
 
             case 7:
             {
-                DynamicObject* o = new DynamicObject();
+                auto o = new DynamicObject();
 
                 for (int i = r.nextInt (30); --i >= 0;)
                     o->setProperty (createRandomIdentifier (r), createRandomVar (r, depth + 1));
@@ -633,31 +658,57 @@ public:
 
     void runTest() override
     {
-        beginTest ("JSON");
-        Random r = getRandom();
-
-        expect (JSON::parse (String()) == var());
-        expect (JSON::parse ("{}").isObject());
-        expect (JSON::parse ("[]").isArray());
-        expect (JSON::parse ("[ 1234 ]")[0].isInt());
-        expect (JSON::parse ("[ 12345678901234 ]")[0].isInt64());
-        expect (JSON::parse ("[ 1.123e3 ]")[0].isDouble());
-        expect (JSON::parse ("[ -1234]")[0].isInt());
-        expect (JSON::parse ("[-12345678901234]")[0].isInt64());
-        expect (JSON::parse ("[-1.123e3]")[0].isDouble());
-
-        for (int i = 100; --i >= 0;)
         {
-            var v;
+            beginTest ("JSON");
 
-            if (i > 0)
-                v = createRandomVar (r, 0);
+            auto r = getRandom();
 
-            const bool oneLine = r.nextBool();
-            String asString (JSON::toString (v, oneLine));
-            var parsed = JSON::parse ("[" + asString + "]")[0];
-            String parsedString (JSON::toString (parsed, oneLine));
-            expect (asString.isNotEmpty() && parsedString == asString);
+            expect (JSON::parse (String()) == var());
+            expect (JSON::parse ("{}").isObject());
+            expect (JSON::parse ("[]").isArray());
+            expect (JSON::parse ("[ 1234 ]")[0].isInt());
+            expect (JSON::parse ("[ 12345678901234 ]")[0].isInt64());
+            expect (JSON::parse ("[ 1.123e3 ]")[0].isDouble());
+            expect (JSON::parse ("[ -1234]")[0].isInt());
+            expect (JSON::parse ("[-12345678901234]")[0].isInt64());
+            expect (JSON::parse ("[-1.123e3]")[0].isDouble());
+
+            for (int i = 100; --i >= 0;)
+            {
+                var v;
+
+                if (i > 0)
+                    v = createRandomVar (r, 0);
+
+                const auto oneLine = r.nextBool();
+                const auto asString = JSON::toString (v, oneLine);
+                const auto parsed = JSON::parse ("[" + asString + "]")[0];
+                const auto parsedString = JSON::toString (parsed, oneLine);
+                expect (asString.isNotEmpty() && parsedString == asString);
+            }
+        }
+
+        {
+            beginTest ("Float formatting");
+
+            std::map<double, String> tests;
+            tests[1] = "1.0";
+            tests[1.1] = "1.1";
+            tests[1.01] = "1.01";
+            tests[0.76378] = "0.76378";
+            tests[-10] = "-10.0";
+            tests[10.01] = "10.01";
+            tests[0.0123] = "0.0123";
+            tests[-3.7e-27] = "-3.7e-27";
+            tests[1e+40] = "1.0e40";
+            tests[-12345678901234567.0] = "-1.234567890123457e16";
+            tests[192000] = "192000.0";
+            tests[1234567] = "1.234567e6";
+            tests[0.00006] = "0.00006";
+            tests[0.000006] = "6.0e-6";
+
+            for (auto& test : tests)
+                expectEquals (JSON::toString (test.first), test.second);
         }
     }
 };

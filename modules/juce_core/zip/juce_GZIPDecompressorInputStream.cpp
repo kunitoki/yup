@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -39,23 +40,21 @@
 namespace juce
 {
 
-#if JUCE_MSVC
- #pragma warning (push)
- #pragma warning (disable: 4309 4305 4365)
-#endif
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4309 4305 4365 6385 6326 6340)
 
 namespace zlibNamespace
 {
  #if JUCE_INCLUDE_ZLIB_CODE
-  #if JUCE_CLANG
-   #pragma clang diagnostic push
-   #pragma clang diagnostic ignored "-Wconversion"
-   #pragma clang diagnostic ignored "-Wshadow"
-   #pragma clang diagnostic ignored "-Wdeprecated-register"
-   #if __has_warning("-Wcomma")
-    #pragma clang diagnostic ignored "-Wcomma"
-   #endif
-  #endif
+  JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wconversion",
+                                       "-Wsign-conversion",
+                                       "-Wshadow",
+                                       "-Wdeprecated-register",
+                                       "-Wswitch-enum",
+                                       "-Wswitch-default",
+                                       "-Wredundant-decls",
+                                       "-Wimplicit-fallthrough",
+                                       "-Wzero-as-null-pointer-constant",
+                                       "-Wcomma")
 
   #undef OS_CODE
   #undef fdopen
@@ -88,9 +87,7 @@ namespace zlibNamespace
   #undef Dad
   #undef Len
 
-  #if JUCE_CLANG
-   #pragma clang diagnostic pop
-  #endif
+  JUCE_END_IGNORE_WARNINGS_GCC_LIKE
  #else
   #include JUCE_ZLIB_INCLUDE_PATH
 
@@ -105,9 +102,7 @@ namespace zlibNamespace
  #endif
 }
 
-#if JUCE_MSVC
- #pragma warning (pop)
-#endif
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 //==============================================================================
 // internal helper object that holds the zlib structures so they don't have to be
@@ -152,7 +147,7 @@ public:
             {
             case Z_STREAM_END:
                 finished = true;
-                // deliberate fall-through
+                JUCE_FALLTHROUGH
             case Z_OK:
                 data += dataSize - stream.avail_in;
                 dataSize = (z_uInt) stream.avail_in;
@@ -167,7 +162,7 @@ public:
             case Z_DATA_ERROR:
             case Z_MEM_ERROR:
                 error = true;
-
+                JUCE_FALLTHROUGH
             default:
                 break;
             }
@@ -286,7 +281,7 @@ int GZIPDecompressorInputStream::read (void* destBuffer, int howMany)
 
 bool GZIPDecompressorInputStream::isExhausted()
 {
-    return helper->error || isEof;
+    return helper->error || helper->finished || isEof;
 }
 
 int64 GZIPDecompressorInputStream::getPosition()
@@ -310,5 +305,85 @@ bool GZIPDecompressorInputStream::setPosition (int64 newPos)
     skipNextBytes (newPos - currentPos);
     return true;
 }
+
+
+//==============================================================================
+//==============================================================================
+#if JUCE_UNIT_TESTS
+
+struct GZIPDecompressorInputStreamTests final : public UnitTest
+{
+    GZIPDecompressorInputStreamTests()
+        : UnitTest ("GZIPDecompressorInputStreamTests", UnitTestCategories::streams)
+    {}
+
+    void runTest() override
+    {
+        const MemoryBlock data ("abcdefghijklmnopqrstuvwxyz", 26);
+
+        MemoryOutputStream mo;
+        GZIPCompressorOutputStream gzipOutputStream (mo);
+        gzipOutputStream.write (data.getData(), data.getSize());
+        gzipOutputStream.flush();
+
+        MemoryInputStream mi (mo.getData(), mo.getDataSize(), false);
+        GZIPDecompressorInputStream stream (&mi, false, GZIPDecompressorInputStream::zlibFormat, (int64) data.getSize());
+
+        beginTest ("Read");
+
+        expectEquals (stream.getPosition(), (int64) 0);
+        expectEquals (stream.getTotalLength(), (int64) data.getSize());
+        expectEquals (stream.getNumBytesRemaining(), stream.getTotalLength());
+        expect (! stream.isExhausted());
+
+        size_t numBytesRead = 0;
+        MemoryBlock readBuffer (data.getSize());
+
+        while (numBytesRead < data.getSize())
+        {
+            numBytesRead += (size_t) stream.read (&readBuffer[numBytesRead], 3);
+
+            expectEquals (stream.getPosition(), (int64) numBytesRead);
+            expectEquals (stream.getNumBytesRemaining(), (int64) (data.getSize() - numBytesRead));
+            expect (stream.isExhausted() == (numBytesRead == data.getSize()));
+        }
+
+        expectEquals (stream.getPosition(), (int64) data.getSize());
+        expectEquals (stream.getNumBytesRemaining(), (int64) 0);
+        expect (stream.isExhausted());
+
+        expect (readBuffer == data);
+
+        beginTest ("Skip");
+
+        stream.setPosition (0);
+        expectEquals (stream.getPosition(), (int64) 0);
+        expectEquals (stream.getTotalLength(), (int64) data.getSize());
+        expectEquals (stream.getNumBytesRemaining(), stream.getTotalLength());
+        expect (! stream.isExhausted());
+
+        numBytesRead = 0;
+        const int numBytesToSkip = 5;
+
+        while (numBytesRead < data.getSize())
+        {
+            stream.skipNextBytes (numBytesToSkip);
+            numBytesRead += numBytesToSkip;
+            numBytesRead = std::min (numBytesRead, data.getSize());
+
+            expectEquals (stream.getPosition(), (int64) numBytesRead);
+            expectEquals (stream.getNumBytesRemaining(), (int64) (data.getSize() - numBytesRead));
+            expect (stream.isExhausted() == (numBytesRead == data.getSize()));
+        }
+
+        expectEquals (stream.getPosition(), (int64) data.getSize());
+        expectEquals (stream.getNumBytesRemaining(), (int64) 0);
+        expect (stream.isExhausted());
+    }
+};
+
+static GZIPDecompressorInputStreamTests gzipDecompressorInputStreamTests;
+
+#endif
 
 } // namespace juce

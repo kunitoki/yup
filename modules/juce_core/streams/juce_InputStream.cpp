@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -47,6 +48,26 @@ int64 InputStream::getNumBytesRemaining()
         len -= getPosition();
 
     return len;
+}
+
+ssize_t InputStream::read (void* destBuffer, size_t size)
+{
+    ssize_t totalRead = 0;
+
+    while (size > 0)
+    {
+        auto numToRead = (int) std::min (size, (size_t) 0x70000000);
+        auto numRead = read (juce::addBytesToPointer (destBuffer, totalRead), numToRead);
+        jassert (numRead <= numToRead);
+
+        if (numRead < 0) return (ssize_t) numRead;
+        if (numRead == 0) break;
+
+        size -= (size_t) numRead;
+        totalRead += numRead;
+    }
+
+    return totalRead;
 }
 
 char InputStream::readByte()

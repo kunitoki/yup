@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -39,7 +40,7 @@
 namespace juce
 {
 
-class AsyncUpdater::AsyncUpdaterMessage  : public CallbackMessage
+class AsyncUpdater::AsyncUpdaterMessage final : public CallbackMessage
 {
 public:
     AsyncUpdaterMessage (AsyncUpdater& au)  : owner (au) {}
@@ -59,7 +60,7 @@ public:
 //==============================================================================
 AsyncUpdater::AsyncUpdater()
 {
-    activeMessage = new AsyncUpdaterMessage (*this);
+    activeMessage = *new AsyncUpdaterMessage (*this);
 }
 
 AsyncUpdater::~AsyncUpdater()
@@ -79,7 +80,7 @@ void AsyncUpdater::triggerAsyncUpdate()
 {
     // If you're calling this before (or after) the MessageManager is
     // running, then you're not going to get any callbacks!
-    jassert (MessageManager::getInstanceWithoutCreating() != nullptr);
+    JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
 
     if (activeMessage->shouldDeliver.compareAndSetBool (1, 0))
         if (! activeMessage->post())
@@ -95,7 +96,7 @@ void AsyncUpdater::cancelPendingUpdate() noexcept
 void AsyncUpdater::handleUpdateNowIfNeeded()
 {
     // This can only be called by the event thread.
-    jassert (MessageManager::getInstance()->currentThreadHasLockedMessageManager());
+    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (activeMessage->shouldDeliver.exchange (0) != 0)
         handleAsyncUpdate();

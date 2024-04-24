@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -39,28 +40,21 @@
 namespace juce
 {
 
-class Timer::TimerThread  : private Thread,
-                            private DeletedAtShutdown,
-                            private AsyncUpdater
+class Timer::TimerThread final : private Thread
 {
 public:
-    typedef CriticalSection LockType; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
+    using LockType = CriticalSection; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
 
     TimerThread()  : Thread ("JUCE Timer")
     {
         timers.reserve (32);
-        triggerAsyncUpdate();
     }
 
-    ~TimerThread() noexcept
+    ~TimerThread() override
     {
         signalThreadShouldExit();
         callbackArrived.signal();
-        stopThread (4000);
-        jassert (instance == this || instance == nullptr);
-
-        if (instance == this)
-            instance = nullptr;
+        stopThread (-1);
     }
 
     void run() override
@@ -141,69 +135,20 @@ public:
 
     void callTimersSynchronously()
     {
-        if (! isThreadRunning())
-        {
-            // (This is relied on by some plugins in cases where the MM has
-            // had to restart and the async callback never started)
-            cancelPendingUpdate();
-            triggerAsyncUpdate();
-        }
-
         callTimers();
     }
 
-    static inline void add (Timer* tim) noexcept
-    {
-        if (instance == nullptr)
-            instance = new TimerThread();
-
-        instance->addTimer (tim);
-    }
-
-    static inline void remove (Timer* tim) noexcept
-    {
-        if (instance != nullptr)
-            instance->removeTimer (tim);
-    }
-
-    static inline void resetCounter (Timer* tim) noexcept
-    {
-        if (instance != nullptr)
-            instance->resetTimerCounter (tim);
-    }
-
-    static TimerThread* instance;
-    static LockType lock;
-
-private:
-    struct TimerCountdown
-    {
-        Timer* timer;
-        int countdownMs;
-    };
-
-    std::vector<TimerCountdown> timers;
-
-    WaitableEvent callbackArrived;
-
-    struct CallTimersMessage  : public MessageManager::MessageBase
-    {
-        CallTimersMessage() {}
-
-        void messageCallback() override
-        {
-            if (instance != nullptr)
-                instance->callTimers();
-        }
-    };
-
-    //==============================================================================
     void addTimer (Timer* t)
     {
+        const LockType::ScopedLockType sl (lock);
+
+        if (! isThreadRunning())
+            startThread (Thread::Priority::high);
+
         // Trying to add a timer that's already here - shouldn't get to this point,
         // so if you get this assertion, let me know!
-        jassert (std::find_if (timers.begin(), timers.end(),
-                               [t](TimerCountdown i) { return i.timer == t; }) == timers.end());
+        jassert (std::none_of (timers.begin(), timers.end(),
+                               [t] (TimerCountdown i) { return i.timer == t; }));
 
         auto pos = timers.size();
 
@@ -215,6 +160,8 @@ private:
 
     void removeTimer (Timer* t)
     {
+        const LockType::ScopedLockType sl (lock);
+
         auto pos = t->positionInQueue;
         auto lastIndex = timers.size() - 1;
 
@@ -232,6 +179,8 @@ private:
 
     void resetTimerCounter (Timer* t) noexcept
     {
+        const LockType::ScopedLockType sl (lock);
+
         auto pos = t->positionInQueue;
 
         jassert (pos < timers.size());
@@ -253,6 +202,31 @@ private:
         }
     }
 
+private:
+    LockType lock;
+
+    struct TimerCountdown
+    {
+        Timer* timer;
+        int countdownMs;
+    };
+
+    std::vector<TimerCountdown> timers;
+
+    WaitableEvent callbackArrived;
+
+    struct CallTimersMessage final : public MessageManager::MessageBase
+    {
+        CallTimersMessage() = default;
+
+        void messageCallback() override
+        {
+            if (auto instance = SharedResourcePointer<TimerThread>::getSharedObjectWithoutCreating())
+                (*instance)->callTimers();
+        }
+    };
+
+    //==============================================================================
     void shuffleTimerBackInQueue (size_t pos)
     {
         auto numTimers = timers.size();
@@ -316,16 +290,8 @@ private:
         return timers.front().countdownMs;
     }
 
-    void handleAsyncUpdate() override
-    {
-        startThread (7);
-    }
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimerThread)
 };
-
-Timer::TimerThread* Timer::TimerThread::instance = nullptr;
-Timer::TimerThread::LockType Timer::TimerThread::lock;
 
 //==============================================================================
 Timer::Timer() noexcept {}
@@ -333,6 +299,14 @@ Timer::Timer (const Timer&) noexcept {}
 
 Timer::~Timer()
 {
+    // If you're destroying a timer on a background thread, make sure the timer has
+    // been stopped before execution reaches this point. A simple way to achieve this
+    // is to add a call to `stopTimer()` to the destructor of your class which inherits
+    // from Timer.
+    jassert (! isTimerRunning()
+             || MessageManager::getInstanceWithoutCreating() == nullptr
+             || MessageManager::getInstanceWithoutCreating()->currentThreadHasLockedMessageManager());
+
     stopTimer();
 }
 
@@ -340,17 +314,15 @@ void Timer::startTimer (int interval) noexcept
 {
     // If you're calling this before (or after) the MessageManager is
     // running, then you're not going to get any timer callbacks!
-    jassert (MessageManager::getInstanceWithoutCreating() != nullptr);
-
-    const TimerThread::LockType::ScopedLockType sl (TimerThread::lock);
+    JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
 
     bool wasStopped = (timerPeriodMs == 0);
     timerPeriodMs = jmax (1, interval);
 
     if (wasStopped)
-        TimerThread::add (this);
+        timerThread->addTimer (this);
     else
-        TimerThread::resetCounter (this);
+        timerThread->resetTimerCounter (this);
 }
 
 void Timer::startTimerHz (int timerFrequencyHz) noexcept
@@ -363,33 +335,37 @@ void Timer::startTimerHz (int timerFrequencyHz) noexcept
 
 void Timer::stopTimer() noexcept
 {
-    const TimerThread::LockType::ScopedLockType sl (TimerThread::lock);
-
     if (timerPeriodMs > 0)
     {
-        TimerThread::remove (this);
+        timerThread->removeTimer (this);
         timerPeriodMs = 0;
     }
 }
 
 void JUCE_CALLTYPE Timer::callPendingTimersSynchronously()
 {
-    if (TimerThread::instance != nullptr)
-        TimerThread::instance->callTimersSynchronously();
+    if (auto instance = SharedResourcePointer<TimerThread>::getSharedObjectWithoutCreating())
+        (*instance)->callTimersSynchronously();
 }
 
-struct LambdaInvoker  : private Timer
+struct LambdaInvoker final : private Timer,
+                             private DeletedAtShutdown
 {
-    LambdaInvoker (int milliseconds, std::function<void()> f)  : function (f)
+    LambdaInvoker (int milliseconds, std::function<void()> f)
+        : function (std::move (f))
     {
         startTimer (milliseconds);
     }
 
-    void timerCallback() override
+    ~LambdaInvoker() final
     {
-        auto f = function;
+        stopTimer();
+    }
+
+    void timerCallback() final
+    {
+        NullCheckedInvocation::invoke (function);
         delete this;
-        f();
     }
 
     std::function<void()> function;
@@ -399,7 +375,7 @@ struct LambdaInvoker  : private Timer
 
 void JUCE_CALLTYPE Timer::callAfterDelay (int milliseconds, std::function<void()> f)
 {
-    new LambdaInvoker (milliseconds, f);
+    new LambdaInvoker (milliseconds, std::move (f));
 }
 
 } // namespace juce

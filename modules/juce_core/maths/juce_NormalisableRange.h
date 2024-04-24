@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -56,36 +57,12 @@ class NormalisableRange
 {
 public:
     /** Creates a continuous range that performs a dummy mapping. */
-    NormalisableRange() noexcept {}
+    NormalisableRange() = default;
 
     NormalisableRange (const NormalisableRange&) = default;
     NormalisableRange& operator= (const NormalisableRange&) = default;
-
-    // VS2013 can't default move constructors
-    NormalisableRange (NormalisableRange&& other)
-        : start (other.start), end (other.end),
-          interval (other.interval), skew (other.skew),
-          symmetricSkew (other.symmetricSkew),
-          convertFrom0To1Function  (static_cast<ConverstionFunction&&> (other.convertFrom0To1Function)),
-          convertTo0To1Function    (static_cast<ConverstionFunction&&> (other.convertTo0To1Function)),
-          snapToLegalValueFunction (static_cast<ConverstionFunction&&> (other.snapToLegalValueFunction))
-    {
-    }
-
-    // VS2013 can't default move assignments
-    NormalisableRange& operator= (NormalisableRange&& other)
-    {
-        start = other.start;
-        end = other.end;
-        interval = other.interval;
-        skew = other.skew;
-        symmetricSkew = other.symmetricSkew;
-        convertFrom0To1Function  = static_cast<ConverstionFunction&&> (other.convertFrom0To1Function);
-        convertTo0To1Function    = static_cast<ConverstionFunction&&> (other.convertTo0To1Function);
-        snapToLegalValueFunction = static_cast<ConverstionFunction&&> (other.snapToLegalValueFunction);
-
-        return *this;
-    }
+    NormalisableRange (NormalisableRange&&) = default;
+    NormalisableRange& operator= (NormalisableRange&&) = default;
 
     /** Creates a NormalisableRange with a given range, interval and skew factor. */
     NormalisableRange (ValueType rangeStart,
@@ -128,6 +105,11 @@ public:
     {
     }
 
+    /** A function object which can remap a value in some way based on the start and end of a range. */
+    using ValueRemapFunction = std::function<ValueType(ValueType rangeStart,
+                                                       ValueType rangeEnd,
+                                                       ValueType valueToRemap)>;
+
     /** Creates a NormalisableRange with a given range and an injective mapping function.
 
         @param rangeStart           The minimum value in the range.
@@ -141,14 +123,14 @@ public:
     */
     NormalisableRange (ValueType rangeStart,
                        ValueType rangeEnd,
-                       std::function<ValueType (ValueType currentRangeStart, ValueType currentRangeEnd, ValueType normalisedValue)> convertFrom0To1Func,
-                       std::function<ValueType (ValueType currentRangeStart, ValueType currentRangeEnd, ValueType mappedValue)> convertTo0To1Func,
-                       std::function<ValueType (ValueType currentRangeStart, ValueType currentRangeEnd, ValueType valueToSnap)> snapToLegalValueFunc = nullptr) noexcept
+                       ValueRemapFunction convertFrom0To1Func,
+                       ValueRemapFunction convertTo0To1Func,
+                       ValueRemapFunction snapToLegalValueFunc = {}) noexcept
         : start (rangeStart),
           end   (rangeEnd),
-          convertFrom0To1Function  (convertFrom0To1Func),
-          convertTo0To1Function    (convertTo0To1Func),
-          snapToLegalValueFunction (snapToLegalValueFunc)
+          convertFrom0To1Function  (std::move (convertFrom0To1Func)),
+          convertTo0To1Function    (std::move (convertTo0To1Func)),
+          snapToLegalValueFunction (std::move (snapToLegalValueFunc))
     {
         checkInvariants();
     }
@@ -159,11 +141,11 @@ public:
     ValueType convertTo0to1 (ValueType v) const noexcept
     {
         if (convertTo0To1Function != nullptr)
-            return convertTo0To1Function (start, end, v);
+            return clampTo0To1 (convertTo0To1Function (start, end, v));
 
-        auto proportion = (v - start) / (end - start);
+        auto proportion = clampTo0To1 ((v - start) / (end - start));
 
-        if (skew == static_cast<ValueType> (1))
+        if (exactlyEqual (skew, static_cast<ValueType> (1)))
             return proportion;
 
         if (! symmetricSkew)
@@ -182,12 +164,14 @@ public:
     */
     ValueType convertFrom0to1 (ValueType proportion) const noexcept
     {
+        proportion = clampTo0To1 (proportion);
+
         if (convertFrom0To1Function != nullptr)
             return convertFrom0To1Function (start, end, proportion);
 
         if (! symmetricSkew)
         {
-            if (skew != static_cast<ValueType> (1) && proportion > ValueType())
+            if (! exactlyEqual (skew, static_cast<ValueType> (1)) && proportion > ValueType())
                 proportion = std::exp (std::log (proportion) / skew);
 
             return start + (end - start) * proportion;
@@ -195,7 +179,7 @@ public:
 
         auto distanceFromMiddle = static_cast<ValueType> (2) * proportion - static_cast<ValueType> (1);
 
-        if (skew != static_cast<ValueType> (1) && distanceFromMiddle != static_cast<ValueType> (0))
+        if (! exactlyEqual (skew, static_cast<ValueType> (1)) && ! exactlyEqual (distanceFromMiddle, static_cast<ValueType> (0)))
             distanceFromMiddle = std::exp (std::log (std::abs (distanceFromMiddle)) / skew)
                                  * (distanceFromMiddle < ValueType() ? static_cast<ValueType> (-1)
                                                                      : static_cast<ValueType> (1));
@@ -204,7 +188,7 @@ public:
     }
 
     /** Takes a non-normalised value and snaps it based on either the interval property of
-        this NormalisedRange or the lambda function supplied to the constructor.
+        this NormalisableRange or the lambda function supplied to the constructor.
     */
     ValueType snapToLegalValue (ValueType v) const noexcept
     {
@@ -277,10 +261,18 @@ private:
         jassert (skew > ValueType());
     }
 
-    typedef std::function<ValueType(ValueType, ValueType, ValueType)> ConverstionFunction;
-    ConverstionFunction convertFrom0To1Function  = {},
-                        convertTo0To1Function    = {},
-                        snapToLegalValueFunction = {};
+    static ValueType clampTo0To1 (ValueType value)
+    {
+        auto clampedValue = jlimit (static_cast<ValueType> (0), static_cast<ValueType> (1), value);
+
+        // If you hit this assertion then either your normalisation function is not working
+        // correctly or your input is out of the expected bounds.
+        jassert (exactlyEqual (clampedValue, value));
+
+        return clampedValue;
+    }
+
+    ValueRemapFunction convertFrom0To1Function, convertTo0To1Function, snapToLegalValueFunction;
 };
 
 } // namespace juce

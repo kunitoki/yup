@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -153,6 +154,13 @@ public:
     */
     String getDescription (const String& returnValueForZeroTime = "0") const;
 
+    //==============================================================================
+    /** This returns a string that roughly describes how long ago this time was, which
+        can be handy for showing ages of files, etc.
+        This will only attempt to be accurate to within the nearest order of magnitude
+        so returns strings such as "5 years", "2 weeks", "< 1 minute", "< 1 sec" etc.
+    */
+    String getApproximateDescription() const;
 
     //==============================================================================
     /** Adds another RelativeTime to this one. */

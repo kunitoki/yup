@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -68,13 +69,12 @@ public:
 
     /** Constructor.
 
-        If you use this constructor, the synthesiser will take ownership of the
-        provided instrument object, and will use it internally to handle the
-        MPE note state logic.
+        If you use this constructor, the synthesiser will use the provided instrument
+        object to handle the MPE note state logic.
         This is useful if you want to use an instance of your own class derived
         from MPEInstrument for the MPE logic.
     */
-    MPESynthesiserBase (MPEInstrument* instrument);
+    MPESynthesiserBase (MPEInstrument& instrument);
 
     //==============================================================================
     /** Returns the synthesiser's internal MPE zone layout.
@@ -104,9 +104,14 @@ public:
 
         Call this to make sound. This will chop up the AudioBuffer into subBlock
         pieces separated by events in the MIDI buffer, and then call
-        processNextSubBlock on each one of them. In between you will get calls
+        renderNextSubBlock on each one of them. In between you will get calls
         to noteAdded/Changed/Finished, where you can update parameters that
         depend on those notes to use for your audio rendering.
+
+        @param outputAudio      Buffer into which audio will be rendered
+        @param inputMidi        MIDI events to process
+        @param startSample      The first sample to process in both buffers
+        @param numSamples       The number of samples to process
     */
     template <typename floatType>
     void renderNextBlock (AudioBuffer<floatType>& outputAudio,
@@ -181,7 +186,7 @@ public:
     void setLegacyModePitchbendRange (int pitchbendRange);
 
     //==============================================================================
-    typedef MPEInstrument::TrackingMode TrackingMode;
+    using TrackingMode = MPEInstrument::TrackingMode;
 
     /** Set the MPE tracking mode for the pressure dimension. */
     void setPressureTrackingMode (TrackingMode modeToUse);
@@ -211,10 +216,12 @@ protected:
 protected:
     //==============================================================================
     /** @internal */
-    ScopedPointer<MPEInstrument> instrument;
+    MPEInstrument& instrument;
 
 private:
     //==============================================================================
+    MPEInstrument defaultInstrument { MPEZone (MPEZone::Type::lower, 15) };
+
     CriticalSection noteStateLock;
     double sampleRate = 0.0;
     int minimumSubBlockSize = 32;

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -60,7 +61,7 @@ class JUCE_API  TimeSliceClient
 {
 public:
     /** Destructor. */
-    virtual ~TimeSliceClient()   {}
+    virtual ~TimeSliceClient() = default;
 
     /** Called back by a TimeSliceThread.
 
@@ -73,7 +74,7 @@ public:
         @returns    Your method should return the number of milliseconds which it would like to wait before being called
                     again. Returning 0 will make the thread call again as soon as possible (after possibly servicing
                     other busy clients). If you return a value below zero, your client will be removed from the list of clients,
-                    and won't be called again. The value you specify isn't a guaranteee, and is only used as a hint by the
+                    and won't be called again. The value you specify isn't a guarantee, and is only used as a hint by the
                     thread - the actual time before the next callback may be more or less than specified.
                     You can force the TimeSliceThread to wake up and poll again immediately by calling its notify() method.
     */
@@ -114,7 +115,7 @@ public:
         should always call stopThread() with a decent timeout before deleting,
         to avoid the thread being forcibly killed (which is a Bad Thing).
     */
-    ~TimeSliceThread();
+    ~TimeSliceThread() override;
 
     //==============================================================================
     /** Adds a client to the list.
@@ -146,6 +147,9 @@ public:
 
     /** Returns one of the registered clients. */
     TimeSliceClient* getClient (int index) const;
+
+    /** Returns true if the client is currently registered. */
+    bool contains (const TimeSliceClient*) const;
 
     //==============================================================================
    #ifndef DOXYGEN

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -40,17 +41,16 @@ namespace juce
 {
 
 WebInputStream::WebInputStream (const URL& url, const bool usePost)
-    : pimpl (new Pimpl (*this, url, usePost)), hasCalledConnect (false)
+    : pimpl (std::make_unique<Pimpl> (*this, url, usePost))
 {
 }
 
 WebInputStream::~WebInputStream()
 {
-    delete pimpl;
 }
 
 WebInputStream& WebInputStream::withExtraHeaders (const String& extra)         { pimpl->withExtraHeaders (extra);       return *this; }
-WebInputStream& WebInputStream::withCustomRequestCommand (const String& cmd)   { pimpl->withCustomRequestCommand(cmd);  return *this; }
+WebInputStream& WebInputStream::withCustomRequestCommand (const String& cmd)   { pimpl->withCustomRequestCommand (cmd); return *this; }
 WebInputStream& WebInputStream::withConnectionTimeout (int t)                  { pimpl->withConnectionTimeout (t);      return *this; }
 WebInputStream& WebInputStream::withNumRedirectsToFollow (int num)             { pimpl->withNumRedirectsToFollow (num); return *this; }
 StringPairArray WebInputStream::getRequestHeaders() const                      { return pimpl->getRequestHeaders(); }
@@ -76,28 +76,45 @@ bool WebInputStream::connect (Listener* listener)
 StringPairArray WebInputStream::parseHttpHeaders (const String& headerData)
 {
     StringPairArray headerPairs;
-    StringArray headerLines = StringArray::fromLines (headerData);
+    auto headerLines = StringArray::fromLines (headerData);
 
-    // ignore the first line as this is the status line
-    for (int i = 1; i < headerLines.size(); ++i)
+    for (const auto& headersEntry : headerLines)
     {
-        const String& headersEntry = headerLines[i];
-
         if (headersEntry.isNotEmpty())
         {
-            const String key   (headersEntry.upToFirstOccurrenceOf (": ", false, false));
-            const String value (headersEntry.fromFirstOccurrenceOf (": ", false, false));
-            const String previousValue (headerPairs [key]);
-            headerPairs.set (key, previousValue.isEmpty() ? value : (previousValue + "," + value));
+            const auto key = headersEntry.upToFirstOccurrenceOf (": ", false, false);
+
+            auto value = [&headersEntry, &headerPairs, &key]
+            {
+                const auto currentValue = headersEntry.fromFirstOccurrenceOf (": ", false, false);
+                const auto previousValue = headerPairs [key];
+
+                if (previousValue.isNotEmpty())
+                    return previousValue + "," + currentValue;
+
+                return currentValue;
+            }();
+
+            headerPairs.set (key, value);
         }
     }
 
     return headerPairs;
 }
 
-void WebInputStream::createHeadersAndPostData (const URL& aURL, String& headers, MemoryBlock& data)
+void WebInputStream::createHeadersAndPostData (const URL& aURL,
+                                               String& headers,
+                                               MemoryBlock& data,
+                                               bool addParametersToBody)
 {
-    aURL.createHeadersAndPostData (headers, data);
+    aURL.createHeadersAndPostData (headers, data, addParametersToBody);
+}
+
+bool WebInputStream::Listener::postDataSendProgress ([[maybe_unused]] WebInputStream& request,
+                                                     [[maybe_unused]] int bytesSent,
+                                                     [[maybe_unused]] int totalBytes)
+{
+    return true;
 }
 
 } // namespace juce

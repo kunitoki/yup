@@ -402,7 +402,6 @@ function (yup_add_module module_path)
 
     # ==== Setup module sources and properties
     target_sources (${module_name} INTERFACE ${module_sources})
-    message (STATUS "${module_sources}")
 
     set_target_properties (${module_name} PROPERTIES
         CXX_STANDARD                17

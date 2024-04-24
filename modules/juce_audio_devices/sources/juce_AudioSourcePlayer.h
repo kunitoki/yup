@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -61,7 +62,7 @@ public:
         Make sure this object isn't still being used by an AudioIODevice before
         deleting it!
     */
-    virtual ~AudioSourcePlayer();
+    ~AudioSourcePlayer() override;
 
     //==============================================================================
     /** Changes the current audio source to play from.
@@ -95,12 +96,13 @@ public:
     float getGain() const noexcept                      { return gain; }
 
     //==============================================================================
-    /** Implementation of the AudioIODeviceCallback method. */
-    void audioDeviceIOCallback (const float** inputChannelData,
-                                int totalNumInputChannels,
-                                float** outputChannelData,
-                                int totalNumOutputChannels,
-                                int numSamples) override;
+    /** Implementation of the AudioIODeviceCallbackWithContext method. */
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
+                                           int totalNumInputChannels,
+                                           float* const* outputChannelData,
+                                           int totalNumOutputChannels,
+                                           int numSamples,
+                                           const AudioIODeviceCallbackContext& context) override;
 
     /** Implementation of the AudioIODeviceCallback method. */
     void audioDeviceAboutToStart (AudioIODevice* device) override;
@@ -121,7 +123,8 @@ private:
     float* outputChans[128];
     const float* inputChans[128];
     AudioBuffer<float> tempBuffer;
-    float lastGain = 1.0f, gain = 1.0f;
+    float lastGain = 1.0f;
+    std::atomic<float> gain { 1.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioSourcePlayer)
 };

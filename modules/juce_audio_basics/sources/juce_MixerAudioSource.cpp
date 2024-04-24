@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -77,7 +78,7 @@ void MixerAudioSource::removeInputSource (AudioSource* const input)
 {
     if (input != nullptr)
     {
-        ScopedPointer<AudioSource> toDelete;
+        std::unique_ptr<AudioSource> toDelete;
 
         {
             const ScopedLock sl (lock);
@@ -106,13 +107,13 @@ void MixerAudioSource::removeAllInputs()
 
         for (int i = inputs.size(); --i >= 0;)
             if (inputsToDelete[i])
-                toDelete.add (inputs.getUnchecked(i));
+                toDelete.add (inputs.getUnchecked (i));
 
         inputs.clear();
     }
 
     for (int i = toDelete.size(); --i >= 0;)
-        toDelete.getUnchecked(i)->releaseResources();
+        toDelete.getUnchecked (i)->releaseResources();
 }
 
 void MixerAudioSource::prepareToPlay (int samplesPerBlockExpected, double sampleRate)
@@ -125,7 +126,7 @@ void MixerAudioSource::prepareToPlay (int samplesPerBlockExpected, double sample
     bufferSizeExpected = samplesPerBlockExpected;
 
     for (int i = inputs.size(); --i >= 0;)
-        inputs.getUnchecked(i)->prepareToPlay (samplesPerBlockExpected, sampleRate);
+        inputs.getUnchecked (i)->prepareToPlay (samplesPerBlockExpected, sampleRate);
 }
 
 void MixerAudioSource::releaseResources()
@@ -133,7 +134,7 @@ void MixerAudioSource::releaseResources()
     const ScopedLock sl (lock);
 
     for (int i = inputs.size(); --i >= 0;)
-        inputs.getUnchecked(i)->releaseResources();
+        inputs.getUnchecked (i)->releaseResources();
 
     tempBuffer.setSize (2, 0);
 
@@ -147,7 +148,7 @@ void MixerAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 
     if (inputs.size() > 0)
     {
-        inputs.getUnchecked(0)->getNextAudioBlock (info);
+        inputs.getUnchecked (0)->getNextAudioBlock (info);
 
         if (inputs.size() > 1)
         {
@@ -158,7 +159,7 @@ void MixerAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 
             for (int i = 1; i < inputs.size(); ++i)
             {
-                inputs.getUnchecked(i)->getNextAudioBlock (info2);
+                inputs.getUnchecked (i)->getNextAudioBlock (info2);
 
                 for (int chan = 0; chan < info.buffer->getNumChannels(); ++chan)
                     info.buffer->addFrom (chan, info.startSample, tempBuffer, chan, 0, info.numSamples);

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -44,16 +45,34 @@ XmlDocument::XmlDocument (const File& file)  : inputSource (new FileInputSource 
 
 XmlDocument::~XmlDocument() {}
 
-XmlElement* XmlDocument::parse (const File& file)
+std::unique_ptr<XmlElement> XmlDocument::parse (const File& file)
 {
-    XmlDocument doc (file);
-    return doc.getDocumentElement();
+    return XmlDocument (file).getDocumentElement();
 }
 
-XmlElement* XmlDocument::parse (const String& xmlData)
+std::unique_ptr<XmlElement> XmlDocument::parse (const String& textToParse)
 {
-    XmlDocument doc (xmlData);
-    return doc.getDocumentElement();
+    return XmlDocument (textToParse).getDocumentElement();
+}
+
+std::unique_ptr<XmlElement> parseXML (const String& textToParse)
+{
+    return XmlDocument (textToParse).getDocumentElement();
+}
+
+std::unique_ptr<XmlElement> parseXML (const File& file)
+{
+    return XmlDocument (file).getDocumentElement();
+}
+
+std::unique_ptr<XmlElement> parseXMLIfTagMatches (const String& textToParse, StringRef requiredTag)
+{
+    return XmlDocument (textToParse).getDocumentElementIfTagMatches (requiredTag);
+}
+
+std::unique_ptr<XmlElement> parseXMLIfTagMatches (const File& file, StringRef requiredTag)
+{
+    return XmlDocument (file).getDocumentElementIfTagMatches (requiredTag);
 }
 
 void XmlDocument::setInputSource (InputSource* newSource) noexcept
@@ -78,7 +97,7 @@ namespace XmlIdentifierChars
     {
         static const uint32 legalChars[] = { 0, 0x7ff6000, 0x87fffffe, 0x7fffffe, 0 };
 
-        return ((int) c < (int) numElementsInArray (legalChars) * 32) ? ((legalChars [c >> 5] & (1 << (c & 31))) != 0)
+        return ((int) c < (int) numElementsInArray (legalChars) * 32) ? ((legalChars [c >> 5] & (uint32) (1 << (c & 31))) != 0)
                                                                       : isIdentifierCharSlow (c);
     }
 
@@ -105,11 +124,11 @@ namespace XmlIdentifierChars
     }
 }
 
-XmlElement* XmlDocument::getDocumentElement (const bool onlyReadOuterDocumentElement)
+std::unique_ptr<XmlElement> XmlDocument::getDocumentElement (const bool onlyReadOuterDocumentElement)
 {
     if (originalText.isEmpty() && inputSource != nullptr)
     {
-        ScopedPointer<InputStream> in (inputSource->createInputStream());
+        std::unique_ptr<InputStream> in (inputSource->createInputStream());
 
         if (in != nullptr)
         {
@@ -145,6 +164,15 @@ XmlElement* XmlDocument::getDocumentElement (const bool onlyReadOuterDocumentEle
     return parseDocumentElement (originalText.getCharPointer(), onlyReadOuterDocumentElement);
 }
 
+std::unique_ptr<XmlElement> XmlDocument::getDocumentElementIfTagMatches (StringRef requiredTag)
+{
+    if (auto xml = getDocumentElement (true))
+        if (xml->hasTagName (requiredTag))
+            return getDocumentElement (false);
+
+    return {};
+}
+
 const String& XmlDocument::getLastParseError() const noexcept
 {
     return lastError;
@@ -160,7 +188,7 @@ String XmlDocument::getFileContents (const String& filename) const
 {
     if (inputSource != nullptr)
     {
-        ScopedPointer<InputStream> in (inputSource->createInputStreamFor (filename.trim().unquoted()));
+        std::unique_ptr<InputStream> in (inputSource->createInputStreamFor (filename.trim().unquoted()));
 
         if (in != nullptr)
             return in->readEntireStreamAsString();
@@ -182,8 +210,8 @@ juce_wchar XmlDocument::readNextChar() noexcept
     return c;
 }
 
-XmlElement* XmlDocument::parseDocumentElement (String::CharPointerType textToParse,
-                                               const bool onlyReadOuterDocumentElement)
+std::unique_ptr<XmlElement> XmlDocument::parseDocumentElement (String::CharPointerType textToParse,
+                                                               bool onlyReadOuterDocumentElement)
 {
     input = textToParse;
     errorOccurred = false;
@@ -205,13 +233,13 @@ XmlElement* XmlDocument::parseDocumentElement (String::CharPointerType textToPar
     else
     {
         lastError.clear();
-        ScopedPointer<XmlElement> result (readNextElement (! onlyReadOuterDocumentElement));
+        std::unique_ptr<XmlElement> result (readNextElement (! onlyReadOuterDocumentElement));
 
         if (! errorOccurred)
-            return result.release();
+            return result;
     }
 
-    return nullptr;
+    return {};
 }
 
 bool XmlDocument::parseHeader()
@@ -280,7 +308,7 @@ void XmlDocument::skipNextWhiteSpace()
 {
     for (;;)
     {
-        input = input.findEndOfWhitespace();
+        input.incrementToEndOfWhitespace();
 
         if (input.isEmpty())
         {
@@ -673,7 +701,7 @@ void XmlDocument::readEntity (String& result)
     }
     else if (*input == '#')
     {
-        int charCode = 0;
+        int64_t charCode = 0;
         ++input;
 
         if (*input == 'x' || *input == 'X')
@@ -701,15 +729,26 @@ void XmlDocument::readEntity (String& result)
         {
             int numChars = 0;
 
-            while (input[0] != ';')
+            for (;;)
             {
+                const auto firstChar = input[0];
+
+                if (firstChar == 0)
+                {
+                    setLastError ("unexpected end of input", true);
+                    return;
+                }
+
+                if (firstChar == ';')
+                    break;
+
                 if (++numChars > 12)
                 {
                     setLastError ("illegal escape sequence", true);
                     break;
                 }
 
-                charCode = charCode * 10 + ((int) input[0] - '0');
+                charCode = charCode * 10 + ((int) firstChar - '0');
                 ++input;
             }
 

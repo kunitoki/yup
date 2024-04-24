@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -53,7 +54,7 @@ namespace juce
 template <typename Type, typename MutexType, bool onlyCreateOncePerRun>
 struct SingletonHolder  : private MutexType // (inherited so we can use the empty-base-class optimisation)
 {
-    SingletonHolder() noexcept {}
+    SingletonHolder() = default;
 
     ~SingletonHolder()
     {
@@ -63,53 +64,49 @@ struct SingletonHolder  : private MutexType // (inherited so we can use the empt
            If you're having trouble cleaning up your singletons, perhaps consider using the
            SharedResourcePointer class instead.
         */
-        jassert (instance == nullptr);
+        jassert (instance.load() == nullptr);
     }
 
     /** Returns the current instance, or creates a new instance if there isn't one. */
     Type* get()
     {
-        if (instance == nullptr)
+        if (auto* ptr = instance.load())
+            return ptr;
+
+        typename MutexType::ScopedLockType sl (*this);
+
+        if (auto* ptr = instance.load())
+            return ptr;
+
+        auto once = onlyCreateOncePerRun; // (local copy avoids VS compiler warning about this being constant)
+
+        if (once)
         {
-            typename MutexType::ScopedLockType sl (*this);
+            static bool createdOnceAlready = false;
 
-            if (instance == nullptr)
+            if (createdOnceAlready)
             {
-                auto once = onlyCreateOncePerRun; // (local copy avoids VS compiler warning about this being constant)
-
-                if (once)
-                {
-                    static bool createdOnceAlready = false;
-
-                    if (createdOnceAlready)
-                    {
-                        // This means that the doNotRecreateAfterDeletion flag was set
-                        // and you tried to create the singleton more than once.
-                        jassertfalse;
-                        return nullptr;
-                    }
-
-                    createdOnceAlready = true;
-                }
-
-                static bool alreadyInside = false;
-
-                if (alreadyInside)
-                {
-                    // This means that your object's constructor has done something which has
-                    // ended up causing a recursive loop of singleton creation..
-                    jassertfalse;
-                }
-                else
-                {
-                    alreadyInside = true;
-                    getWithoutChecking();
-                    alreadyInside = false;
-                }
+                // This means that the doNotRecreateAfterDeletion flag was set
+                // and you tried to create the singleton more than once.
+                jassertfalse;
+                return nullptr;
             }
+
+            createdOnceAlready = true;
         }
 
-        return instance;
+        static bool alreadyInside = false;
+
+        if (alreadyInside)
+        {
+            // This means that your object's constructor has done something which has
+            // ended up causing a recursive loop of singleton creation.
+            jassertfalse;
+            return nullptr;
+        }
+
+        const ScopedValueSetter<bool> scope (alreadyInside, true);
+        return getWithoutChecking();
     }
 
     /** Returns the current instance, or creates a new instance if there isn't one, but doesn't do
@@ -117,32 +114,30 @@ struct SingletonHolder  : private MutexType // (inherited so we can use the empt
     */
     Type* getWithoutChecking()
     {
-        if (instance == nullptr)
-        {
-            auto newObject = new Type(); // (create into a local so that instance is still null during construction)
-            instance = newObject;
-        }
+        if (auto* p = instance.load())
+            return p;
 
-        return instance;
+        auto* newObject = new Type(); // (create into a local so that instance is still null during construction)
+        instance.store (newObject);
+        return newObject;
     }
 
     /** Deletes and resets the current instance, if there is one. */
     void deleteInstance()
     {
         typename MutexType::ScopedLockType sl (*this);
-        auto old = instance;
-        instance = nullptr;
-        delete old;
+        delete instance.exchange (nullptr);
     }
 
     /** Called by the class's destructor to clear the pointer if it is currently set to the given object. */
     void clear (Type* expectedObject) noexcept
     {
-        if (instance == expectedObject)
-            instance = nullptr;
+        instance.compare_exchange_strong (expectedObject, nullptr);
     }
 
-    Type* instance = nullptr;
+    // This must be atomic, otherwise a late call to get() may attempt to read instance while it is
+    // being modified by the very first call to get().
+    std::atomic<Type*> instance { nullptr };
 };
 
 
@@ -150,10 +145,10 @@ struct SingletonHolder  : private MutexType // (inherited so we can use the empt
 /**
     Macro to generate the appropriate methods and boilerplate for a singleton class.
 
-    To use this, add the line JUCE_DECLARE_SINGLETON(MyClass, doNotRecreateAfterDeletion)
+    To use this, add the line JUCE_DECLARE_SINGLETON (MyClass, doNotRecreateAfterDeletion)
     to the class's definition.
 
-    Then put a macro JUCE_IMPLEMENT_SINGLETON(MyClass) along with the class's
+    Then put a macro JUCE_IMPLEMENT_SINGLETON (MyClass) along with the class's
     implementation code.
 
     It's also a very good idea to also add the call clearSingletonInstance() in your class's
@@ -206,7 +201,7 @@ struct SingletonHolder  : private MutexType // (inherited so we can use the empt
 #define JUCE_DECLARE_SINGLETON(Classname, doNotRecreateAfterDeletion) \
 \
     static juce::SingletonHolder<Classname, juce::CriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
-    friend decltype (singletonHolder); \
+    friend juce::SingletonHolder<Classname, juce::CriticalSection, doNotRecreateAfterDeletion>; \
 \
     static Classname* JUCE_CALLTYPE getInstance()                           { return singletonHolder.get(); } \
     static Classname* JUCE_CALLTYPE getInstanceWithoutCreating() noexcept   { return singletonHolder.instance; } \

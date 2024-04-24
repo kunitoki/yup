@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -45,7 +46,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API MemoryAudioSource   : public AudioSource
+class JUCE_API MemoryAudioSource   : public PositionableAudioSource
 {
 public:
     //==============================================================================
@@ -68,11 +69,28 @@ public:
     /** Implementation of the AudioSource method. */
     void getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill) override;
 
+    //==============================================================================
+    /** Implementation of the PositionableAudioSource method. */
+    void setNextReadPosition (int64 newPosition) override;
+
+    /** Implementation of the PositionableAudioSource method. */
+    int64 getNextReadPosition() const override;
+
+    /** Implementation of the PositionableAudioSource method. */
+    int64 getTotalLength() const override;
+
+    //==============================================================================
+    /** Implementation of the PositionableAudioSource method. */
+    bool isLooping() const override;
+
+    /** Implementation of the PositionableAudioSource method. */
+    void setLooping (bool shouldLoop) override;
+
 private:
     //==============================================================================
     AudioBuffer<float> buffer;
     int position = 0;
-    bool isLooping;
+    bool isCurrentlyLooping;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryAudioSource)

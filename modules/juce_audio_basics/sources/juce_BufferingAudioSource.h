@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -82,7 +83,7 @@ public:
         The input source may be deleted depending on whether the deleteSourceWhenDeleted
         flag was set in the constructor.
     */
-    ~BufferingAudioSource();
+    ~BufferingAudioSource() override;
 
     //==============================================================================
     /** Implementation of the AudioSource method. */
@@ -111,24 +112,29 @@ public:
 
         This is useful for offline rendering.
     */
-    bool waitForNextAudioBlockReady (const AudioSourceChannelInfo& info, const uint32 timeout);
+    bool waitForNextAudioBlockReady (const AudioSourceChannelInfo& info, uint32 timeout);
 
 private:
+    //==============================================================================
+    Range<int> getValidBufferRange (int numSamples) const;
+    bool readNextBufferChunk();
+    void readBufferSection (int64 start, int length, int bufferOffset);
+    int useTimeSlice() override;
+
     //==============================================================================
     OptionalScopedPointer<PositionableAudioSource> source;
     TimeSliceThread& backgroundThread;
     int numberOfSamplesToBuffer, numberOfChannels;
     AudioBuffer<float> buffer;
-    CriticalSection bufferStartPosLock;
+    CriticalSection callbackLock, bufferRangeLock;
     WaitableEvent bufferReadyEvent;
-    int64 volatile bufferValidStart, bufferValidEnd, nextPlayPos;
-    double volatile sampleRate;
-    bool wasSourceLooping, isPrepared, prefillBuffer;
+    int64 bufferValidStart = 0, bufferValidEnd = 0;
+    std::atomic<int64> nextPlayPos { 0 };
+    double sampleRate = 0;
+    bool wasSourceLooping = false, isPrepared = false;
+    const bool prefillBuffer;
 
-    bool readNextBufferChunk();
-    void readBufferSection (int64 start, int length, int bufferOffset);
-    int useTimeSlice() override;
-
+    //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferingAudioSource)
 };
 

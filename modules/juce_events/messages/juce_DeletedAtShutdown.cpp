@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -59,12 +60,9 @@ DeletedAtShutdown::~DeletedAtShutdown()
     getDeletedAtShutdownObjects().removeFirstMatchingValue (this);
 }
 
-#if JUCE_MSVC
- // Disable unreachable code warning, in case the compiler manages to figure out that
- // you have no classes of DeletedAtShutdown that could throw an exception in their destructor.
- #pragma warning (push)
- #pragma warning (disable: 4702)
-#endif
+// Disable unreachable code warning, in case the compiler manages to figure out that
+// you have no classes of DeletedAtShutdown that could throw an exception in their destructor.
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4702)
 
 void DeletedAtShutdown::deleteAll()
 {
@@ -81,7 +79,7 @@ void DeletedAtShutdown::deleteAll()
     {
         JUCE_TRY
         {
-            auto* deletee = localCopy.getUnchecked(i);
+            auto* deletee = localCopy.getUnchecked (i);
 
             // double-check that it's not already been deleted during another object's destructor.
             {
@@ -103,8 +101,6 @@ void DeletedAtShutdown::deleteAll()
     getDeletedAtShutdownObjects().clear(); // just to make sure the array doesn't have any memory still allocated
 }
 
-#if JUCE_MSVC
- #pragma warning (pop)
-#endif
+JUCE_END_IGNORE_WARNINGS_MSVC
 
 } // namespace juce

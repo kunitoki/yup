@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -66,7 +67,7 @@ public:
         @param priority     the process priority, where
                             0=low, 1=normal, 2=high, 3=realtime
     */
-    static void JUCE_CALLTYPE setPriority (const ProcessPriority priority);
+    static void JUCE_CALLTYPE setPriority (ProcessPriority priority);
 
     /** Kills the current process immediately.
 
@@ -122,8 +123,8 @@ public:
                                                         const String& bodyText,
                                                         const StringArray& filesToAttach);
 
-   #if JUCE_WINDOWS || DOXYGEN
     //==============================================================================
+   #if JUCE_WINDOWS || DOXYGEN
     /** WINDOWS ONLY - This returns the HINSTANCE of the current module.
 
         The return type is a void* to avoid being dependent on windows.h - just cast
@@ -149,14 +150,14 @@ public:
     static void JUCE_CALLTYPE setCurrentModuleInstanceHandle (void* newHandle) noexcept;
    #endif
 
-   #if JUCE_MAC || DOXYGEN
     //==============================================================================
+   #if JUCE_MAC || DOXYGEN
     /** OSX ONLY - Shows or hides the OSX dock icon for this app. */
     static void setDockIconVisible (bool isVisible);
    #endif
 
-   #if JUCE_MAC || JUCE_LINUX || DOXYGEN
     //==============================================================================
+   #if JUCE_MAC || JUCE_LINUX || JUCE_BSD || DOXYGEN
     /** UNIX ONLY - Attempts to use setrlimit to change the maximum number of file
         handles that the app can open. Pass 0 or less as the parameter to mean
         'infinite'. Returns true if it succeeds.

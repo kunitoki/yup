@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -65,7 +66,7 @@ public:
     AudioTransportSource();
 
     /** Destructor. */
-    ~AudioTransportSource();
+    ~AudioTransportSource() override;
 
     //==============================================================================
     /** Sets the reader that is being used as the input source.
@@ -109,7 +110,7 @@ public:
     */
     void setPosition (double newPosition);
 
-    /** Returns the position that the next data block will be read from
+    /** Returns the position that the next data block will be read from.
         This is a time in seconds.
     */
     double getCurrentPosition() const;
@@ -118,7 +119,7 @@ public:
     double getLengthInSeconds() const;
 
     /** Returns true if the player has stopped because its input stream ran out of data. */
-    bool hasStreamFinished() const noexcept             { return inputStreamEOF; }
+    bool hasStreamFinished() const noexcept;
 
     //==============================================================================
     /** Starts playing (if a source has been selected).
@@ -182,11 +183,11 @@ private:
     AudioSource* masterSource = nullptr;
 
     CriticalSection callbackLock;
-    float volatile gain = 1.0f, lastGain = 1.0f;
-    bool volatile playing = false, stopped = true;
+    float gain = 1.0f, lastGain = 1.0f;
+    std::atomic<bool> playing { false }, stopped { true };
     double sampleRate = 44100.0, sourceSampleRate = 0;
     int blockSize = 128, readAheadBufferSize = 0;
-    bool volatile isPrepared = false, inputStreamEOF = false;
+    bool isPrepared = false;
 
     void releaseMasterResources();
 

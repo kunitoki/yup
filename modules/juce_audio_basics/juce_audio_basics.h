@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -36,26 +37,28 @@
   ==============================================================================
 */
 
+
 /*******************************************************************************
  The block below describes the properties of this module, and is read by
  the Projucer to automatically generate project code that uses it.
  For details about the syntax and how to create or use a module, see the
- JUCE Module Format.txt file.
+ JUCE Module Format.md file.
 
 
  BEGIN_JUCE_MODULE_DECLARATION
 
-  ID:               juce_audio_basics
-  vendor:           juce
-  version:          5.3.0
-  name:             JUCE audio and MIDI data classes
-  description:      Classes for audio buffer manipulation, midi message handling, synthesis, etc.
-  website:          http://www.juce.com/juce
-  license:          ISC
+  ID:                 juce_audio_basics
+  vendor:             juce
+  version:            7.0.12
+  name:               JUCE audio and MIDI data classes
+  description:        Classes for audio buffer manipulation, midi message handling, synthesis, etc.
+  website:            http://www.juce.com/juce
+  license:            ISC
+  minimumCppStandard: 17
 
-  dependencies:     juce_core
-  OSXFrameworks:    Accelerate
-  iOSFrameworks:    Accelerate
+  dependencies:       juce_core
+  OSXFrameworks:      Accelerate
+  iOSFrameworks:      Accelerate
 
  END_JUCE_MODULE_DECLARATION
 
@@ -97,15 +100,19 @@
 
 //==============================================================================
 #include "buffers/juce_AudioDataConverters.h"
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4661)
 #include "buffers/juce_FloatVectorOperations.h"
+JUCE_END_IGNORE_WARNINGS_MSVC
 #include "buffers/juce_AudioSampleBuffer.h"
 #include "buffers/juce_AudioChannelSet.h"
-#include "effects/juce_Decibels.h"
-#include "effects/juce_IIRFilter.h"
-#include "effects/juce_LagrangeInterpolator.h"
-#include "effects/juce_CatmullRomInterpolator.h"
-#include "effects/juce_LinearSmoothedValue.h"
-#include "effects/juce_Reverb.h"
+#include "buffers/juce_AudioProcessLoadMeasurer.h"
+#include "utilities/juce_Decibels.h"
+#include "utilities/juce_IIRFilter.h"
+#include "utilities/juce_GenericInterpolator.h"
+#include "utilities/juce_Interpolators.h"
+#include "utilities/juce_SmoothedValue.h"
+#include "utilities/juce_Reverb.h"
+#include "utilities/juce_ADSR.h"
 #include "midi/juce_MidiMessage.h"
 #include "midi/juce_MidiBuffer.h"
 #include "midi/juce_MidiMessageSequence.h"
@@ -133,3 +140,11 @@
 #include "sources/juce_ToneGeneratorAudioSource.h"
 #include "synthesisers/juce_Synthesiser.h"
 #include "audio_play_head/juce_AudioPlayHead.h"
+#include "utilities/juce_AudioWorkgroup.h"
+#include "midi/ump/juce_UMPBytesOnGroup.h"
+#include "midi/ump/juce_UMPDeviceInfo.h"
+
+namespace juce
+{
+    namespace ump = universal_midi_packets;
+}

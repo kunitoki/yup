@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -62,7 +63,7 @@ protected:
 
 public:
     /** Destructor. */
-    virtual ~SynthesiserSound();
+    ~SynthesiserSound() override;
 
     //==============================================================================
     /** Returns true if this sound should be played when a given midi note is pressed.
@@ -80,7 +81,7 @@ public:
     virtual bool appliesToChannel (int midiChannel) = 0;
 
     /** The class is reference-counted, so this is a handy pointer class for it. */
-    typedef ReferenceCountedObjectPtr<SynthesiserSound> Ptr;
+    using Ptr = ReferenceCountedObjectPtr<SynthesiserSound>;
 
 
 private:
@@ -290,11 +291,6 @@ private:
 
     AudioBuffer<float> tempBuffer;
 
-   #if JUCE_CATCH_DEPRECATED_CODE_MISUSE
-    // Note the new parameters for this method.
-    virtual int stopNote (bool) { return 0; }
-   #endif
-
     JUCE_LEAK_DETECTOR (SynthesiserVoice)
 };
 
@@ -368,7 +364,7 @@ public:
     int getNumSounds() const noexcept                               { return sounds.size(); }
 
     /** Returns one of the sounds. */
-    SynthesiserSound* getSound (int index) const noexcept           { return sounds [index]; }
+    SynthesiserSound::Ptr getSound (int index) const noexcept       { return sounds[index]; }
 
     /** Adds a new sound to the synthesiser.
 
@@ -541,21 +537,15 @@ public:
         both to the audio output buffer and the midi input buffer, so any midi events
         with timestamps outside the specified region will be ignored.
     */
-    inline void renderNextBlock (AudioBuffer<float>& outputAudio,
-                                 const MidiBuffer& inputMidi,
-                                 int startSample,
-                                 int numSamples)
-    {
-        processNextBlock (outputAudio, inputMidi, startSample, numSamples);
-    }
+    void renderNextBlock (AudioBuffer<float>& outputAudio,
+                          const MidiBuffer& inputMidi,
+                          int startSample,
+                          int numSamples);
 
-    inline void renderNextBlock (AudioBuffer<double>& outputAudio,
-                                 const MidiBuffer& inputMidi,
-                                 int startSample,
-                                 int numSamples)
-    {
-        processNextBlock (outputAudio, inputMidi, startSample, numSamples);
-    }
+    void renderNextBlock (AudioBuffer<double>& outputAudio,
+                          const MidiBuffer& inputMidi,
+                          int startSample,
+                          int numSamples);
 
     /** Returns the current target sample rate at which rendering is being done.
         Subclasses may need to know this so that they can pitch things correctly.
@@ -648,26 +638,17 @@ protected:
 
 private:
     //==============================================================================
-    template <typename floatType>
-    void processNextBlock (AudioBuffer<floatType>& outputAudio,
-                           const MidiBuffer& inputMidi,
-                           int startSample,
-                           int numSamples);
-    //==============================================================================
     double sampleRate = 0;
     uint32 lastNoteOnCounter = 0;
     int minimumSubBlockSize = 32;
     bool subBlockSubdivisionIsStrict = false;
     bool shouldStealNotes = true;
     BigInteger sustainPedalsDown;
+    mutable CriticalSection stealLock;
+    mutable Array<SynthesiserVoice*> usableVoicesToStealArray;
 
-   #if JUCE_CATCH_DEPRECATED_CODE_MISUSE
-    // Note the new parameters for these methods.
-    virtual int findFreeVoice (const bool) const { return 0; }
-    virtual int noteOff (int, int, int) { return 0; }
-    virtual int findFreeVoice (SynthesiserSound*, const bool) { return 0; }
-    virtual int findVoiceToSteal (SynthesiserSound*) const { return 0; }
-   #endif
+    template <typename floatType>
+    void processNextBlock (AudioBuffer<floatType>&, const MidiBuffer&, int startSample, int numSamples);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Synthesiser)
 };

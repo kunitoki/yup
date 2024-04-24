@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -66,15 +67,15 @@ namespace juce
     "goodbye" = "au revoir"
     @endcode
 
-    If the strings need to contain a quote character, they can use '\"' instead, and
+    If the strings need to contain a quote character, they can use \" instead, and
     if the first non-whitespace character on a line isn't a quote, then it's ignored,
     (you can use this to add comments).
 
     Note that this is a singleton class, so don't create or destroy the object directly.
-    There's also a TRANS(text) macro defined to make it easy to use the this.
+    There's also a TRANS (text) macro defined to make it easy to use the this.
 
-    E.g. @code
-    printSomething (TRANS("hello"));
+    @code
+    printSomething (TRANS ("hello"));
     @endcode
 
     This macro is used in the JUCE classes themselves, so your application has a chance to
@@ -106,7 +107,7 @@ public:
     LocalisedStrings& operator= (const LocalisedStrings&);
 
     /** Destructor. */
-    ~LocalisedStrings();
+    ~LocalisedStrings() = default;
 
     //==============================================================================
     /** Selects the current set of mappings to be used by the system.
@@ -177,7 +178,7 @@ public:
         countries: fr be mc ch lu
         @endcode
 
-        The country codes are supposed to be 2-character ISO complient codes.
+        The country codes are supposed to be 2-character ISO compliant codes.
     */
     const StringArray& getCountryCodes() const            { return countryCodes; }
 
@@ -206,8 +207,7 @@ private:
     String languageName;
     StringArray countryCodes;
     StringPairArray translations;
-    ScopedPointer<LocalisedStrings> fallback;
-    friend struct ContainerDeletePolicy<LocalisedStrings>;
+    std::unique_ptr<LocalisedStrings> fallback;
 
     void loadFromText (const String&, bool ignoreCase);
 

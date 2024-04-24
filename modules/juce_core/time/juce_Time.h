@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -54,18 +55,14 @@ class JUCE_API  Time
 public:
     //==============================================================================
     /** Creates a Time object.
-
         This default constructor creates a time of midnight Jan 1st 1970 UTC, (which is
         represented internally as 0ms).
-
         To create a time object representing the current time, use getCurrentTime().
-
         @see getCurrentTime
     */
-    Time() noexcept;
+    Time() = default;
 
     /** Creates a time based on a number of milliseconds.
-
         To create a time object set to the current time, use getCurrentTime().
 
         @param millisecondsSinceEpoch   the number of milliseconds since the unix
@@ -95,14 +92,10 @@ public:
           int milliseconds = 0,
           bool useLocalTime = true) noexcept;
 
-    /** Creates a copy of another Time object. */
-    Time (const Time& other) noexcept;
+    Time (const Time&) = default;
+    ~Time() = default;
 
-    /** Destructor. */
-    ~Time() noexcept;
-
-    /** Copies this time from another one. */
-    Time& operator= (const Time& other) noexcept;
+    Time& operator= (const Time&) = default;
 
     //==============================================================================
     /** Returns a Time object that is set to the current system time.
@@ -199,7 +192,7 @@ public:
 
     //==============================================================================
     /** Returns a 3-character string to indicate the local timezone. */
-    String getTimeZone() const noexcept;
+    String getTimeZone() const;
 
     /** Returns the local timezone offset from UTC in seconds. */
     int getUTCOffsetSeconds() const noexcept;
@@ -226,7 +219,7 @@ public:
     String toString (bool includeDate,
                      bool includeTime,
                      bool includeSeconds = true,
-                     bool use24HourClock = false) const noexcept;
+                     bool use24HourClock = false) const;
 
     /** Converts this date/time to a string with a user-defined format.
 
@@ -271,7 +264,7 @@ public:
     String toISO8601 (bool includeDividerCharacters) const;
 
     /** Parses an ISO-8601 string and returns it as a Time. */
-    static Time fromISO8601 (StringRef iso8601) noexcept;
+    static Time fromISO8601 (StringRef iso8601);
 
     //==============================================================================
     /** Adds a RelativeTime to this time. */
@@ -395,7 +388,7 @@ public:
 
 private:
     //==============================================================================
-    int64 millisSinceEpoch;
+    int64 millisSinceEpoch = 0;
 };
 
 //==============================================================================
@@ -407,7 +400,7 @@ JUCE_API Time operator+ (RelativeTime delta, Time time) noexcept;
 /** Subtracts a RelativeTime from a Time. */
 JUCE_API Time operator- (Time time, RelativeTime delta) noexcept;
 /** Returns the relative time difference between two times. */
-JUCE_API const RelativeTime operator- (Time time1, Time time2) noexcept;
+JUCE_API RelativeTime operator- (Time time1, Time time2) noexcept;
 
 /** Compares two Time objects. */
 JUCE_API bool operator== (Time time1, Time time2) noexcept;

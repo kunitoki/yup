@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -46,24 +47,24 @@ NamedValueSet::NamedValue::NamedValue (const Identifier& n, const var& v)  : nam
 NamedValueSet::NamedValue::NamedValue (const NamedValue& other) : NamedValue (other.name, other.value) {}
 
 NamedValueSet::NamedValue::NamedValue (NamedValue&& other) noexcept
-   : NamedValue (static_cast<Identifier&&> (other.name),
-                 static_cast<var&&> (other.value))
+   : NamedValue (std::move (other.name),
+                 std::move (other.value))
 {}
 
 NamedValueSet::NamedValue::NamedValue (const Identifier& n, var&& v) noexcept
-   : name (n), value (static_cast<var&&> (v))
+   : name (n), value (std::move (v))
 {
 }
 
 NamedValueSet::NamedValue::NamedValue (Identifier&& n, var&& v) noexcept
-   : name (static_cast<Identifier&&> (n)),
-     value (static_cast<var&&> (v))
+   : name (std::move (n)),
+     value (std::move (v))
 {}
 
 NamedValueSet::NamedValue& NamedValueSet::NamedValue::operator= (NamedValue&& other) noexcept
 {
-    name = static_cast<Identifier&&> (other.name);
-    value = static_cast<var&&> (other.value);
+    name = std::move (other.name);
+    value = std::move (other.value);
     return *this;
 }
 
@@ -75,7 +76,14 @@ NamedValueSet::NamedValueSet() noexcept {}
 NamedValueSet::~NamedValueSet() noexcept {}
 
 NamedValueSet::NamedValueSet (const NamedValueSet& other)  : values (other.values) {}
-NamedValueSet::NamedValueSet (NamedValueSet&& other) noexcept  : values (static_cast<Array<NamedValue>&&> (other.values)) {}
+
+NamedValueSet::NamedValueSet (NamedValueSet&& other) noexcept
+   : values (std::move (other.values)) {}
+
+NamedValueSet::NamedValueSet (std::initializer_list<NamedValue> list)
+   : values (std::move (list))
+{
+}
 
 NamedValueSet& NamedValueSet::operator= (const NamedValueSet& other)
 {
@@ -105,9 +113,9 @@ bool NamedValueSet::operator== (const NamedValueSet& other) const noexcept
     for (int i = 0; i < num; ++i)
     {
         // optimise for the case where the keys are in the same order
-        if (values.getReference(i).name == other.values.getReference(i).name)
+        if (values.getReference (i).name == other.values.getReference (i).name)
         {
-            if (values.getReference(i).value != other.values.getReference(i).value)
+            if (values.getReference (i).value != other.values.getReference (i).value)
                 return false;
         }
         else
@@ -115,8 +123,8 @@ bool NamedValueSet::operator== (const NamedValueSet& other) const noexcept
             // if we encounter keys that are in a different order, search remaining items by brute force..
             for (int j = i; j < num; ++j)
             {
-                if (auto* otherVal = other.getVarPointer (values.getReference(j).name))
-                    if (values.getReference(j).value == *otherVal)
+                if (auto* otherVal = other.getVarPointer (values.getReference (j).name))
+                    if (values.getReference (j).value == *otherVal)
                         continue;
 
                 return false;
@@ -156,7 +164,16 @@ var NamedValueSet::getWithDefault (const Identifier& name, const var& defaultRet
     return defaultReturnValue;
 }
 
-var* NamedValueSet::getVarPointer (const Identifier& name) const noexcept
+var* NamedValueSet::getVarPointer (const Identifier& name) noexcept
+{
+    for (auto& i : values)
+        if (i.name == name)
+            return &(i.value);
+
+    return {};
+}
+
+const var* NamedValueSet::getVarPointer (const Identifier& name) const noexcept
 {
     for (auto& i : values)
         if (i.name == name)
@@ -172,11 +189,11 @@ bool NamedValueSet::set (const Identifier& name, var&& newValue)
         if (v->equalsWithSameType (newValue))
             return false;
 
-        *v = static_cast<var&&> (newValue);
+        *v = std::move (newValue);
         return true;
     }
 
-    values.add ({ name, static_cast<var&&> (newValue) });
+    values.add ({ name, std::move (newValue) });
     return true;
 }
 
@@ -205,7 +222,7 @@ int NamedValueSet::indexOf (const Identifier& name) const noexcept
     auto numValues = values.size();
 
     for (int i = 0; i < numValues; ++i)
-        if (values.getReference(i).name == name)
+        if (values.getReference (i).name == name)
             return i;
 
     return -1;
@@ -217,7 +234,7 @@ bool NamedValueSet::remove (const Identifier& name)
 
     for (int i = 0; i < numValues; ++i)
     {
-        if (values.getReference(i).name == name)
+        if (values.getReference (i).name == name)
         {
             values.remove (i);
             return true;
@@ -245,7 +262,15 @@ const var& NamedValueSet::getValueAt (const int index) const noexcept
     return getNullVarRef();
 }
 
-var* NamedValueSet::getVarPointerAt (int index) const noexcept
+var* NamedValueSet::getVarPointerAt (int index) noexcept
+{
+    if (isPositiveAndBelow (index, values.size()))
+        return &(values.getReference (index).value);
+
+    return {};
+}
+
+const var* NamedValueSet::getVarPointerAt (int index) const noexcept
 {
     if (isPositiveAndBelow (index, values.size()))
         return &(values.getReference (index).value);

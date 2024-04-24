@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -41,12 +42,10 @@ namespace juce
 
 MPESynthesiser::MPESynthesiser()
 {
-    MPEZoneLayout zoneLayout;
-    zoneLayout.setLowerZone (15);
-    setZoneLayout (zoneLayout);
 }
 
-MPESynthesiser::MPESynthesiser (MPEInstrument* mpeInstrument)  : MPESynthesiserBase (mpeInstrument)
+MPESynthesiser::MPESynthesiser (MPEInstrument& mpeInstrument)
+    : MPESynthesiserBase (mpeInstrument)
 {
 }
 
@@ -58,13 +57,16 @@ MPESynthesiser::~MPESynthesiser()
 void MPESynthesiser::startVoice (MPESynthesiserVoice* voice, MPENote noteToStart)
 {
     jassert (voice != nullptr);
+
     voice->currentlyPlayingNote = noteToStart;
+    voice->noteOnTime = lastNoteOnCounter++;
     voice->noteStarted();
 }
 
 void MPESynthesiser::stopVoice (MPESynthesiserVoice* voice, MPENote noteToStop, bool allowTailOff)
 {
     jassert (voice != nullptr);
+
     voice->currentlyPlayingNote = noteToStop;
     voice->noteStopped (allowTailOff);
 }
@@ -142,7 +144,7 @@ void MPESynthesiser::noteReleased (MPENote finishedNote)
     {
         auto* voice = voices.getUnchecked (i);
 
-        if (voice->isCurrentlyPlayingNote(finishedNote))
+        if (voice->isCurrentlyPlayingNote (finishedNote))
             stopVoice (voice, finishedNote, true);
     }
 }
@@ -199,24 +201,28 @@ MPESynthesiserVoice* MPESynthesiser::findVoiceToSteal (MPENote noteToStealVoiceF
     MPESynthesiserVoice* low = nullptr; // Lowest sounding note, might be sustained, but NOT in release phase
     MPESynthesiserVoice* top = nullptr; // Highest sounding note, might be sustained, but NOT in release phase
 
+    // All major OSes use double-locking so this will be lock- and wait-free as long as stealLock is not
+    // contended. This is always the case if you do not call findVoiceToSteal on multiple threads at
+    // the same time.
+    const ScopedLock sl (stealLock);
+
     // this is a list of voices we can steal, sorted by how long they've been running
-    Array<MPESynthesiserVoice*> usableVoices;
-    usableVoices.ensureStorageAllocated (voices.size());
+    usableVoicesToStealArray.clear();
 
     for (auto* voice : voices)
     {
         jassert (voice->isActive()); // We wouldn't be here otherwise
 
-        usableVoices.add (voice);
+        usableVoicesToStealArray.add (voice);
 
         // NB: Using a functor rather than a lambda here due to scare-stories about
         // compilers generating code containing heap allocations..
         struct Sorter
         {
-            bool operator() (const MPESynthesiserVoice* a, const MPESynthesiserVoice* b) const noexcept { return a->wasStartedBefore (*b); }
+            bool operator() (const MPESynthesiserVoice* a, const MPESynthesiserVoice* b) const noexcept { return a->noteOnTime < b->noteOnTime; }
         };
 
-        std::sort (usableVoices.begin(), usableVoices.end(), Sorter());
+        std::sort (usableVoicesToStealArray.begin(), usableVoicesToStealArray.end(), Sorter());
 
         if (! voice->isPlayingButReleased()) // Don't protect released notes
         {
@@ -237,24 +243,24 @@ MPESynthesiserVoice* MPESynthesiser::findVoiceToSteal (MPENote noteToStealVoiceF
     // If we want to re-use the voice to trigger a new note,
     // then The oldest note that's playing the same note number is ideal.
     if (noteToStealVoiceFor.isValid())
-        for (auto* voice : usableVoices)
+        for (auto* voice : usableVoicesToStealArray)
             if (voice->getCurrentlyPlayingNote().initialNote == noteToStealVoiceFor.initialNote)
                 return voice;
 
     // Oldest voice that has been released (no finger on it and not held by sustain pedal)
-    for (auto* voice : usableVoices)
+    for (auto* voice : usableVoicesToStealArray)
         if (voice != low && voice != top && voice->isPlayingButReleased())
             return voice;
 
     // Oldest voice that doesn't have a finger on it:
-    for (auto* voice : usableVoices)
+    for (auto* voice : usableVoicesToStealArray)
         if (voice != low && voice != top
              && voice->getCurrentlyPlayingNote().keyState != MPENote::keyDown
              && voice->getCurrentlyPlayingNote().keyState != MPENote::keyDownAndSustained)
             return voice;
 
     // Oldest voice that isn't protected
-    for (auto* voice : usableVoices)
+    for (auto* voice : usableVoicesToStealArray)
         if (voice != low && voice != top)
             return voice;
 
@@ -271,9 +277,16 @@ MPESynthesiserVoice* MPESynthesiser::findVoiceToSteal (MPENote noteToStealVoiceF
 //==============================================================================
 void MPESynthesiser::addVoice (MPESynthesiserVoice* const newVoice)
 {
-    const ScopedLock sl (voicesLock);
-    newVoice->setCurrentSampleRate (getSampleRate());
-    voices.add (newVoice);
+    {
+        const ScopedLock sl (voicesLock);
+        newVoice->setCurrentSampleRate (getSampleRate());
+        voices.add (newVoice);
+    }
+
+    {
+        const ScopedLock sl (stealLock);
+        usableVoicesToStealArray.ensureStorageAllocated (voices.size() + 1);
+    }
 }
 
 void MPESynthesiser::clearVoices()
@@ -312,18 +325,29 @@ void MPESynthesiser::reduceNumVoices (const int newNumVoices)
 
 void MPESynthesiser::turnOffAllVoices (bool allowTailOff)
 {
-    // first turn off all voices (it's more efficient to do this immediately
-    // rather than to go through the MPEInstrument for this).
-    for (auto* voice : voices)
-        voice->noteStopped (allowTailOff);
+    {
+        const ScopedLock sl (voicesLock);
+
+        // first turn off all voices (it's more efficient to do this immediately
+        // rather than to go through the MPEInstrument for this).
+        for (auto* voice : voices)
+        {
+            voice->currentlyPlayingNote.noteOffVelocity = MPEValue::from7BitInt (64); // some reasonable number
+            voice->currentlyPlayingNote.keyState = MPENote::off;
+
+            voice->noteStopped (allowTailOff);
+        }
+    }
 
     // finally make sure the MPE Instrument also doesn't have any notes anymore.
-    instrument->releaseAllNotes();
+    instrument.releaseAllNotes();
 }
 
 //==============================================================================
 void MPESynthesiser::renderNextSubBlock (AudioBuffer<float>& buffer, int startSample, int numSamples)
 {
+    const ScopedLock sl (voicesLock);
+
     for (auto* voice : voices)
     {
         if (voice->isActive())
@@ -333,6 +357,8 @@ void MPESynthesiser::renderNextSubBlock (AudioBuffer<float>& buffer, int startSa
 
 void MPESynthesiser::renderNextSubBlock (AudioBuffer<double>& buffer, int startSample, int numSamples)
 {
+    const ScopedLock sl (voicesLock);
+
     for (auto* voice : voices)
     {
         if (voice->isActive())

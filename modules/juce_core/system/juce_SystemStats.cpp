@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -53,9 +54,9 @@ String SystemStats::getJUCEVersion()
     static_assert (sizeof (int64) == 8,                          "Basic sanity test failed: please report!");
     static_assert (sizeof (uint64) == 8,                         "Basic sanity test failed: please report!");
 
-    return "JUCE v" JUCE_STRINGIFY(JUCE_MAJOR_VERSION)
-                "." JUCE_STRINGIFY(JUCE_MINOR_VERSION)
-                "." JUCE_STRINGIFY(JUCE_BUILDNUMBER);
+    return "JUCE v" JUCE_STRINGIFY (JUCE_MAJOR_VERSION)
+                "." JUCE_STRINGIFY (JUCE_MINOR_VERSION)
+                "." JUCE_STRINGIFY (JUCE_BUILDNUMBER);
 }
 
 #if JUCE_ANDROID && ! defined (JUCE_DISABLE_JUCE_VERSION_PRINTING)
@@ -76,26 +77,64 @@ String SystemStats::getJUCEVersion()
 
 StringArray SystemStats::getDeviceIdentifiers()
 {
+    for (const auto flag : { MachineIdFlags::fileSystemId, MachineIdFlags::macAddresses  })
+        if (auto ids = getMachineIdentifiers (flag); ! ids.isEmpty())
+            return ids;
+
+    jassertfalse; // Failed to create any IDs!
+    return {};
+}
+
+String getLegacyUniqueDeviceID();
+
+StringArray SystemStats::getMachineIdentifiers (MachineIdFlags flags)
+{
+    auto macAddressProvider = [] (StringArray& arr)
+    {
+        for (const auto& mac : MACAddress::getAllAddresses())
+            arr.add (mac.toString());
+    };
+
+    auto fileSystemProvider = [] (StringArray& arr)
+    {
+       #if JUCE_WINDOWS
+        File f (File::getSpecialLocation (File::windowsSystemDirectory));
+       #else
+        File f ("~");
+       #endif
+        if (auto num = f.getFileIdentifier())
+            arr.add (String::toHexString ((int64) num));
+    };
+
+    auto legacyIdProvider = [] ([[maybe_unused]] StringArray& arr)
+    {
+       #if JUCE_WINDOWS
+        arr.add (getLegacyUniqueDeviceID());
+       #endif
+    };
+
+    auto uniqueIdProvider = [] (StringArray& arr)
+    {
+        arr.add (getUniqueDeviceID());
+    };
+
+    struct Provider { MachineIdFlags flag; void (*func) (StringArray&); };
+    static const Provider providers[] =
+    {
+        { MachineIdFlags::macAddresses,   macAddressProvider },
+        { MachineIdFlags::fileSystemId,   fileSystemProvider },
+        { MachineIdFlags::legacyUniqueId, legacyIdProvider },
+        { MachineIdFlags::uniqueId,       uniqueIdProvider }
+    };
+
     StringArray ids;
 
-   #if JUCE_WINDOWS
-    File f (File::getSpecialLocation (File::windowsSystemDirectory));
-   #else
-    File f ("~");
-   #endif
-    if (auto num = f.getFileIdentifier())
+    for (const auto& provider : providers)
     {
-        ids.add (String::toHexString ((int64) num));
-    }
-    else
-    {
-        Array<MACAddress> addresses;
-        MACAddress::findAllAddresses (addresses);
-        for (auto& address : addresses)
-            ids.add (address.toString());
+        if (hasBitValueSet (flags, provider.flag))
+            provider.func (ids);
     }
 
-    jassert (ids.size() > 0); // Failed to create any IDs!
     return ids;
 }
 
@@ -108,9 +147,14 @@ struct CPUInformation
 
     int numLogicalCPUs = 0, numPhysicalCPUs = 0;
 
-    bool hasMMX = false, hasSSE = false, hasSSE2 = false, hasSSE3 = false,
-         has3DNow = false, hasSSSE3 = false, hasSSE41 = false,
-         hasSSE42 = false, hasAVX = false, hasAVX2 = false, hasNeon = false;
+    bool hasMMX      = false, hasSSE        = false, hasSSE2       = false, hasSSE3       = false,
+         has3DNow    = false, hasFMA3       = false, hasFMA4       = false, hasSSSE3      = false,
+         hasSSE41    = false, hasSSE42      = false, hasAVX        = false, hasAVX2       = false,
+         hasAVX512F  = false, hasAVX512BW   = false, hasAVX512CD   = false,
+         hasAVX512DQ = false, hasAVX512ER   = false, hasAVX512IFMA = false,
+         hasAVX512PF = false, hasAVX512VBMI = false, hasAVX512VL   = false,
+         hasAVX512VPOPCNTDQ = false,
+         hasNeon = false;
 };
 
 static const CPUInformation& getCPUInformation() noexcept
@@ -123,6 +167,8 @@ int SystemStats::getNumCpus() noexcept          { return getCPUInformation().num
 int SystemStats::getNumPhysicalCpus() noexcept  { return getCPUInformation().numPhysicalCPUs; }
 bool SystemStats::hasMMX() noexcept             { return getCPUInformation().hasMMX; }
 bool SystemStats::has3DNow() noexcept           { return getCPUInformation().has3DNow; }
+bool SystemStats::hasFMA3() noexcept            { return getCPUInformation().hasFMA3; }
+bool SystemStats::hasFMA4() noexcept            { return getCPUInformation().hasFMA4; }
 bool SystemStats::hasSSE() noexcept             { return getCPUInformation().hasSSE; }
 bool SystemStats::hasSSE2() noexcept            { return getCPUInformation().hasSSE2; }
 bool SystemStats::hasSSE3() noexcept            { return getCPUInformation().hasSSE3; }
@@ -131,6 +177,16 @@ bool SystemStats::hasSSE41() noexcept           { return getCPUInformation().has
 bool SystemStats::hasSSE42() noexcept           { return getCPUInformation().hasSSE42; }
 bool SystemStats::hasAVX() noexcept             { return getCPUInformation().hasAVX; }
 bool SystemStats::hasAVX2() noexcept            { return getCPUInformation().hasAVX2; }
+bool SystemStats::hasAVX512F() noexcept         { return getCPUInformation().hasAVX512F; }
+bool SystemStats::hasAVX512BW() noexcept        { return getCPUInformation().hasAVX512BW; }
+bool SystemStats::hasAVX512CD() noexcept        { return getCPUInformation().hasAVX512CD; }
+bool SystemStats::hasAVX512DQ() noexcept        { return getCPUInformation().hasAVX512DQ; }
+bool SystemStats::hasAVX512ER() noexcept        { return getCPUInformation().hasAVX512ER; }
+bool SystemStats::hasAVX512IFMA() noexcept      { return getCPUInformation().hasAVX512IFMA; }
+bool SystemStats::hasAVX512PF() noexcept        { return getCPUInformation().hasAVX512PF; }
+bool SystemStats::hasAVX512VBMI() noexcept      { return getCPUInformation().hasAVX512VBMI; }
+bool SystemStats::hasAVX512VL() noexcept        { return getCPUInformation().hasAVX512VL; }
+bool SystemStats::hasAVX512VPOPCNTDQ() noexcept { return getCPUInformation().hasAVX512VPOPCNTDQ; }
 bool SystemStats::hasNeon() noexcept            { return getCPUInformation().hasNeon; }
 
 
@@ -139,7 +195,7 @@ String SystemStats::getStackBacktrace()
 {
     String result;
 
-   #if JUCE_ANDROID || JUCE_MINGW
+   #if JUCE_ANDROID || JUCE_MINGW || JUCE_WASM
     jassertfalse; // sorry, not implemented yet!
 
    #elif JUCE_WINDOWS
@@ -175,10 +231,10 @@ String SystemStats::getStackBacktrace()
 
    #else
     void* stack[128];
-    int frames = backtrace (stack, numElementsInArray (stack));
+    auto frames = backtrace (stack, numElementsInArray (stack));
     char** frameStrings = backtrace_symbols (stack, frames);
 
-    for (int i = 0; i < frames; ++i)
+    for (auto i = (decltype (frames)) 0; i < frames; ++i)
         result << frameStrings[i] << newLine;
 
     ::free (frameStrings);
@@ -188,6 +244,8 @@ String SystemStats::getStackBacktrace()
 }
 
 //==============================================================================
+#if ! JUCE_WASM
+
 static SystemStats::CrashHandlerFunction globalCrashHandler = nullptr;
 
 #if JUCE_WINDOWS
@@ -200,7 +258,7 @@ static LONG WINAPI handleCrash (LPEXCEPTION_POINTERS ep)
 static void handleCrash (int signum)
 {
     globalCrashHandler ((void*) (pointer_sized_int) signum);
-    kill (getpid(), SIGKILL);
+    ::kill (getpid(), SIGKILL);
 }
 
 int juce_siginterrupt (int sig, int flag);
@@ -224,16 +282,13 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
    #endif
 }
 
+#endif
+
 bool SystemStats::isRunningInAppExtensionSandbox() noexcept
 {
    #if JUCE_MAC || JUCE_IOS
-    static bool firstQuery = true;
-    static bool isRunningInAppSandbox = false;
-
-    if (firstQuery)
+    static bool isRunningInAppSandbox = [&]
     {
-        firstQuery = false;
-
         File bundle = File::getSpecialLocation (File::invokedExecutableFile).getParentDirectory();
 
        #if JUCE_MAC
@@ -241,13 +296,36 @@ bool SystemStats::isRunningInAppExtensionSandbox() noexcept
        #endif
 
         if (bundle.isDirectory())
-            isRunningInAppSandbox = (bundle.getFileExtension() == ".appex");
-    }
+            return bundle.getFileExtension() == ".appex";
+
+        return false;
+    }();
 
     return isRunningInAppSandbox;
    #else
     return false;
    #endif
 }
+
+#if JUCE_UNIT_TESTS
+
+class UniqueHardwareIDTest final : public UnitTest
+{
+public:
+    //==============================================================================
+    UniqueHardwareIDTest() : UnitTest ("UniqueHardwareID", UnitTestCategories::analytics) {}
+
+    void runTest() override
+    {
+        beginTest ("getUniqueDeviceID returns usable data.");
+        {
+            expect (SystemStats::getUniqueDeviceID().isNotEmpty());
+        }
+    }
+};
+
+static UniqueHardwareIDTest uniqueHardwareIDTest;
+
+#endif
 
 } // namespace juce

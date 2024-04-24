@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -120,8 +121,8 @@ public:
 
     /** Returns one of the properties as an XML element.
 
-        The result will a new XMLElement object that the caller must delete. If may return nullptr
-        if the key isn't found, or if the entry contains an string that isn't valid XML.
+        The result will a new XMLElement object. It may return nullptr if the key isn't found,
+        or if the entry contains an string that isn't valid XML.
 
         If the value isn't found in this set, then this will look for it in a fallback
         property set (if you've specified one with the setFallbackPropertySet() method),
@@ -129,7 +130,7 @@ public:
 
         @param keyName              the name of the property to retrieve
     */
-    XmlElement* getXmlValue (StringRef keyName) const;
+    std::unique_ptr<XmlElement> getXmlValue (StringRef keyName) const;
 
     //==============================================================================
     /** Sets a named property.
@@ -137,7 +138,7 @@ public:
         @param keyName      the name of the property to set. (This mustn't be an empty string)
         @param value        the new value to set it to
     */
-    void setValue (const String& keyName, const var& value);
+    void setValue (StringRef keyName, const var& value);
 
     /** Sets a named property to an XML element.
 
@@ -146,7 +147,7 @@ public:
                             be set to an empty string
         @see getXmlValue
     */
-    void setValue (const String& keyName, const XmlElement* xml);
+    void setValue (StringRef keyName, const XmlElement* xml);
 
     /** This copies all the values from a source PropertySet to this one.
         This won't remove any existing settings, it just adds any that it finds in the source set.
@@ -159,7 +160,7 @@ public:
     */
     void removeValue (StringRef keyName);
 
-    /** Returns true if the properies include the given key. */
+    /** Returns true if the properties include the given key. */
     bool containsKey (StringRef keyName) const noexcept;
 
     /** Removes all values. */
@@ -177,7 +178,7 @@ public:
         The string parameter is the tag name that should be used for the node.
         @see restoreFromXml
     */
-    XmlElement* createXml (const String& nodeName) const;
+    std::unique_ptr<XmlElement> createXml (const String& nodeName) const;
 
     /** Reloads a set of properties that were previously stored as XML.
         The node passed in must have been created by the createXml() method.
@@ -206,7 +207,7 @@ public:
     PropertySet* getFallbackPropertySet() const noexcept                { return fallbackProperties; }
 
 protected:
-    /** Subclasses can override this to be told when one of the properies has been changed. */
+    /** Subclasses can override this to be told when one of the properties has been changed. */
     virtual void propertyChanged();
 
 private:

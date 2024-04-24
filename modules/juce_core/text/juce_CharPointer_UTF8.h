@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -50,49 +51,46 @@ namespace juce
 class CharPointer_UTF8  final
 {
 public:
-    typedef char CharType;
+    using CharType = char;
 
-    inline explicit CharPointer_UTF8 (const CharType* rawPointer) noexcept
+    explicit CharPointer_UTF8 (const CharType* rawPointer) noexcept
         : data (const_cast<CharType*> (rawPointer))
     {
     }
 
-    inline CharPointer_UTF8 (const CharPointer_UTF8& other) noexcept
-        : data (other.data)
-    {
-    }
+    CharPointer_UTF8 (const CharPointer_UTF8& other) = default;
 
-    inline CharPointer_UTF8 operator= (CharPointer_UTF8 other) noexcept
+    CharPointer_UTF8 operator= (CharPointer_UTF8 other) noexcept
     {
         data = other.data;
         return *this;
     }
 
-    inline CharPointer_UTF8 operator= (const CharType* text) noexcept
+    CharPointer_UTF8 operator= (const CharType* text) noexcept
     {
         data = const_cast<CharType*> (text);
         return *this;
     }
 
     /** This is a pointer comparison, it doesn't compare the actual text. */
-    inline bool operator== (CharPointer_UTF8 other) const noexcept      { return data == other.data; }
-    inline bool operator!= (CharPointer_UTF8 other) const noexcept      { return data != other.data; }
-    inline bool operator<= (CharPointer_UTF8 other) const noexcept      { return data <= other.data; }
-    inline bool operator<  (CharPointer_UTF8 other) const noexcept      { return data <  other.data; }
-    inline bool operator>= (CharPointer_UTF8 other) const noexcept      { return data >= other.data; }
-    inline bool operator>  (CharPointer_UTF8 other) const noexcept      { return data >  other.data; }
+    bool operator== (CharPointer_UTF8 other) const noexcept      { return data == other.data; }
+    bool operator!= (CharPointer_UTF8 other) const noexcept      { return data != other.data; }
+    bool operator<= (CharPointer_UTF8 other) const noexcept      { return data <= other.data; }
+    bool operator<  (CharPointer_UTF8 other) const noexcept      { return data <  other.data; }
+    bool operator>= (CharPointer_UTF8 other) const noexcept      { return data >= other.data; }
+    bool operator>  (CharPointer_UTF8 other) const noexcept      { return data >  other.data; }
 
     /** Returns the address that this pointer is pointing to. */
-    inline CharType* getAddress() const noexcept        { return data; }
+    CharType* getAddress() const noexcept        { return data; }
 
     /** Returns the address that this pointer is pointing to. */
-    inline operator const CharType*() const noexcept    { return data; }
+    operator const CharType*() const noexcept    { return data; }
 
     /** Returns true if this pointer is pointing to a null character. */
-    inline bool isEmpty() const noexcept                { return *data == 0; }
+    bool isEmpty() const noexcept                { return *data == 0; }
 
     /** Returns true if this pointer is not pointing to a null character. */
-    inline bool isNotEmpty() const noexcept             { return *data != 0; }
+    bool isNotEmpty() const noexcept             { return *data != 0; }
 
     /** Returns the unicode character that this pointer is pointing to. */
     juce_wchar operator*() const noexcept
@@ -138,12 +136,12 @@ public:
 
         if (n < 0)
         {
-            juce_wchar bit = 0x40;
+            uint8 bit = 0x40;
 
-            while ((static_cast<juce_wchar> (n) & bit) != 0 && bit > 0x8)
+            while ((static_cast<uint8> (n) & bit) != 0 && bit > 0x8)
             {
                 ++data;
-                bit >>= 1;
+                bit = static_cast<uint8> (bit >> 1);
             }
         }
 
@@ -293,8 +291,10 @@ public:
     */
     size_t sizeInBytes() const noexcept
     {
+        JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6387)
         jassert (data != nullptr);
         return strlen (data) + 1;
+        JUCE_END_IGNORE_WARNINGS_MSVC
     }
 
     /** Returns the number of bytes that would be needed to represent the given
@@ -367,7 +367,7 @@ public:
     }
 
     /** Writes a null character to this string (leaving the pointer's position unchanged). */
-    inline void writeNull() const noexcept
+    void writeNull() const noexcept
     {
         *data = 0;
     }
@@ -466,7 +466,7 @@ public:
     }
 
     /** Returns true if the first character of this string is whitespace. */
-    bool isWhitespace() const noexcept          { const CharType c = *data; return c == ' ' || (c <= 13 && c >= 9); }
+    bool isWhitespace() const noexcept          { return CharacterFunctions::isWhitespace ((juce_wchar) *(*this)); }
     /** Returns true if the first character of this string is a digit. */
     bool isDigit() const noexcept               { const CharType c = *data; return c >= '0' && c <= '9'; }
     /** Returns true if the first character of this string is a letter. */
@@ -501,6 +501,9 @@ public:
 
     /** Returns the first non-whitespace character in the string. */
     CharPointer_UTF8 findEndOfWhitespace() const noexcept       { return CharacterFunctions::findEndOfWhitespace (*this); }
+
+    /** Move this pointer to the first non-whitespace character in the string. */
+    void incrementToEndOfWhitespace() noexcept                  { CharacterFunctions::incrementToEndOfWhitespace (*this); }
 
     /** Returns true if the given unicode character can be represented in this encoding. */
     static bool canRepresent (juce_wchar character) noexcept
@@ -568,12 +571,14 @@ public:
     */
     static bool isByteOrderMark (const void* possibleByteOrder) noexcept
     {
+        JUCE_BEGIN_IGNORE_WARNINGS_MSVC (28182)
         jassert (possibleByteOrder != nullptr);
         auto c = static_cast<const uint8*> (possibleByteOrder);
 
         return c[0] == (uint8) byteOrderMark1
             && c[1] == (uint8) byteOrderMark2
             && c[2] == (uint8) byteOrderMark3;
+        JUCE_END_IGNORE_WARNINGS_MSVC
     }
 
 private:

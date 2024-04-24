@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -122,14 +123,17 @@ MidiBuffer MPEMessages::setZoneLayout (MPEZoneLayout layout)
     return buffer;
 }
 
+
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class MPEMessagesTests  : public UnitTest
+class MPEMessagesTests final : public UnitTest
 {
 public:
-    MPEMessagesTests() : UnitTest ("MPEMessages class", "MIDI/MPE") {}
+    MPEMessagesTests()
+        : UnitTest ("MPEMessages class", UnitTestCategories::midi)
+    {}
 
     void runTest() override
     {
@@ -229,14 +233,11 @@ private:
     void extractRawBinaryData (const MidiBuffer& midiBuffer, const uint8* bufferToCopyTo, std::size_t maxBytes)
     {
         std::size_t pos = 0;
-        MidiBuffer::Iterator iter (midiBuffer);
-        MidiMessage midiMessage;
-        int samplePosition; // Note: not actually used, so no need to initialise.
 
-        while (iter.getNextEvent (midiMessage, samplePosition))
+        for (const auto metadata : midiBuffer)
         {
-            const uint8* data = midiMessage.getRawData();
-            std::size_t dataSize = (std::size_t) midiMessage.getRawDataSize();
+            const uint8* data = metadata.data;
+            std::size_t dataSize = (std::size_t) metadata.numBytes;
 
             if (pos + dataSize > maxBytes)
                 return;
@@ -249,6 +250,6 @@ private:
 
 static MPEMessagesTests MPEMessagesUnitTests;
 
-#endif // JUCE_UNIT_TESTS
+#endif
 
 } // namespace juce

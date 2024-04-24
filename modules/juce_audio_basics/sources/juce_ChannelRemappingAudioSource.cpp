@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -161,18 +162,18 @@ void ChannelRemappingAudioSource::getNextAudioBlock (const AudioSourceChannelInf
 }
 
 //==============================================================================
-XmlElement* ChannelRemappingAudioSource::createXml() const
+std::unique_ptr<XmlElement> ChannelRemappingAudioSource::createXml() const
 {
-    XmlElement* e = new XmlElement ("MAPPINGS");
+    auto e = std::make_unique<XmlElement> ("MAPPINGS");
     String ins, outs;
 
     const ScopedLock sl (lock);
 
     for (int i = 0; i < remappedInputs.size(); ++i)
-        ins << remappedInputs.getUnchecked(i) << ' ';
+        ins << remappedInputs.getUnchecked (i) << ' ';
 
     for (int i = 0; i < remappedOutputs.size(); ++i)
-        outs << remappedOutputs.getUnchecked(i) << ' ';
+        outs << remappedOutputs.getUnchecked (i) << ' ';
 
     e->setAttribute ("inputs", ins.trimEnd());
     e->setAttribute ("outputs", outs.trimEnd());

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -128,7 +129,7 @@ BigInteger::BigInteger (const BigInteger& other)
 }
 
 BigInteger::BigInteger (BigInteger&& other) noexcept
-    : heapAllocation (static_cast<HeapBlock<uint32>&&> (other.heapAllocation)),
+    : heapAllocation (std::move (other.heapAllocation)),
       allocatedSize (other.allocatedSize),
       highestBit (other.highestBit),
       negative (other.negative)
@@ -138,16 +139,12 @@ BigInteger::BigInteger (BigInteger&& other) noexcept
 
 BigInteger& BigInteger::operator= (BigInteger&& other) noexcept
 {
-    heapAllocation = static_cast<HeapBlock<uint32>&&> (other.heapAllocation);
+    heapAllocation = std::move (other.heapAllocation);
     memcpy (preallocated, other.preallocated, sizeof (preallocated));
     allocatedSize = other.allocatedSize;
     highestBit = other.highestBit;
     negative = other.negative;
     return *this;
-}
-
-BigInteger::~BigInteger()
-{
 }
 
 void BigInteger::swapWith (BigInteger& other) noexcept
@@ -182,12 +179,14 @@ BigInteger& BigInteger::operator= (const BigInteger& other)
     return *this;
 }
 
+BigInteger::~BigInteger() = default;
+
 uint32* BigInteger::getValues() const noexcept
 {
     jassert (heapAllocation != nullptr || allocatedSize <= numPreallocatedInts);
 
     return heapAllocation != nullptr ? heapAllocation
-                                     : (uint32*) preallocated;
+                                     : const_cast<uint32*> (preallocated);
 }
 
 uint32* BigInteger::ensureSize (const size_t numVals)
@@ -278,7 +277,7 @@ uint32 BigInteger::getBitRangeAsInt (const int startBit, int numBits) const noex
     return n & (((uint32) 0xffffffff) >> endSpace);
 }
 
-void BigInteger::setBitRangeAsInt (const int startBit, int numBits, uint32 valueToSet)
+BigInteger& BigInteger::setBitRangeAsInt (const int startBit, int numBits, uint32 valueToSet)
 {
     if (numBits > 32)
     {
@@ -291,10 +290,12 @@ void BigInteger::setBitRangeAsInt (const int startBit, int numBits, uint32 value
         setBit (startBit + i, (valueToSet & 1) != 0);
         valueToSet >>= 1;
     }
+
+    return *this;
 }
 
 //==============================================================================
-void BigInteger::clear() noexcept
+BigInteger& BigInteger::clear() noexcept
 {
     heapAllocation.free();
     allocatedSize = numPreallocatedInts;
@@ -303,9 +304,11 @@ void BigInteger::clear() noexcept
 
     for (int i = 0; i < numPreallocatedInts; ++i)
         preallocated[i] = 0;
+
+    return *this;
 }
 
-void BigInteger::setBit (const int bit)
+BigInteger& BigInteger::setBit (const int bit)
 {
     if (bit >= 0)
     {
@@ -317,17 +320,21 @@ void BigInteger::setBit (const int bit)
 
         getValues() [bitToIndex (bit)] |= bitToMask (bit);
     }
+
+    return *this;
 }
 
-void BigInteger::setBit (const int bit, const bool shouldBeSet)
+BigInteger& BigInteger::setBit (const int bit, const bool shouldBeSet)
 {
     if (shouldBeSet)
         setBit (bit);
     else
         clearBit (bit);
+
+    return *this;
 }
 
-void BigInteger::clearBit (const int bit) noexcept
+BigInteger& BigInteger::clearBit (const int bit) noexcept
 {
     if (bit >= 0 && bit <= highestBit)
     {
@@ -336,20 +343,25 @@ void BigInteger::clearBit (const int bit) noexcept
         if (bit == highestBit)
             highestBit = getHighestBit();
     }
+
+    return *this;
 }
 
-void BigInteger::setRange (int startBit, int numBits, const bool shouldBeSet)
+BigInteger& BigInteger::setRange (int startBit, int numBits, const bool shouldBeSet)
 {
     while (--numBits >= 0)
         setBit (startBit++, shouldBeSet);
+
+    return *this;
 }
 
-void BigInteger::insertBit (const int bit, const bool shouldBeSet)
+BigInteger& BigInteger::insertBit (const int bit, const bool shouldBeSet)
 {
     if (bit >= 0)
         shiftBits (1, bit);
 
     setBit (bit, shouldBeSet);
+    return *this;
 }
 
 //==============================================================================
@@ -567,7 +579,7 @@ BigInteger& BigInteger::operator*= (const BigInteger& other)
         {
             auto uv = (uint64) totalValues[i + j] + (uint64) values[j] * (uint64) mValues[i] + (uint64) c;
             totalValues[i + j] = (uint32) uv;
-            c = uv >> 32;
+            c = static_cast<uint32> (uv >> 32);
         }
 
         totalValues[i + n + 1] = c;
@@ -875,7 +887,7 @@ void BigInteger::shiftRight (int bits, const int startBit)
     }
 }
 
-void BigInteger::shiftBits (int bits, const int startBit)
+BigInteger& BigInteger::shiftBits (int bits, const int startBit)
 {
     if (highestBit >= 0)
     {
@@ -884,6 +896,8 @@ void BigInteger::shiftBits (int bits, const int startBit)
         else if (bits > 0)
             shiftLeft (bits, startBit);
     }
+
+    return *this;
 }
 
 //==============================================================================
@@ -1008,7 +1022,7 @@ void BigInteger::montgomeryMultiplication (const BigInteger& other, const BigInt
 void BigInteger::extendedEuclidean (const BigInteger& a, const BigInteger& b,
                                     BigInteger& x, BigInteger& y)
 {
-    BigInteger p(a), q(b), gcd(1);
+    BigInteger p (a), q (b), gcd (1);
     Array<BigInteger> tempValues;
 
     while (! q.isZero())
@@ -1212,7 +1226,7 @@ void BigInteger::loadFromMemoryBlock (const MemoryBlock& data)
     auto* values = ensureSize (numInts);
 
     for (int i = 0; i < (int) numInts - 1; ++i)
-        values[i] = (uint32) ByteOrder::littleEndianInt (addBytesToPointer (data.getData(), sizeof (uint32) * (size_t) i));
+        values[i] = (uint32) ByteOrder::littleEndianInt (addBytesToPointer (data.getData(), (size_t) i * sizeof (uint32)));
 
     values[numInts - 1] = 0;
 
@@ -1256,7 +1270,7 @@ void writeLittleEndianBitsInBuffer (void* buffer, uint32 startBit, uint32 numBit
     }
 
     if (numBits > 0)
-        *data = (uint8) ((*data & (0xff << numBits)) | value);
+        *data = (uint8) ((*data & (uint32) (0xff << numBits)) | value);
 }
 
 uint32 readLittleEndianBitsInBuffer (const void* buffer, uint32 startBit, uint32 numBits) noexcept
@@ -1271,7 +1285,7 @@ uint32 readLittleEndianBitsInBuffer (const void* buffer, uint32 startBit, uint32
     if (const uint32 offset = (startBit & 7))
     {
         const uint32 bitsInByte = 8 - offset;
-        result = (*data >> offset);
+        result = (uint32) (*data >> offset);
 
         if (bitsInByte >= numBits)
             return result & ((1u << numBits) - 1u);
@@ -1294,14 +1308,17 @@ uint32 readLittleEndianBitsInBuffer (const void* buffer, uint32 startBit, uint32
     return result;
 }
 
+
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class BigIntegerTests  : public UnitTest
+class BigIntegerTests final : public UnitTest
 {
 public:
-    BigIntegerTests() : UnitTest ("BigInteger", "Maths") {}
+    BigIntegerTests()
+        : UnitTest ("BigInteger", UnitTestCategories::maths)
+    {}
 
     static BigInteger getBigRandom (Random& r)
     {
@@ -1321,12 +1338,12 @@ public:
             Random r = getRandom();
 
             expect (BigInteger().isZero());
-            expect (BigInteger(1).isOne());
+            expect (BigInteger (1).isOne());
 
             for (int j = 10000; --j >= 0;)
             {
-                BigInteger b1 (getBigRandom(r)),
-                           b2 (getBigRandom(r));
+                BigInteger b1 (getBigRandom (r)),
+                           b2 (getBigRandom (r));
 
                 BigInteger b3 = b1 + b2;
                 expect (b3 > b1 && b3 > b2);

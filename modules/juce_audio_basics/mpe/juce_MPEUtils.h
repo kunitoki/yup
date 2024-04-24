@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -79,17 +80,25 @@ public:
     */
     int findMidiChannelForNewNote (int noteNumber) noexcept;
 
+    /** If a note has been added using findMidiChannelForNewNote() this will return the channel
+        to which it was assigned, otherwise it will return -1.
+    */
+    int findMidiChannelForExistingNote (int initialNoteOnNumber) noexcept;
+
     /** You must call this method for all note-offs that you receive so that this class
         can keep track of the currently playing notes internally.
+
+        You can specify the channel number the note off happened on. If you don't, it will
+        look through all channels to find the registered midi note matching the given note number.
     */
-    void noteOff (int noteNumber);
+    void noteOff (int noteNumber, int midiChannel = -1);
 
     /** Call this to clear all currently playing notes. */
     void allNotesOff();
 
 private:
     bool isLegacy = false;
-    ScopedPointer<MPEZoneLayout::Zone> zone;
+    std::unique_ptr<MPEZoneLayout::Zone> zone;
     int channelIncrement, numChannels, firstChannel, lastChannel, midiChannelLastAssigned;
 
     //==============================================================================
@@ -99,7 +108,7 @@ private:
         int lastNotePlayed = -1;
         bool isFree() const noexcept  { return notes.isEmpty(); }
     };
-    MidiChannel midiChannels[17];
+    std::array<MidiChannel, 17> midiChannels;
 
     //==============================================================================
     int findMidiChannelPlayingClosestNonequalNote (int noteNumber) noexcept;

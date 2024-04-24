@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -44,10 +45,8 @@ AbstractFifo::AbstractFifo (int capacity) noexcept : bufferSize (capacity)
     jassert (bufferSize > 0);
 }
 
-AbstractFifo::~AbstractFifo() {}
-
-int AbstractFifo::getTotalSize() const noexcept           { return bufferSize; }
-int AbstractFifo::getFreeSpace() const noexcept           { return bufferSize - getNumReady() - 1; }
+int AbstractFifo::getTotalSize() const noexcept    { return bufferSize; }
+int AbstractFifo::getFreeSpace() const noexcept    { return bufferSize - getNumReady() - 1; }
 
 int AbstractFifo::getNumReady() const noexcept
 {
@@ -70,7 +69,8 @@ void AbstractFifo::setTotalSize (int newSize) noexcept
 }
 
 //==============================================================================
-void AbstractFifo::prepareToWrite (int numToWrite, int& startIndex1, int& blockSize1, int& startIndex2, int& blockSize2) const noexcept
+void AbstractFifo::prepareToWrite (int numToWrite, int& startIndex1, int& blockSize1,
+                                   int& startIndex2, int& blockSize2) const noexcept
 {
     auto vs = validStart.get();
     auto ve = validEnd.get();
@@ -107,7 +107,8 @@ void AbstractFifo::finishedWrite (int numWritten) noexcept
     validEnd = newEnd;
 }
 
-void AbstractFifo::prepareToRead (int numWanted, int& startIndex1, int& blockSize1, int& startIndex2, int& blockSize2) const noexcept
+void AbstractFifo::prepareToRead (int numWanted, int& startIndex1, int& blockSize1,
+                                  int& startIndex2, int& blockSize2) const noexcept
 {
     auto vs = validStart.get();
     auto ve = validEnd.get();
@@ -146,13 +147,6 @@ void AbstractFifo::finishedRead (int numRead) noexcept
 
 //==============================================================================
 template <AbstractFifo::ReadOrWrite mode>
-AbstractFifo::ScopedReadWrite<mode>::ScopedReadWrite (AbstractFifo& f, int num) noexcept
-    : fifo (&f)
-{
-    prepare (*fifo, num);
-}
-
-template <AbstractFifo::ReadOrWrite mode>
 AbstractFifo::ScopedReadWrite<mode>::ScopedReadWrite (ScopedReadWrite&& other) noexcept
     : startIndex1 (other.startIndex1),
       blockSize1 (other.blockSize1),
@@ -171,13 +165,6 @@ AbstractFifo::ScopedReadWrite<mode>::operator= (ScopedReadWrite&& other) noexcep
 }
 
 template <AbstractFifo::ReadOrWrite mode>
-AbstractFifo::ScopedReadWrite<mode>::~ScopedReadWrite() noexcept
-{
-    if (fifo != nullptr)
-        finish (*fifo, blockSize1 + blockSize2);
-}
-
-template <AbstractFifo::ReadOrWrite mode>
 void AbstractFifo::ScopedReadWrite<mode>::swap (ScopedReadWrite& other) noexcept
 {
     std::swap (other.fifo, fifo);
@@ -187,42 +174,25 @@ void AbstractFifo::ScopedReadWrite<mode>::swap (ScopedReadWrite& other) noexcept
     std::swap (other.blockSize2, blockSize2);
 }
 
-template<>
-void AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::read>::prepare (AbstractFifo& f, int num) noexcept
-{
-    f.prepareToRead (num, startIndex1, blockSize1, startIndex2, blockSize2);
-}
-
-template<>
-void AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::write>::prepare (AbstractFifo& f, int num) noexcept
-{
-    f.prepareToWrite (num, startIndex1, blockSize1, startIndex2, blockSize2);
-}
-
-template<>
-void AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::read>::finish (AbstractFifo& f, int num) noexcept
-{
-    f.finishedRead (num);
-}
-
-template<>
-void AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::write>::finish (AbstractFifo& f, int num) noexcept
-{
-    f.finishedWrite (num);
-}
-
 template class AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::read>;
 template class AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::write>;
 
+AbstractFifo::ScopedRead  AbstractFifo::read  (int numToRead) noexcept     { return { *this, numToRead }; }
+AbstractFifo::ScopedWrite AbstractFifo::write (int numToWrite) noexcept    { return { *this, numToWrite }; }
+
+
+//==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class AbstractFifoTests  : public UnitTest
+class AbstractFifoTests final : public UnitTest
 {
 public:
-    AbstractFifoTests() : UnitTest ("Abstract Fifo", "Containers") {}
+    AbstractFifoTests()
+        : UnitTest ("Abstract Fifo", UnitTestCategories::containers)
+    {}
 
-    struct WriteThread  : public Thread
+    struct WriteThread final : public Thread
     {
         WriteThread (AbstractFifo& f, int* b, Random rng)
             : Thread ("fifo writer"), fifo (f), buffer (b), random (rng)
@@ -230,12 +200,12 @@ public:
             startThread();
         }
 
-        ~WriteThread()
+        ~WriteThread() override
         {
             stopThread (5000);
         }
 
-        void run()
+        void run() override
         {
             int n = 0;
 
@@ -259,6 +229,8 @@ public:
         int* buffer;
         Random random;
     };
+
+    JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6262)
 
     void runTest() override
     {
@@ -303,6 +275,8 @@ public:
             }
         }
     }
+
+    JUCE_END_IGNORE_WARNINGS_MSVC
 };
 
 static AbstractFifoTests fifoUnitTests;

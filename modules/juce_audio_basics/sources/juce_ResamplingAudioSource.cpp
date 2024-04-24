@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -43,11 +44,6 @@ ResamplingAudioSource::ResamplingAudioSource (AudioSource* const inputSource,
                                               const bool deleteInputWhenDeleted,
                                               const int channels)
     : input (inputSource, deleteInputWhenDeleted),
-      ratio (1.0),
-      lastRatio (1.0),
-      bufferPos (0),
-      sampsInBuffer (0),
-      subSampleOffset (0),
       numChannels (channels)
 {
     jassert (input != nullptr);
@@ -83,6 +79,8 @@ void ResamplingAudioSource::prepareToPlay (int samplesPerBlockExpected, double s
 
 void ResamplingAudioSource::flushBuffers()
 {
+    const ScopedLock sl (callbackLock);
+
     buffer.clear();
     bufferPos = 0;
     sampsInBuffer = 0;
@@ -98,14 +96,16 @@ void ResamplingAudioSource::releaseResources()
 
 void ResamplingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info)
 {
+    const ScopedLock sl (callbackLock);
+
     double localRatio;
 
     {
-        const SpinLock::ScopedLockType sl (ratioLock);
+        const SpinLock::ScopedLockType ratioSl (ratioLock);
         localRatio = ratio;
     }
 
-    if (lastRatio != localRatio)
+    if (! approximatelyEqual (lastRatio, localRatio))
     {
         createLowPass (localRatio);
         lastRatio = localRatio;

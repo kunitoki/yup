@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -69,23 +70,23 @@
     a pre-v4.2 version of the Introjucer/Projucer, it's very easy to fix: just re-save
     your project with the latest version of the Projucer, and it'll magically fix this!
  */
- //#error "No global header file was included!"
+ #error "No global header file was included!"
 #endif
 
 //==============================================================================
 #if defined (_WIN32) || defined (_WIN64)
-  #define       JUCE_WIN32 1
   #define       JUCE_WINDOWS 1
 #elif defined (JUCE_ANDROID)
   #undef        JUCE_ANDROID
   #define       JUCE_ANDROID 1
-#elif defined (__FreeBSD__) || (__OpenBSD__)
+#elif defined (__FreeBSD__) || defined (__OpenBSD__)
   #define       JUCE_BSD 1
 #elif defined (LINUX) || defined (__linux__)
-  #define     JUCE_LINUX 1
+  #define       JUCE_LINUX 1
 #elif defined (__APPLE_CPP__) || defined (__APPLE_CC__)
-  #include <CoreFoundation/CoreFoundation.h> // (needed to find out what platform we're using)
-  #include "../native/juce_mac_ClangBugWorkaround.h"
+  #define CF_EXCLUDE_CSTD_HEADERS 1
+  #include <TargetConditionals.h> // (needed to find out what platform we're using)
+  #include <AvailabilityMacros.h>
 
   #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
     #define     JUCE_IPHONE 1
@@ -93,6 +94,8 @@
   #else
     #define     JUCE_MAC 1
   #endif
+#elif defined (__wasm__)
+  #define       JUCE_WASM 1
 #else
   #error "Unknown platform!"
 #endif
@@ -123,7 +126,11 @@
   /** If defined, this indicates that the processor is little-endian. */
   #define JUCE_LITTLE_ENDIAN 1
 
-  #define JUCE_INTEL 1
+  #if defined (_M_ARM) || defined (_M_ARM64) || defined (__arm__) || defined (__aarch64__)
+    #define JUCE_ARM 1
+  #else
+    #define JUCE_INTEL 1
+  #endif
 #endif
 
 //==============================================================================
@@ -157,17 +164,17 @@
     #define JUCE_INTEL 1
   #endif
 
-  #if JUCE_MAC && MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_5
-    #error "Building for OSX 10.4 is no longer supported!"
-  #endif
-
-  #if JUCE_MAC && ! defined (MAC_OS_X_VERSION_10_6)
-    #error "To build with 10.5 compatibility, use a later SDK and set the deployment target to 10.5"
+  #if JUCE_MAC
+    #if ! defined (MAC_OS_X_VERSION_10_14)
+      #error "The 10.14 SDK (Xcode 10.1+) is required to build JUCE apps. You can create apps that run on macOS 10.9+ by changing the deployment target."
+    #elif MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_9
+      #error "Building for OSX 10.8 and earlier is no longer supported!"
+    #endif
   #endif
 #endif
 
 //==============================================================================
-#if JUCE_LINUX || JUCE_ANDROID
+#if JUCE_LINUX || JUCE_ANDROID || JUCE_BSD
 
   #ifdef _DEBUG
     #define JUCE_DEBUG 1
@@ -198,7 +205,7 @@
 //==============================================================================
 // Compiler type macros.
 
-#ifdef __clang__
+#if defined (__clang__)
   #define JUCE_CLANG 1
 
 #elif defined (__GNUC__)

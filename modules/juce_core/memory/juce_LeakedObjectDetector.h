@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -62,6 +63,8 @@ public:
     LeakedObjectDetector() noexcept                                 { ++(getCounter().numObjects); }
     LeakedObjectDetector (const LeakedObjectDetector&) noexcept     { ++(getCounter().numObjects); }
 
+    LeakedObjectDetector& operator= (const LeakedObjectDetector&) noexcept = default;
+
     ~LeakedObjectDetector()
     {
         if (--(getCounter().numObjects) < 0)
@@ -76,7 +79,7 @@ public:
                 at an earlier point in the program, and simply not been detected until now.
 
                 Most errors like this are caused by using old-fashioned, non-RAII techniques for
-                your object management. Tut, tut. Always, always use ScopedPointers, OwnedArrays,
+                your object management. Tut, tut. Always, always use std::unique_ptrs, OwnedArrays,
                 ReferenceCountedObjects, etc, and avoid the 'delete' operator at all costs!
             */
             jassertfalse;
@@ -88,7 +91,7 @@ private:
     class LeakCounter
     {
     public:
-        LeakCounter() noexcept {}
+        LeakCounter() = default;
 
         ~LeakCounter()
         {
@@ -100,7 +103,7 @@ private:
                     the 'OwnerClass' template parameter - the name should have been printed by the line above.
 
                     If you're leaking, it's probably because you're using old-fashioned, non-RAII techniques for
-                    your object management. Tut, tut. Always, always use ScopedPointers, OwnedArrays,
+                    your object management. Tut, tut. Always, always use std::unique_ptrs, OwnedArrays,
                     ReferenceCountedObjects, etc, and avoid the 'delete' operator at all costs!
                 */
                 jassertfalse;
@@ -127,7 +130,7 @@ private:
  #if (DOXYGEN || JUCE_CHECK_MEMORY_LEAKS)
   /** This macro lets you embed a leak-detecting object inside a class.
 
-      To use it, simply declare a JUCE_LEAK_DETECTOR(YourClassName) inside a private section
+      To use it, simply declare a JUCE_LEAK_DETECTOR (YourClassName) inside a private section
       of the class declaration. E.g.
 
       @code

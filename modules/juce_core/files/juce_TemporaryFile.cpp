@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -39,6 +40,23 @@
 namespace juce
 {
 
+// Using Random::getSystemRandom() can be a bit dangerous in multithreaded contexts!
+class LockedRandom
+{
+public:
+    int nextInt()
+    {
+        const ScopedLock lock (mutex);
+        return random.nextInt();
+    }
+
+private:
+    CriticalSection mutex;
+    Random random;
+};
+
+static LockedRandom lockedRandom;
+
 static File createTempFile (const File& parentDirectory, String name,
                             const String& suffix, int optionFlags)
 {
@@ -50,15 +68,16 @@ static File createTempFile (const File& parentDirectory, String name,
 
 TemporaryFile::TemporaryFile (const String& suffix, const int optionFlags)
     : temporaryFile (createTempFile (File::getSpecialLocation (File::tempDirectory),
-                                     "temp_" + String::toHexString (Random::getSystemRandom().nextInt()),
-                                     suffix, optionFlags))
+                                     "temp_" + String::toHexString (lockedRandom.nextInt()),
+                                     suffix, optionFlags)),
+      targetFile()
 {
 }
 
 TemporaryFile::TemporaryFile (const File& target, const int optionFlags)
     : temporaryFile (createTempFile (target.getParentDirectory(),
                                      target.getFileNameWithoutExtension()
-                                       + "_temp" + String::toHexString (Random::getSystemRandom().nextInt()),
+                                       + "_temp" + String::toHexString (lockedRandom.nextInt()),
                                      target.getFileExtension(), optionFlags)),
       targetFile (target)
 {
@@ -120,7 +139,7 @@ bool TemporaryFile::deleteTemporaryFile() const
     // Have a few attempts at deleting the file before giving up..
     for (int i = 5; --i >= 0;)
     {
-        if (temporaryFile.deleteFile())
+        if (temporaryFile.isDirectory() ? temporaryFile.deleteRecursively() : temporaryFile.deleteFile())
             return true;
 
         Thread::sleep (50);

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -45,22 +46,15 @@ inline void zeromem (void* memory, size_t numBytes) noexcept        { memset (me
 
 /** Overwrites a structure or object with zeros. */
 template <typename Type>
-inline void zerostruct (Type& structure) noexcept                   { memset (&structure, 0, sizeof (structure)); }
+inline void zerostruct (Type& structure) noexcept                   { memset ((void*) &structure, 0, sizeof (structure)); }
 
 /** Delete an object pointer, and sets the pointer to null.
 
-    Remember that it's not good c++ practice to use delete directly - always try to use a ScopedPointer
+    Remember that it's not good c++ practice to use delete directly - always try to use a std::unique_ptr
     or other automatic lifetime-management system rather than resorting to deleting raw pointers!
 */
 template <typename Type>
 inline void deleteAndZero (Type& pointer)                           { delete pointer; pointer = nullptr; }
-
-/** A handy function which adds a number of bytes to any type of pointer and returns the result.
-    This can be useful to avoid casting pointers to a char* and back when you want to move them by
-    a specific number of bytes,
-*/
-template <typename Type, typename IntegerType>
-inline Type* addBytesToPointer (Type* basePointer, IntegerType bytes) noexcept  { return (Type*) (((char*) basePointer) + bytes); }
 
 /** A handy function to round up a pointer to the nearest multiple of a given number of bytes.
     alignmentBytes must be a power of two. */
@@ -97,6 +91,55 @@ template <typename Type>
 inline void writeUnaligned (void* dstPtr, Type value) noexcept
 {
     memcpy (dstPtr, &value, sizeof (Type));
+}
+
+//==============================================================================
+/** Casts a pointer to another type via `void*`, which suppresses the cast-align
+    warning which sometimes arises when casting pointers to types with different
+    alignment.
+    You should only use this when you know for a fact that the input pointer points
+    to a region that has suitable alignment for `Type`, e.g. regions returned from
+    malloc/calloc that should be suitable for any non-over-aligned type.
+*/
+template <typename Type>
+inline Type unalignedPointerCast (void* ptr) noexcept
+{
+    static_assert (std::is_pointer_v<Type>);
+    return reinterpret_cast<Type> (ptr);
+}
+
+/** Casts a pointer to another type via `void*`, which suppresses the cast-align
+    warning which sometimes arises when casting pointers to types with different
+    alignment.
+    You should only use this when you know for a fact that the input pointer points
+    to a region that has suitable alignment for `Type`, e.g. regions returned from
+    malloc/calloc that should be suitable for any non-over-aligned type.
+*/
+template <typename Type>
+inline Type unalignedPointerCast (const void* ptr) noexcept
+{
+    static_assert (std::is_pointer_v<Type>);
+    return reinterpret_cast<Type> (ptr);
+}
+
+/** A handy function which adds a number of bytes to any type of pointer and returns the result.
+    This can be useful to avoid casting pointers to a char* and back when you want to move them by
+    a specific number of bytes,
+*/
+template <typename Type, typename IntegerType>
+inline Type* addBytesToPointer (Type* basePointer, IntegerType bytes) noexcept
+{
+    return unalignedPointerCast<Type*> (reinterpret_cast<char*> (basePointer) + bytes);
+}
+
+/** A handy function which adds a number of bytes to any type of pointer and returns the result.
+    This can be useful to avoid casting pointers to a char* and back when you want to move them by
+    a specific number of bytes,
+*/
+template <typename Type, typename IntegerType>
+inline const Type* addBytesToPointer (const Type* basePointer, IntegerType bytes) noexcept
+{
+    return unalignedPointerCast<const Type*> (reinterpret_cast<const char*> (basePointer) + bytes);
 }
 
 //==============================================================================
@@ -158,5 +201,19 @@ inline void writeUnaligned (void* dstPtr, Type value) noexcept
 #ifndef juce_UseDebuggingNewOperator
  #define juce_UseDebuggingNewOperator
 #endif
+
+/** Converts an owning raw pointer into a unique_ptr, deriving the
+    type of the unique_ptr automatically.
+
+    This should only be used with pointers to single objects.
+    Do NOT pass a pointer to an array to this function, as the
+    destructor of the unique_ptr will incorrectly call `delete`
+    instead of `delete[]` on the pointer.
+*/
+template <typename T>
+std::unique_ptr<T> rawToUniquePtr (T* ptr)
+{
+    return std::unique_ptr<T> (ptr);
+}
 
 } // namespace juce

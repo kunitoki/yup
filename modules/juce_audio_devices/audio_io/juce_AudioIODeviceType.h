@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -96,9 +97,8 @@ public:
 
         The scanForDevices() method must have been called to create this list.
 
-        @param wantInputNames     only really used by DirectSound where devices are split up
-                                  into inputs and outputs, this indicates whether to use
-                                  the input or output name to refer to a pair of devices.
+        @param wantInputNames    for devices which have separate inputs and outputs
+                                 this determines which list of names is returned
     */
     virtual StringArray getDeviceNames (bool wantInputNames = false) const = 0;
 
@@ -133,7 +133,7 @@ public:
     /**
         A class for receiving events when audio devices are inserted or removed.
 
-        You can register an AudioIODeviceType::Listener with an~AudioIODeviceType object
+        You can register an AudioIODeviceType::Listener with an AudioIODeviceType object
         using the AudioIODeviceType::addListener() method, and it will be called when
         devices of that type are added or removed.
 
@@ -142,7 +142,7 @@ public:
     class Listener
     {
     public:
-        virtual ~Listener() {}
+        virtual ~Listener() = default;
 
         /** Called when the list of available audio devices changes. */
         virtual void audioDeviceListChanged() = 0;
@@ -165,8 +165,8 @@ public:
     static AudioIODeviceType* createAudioIODeviceType_CoreAudio();
     /** Creates an iOS device type if it's available on this platform, or returns null. */
     static AudioIODeviceType* createAudioIODeviceType_iOSAudio();
-    /** Creates a WASAPI device type if it's available on this platform, or returns null. */
-    static AudioIODeviceType* createAudioIODeviceType_WASAPI (bool exclusiveMode);
+    /** Creates a WASAPI device type in the specified mode if it's available on this platform, or returns null. */
+    static AudioIODeviceType* createAudioIODeviceType_WASAPI (WASAPIDeviceMode deviceMode);
     /** Creates a DirectSound device type if it's available on this platform, or returns null. */
     static AudioIODeviceType* createAudioIODeviceType_DirectSound();
     /** Creates an ASIO device type if it's available on this platform, or returns null. */
@@ -181,6 +181,13 @@ public:
     static AudioIODeviceType* createAudioIODeviceType_OpenSLES();
     /** Creates an Oboe device type if it's available on this platform, or returns null. */
     static AudioIODeviceType* createAudioIODeviceType_Oboe();
+    /** Creates a Bela device type if it's available on this platform, or returns null. */
+    static AudioIODeviceType* createAudioIODeviceType_Bela();
+
+   #ifndef DOXYGEN
+    [[deprecated ("You should call the method which takes a WASAPIDeviceMode instead.")]]
+    static AudioIODeviceType* createAudioIODeviceType_WASAPI (bool exclusiveMode);
+   #endif
 
 protected:
     explicit AudioIODeviceType (const String& typeName);

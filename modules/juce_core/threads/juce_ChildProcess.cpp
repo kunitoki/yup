@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -96,19 +97,23 @@ String ChildProcess::readAllProcessOutput()
     return result.toString();
 }
 
+
+//==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class ChildProcessTests  : public UnitTest
+class ChildProcessTests final : public UnitTest
 {
 public:
-    ChildProcessTests() : UnitTest ("ChildProcess", "Threads") {}
+    ChildProcessTests()
+        : UnitTest ("ChildProcess", UnitTestCategories::threads)
+    {}
 
     void runTest() override
     {
         beginTest ("Child Processes");
 
-      #if JUCE_WINDOWS || JUCE_MAC || JUCE_LINUX
+      #if JUCE_WINDOWS || JUCE_MAC || JUCE_LINUX || JUCE_BSD
         ChildProcess p;
 
        #if JUCE_WINDOWS
@@ -117,8 +122,8 @@ public:
         expect (p.start ("ls /"));
        #endif
 
-        //String output (p.readAllProcessOutput());
-        //expect (output.isNotEmpty());
+        auto output = p.readAllProcessOutput();
+        expect (output.isNotEmpty());
       #endif
     }
 };

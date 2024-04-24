@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -97,14 +98,14 @@ MemoryBlock& MemoryBlock::operator= (const MemoryBlock& other)
 }
 
 MemoryBlock::MemoryBlock (MemoryBlock&& other) noexcept
-    : data (static_cast<HeapBlockType&&> (other.data)),
+    : data (std::move (other.data)),
       size (other.size)
 {
 }
 
 MemoryBlock& MemoryBlock::operator= (MemoryBlock&& other) noexcept
 {
-    data = static_cast<HeapBlockType&&> (other.data);
+    data = std::move (other.data);
     size = other.size;
     return *this;
 }
@@ -190,14 +191,17 @@ void MemoryBlock::append (const void* srcData, size_t numBytes)
     }
 }
 
-void MemoryBlock::replaceWith (const void* srcData, size_t numBytes)
+void MemoryBlock::replaceAll (const void* srcData, size_t numBytes)
 {
-    if (numBytes > 0)
+    if (numBytes <= 0)
     {
-        jassert (srcData != nullptr); // this must not be null!
-        setSize (numBytes);
-        memcpy (data, srcData, numBytes);
+        reset();
+        return;
     }
+
+    jassert (srcData != nullptr); // this must not be null!
+    setSize (numBytes);
+    memcpy (data, srcData, numBytes);
 }
 
 void MemoryBlock::insert (const void* srcData, size_t numBytes, size_t insertPosition)
@@ -337,7 +341,7 @@ void MemoryBlock::loadFromHexString (StringRef hex)
 
     for (;;)
     {
-        int byte = 0;
+        juce_wchar byte = 0;
 
         for (int loop = 2; --loop >= 0;)
         {
@@ -372,7 +376,7 @@ String MemoryBlock::toBase64Encoding() const
 
     String destString ((unsigned int) size); // store the length, followed by a '.', and then the data.
     auto initialLen = destString.length();
-    destString.preallocateBytes (sizeof (String::CharPointerType::CharType) * (size_t) initialLen + 2 + numChars);
+    destString.preallocateBytes ((size_t) initialLen * sizeof (String::CharPointerType::CharType) + 2 + numChars);
 
     auto d = destString.getCharPointer();
     d += initialLen;

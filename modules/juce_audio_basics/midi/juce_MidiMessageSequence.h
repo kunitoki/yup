@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -69,9 +70,6 @@ public:
     /** Move assignment operator */
     MidiMessageSequence& operator= (MidiMessageSequence&&) noexcept;
 
-    /** Destructor. */
-    ~MidiMessageSequence();
-
     //==============================================================================
     /** Structure used to hold midi events in the sequence.
 
@@ -84,9 +82,6 @@ public:
     {
     public:
         //==============================================================================
-        /** Destructor. */
-        ~MidiEventHolder();
-
         /** The message itself, whose timestamp is used to specify the event's time. */
         MidiMessage message;
 
@@ -119,10 +114,16 @@ public:
     MidiEventHolder* getEventPointer (int index) const noexcept;
 
     /** Iterator for the list of MidiEventHolders */
-    MidiEventHolder** begin() const noexcept;
+    MidiEventHolder** begin() noexcept;
 
     /** Iterator for the list of MidiEventHolders */
-    MidiEventHolder** end() const noexcept;
+    MidiEventHolder* const* begin() const noexcept;
+
+    /** Iterator for the list of MidiEventHolders */
+    MidiEventHolder** end() noexcept;
+
+    /** Iterator for the list of MidiEventHolders */
+    MidiEventHolder* const* end() const noexcept;
 
     /** Returns the time of the note-up that matches the note-on at this index.
         If the event at this index isn't a note-on, it'll just return 0.
@@ -286,6 +287,21 @@ public:
 
         As well as controllers, it will also recreate the midi program number
         and pitch bend position.
+
+        This function has special handling for the "bank select" and "data entry"
+        controllers (0x00, 0x20, 0x06, 0x26, 0x60, 0x61, 0x62, 0x63, 0x64, 0x65).
+
+        If the sequence contains multiple bank select and program change messages,
+        only the bank select messages immediately preceding the final program change
+        message will be kept.
+
+        All "data increment" and "data decrement" messages will be retained. Some hardware will
+        ignore the requested increment/decrement values, so retaining all messages is the only
+        way to ensure compatibility with all hardware.
+
+        "Parameter number" changes will be slightly condensed. Only the parameter number
+        events immediately preceding each data entry event will be kept. The parameter number
+        will also be set to its final value at the end of the sequence, if necessary.
 
         @param channelNumber    the midi channel to look for, in the range 1 to 16. Controllers
                                 for other channels will be ignored.

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -217,12 +218,15 @@ public:
         bytes (0xff, 0xfe) to indicate the endianness (these should only be used at the start
         of a file).
 
-        The method also replaces '\\n' characters in the text with '\\r\\n'.
+        If lineEndings is nullptr, then line endings in the text won't be modified. If you
+        pass "\\n" or "\\r\\n" then this function will replace any existing line feeds.
+
         @returns false if the write operation fails for some reason
     */
     virtual bool writeText (const String& text,
                             bool asUTF16,
-                            bool writeUTF16ByteOrderMark);
+                            bool writeUTF16ByteOrderMark,
+                            const char* lineEndings);
 
     /** Reads data from an input stream and writes it to this stream.
 

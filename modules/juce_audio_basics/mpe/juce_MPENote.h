@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -131,7 +132,7 @@ struct JUCE_API  MPENote
     */
     MPEValue noteOnVelocity  { MPEValue::minValue() };
 
-    /** Current per-note pitchbend of the note  (in units of MIDI pitchwheel
+    /** Current per-note pitchbend of the note (in units of MIDI pitchwheel
         position). This dimension can be modulated while the note sounds.
 
         Note: This value is not aware of the currently used pitchbend range,
@@ -148,7 +149,7 @@ struct JUCE_API  MPENote
     */
     MPEValue pressure        { MPEValue::centreValue() };
 
-    /** Inital value of timbre when the note was triggered.
+    /** Initial value of timbre when the note was triggered.
         This should never change during the lifetime of an MPENote object.
     */
     MPEValue initialTimbre   { MPEValue::centreValue() };

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -44,14 +45,14 @@ namespace juce
     Collects incoming realtime MIDI messages and turns them into blocks suitable for
     processing by a block-based audio callback.
 
-    The class can also be used as either a MidiKeyboardStateListener or a MidiInputCallback
+    The class can also be used as either a MidiKeyboardState::Listener or a MidiInputCallback
     so it can easily use a midi input or keyboard component as its source.
 
     @see MidiMessage, MidiInput
 
     @tags{Audio}
 */
-class JUCE_API  MidiMessageCollector    : public MidiKeyboardStateListener,
+class JUCE_API  MidiMessageCollector    : public MidiKeyboardState::Listener,
                                           public MidiInputCallback
 {
 public:
@@ -60,7 +61,7 @@ public:
     MidiMessageCollector();
 
     /** Destructor. */
-    ~MidiMessageCollector();
+    ~MidiMessageCollector() override;
 
     //==============================================================================
     /** Clears any messages from the queue.
@@ -95,6 +96,14 @@ public:
         Precondition: numSamples must be greater than 0.
     */
     void removeNextBlockOfMessages (MidiBuffer& destBuffer, int numSamples);
+
+    /** Preallocates storage for collected messages.
+
+        This can be called before audio processing begins to ensure that there
+        is sufficient space for the expected MIDI messages, in order to avoid
+        allocations within the audio callback.
+    */
+    void ensureStorageAllocated (size_t bytes);
 
 
     //==============================================================================

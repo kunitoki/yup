@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -95,6 +96,15 @@ public:
 
         /** The last time the file was modified. */
         Time fileTime;
+
+        /** True if the zip entry is a symbolic link. */
+        bool isSymbolicLink;
+
+        /** Platform specific data. Depending on how the zip file was created this
+            may contain macOS and Linux file types, permissions and
+            setuid/setgid/sticky bits.
+        */
+        uint32 externalFileAttributes;
     };
 
     //==============================================================================
@@ -186,6 +196,25 @@ public:
                             const File& targetDirectory,
                             bool shouldOverwriteFiles = true);
 
+    enum class OverwriteFiles { no, yes };
+    enum class FollowSymlinks { no, yes };
+
+    /** Uncompresses one of the entries from the zip file.
+
+        This will expand the entry and write it in a target directory. The entry's path is used to
+        determine which subfolder of the target should contain the new file.
+
+        @param index                the index of the entry to uncompress - this must be a valid index
+                                    between 0 and (getNumEntries() - 1).
+        @param targetDirectory      the root folder to uncompress into
+        @param overwriteFiles       whether to overwrite existing files with similarly-named ones
+        @param followSymlinks       whether to follow symlinks inside the target directory
+        @returns success if all the files are successfully unzipped
+    */
+    Result uncompressEntry (int index,
+                            const File& targetDirectory,
+                            OverwriteFiles overwriteFiles,
+                            FollowSymlinks followSymlinks);
 
     //==============================================================================
     /** Used to create a new zip file.
@@ -237,7 +266,6 @@ public:
         //==============================================================================
     private:
         struct Item;
-        friend struct ContainerDeletePolicy<Item>;
         OwnedArray<Item> items;
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Builder)
@@ -251,13 +279,13 @@ private:
     OwnedArray<ZipEntryHolder> entries;
     CriticalSection lock;
     InputStream* inputStream = nullptr;
-    ScopedPointer<InputStream> streamToDelete;
-    ScopedPointer<InputSource> inputSource;
+    std::unique_ptr<InputStream> streamToDelete;
+    std::unique_ptr<InputSource> inputSource;
 
    #if JUCE_DEBUG
     struct OpenStreamCounter
     {
-        OpenStreamCounter() {}
+        OpenStreamCounter() = default;
         ~OpenStreamCounter();
 
         int numOpenStreams = 0;

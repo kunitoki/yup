@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -124,9 +125,8 @@ bool Base64::convertFromBase64 (OutputStream& binaryOutput, StringRef base64Text
 String Base64::toBase64 (const void* sourceData, size_t sourceDataSize)
 {
     MemoryOutputStream m ((sourceDataSize * 4) / 3 + 3);
-    bool ok = convertToBase64 (m, sourceData, sourceDataSize);
+    [[maybe_unused]] bool ok = convertToBase64 (m, sourceData, sourceDataSize);
     jassert (ok); // should always succeed for this simple case
-    ignoreUnused (ok);
     return m.toString();
 }
 
@@ -140,10 +140,12 @@ String Base64::toBase64 (const String& text)
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
-class Base64Tests  : public UnitTest
+class Base64Tests final : public UnitTest
 {
 public:
-    Base64Tests() : UnitTest ("Base64 class", "Text") {}
+    Base64Tests()
+        : UnitTest ("Base64 class", UnitTestCategories::text)
+    {}
 
     static MemoryBlock createRandomData (Random& r)
     {

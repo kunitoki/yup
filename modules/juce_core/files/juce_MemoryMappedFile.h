@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -87,7 +88,7 @@ public:
 
         If the file can't be opened for some reason, the getData() method will return a null pointer.
 
-        NOTE: the start of the actual range used may be rounded-down to a multiple of the OS's page-size,
+        NOTE: The start of the actual range used may be rounded-down to a multiple of the OS's page-size,
         so do not assume that the mapped memory will begin at exactly the position you requested - always
         use getRange() to check the actual range that is being used.
     */

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -58,7 +59,7 @@ public:
     StringPairArray (const StringPairArray& other);
 
     /** Destructor. */
-    ~StringPairArray();
+    ~StringPairArray() = default;
 
     /** Copies the contents of another string array into this one */
     StringPairArray& operator= (const StringPairArray& other);
@@ -140,6 +141,10 @@ public:
     */
     void setIgnoresCase (bool shouldIgnoreCase);
 
+    /** Indicates whether a case-insensitive search is used when looking up a key string.
+    */
+    bool getIgnoresCase() const noexcept;
+
     //==============================================================================
     /** Returns a descriptive string containing the items.
         This is handy for dumping the contents of an array.
@@ -155,9 +160,18 @@ public:
     */
     void minimiseStorageOverheads();
 
+    //==============================================================================
+    /** Adds the contents of a map to this StringPairArray. */
+    void addMap (const std::map<String, String>& mapToAdd);
+
+    /** Adds the contents of an unordered map to this StringPairArray. */
+    void addUnorderedMap (const std::unordered_map<String, String>& mapToAdd);
 
 private:
     //==============================================================================
+    template <typename Map>
+    void addMapImpl (const Map& mapToAdd);
+
     StringArray keys, values;
     bool ignoreCase;
 

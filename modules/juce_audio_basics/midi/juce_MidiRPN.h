@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -84,10 +85,10 @@ class JUCE_API  MidiRPNDetector
 {
 public:
     /** Constructor. */
-    MidiRPNDetector() noexcept;
+    MidiRPNDetector() noexcept = default;
 
     /** Destructor. */
-    ~MidiRPNDetector() noexcept;
+    ~MidiRPNDetector() noexcept = default;
 
     /** Resets the RPN detector's internal state, so that it forgets about
         previously received MIDI CC messages.
@@ -95,30 +96,42 @@ public:
     void reset() noexcept;
 
     //==============================================================================
-    /** Takes the next in a stream of incoming MIDI CC messages and returns true
-        if it forms the last of a sequence that makes an RPN or NPRN.
-
-        If this returns true, then the RPNMessage object supplied will be
-        filled-out with the message's details.
-        (If it returns false then the RPNMessage object will be unchanged).
-    */
+    /** @see tryParse() */
+    [[deprecated ("Use tryParse() instead")]]
     bool parseControllerMessage (int midiChannel,
                                  int controllerNumber,
                                  int controllerValue,
                                  MidiRPNMessage& result) noexcept;
 
+    /** Takes the next in a stream of incoming MIDI CC messages and returns
+        a MidiRPNMessage if the current message produces a well-formed RPN or NRPN.
+
+        Note that senders are expected to send the MSB before the LSB, but senders are
+        not required to send a LSB at all. Therefore, tryParse() will return a non-null
+        optional on all MSB messages (provided a parameter number has been set), and will
+        also return a non-null optional for each LSB that follows the initial MSB.
+
+        This behaviour allows senders to transmit a single MSB followed by multiple LSB
+        messages to facilitate fine-tuning of parameters.
+
+        The result of parsing a MSB will always be a 7-bit value.
+        The result of parsing a LSB that follows an MSB will always be a 14-bit value.
+    */
+    std::optional<MidiRPNMessage> tryParse (int midiChannel,
+                                            int controllerNumber,
+                                            int controllerValue);
+
 private:
     //==============================================================================
     struct ChannelState
     {
-        ChannelState() noexcept;
-        bool handleController (int channel, int controllerNumber,
-                               int value, MidiRPNMessage&) noexcept;
+        std::optional<MidiRPNMessage> handleController (int channel, int controllerNumber,
+                                                        int value) noexcept;
         void resetValue() noexcept;
-        bool sendIfReady (int channel, MidiRPNMessage&) noexcept;
+        std::optional<MidiRPNMessage> sendIfReady (int channel) noexcept;
 
-        uint8 parameterMSB, parameterLSB, valueMSB, valueLSB;
-        bool isNRPN;
+        uint8 parameterMSB = 0xff, parameterLSB = 0xff, valueMSB = 0xff, valueLSB = 0xff;
+        bool isNRPN = false;
     };
 
     //==============================================================================
@@ -158,7 +171,7 @@ public:
 
         @param use14BitValue     If true (default), the value will have 14-bit precision
                                  (two MIDI bytes). If false, instead the value will have
-                                 7-bit presision (a single MIDI byte).
+                                 7-bit precision (a single MIDI byte).
     */
     static MidiBuffer generate (int channel,
                                 int parameterNumber,

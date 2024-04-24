@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -106,13 +107,13 @@ public:
 
     //==============================================================================
     /** Provides the type of scoped lock to use with a CriticalSection. */
-    typedef GenericScopedLock <CriticalSection>       ScopedLockType;
+    using ScopedLockType = GenericScopedLock<CriticalSection>;
 
     /** Provides the type of scoped unlocker to use with a CriticalSection. */
-    typedef GenericScopedUnlock <CriticalSection>     ScopedUnlockType;
+    using ScopedUnlockType = GenericScopedUnlock<CriticalSection>;
 
     /** Provides the type of scoped try-locker to use with a CriticalSection. */
-    typedef GenericScopedTryLock <CriticalSection>    ScopedTryLockType;
+    using ScopedTryLockType = GenericScopedTryLock<CriticalSection>;
 
 
 private:
@@ -122,9 +123,9 @@ private:
     // a block of memory here that's big enough to be used internally as a windows
     // CRITICAL_SECTION structure.
     #if JUCE_64BIT
-     uint8 lock[44];
+     std::aligned_storage_t<44, 8> lock;
     #else
-     uint8 lock[24];
+     std::aligned_storage_t<24, 8> lock;
     #endif
    #else
     mutable pthread_mutex_t lock;
@@ -149,8 +150,8 @@ private:
 class JUCE_API  DummyCriticalSection
 {
 public:
-    inline DummyCriticalSection() noexcept      {}
-    inline ~DummyCriticalSection() noexcept     {}
+    inline DummyCriticalSection() = default;
+    inline ~DummyCriticalSection() = default;
 
     inline void enter() const noexcept          {}
     inline bool tryEnter() const noexcept       { return true; }
@@ -164,7 +165,7 @@ public:
     };
 
     /** A dummy scoped-unlocker type to use with a dummy critical section. */
-    typedef ScopedLockType ScopedUnlockType;
+    using ScopedUnlockType = ScopedLockType;
 
 private:
     JUCE_DECLARE_NON_COPYABLE (DummyCriticalSection)
@@ -199,7 +200,7 @@ private:
 
     @see CriticalSection, ScopedUnlock
 */
-typedef CriticalSection::ScopedLockType  ScopedLock;
+using ScopedLock = CriticalSection::ScopedLockType;
 
 //==============================================================================
 /**
@@ -239,7 +240,7 @@ typedef CriticalSection::ScopedLockType  ScopedLock;
 
     @see CriticalSection, ScopedLock
 */
-typedef CriticalSection::ScopedUnlockType  ScopedUnlock;
+using ScopedUnlock = CriticalSection::ScopedUnlockType;
 
 //==============================================================================
 /**
@@ -273,6 +274,6 @@ typedef CriticalSection::ScopedUnlockType  ScopedUnlock;
 
     @see CriticalSection::tryEnter, ScopedLock, ScopedUnlock, ScopedReadLock
 */
-typedef CriticalSection::ScopedTryLockType  ScopedTryLock;
+using ScopedTryLock = CriticalSection::ScopedTryLockType;
 
 } // namespace juce

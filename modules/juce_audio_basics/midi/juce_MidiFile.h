@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -60,9 +61,6 @@ public:
     //==============================================================================
     /** Creates an empty MidiFile object. */
     MidiFile();
-
-    /** Destructor. */
-    ~MidiFile();
 
     /** Creates a copy of another MidiFile. */
     MidiFile (const MidiFile&);
@@ -152,7 +150,7 @@ public:
     */
     void findAllTimeSigEvents (MidiMessageSequence& timeSigEvents) const;
 
-    /** Makes a list of all the time-signature meta-events from all tracks in the midi file.
+    /** Makes a list of all the key-signature meta-events from all tracks in the midi file.
         @param keySigEvents         a list to which all the events will be added
     */
     void findAllKeySigEvents (MidiMessageSequence& keySigEvents) const;
@@ -172,16 +170,29 @@ public:
         terms of midi ticks. To convert them to seconds, use the convertTimestampTicksToSeconds()
         method.
 
+        @param sourceStream              the source stream
+        @param createMatchingNoteOffs    if true, any missing note-offs for previous note-ons will
+                                         be automatically added at the end of the file by calling
+                                         MidiMessageSequence::updateMatchedPairs on each track.
+        @param midiFileType              if not nullptr, the integer at this address will be set
+                                         to 0, 1, or 2 depending on the type of the midi file
+
         @returns true if the stream was read successfully
     */
-    bool readFrom (InputStream& sourceStream);
+    bool readFrom (InputStream& sourceStream,
+                   bool createMatchingNoteOffs = true,
+                   int* midiFileType = nullptr);
 
     /** Writes the midi tracks as a standard midi file.
         The midiFileType value is written as the file's format type, which can be 0, 1
         or 2 - see the midi file spec for more info about that.
+
+        @param destStream        the destination stream
+        @param midiFileType      the type of midi file
+
         @returns true if the operation succeeded.
     */
-    bool writeTo (OutputStream& destStream, int midiFileType = 1);
+    bool writeTo (OutputStream& destStream, int midiFileType = 1) const;
 
     /** Converts the timestamp of all the midi events from midi ticks to seconds.
 
@@ -190,14 +201,13 @@ public:
     */
     void convertTimestampTicksToSeconds();
 
-
 private:
     //==============================================================================
     OwnedArray<MidiMessageSequence> tracks;
     short timeFormat;
 
-    void readNextTrack (const uint8*, int size);
-    bool writeTrack (OutputStream&, const MidiMessageSequence&);
+    void readNextTrack (const uint8*, int, bool);
+    bool writeTrack (OutputStream&, const MidiMessageSequence&) const;
 
     JUCE_LEAK_DETECTOR (MidiFile)
 };

@@ -16,16 +16,17 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-  ==============================================================================
+==============================================================================
 
-   This file was part of the JUCE7 library.
-   Copyright (c) 2017 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2022 - Raw Material Software Limited
 
-   JUCE is an open source library subject to commercial or open-source licensing.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
    The code included in this file is provided under the terms of the ISC license
    http://www.isc.org/downloads/software-support-policy/isc-license. Permission
-   to use, copy, modify, and/or distribute this software for any purpose with or
+   To use, copy, modify, and/or distribute this software for any purpose with or
    without fee is hereby granted provided that the above copyright notice and
    this permission notice appear in all copies.
 
@@ -50,9 +51,10 @@ MidiMessageCollector::~MidiMessageCollector()
 //==============================================================================
 void MidiMessageCollector::reset (const double newSampleRate)
 {
+    const ScopedLock sl (midiCallbackLock);
+
     jassert (newSampleRate > 0);
 
-    const ScopedLock sl (midiCallbackLock);
    #if JUCE_DEBUG
     hasCalledReset = true;
    #endif
@@ -63,15 +65,15 @@ void MidiMessageCollector::reset (const double newSampleRate)
 
 void MidiMessageCollector::addMessageToQueue (const MidiMessage& message)
 {
+    const ScopedLock sl (midiCallbackLock);
+
    #if JUCE_DEBUG
     jassert (hasCalledReset); // you need to call reset() to set the correct sample rate before using this object
    #endif
 
     // the messages that come in here need to be time-stamped correctly - see MidiInput
     // for details of what the number should be.
-    jassert (message.getTimeStamp() != 0);
-
-    const ScopedLock sl (midiCallbackLock);
+    jassert (! approximatelyEqual (message.getTimeStamp(), 0.0));
 
     auto sampleNumber = (int) ((message.getTimeStamp() - 0.001 * lastCallbackTime) * sampleRate);
 
@@ -86,6 +88,8 @@ void MidiMessageCollector::addMessageToQueue (const MidiMessage& message)
 void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
                                                       const int numSamples)
 {
+    const ScopedLock sl (midiCallbackLock);
+
    #if JUCE_DEBUG
     jassert (hasCalledReset); // you need to call reset() to set the correct sample rate before using this object
    #endif
@@ -95,7 +99,6 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
     auto timeNow = Time::getMillisecondCounterHiRes();
     auto msElapsed = timeNow - lastCallbackTime;
 
-    const ScopedLock sl (midiCallbackLock);
     lastCallbackTime = timeNow;
 
     if (! incomingMessages.isEmpty())
@@ -104,33 +107,28 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
         int startSample = 0;
         int scale = 1 << 16;
 
-        const uint8* midiData;
-        int numBytes, samplePosition;
-
-        MidiBuffer::Iterator iter (incomingMessages);
-
         if (numSourceSamples > numSamples)
         {
             // if our list of events is longer than the buffer we're being
             // asked for, scale them down to squeeze them all in..
             const int maxBlockLengthToUse = numSamples << 5;
 
+            auto iter = incomingMessages.cbegin();
+
             if (numSourceSamples > maxBlockLengthToUse)
             {
                 startSample = numSourceSamples - maxBlockLengthToUse;
                 numSourceSamples = maxBlockLengthToUse;
-                iter.setNextSamplePosition (startSample);
+                iter = incomingMessages.findNextSamplePosition (startSample);
             }
 
             scale = (numSamples << 10) / numSourceSamples;
 
-            while (iter.getNextEvent (midiData, numBytes, samplePosition))
+            std::for_each (iter, incomingMessages.cend(), [&] (const MidiMessageMetadata& meta)
             {
-                samplePosition = ((samplePosition - startSample) * scale) >> 10;
-
-                destBuffer.addEvent (midiData, numBytes,
-                                     jlimit (0, numSamples - 1, samplePosition));
-            }
+                const auto pos = ((meta.samplePosition - startSample) * scale) >> 10;
+                destBuffer.addEvent (meta.data, meta.numBytes, jlimit (0, numSamples - 1, pos));
+            });
         }
         else
         {
@@ -138,15 +136,18 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
             // towards the end of the buffer
             startSample = numSamples - numSourceSamples;
 
-            while (iter.getNextEvent (midiData, numBytes, samplePosition))
-            {
-                destBuffer.addEvent (midiData, numBytes,
-                                     jlimit (0, numSamples - 1, samplePosition + startSample));
-            }
+            for (const auto metadata : incomingMessages)
+                destBuffer.addEvent (metadata.data, metadata.numBytes,
+                                     jlimit (0, numSamples - 1, metadata.samplePosition + startSample));
         }
 
         incomingMessages.clear();
     }
+}
+
+void MidiMessageCollector::ensureStorageAllocated (size_t bytes)
+{
+    incomingMessages.ensureSize (bytes);
 }
 
 //==============================================================================
