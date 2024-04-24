@@ -16,7 +16,7 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE library.
    Copyright (c) 2022 - Raw Material Software Limited
@@ -71,7 +71,7 @@ struct ThreadPriorities
         { Thread::Priority::background, AndroidThreadPriority::THREAD_PRIORITY_BACKGROUND },
        #endif
 
-       #if JUCE_LINUX || JUCE_BSD
+       #if JUCE_LINUX || JUCE_BSD || JUCE_WASM
         { Thread::Priority::highest,    0 },
         { Thread::Priority::high,       0 },
         { Thread::Priority::normal,     0 },

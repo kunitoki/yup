@@ -16,7 +16,7 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE library.
    Copyright (c) 2022 - Raw Material Software Limited
@@ -122,6 +122,10 @@
  #if ! (JUCE_ANDROID || JUCE_WASM)
   #include <execinfo.h>
  #endif
+#endif
+
+#if JUCE_EMSCRIPTEN
+ #include <emscripten.h>
 #endif
 
 #if JUCE_MAC || JUCE_IOS

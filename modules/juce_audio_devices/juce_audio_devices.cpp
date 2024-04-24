@@ -16,7 +16,7 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE library.
    Copyright (c) 2022 - Raw Material Software Limited
@@ -221,7 +221,7 @@ namespace juce
     RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 } // namespace juce
 
-#include "native/juce_Audio_android.cpp"
+ #include "native/juce_Audio_android.cpp"
 
  #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
  #include "native/juce_Midi_android.cpp"
@@ -260,6 +260,9 @@ namespace juce
       RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
   }
  #endif
+
+#elif JUCE_WASM
+ #include "native/juce_Midi_wasm.cpp"
 
 #endif
 

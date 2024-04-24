@@ -16,7 +16,7 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE library.
    Copyright (c) 2022 - Raw Material Software Limited
@@ -94,6 +94,9 @@
   #else
     #define     JUCE_MAC 1
   #endif
+#elif defined (__wasm__) && defined (__EMSCRIPTEN__)
+  #define       JUCE_WASM 1
+  #define       JUCE_EMSCRIPTEN 1
 #elif defined (__wasm__)
   #define       JUCE_WASM 1
 #else

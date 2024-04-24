@@ -16,7 +16,7 @@
    EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
    DISCLAIMED.
 
-==============================================================================
+  ==============================================================================
 
    This file is part of the JUCE library.
    Copyright (c) 2022 - Raw Material Software Limited
