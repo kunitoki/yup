@@ -322,6 +322,7 @@ function (yup_add_module module_path)
     # ==== Assign configs to variables from module declaration string
     set (module_dependencies "")
     set (module_defines "")
+    set (module_wasm_defines "")
     set (module_searchpaths "")
     set (module_searchpaths_private "")
     set (module_osx_frameworks "")
@@ -344,6 +345,8 @@ function (yup_add_module module_path)
             _yup_comma_or_space_separated_list (${module_config_value} module_dependencies)
         elseif (${module_config_key} STREQUAL "defines")
             _yup_comma_or_space_separated_list (${module_config_value} module_defines)
+        elseif (${module_config_key} STREQUAL "WASMDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_wasm_defines)
         elseif (${module_config_key} STREQUAL "searchpaths")
             _yup_comma_or_space_separated_list (${module_config_value} module_searchpaths)
         elseif (${module_config_key} STREQUAL "OSXFrameworks")
@@ -399,6 +402,11 @@ function (yup_add_module module_path)
             list (APPEND module_additional_include_paths "${module_path}/${searchpath}")
         endif()
     endforeach()
+
+    # ==== Prepare defines
+    if ("${yup_platform}" MATCHES "^(emscripten)$")
+        list (APPEND module_defines ${module_wasm_defines})
+    endif()
 
     # ==== Setup module sources and properties
     target_sources (${module_name} INTERFACE ${module_sources})

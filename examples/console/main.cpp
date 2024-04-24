@@ -23,5 +23,10 @@
 
 int main(int argc, char* argv[])
 {
+    juce::String s;
+    s << "Testing is fine !";
+
+    juce::Logger::getCurrentLogger()->writeToLog(s);
+
     return 0;
 }

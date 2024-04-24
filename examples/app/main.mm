@@ -31,13 +31,17 @@
 
 #include "fiddle_context.hpp"
 
+#if __OSX__
 #define GLFW_INCLUDE_NONE
 #define GLFW_EXPOSE_NATIVE_COCOA
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
-
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+#else
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+#endif
 
 #include <memory>
 #include <fstream>
@@ -384,9 +388,11 @@ struct Application : juce::JUCEApplicationBase, juce::Timer
         return false;
     }
 
+#if __OSX__
     CAMetalLayer *swapchain = nullptr;
     id<MTLDevice> gpu = nil;
     id<MTLCommandQueue> queue = nil;
+#endif
 
     void timerCallback() override
     {
@@ -409,11 +415,13 @@ struct Application : juce::JUCEApplicationBase, juce::Timer
         setvbuf(stdout, NULL, _IONBF, 0);
         setvbuf(stderr, NULL, _IONBF, 0);
 
+#if __OSX__
         gpu = MTLCreateSystemDefaultDevice();
         queue = [gpu newCommandQueue];
         swapchain = [CAMetalLayer layer];
         swapchain.device = gpu;
         swapchain.opaque = YES;
+#endif
 
         glfwSetErrorCallback(glfw_error_callback);
         glfwInit();
@@ -450,9 +458,11 @@ struct Application : juce::JUCEApplicationBase, juce::Timer
 
         s_window = glfwCreateWindow(800, 800, "GLFW Metal", NULL, NULL);
 
+#if __OSX__
         NSWindow *nswindow = glfwGetCocoaWindow(s_window);
         nswindow.contentView.layer = swapchain;
         nswindow.contentView.wantsLayer = YES;
+#endif
 
         glfwSetMouseButtonCallback(s_window, mouse_button_callback);
         glfwSetCursorPosCallback(s_window, mousemove_callback);

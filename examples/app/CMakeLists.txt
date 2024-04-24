@@ -49,18 +49,25 @@ if (APPLE)
         XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
 endif()
 
-target_compile_features (${target_name} PRIVATE cxx_std_17)
-target_compile_options (${target_name} PRIVATE "$<$<CONFIG:DEBUG>:-DDEBUG>")
+if ("${yup_platform}" STREQUAL "emscripten")
+    target_link_options (${target_name} PRIVATE
+        -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1 -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0)
+endif()
 
-target_include_directories (${target_name} PRIVATE
-    /opt/homebrew/Cellar/glfw/3.4/include)
+target_compile_features (${target_name} PRIVATE cxx_std_17)
+target_compile_options (${target_name} PRIVATE "$<$<CONFIG:DEBUG>:-DDEBUG=1>")
 
 target_compile_definitions (${target_name} PRIVATE
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
     JUCE_STANDALONE_APPLICATION=1)
 
-target_link_directories (${target_name} PRIVATE
-    /opt/homebrew/Cellar/glfw/3.4/lib)
+if (NOT "${yup_platform}" STREQUAL "emscripten")
+    target_include_directories (${target_name} PRIVATE
+        /opt/homebrew/Cellar/glfw/3.4/include)
+
+    target_link_directories (${target_name} PRIVATE
+        /opt/homebrew/Cellar/glfw/3.4/lib)
+endif()
 
 target_link_libraries (${target_name} PRIVATE
     juce_core
