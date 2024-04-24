@@ -55,7 +55,7 @@
   license:          ISC
 
   dependencies:
-  OSXFrameworks:    Cocoa IOKit
+  OSXFrameworks:    Foundation Cocoa IOKit AppKit
   iOSFrameworks:    Foundation
   linuxLibs:        rt dl pthread
   linuxPackages:    libcurl

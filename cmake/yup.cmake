@@ -31,6 +31,12 @@ function (_yup_strip_list input_list output_variable)
     set (${output_variable} "${inner_list}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_comma_or_space_separated_list input_list output_variable)
+    string (REPLACE "," " " temp1_list ${input_list})
+    string (REPLACE " " ";" temp2_list ${temp1_list})
+    _yup_strip_list ("${temp2_list}" final_list)
+    set (${output_variable} "${final_list}" PARENT_SCOPE)
+endfunction()
 
 function (_yup_source_group sources base)
     get_filename_component (base "${base}" ABSOLUTE)
@@ -110,7 +116,12 @@ endfunction()
 
 function (_yup_collect_source_files source_files_var header_files_var folder)
     set(source_files "")
-    set(source_extensions ".c;.cc;.cpp;.cxx;.m;.mm;.ui;.h;.hh;.hpp;.inl")
+    set(source_extensions ".c;.cc;.cpp;.cxx;.h;.hh;.hpp;.hxx;.inl")
+
+    if (APPLE)
+        list (APPEND source_extensions ".m" ".mm")
+    endif()
+
     foreach (extension ${source_extensions})
         file (GLOB_RECURSE found_source_files
             "${folder}/source/common/*${extension}"
@@ -143,6 +154,93 @@ function (_yup_collect_source_files source_files_var header_files_var folder)
     set (${header_files_var} "${header_files}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_module_collect_sources folder output_variable)
+    set(source_extensions ".c;.cc;.cxx;.cpp;.h;.hh;.hxx;.hpp")
+    if (APPLE)
+        list (APPEND source_extensions ".m" ".mm")
+    endif()
+
+    set (base_path "${folder}/${module_name}")
+    set (all_module_sources "")
+
+    foreach (extension ${source_extensions})
+        file (GLOB found_source_files "${base_path}*${extension}")
+
+        if (NOT "${yup_platform}" MATCHES "^(win32|uwp)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(win32)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_win32${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(uwp)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_uwp${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(ios|osx)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_apple${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(ios)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(osx)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mobile${extension}")
+        endif()
+        if (NOT "${yup_platform}" MATCHES "^(android)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_android${extension}")
+        endif()
+
+        foreach (source ${found_source_files})
+            list (APPEND all_module_sources ${source})
+        endforeach()
+    endforeach()
+
+    set (module_sources "")
+    foreach (module_source ${all_module_sources})
+        if (APPLE)
+            if (module_source MATCHES "^.*\.(cc|cxx|cpp)$")
+                get_filename_component (source_directory ${module_source} DIRECTORY)
+                get_filename_component (source_file ${module_source} NAME_WLE)
+                set (imported_module_source "${source_directory}/${source_file}.mm")
+                if (${imported_module_source} IN_LIST all_module_sources)
+                    continue()
+                endif()
+            elseif (module_source MATCHES "^.*\.c$")
+                get_filename_component (source_directory ${module_source} DIRECTORY)
+                get_filename_component (source_file ${module_source} NAME_WLE)
+                set (imported_module_source "${source_directory}/${source_file}.m")
+                if (${imported_module_source} IN_LIST all_module_sources)
+                    continue()
+                endif()
+            endif()
+        endif()
+        list (APPEND module_sources ${module_source})
+    endforeach()
+
+    set (module_sources "${module_sources}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_prepare_frameworks frameworks weak_frameworks output_variable)
+    set (temp_frameworks "")
+    foreach (framework ${frameworks})
+        list (APPEND temp_frameworks "-framework ${framework}")
+    endforeach()
+
+    foreach (framework ${weak_frameworks})
+        list (APPEND temp_frameworks "-weak_framework ${framework}")
+    endforeach()
+
+    list (JOIN temp_frameworks " " final_frameworks)
+    set (${output_variable} "${final_frameworks}" PARENT_SCOPE)
+endfunction()
+
 #==============================================================================
 
 function (yup_add_target target_name target_path dependencies public_definitions public_includes public_libs private_definitions private_includes private_libs)
@@ -169,8 +267,9 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_module module_name module_path)
+function (yup_add_module module_path)
     get_filename_component (module_path ${module_path} ABSOLUTE)
+    get_filename_component (module_name ${module_path} NAME)
 
     message (STATUS "YUP -- Processing module " ${module_name} " at " ${module_path})
     set (${module_name}_Found OFF PARENT_SCOPE)
@@ -184,6 +283,10 @@ function (yup_add_module module_name module_path)
         message (FATAL_ERROR "YUP -- Module header ${module_header} not found")
     endif()
 
+    # ==== Add module as library
+    add_library (${module_name} INTERFACE)
+
+    # ==== Parse module declaration string
     set (module_configs "")
     set (module_user_configs "")
 
@@ -216,10 +319,20 @@ function (yup_add_module module_name module_path)
         endif()
     endwhile()
 
+    # ==== Assign configs to variables from module declaration string
+    set (module_dependencies "")
+    set (module_defines "")
+    set (module_searchpaths "")
+    set (module_searchpaths_private "")
     set (module_osx_frameworks "")
+    set (module_osx_weak_frameworks "")
+    set (module_osx_libs "")
     set (module_ios_frameworks "")
+    set (module_ios_weak_frameworks "")
+    set (module_ios_libs "")
     set (module_linux_libs "")
     set (module_linux_packages "")
+    set (module_windows_libs "")
     set (module_mingw_libs "")
 
     set (parsed_dependencies "")
@@ -228,83 +341,95 @@ function (yup_add_module module_name module_path)
         string (REGEX REPLACE "^.+:[ \t\r\n]+(.+)$" "\\1" module_config_value ${module_config})
 
         if (${module_config_key} STREQUAL "dependencies")
-            string (REPLACE "," ";" parsed_dependencies ${module_config_value})
+            _yup_comma_or_space_separated_list (${module_config_value} module_dependencies)
+        elseif (${module_config_key} STREQUAL "defines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_defines)
+        elseif (${module_config_key} STREQUAL "searchpaths")
+            _yup_comma_or_space_separated_list (${module_config_value} module_searchpaths)
         elseif (${module_config_key} STREQUAL "OSXFrameworks")
-            string (REPLACE " " ";" module_osx_frameworks ${module_config_value})
+            _yup_comma_or_space_separated_list (${module_config_value} module_osx_frameworks)
+        elseif (${module_config_key} STREQUAL "WeakOSXFrameworks")
+            _yup_comma_or_space_separated_list (${module_config_value} module_osx_weak_frameworks)
+        elseif (${module_config_key} STREQUAL "OSXLibs")
+            _yup_comma_or_space_separated_list (${module_config_value} module_osx_libs)
         elseif (${module_config_key} STREQUAL "iOSFrameworks")
-            string (REPLACE " " ";" module_ios_frameworks ${module_config_value})
+            _yup_comma_or_space_separated_list (${module_config_value} module_ios_frameworks)
+        elseif (${module_config_key} STREQUAL "WeakiOSFrameworks")
+            _yup_comma_or_space_separated_list (${module_config_value} module_ios_weak_frameworks)
+        elseif (${module_config_key} STREQUAL "iOSLibs")
+            _yup_comma_or_space_separated_list (${module_config_value} module_ios_libs)
         elseif (${module_config_key} STREQUAL "linuxLibs")
-            string (REPLACE " " ";" module_linux_libs ${module_config_value})
+            _yup_comma_or_space_separated_list (${module_config_value} module_linux_libs)
         elseif (${module_config_key} STREQUAL "linuxPackages")
-            string (REPLACE " " ";" module_linux_packages ${module_config_value})
+            _yup_comma_or_space_separated_list (${module_config_value} module_linux_packages)
+        elseif (${module_config_key} STREQUAL "windowsLibs")
+            _yup_comma_or_space_separated_list (${module_config_value} module_windows_libs)
         elseif (${module_config_key} STREQUAL "mingwLibs")
-            string (REPLACE " " ";" module_mingw_libs ${module_config_value})
+            _yup_comma_or_space_separated_list (${module_config_value} module_mingw_libs)
         endif()
     endforeach()
-    _yup_strip_list ("${parsed_dependencies}" module_dependencies)
 
+    # ==== Scan sources to include
+    _yup_module_collect_sources (${module_path} all_module_sources)
+
+    # ==== Setup libs and frameworks
+    set (module_frameworks "")
+    if ("${yup_platform}" MATCHES "^(ios)$")
+        list (JOIN module_ios_libs " " module_libs)
+        _yup_prepare_frameworks ("${module_ios_frameworks}" "${module_ios_weak_frameworks}" module_frameworks)
+    elseif ("${yup_platform}" MATCHES "^(osx)$")
+        list (JOIN module_osx_libs " " module_libs)
+        _yup_prepare_frameworks ("${module_osx_frameworks}" "${module_osx_weak_frameworks}" module_frameworks)
+    elseif ("${yup_platform}" MATCHES "^(linux)$")
+        list (JOIN module_linux_libs " " module_libs)
+    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$" AND NOT)
+        if (MINGW)
+            list (JOIN module_mingw_libs " " module_libs)
+        else()
+            list (JOIN module_windows_libs " " module_libs)
+        endif()
+    endif()
+
+    # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
 
-    if (APPLE)
-        file (GLOB all_module_sources
-            "${module_path}/${module_name}*.h"
-            "${module_path}/${module_name}*.c"
-            "${module_path}/${module_name}*.cpp"
-            "${module_path}/${module_name}*.m"
-            "${module_path}/${module_name}*.mm")
+    set (module_additional_include_paths "")
+    foreach (searchpath ${module_searchpaths})
+        if (EXISTS "${module_path}/${searchpath}")
+            list (APPEND module_additional_include_paths "${module_path}/${searchpath}")
+        endif()
+    endforeach()
 
-        set (module_sources "")
-        foreach (module_source ${all_module_sources})
-            if (module_source MATCHES "^.*\.cpp$")
-                get_filename_component (source_directory ${module_source} DIRECTORY)
-                get_filename_component (source_file ${module_source} NAME_WLE)
-                set (imported_module_source "${source_directory}/${source_file}.mm")
-                if (${imported_module_source} IN_LIST all_module_sources)
-                    continue()
-                endif()
-            elseif (module_source MATCHES "^.*\.c$")
-                get_filename_component (source_directory ${module_source} DIRECTORY)
-                get_filename_component (source_file ${module_source} NAME_WLE)
-                set (imported_module_source "${source_directory}/${source_file}.m")
-                if (${imported_module_source} IN_LIST all_module_sources)
-                    continue()
-                endif()
-            endif()
-            list (APPEND module_sources ${module_source})
-        endforeach()
+    # ==== Setup module sources and properties
+    target_sources (${module_name} INTERFACE ${module_sources})
+    message (STATUS "${module_sources}")
 
-        set (module_libs "")
+    set_target_properties (${module_name} PROPERTIES
+        CXX_STANDARD                17
+        CXX_EXTENSIONS              OFF
+        CXX_VISIBILITY_PRESET       "hidden"
+        VISIBILITY_INLINES_HIDDEN   ON)
 
-        set (frameworks "")
-        foreach (framework ${module_osx_frameworks})
-            list (APPEND frameworks "-framework ${framework}")
-        endforeach()
-        list (JOIN frameworks " " module_frameworks)
-    else()
-        file (GLOB module_sources
-            "${module_path}/${module_name}*.h"
-            "${module_path}/${module_name}*.c"
-            "${module_path}/${module_name}*.cpp")
+    target_compile_definitions (${module_name} INTERFACE
+        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        ${module_defines})
 
-        set (module_libs "")
-        set (module_frameworks "")
-    endif()
+    target_include_directories (${module_name} INTERFACE
+        ${module_include_path}
+        ${module_additional_include_paths})
+
+    target_link_libraries (${module_name} INTERFACE
+        ${module_libs}
+        ${module_frameworks})
+
+    target_link_libraries (${module_name} INTERFACE
+        ${module_dependencies})
 
     #set (${module_name}_Deps "${module_dependencies}")
     #set (${module_name}_Deps ${${module_name}_Deps} PARENT_SCOPE)
 
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
-
-    add_library (${module_name} STATIC ${module_sources})
-
-    target_compile_features (${module_name} PRIVATE cxx_std_17)
-
-    target_include_directories (${module_name} PUBLIC ${module_include_path})
-    target_link_libraries (${module_name} PUBLIC ${module_libs} ${module_frameworks})
-
-    set_target_properties (${module_name} PROPERTIES CXX_VISIBILITY_PRESET "hidden")
-    set_target_properties (${module_name} PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE)
 
     #file (GLOB_RECURSE all_module_files "${module_path}/*")
     #_yup_source_group (${all_module_files} "${module_path}")

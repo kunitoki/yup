@@ -33,9 +33,11 @@ add_executable (${target_name} MACOSX_BUNDLE ${sources})
 if (APPLE)
     set_target_properties (${target_name} PROPERTIES
         BUNDLE                                         ON
+        CXX_STANDARD                                   17
+        CXX_EXTENSIONS                                 OFF
         MACOSX_BUNDLE_GUI_IDENTIFIER                   "org.kunitoki.yup"
-        MACOSX_BUNDLE_BUNDLE_NAME                      "${target_name}"
-        MACOSX_BUNDLE_BUNDLE_VERSION                   "1.0.0"
+        MACOSX_BUNDLE_NAME                             "${target_name}"
+        MACOSX_BUNDLE_ERSION                           "1.0.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING             "1.0"
         #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
         MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/../cmake/platforms/macos/Info.plist.in"
@@ -47,26 +49,26 @@ if (APPLE)
         XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
 endif()
 
-target_compile_features (${target_name} PUBLIC cxx_std_17)
-target_compile_options (${target_name} PUBLIC "$<$<CONFIG:DEBUG>:-DDEBUG>")
+target_compile_features (${target_name} PRIVATE cxx_std_17)
+target_compile_options (${target_name} PRIVATE "$<$<CONFIG:DEBUG>:-DDEBUG>")
 
-target_include_directories (${target_name} PUBLIC
+target_include_directories (${target_name} PRIVATE
     /opt/homebrew/Cellar/glfw/3.4/include)
 
-target_compile_definitions (${target_name} PUBLIC
+target_compile_definitions (${target_name} PRIVATE
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
     JUCE_STANDALONE_APPLICATION=1)
 
-target_link_directories (${target_name} PUBLIC
+target_link_directories (${target_name} PRIVATE
     /opt/homebrew/Cellar/glfw/3.4/lib)
 
-target_link_libraries (${target_name} PUBLIC
+target_link_libraries (${target_name} PRIVATE
     juce_core
     juce_events
     juce_audio_basics
     juce_audio_devices
-    rive
-    rive-pls-renderer
     harfbuzz
     sheenbidi
+    rive
+    rive-pls-renderer
     glfw)

@@ -4,7 +4,10 @@
 #include "rive/container_component.hpp"
 
 using namespace rive;
+
+namespace rive {
 class StateMachineInstance;
+}
 
 // Use the NestedBoolBase m_NestedValue on initialization but then it won't
 // be used anymore and interface directly with the nested input value.
