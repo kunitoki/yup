@@ -38,4 +38,5 @@ yup_add_module (modules/juce_events)
 yup_add_module (modules/juce_audio_basics)
 yup_add_module (modules/juce_audio_devices)
 
-add_subdirectory (example)
+add_subdirectory (examples/app)
+add_subdirectory (examples/console)
