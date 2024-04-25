@@ -54,11 +54,12 @@ target_compile_definitions (${target_name} PUBLIC
     $<$<CONFIG:DEBUG>:DEBUG=1>
     $<$<CONFIG:RELEASE>:NDEBUG=1>
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-    JUCE_STANDALONE_APPLICATION=1)
+    JUCE_STANDALONE_APPLICATION=1
+    JUCE_USE_CURL=0)
 
 target_link_libraries (${target_name} PUBLIC
     juce_core
     juce_events
     juce_audio_basics
-    juce_audio_devices
+    #juce_audio_devices
     GTest::gtest_main)
