@@ -41,7 +41,7 @@ endfunction()
 function (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules ("${package_name}" REQUIRED IMPORTED_TARGET "${package_name}")
-    set (output_variable "PkgConfig::${package_name}")
+    set (${output_variable} "PkgConfig::${package_name}")
 endfunction()
 
 #==============================================================================
@@ -282,7 +282,7 @@ function (yup_add_module module_path)
     endforeach()
 
     # ==== Scan sources to include
-    _yup_module_collect_sources (${module_path} all_module_sources)
+    _yup_module_collect_sources ("${module_path}" module_sources)
 
     # ==== Setup libs and frameworks
     set (module_frameworks "")
