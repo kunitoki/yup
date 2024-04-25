@@ -40,9 +40,8 @@ endfunction()
 
 function (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
-    string (TOUPPER "${package_name}" package)
-    pkg_check_modules (${package} REQUIRED IMPORTED_TARGET ${package_name})
-    set (${output_variable} PkgConfig::${package})
+    pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
+    set (${output_variable} "PkgConfig::${package_name}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================
