@@ -1,9 +1,9 @@
-name: Build And Test MacOS
+name: Build And Test Wasm
 
 on:
   push:
     paths:
-      - "**/workflows/build_macos.yml"
+      - "**/workflows/build_wasm.yml"
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
@@ -16,10 +16,7 @@ concurrency:
 
 jobs:
   test:
-    runs-on: macos-latest
-
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_15.1.app/Contents/Developer
+    runs-on: ubuntu-latest
 
     steps:
 
@@ -29,25 +26,30 @@ jobs:
 
     - uses: seanmiddleditch/gha-setup-ninja@master
 
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
+
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
       working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
+      run: emcmake cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
 
     - name: Build Debug
       working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config Debug --parallel 4 --target yup_tests
+      run: emcmake cmake --build . --config Debug --parallel 4 --target yup_tests
 
     - name: Test Debug
       working-directory: ${{runner.workspace}}/build/tests/Debug
-      run: ./yup_tests
+      run: node yup_tests.js
 
     - name: Build Release
       working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config Release --parallel 4 --target yup_tests
+      run: emcmake cmake --build . --config Release --parallel 4 --target yup_tests
 
     - name: Test Release
       working-directory: ${{runner.workspace}}/build/tests/Release
-      run: ./yup_tests
+      run: node yup_tests.js
