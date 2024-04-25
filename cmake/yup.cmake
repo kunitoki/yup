@@ -417,7 +417,23 @@ function (yup_add_module module_path)
         CXX_VISIBILITY_PRESET       "hidden"
         VISIBILITY_INLINES_HIDDEN   ON)
 
+    get_cmake_property (multi_config GENERATOR_IS_MULTI_CONFIG)
+    if (NOT multi_config)
+        if (CMAKE_BUILD_TYPE)
+            string (TOLOWER "${CMAKE_BUILD_TYPE}" build_type_string)
+        else()
+            set (build_type_string "Debug")
+        endif()
+        if (build_type_string STREQUAL "Debug")
+            list (APPEND module_defines "DEBUG=1")
+        else()
+            list (APPEND module_defines "NDEBUG=1")
+        endif()
+    endif()
+
     target_compile_definitions (${module_name} INTERFACE
+        $<$<CONFIG:DEBUG>:DEBUG=1>
+        $<$<CONFIG:RELEASE>:NDEBUG=1>
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         ${module_defines})
 

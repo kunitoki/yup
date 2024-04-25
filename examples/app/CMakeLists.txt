@@ -55,9 +55,10 @@ if ("${yup_platform}" STREQUAL "emscripten")
 endif()
 
 target_compile_features (${target_name} PRIVATE cxx_std_17)
-target_compile_options (${target_name} PRIVATE "$<$<CONFIG:DEBUG>:-DDEBUG=1>")
 
 target_compile_definitions (${target_name} PRIVATE
+    $<$<CONFIG:DEBUG>:DEBUG=1>
+    $<$<CONFIG:RELEASE>:NDEBUG=1>
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
     JUCE_STANDALONE_APPLICATION=1)
 

@@ -1,0 +1,49 @@
+name: Build And Test MacOS
+
+on:
+  push:
+    paths:
+      - "**/workflows/build_macos.yml"
+      - "**/cmake/**"
+      - "**/modules/**"
+      - "**/tests/**"
+      - "**/thirdparty/**"
+      - "CMakeLists.txt"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug:
+    runs-on: macos-latest
+    steps:
+
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+
+    - uses: seanmiddleditch/gha-setup-ninja@master
+
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{runner.workspace}}/build
+
+    - name: Configure
+      working-directory: ${{runner.workspace}}/build
+      run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
+
+    - name: Build Debug
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Debug --parallel 4 --target yup_tests
+
+    - name: Test Debug
+      working-directory: ${{runner.workspace}}/build/tests/Debug
+      run: ./yup_tests
+
+    - name: Build Release
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Release --parallel 4 --target yup_tests
+
+    - name: Test Release
+      working-directory: ${{runner.workspace}}/build/tests/Release
+      run: ./yup_tests
