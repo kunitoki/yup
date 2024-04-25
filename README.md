@@ -4,6 +4,8 @@
 
 ## Disclaimer: The Project Is Still In Embryonic Stage
 
+[![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
+
 ## Introduction
 YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application development, featuring state-of-the-art rendering and audio processing. Originating from a fork of JUCE7's ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license, ensuring that it remains a freely accessible and modifiable resource for developers worldwide.
 
