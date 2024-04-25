@@ -36,7 +36,7 @@ file(GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/*.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/*.mm")
 
-_yup_source_group (${sources} ${CMAKE_CURRENT_LIST_DIR})
+source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 
 # ==== Create executable
 enable_testing()
@@ -62,7 +62,3 @@ target_link_libraries (${target_name} PUBLIC
     juce_audio_basics
     juce_audio_devices
     GTest::gtest_main)
-
-# ==== Discover tests
-include (GoogleTest)
-gtest_discover_tests (${target_name})

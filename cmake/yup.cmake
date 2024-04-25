@@ -38,19 +38,6 @@ function (_yup_comma_or_space_separated_list input_list output_variable)
     set (${output_variable} "${final_list}" PARENT_SCOPE)
 endfunction()
 
-function (_yup_source_group sources base)
-    get_filename_component (base "${base}" ABSOLUTE)
-    foreach (source ${sources})
-        get_filename_component (source "${source}" ABSOLUTE)
-        get_filename_component (parent_dir "${source}" DIRECTORY)
-        if (NOT "${parent_dir}" STREQUAL "")
-            string (REPLACE "${base}" "" parent_dir_stripped "${parent_dir}")
-            string (REPLACE "/" "\\\\" group "${parent_dir_stripped}")
-            source_group ("${group}" FILES "${source}")
-        endif()
-    endforeach()
-endfunction()
-
 #==============================================================================
 
 macro(_yup_setup_platform)
@@ -74,7 +61,7 @@ macro(_yup_setup_platform)
         set (yup_platform "unknown")
     endif()
 
-    message (STATUS "YUP -- Settin up for ${yup_platform} platform")
+    message (STATUS "YUP -- Setting up for ${yup_platform} platform")
 endmacro()
 
 #==============================================================================
@@ -221,6 +208,7 @@ function (yup_add_module module_path)
     endwhile()
 
     # ==== Assign configs to variables from module declaration string
+    set (module_cpp_standard "")
     set (module_dependencies "")
     set (module_defines "")
     set (module_wasm_defines "")
@@ -243,7 +231,9 @@ function (yup_add_module module_path)
         string (REGEX REPLACE "^(.+):([ \t\r\n]+.*)$" "\\1" module_config_key ${module_config})
         string (REGEX REPLACE "^.+:[ \t\r\n]+(.+)$" "\\1" module_config_value ${module_config})
 
-        if (${module_config_key} STREQUAL "dependencies")
+        if (${module_config_key} STREQUAL "minimumCppStandard")
+            set (module_cpp_standard "${module_config_value}")
+        elseif (${module_config_key} STREQUAL "dependencies")
             _yup_comma_or_space_separated_list (${module_config_value} module_dependencies)
         elseif (${module_config_key} STREQUAL "defines")
             _yup_comma_or_space_separated_list (${module_config_value} module_defines)
@@ -300,6 +290,11 @@ function (yup_add_module module_path)
         endif()
     endif()
 
+    if ((${module_name} STREQUAL "juce_audio_devices") AND ("${yup_platform}" MATCHES "^(android)$"))
+        add_subdirectory("${module_path}/native/oboe")
+        list (APPEND module_libs oboe)
+    endif()
+
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
 
@@ -318,8 +313,13 @@ function (yup_add_module module_path)
     # ==== Setup module sources and properties
     target_sources (${module_name} INTERFACE ${module_sources})
 
+    if (module_cpp_standard)
+        target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
+    else()
+        target_compile_features (${module_name} INTERFACE cxx_std_11)
+    endif()
+
     set_target_properties (${module_name} PROPERTIES
-        CXX_STANDARD                17
         CXX_EXTENSIONS              OFF
         CXX_VISIBILITY_PRESET       "hidden"
         VISIBILITY_INLINES_HIDDEN   ON)
@@ -341,6 +341,7 @@ function (yup_add_module module_path)
     target_compile_definitions (${module_name} INTERFACE
         $<$<CONFIG:DEBUG>:DEBUG=1>
         $<$<CONFIG:RELEASE>:NDEBUG=1>
+        JUCE_MODULE_AVAILABLE_${module_name}=1
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         ${module_defines})
 
@@ -355,14 +356,11 @@ function (yup_add_module module_path)
     target_link_libraries (${module_name} INTERFACE
         ${module_dependencies})
 
-    #set (${module_name}_Deps "${module_dependencies}")
-    #set (${module_name}_Deps ${${module_name}_Deps} PARENT_SCOPE)
-
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
 
-    #file (GLOB_RECURSE all_module_files "${module_path}/*")
-    #_yup_source_group (${all_module_files} "${module_path}")
-    #add_library (${module_name}-files INTERFACE ${all_module_files})
+    file (GLOB_RECURSE all_module_files "${module_path}/*")
+    add_library (${module_name}-module INTERFACE ${all_module_files})
+    source_group (TREE ${module_path}/ FILES ${all_module_files})
 
 endfunction()

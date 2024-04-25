@@ -21,12 +21,12 @@ cmake_minimum_required(VERSION 3.28)
 
 set (target_name yup_console)
 
-file(GLOB_RECURSE sources
+file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
     "${CMAKE_CURRENT_LIST_DIR}/*.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/*.mm")
 
-_yup_source_group (${sources} ${CMAKE_CURRENT_LIST_DIR})
+source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 
 add_executable (${target_name} ${sources})
 
