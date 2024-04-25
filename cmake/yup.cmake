@@ -73,86 +73,11 @@ macro(_yup_setup_platform)
     else()
         set (yup_platform "unknown")
     endif()
+
+    message (STATUS "YUP -- Settin up for ${yup_platform} platform")
 endmacro()
 
 #==============================================================================
-
-function (_yup_target_include_directories target_name folder)
-    if (EXISTS "${folder}/include")
-        target_include_directories ("${target_name}" PUBLIC "${folder}/include")
-    endif()
-
-    if (EXISTS "${folder}/platform_include")
-        target_include_directories ("${target_name}" PUBLIC "${folder}/platform_include/${yup_platform}")
-
-        if ("${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
-            target_include_directories ("${target_name}" PUBLIC "${folder}/platform_include/posix")
-        endif()
-
-        if ("${yup_platform}" MATCHES "^(ios|osx)$")
-            target_include_directories ("${target_name}" PUBLIC "${folder}/platform_include/apple")
-        endif()
-
-        if ("${yup_platform}" MATCHES "^(win32|uwp)$")
-            target_include_directories ("${target_name}" PUBLIC "${folder}/platform_include/msft")
-        endif()
-    endif()
-
-    target_include_directories ("${target_name}" PRIVATE "${folder}/source/common")
-    target_include_directories ("${target_name}" PRIVATE "${folder}/source/${yup_platform}")
-
-    if ("${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
-       target_include_directories ("${target_name}" PRIVATE "${folder}/source/posix")
-    endif()
-
-    if ("${yup_platform}" MATCHES "^(ios|osx)$")
-        target_include_directories ("${target_name}" PRIVATE "${folder}/source/apple")
-    endif()
-
-    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
-        target_include_directories ("${target_name}" PRIVATE "${folder}/source/msft")
-    endif()
-endfunction()
-
-function (_yup_collect_source_files source_files_var header_files_var folder)
-    set(source_files "")
-    set(source_extensions ".c;.cc;.cpp;.cxx;.h;.hh;.hpp;.hxx;.inl")
-
-    if (APPLE)
-        list (APPEND source_extensions ".m" ".mm")
-    endif()
-
-    foreach (extension ${source_extensions})
-        file (GLOB_RECURSE found_source_files
-            "${folder}/source/common/*${extension}"
-            "${folder}/source/${yup_platform}/*${extension}")
-        list (APPEND source_files ${found_source_files})
-
-        if ("${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
-            file (GLOB_RECURSE posix_source_files "${folder}/source/posix/*${extension}")
-            list (APPEND source_files ${posix_source_files})
-        endif()
-
-        if ("${yup_platform}" MATCHES "^(ios|osx)$")
-            file (GLOB_RECURSE apple_source_files "${folder}/source/apple/*${extension}")
-            list (APPEND source_files ${apple_source_files})
-        endif()
-
-        if ("${yup_platform}" MATCHES "^(win32|uwp)$")
-            file (GLOB_RECURSE msft_source_files "${folder}/source/msft/*${extension}")
-            list (APPEND source_files ${msft_source_files})
-        endif()
-    endforeach()
-    set (${source_files_var} "${source_files}" PARENT_SCOPE)
-
-    set (header_extensions ".h;.hh;.hpp;.inl")
-    set (header_files "")
-    foreach (extension ${header_extensions})
-        file (GLOB_RECURSE found_header_files "${folder}/include/*${extension}")
-        list (APPEND header_files ${found_header_files})
-    endforeach()
-    set (${header_files_var} "${header_files}" PARENT_SCOPE)
-endfunction()
 
 function (_yup_module_collect_sources folder output_variable)
     set(source_extensions ".c;.cc;.cxx;.cpp;.h;.hh;.hxx;.hpp")
@@ -243,30 +168,6 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_target target_name target_path dependencies public_definitions public_includes public_libs private_definitions private_includes private_libs)
-    _yup_collect_source_files (sources headers ${target_path})
-    _yup_source_group ("${sources}" ${target_path})
-    _yup_source_group ("${headers}" ${target_path})
-
-    add_library (${target_name} STATIC ${sources} ${headers})
-    target_compile_features (${target_name} PRIVATE cxx_std_17)
-
-    target_compile_definitions (${target_name} PUBLIC ${public_definitions})
-    target_compile_definitions (${target_name} PRIVATE ${private_definitions})
-
-    _yup_target_include_directories (${target_name} ${target_path})
-    target_include_directories (${target_name} PUBLIC ${public_includes})
-    target_include_directories (${target_name} PRIVATE ${private_includes})
-
-    target_link_libraries (${target_name} PUBLIC ${public_libs})
-    target_link_libraries (${target_name} PRIVATE ${private_libs})
-
-    set_target_properties (${target_name} PROPERTIES CXX_VISIBILITY_PRESET "hidden")
-    set_target_properties (${target_name} PROPERTIES VISIBILITY_INLINES_HIDDEN TRUE)
-endfunction()
-
-#==============================================================================
-
 function (yup_add_module module_path)
     get_filename_component (module_path ${module_path} ABSOLUTE)
     get_filename_component (module_name ${module_path} NAME)
@@ -335,6 +236,7 @@ function (yup_add_module module_path)
     set (module_linux_packages "")
     set (module_windows_libs "")
     set (module_mingw_libs "")
+    set (module_wasm_libs "")
 
     set (parsed_dependencies "")
     foreach (module_config ${module_configs})
@@ -369,6 +271,8 @@ function (yup_add_module module_path)
             _yup_comma_or_space_separated_list (${module_config_value} module_windows_libs)
         elseif (${module_config_key} STREQUAL "mingwLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_mingw_libs)
+        elseif (${module_config_key} STREQUAL "wasmLibs")
+            _yup_comma_or_space_separated_list (${module_config_value} module_wasm_libs)
         endif()
     endforeach()
 
@@ -385,6 +289,8 @@ function (yup_add_module module_path)
         _yup_prepare_frameworks ("${module_osx_frameworks}" "${module_osx_weak_frameworks}" module_frameworks)
     elseif ("${yup_platform}" MATCHES "^(linux)$")
         list (JOIN module_linux_libs " " module_libs)
+    elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+        list (JOIN module_wasm_libs " " module_libs)
     elseif ("${yup_platform}" MATCHES "^(win32|uwp)$" AND NOT)
         if (MINGW)
             list (JOIN module_mingw_libs " " module_libs)
