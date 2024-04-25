@@ -1,9 +1,9 @@
-name: Build And Test Wasm
+name: Build And Test Linux
 
 on:
   push:
     paths:
-      - "**/workflows/build_wasm.yml"
+      - "**/workflows/build_linux.yml"
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
@@ -23,18 +23,12 @@ jobs:
 
     - uses: seanmiddleditch/gha-setup-ninja@master
 
-    - name: Setup emsdk
-      uses: mymindstorm/setup-emsdk@v14
-      with:
-        version: 3.1.45
-        actions-cache-folder: "emsdk-cache"
-
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
       working-directory: ${{runner.workspace}}/build
-      run: emcmake cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
+      run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
 
     - name: Build Debug
       working-directory: ${{runner.workspace}}/build
@@ -42,7 +36,7 @@ jobs:
 
     - name: Test Debug
       working-directory: ${{runner.workspace}}/build/tests/Debug
-      run: node yup_tests.js
+      run: ./yup_tests
 
     - name: Build Release
       working-directory: ${{runner.workspace}}/build
@@ -50,4 +44,4 @@ jobs:
 
     - name: Test Release
       working-directory: ${{runner.workspace}}/build/tests/Release
-      run: node yup_tests.js
+      run: ./yup_tests
