@@ -38,6 +38,12 @@ function (_yup_comma_or_space_separated_list input_list output_variable)
     set (${output_variable} "${final_list}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_get_package_config_libs package_name output_variable)
+    find_package (PkgConfig REQUIRED)
+    pkg_check_modules (current_package REQUIRED IMPORTED_TARGET ${package_name})
+    set (output_variable "${${current_package}_LIBRARIES}")
+endfunction()
+
 #==============================================================================
 
 macro(_yup_setup_platform)
@@ -280,6 +286,10 @@ function (yup_add_module module_path)
         _yup_prepare_frameworks ("${module_osx_frameworks}" "${module_osx_weak_frameworks}" module_frameworks)
     elseif ("${yup_platform}" MATCHES "^(linux)$")
         set (module_libs "${module_linux_libs}")
+        foreach (package ${module_linux_packages})
+            _yup_get_package_config_libs (${package} package_libs)
+            list (APPEND module_libs "${package_libs}")
+        endforeach()
     elseif ("${yup_platform}" MATCHES "^(emscripten)$")
         set (module_libs "${module_wasm_libs}")
     elseif ("${yup_platform}" MATCHES "^(win32|uwp)$" AND NOT)
