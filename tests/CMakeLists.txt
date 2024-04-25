@@ -61,5 +61,5 @@ target_link_libraries (${target_name} PUBLIC
     juce_core
     juce_events
     juce_audio_basics
-    #juce_audio_devices
+    juce_audio_devices
     GTest::gtest_main)
