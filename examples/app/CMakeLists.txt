@@ -42,7 +42,7 @@ if (APPLE)
         MACOSX_BUNDLE_ERSION                           "1.0.0"
         MACOSX_BUNDLE_SHORT_VERSION_STRING             "1.0"
         #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/../../cmake/platforms/macos/Info.plist.in"
+        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/../../cmake/platforms/macos/Info.plist"
         #RESOURCE                                       "${RESOURCE_FILES}"
         #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
         XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
