@@ -19,6 +19,10 @@
 
 #==============================================================================
 
+list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/tools")
+
+#==============================================================================
+
 function (_yup_strip_list input_list output_variable)
     set (inner_list "" PARENT_SCOPE)
     foreach (item ${input_list})

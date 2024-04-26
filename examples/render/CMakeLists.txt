@@ -21,6 +21,9 @@ cmake_minimum_required(VERSION 3.28)
 
 set (target_name yup_render)
 
+# ==== Find dependencies
+find_package (GLFW3 REQUIRED)
+
 # ==== Prepare sources
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.hpp"
@@ -70,13 +73,8 @@ target_compile_definitions (${target_name} PRIVATE
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
     JUCE_STANDALONE_APPLICATION=1)
 
-if (NOT "${yup_platform}" STREQUAL "emscripten")
-    target_include_directories (${target_name} PRIVATE
-        /opt/homebrew/Cellar/glfw/3.4/include)
-
-    target_link_directories (${target_name} PRIVATE
-        /opt/homebrew/Cellar/glfw/3.4/lib)
-endif()
+target_include_directories (${target_name} PRIVATE
+    ${GLFW3_INCLUDE_DIR})
 
 target_link_libraries (${target_name} PRIVATE
     juce_core
@@ -88,4 +86,4 @@ target_link_libraries (${target_name} PRIVATE
     sheenbidi
     rive
     rive_pls_renderer
-    glfw)
+    ${GLFW3_LIBRARY})
