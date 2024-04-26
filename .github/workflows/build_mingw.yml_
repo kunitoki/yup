@@ -1,9 +1,9 @@
-name: Linux
+name: Build And Test Mingw
 
 on:
   push:
     paths:
-      - "**/workflows/build_linux.yml"
+      - "**/workflows/build_mingw.yml"
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
@@ -16,22 +16,19 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
 
     steps:
     - uses: actions/checkout@v4
 
     - uses: seanmiddleditch/gha-setup-ninja@master
 
-    - name: Install Dependencies
-      run: sudo apt-get install -y libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev
-
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
       working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
 
     - name: Build Debug
       working-directory: ${{runner.workspace}}/build
@@ -39,7 +36,7 @@ jobs:
 
     - name: Test Debug
       working-directory: ${{runner.workspace}}/build/tests/Debug
-      run: ./yup_tests
+      run: ./yup_tests.exe
 
     - name: Build Release
       working-directory: ${{runner.workspace}}/build
@@ -47,4 +44,4 @@ jobs:
 
     - name: Test Release
       working-directory: ${{runner.workspace}}/build/tests/Release
-      run: ./yup_tests
+      run: ./yup_tests.exe

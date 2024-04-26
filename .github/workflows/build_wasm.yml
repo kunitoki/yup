@@ -1,4 +1,4 @@
-name: Build And Test Wasm
+name: Wasm
 
 on:
   push:
