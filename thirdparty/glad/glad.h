@@ -23,19 +23,16 @@
 
  BEGIN_JUCE_MODULE_DECLARATION
 
-  ID:                 rive_pls_renderer
-  vendor:             rive
-  version:            1.0
-  name:               Rive Renderer.
-  description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
-  website:            https://github.com/rive-app/rive-renderer
-  license:            MIT
+  ID:               glad
+  vendor:           glad
+  version:          1.0.0
+  name:             Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator
+  description:      Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specifications for multiple languages..
+  website:          https://glad.dav1d.de/
+  license:          MIT
 
-  dependencies:       rive glad
-  OSXFrameworks:      Metal QuartzCore
-  defines:            WITH_RIVE_TEXT=1
-  WASMDefines:        RIVE_WEBGPU=1
-  searchpaths:        include source
+  dependencies:
+  searchpaths:      include
 
  END_JUCE_MODULE_DECLARATION
 
@@ -43,4 +40,6 @@
 
 #pragma once
 
-// TODO - Other deps: rive-decoders rive-dependencies glad
+#include "include/glad.h"
+#include "include/glad_custom.h"
+#include "include/khrplatform.h"

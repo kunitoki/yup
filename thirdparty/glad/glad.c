@@ -19,28 +19,7 @@
   ==============================================================================
 */
 
-/*******************************************************************************
+#include "glad.h"
 
- BEGIN_JUCE_MODULE_DECLARATION
-
-  ID:                 rive_pls_renderer
-  vendor:             rive
-  version:            1.0
-  name:               Rive Renderer.
-  description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
-  website:            https://github.com/rive-app/rive-renderer
-  license:            MIT
-
-  dependencies:       rive glad
-  OSXFrameworks:      Metal QuartzCore
-  defines:            WITH_RIVE_TEXT=1
-  WASMDefines:        RIVE_WEBGPU=1
-  searchpaths:        include source
-
- END_JUCE_MODULE_DECLARATION
-
-*******************************************************************************/
-
-#pragma once
-
-// TODO - Other deps: rive-decoders rive-dependencies glad
+#include "source/glad.c"
+#include "source/glad_custom.c"

@@ -22,7 +22,14 @@ cmake_minimum_required(VERSION 3.28)
 set (target_name yup_render)
 
 # ==== Find dependencies
-find_package (GLFW3 REQUIRED)
+# find_package (GLFW3)
+include (FetchContent)
+
+FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable (glfw)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
@@ -73,9 +80,6 @@ target_compile_definitions (${target_name} PRIVATE
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
     JUCE_STANDALONE_APPLICATION=1)
 
-target_include_directories (${target_name} PRIVATE
-    ${GLFW3_INCLUDE_DIR})
-
 target_link_libraries (${target_name} PRIVATE
     juce_core
     juce_events
@@ -86,4 +90,4 @@ target_link_libraries (${target_name} PRIVATE
     sheenbidi
     rive
     rive_pls_renderer
-    ${GLFW3_LIBRARY})
+    glfw)

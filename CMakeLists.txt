@@ -33,6 +33,7 @@ set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
+yup_add_module (thirdparty/glad)
 yup_add_module (thirdparty/harfbuzz)
 yup_add_module (thirdparty/sheenbidi)
 yup_add_module (thirdparty/rive)
