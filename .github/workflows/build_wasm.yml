@@ -51,3 +51,4 @@ jobs:
     - name: Test Release
       working-directory: ${{runner.workspace}}/build/tests/Release
       run: node yup_tests.js
+

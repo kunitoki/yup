@@ -23,8 +23,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: seanmiddleditch/gha-setup-ninja@master
-
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
 
