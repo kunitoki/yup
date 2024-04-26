@@ -24,15 +24,13 @@ set (target_name yup_render)
 # ==== Prepare sources
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.hpp"
-    "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.cpp")
+    "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/source/main.cpp")
 
 if (APPLE)
     file (GLOB_RECURSE apple_sources
         "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.mm")
     list (APPEND sources ${apple_sources})
-    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/source/main.mm")
-else()
-    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/source/main.cpp")
 endif()
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})

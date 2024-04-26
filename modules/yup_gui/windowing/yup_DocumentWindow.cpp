@@ -224,6 +224,8 @@ void* DocumentWindow::nativeHandle() const
 
 #if JUCE_MAC
     return glfwGetCocoaWindow (heavyweightWindow->window);
+#elif JUCE_WINDOWS
+    return glfwGetWin32Window (heavyweightWindow->window);
 #else
     return nullptr;
 #endif
