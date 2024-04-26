@@ -1,4 +1,4 @@
-name: Build And Test Mingw
+name: Mingw
 
 on:
   push:

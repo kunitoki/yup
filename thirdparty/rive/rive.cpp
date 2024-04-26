@@ -21,6 +21,11 @@
 
 #include "rive.h"
 
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#endif
+
 #include "source/generated/draw_target_base.cpp"
 #include "source/generated/backboard_base.cpp"
 #include "source/generated/constraints/follow_path_constraint_base.cpp"
@@ -309,3 +314,7 @@
 #include "source/static_scene.cpp"
 #include "source/renderer.cpp"
 #include "source/audio_event.cpp"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#endif

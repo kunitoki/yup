@@ -41,9 +41,9 @@ public:
         printf("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
     }
 
-    float dpiScale(GLFWwindow* window) const override
+    float dpiScale(void* window) const override
     {
-        NSWindow* nsWindow = glfwGetCocoaWindow(window);
+        NSWindow* nsWindow = (NSWindow*)window; // glfwGetCocoaWindow(window);
         return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1;
     }
 
@@ -53,9 +53,9 @@ public:
 
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
-    void onSizeChanged(GLFWwindow* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
     {
-        NSWindow* nsWindow = glfwGetCocoaWindow(window);
+        NSWindow* nsWindow = (NSWindow*)window; // glfwGetCocoaWindow(window);
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
 
@@ -100,7 +100,7 @@ public:
         [flushCommandBuffer commit];
     }
 
-    void end(GLFWwindow* window, std::vector<uint8_t>*) final
+    void end(void*, std::vector<uint8_t>*) final
     {
         flushPLSContext();
 
@@ -117,7 +117,7 @@ private:
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     std::unique_ptr<PLSRenderContext> m_plsContext;
-    CAMetalLayer* m_swapchain;
+    CAMetalLayer* m_swapchain = nil;
     rcp<PLSRenderTargetMetal> m_renderTarget;
     id<CAMetalDrawable> m_currentFrameSurface = nil;
 };

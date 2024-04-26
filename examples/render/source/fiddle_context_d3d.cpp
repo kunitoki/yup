@@ -33,7 +33,7 @@ public:
         m_plsContext(PLSRenderContextD3DImpl::MakeContext(m_gpu, m_gpuContext, contextOptions))
     {}
 
-    float dpiScale(GLFWwindow*) const override { return 1; }
+    float dpiScale(void*) const override { return 1; }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
@@ -41,7 +41,7 @@ public:
 
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
-    void onSizeChanged(GLFWwindow* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
     {
         m_swapchain.Reset();
 
@@ -54,7 +54,7 @@ public:
         scd.BufferCount = 2;
         scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
         VERIFY_OK(m_d3dFactory->CreateSwapChainForHwnd(m_gpu.Get(),
-                                                       glfwGetWin32Window(window),
+                                                       (HWND) window, // glfwGetWin32Window(window),
                                                        &scd,
                                                        NULL,
                                                        NULL,
@@ -91,7 +91,7 @@ public:
         m_plsContext->flush({.renderTarget = m_renderTarget.get()});
     }
 
-    void end(GLFWwindow*, std::vector<uint8_t>* pixelData = nullptr) override
+    void end(void*, std::vector<uint8_t>* pixelData = nullptr) override
     {
         flushPLSContext();
         if (pixelData != nullptr)

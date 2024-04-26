@@ -19,17 +19,25 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-set (target_name yup_app)
+set (target_name yup_render)
 
-set (sources "")
+# ==== Prepare sources
+file (GLOB_RECURSE sources
+    "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.hpp"
+    "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.cpp")
+
 if (APPLE)
-    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.mm")
+    file (GLOB_RECURSE apple_sources
+        "${CMAKE_CURRENT_LIST_DIR}/source/fiddle_*.mm")
+    list (APPEND sources ${apple_sources})
+    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/source/main.mm")
 else()
-    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
+    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/source/main.cpp")
 endif()
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 
+# ==== Prepare sources
 add_executable (${target_name} MACOSX_BUNDLE ${sources})
 
 if (APPLE)
@@ -64,8 +72,22 @@ target_compile_definitions (${target_name} PRIVATE
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
     JUCE_STANDALONE_APPLICATION=1)
 
+if (NOT "${yup_platform}" STREQUAL "emscripten")
+    target_include_directories (${target_name} PRIVATE
+        /opt/homebrew/Cellar/glfw/3.4/include)
+
+    target_link_directories (${target_name} PRIVATE
+        /opt/homebrew/Cellar/glfw/3.4/lib)
+endif()
+
 target_link_libraries (${target_name} PRIVATE
     juce_core
     juce_events
     juce_audio_basics
-    juce_audio_devices)
+    juce_audio_devices
+    yup_gui
+    harfbuzz
+    sheenbidi
+    rive
+    rive_pls_renderer
+    glfw)

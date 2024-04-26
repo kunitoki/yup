@@ -1,4 +1,4 @@
-#include "rive-pls-renderer.h"
+#include "rive_pls_renderer.h"
 
 #if RIVE_WEBGPU
 #include "source/webgpu/em_js_handle.cpp"

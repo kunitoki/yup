@@ -28,24 +28,31 @@ endif()
 
 project (yup VERSION 1.0)
 
-option (YUP_BUILD_EXAMPLES "Build the examples" OFF)
+set_property (GLOBAL PROPERTY USE_FOLDERS ON)
+
+option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
 yup_add_module (thirdparty/harfbuzz)
 yup_add_module (thirdparty/sheenbidi)
 yup_add_module (thirdparty/rive)
-yup_add_module (thirdparty/rive-pls-renderer)
+yup_add_module (thirdparty/rive_pls_renderer)
 
 yup_add_module (modules/juce_core)
 yup_add_module (modules/juce_events)
 yup_add_module (modules/juce_audio_basics)
 yup_add_module (modules/juce_audio_devices)
 
+yup_add_module (modules/yup_gui)
+
 if (YUP_BUILD_EXAMPLES)
+    message (STATUS "YUP -- Building examples")
     add_subdirectory (examples/app)
     add_subdirectory (examples/console)
+    add_subdirectory (examples/render)
 endif()
 
 if (YUP_BUILD_TESTS)
+    message (STATUS "YUP -- Building tests")
     add_subdirectory (tests)
 endif()

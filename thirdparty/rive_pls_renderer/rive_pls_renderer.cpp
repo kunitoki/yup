@@ -1,4 +1,9 @@
-#include "rive-pls-renderer.h"
+#include "rive_pls_renderer.h"
+
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#endif
 
 #include "source/path_utils.cpp"
 #include "source/pls_paint.cpp"
@@ -12,3 +17,7 @@
 #include "source/gr_triangulator.cpp"
 #include "source/pls_path.cpp"
 #include "source/pls_renderer.cpp"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#endif

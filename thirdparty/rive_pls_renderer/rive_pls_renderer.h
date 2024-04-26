@@ -23,7 +23,7 @@
 
  BEGIN_JUCE_MODULE_DECLARATION
 
-  ID:                 rive-pls-renderer
+  ID:                 rive_pls_renderer
   vendor:             rive
   version:            1.0
   name:               Rive Renderer.

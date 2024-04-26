@@ -99,7 +99,7 @@ public:
 
     ~FiddleContextGL() { glDeleteFramebuffers(1, &m_zoomWindowFBO); }
 
-    float dpiScale(GLFWwindow*) const override
+    float dpiScale(void*) const override
     {
 #ifdef __APPLE__
         return 2;
