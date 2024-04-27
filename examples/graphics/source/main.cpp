@@ -86,9 +86,6 @@ public:
         if (button == GLFW_MOUSE_BUTTON_LEFT)
         {
             dragIdx = -1;
-            if (rivFile != nullptr)
-                return;
-
             for (int i = 0; i < kNumInteractivePts; ++i)
             {
                 if (rive::simd::all (rive::simd::abs (dragLastPos - (pts[i] + translate)) < 100))
@@ -209,15 +206,12 @@ public:
         }
     }
 
-    void updateWindowTitle(double fps, int instances, int width, int height)
+    void updateWindowTitle(double fps, int width, int height)
     {
         juce::String title;
 
         if (fps != 0)
             title << "[" << fps << " FPS]";
-
-        if (instances > 1)
-            title << " (x" << instances << " instances)";
 
         title << " | " << "YUP On Rive Renderer";
 
@@ -236,7 +230,7 @@ private:
         {
             stopTimer();
 
-            juce::MessageManager::callAsync([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
+            juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
             return;
         }
 
@@ -252,7 +246,7 @@ private:
         auto [width, height] = getSize();
         if (lastWidth != width || lastHeight != height)
         {
-            printf ("size changed to %ix%i\n", width, height);
+            DBG ("size changed to " << width << "x" << height << "\n");
 
             lastWidth = width;
             lastHeight = height;
@@ -265,7 +259,7 @@ private:
 
         if (needsTitleUpdate)
         {
-            updateWindowTitle (0, 1, width, height);
+            updateWindowTitle (0, width, height);
             needsTitleUpdate = false;
         }
 
@@ -367,6 +361,7 @@ private:
     ;
 
     std::unique_ptr<juce::LowLevelRenderContext> fiddleContext;
+    std::unique_ptr<rive::Renderer> renderer;
 
     rive::float2 pts[9] = {
         {260 + 2 * 100, 60 + 2 * 500},
@@ -391,8 +386,6 @@ private:
     bool paused = false;
     int dragIdx = -1;
     rive::float2 dragLastPos;
-
-    std::unique_ptr<rive::Renderer> renderer;
 
     int lastWidth = 0, lastHeight = 0;
     double fpsLastTime = 0;

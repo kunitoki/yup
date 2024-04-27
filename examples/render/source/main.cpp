@@ -101,45 +101,26 @@ public:
 
     void mouseDown(int button, int mods, double x, double y) override
     {
+        if (scenes.empty())
+            return;
+
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
         y *= dpiScale;
 
-        if (scenes.empty())
-        {
-            dragLastPos = rive::float2 { (float)x, (float)y };
-            if (button == GLFW_MOUSE_BUTTON_LEFT)
-            {
-                dragIdx = -1;
-                if (rivFile != nullptr)
-                    return;
-
-                for (int i = 0; i < kNumInteractivePts; ++i)
-                {
-                    if (rive::simd::all (rive::simd::abs (dragLastPos - (pts[i] + translate)) < 100))
-                    {
-                        dragIdx = i;
-                        break;
-                    }
-                }
-            }
-        }
-        else
-        {
-            auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-            for (auto& scene : scenes)
-                scene->pointerDown (xy);
-        }
+        auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
+        for (auto& scene : scenes)
+            scene->pointerDown (xy);
     }
 
     void mouseUp (int button, int mods, double x, double y) override
     {
+        if (scenes.empty())
+            return;
+
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
         y *= dpiScale;
-
-        if (scenes.empty())
-            return;
 
         auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
         for (auto& scene : scenes)
@@ -148,12 +129,12 @@ public:
 
     void mouseMove (int button, int mods, double x, double y) override
     {
+        if (scenes.empty())
+            return;
+
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
         y *= dpiScale;
-
-        if (scenes.empty())
-            return;
 
         const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
         for (auto& scene : scenes)
@@ -162,28 +143,16 @@ public:
 
     void mouseDrag (int button, int mods, double x, double y) override
     {
+        if (scenes.empty())
+            return;
+
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
         y *= dpiScale;
 
-        if (scenes.empty())
-        {
-            if (button == GLFW_MOUSE_BUTTON_LEFT)
-            {
-                rive::float2 pos = rive::float2 { (float)x, (float)y };
-                if (dragIdx >= 0)
-                    pts[dragIdx] += (pos - dragLastPos);
-                else
-                    translate += (pos - dragLastPos);
-                dragLastPos = pos;
-            }
-        }
-        else
-        {
-            const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-            for (auto& scene : scenes)
-                scene->pointerMove (xy);
-        }
+        const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
+        for (auto& scene : scenes)
+            scene->pointerMove (xy);
     }
 
     void keyDown (int key, int scancode, int mods, double x, double y) override
@@ -206,44 +175,11 @@ public:
         case GLFW_KEY_D:
             printf ("static float scale = %f;\n", scale);
             printf ("static float2 translate = {%f, %f};\n", translate.x, translate.y);
-            printf ("static float2 pts[] = {");
-            for (int i = 0; i < kNumInteractivePts; i++)
-            {
-                printf("{%g, %g}", pts[i].x, pts[i].y);
-                if (i < kNumInteractivePts - 1)
-                    printf(", ");
-                else
-                    printf("};\n");
-            }
             fflush(stdout);
-            break;
-
-        case GLFW_KEY_1:
-            strokeWidth /= 1.5f;
-            break;
-
-        case GLFW_KEY_2:
-            strokeWidth *= 1.5f;
             break;
 
         case GLFW_KEY_W:
             wireframe = !wireframe;
-            break;
-
-        case GLFW_KEY_C:
-            cap = static_cast<rive::StrokeCap> ((static_cast<int> (cap) + 1) % 3);
-            break;
-
-        case GLFW_KEY_O:
-            doClose = !doClose;
-            break;
-
-        case GLFW_KEY_S:
-            disableStroke = !disableStroke;
-            break;
-
-        case GLFW_KEY_F:
-            disableFill = !disableFill;
             break;
 
         case GLFW_KEY_P:
@@ -265,9 +201,7 @@ public:
             break;
 
         case GLFW_KEY_J:
-            if (!rivFile)
-                join = static_cast<rive::StrokeJoin> ((static_cast<int> (join) + 1) % 3);
-            else if (!shift)
+            if (!shift)
                 ++downRepeat;
             else if (downRepeat > 0)
                 --downRepeat;
@@ -293,7 +227,7 @@ public:
         }
     }
 
-    void updateWindowTitle(double fps, int instances, int width, int height)
+    void updateWindowTitle (double fps, int instances, int width, int height)
     {
         juce::String title;
 
@@ -320,7 +254,7 @@ private:
         {
             stopTimer();
 
-            juce::MessageManager::callAsync([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
+            juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
             return;
         }
 
@@ -378,7 +312,7 @@ private:
         auto [width, height] = getSize();
         if (lastWidth != width || lastHeight != height)
         {
-            printf ("size changed to %ix%i\n", width, height);
+            DBG ("size changed to " << width << "x" << height << "\n");
 
             lastWidth = width;
             lastHeight = height;
@@ -452,55 +386,6 @@ private:
             }
             renderer->restore();
         }
-        else
-        {
-            rive::float2 p[9];
-            for (int i = 0; i < 9; ++i)
-                p[i] = pts[i] + translate;
-
-            rive::RawPath rawPath;
-            rawPath.moveTo (p[0].x, p[0].y);
-            rawPath.cubicTo (p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-            rive::float2 c0 = rive::simd::mix (p[3], p[4], rive::float2 (2 / 3.f));
-            rive::float2 c1 = rive::simd::mix (p[5], p[4], rive::float2 (2 / 3.f));
-            rawPath.cubicTo (c0.x, c0.y, c1.x, c1.y, p[5].x, p[5].y);
-            rawPath.cubicTo (p[6].x, p[6].y, p[7].x, p[7].y, p[8].x, p[8].y);
-            if (doClose)
-                rawPath.close();
-
-            rive::Factory* factory = fiddleContext->factory();
-            auto path = factory->makeRenderPath (rawPath, rive::FillRule::nonZero);
-
-            auto fillPaint = factory->makeRenderPaint();
-            fillPaint->style (rive::RenderPaintStyle::fill);
-            fillPaint->color (-1);
-
-            auto strokePaint = factory->makeRenderPaint();
-            strokePaint->style (rive::RenderPaintStyle::stroke);
-            strokePaint->color (0x8000ffff);
-            strokePaint->thickness (strokeWidth);
-            strokePaint->join (join);
-            strokePaint->cap (cap);
-
-            renderer->drawPath (path.get(), fillPaint.get());
-            renderer->drawPath (path.get(), strokePaint.get());
-
-            // Draw the interactive points.
-            auto pointPaint = factory->makeRenderPaint();
-            pointPaint->style (rive::RenderPaintStyle::stroke);
-            pointPaint->color (0xff0000ff);
-            pointPaint->thickness (14);
-            pointPaint->cap (rive::StrokeCap::round);
-
-            auto pointPath = factory->makeEmptyRenderPath();
-            for (int i : { 1, 2, 4, 6, 7 })
-            {
-                rive::float2 pt = pts[i] + translate;
-                pointPath->moveTo (pt.x, pt.y);
-            }
-
-            renderer->drawPath (pointPath.get(), pointPaint.get());
-        }
 
         fiddleContext->end (nativeHandle());
 
@@ -529,49 +414,8 @@ private:
     bool wireframe = false;
     bool disableFill = false;
     bool disableStroke = false;
+
     float framerate = 30.0f;
-
-    std::unique_ptr<juce::LowLevelRenderContext> fiddleContext;
-
-    rive::float2 pts[9] = {
-        {260 + 2 * 100, 60 + 2 * 500},
-        {260 + 2 * 257, 60 + 2 * 233},
-        {260 + 2 * -100, 60 + 2 * 300},
-        {260 + 2 * 100, 60 + 2 * 200},
-        {260 + 2 * 250, 60 + 2 * 0},
-        {260 + 2 * 400, 60 + 2 * 200},
-        {260 + 2 * 213, 60 + 2 * 200},
-        {260 + 2 * 213, 60 + 2 * 300},
-        {260 + 2 * 391, 60 + 2 * 480}
-    };
-
-    static constexpr int kNumInteractivePts = sizeof(pts) / sizeof(*pts);
-
-    float strokeWidth = 70;
-
-    rive::float2 translate;
-    float scale = 1;
-
-    rive::StrokeJoin join = rive::StrokeJoin::miter;
-    rive::StrokeCap cap = rive::StrokeCap::butt;
-
-    bool doClose = false;
-    bool paused = false;
-
-    int dragIdx = -1;
-    rive::float2 dragLastPos;
-
-    int animation = -1;
-    int stateMachine = -1;
-    int horzRepeat = 0;
-    int upRepeat = 0;
-    int downRepeat = 0;
-
-    rive::Mat2D viewTransform;
-
-    std::unique_ptr<rive::File> rivFile;
-    std::vector<std::unique_ptr<rive::Artboard>> artboards;
-    std::vector<std::unique_ptr<rive::Scene>> scenes;
 
     API api =
     #if JUCE_MAC || JUCE_IOS
@@ -583,7 +427,25 @@ private:
     #endif
     ;
 
+    std::unique_ptr<juce::LowLevelRenderContext> fiddleContext;
     std::unique_ptr<rive::Renderer> renderer;
+
+    std::unique_ptr<rive::File> rivFile;
+    std::vector<std::unique_ptr<rive::Artboard>> artboards;
+    std::vector<std::unique_ptr<rive::Scene>> scenes;
+
+    rive::Mat2D viewTransform;
+    rive::float2 translate;
+    float scale = 1.0f;
+
+    bool paused = false;
+
+    int animation = -1;
+    int stateMachine = -1;
+
+    int horzRepeat = 0;
+    int upRepeat = 0;
+    int downRepeat = 0;
 
     int lastWidth = 0, lastHeight = 0;
     double fpsLastTime = 0;
