@@ -1,4 +1,25 @@
-#include "fiddle_context.hpp"
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2024 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include "yup_LowLevelRenderContext.h"
 
 #if 0
 
@@ -15,7 +36,10 @@
 #endif
 
 #define GLFW_INCLUDE_NONE
-#include "GLFW/glfw3.h"
+#include <GLFW/glfw3.h>
+
+namespace juce
+{
 
 using namespace rive;
 using namespace rive::pls;
@@ -55,10 +79,10 @@ static void GLAPIENTRY err_msg_callback(GLenum source,
 #endif
 #endif
 
-class FiddleContextGL : public FiddleContext
+class LowLevelRenderContextGL : public LowLevelRenderContext
 {
 public:
-    FiddleContextGL()
+    LowLevelRenderContextGL()
     {
 #ifdef RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
@@ -97,7 +121,7 @@ public:
 #endif
     }
 
-    ~FiddleContextGL() { glDeleteFramebuffers(1, &m_zoomWindowFBO); }
+    ~LowLevelRenderContextGL() { glDeleteFramebuffers(1, &m_zoomWindowFBO); }
 
     float dpiScale(void*) const override
     {
@@ -108,35 +132,14 @@ public:
 #endif
     }
 
-    void toggleZoomWindow() final
-    {
-        if (m_zoomWindowFBO)
-        {
-            glDeleteFramebuffers(1, &m_zoomWindowFBO);
-            m_zoomWindowFBO = 0;
-        }
-        else
-        {
-            GLuint tex;
-            glGenTextures(1, &tex);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGB8, kZoomWindowWidth, kZoomWindowHeight);
-
-            glGenFramebuffers(1, &m_zoomWindowFBO);
-            glBindFramebuffer(GL_FRAMEBUFFER, m_zoomWindowFBO);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, tex, 0);
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-            glDeleteTextures(1, &tex);
-        }
-    }
-
     void end(GLFWwindow* window, std::vector<uint8_t>* pixelData) final
     {
         assert(pixelData == nullptr); // Not implemented yet.
+
         onEnd();
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
         if (m_zoomWindowFBO)
         {
             // Blit the zoom window.
@@ -189,94 +192,10 @@ private:
     GLuint m_zoomWindowFBO = 0;
 };
 
-#ifndef RIVE_SKIA
-
-std::unique_ptr<FiddleContext> FiddleContext::MakeGLSkia() { return nullptr; }
-
-#else
-
-#include "skia_factory.hpp"
-#include "skia_renderer.hpp"
-#include "skia/include/core/SkCanvas.h"
-#include "skia/include/core/SkSurface.h"
-#include "skia/include/gpu/GrDirectContext.h"
-#include "skia/include/gpu/gl/GrGLAssembleInterface.h"
-#include "skia/include/gpu/gl/GrGLInterface.h"
-
-static GrGLFuncPtr get_skia_gl_proc_address(void* ctx, const char name[])
-{
-    return glfwGetProcAddress(name);
-}
-
-class FiddleContextGLSkia : public FiddleContextGL
+class LowLevelRenderContextGLPLS : public LowLevelRenderContextGL
 {
 public:
-    FiddleContextGLSkia() :
-        m_grContext(
-            GrDirectContext::MakeGL(GrGLMakeAssembledInterface(nullptr, get_skia_gl_proc_address)))
-    {
-        if (!m_grContext)
-        {
-            fprintf(stderr, "GrDirectContext::MakeGL failed.\n");
-            exit(-1);
-        }
-    }
-
-    rive::Factory* factory() override { return &m_factory; }
-
-    rive::pls::PLSRenderContext* plsContextOrNull() override { return nullptr; }
-
-    rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return nullptr; }
-
-    std::unique_ptr<Renderer> makeRenderer(int width, int height) override
-    {
-        GrBackendRenderTarget backendRT(width,
-                                        height,
-                                        1 /*samples*/,
-                                        0 /*stencilBits*/,
-                                        {0 /*fbo 0*/, GL_RGBA8});
-
-        SkSurfaceProps surfProps(0, kUnknown_SkPixelGeometry);
-
-        m_skSurface = SkSurface::MakeFromBackendRenderTarget(m_grContext.get(),
-                                                             backendRT,
-                                                             kBottomLeft_GrSurfaceOrigin,
-                                                             kRGBA_8888_SkColorType,
-                                                             nullptr,
-                                                             &surfProps);
-        if (!m_skSurface)
-        {
-            fprintf(stderr, "SkSurface::MakeFromBackendRenderTarget failed.\n");
-            exit(-1);
-        }
-        return std::make_unique<SkiaRenderer>(m_skSurface->getCanvas());
-    }
-
-    void begin(const PLSRenderContext::FrameDescriptor& frameDescriptor) override
-    {
-        m_skSurface->getCanvas()->clear(frameDescriptor.clearColor);
-        m_grContext->resetContext();
-    }
-
-    void onEnd() override { m_skSurface->flush(); }
-
-private:
-    SkiaFactory m_factory;
-    const sk_sp<GrDirectContext> m_grContext;
-    sk_sp<SkSurface> m_skSurface;
-};
-
-std::unique_ptr<FiddleContext> FiddleContext::MakeGLSkia()
-{
-    return std::make_unique<FiddleContextGLSkia>();
-}
-
-#endif
-
-class FiddleContextGLPLS : public FiddleContextGL
-{
-public:
-    FiddleContextGLPLS()
+    LowLevelRenderContextGLPLS()
     {
         if (!m_plsContext)
         {
@@ -318,21 +237,27 @@ public:
 private:
     std::unique_ptr<PLSRenderContext> m_plsContext =
         PLSRenderContextGLImpl::MakeContext(PLSRenderContextGLImpl::ContextOptions());
+
     rcp<PLSRenderTargetGL> m_renderTarget;
 };
 
-std::unique_ptr<FiddleContext> FiddleContext::MakeGLPLS()
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeGLPLS()
 {
-    return std::make_unique<FiddleContextGLPLS>();
+    return std::make_unique<LowLevelRenderContextGLPLS>();
 }
+
+} // namespace juce
+
+#else
+
+namespace juce
+{
+
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeGLPLS()
+{
+    return nullptr;
+}
+
+} // namespace juce
+
 #endif
-
-std::unique_ptr<FiddleContext> FiddleContext::MakeGLSkia()
-{
-    return nullptr;
-}
-
-std::unique_ptr<FiddleContext> FiddleContext::MakeGLPLS()
-{
-    return nullptr;
-}

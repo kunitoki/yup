@@ -19,34 +19,20 @@
   ==============================================================================
 */
 
-#include <juce_core/juce_core.h>
-#include <juce_events/juce_events.h>
+#include <yup_gui/yup_gui.h>
 
-struct Application : juce::JUCEApplicationBase, juce::Timer
+class Application : public juce::JUCEApplication, public juce::Timer
 {
-    Application()
-    {}
+    Application() = default;
 
     const juce::String getApplicationName() override
     {
-        return "yup!";
+        return "yup app!";
     }
 
     const juce::String getApplicationVersion() override
     {
         return "1.0";
-    }
-
-    bool moreThanOneInstanceAllowed() override
-    {
-        return false;
-    }
-
-    void timerCallback() override
-    {
-        stopTimer();
-
-        juce::MessageManager::callAsync([this] { systemRequestedQuit(); });
     }
 
     void initialise (const juce::String& commandLineParameters) override
@@ -57,30 +43,14 @@ struct Application : juce::JUCEApplicationBase, juce::Timer
 
     void shutdown() override
     {
-        DBG("Shutting down");
+        DBG ("Shutting down");
     }
 
-    void anotherInstanceStarted (const juce::String& commandLine) override
+    void timerCallback() override
     {
-    }
+        stopTimer();
 
-    void systemRequestedQuit() override
-    {
-        quit();
-    }
-
-    void suspended() override
-    {
-    }
-
-    void resumed() override
-    {
-    }
-
-    void unhandledException (const std::exception*,
-                             const juce::String& sourceFilename,
-                             int lineNumber) override
-    {
+        juce::MessageManager::callAsync([this] { systemRequestedQuit(); });
     }
 };
 

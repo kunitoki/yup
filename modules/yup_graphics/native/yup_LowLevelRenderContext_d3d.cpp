@@ -1,29 +1,48 @@
-#include "fiddle_context.hpp"
+/*
+  ==============================================================================
 
-#ifndef _WIN32
+   This file is part of the YUP library.
+   Copyright (c) 2024 - kunitoki@gmail.com
 
-std::unique_ptr<FiddleContext> FiddleContext::MakeD3DPLS(FiddleContextOptions) { return nullptr; }
+   YUP is an open source library subject to open-source licensing.
 
-#else
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include "yup_LowLevelRenderContext.h"
 
 #include "rive/pls/pls_renderer.hpp"
 #include "rive/pls/d3d/pls_render_context_d3d_impl.hpp"
 #include "rive/pls/d3d/d3d11.hpp"
+
 #include <array>
 #include <dxgi1_2.h>
 
 #define GLFW_INCLUDE_NONE
 #define GLFW_EXPOSE_NATIVE_WIN32
-#include "GLFW/glfw3.h"
+#include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
+
+namespace juce
+{
 
 using namespace rive;
 using namespace rive::pls;
 
-class FiddleContextD3DPLS : public FiddleContext
+class LowLevelRenderContextD3DPLS : public LowLevelRenderContext
 {
 public:
-    FiddleContextD3DPLS(ComPtr<IDXGIFactory2> d3dFactory,
+    LowLevelRenderContextD3DPLS(ComPtr<IDXGIFactory2> d3dFactory,
                         ComPtr<ID3D11Device> gpu,
                         ComPtr<ID3D11DeviceContext> gpuContext,
                         const PLSRenderContextD3DImpl::ContextOptions& contextOptions) :
@@ -64,8 +83,6 @@ public:
         m_renderTarget = plsContextImpl->makeRenderTarget(width, height);
         m_readbackTexture = nullptr;
     }
-
-    void toggleZoomWindow() override {}
 
     std::unique_ptr<Renderer> makeRenderer(int width, int height) override
     {
@@ -142,7 +159,7 @@ private:
     rcp<PLSRenderTargetD3D> m_renderTarget;
 };
 
-std::unique_ptr<FiddleContext> FiddleContext::MakeD3DPLS(FiddleContextOptions fiddleOptions)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeD3DPLS(LowLevelRenderContextOptions fiddleOptions)
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;
@@ -190,10 +207,10 @@ std::unique_ptr<FiddleContext> FiddleContext::MakeD3DPLS(FiddleContextOptions fi
 
     printf("D3D device: %S\n", adapterDesc.Description);
 
-    return std::make_unique<FiddleContextD3DPLS>(std::move(factory),
+    return std::make_unique<LowLevelRenderContextD3DPLS>(std::move(factory),
                                                  std::move(gpu),
                                                  std::move(gpuContext),
                                                  contextOptions);
 }
 
-#endif
+} // namespace juce

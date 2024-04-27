@@ -19,4 +19,39 @@
   ==============================================================================
 */
 
-#include "main.cpp"
+namespace juce
+{
+
+//==============================================================================
+
+bool JUCEApplication::moreThanOneInstanceAllowed()
+{
+    return true;
+}
+
+void JUCEApplication::anotherInstanceStarted (const String& commandLine)
+{
+    ignoreUnused (commandLine);
+}
+
+void JUCEApplication::systemRequestedQuit()
+{
+    quit();
+}
+
+void JUCEApplication::suspended()
+{
+}
+
+void JUCEApplication::resumed()
+{
+}
+
+void JUCEApplication::unhandledException (const std::exception* ex,
+                                          const String& sourceFilename,
+                                          int lineNumber)
+{
+    ignoreUnused (ex, sourceFilename, lineNumber);
+}
+
+} // namespace juce

@@ -31,7 +31,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  DocumentWindow
+class JUCE_API DocumentWindow
 {
 public:
     //==============================================================================

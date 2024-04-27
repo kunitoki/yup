@@ -37,9 +37,10 @@
   license:            ISC
   minimumCppStandard: 17
 
-  dependencies:       juce_core rive_pls_renderer
+  dependencies:       juce_core rive rive_pls_renderer
   OSXFrameworks:      Metal
   iOSFrameworks:      Metal
+  searchpaths:        native
 
  END_JUCE_MODULE_DECLARATION
 
@@ -50,6 +51,10 @@
 
 #include <juce_core/juce_core.h>
 
+#include <rive/rive.h>
+
 //==============================================================================
 
 //#include "windowing/juce_DocumentWindow.h"
+
+#include "native/yup_LowLevelRenderContext.h"

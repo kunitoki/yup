@@ -1,4 +1,25 @@
-#include "fiddle_context.hpp"
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2024 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include "yup_LowLevelRenderContext.h"
 
 #include "rive/pls/pls_renderer.hpp"
 //#include "rive/pls/gl/pls_render_context_gl_impl.hpp"
@@ -10,16 +31,19 @@
 
 #define GLFW_INCLUDE_NONE
 #define GLFW_EXPOSE_NATIVE_COCOA
-#include "GLFW/glfw3.h"
-#include "GLFW/glfw3native.h"
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
+namespace juce
+{
 
 using namespace rive;
 using namespace rive::pls;
 
-class FiddleContextMetalPLS : public FiddleContext
+class LowLevelRenderContextMetalPLS : public LowLevelRenderContext
 {
 public:
-    FiddleContextMetalPLS(FiddleContextOptions fiddleOptions)
+    LowLevelRenderContextMetalPLS(LowLevelRenderContextOptions fiddleOptions)
         : m_fiddleOptions(fiddleOptions)
     {
         PLSRenderContextMetalImpl::ContextOptions metalOptions;
@@ -72,8 +96,6 @@ public:
         m_renderTarget = plsContextImpl->makeRenderTarget(MTLPixelFormatBGRA8Unorm, width, height);
     }
 
-    void toggleZoomWindow() override {}
-
     std::unique_ptr<Renderer> makeRenderer(int width, int height) override
     {
         return std::make_unique<PLSRenderer>(m_plsContext.get());
@@ -113,7 +135,7 @@ public:
     }
 
 private:
-    const FiddleContextOptions m_fiddleOptions;
+    const LowLevelRenderContextOptions m_fiddleOptions;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     std::unique_ptr<PLSRenderContext> m_plsContext;
@@ -122,7 +144,9 @@ private:
     id<CAMetalDrawable> m_currentFrameSurface = nil;
 };
 
-std::unique_ptr<FiddleContext> FiddleContext::MakeMetalPLS(FiddleContextOptions fiddleOptions)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeMetalPLS(LowLevelRenderContextOptions fiddleOptions)
 {
-    return std::make_unique<FiddleContextMetalPLS>(fiddleOptions);
+    return std::make_unique<LowLevelRenderContextMetalPLS>(fiddleOptions);
 }
+
+} // namespace juce

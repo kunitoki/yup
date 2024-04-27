@@ -52,4 +52,5 @@
 
 //==============================================================================
 
+#include "application/yup_Application.h"
 #include "windowing/yup_DocumentWindow.h"

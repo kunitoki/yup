@@ -1,14 +1,27 @@
-#include "fiddle_context.hpp"
+/*
+  ==============================================================================
 
-#ifndef RIVE_DAWN
+   This file is part of the YUP library.
+   Copyright (c) 2024 - kunitoki@gmail.com
 
-std::unique_ptr<FiddleContext> FiddleContext::MakeDawnPLS(FiddleContextOptions options)
-{
-    return nullptr;
-}
+   YUP is an open source library subject to open-source licensing.
 
-#else
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include "yup_LowLevelRenderContext.h"
+
+#if RIVE_DAWN
 #include "dawn/native/DawnNative.h"
 #include "dawn/dawn_proc.h"
 
@@ -18,6 +31,9 @@ std::unique_ptr<FiddleContext> FiddleContext::MakeDawnPLS(FiddleContextOptions o
 
 #include <array>
 #include <thread>
+
+namespace juce
+{
 
 using namespace rive;
 using namespace rive::pls;
@@ -80,10 +96,10 @@ static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescript
 }
 #endif
 
-class FiddleContextDawnPLS : public FiddleContext
+class LowLevelRenderContextDawnPLS : public LowLevelRenderContext
 {
 public:
-    FiddleContextDawnPLS(FiddleContextOptions options) : m_options(options)
+    LowLevelRenderContextDawnPLS(LowLevelRenderContextOptions options) : m_options(options)
     {
         WGPUInstanceDescriptor instanceDescriptor{};
         instanceDescriptor.features.timedWaitAnyEnable = true;
@@ -208,8 +224,6 @@ public:
         m_pixelReadBuff = {};
     }
 
-    void toggleZoomWindow() override {}
-
     std::unique_ptr<Renderer> makeRenderer(int width, int height) override
     {
         return std::make_unique<PLSRenderer>(m_plsContext.get());
@@ -318,7 +332,7 @@ public:
     void tick() override { m_device.Tick(); }
 
 private:
-    const FiddleContextOptions m_options;
+    const LowLevelRenderContextOptions m_options;
     WGPUDevice m_backendDevice = {};
     wgpu::Device m_device = {};
     wgpu::Queue m_queue = {};
@@ -329,9 +343,22 @@ private:
     wgpu::Buffer m_pixelReadBuff;
 };
 
-std::unique_ptr<FiddleContext> FiddleContext::MakeDawnPLS(FiddleContextOptions options)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(LowLevelRenderContextOptions options)
 {
-    return std::make_unique<FiddleContextDawnPLS>(options);
+    return std::make_unique<LowLevelRenderContextDawnPLS>(options);
 }
+
+} // namespace juce
+
+#else
+
+namespace juce {
+
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(LowLevelRenderContextOptions options)
+{
+    return nullptr;
+}
+
+} // namespace juce
 
 #endif

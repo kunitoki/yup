@@ -43,7 +43,9 @@
 #else
  #define GLFW_INCLUDE_NONE
  #include <GLFW/glfw3.h>
+
 #endif
 
 //==============================================================================
+#include "application/yup_Application.cpp"
 #include "windowing/yup_DocumentWindow.cpp"

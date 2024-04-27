@@ -19,31 +19,34 @@
   ==============================================================================
 */
 
-#ifdef YUP_GRAPHICS_H_INCLUDED
- /* When you add this cpp file to your project, you mustn't include it in a file where you've
-    already included any other headers - just put it inside a file on its own, possibly with your config
-    flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
-    header files that the compiler may be using.
- */
- #error "Incorrect use of YUP cpp file"
-#endif
-
-#include "yup_graphics.h"
+namespace juce
+{
 
 //==============================================================================
 
-#if JUCE_WINDOWS
- #include "native/yup_LowLevelRenderContext_d3d.cpp"
- #include "native/yup_LowLevelRenderContext_gl.cpp"
+class JUCE_API JUCEApplication : public JUCEApplicationBase
+{
+public:
+    JUCEApplication() = default;
+    ~JUCEApplication() = default;
 
-#elif JUCE_MAC || JUCE_IOS
- #include "native/yup_LowLevelRenderContext_metal.cpp"
- #include "native/yup_LowLevelRenderContext_gl.cpp"
+    bool moreThanOneInstanceAllowed() override;
 
-#else
- #include "native/yup_LowLevelRenderContext_gl.cpp"
+    void anotherInstanceStarted (const String& commandLine) override;
 
-#endif
+    void systemRequestedQuit() override;
 
-#include "native/yup_LowLevelRenderContext_dawn.cpp"
-#include "native/yup_LowLevelRenderContext_dawn_helper.cpp"
+    void suspended() override;
+
+    void resumed() override;
+
+    void unhandledException (const std::exception*,
+                             const String& sourceFilename,
+                             int lineNumber) override;
+
+private:
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JUCEApplication)
+};
+
+} // namespace juce
