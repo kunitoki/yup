@@ -1,5 +1,8 @@
 # YUP: Cross-Platform Application Development Library
 
+![SeaSynth](./images/seasynth_prototype.png)
+UI courtesy from: https://www.drywestdesign.com/
+
 [![Prototype](./images/prototype_renderer.png)](https://youtube.com/shorts/3XC4hyDlrVs)
 
 ## Disclaimer: The Project Is Still In Embryonic Stage

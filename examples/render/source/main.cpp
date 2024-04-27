@@ -96,7 +96,7 @@ public:
         auto rivName = juce::File (__FILE__)
             .getParentDirectory()
             .getSiblingFile("data")
-            .getChildFile("alien.riv");
+            .getChildFile("seasynth.riv");
 
         if (rivName.existsAsFile())
         {
@@ -546,7 +546,7 @@ private:
     bool wireframe = false;
     bool disableFill = false;
     bool disableStroke = false;
-    float framerate = 60.0f;
+    float framerate = 30.0f;
 
     std::unique_ptr<FiddleContext> fiddleContext;
 
@@ -637,6 +637,7 @@ struct Application : juce::JUCEApplicationBase
         DBG("Starting app " << commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
+        window->setSize (1280, 866);
         window->setVisible (true);
     }
 
