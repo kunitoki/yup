@@ -27,12 +27,8 @@
 #include "rive/pls/metal/pls_render_context_metal_impl.h"
 
 #import <Metal/Metal.h>
+#import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
-
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
 
 namespace juce
 {

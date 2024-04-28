@@ -22,14 +22,17 @@ cmake_minimum_required (VERSION 3.28)
 set (target_name example_app)
 
 # ==== Find dependencies
-include (FetchContent)
-
-FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable (glfw)
+set (additional_deps "")
+if (NOT "${yup_platform}" STREQUAL "emscripten")
+    include (FetchContent)
+    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable (glfw)
+    set (additional_deps "glfw")
+endif()
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
@@ -85,4 +88,4 @@ target_link_libraries (${target_name} PRIVATE
     sheenbidi
     rive
     rive_pls_renderer
-    glfw)
+    ${additional_deps})
