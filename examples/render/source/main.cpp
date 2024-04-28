@@ -31,9 +31,6 @@
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/static_scene.hpp"
 
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-
 #include <memory>
 
 enum class API
@@ -99,10 +96,12 @@ public:
         startTimerHz (static_cast<int> (framerate));
     }
 
-    void mouseDown(int button, int mods, double x, double y) override
+    void mouseDown(const juce::MouseEvent& event) override
     {
-        if (scenes.empty())
+        if (scenes.empty() || ! event.isLeftButtoDown())
             return;
+
+        auto [x, y] = event.getPosition();
 
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
@@ -113,10 +112,12 @@ public:
             scene->pointerDown (xy);
     }
 
-    void mouseUp (int button, int mods, double x, double y) override
+    void mouseUp (const juce::MouseEvent& event) override
     {
-        if (scenes.empty())
+        if (scenes.empty() || ! event.isLeftButtoDown())
             return;
+
+        auto [x, y] = event.getPosition();
 
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
@@ -127,10 +128,12 @@ public:
             scene->pointerUp (xy);
     }
 
-    void mouseMove (int button, int mods, double x, double y) override
+    void mouseMove (const juce::MouseEvent& event) override
     {
         if (scenes.empty())
             return;
+
+        auto [x, y] = event.getPosition();
 
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
@@ -141,10 +144,12 @@ public:
             scene->pointerMove (xy);
     }
 
-    void mouseDrag (int button, int mods, double x, double y) override
+    void mouseDrag (const juce::MouseEvent& event) override
     {
-        if (scenes.empty())
+        if (scenes.empty() || ! event.isLeftButtoDown())
             return;
+
+        auto [x, y] = event.getPosition();
 
         float dpiScale = fiddleContext->dpiScale (nativeHandle());
         x *= dpiScale;
@@ -155,59 +160,59 @@ public:
             scene->pointerMove (xy);
     }
 
-    void keyDown (int key, int scancode, int mods, double x, double y) override
+    void keyDown (const juce::KeyPress& keys, double x, double y) override
     {
-        const bool shift = mods & GLFW_MOD_SHIFT;
+        const bool shift = keys.getModifiers().isShiftDown();
 
-        switch (key)
+        switch (keys.getKey())
         {
-        case GLFW_KEY_ESCAPE:
+        case juce::KeyPress::escapeKey:
             close();
             break;
 
-        case GLFW_KEY_A:
+        case juce::KeyPress::textAKey:
             forceAtomicMode = !forceAtomicMode;
             fpsLastTime = 0;
             fpsFrames = 0;
             needsTitleUpdate = true;
             break;
 
-        case GLFW_KEY_D:
+        case juce::KeyPress::textDKey:
             printf ("static float scale = %f;\n", scale);
             printf ("static float2 translate = {%f, %f};\n", translate.x, translate.y);
             fflush(stdout);
             break;
 
-        case GLFW_KEY_W:
+        case juce::KeyPress::textWKey:
             wireframe = !wireframe;
             break;
 
-        case GLFW_KEY_P:
+        case juce::KeyPress::textPKey:
             paused = !paused;
             break;
 
-        case GLFW_KEY_H:
+        case juce::KeyPress::textHKey:
             if (!shift)
                 ++horzRepeat;
             else if (horzRepeat > 0)
                 --horzRepeat;
             break;
 
-        case GLFW_KEY_K:
+        case juce::KeyPress::textKKey:
             if (!shift)
                 ++upRepeat;
             else if (upRepeat > 0)
                 --upRepeat;
             break;
 
-        case GLFW_KEY_J:
+        case juce::KeyPress::textJKey:
             if (!shift)
                 ++downRepeat;
             else if (downRepeat > 0)
                 --downRepeat;
             break;
 
-        case GLFW_KEY_UP:
+        case juce::KeyPress::upKey:
         {
             float oldScale = scale;
             scale *= 1.25;
@@ -216,7 +221,7 @@ public:
             break;
         }
 
-        case GLFW_KEY_DOWN:
+        case juce::KeyPress::downKey:
         {
             float oldScale = scale;
             scale /= 1.25;
@@ -257,8 +262,6 @@ private:
             juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
             return;
         }
-
-        glfwPollEvents(); // TODO - remove
 
         mainLoop (juce::Time::getMillisecondCounterHiRes() / 1000.0);
 
@@ -409,7 +412,7 @@ private:
         }
     }
 
-    juce::LowLevelRenderContextOptions options;
+    juce::LowLevelRenderContext::Options options;
     bool forceAtomicMode = false;
     bool wireframe = false;
     bool disableFill = false;

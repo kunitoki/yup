@@ -159,7 +159,7 @@ private:
     rcp<PLSRenderTargetD3D> m_renderTarget;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeD3DPLS(LowLevelRenderContextOptions fiddleOptions)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeD3DPLS(Options fiddleOptions)
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;

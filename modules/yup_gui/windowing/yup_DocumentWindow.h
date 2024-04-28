@@ -57,13 +57,15 @@ public:
 
     void* nativeHandle() const;
 
-    virtual void mouseDown(int button, int mods, double x, double y);
-    virtual void mouseMove(int button, int mods, double x, double y);
-    virtual void mouseDrag(int button, int mods, double x, double y);
-    virtual void mouseUp(int button, int mods, double x, double y);
+    virtual void paint (Graphics& g);
 
-    virtual void keyDown(int key, int scancode, int mods, double x, double y);
-    virtual void keyUp(int key, int scancode, int mods, double x, double y);
+    virtual void mouseDown (const MouseEvent& event);
+    virtual void mouseMove (const MouseEvent& event);
+    virtual void mouseDrag (const MouseEvent& event);
+    virtual void mouseUp (const MouseEvent& event);
+
+    virtual void keyDown (const KeyPress& keys, double x, double y);
+    virtual void keyUp (const KeyPress& keys, double x, double y);
 
     /** Attempts to launch a child process command.
 

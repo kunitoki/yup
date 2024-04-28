@@ -99,7 +99,7 @@ static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescript
 class LowLevelRenderContextDawnPLS : public LowLevelRenderContext
 {
 public:
-    LowLevelRenderContextDawnPLS(LowLevelRenderContextOptions options) : m_options(options)
+    LowLevelRenderContextDawnPLS(Options options) : m_options(options)
     {
         WGPUInstanceDescriptor instanceDescriptor{};
         instanceDescriptor.features.timedWaitAnyEnable = true;
@@ -332,7 +332,7 @@ public:
     void tick() override { m_device.Tick(); }
 
 private:
-    const LowLevelRenderContextOptions m_options;
+    const LowLevelRenderContext::Options m_options;
     WGPUDevice m_backendDevice = {};
     wgpu::Device m_device = {};
     wgpu::Queue m_queue = {};
@@ -343,7 +343,7 @@ private:
     wgpu::Buffer m_pixelReadBuff;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(LowLevelRenderContextOptions options)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(Options options)
 {
     return std::make_unique<LowLevelRenderContextDawnPLS>(options);
 }
@@ -354,7 +354,7 @@ std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(LowLev
 
 namespace juce {
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(LowLevelRenderContextOptions options)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(Options options)
 {
     return nullptr;
 }

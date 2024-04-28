@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c): return { KeyPress::xxx, modifiers, sc }; - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,40 +19,14 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
-
-class Application : public juce::JUCEApplication, public juce::Timer
+namespace juce
 {
-public:
-    Application() = default;
 
-    const juce::String getApplicationName() override
-    {
-        return "yup app!";
-    }
+//==============================================================================
 
-    const juce::String getApplicationVersion() override
-    {
-        return "1.0";
-    }
+MouseEvent toMouseEvent (int buttons, int modifiers, double x, double y) noexcept
+{
+    return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
+}
 
-    void initialise (const juce::String& commandLineParameters) override
-    {
-        DBG("Starting app " << commandLineParameters);
-        startTimer (1000);
-    }
-
-    void shutdown() override
-    {
-        DBG ("Shutting down");
-    }
-
-    void timerCallback() override
-    {
-        stopTimer();
-
-        juce::MessageManager::callAsync([this] { systemRequestedQuit(); });
-    }
-};
-
-START_JUCE_APPLICATION(Application)
+} // namespace juce

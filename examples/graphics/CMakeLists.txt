@@ -22,7 +22,6 @@ cmake_minimum_required(VERSION 3.28)
 set (target_name example_graphics)
 
 # ==== Find dependencies
-# find_package (GLFW3)
 include (FetchContent)
 
 FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)

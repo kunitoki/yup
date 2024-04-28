@@ -21,11 +21,23 @@ cmake_minimum_required (VERSION 3.28)
 
 set (target_name example_app)
 
+# ==== Find dependencies
+include (FetchContent)
+
+FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable (glfw)
+
+# ==== Prepare sources
 file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 
+# ==== Setup executable
 add_executable (${target_name})
 
 target_compile_features (${target_name} PRIVATE cxx_std_17)
@@ -66,4 +78,11 @@ target_link_libraries (${target_name} PRIVATE
     juce_core
     juce_events
     juce_audio_basics
-    juce_audio_devices)
+    juce_audio_devices
+    yup_graphics
+    yup_gui
+    harfbuzz
+    sheenbidi
+    rive
+    rive_pls_renderer
+    glfw)

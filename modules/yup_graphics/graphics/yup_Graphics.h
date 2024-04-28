@@ -19,40 +19,20 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
+namespace juce
+{
 
-class Application : public juce::JUCEApplication, public juce::Timer
+class JUCE_API Graphics
 {
 public:
-    Application() = default;
+    Graphics() noexcept = default;
 
-    const juce::String getApplicationName() override
-    {
-        return "yup app!";
-    }
+    constexpr Graphics (const Graphics& other) noexcept = delete;
+    constexpr Graphics (Graphics&& other) noexcept = default;
+    constexpr Graphics& operator=(const Graphics& other) noexcept = delete;
+    constexpr Graphics& operator=(Graphics&& other) noexcept = default;
 
-    const juce::String getApplicationVersion() override
-    {
-        return "1.0";
-    }
-
-    void initialise (const juce::String& commandLineParameters) override
-    {
-        DBG("Starting app " << commandLineParameters);
-        startTimer (1000);
-    }
-
-    void shutdown() override
-    {
-        DBG ("Shutting down");
-    }
-
-    void timerCallback() override
-    {
-        stopTimer();
-
-        juce::MessageManager::callAsync([this] { systemRequestedQuit(); });
-    }
+private:
 };
 
-START_JUCE_APPLICATION(Application)
+} // namespace juce

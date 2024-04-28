@@ -43,7 +43,7 @@ using namespace rive::pls;
 class LowLevelRenderContextMetalPLS : public LowLevelRenderContext
 {
 public:
-    LowLevelRenderContextMetalPLS(LowLevelRenderContextOptions fiddleOptions)
+    LowLevelRenderContextMetalPLS(Options fiddleOptions)
         : m_fiddleOptions(fiddleOptions)
     {
         PLSRenderContextMetalImpl::ContextOptions metalOptions;
@@ -135,7 +135,7 @@ public:
     }
 
 private:
-    const LowLevelRenderContextOptions m_fiddleOptions;
+    const LowLevelRenderContext::Options m_fiddleOptions;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     std::unique_ptr<PLSRenderContext> m_plsContext;
@@ -144,7 +144,7 @@ private:
     id<CAMetalDrawable> m_currentFrameSurface = nil;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeMetalPLS(LowLevelRenderContextOptions fiddleOptions)
+std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeMetalPLS(Options fiddleOptions)
 {
     return std::make_unique<LowLevelRenderContextMetalPLS>(fiddleOptions);
 }

@@ -29,18 +29,20 @@
 namespace juce
 {
 
-struct LowLevelRenderContextOptions
-{
-    bool retinaDisplay = true;
-    bool readableFramebuffer = true;
-    bool synchronousShaderCompilations = false;
-    bool enableReadPixels = false;
-    bool disableRasterOrdering = false;
-};
-
-class LowLevelRenderContext
+class JUCE_API LowLevelRenderContext
 {
 public:
+    struct Options
+    {
+        constexpr Options() noexcept {}
+
+        bool retinaDisplay = true;
+        bool readableFramebuffer = true;
+        bool synchronousShaderCompilations = false;
+        bool enableReadPixels = false;
+        bool disableRasterOrdering = false;
+    };
+
     virtual ~LowLevelRenderContext() = default;
 
     virtual float dpiScale (void* nativeHandle) const = 0;
@@ -71,24 +73,24 @@ public:
      * @brief Metal renderer.
      */
 #if JUCE_MAC || JUCE_IOS
-    static std::unique_ptr<LowLevelRenderContext> makeMetalPLS (LowLevelRenderContextOptions = {});
+    static std::unique_ptr<LowLevelRenderContext> makeMetalPLS (Options = {});
 #else
-    static std::unique_ptr<LowLevelRenderContext> makeMetalPLS (LowLevelRenderContextOptions = {}) { return nullptr; }
+    static std::unique_ptr<LowLevelRenderContext> makeMetalPLS (Options = {}) { return nullptr; }
 #endif
 
     /**
      * @brief Direct3D renderer.
      */
 #if JUCE_WINDOWS
-    static std::unique_ptr<LowLevelRenderContext> makeD3DPLS (LowLevelRenderContextOptions = {});
+    static std::unique_ptr<LowLevelRenderContext> makeD3DPLS (Options = {});
 #else
-    static std::unique_ptr<LowLevelRenderContext> makeD3DPLS (LowLevelRenderContextOptions = {}) { return nullptr; }
+    static std::unique_ptr<LowLevelRenderContext> makeD3DPLS (Options = {}) { return nullptr; }
 #endif
 
     /**
      * @brief WebGPU (Dawn) renderer.
      */
-    static std::unique_ptr<LowLevelRenderContext> makeDawnPLS (LowLevelRenderContextOptions = {});
+    static std::unique_ptr<LowLevelRenderContext> makeDawnPLS (Options = {});
 };
 
 } // namespace juce

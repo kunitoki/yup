@@ -22,10 +22,14 @@
 namespace juce
 {
 
+//==============================================================================
+
 void juce_glfwErrorCallback (int code, const char* message)
 {
     DBG ("GLFW Error: " << code << " - " << message);
 }
+
+//==============================================================================
 
 void juce_glfwInitialiseWindowing()
 {
@@ -60,6 +64,8 @@ void juce_glfwInitialiseWindowing()
     } glfwInstance = {};
 }
 
+//==============================================================================
+
 void juce_glfwMouseMove (GLFWwindow* window, double x, double y)
 {
     //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
@@ -68,17 +74,25 @@ void juce_glfwMouseMove (GLFWwindow* window, double x, double y)
 
     auto* documentWindow = static_cast<juce::DocumentWindow*> (glfwGetWindowUserPointer (window));
 
-    if (glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS
-        || glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS
-        || glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+    const auto leftButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    const auto middleButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+    const auto rightButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+    if (leftButtonDown || middleButtonDown || rightButtonDown)
     {
-        documentWindow->mouseDrag (0, 0, x, y);
+        int buttons = (leftButtonDown ? GLFW_MOUSE_BUTTON_LEFT : 0)
+            | (middleButtonDown ? GLFW_MOUSE_BUTTON_MIDDLE : 0)
+            | (rightButtonDown ? GLFW_MOUSE_BUTTON_RIGHT : 0);
+
+        documentWindow->mouseDrag (toMouseEvent (buttons, 0, x, y));
     }
     else
     {
-        documentWindow->mouseMove (0, 0, x, y);
+        documentWindow->mouseMove (toMouseEvent (0, 0, x, y));
     }
 }
+
+//==============================================================================
 
 void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
 {
@@ -92,10 +106,12 @@ void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
     auto* documentWindow = static_cast<juce::DocumentWindow*> (glfwGetWindowUserPointer (window));
 
     if (action == GLFW_PRESS)
-        documentWindow->mouseDown (button, mods, x, y);
+        documentWindow->mouseDown (toMouseEvent (button, mods, x, y));
     else
-        documentWindow->mouseUp (button, mods, x, y);
+        documentWindow->mouseUp (toMouseEvent (button, mods, x, y));
 }
+
+//==============================================================================
 
 void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -109,10 +125,12 @@ void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, i
     auto* documentWindow = static_cast<juce::DocumentWindow*> (glfwGetWindowUserPointer (window));
 
     if (action == GLFW_PRESS)
-        documentWindow->keyDown (key, scancode, mods, x, y);
+        documentWindow->keyDown (toKeyPress (key, scancode, mods), x, y);
     else
-        documentWindow->keyUp (key, scancode, mods, x, y);
+        documentWindow->keyUp (toKeyPress (key, scancode, mods), x, y);
 }
+
+//==============================================================================
 
 struct DocumentWindow::HeavyweightWindow
 {
@@ -124,6 +142,8 @@ struct DocumentWindow::HeavyweightWindow
     CAMetalLayer* swapchain = nullptr;
 #endif
 };
+
+//==============================================================================
 
 DocumentWindow::DocumentWindow()
     : heavyweightWindow (std::make_unique<HeavyweightWindow> ())
@@ -193,7 +213,7 @@ void DocumentWindow::setVisible (bool shouldBeVisible)
     if (shouldBeVisible)
     {
         // if (GL)
-        //     glfwMakeContextCurrent (heavyweightWindow->window);
+        //glfwMakeContextCurrent (heavyweightWindow->window);
 
         glfwSetWindowAttrib (heavyweightWindow->window, GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
         glfwShowWindow (heavyweightWindow->window);
@@ -231,27 +251,31 @@ void* DocumentWindow::nativeHandle() const
 #endif
 }
 
-void DocumentWindow::mouseDown(int button, int mods, double x, double y)
+void DocumentWindow::paint (Graphics& g)
 {
 }
 
-void DocumentWindow::mouseMove(int button, int mods, double x, double y)
+void DocumentWindow::mouseDown (const MouseEvent& event)
 {
 }
 
-void DocumentWindow::mouseUp(int button, int mods, double x, double y)
+void DocumentWindow::mouseMove (const MouseEvent& event)
 {
 }
 
-void DocumentWindow::mouseDrag(int button, int mods, double x, double y)
+void DocumentWindow::mouseUp (const MouseEvent& event)
 {
 }
 
-void DocumentWindow::keyDown(int key, int scancode, int mods, double x, double y)
+void DocumentWindow::mouseDrag (const MouseEvent& event)
 {
 }
 
-void DocumentWindow::keyUp(int key, int scancode, int mods, double x, double y)
+void DocumentWindow::keyDown (const KeyPress& keys, double x, double y)
+{
+}
+
+void DocumentWindow::keyUp (const KeyPress& keys, double x, double y)
 {
 }
 

@@ -50,7 +50,12 @@
 
 #include <juce_events/juce_events.h>
 
+#include <yup_graphics/yup_graphics.h>
+
 //==============================================================================
 
 #include "application/yup_Application.h"
+#include "keyboard/yup_KeyModifiers.h"
+#include "keyboard/yup_KeyPress.h"
+#include "mouse/yup_MouseEvent.h"
 #include "windowing/yup_DocumentWindow.h"
