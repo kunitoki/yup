@@ -91,13 +91,18 @@
 
  #if JUCE_WASM
   #include <stdio.h>
-  #include <sys/types.h>
   #include <sys/socket.h>
+  #include <sys/stat.h>
+  #include <sys/types.h>
+  #include <sys/vfs.h>
   #include <errno.h>
   #include <unistd.h>
   #include <netinet/in.h>
-  #include <sys/stat.h>
  #endif
+
+#if JUCE_EMSCRIPTEN
+ #include <emscripten.h>
+#endif
 
  #if JUCE_LINUX || JUCE_BSD
   #include <stdio.h>
@@ -122,10 +127,6 @@
  #if ! (JUCE_ANDROID || JUCE_WASM)
   #include <execinfo.h>
  #endif
-#endif
-
-#if JUCE_EMSCRIPTEN
- #include <emscripten.h>
 #endif
 
 #if JUCE_MAC || JUCE_IOS
@@ -281,6 +282,8 @@
 //==============================================================================
 #elif JUCE_WASM
  #include "native/juce_SystemStats_wasm.cpp"
+ #include "native/juce_Files_wasm.cpp"
+ #include "native/juce_Threads_wasm.cpp"
  #include "native/juce_PlatformTimer_generic.cpp"
 #endif
 

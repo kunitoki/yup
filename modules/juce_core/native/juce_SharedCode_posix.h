@@ -419,8 +419,10 @@ bool File::deleteFile() const
 
 bool File::moveInternal (const File& dest) const
 {
+   #if ! JUCE_WASM
     if (rename (fullPath.toUTF8(), dest.getFullPathName().toUTF8()) == 0)
         return true;
+   #endif
 
     if (isNonEmptyDirectory())
         return false;
@@ -911,8 +913,13 @@ public:
         {
             if (isRealtime)
             {
+               #if ! JUCE_WASM
                 const auto min = jmax (0, sched_get_priority_min (SCHED_RR));
                 const auto max = jmax (1, sched_get_priority_max (SCHED_RR));
+               #else
+                const auto min = 0;
+                const auto max = 100;
+               #endif
 
                 return jmap (rt->getPriority(), 0, 10, min, max);
             }
@@ -1031,7 +1038,7 @@ void JUCE_CALLTYPE Thread::yield()
    calls (the API for these has changed about quite a bit in various Linux
    versions, and a lot of distros seem to ship with obsolete versions)
 */
-#if defined (CPU_ISSET) && ! defined (SUPPORT_AFFINITIES)
+#if (! JUCE_WASM) && defined (CPU_ISSET) && ! defined (SUPPORT_AFFINITIES)
  #define SUPPORT_AFFINITIES 1
 #endif
 

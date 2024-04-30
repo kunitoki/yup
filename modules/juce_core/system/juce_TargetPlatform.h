@@ -206,6 +206,16 @@
 #endif
 
 //==============================================================================
+#if JUCE_WASM
+  #ifdef _DEBUG
+    #define JUCE_DEBUG 1
+  #endif
+
+  #define JUCE_LITTLE_ENDIAN 1
+  #define JUCE_32BIT 1
+#endif
+
+//==============================================================================
 // Compiler type macros.
 
 #if defined (__clang__)

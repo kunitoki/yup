@@ -609,7 +609,7 @@ private:
     std::atomic<bool> shouldExit { false };
     ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
-   #if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD
+   #if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD || JUCE_WASM
     std::atomic<Priority> priority;
    #endif
 

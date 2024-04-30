@@ -258,7 +258,9 @@ static LONG WINAPI handleCrash (LPEXCEPTION_POINTERS ep)
 static void handleCrash (int signum)
 {
     globalCrashHandler ((void*) (pointer_sized_int) signum);
+   #if ! JUCE_WASM
     ::kill (getpid(), SIGKILL);
+   #endif
 }
 
 int juce_siginterrupt (int sig, int flag);
@@ -271,6 +273,10 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
 
    #if JUCE_WINDOWS
     SetUnhandledExceptionFilter (handleCrash);
+
+   #elif JUCE_WASM
+	// TODO
+
    #else
     const int signals[] = { SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGABRT, SIGSYS };
 
@@ -279,6 +285,7 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
         ::signal (signals[i], handleCrash);
         juce_siginterrupt (signals[i], 1);
     }
+
    #endif
 }
 

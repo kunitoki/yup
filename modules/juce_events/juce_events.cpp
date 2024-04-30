@@ -68,6 +68,13 @@
 
 #elif JUCE_LINUX || JUCE_BSD
  #include <unistd.h>
+
+#elif JUCE_EMSCRIPTEN
+ #include <emscripten.h>
+
+ #include <deque>
+ #include <mutex>
+
 #endif
 
 //==============================================================================
@@ -90,9 +97,7 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-
  #include "native/juce_MessageQueue_mac.h"
-
  #if JUCE_MAC
   #include "native/juce_MessageManager_mac.mm"
  #else
@@ -109,6 +114,9 @@
 #elif JUCE_LINUX || JUCE_BSD
  #include "native/juce_EventLoopInternal_linux.h"
  #include "native/juce_Messaging_linux.cpp"
+
+#elif JUCE_WASM && JUCE_EMSCRIPTEN
+ #include "native/juce_Messaging_emscripten.cpp"
 
 #elif JUCE_ANDROID
  #include "native/juce_Messaging_android.cpp"

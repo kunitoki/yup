@@ -97,7 +97,7 @@ bool MessageManager::MessageBase::post()
 }
 
 //==============================================================================
-#if ! (JUCE_MAC || JUCE_IOS || JUCE_ANDROID)
+#if ! (JUCE_MAC || JUCE_IOS || JUCE_ANDROID || JUCE_WASM)
 // implemented in platform-specific code (juce_Messaging_linux.cpp and juce_Messaging_windows.cpp)
 namespace detail
 {

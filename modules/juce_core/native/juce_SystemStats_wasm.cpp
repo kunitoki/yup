@@ -42,7 +42,7 @@ namespace juce
 
 void Logger::outputDebugString (const String& text)
 {
-    std::cerr << text << std::endl;
+    std::printf ("%.*s", text.length(), text.toRawUTF8());
 }
 
 //==============================================================================
