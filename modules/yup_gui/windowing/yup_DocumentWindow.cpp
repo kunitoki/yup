@@ -194,7 +194,20 @@ void DocumentWindow::setSize (int width, int height)
 {
     jassert (heavyweightWindow != nullptr && heavyweightWindow->window != nullptr);
 
+#if JUCE_EMSCRIPTEN
+    glfwSetWindowSize (heavyweightWindow->window, width * 2, height * 2);
+
+    //emscripten_set_canvas_element_size ("#canvas", width, height);
+
+    EM_ASM({
+        var canvas = document.getElementById("canvas");
+        canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
+    }, width, height);
+
+#else
     glfwSetWindowSize (heavyweightWindow->window, width, height);
+
+#endif
 }
 
 std::tuple<int, int> DocumentWindow::getSize() const
@@ -212,8 +225,9 @@ void DocumentWindow::setVisible (bool shouldBeVisible)
 
     if (shouldBeVisible)
     {
-        // if (GL)
-        //glfwMakeContextCurrent (heavyweightWindow->window);
+#if JUCE_EMSCRIPTEN
+        glfwMakeContextCurrent (heavyweightWindow->window);
+#endif
 
         glfwSetWindowAttrib (heavyweightWindow->window, GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
         glfwShowWindow (heavyweightWindow->window);

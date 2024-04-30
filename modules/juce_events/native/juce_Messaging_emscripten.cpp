@@ -31,29 +31,170 @@ static void createDirIfNotExists(File::SpecialLocationType type)
     if (! dir.exists()) dir.createDirectory();
 }
 
-//static bool appIsInsideEmrun{ false };
-
-static std::deque<MessageManager::MessageBase*> messageQueue;
-static std::deque<MessageManager::MessageBase*> eventQueue;
-static std::mutex queueMtx;
-static std::atomic<bool> quitReceived{ false };
-static double timeDispatchBeginMS{ 0 };
-
-static Thread::ThreadID messageThreadID{ nullptr }; // JUCE message thread
-static Thread::ThreadID mainThreadID{ nullptr };    // Javascript main thread
-
-std::unique_ptr<juce::ScopedJuceInitialiser_GUI> libraryInitialiser;
-
+Thread::ThreadID messageThreadID = nullptr; // JUCE message thread
+Thread::ThreadID mainThreadID = nullptr;    // Javascript main thread
 std::vector<std::function<void()>> preDispatchLoopFuncs;
-// These callbacks are only executed if main thread isn't message thread.
 std::vector<std::function<void()>> mainThreadLoopFuncs;
+double timeDispatchBeginMS = 0.0;
 
-extern bool isMessageThreadProxied()
+extern bool isMessageThreadProxied();
+extern void registerCallbackToMainThread (std::function<void()> f);
+
+int juce_animationFrameCallback (double timestamp);
+void juce_dispatchLoop();
+
+class InternalMessageQueue
+{
+public:
+    InternalMessageQueue()
+    {
+        createDirIfNotExists (File::userHomeDirectory);
+        createDirIfNotExists (File::userDocumentsDirectory);
+        createDirIfNotExists (File::userMusicDirectory);
+        createDirIfNotExists (File::userMoviesDirectory);
+        createDirIfNotExists (File::userPicturesDirectory);
+        createDirIfNotExists (File::userDesktopDirectory);
+        createDirIfNotExists (File::userApplicationDataDirectory);
+        createDirIfNotExists (File::commonDocumentsDirectory);
+        createDirIfNotExists (File::commonApplicationDataDirectory);
+        createDirIfNotExists (File::globalApplicationsDirectory);
+        createDirIfNotExists (File::tempDirectory);
+
+        messageThreadID = Thread::getCurrentThreadId();
+
+        MAIN_THREAD_EM_ASM ({
+            if (window.juce_animationFrameCallback)
+                return;
+
+            window.juce_animationFrameCallback = function (timestamp)
+            {
+                dynCall("ii", $0, [timestamp]);
+
+                window.requestAnimationFrame (window.juce_animationFrameCallback);
+            };
+
+            window.requestAnimationFrame (window.juce_animationFrameCallback);
+        }, juce_animationFrameCallback);
+    }
+
+    ~InternalMessageQueue()
+    {
+        clearSingletonInstance();
+    }
+
+    //==============================================================================
+    void postMessage (MessageManager::MessageBase* const msg) noexcept
+    {
+        {
+            const ScopedLock sl (lock);
+
+            if (dynamic_cast<EmscriptenEventMessage* const> (msg))
+                eventQueue.add (msg);
+            else
+                messageQueue.add (msg);
+        }
+    }
+
+    //==============================================================================
+    void dispatchLoop()
+    {
+        if (quitReceived.load())
+        {
+            emscripten_cancel_main_loop();
+
+            //auto* app = JUCEApplicationBase::getInstance();
+            //app->shutdownApp();
+
+            return;
+        }
+
+        timeDispatchBeginMS = Time::getMillisecondCounterHiRes();
+
+        Timer::callPendingTimersSynchronously();
+
+        dispatchEvents();
+
+        for (auto f : preDispatchLoopFuncs) f();
+
+        ReferenceCountedArray <MessageManager::MessageBase> currentMessages;
+
+        {
+            const ScopedLock sl (lock);
+
+            currentMessages = std::move (messageQueue);
+            messageQueue.clear();
+        }
+
+        while (! currentMessages.isEmpty())
+        {
+            if (auto message = currentMessages.removeAndReturn (0))
+                message->messageCallback();
+        }
+    }
+
+    void runDispatchLoop()
+    {
+        constexpr int framesPerSeconds = 0;
+        constexpr int simulateInfiniteLoop = 1;
+        emscripten_set_main_loop (juce_dispatchLoop, framesPerSeconds, simulateInfiniteLoop);
+    }
+
+    void stopDispatchLoop()
+    {
+        (new QuitCallback(*this))->post();
+    }
+
+    //==============================================================================
+    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+
+private:
+    struct QuitCallback : public CallbackMessage
+    {
+        InternalMessageQueue& parent;
+
+        QuitCallback(InternalMessageQueue& newParent)
+            : parent (newParent)
+        {
+        }
+
+        void messageCallback() override
+        {
+            parent.quitReceived = true;
+        }
+    };
+
+    void dispatchEvents()
+    {
+        ReferenceCountedArray <MessageManager::MessageBase> currentEvents;
+
+        {
+            const ScopedLock sl (lock);
+
+            currentEvents = std::move (eventQueue);
+            eventQueue.clear();
+        }
+
+        while (! currentEvents.isEmpty())
+        {
+            if (auto message = currentEvents.removeAndReturn (0))
+                message->messageCallback();
+        }
+    }
+
+    CriticalSection lock;
+    ReferenceCountedArray <MessageManager::MessageBase> messageQueue;
+    ReferenceCountedArray <MessageManager::MessageBase> eventQueue;
+    std::atomic<bool> quitReceived = false;
+};
+
+JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
+
+bool isMessageThreadProxied()
 {
     return messageThreadID != mainThreadID;
 }
 
-extern void registerCallbackToMainThread (std::function<void()> f)
+void registerCallbackToMainThread (std::function<void()> f)
 {
     if (mainThreadID == messageThreadID)
         preDispatchLoopFuncs.push_back (std::move (f));
@@ -61,25 +202,26 @@ extern void registerCallbackToMainThread (std::function<void()> f)
         mainThreadLoopFuncs.push_back (std::move (f));
 }
 
-extern std::deque<std::string> debugPrintQueue;
-extern std::mutex debugPrintQueueMtx;
-
-// If timestamp < 0, this callback tests if the calling thread (main thread) is
-//   different from the message thread and return the result.
-// If timestamp >= 0, it always returns 0.
-extern "C" int juce_animationFrameCallback (double timestamp)
+void juce_dispatchLoop()
 {
+    InternalMessageQueue::getInstance()->dispatchLoop();
+}
+
+int juce_animationFrameCallback (double timestamp)
+{
+    // If timestamp < 0, this callback tests if the calling thread (main thread) is
+    //   different from the message thread and return the result.
+    // If timestamp >= 0, it always returns 0.
     if (timestamp < 0)
     {
         mainThreadID = Thread::getCurrentThreadId();
         return mainThreadID != messageThreadID;
     }
 
-    static double prevTimestamp = 0;
+    //static double prevTimestamp = 0;
     //if (timestamp - prevTimestamp > 20)
     //    Logger::outputDebugString ("juce_animationFrameCallback " + std::to_string (timestamp - prevTimestamp));
-
-    prevTimestamp = timestamp;
+    //prevTimestamp = timestamp;
 
     for (auto f : mainThreadLoopFuncs) f();
 
@@ -88,49 +230,13 @@ extern "C" int juce_animationFrameCallback (double timestamp)
 
 void MessageManager::doPlatformSpecificInitialisation()
 {
-    createDirIfNotExists (File::userHomeDirectory);
-    createDirIfNotExists (File::userDocumentsDirectory);
-    createDirIfNotExists (File::userMusicDirectory);
-    createDirIfNotExists (File::userMoviesDirectory);
-    createDirIfNotExists (File::userPicturesDirectory);
-    createDirIfNotExists (File::userDesktopDirectory);
-    createDirIfNotExists (File::userApplicationDataDirectory);
-    createDirIfNotExists (File::commonDocumentsDirectory);
-    createDirIfNotExists (File::commonApplicationDataDirectory);
-    createDirIfNotExists (File::globalApplicationsDirectory);
-    createDirIfNotExists (File::tempDirectory);
-
-    messageThreadID = Thread::getCurrentThreadId();
-
-    /*
-    appIsInsideEmrun = MAIN_THREAD_EM_ASM_INT ({
-        return document.title == "Emscripten-Generated Code";
-    });
-    */
-
-    MAIN_THREAD_EM_ASM ({
-        if (window.juce_animationFrameCallback)
-            return;
-
-        window.juce_animationFrameCallback = function (time) // Module.cwrap ("juce_animationFrameCallback", "int", ["number"]);
-        {
-            return dynCall("ii", $0, [time]);
-        };
-
-        //if (window.juce_animationFrameCallback (-1.0) == 1)
-        {
-            window.juce_animationFrameWrapper = function (timestamp)
-            {
-                window.juce_animationFrameCallback (timestamp);
-                window.requestAnimationFrame (window.juce_animationFrameWrapper);
-            };
-
-            window.requestAnimationFrame (window.juce_animationFrameWrapper);
-        }
-    }, juce_animationFrameCallback);
+    InternalMessageQueue::getInstance();
 }
 
-void MessageManager::doPlatformSpecificShutdown() {}
+void MessageManager::doPlatformSpecificShutdown()
+{
+    InternalMessageQueue::deleteInstance();
+}
 
 namespace detail
 {
@@ -152,105 +258,9 @@ double getTimeSpentInCurrentDispatchCycle()
     return (currentTimeMS - timeDispatchBeginMS) / 1000.0;
 }
 
-static void dispatchEvents()
-{
-    std::deque<MessageManager::MessageBase*> currentEvents;
-
-    {
-        const std::lock_guard lg (queueMtx);
-
-        currentEvents = std::move (eventQueue);
-        eventQueue.clear();
-    }
-
-    // TODO
-    if (currentEvents.size() > 0)
-        printf("currentEvents=%d\n", (int)currentEvents.size());
-
-    while (! currentEvents.empty())
-    {
-        auto* message = currentEvents.front();
-        currentEvents.pop_front();
-
-        message->messageCallback();
-        message->decReferenceCount();
-    }
-}
-
-static void dispatchLoop()
-{
-    if (quitReceived.load())
-    {
-        emscripten_cancel_main_loop();
-
-        auto* app = JUCEApplicationBase::getInstance();
-        app->shutdownApp();
-
-        libraryInitialiser.reset (nullptr);
-        return;
-    }
-
-    timeDispatchBeginMS = Time::getMillisecondCounterHiRes();
-
-    Timer::callPendingTimersSynchronously();
-
-    dispatchEvents();
-
-    for (auto f : preDispatchLoopFuncs) f();
-
-   #if JUCE_DEBUG
-    {
-        const std::lock_guard lg (debugPrintQueueMtx);
-
-        while (! debugPrintQueue.empty())
-        {
-            std::cout << debugPrintQueue.front() << std::endl;
-            debugPrintQueue.pop_front();
-        }
-    }
-   #endif
-
-    std::deque<MessageManager::MessageBase*> currentMessages;
-
-    {
-        const std::lock_guard lg (queueMtx);
-
-        currentMessages = std::move (messageQueue);
-        messageQueue.clear();
-    }
-
-    while (! currentMessages.empty())
-    {
-        auto* message = currentMessages.front();
-        currentMessages.pop_front();
-
-        message->messageCallback();
-        message->decReferenceCount();
-    }
-
-    /*
-    if (appIsInsideEmrun)
-    {
-        MAIN_THREAD_EM_ASM ({
-            var logArea = document.querySelector("#output");
-            var n = logArea.value.length;
-            if (n > 1000)
-                logArea.value = logArea.value.substring(n - 1000, n);
-        });
-    }
-    */
-}
-
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
-    const std::lock_guard lg (queueMtx);
-
-    if (dynamic_cast<EmscriptenEventMessage* const> (message))
-        eventQueue.push_back (message);
-    else
-        messageQueue.push_back (message);
-
-    message->incReferenceCount();
+    InternalMessageQueue::getInstance()->postMessage (message);
 
     return true;
 }
@@ -261,23 +271,13 @@ void MessageManager::broadcastMessage (const String&)
 
 void MessageManager::runDispatchLoop()
 {
-    constexpr int framesPerSeconds = 0;
-    constexpr int simulateInfiniteLoop = 1;
-    emscripten_set_main_loop (dispatchLoop, framesPerSeconds, simulateInfiniteLoop);
+    InternalMessageQueue::getInstance()->runDispatchLoop();
 }
-
-struct QuitCallback : public CallbackMessage
-{
-    QuitCallback() {}
-    void messageCallback() override
-    {
-        quitReceived = true;
-    }
-};
 
 void MessageManager::stopDispatchLoop()
 {
-    (new QuitCallback())->post();
+    InternalMessageQueue::getInstance()->stopDispatchLoop();
+
     quitMessagePosted = true;
 }
 
