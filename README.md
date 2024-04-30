@@ -9,8 +9,6 @@ UI courtesy from: https://www.drywestdesign.com/
 
 [Renderer Youtube Video](https://youtube.com/shorts/3XC4hyDlrVs)
 
-[![Prototype](./images/prototype_renderer.png)](https://youtube.com/shorts/3XC4hyDlrVs)
-
 ## Disclaimer: The Project Is Still In Embryonic Stage
 
 [![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
