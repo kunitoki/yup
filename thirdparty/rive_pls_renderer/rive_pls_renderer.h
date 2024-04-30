@@ -34,7 +34,7 @@
   dependencies:       rive glad
   OSXFrameworks:      Metal QuartzCore
   defines:            WITH_RIVE_TEXT=1
-  WASMDefines:        RIVE_WEBGPU=1
+  WASMDefines:        RIVE_WEBGL=1
   searchpaths:        include source
 
  END_JUCE_MODULE_DECLARATION
