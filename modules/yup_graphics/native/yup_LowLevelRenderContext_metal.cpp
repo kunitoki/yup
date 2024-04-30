@@ -22,8 +22,6 @@
 #include "yup_LowLevelRenderContext.h"
 
 #include "rive/pls/pls_renderer.hpp"
-//#include "rive/pls/gl/pls_render_context_gl_impl.hpp"
-//#include "rive/pls/gl/pls_render_target_gl.hpp"
 #include "rive/pls/metal/pls_render_context_metal_impl.h"
 
 #import <Metal/Metal.h>

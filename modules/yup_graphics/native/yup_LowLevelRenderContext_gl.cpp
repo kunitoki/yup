@@ -21,9 +21,7 @@
 
 #include "yup_LowLevelRenderContext.h"
 
-#if 0
-
-#include "path_fiddle.hpp"
+#if 1
 
 #include "rive/pls/gl/gles3.hpp"
 #include "rive/pls/pls_renderer.hpp"
@@ -79,11 +77,17 @@ static void GLAPIENTRY err_msg_callback(GLenum source,
 #endif
 #endif
 
-class LowLevelRenderContextGL : public LowLevelRenderContext
+class LowLevelRenderContextGLPLS : public LowLevelRenderContext
 {
 public:
-    LowLevelRenderContextGL()
+    LowLevelRenderContextGLPLS()
     {
+        if (!m_plsContext)
+        {
+            fprintf(stderr, "Failed to create a PLS renderer.\n");
+            exit(-1);
+        }
+
 #ifdef RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
         if (!gladLoadCustomLoader((GLADloadproc)glfwGetProcAddress))
@@ -100,6 +104,7 @@ public:
         printf("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n",
                GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 #endif
+
 #if 0
         int n;
         glGetIntegerv(GL_NUM_EXTENSIONS, &n);
@@ -121,7 +126,9 @@ public:
 #endif
     }
 
-    ~LowLevelRenderContextGL() { glDeleteFramebuffers(1, &m_zoomWindowFBO); }
+    ~LowLevelRenderContextGLPLS()
+    {
+    }
 
     float dpiScale(void*) const override
     {
@@ -132,85 +139,13 @@ public:
 #endif
     }
 
-    void end(GLFWwindow* window, std::vector<uint8_t>* pixelData) final
-    {
-        assert(pixelData == nullptr); // Not implemented yet.
-
-        onEnd();
-
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        if (m_zoomWindowFBO)
-        {
-            // Blit the zoom window.
-            double xd, yd;
-            glfwGetCursorPos(window, &xd, &yd);
-            xd *= dpiScale(window);
-            yd *= dpiScale(window);
-            int width = 0, height = 0;
-            glfwGetFramebufferSize(window, &width, &height);
-            int x = xd, y = height - yd;
-            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_zoomWindowFBO);
-            glBlitFramebuffer(x - kZoomWindowWidth / 2,
-                              y - kZoomWindowHeight / 2,
-                              x + kZoomWindowWidth / 2,
-                              y + kZoomWindowHeight / 2,
-                              0,
-                              0,
-                              kZoomWindowWidth,
-                              kZoomWindowHeight,
-                              GL_COLOR_BUFFER_BIT,
-                              GL_NEAREST);
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-            glEnable(GL_SCISSOR_TEST);
-            glScissor(0,
-                      0,
-                      kZoomWindowWidth * kZoomWindowScale + 2,
-                      kZoomWindowHeight * kZoomWindowScale + 2);
-            glClearColor(.6, .6, .6, 1);
-            glClear(GL_COLOR_BUFFER_BIT);
-            glBindFramebuffer(GL_READ_FRAMEBUFFER, m_zoomWindowFBO);
-            glBlitFramebuffer(0,
-                              0,
-                              kZoomWindowWidth,
-                              kZoomWindowHeight,
-                              0,
-                              0,
-                              kZoomWindowWidth * kZoomWindowScale,
-                              kZoomWindowHeight * kZoomWindowScale,
-                              GL_COLOR_BUFFER_BIT,
-                              GL_NEAREST);
-            glDisable(GL_SCISSOR_TEST);
-        }
-    }
-
-protected:
-    virtual void onEnd() = 0;
-
-private:
-    GLuint m_zoomWindowFBO = 0;
-};
-
-class LowLevelRenderContextGLPLS : public LowLevelRenderContextGL
-{
-public:
-    LowLevelRenderContextGLPLS()
-    {
-        if (!m_plsContext)
-        {
-            fprintf(stderr, "Failed to create a PLS renderer.\n");
-            exit(-1);
-        }
-    }
-
     rive::Factory* factory() override { return m_plsContext.get(); }
 
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
 
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
-    void onSizeChanged(GLFWwindow* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
     {
         m_renderTarget = make_rcp<FramebufferRenderTargetGL>(width, height, 0, sampleCount);
     }
@@ -226,13 +161,16 @@ public:
         m_plsContext->beginFrame(frameDescriptor);
     }
 
-    void onEnd() override
+    void flushPLSContext() override
+    {
+        m_plsContext->flush({ .renderTarget = m_renderTarget.get() });
+    }
+
+    void end (void*, std::vector<uint8_t>*) final
     {
         flushPLSContext();
         m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->unbindGLInternalResources();
     }
-
-    void flushPLSContext() override { m_plsContext->flush({.renderTarget = m_renderTarget.get()}); }
 
 private:
     std::unique_ptr<PLSRenderContext> m_plsContext =
