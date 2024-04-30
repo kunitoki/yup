@@ -47,7 +47,9 @@ target_compile_features (${target_name} PRIVATE cxx_std_17)
 
 target_sources (${target_name} PRIVATE ${sources})
 
-if (APPLE)
+set (additional_definitions "")
+
+if ("${yup_platform}" MATCHES "^(osx|ios)$")
     set_target_properties (${target_name} PROPERTIES
         BUNDLE                                         ON
         CXX_STANDARD                                   17
@@ -64,18 +66,25 @@ if (APPLE)
         XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
         XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
         XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
-endif()
+elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+    set_target_properties (${target_name} PROPERTIES
+        SUFFIX ".html")
 
-if ("${yup_platform}" STREQUAL "emscripten")
+    set (additional_definitions "RIVE_WEBGL=1")
+
     target_link_options (${target_name} PRIVATE
-        -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1 -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0)
+        -gsource-map -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
+        -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0
+        -sMAX_WEBGL_VERSION=2
+        -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
 endif()
 
 target_compile_definitions (${target_name} PRIVATE
     $<$<CONFIG:DEBUG>:DEBUG=1>
     $<$<CONFIG:RELEASE>:NDEBUG=1>
     JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-    JUCE_STANDALONE_APPLICATION=1)
+    JUCE_STANDALONE_APPLICATION=1
+    ${additional_definitions})
 
 target_link_libraries (${target_name} PRIVATE
     juce_core

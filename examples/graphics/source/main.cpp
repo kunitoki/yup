@@ -409,7 +409,7 @@ struct Application : juce::JUCEApplication
 
     void initialise (const juce::String& commandLineParameters) override
     {
-        DBG("Starting app " << commandLineParameters);
+        juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
         window->setSize (800, 800);
@@ -418,7 +418,7 @@ struct Application : juce::JUCEApplication
 
     void shutdown() override
     {
-        DBG("Shutting down");
+        juce::Logger::outputDebugString ("Shutting down");
 
         window.reset();
     }

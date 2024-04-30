@@ -47,7 +47,7 @@ target_compile_features (${target_name} PRIVATE cxx_std_17)
 
 target_sources (${target_name} PRIVATE ${sources})
 
-if (APPLE)
+if ("${yup_platform}" MATCHES "^(osx|ios)$")
     set_target_properties (${target_name} PROPERTIES
         BUNDLE                                         ON
         CXX_STANDARD                                   17
@@ -64,11 +64,15 @@ if (APPLE)
         XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
         XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
         XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
-endif()
+elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+    set_target_properties (${target_name} PROPERTIES
+        SUFFIX ".html")
 
-if ("${yup_platform}" STREQUAL "emscripten")
     target_link_options (${target_name} PRIVATE
-        -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1 -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0)
+        -gsource-map -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
+        -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0
+        -sEXPORTED_RUNTIME_METHODS=cwrap
+        -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
 endif()
 
 target_compile_definitions (${target_name} PRIVATE

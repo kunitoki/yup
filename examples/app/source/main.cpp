@@ -38,13 +38,14 @@ public:
 
     void initialise (const juce::String& commandLineParameters) override
     {
-        DBG("Starting app " << commandLineParameters);
+        juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
+
         startTimer (1000);
     }
 
     void shutdown() override
     {
-        DBG ("Shutting down");
+        juce::Logger::outputDebugString ("Shutting down");
     }
 
     void timerCallback() override
