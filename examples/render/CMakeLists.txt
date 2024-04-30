@@ -24,7 +24,7 @@ set (target_name example_render)
 
 set (link_options "")
 if ("${yup_platform}" MATCHES "^(emscripten)$")
-    set (link_options --preload-file ${CMAKE_CURRENT_LIST_DIR}/data/car_interface.riv@data/car_interface.riv)
+    set (link_options --preload-file ${CMAKE_CURRENT_LIST_DIR}/data/alien.riv@data/alien.riv)
 endif()
 
 yup_standalone_app (

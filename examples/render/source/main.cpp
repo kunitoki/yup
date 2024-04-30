@@ -82,7 +82,7 @@ public:
 #else
         juce::File riveFilePath = juce::File (__FILE__).getParentDirectory().getSiblingFile("data");
 #endif
-        riveFilePath = riveFilePath.getChildFile("car_interface.riv");
+        riveFilePath = riveFilePath.getChildFile("alien.riv");
 
         if (riveFilePath.existsAsFile())
         {
@@ -282,7 +282,7 @@ private:
 
             std::unique_ptr<rive::Scene> scene;
 
-            //scene = artboard->defaultStateMachine();
+            scene = artboard->defaultStateMachine();
             if (scene == nullptr)
             {
                 if (stateMachine >= 0)
@@ -420,7 +420,7 @@ private:
     bool disableFill = false;
     bool disableStroke = false;
 
-    float framerate = 30.0f;
+    float framerate = 60.0f;
 
     API api =
     #if JUCE_MAC || JUCE_IOS
