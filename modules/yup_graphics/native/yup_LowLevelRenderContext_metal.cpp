@@ -116,7 +116,7 @@ public:
         [flushCommandBuffer commit];
     }
 
-    void end(void*, std::vector<uint8_t>*) final
+    void end(void*) final
     {
         flushPLSContext();
 

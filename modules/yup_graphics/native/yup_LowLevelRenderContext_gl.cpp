@@ -165,9 +165,10 @@ public:
         m_plsContext->flush({ .renderTarget = m_renderTarget.get() });
     }
 
-    void end (void*, std::vector<uint8_t>*) final
+    void end (void*) final
     {
         flushPLSContext();
+
         m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->unbindGLInternalResources();
     }
 

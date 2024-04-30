@@ -30,14 +30,14 @@
 #include "source/pls_paint.cpp"
 #include "source/pls_render_context_helper_impl.cpp"
 #include "source/pls.cpp"
-#include "source/intersection_board.cpp"
 #include "source/pls_image.cpp"
 #include "source/pls_render_context.cpp"
 #include "source/pls_draw.cpp"
 #include "source/pls_factory.cpp"
-#include "source/gr_triangulator.cpp"
 #include "source/pls_path.cpp"
 #include "source/pls_renderer.cpp"
+#include "source/intersection_board.cpp"
+#include "source/gr_triangulator.cpp"
 
 #if __clang__
  #pragma clang diagnostic pop

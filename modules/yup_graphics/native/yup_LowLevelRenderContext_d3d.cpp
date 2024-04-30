@@ -108,42 +108,10 @@ public:
         m_plsContext->flush({.renderTarget = m_renderTarget.get()});
     }
 
-    void end(void*, std::vector<uint8_t>* pixelData = nullptr) override
+    void end(void*) override
     {
         flushPLSContext();
-        if (pixelData != nullptr)
-        {
-            uint32_t w = m_renderTarget->width();
-            uint32_t h = m_renderTarget->height();
-            if (m_readbackTexture == nullptr)
-            {
-                D3D11_TEXTURE2D_DESC readbackTexDesc{};
-                readbackTexDesc.Width = w;
-                readbackTexDesc.Height = h;
-                readbackTexDesc.MipLevels = 1;
-                readbackTexDesc.ArraySize = 1;
-                readbackTexDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-                readbackTexDesc.SampleDesc.Count = 1;
-                readbackTexDesc.Usage = D3D11_USAGE_STAGING;
-                readbackTexDesc.BindFlags = 0;
-                readbackTexDesc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
-                readbackTexDesc.MiscFlags = 0;
-                VERIFY_OK(m_gpu->CreateTexture2D(&readbackTexDesc,
-                                                 nullptr,
-                                                 m_readbackTexture.ReleaseAndGetAddressOf()));
-            }
 
-            D3D11_MAPPED_SUBRESOURCE map;
-            m_gpuContext->CopyResource(m_readbackTexture.Get(), m_renderTarget->targetTexture());
-            m_gpuContext->Map(m_readbackTexture.Get(), 0, D3D11_MAP_READ, 0, &map);
-            pixelData->resize(h * w * 4);
-            for (int y = 0; y < h; ++y)
-            {
-                auto row = reinterpret_cast<const char*>(map.pData) + map.RowPitch * y;
-                memcpy(pixelData->data() + (h - y - 1) * w * 4, row, w * 4);
-            }
-            m_gpuContext->Unmap(m_readbackTexture.Get(), 0);
-        }
         m_swapchain->Present(0, 0);
 
         m_renderTarget->setTargetTexture(nullptr);

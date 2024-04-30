@@ -34,13 +34,11 @@
 
 #if JUCE_WINDOWS
  #include "native/yup_LowLevelRenderContext_d3d.cpp"
- #include "native/yup_LowLevelRenderContext_gl.cpp"
 
 #elif JUCE_MAC || JUCE_IOS
  #include "native/yup_LowLevelRenderContext_metal.cpp"
- #include "native/yup_LowLevelRenderContext_gl.cpp"
 
-#else
+#elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
  #include "native/yup_LowLevelRenderContext_gl.cpp"
 
 #endif

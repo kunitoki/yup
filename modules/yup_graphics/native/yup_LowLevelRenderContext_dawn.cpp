@@ -238,93 +238,9 @@ public:
         m_plsContext->beginFrame(std::move(frameDescriptor));
     }
 
-    void end(GLFWwindow* window, std::vector<uint8_t>* pixelData) final
+    void end(GLFWwindow* window) final
     {
         m_plsContext->flush();
-
-        if (pixelData != nullptr)
-        {
-            // Read back pixels from the framebuffer!
-            uint32_t w = m_renderTarget->width();
-            uint32_t h = m_renderTarget->height();
-            uint32_t rowBytesInReadBuff = math::round_up_to_multiple_of<256>(w * 4);
-
-            // Create a buffer to receive the pixels.
-            if (!m_pixelReadBuff)
-            {
-                wgpu::BufferDescriptor buffDesc{
-                    .usage = wgpu::BufferUsage::MapRead | wgpu::BufferUsage::CopyDst,
-                    .size = h * rowBytesInReadBuff,
-                };
-                m_pixelReadBuff = m_device.CreateBuffer(&buffDesc);
-            }
-            assert(m_pixelReadBuff.GetSize() == h * rowBytesInReadBuff);
-
-            // Blit the framebuffer into m_pixelReadBuff.
-            wgpu::CommandEncoder readEncoder = m_device.CreateCommandEncoder();
-            wgpu::ImageCopyTexture srcTexture = {
-                .texture = m_swapchain.GetCurrentTexture(),
-                .origin = {0, 0, 0},
-            };
-            wgpu::ImageCopyBuffer dstBuffer = {
-                .layout =
-                    {
-                        .offset = 0,
-                        .bytesPerRow = rowBytesInReadBuff,
-                    },
-                .buffer = m_pixelReadBuff,
-            };
-            wgpu::Extent3D copySize = {
-                .width = w,
-                .height = h,
-            };
-            readEncoder.CopyTextureToBuffer(&srcTexture, &dstBuffer, &copySize);
-
-            wgpu::CommandBuffer commands = readEncoder.Finish();
-            m_queue.Submit(1, &commands);
-
-            // Request a mapping of m_pixelReadBuff and wait for it to complete.
-            bool mapped = false;
-            m_pixelReadBuff.MapAsync(
-                wgpu::MapMode::Read,
-                0,
-                h * rowBytesInReadBuff,
-                [](WGPUBufferMapAsyncStatus status, void* mapped) {
-                    if (status != WGPUBufferMapAsyncStatus_Success)
-                    {
-                        fprintf(stderr, "failed to map m_pixelReadBuff\n");
-                        exit(-1);
-                    }
-                    *reinterpret_cast<bool*>(mapped) = true;
-                },
-                &mapped);
-            while (!mapped)
-            {
-                // Spin until the GPU is finished with m_pixelReadBuff and we can read it.
-                std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                tick();
-            }
-
-            // Copy the image data from m_pixelReadBuff to pixelData.
-            pixelData->resize(h * w * 4);
-            const uint8_t* pixelReadBuffData =
-                reinterpret_cast<const uint8_t*>(m_pixelReadBuff.GetConstMappedRange());
-            for (size_t y = 0; y < h; ++y)
-            {
-                // Flip Y.
-                const uint8_t* src = &pixelReadBuffData[(h - y - 1) * rowBytesInReadBuff];
-                size_t row = y * w * 4;
-                for (size_t x = 0; x < w * 4; x += 4)
-                {
-                    // BGBRA -> RGBA.
-                    (*pixelData)[row + x + 0] = src[x + 2];
-                    (*pixelData)[row + x + 1] = src[x + 1];
-                    (*pixelData)[row + x + 2] = src[x + 0];
-                    (*pixelData)[row + x + 3] = src[x + 3];
-                }
-            }
-            m_pixelReadBuff.Unmap();
-        }
 
         m_swapchain.Present();
     }

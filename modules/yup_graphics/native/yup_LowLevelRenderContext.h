@@ -60,14 +60,18 @@ public:
 
     virtual void flushPLSContext() = 0; // Called by end()
 
-    virtual void end (void* nativeHandle, std::vector<uint8_t>* pixelData = nullptr) = 0;
+    virtual void end (void* nativeHandle) = 0;
 
     virtual void tick() {}
 
     /**
      * @brief OpenGL renderer.
      */
+#if JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
     static std::unique_ptr<LowLevelRenderContext> makeGLPLS();
+#else
+    static std::unique_ptr<LowLevelRenderContext> makeGLPLS() { return nullptr; }
+#endif
 
     /**
      * @brief Metal renderer.
