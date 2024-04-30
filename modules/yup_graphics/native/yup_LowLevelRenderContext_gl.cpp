@@ -21,8 +21,6 @@
 
 #include "yup_LowLevelRenderContext.h"
 
-#if 1
-
 #include "rive/pls/gl/gles3.hpp"
 #include "rive/pls/pls_renderer.hpp"
 #include "rive/pls/gl/pls_render_context_gl_impl.hpp"
@@ -100,6 +98,7 @@ public:
         printf("GL_VENDOR: %s\n", glGetString(GL_VENDOR));
         printf("GL_RENDERER: %s\n", glGetString(GL_RENDERER));
         printf("GL_VERSION: %s\n", glGetString(GL_VERSION));
+
 #ifdef RIVE_DESKTOP_GL
         printf("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n",
                GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
@@ -185,17 +184,3 @@ std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeGLPLS()
 }
 
 } // namespace juce
-
-#else
-
-namespace juce
-{
-
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeGLPLS()
-{
-    return nullptr;
-}
-
-} // namespace juce
-
-#endif

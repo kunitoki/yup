@@ -69,7 +69,7 @@ public:
 
         if (!fiddleContext)
         {
-            fprintf(stderr, "Failed to create a fiddle context.\n");
+            juce::Logger::outputDebugString ("Failed to create a fiddle context");
 
             juce::JUCEApplicationBase::getInstance()->systemRequestedQuit();
             return;
@@ -77,14 +77,16 @@ public:
 
         rive::Factory* factory = fiddleContext->factory();
 
-        auto rivName = juce::File (__FILE__)
-            .getParentDirectory()
-            .getSiblingFile("data")
-            .getChildFile("seasynth.riv");
+#if JUCE_WASM
+        juce::File riveFilePath = juce::File ("/data");
+#else
+        juce::File riveFilePath = juce::File (__FILE__).getParentDirectory().getSiblingFile("data");
+#endif
+        riveFilePath = riveFilePath.getChildFile("car_interface.riv");
 
-        if (rivName.existsAsFile())
+        if (riveFilePath.existsAsFile())
         {
-            if (auto is = rivName.createInputStream(); is != nullptr && is->openedOk())
+            if (auto is = riveFilePath.createInputStream(); is != nullptr && is->openedOk())
             {
                 juce::MemoryBlock mb;
                 is->readIntoMemoryBlock (mb);
@@ -474,7 +476,7 @@ struct Application : juce::JUCEApplication
 
     void initialise (const juce::String& commandLineParameters) override
     {
-        DBG("Starting app " << commandLineParameters);
+        juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
         window->setSize (1280, 866);
@@ -483,7 +485,7 @@ struct Application : juce::JUCEApplication
 
     void shutdown() override
     {
-        DBG("Shutting down");
+        juce::Logger::outputDebugString ("Shutting down");
 
         window.reset();
     }

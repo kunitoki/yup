@@ -101,9 +101,22 @@ public:
 
     void callTimers()
     {
-        auto timeout = Time::getMillisecondCounter() + 100;
+        auto now = Time::getMillisecondCounter();
+        auto timeout = now + 100;
+
+       #if JUCE_WASM
+        auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
+                                                  : (std::numeric_limits<uint32>::max() - (lastCallTime - now)));
+        lastCallTime = now;
 
         const LockType::ScopedLockType sl (lock);
+
+        countdownTimers (elapsed);
+
+       #else
+        const LockType::ScopedLockType sl (lock);
+
+       #endif
 
         while (! timers.empty())
         {
@@ -212,6 +225,7 @@ private:
     };
 
     std::vector<TimerCountdown> timers;
+    uint32 lastCallTime = 0;
 
     WaitableEvent callbackArrived;
 
@@ -284,10 +298,15 @@ private:
         if (timers.empty())
             return 1000;
 
-        for (auto& t : timers)
-            t.countdownMs -= numMillisecsElapsed;
+        countdownTimers (numMillisecsElapsed);
 
         return timers.front().countdownMs;
+    }
+
+    void countdownTimers (int numMillisecsElapsed)
+    {
+        for (auto& t : timers)
+            t.countdownMs -= numMillisecsElapsed;
     }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimerThread)

@@ -68,11 +68,14 @@ elseif ("${yup_platform}" MATCHES "^(emscripten)$")
     set_target_properties (${target_name} PROPERTIES
         SUFFIX ".html")
 
+    set (additional_definitions "RIVE_WEBGL=1")
+
     target_link_options (${target_name} PRIVATE
         -gsource-map -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
         -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0
-        -sEXPORTED_RUNTIME_METHODS=cwrap
-        -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
+        -sMAX_WEBGL_VERSION=2
+        -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
+        --preload-file ${CMAKE_CURRENT_LIST_DIR}/data/@data/)
 
 endif()
 

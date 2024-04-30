@@ -64,7 +64,7 @@ public:
 
         if (!fiddleContext)
         {
-            fprintf(stderr, "Failed to create a fiddle context.\n");
+            juce::Logger::outputDebugString ("Failed to create a fiddle context");
 
             juce::JUCEApplication::getInstance()->systemRequestedQuit();
             return;
