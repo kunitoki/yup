@@ -17,79 +17,27 @@
 #
 # ==============================================================================
 
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required(VERSION 3.28)
 
+# ==== Prepare target
 set (target_name example_app)
 
-# ==== Find dependencies
-set (additional_deps "")
-if (NOT "${yup_platform}" STREQUAL "emscripten")
-    include (FetchContent)
-    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable (glfw)
-    set (additional_deps "glfw")
-endif()
+yup_standalone_app (
+    TARGET_NAME ${target_name}
+    MODULES
+        juce_core
+        juce_events
+        juce_audio_basics
+        juce_audio_devices
+        yup_graphics
+        yup_gui
+        harfbuzz
+        sheenbidi
+        rive
+        rive_pls_renderer
+)
 
 # ==== Prepare sources
-file (GLOB_RECURSE sources
-    "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
-
+file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-
-# ==== Setup executable
-add_executable (${target_name})
-
-target_compile_features (${target_name} PRIVATE cxx_std_17)
-
 target_sources (${target_name} PRIVATE ${sources})
-
-if ("${yup_platform}" MATCHES "^(osx|ios)$")
-    set_target_properties (${target_name} PROPERTIES
-        BUNDLE                                         ON
-        CXX_STANDARD                                   17
-        CXX_EXTENSIONS                                 OFF
-        MACOSX_BUNDLE_GUI_IDENTIFIER                   "org.kunitoki.yup.${target_name}"
-        MACOSX_BUNDLE_NAME                             "${target_name}"
-        MACOSX_BUNDLE_ERSION                           "1.0.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING             "1.0"
-        #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/../../cmake/platforms/macos/Info.plist"
-        #RESOURCE                                       "${RESOURCE_FILES}"
-        #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
-        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
-        XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
-        XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
-        XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
-elseif ("${yup_platform}" MATCHES "^(emscripten)$")
-    set_target_properties (${target_name} PROPERTIES
-        SUFFIX ".html")
-
-    target_link_options (${target_name} PRIVATE
-        -gsource-map -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
-        -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0
-        -sEXPORTED_RUNTIME_METHODS=cwrap
-        -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
-endif()
-
-target_compile_definitions (${target_name} PRIVATE
-    $<$<CONFIG:DEBUG>:DEBUG=1>
-    $<$<CONFIG:RELEASE>:NDEBUG=1>
-    JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-    JUCE_STANDALONE_APPLICATION=1)
-
-target_link_libraries (${target_name} PRIVATE
-    juce_core
-    juce_events
-    juce_audio_basics
-    juce_audio_devices
-    yup_graphics
-    yup_gui
-    harfbuzz
-    sheenbidi
-    rive
-    rive_pls_renderer
-    ${additional_deps})

@@ -47,6 +47,12 @@
 #endif
 
 //==============================================================================
+#if JUCE_EMSCRIPTEN
+ #include <emscripten/emscripten.h>
+ #include <emscripten/html5.h>
+#endif
+
+//==============================================================================
 #include "native/yup_KeyPress_glfw.cpp"
 #include "native/yup_MouseEvent_glfw.cpp"
 

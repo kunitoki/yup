@@ -95,9 +95,9 @@ public:
         }
 #endif
 
-        printf("GL_VENDOR: %s\n", glGetString(GL_VENDOR));
+        printf("GL_VENDOR:   %s\n", glGetString(GL_VENDOR));
         printf("GL_RENDERER: %s\n", glGetString(GL_RENDERER));
-        printf("GL_VERSION: %s\n", glGetString(GL_VERSION));
+        printf("GL_VERSION:  %s\n", glGetString(GL_VERSION));
 
 #ifdef RIVE_DESKTOP_GL
         printf("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n",

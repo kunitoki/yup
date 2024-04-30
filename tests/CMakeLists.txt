@@ -19,8 +19,6 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-set (target_name yup_tests)
-
 # ==== Setup googletests
 include (FetchContent)
 FetchContent_Declare(
@@ -30,36 +28,27 @@ FetchContent_Declare(
 set (gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable (googletest)
 
-# ==== Setup sources
-file(GLOB_RECURSE sources
-    "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
-    "${CMAKE_CURRENT_LIST_DIR}/*.cpp"
-    "${CMAKE_CURRENT_LIST_DIR}/*.mm")
-
-source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-
 # ==== Create executable
+set (target_name yup_tests)
+
 enable_testing()
 
-add_executable (${target_name} ${sources})
+yup_standalone_app (
+    TARGET_NAME ${target_name}
+    DEFINITIONS
+        JUCE_USE_CURL=0
+    MODULES
+        juce_core
+        juce_events
+        juce_audio_basics
+        juce_audio_devices
+        GTest::gtest_main
+)
 
-target_compile_features (${target_name} PUBLIC cxx_std_17)
-
-if ("${yup_platform}" STREQUAL "emscripten")
-    target_link_options (${target_name} PUBLIC
-        -sWASM=1 -sASSERTIONS=1 -sERROR_ON_UNDEFINED_SYMBOLS=1 -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0)
-endif()
-
-target_compile_definitions (${target_name} PUBLIC
-    $<$<CONFIG:DEBUG>:DEBUG=1>
-    $<$<CONFIG:RELEASE>:NDEBUG=1>
-    JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-    JUCE_STANDALONE_APPLICATION=1
-    JUCE_USE_CURL=0)
-
-target_link_libraries (${target_name} PUBLIC
-    juce_core
-    juce_events
-    juce_audio_basics
-    juce_audio_devices
-    GTest::gtest_main)
+# ==== Setup sources
+file (GLOB_RECURSE sources
+      "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
+      "${CMAKE_CURRENT_LIST_DIR}/*.cpp"
+      "${CMAKE_CURRENT_LIST_DIR}/*.mm")
+source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
+target_sources (${target_name} PRIVATE ${sources})

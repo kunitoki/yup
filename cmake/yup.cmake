@@ -191,7 +191,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_prepare_frameworks frameworks weak_frameworks output_variable)
+function (_yup_module_prepare_frameworks frameworks weak_frameworks output_variable)
     set (temp_frameworks "")
     foreach (framework ${frameworks})
         list (APPEND temp_frameworks "-framework ${framework}")
@@ -296,10 +296,10 @@ function (yup_add_module module_path)
     set (module_libs "")
     if ("${yup_platform}" MATCHES "^(ios)$")
         set (module_libs "${module_ios_libs}")
-        _yup_prepare_frameworks ("${module_ios_frameworks}" "${module_ios_weak_frameworks}" module_frameworks)
+        _yup_module_prepare_frameworks ("${module_ios_frameworks}" "${module_ios_weak_frameworks}" module_frameworks)
     elseif ("${yup_platform}" MATCHES "^(osx)$")
         set (module_libs "${module_osx_libs}")
-        _yup_prepare_frameworks ("${module_osx_frameworks}" "${module_osx_weak_frameworks}" module_frameworks)
+        _yup_module_prepare_frameworks ("${module_osx_frameworks}" "${module_osx_weak_frameworks}" module_frameworks)
     elseif ("${yup_platform}" MATCHES "^(linux)$")
         set (module_libs "${module_linux_libs}")
         foreach (package ${module_linux_packages})
@@ -388,5 +388,84 @@ function (yup_add_module module_path)
     file (GLOB_RECURSE all_module_files "${module_path}/*")
     add_library (${module_name}-module INTERFACE ${all_module_files})
     source_group (TREE ${module_path}/ FILES ${all_module_files})
+
+endfunction()
+
+#==============================================================================
+
+function (yup_standalone_app)
+    # ==== Fetch options
+    set (options CONSOLE)
+    set (one_value_args TARGET_NAME)
+    set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
+
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (additional_libraries "")
+    set (additional_definitions "")
+
+    # ==== Find dependencies
+    if (NOT "${yup_platform}" STREQUAL "emscripten")
+        include (FetchContent)
+
+        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+        set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+        set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable (glfw)
+
+        set (additional_libraries "glfw")
+    endif()
+
+    # ==== Prepare sources
+    add_executable (${target_name})
+
+    target_compile_features (${target_name} PRIVATE cxx_std_17)
+
+    if (NOT YUP_ARG_CONSOLE)
+        if ("${yup_platform}" MATCHES "^(osx|ios)$")
+            set_target_properties (${target_name} PROPERTIES
+                BUNDLE                                         ON
+                CXX_EXTENSIONS                                 OFF
+                MACOSX_BUNDLE_GUI_IDENTIFIER                   "org.kunitoki.yup.${target_name}"
+                MACOSX_BUNDLE_NAME                             "${target_name}"
+                MACOSX_BUNDLE_VERSION                          "1.0.0"
+                #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
+                MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/platforms/macos/Info.plist"
+                #RESOURCE                                       "${RESOURCE_FILES}"
+                #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
+                XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
+                XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
+                XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
+                XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
+
+        elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+            set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
+
+            set (additional_definitions "RIVE_WEBGL=1")
+
+            target_link_options (${target_name} PRIVATE
+                $<$<CONFIG:DEBUG>:-gsource-map>
+                -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
+                -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1
+                -sNODERAWFS=0 -sMAX_WEBGL_VERSION=2 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
+                ${YUP_ARG_LINK_OPTIONS})
+
+        endif()
+    endif()
+
+    target_compile_definitions (${target_name} PRIVATE
+        $<$<CONFIG:DEBUG>:DEBUG=1>
+        $<$<CONFIG:RELEASE>:NDEBUG=1>
+        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        JUCE_STANDALONE_APPLICATION=1
+        ${YUP_ARG_DEFINITIONS}
+        ${additional_definitions})
+
+    target_link_libraries (${target_name} PRIVATE
+        ${YUP_ARG_MODULES}
+        ${additional_libraries})
 
 endfunction()

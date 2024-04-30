@@ -17,34 +17,22 @@
 #
 # ==============================================================================
 
-cmake_minimum_required (VERSION 3.28)
+cmake_minimum_required(VERSION 3.28)
 
+# ==== Prepare target
 set (target_name example_console)
 
-file (GLOB_RECURSE sources
-    "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
+yup_standalone_app (
+    TARGET_NAME ${target_name}
+    CONSOLE
+    MODULES
+        juce_core
+        juce_events
+        juce_audio_basics
+        juce_audio_devices
+)
 
+# ==== Prepare sources
+file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-
-add_executable (${target_name})
-
-target_compile_features (${target_name} PRIVATE cxx_std_17)
-
 target_sources (${target_name} PRIVATE ${sources})
-
-if ("${yup_platform}" STREQUAL "emscripten")
-    target_link_options (${target_name} PRIVATE
-        -sWASM=1 -sASSERTIONS=1 -sERROR_ON_UNDEFINED_SYMBOLS=1 -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1 -sNODERAWFS=0)
-endif()
-
-target_compile_definitions (${target_name} PRIVATE
-    $<$<CONFIG:DEBUG>:DEBUG=1>
-    $<$<CONFIG:RELEASE>:NDEBUG=1>
-    JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-    JUCE_STANDALONE_APPLICATION=1)
-
-target_link_libraries (${target_name} PRIVATE
-    juce_core
-    juce_events
-    juce_audio_basics
-    juce_audio_devices)
