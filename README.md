@@ -3,6 +3,12 @@
 ![SeaSynth](./images/seasynth_prototype.png)
 UI courtesy from: https://www.drywestdesign.com/
 
+[![Web Render Example 1](./images/web_render_1.png)](https://kunitoki.github.io/yup/demos/web_render_1/)
+[![Web Render Example 2](./images/web_render_2.png)](https://kunitoki.github.io/yup/demos/web_render_2/)
+[![Web Render Example 3](./images/web_render_3.png)](https://kunitoki.github.io/yup/demos/web_render_3/)
+
+[Renderer Youtube Video](https://youtube.com/shorts/3XC4hyDlrVs)
+
 [![Prototype](./images/prototype_renderer.png)](https://youtube.com/shorts/3XC4hyDlrVs)
 
 ## Disclaimer: The Project Is Still In Embryonic Stage
