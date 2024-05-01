@@ -1,8 +1,9 @@
 # YUP: Cross-Platform Application Development Library
 
+UI courtesy from https://www.drywestdesign.com/:
 ![SeaSynth](./images/seasynth_prototype.png)
-UI courtesy from: https://www.drywestdesign.com/
 
+Example rive animations ([source code](./examples/render/source/main.cpp)):
 [![Web Render Example 1](./images/web_render_1.png)](https://kunitoki.github.io/yup/demos/web_render_1/)
 [![Web Render Example 2](./images/web_render_2.png)](https://kunitoki.github.io/yup/demos/web_render_2/)
 [![Web Render Example 3](./images/web_render_3.png)](https://kunitoki.github.io/yup/demos/web_render_3/)
