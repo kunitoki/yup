@@ -58,4 +58,7 @@
 #include "keyboard/yup_KeyModifiers.h"
 #include "keyboard/yup_KeyPress.h"
 #include "mouse/yup_MouseEvent.h"
+#include "desktop/yup_Desktop.h"
+#include "component/yup_ComponentNative.h"
+#include "component/yup_Component.h"
 #include "windowing/yup_DocumentWindow.h"

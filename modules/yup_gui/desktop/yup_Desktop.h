@@ -22,16 +22,18 @@
 namespace juce
 {
 
-//==============================================================================
-
-DocumentWindow::DocumentWindow()
+class JUCE_API Desktop
 {
-    addToDesktop();
-}
+public:
+    Desktop() noexcept;
 
-DocumentWindow::~DocumentWindow()
-{
-    removeFromDesktop();
-}
+    Desktop (const Desktop& other) noexcept = delete;
+    Desktop (Desktop&& other) noexcept = default;
+    Desktop& operator=(const Desktop& other) noexcept = delete;
+    Desktop& operator=(Desktop&& other) noexcept = default;
 
-}
+private:
+
+};
+
+} // namespace juce

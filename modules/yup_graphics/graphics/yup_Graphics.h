@@ -27,10 +27,10 @@ class JUCE_API Graphics
 public:
     Graphics() noexcept = default;
 
-    constexpr Graphics (const Graphics& other) noexcept = delete;
-    constexpr Graphics (Graphics&& other) noexcept = default;
-    constexpr Graphics& operator=(const Graphics& other) noexcept = delete;
-    constexpr Graphics& operator=(Graphics&& other) noexcept = default;
+    Graphics (const Graphics& other) noexcept = delete;
+    Graphics (Graphics&& other) noexcept = default;
+    Graphics& operator=(const Graphics& other) noexcept = delete;
+    Graphics& operator=(Graphics&& other) noexcept = default;
 
 private:
 };

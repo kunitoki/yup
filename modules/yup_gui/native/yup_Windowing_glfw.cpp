@@ -24,6 +24,20 @@ namespace juce
 
 //==============================================================================
 
+void juce_glfwWindowClose (GLFWwindow* window);
+void juce_glfwMouseMove (GLFWwindow* window, double x, double y);
+void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods);
+void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
+
+//==============================================================================
+
+MouseEvent toMouseEvent (int buttons, int modifiers, double x, double y) noexcept
+{
+    return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
+}
+
+//==============================================================================
+
 KeyModifiers toKeyModifiers (int modifiers) noexcept
 {
     return { modifiers };
@@ -165,6 +179,261 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
     }
 
     return {};
+}
+
+//==============================================================================
+
+class GLFWComponentNative : public ComponentNative
+{
+public:
+    GLFWComponentNative (Component& component)
+        : ComponentNative (component)
+    {
+       #if JUCE_MAC
+        gpu = MTLCreateSystemDefaultDevice();
+        queue = [gpu newCommandQueue];
+        swapchain = [CAMetalLayer layer];
+        swapchain.device = gpu;
+        swapchain.opaque = YES;
+       #endif
+
+        window = glfwCreateWindow (800, 800, "GLFW Metal", nullptr, nullptr);
+
+       #if JUCE_MAC
+        NSWindow* nswindow = glfwGetCocoaWindow (window);
+        nswindow.contentView.layer = swapchain;
+        nswindow.contentView.wantsLayer = YES;
+       #endif
+
+        glfwSetWindowUserPointer (window, this);
+
+        glfwSetWindowCloseCallback (window, juce_glfwWindowClose);
+        glfwSetCursorPosCallback (window, juce_glfwMouseMove);
+        glfwSetMouseButtonCallback (window, juce_glfwMousePress);
+        glfwSetKeyCallback (window, juce_glfwKeyPress);
+    }
+
+    ~GLFWComponentNative()
+    {
+        jassert (window != nullptr);
+
+        glfwSetWindowUserPointer (window, nullptr);
+        glfwDestroyWindow (window);
+        window = nullptr;
+    }
+
+    void setTitle (const String& title) override
+    {
+        jassert (window != nullptr);
+
+        glfwSetWindowTitle (window, title.toRawUTF8());
+    }
+
+    String getTitle() const override
+    {
+        jassert (window != nullptr);
+
+        if (auto title = glfwGetWindowTitle (window))
+            return String::fromUTF8 (title);
+
+        return {};
+    }
+
+    void setVisible (bool shouldBeVisible) override
+    {
+        jassert (window != nullptr);
+
+        if (shouldBeVisible)
+            glfwShowWindow (window);
+        else
+            glfwHideWindow (window);
+    }
+
+    bool isVisible() const override
+    {
+        jassert (window != nullptr);
+
+        return false;
+    }
+
+    void setSize (const Size<int>& size) override
+    {
+        jassert (window != nullptr);
+
+       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+        glfwSetWindowSize (window, size.getWidth() * 2, size.getHeight() * 2);
+
+        //emscripten_set_canvas_element_size ("#canvas", size.getWidth(), size.getHeight());
+
+        EM_ASM (
+        {
+            var canvas = document.getElementById("canvas");
+            canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
+        }, size.getWidth(), height);
+
+       #else
+        glfwSetWindowSize (window, size.getWidth(), size.getHeight());
+
+       #endif
+    }
+
+    Size<int> getSize() const override
+    {
+        jassert (window != nullptr);
+
+        int width = 0, height = 0;
+        glfwGetWindowSize (window, &width, &height);
+        return { width, height };
+    }
+
+    Size<int> getContentSize() const override
+    {
+        jassert (window != nullptr);
+
+        int width = 0, height = 0;
+        glfwGetFramebufferSize (window, &width, &height);
+        return { width, height };
+    }
+
+    void* getNativeHandle() const override
+    {
+        jassert (window != nullptr);
+
+       #if JUCE_MAC
+        return glfwGetCocoaWindow (window);
+       #elif JUCE_WINDOWS
+        return glfwGetWin32Window (window);
+       #elif JUCE_LINUX
+        return glfwGetX11Window (window);
+       #else
+        return nullptr;
+       #endif
+    }
+
+private:
+    GLFWwindow* window = nullptr;
+
+   #if JUCE_MAC
+    id<MTLDevice> gpu = nil;
+    id<MTLCommandQueue> queue = nil;
+    CAMetalLayer* swapchain = nullptr;
+   #endif
+};
+
+//==============================================================================
+
+std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component)
+{
+    return std::make_unique<GLFWComponentNative> (component);
+}
+
+//==============================================================================
+
+void juce_glfwWindowClose (GLFWwindow* window)
+{
+    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    component->handleUserTriedToCloseWindow();
+}
+
+//==============================================================================
+
+void juce_glfwMouseMove (GLFWwindow* window, double x, double y)
+{
+    //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
+    //x *= dpiScale;
+    //y *= dpiScale;
+
+    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    const auto leftButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    const auto middleButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
+    const auto rightButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+    if (leftButtonDown || middleButtonDown || rightButtonDown)
+    {
+        int buttons = (leftButtonDown ? GLFW_MOUSE_BUTTON_LEFT : 0)
+            | (middleButtonDown ? GLFW_MOUSE_BUTTON_MIDDLE : 0)
+            | (rightButtonDown ? GLFW_MOUSE_BUTTON_RIGHT : 0);
+
+        component->handleMouseDrag (toMouseEvent (buttons, 0, x, y));
+    }
+    else
+    {
+        component->handleMouseMove (toMouseEvent (0, 0, x, y));
+    }
+}
+
+//==============================================================================
+
+void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
+{
+    double x, y;
+    glfwGetCursorPos (window, &x, &y);
+
+    //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
+    //x *= dpiScale;
+    //y *= dpiScale;
+
+    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    if (action == GLFW_PRESS)
+        component->handleMouseDown (toMouseEvent (button, mods, x, y));
+    else
+        component->handleMouseUp (toMouseEvent (button, mods, x, y));
+}
+
+//==============================================================================
+
+void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    double x = 0, y = 0;
+    glfwGetCursorPos (window, &x, &y);
+
+    //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
+    //x *= dpiScale;
+    //y *= dpiScale;
+
+    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    if (action == GLFW_PRESS)
+        component->handleKeyDown (toKeyPress (key, scancode, mods), x, y);
+    else
+        component->handleKeyUp (toKeyPress (key, scancode, mods), x, y);
+}
+
+//==============================================================================
+
+void juce_glfwErrorCallback (int code, const char* message)
+{
+    DBG ("GLFW Error: " << code << " - " << message);
+}
+
+void JUCEApplication::staticInitialisation()
+{
+    glfwSetErrorCallback (juce_glfwErrorCallback);
+
+    glfwInit();
+
+   #if JUCE_MAC || JUCE_WINDOWS
+    glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+   #elif defined (ANGLE)
+    glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
+    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+   #else
+    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 6);
+   #endif
+}
+
+void JUCEApplication::staticFinalisation()
+{
+    glfwTerminate();
 }
 
 } // namespace juce

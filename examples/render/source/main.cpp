@@ -105,7 +105,7 @@ public:
 
         auto [x, y] = event.getPosition();
 
-        float dpiScale = fiddleContext->dpiScale (nativeHandle());
+        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
         x *= dpiScale;
         y *= dpiScale;
 
@@ -121,7 +121,7 @@ public:
 
         auto [x, y] = event.getPosition();
 
-        float dpiScale = fiddleContext->dpiScale (nativeHandle());
+        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
         x *= dpiScale;
         y *= dpiScale;
 
@@ -137,7 +137,7 @@ public:
 
         auto [x, y] = event.getPosition();
 
-        float dpiScale = fiddleContext->dpiScale (nativeHandle());
+        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
         x *= dpiScale;
         y *= dpiScale;
 
@@ -153,7 +153,7 @@ public:
 
         auto [x, y] = event.getPosition();
 
-        float dpiScale = fiddleContext->dpiScale (nativeHandle());
+        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
         x *= dpiScale;
         y *= dpiScale;
 
@@ -169,7 +169,7 @@ public:
         switch (keys.getKey())
         {
         case juce::KeyPress::escapeKey:
-            close();
+            userTriedToCloseWindow();
             break;
 
         case juce::KeyPress::textAKey:
@@ -218,7 +218,7 @@ public:
         {
             float oldScale = scale;
             scale *= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (nativeHandle());
+            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (getNativeHandle());
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
@@ -227,7 +227,7 @@ public:
         {
             float oldScale = scale;
             scale /= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (nativeHandle());
+            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (getNativeHandle());
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
@@ -251,20 +251,19 @@ public:
 
         title << " | " << width << " x " << height;
 
-        setWindowTitle (title);
+        setTitle (title);
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        stopTimer();
+
+        juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
     }
 
 private:
     void timerCallback() override
     {
-        if (shouldClose())
-        {
-            stopTimer();
-
-            juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
-            return;
-        }
-
         mainLoop (juce::Time::getMillisecondCounterHiRes() / 1000.0);
 
         fiddleContext->tick();
@@ -314,7 +313,7 @@ private:
 
     void mainLoop (double time)
     {
-        auto [width, height] = getSize();
+        auto [width, height] = getContentSize();
         if (lastWidth != width || lastHeight != height)
         {
             DBG ("size changed to " << width << "x" << height << "\n");
@@ -322,7 +321,7 @@ private:
             lastWidth = width;
             lastHeight = height;
 
-            fiddleContext->onSizeChanged (nativeHandle(), width, height, 0);
+            fiddleContext->onSizeChanged (getNativeHandle(), width, height, 0);
             renderer = fiddleContext->makeRenderer (width, height);
 
             needsTitleUpdate = true;
@@ -392,7 +391,7 @@ private:
             renderer->restore();
         }
 
-        fiddleContext->end (nativeHandle());
+        fiddleContext->end (getNativeHandle());
 
         updateFrameTime (time, width, height);
     }
@@ -479,7 +478,7 @@ struct Application : juce::JUCEApplication
         juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-        window->setSize (1280, 866);
+        window->setSize ({ 1280, 866 });
         window->setVisible (true);
     }
 

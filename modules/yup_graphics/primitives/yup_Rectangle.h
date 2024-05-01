@@ -28,6 +28,12 @@ class JUCE_API Rectangle
 public:
     constexpr Rectangle() noexcept = default;
 
+    constexpr Rectangle (const Point<ValueType>& xy, const Size<ValueType>& size) noexcept
+        : xy (xy)
+        , size (size)
+    {
+    }
+
     constexpr Rectangle (const Rectangle& other) noexcept = default;
     constexpr Rectangle (Rectangle&& other) noexcept = default;
     constexpr Rectangle& operator=(const Rectangle& other) noexcept = default;
@@ -63,6 +69,17 @@ public:
         return size;
     }
 
+    constexpr Rectangle withSize (const Size<ValueType>& newSize) noexcept
+    {
+        return { xy, newSize };
+    }
+
+    template <class T>
+    constexpr Rectangle withSize (const Size<T>& newSize) noexcept
+    {
+        return { xy, newSize };
+    }
+
     constexpr Rectangle& translate (ValueType deltaX, ValueType deltaY) noexcept
     {
         xy.translate (deltaX, deltaY);
@@ -75,9 +92,15 @@ public:
         return *this;
     }
 
-    constexpr Point<ValueType> translated (Point<ValueType> delta) const noexcept
+    constexpr Rectangle<ValueType> translated (Point<ValueType> delta) const noexcept
     {
         return { xy.translated (delta), size };
+    }
+
+    template <class T>
+    constexpr Rectangle<T> to() const noexcept
+    {
+        return { xy.template to<T>(), size.template to<T>() };
     }
 
     constexpr bool operator== (const Rectangle& other) const noexcept

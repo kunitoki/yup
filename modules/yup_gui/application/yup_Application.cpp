@@ -24,6 +24,16 @@ namespace juce
 
 //==============================================================================
 
+JUCEApplication::JUCEApplication()
+{
+    staticInitialisation();
+}
+
+JUCEApplication::~JUCEApplication()
+{
+    staticFinalisation();
+}
+
 bool JUCEApplication::moreThanOneInstanceAllowed()
 {
     return true;

@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c): return { KeyPress::xxx, modifiers, sc }; - kunitoki@gmail.com
+   Copyright (c) 2024 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -22,11 +22,8 @@
 namespace juce
 {
 
-//==============================================================================
-
-MouseEvent toMouseEvent (int buttons, int modifiers, double x, double y) noexcept
+Desktop::Desktop() noexcept
 {
-    return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
 }
 
 } // namespace juce

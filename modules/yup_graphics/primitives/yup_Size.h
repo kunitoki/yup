@@ -59,6 +59,12 @@ public:
         return { width, newHeight };
     }
 
+    template <class T>
+    constexpr Size<T> to() const noexcept
+    {
+        return { static_cast<T> (width), static_cast<T> (height) };
+    }
+
     constexpr bool operator== (const Size& other) const noexcept
     {
         return width == other.width && height == other.height;

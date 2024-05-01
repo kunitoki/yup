@@ -53,9 +53,11 @@
 #endif
 
 //==============================================================================
-#include "native/yup_KeyPress_glfw.cpp"
-#include "native/yup_MouseEvent_glfw.cpp"
+#include "native/yup_Windowing_glfw.cpp"
 
 //==============================================================================
 #include "application/yup_Application.cpp"
+#include "desktop/yup_Desktop.cpp"
+#include "component/yup_ComponentNative.cpp"
+#include "component/yup_Component.cpp"
 #include "windowing/yup_DocumentWindow.cpp"

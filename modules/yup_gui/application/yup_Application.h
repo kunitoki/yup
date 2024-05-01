@@ -27,8 +27,8 @@ namespace juce
 class JUCE_API JUCEApplication : public JUCEApplicationBase
 {
 public:
-    JUCEApplication() = default;
-    ~JUCEApplication() = default;
+    JUCEApplication();
+    ~JUCEApplication() override;
 
     bool moreThanOneInstanceAllowed() override;
 
@@ -45,6 +45,8 @@ public:
                              int lineNumber) override;
 
 private:
+    static void staticInitialisation();
+    static void staticFinalisation();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JUCEApplication)
 };

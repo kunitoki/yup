@@ -88,6 +88,12 @@ public:
         return { x + delta.x, y + delta.y };
     }
 
+    template <class T>
+    constexpr Point<T> to() const noexcept
+    {
+        return { static_cast<T> (x), static_cast<T> (y) };
+    }
+
     constexpr bool operator== (const Point& other) const noexcept
     {
         return x == other.x && y == other.y;

@@ -450,7 +450,8 @@ function (yup_standalone_app)
                 $<$<CONFIG:DEBUG>:-gsource-map>
                 -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
                 -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1
-                -sNODERAWFS=0 -sMAX_WEBGL_VERSION=2 -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
+                -sALLOW_MEMORY_GROWTH=1 -sNODERAWFS=0 -sMAX_WEBGL_VERSION=2
+                -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
                 ${YUP_ARG_LINK_OPTIONS})
 
         endif()
