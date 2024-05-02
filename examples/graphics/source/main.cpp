@@ -38,48 +38,16 @@ enum class API
 
 //==============================================================================
 
-class CustomWindow : public juce::DocumentWindow, public juce::Timer
+class CustomWindow : public juce::DocumentWindow
 {
 public:
     CustomWindow()
     {
-        switch (api)
-        {
-        case API::metal:
-            fiddleContext = juce::LowLevelRenderContext::makeMetalPLS (options);
-            break;
-
-        case API::d3d:
-            fiddleContext = juce::LowLevelRenderContext::makeD3DPLS (options);
-            break;
-
-        case API::dawn:
-            fiddleContext = juce::LowLevelRenderContext::makeDawnPLS (options);
-            break;
-
-        case API::gl:
-            fiddleContext = juce::LowLevelRenderContext::makeGLPLS();
-            break;
-        }
-
-        if (!fiddleContext)
-        {
-            juce::Logger::outputDebugString ("Failed to create a fiddle context");
-
-            juce::JUCEApplication::getInstance()->systemRequestedQuit();
-            return;
-        }
-
-        startTimerHz (static_cast<int> (framerate));
     }
 
     void mouseDown (const juce::MouseEvent& event) override
     {
         auto [x, y] = event.getPosition();
-
-        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
-        x *= dpiScale;
-        y *= dpiScale;
 
         dragLastPos = rive::float2 { x, y };
         if (event.isLeftButtoDown())
@@ -107,10 +75,6 @@ public:
     void mouseDrag (const juce::MouseEvent& event) override
     {
         auto [x, y] = event.getPosition();
-
-        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
-        x *= dpiScale;
-        y *= dpiScale;
 
         if (event.isLeftButtoDown())
         {
@@ -190,7 +154,7 @@ public:
         {
             float oldScale = scale;
             scale *= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (getNativeHandle());
+            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
@@ -199,47 +163,17 @@ public:
         {
             float oldScale = scale;
             scale /= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (getNativeHandle());
+            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
         }
     }
 
-    void updateWindowTitle(double fps, int width, int height)
+    void paint (juce::Graphics& g, float frameRate) override
     {
-        juce::String title;
+        double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 
-        if (fps != 0)
-            title << "[" << fps << " FPS]";
-
-        title << " | " << "YUP On Rive Renderer";
-
-        if (forceAtomicMode)
-            title << " (atomic)";
-
-        title << " | " << width << " x " << height;
-
-        setTitle (title);
-    }
-
-    void userTriedToCloseWindow() override
-    {
-        stopTimer();
-
-        juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
-    }
-
-private:
-    void timerCallback() override
-    {
-        mainLoop (juce::Time::getMillisecondCounterHiRes() / 1000.0);
-
-        fiddleContext->tick();
-    }
-
-    void mainLoop (double time)
-    {
         auto [width, height] = getContentSize();
         if (lastWidth != width || lastHeight != height)
         {
@@ -247,9 +181,6 @@ private:
 
             lastWidth = width;
             lastHeight = height;
-
-            fiddleContext->onSizeChanged (getNativeHandle(), width, height, 0);
-            renderer = fiddleContext->makeRenderer (width, height);
 
             needsTitleUpdate = true;
         }
@@ -260,16 +191,7 @@ private:
             needsTitleUpdate = false;
         }
 
-        fiddleContext->begin ({
-            .renderTargetWidth = static_cast<uint32_t> (width),
-            .renderTargetHeight = static_cast<uint32_t> (height),
-            .clearColor = 0xff404040,
-            .msaaSampleCount = 0,
-            .disableRasterOrdering = forceAtomicMode,
-            .wireframe = wireframe,
-            .fillsDisabled = disableFill,
-            .strokesDisabled = disableStroke,
-        });
+        auto renderer = g.getRenderer();
 
         rive::float2 p[9];
         for (int i = 0; i < 9; ++i)
@@ -285,7 +207,7 @@ private:
         if (doClose)
             rawPath.close();
 
-        rive::Factory* factory = fiddleContext->factory();
+        rive::Factory* factory = g.getFactory();
         auto path = factory->makeRenderPath (rawPath, rive::FillRule::nonZero);
 
         auto fillPaint = factory->makeRenderPaint();
@@ -318,9 +240,33 @@ private:
 
         renderer->drawPath (pointPath.get(), pointPaint.get());
 
-        fiddleContext->end (getNativeHandle());
-
         updateFrameTime (time, width, height);
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        juce::MessageManager::callAsync ([this]
+        {
+            juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        });
+    }
+
+private:
+    void updateWindowTitle(double fps, int width, int height)
+    {
+        juce::String title;
+
+        if (fps != 0)
+            title << "[" << fps << " FPS]";
+
+        title << " | " << "YUP On Rive Renderer";
+
+        if (forceAtomicMode)
+            title << " (atomic)";
+
+        title << " | " << width << " x " << height;
+
+        setTitle (title);
     }
 
     void updateFrameTime (double time, int width, int height)
@@ -339,26 +285,10 @@ private:
         }
     }
 
-    juce::LowLevelRenderContext::Options options;
     bool forceAtomicMode = false;
     bool wireframe = false;
     bool disableFill = false;
     bool disableStroke = false;
-
-    float framerate = 30.0f;
-
-    API api =
-    #if JUCE_MAC || JUCE_IOS
-        API::metal
-    #elif JUCE_WINDOWS
-        API::d3d
-    #else
-        API::gl
-    #endif
-    ;
-
-    std::unique_ptr<juce::LowLevelRenderContext> fiddleContext;
-    std::unique_ptr<rive::Renderer> renderer;
 
     rive::float2 pts[9] = {
         {260 + 2 * 100, 60 + 2 * 500},

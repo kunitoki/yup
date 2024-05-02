@@ -34,27 +34,33 @@ public:
     virtual ~Component();
 
     //==============================================================================
-    void setVisible (bool shouldBeVisible);
+    virtual void setVisible (bool shouldBeVisible);
     bool isVisible() const;
 
     virtual void visibilityChanged();
 
     //==============================================================================
-    void setTitle (const String& title);
+    virtual void setTitle (const String& title);
     String getTitle() const;
 
     //==============================================================================
-    void setSize (const Size<int>& newSize);
+    virtual void setSize (const Size<int>& newSize);
     Size<int> getSize() const;
     Size<int> getContentSize() const;
 
     virtual void resized();
 
     //==============================================================================
+    float getScaleDpi() const;
+
+    //==============================================================================
     void* getNativeHandle() const;
 
     //==============================================================================
-    void addToDesktop();
+    ComponentNative* getNativeComponent();
+
+    //==============================================================================
+    void addToDesktop (std::optional<float> framerateRedraw = std::nullopt);
     void removeFromDesktop();
     bool isOnDesktop() const noexcept;
 
@@ -68,7 +74,7 @@ public:
     void removeChildComponent (Component* component);
 
     //==============================================================================
-    virtual void paint (Graphics& g);
+    virtual void paint (Graphics& g, float frameRate);
 
     //==============================================================================
     virtual void mouseDown (const MouseEvent& event);
@@ -81,6 +87,7 @@ public:
     virtual void keyUp (const KeyPress& keys, double x, double y);
 
 private:
+    void internalPaint (Graphics& g, float frameRate);
     void internalMouseDown (const MouseEvent& event);
     void internalMouseMove (const MouseEvent& event);
     void internalMouseDrag (const MouseEvent& event);
@@ -90,15 +97,13 @@ private:
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;
+    friend class WeakReference<Component>;
 
     String componentID, componentTitle;
     Component* parentComponent = nullptr;
     Array<Component*> children;
     Rectangle<float> boundsInParent;
-
     std::unique_ptr<ComponentNative> native;
-
-    friend class WeakReference<Component>;
     WeakReference<Component>::Master masterReference;
 
     struct Options

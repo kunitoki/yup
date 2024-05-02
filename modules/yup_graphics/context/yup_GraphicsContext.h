@@ -19,19 +19,12 @@
   ==============================================================================
 */
 
-#pragma once
-
-#if 0
-
-#include <memory>
-#include <vector>
-
-#include "rive/pls/pls_render_context.hpp"
-
 namespace juce
 {
 
-class JUCE_API LowLevelRenderContext
+class LowLevelRenderContext;
+
+class JUCE_API GraphicsContext
 {
 public:
     struct Options
@@ -45,7 +38,21 @@ public:
         bool disableRasterOrdering         : 1 = false;
     };
 
-    virtual ~LowLevelRenderContext() = default;
+    enum Api
+    {
+        OpenGL,
+        Direct3D,
+        Metal,
+        Dawn
+    };
+
+    GraphicsContext () noexcept = default;
+    virtual ~GraphicsContext() = default;
+
+    GraphicsContext (const GraphicsContext& other) noexcept = delete;
+    GraphicsContext (GraphicsContext&& other) noexcept = default;
+    GraphicsContext& operator=(const GraphicsContext& other) noexcept = delete;
+    GraphicsContext& operator=(GraphicsContext&& other) noexcept = default;
 
     virtual float dpiScale (void* nativeHandle) const = 0;
 
@@ -54,7 +61,7 @@ public:
     virtual rive::pls::PLSRenderContext* plsContextOrNull() = 0;
     virtual rive::pls::PLSRenderTarget* plsRenderTargetOrNull() = 0;
 
-    virtual void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) {}
+    virtual void onSizeChanged (void* nativeHandle, int width, int height, uint32_t sampleCount) = 0;
 
     virtual std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) = 0;
 
@@ -66,39 +73,8 @@ public:
 
     virtual void tick() {}
 
-    /**
-     * @brief OpenGL renderer.
-     */
-#if JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
-    static std::unique_ptr<LowLevelRenderContext> makeGLPLS();
-#else
-    static std::unique_ptr<LowLevelRenderContext> makeGLPLS() { return nullptr; }
-#endif
-
-    /**
-     * @brief Metal renderer.
-     */
-#if JUCE_MAC || JUCE_IOS
-    static std::unique_ptr<LowLevelRenderContext> makeMetalPLS (Options = {});
-#else
-    static std::unique_ptr<LowLevelRenderContext> makeMetalPLS (Options = {}) { return nullptr; }
-#endif
-
-    /**
-     * @brief Direct3D renderer.
-     */
-#if JUCE_WINDOWS
-    static std::unique_ptr<LowLevelRenderContext> makeD3DPLS (Options = {});
-#else
-    static std::unique_ptr<LowLevelRenderContext> makeD3DPLS (Options = {}) { return nullptr; }
-#endif
-
-    /**
-     * @brief WebGPU (Dawn) renderer.
-     */
-    static std::unique_ptr<LowLevelRenderContext> makeDawnPLS (Options = {});
+    static std::unique_ptr<GraphicsContext> createContext (Options options);
+    static std::unique_ptr<GraphicsContext> createContext (Api graphicsApi, Options options);
 };
 
 } // namespace juce
-
-#endif

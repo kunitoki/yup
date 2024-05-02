@@ -52,6 +52,7 @@
 #include <juce_core/juce_core.h>
 
 #include <rive/rive.h>
+#include <rive/pls/pls_render_context.hpp>
 
 #include <tuple>
 
@@ -62,3 +63,4 @@
 #include "primitives/yup_Rectangle.h"
 #include "native/yup_LowLevelRenderContext.h"
 #include "graphics/yup_Graphics.h"
+#include "context/yup_GraphicsContext.h"

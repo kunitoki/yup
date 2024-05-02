@@ -26,13 +26,15 @@
 #include "rive/pls/gl/pls_render_context_gl_impl.hpp"
 #include "rive/pls/gl/pls_render_target_gl.hpp"
 
-#ifdef RIVE_WEBGL
+#if RIVE_WEBGL
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 #endif
 
+#if RIVE_DESKTOP_GL
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#endif
 
 namespace juce
 {
@@ -40,8 +42,7 @@ namespace juce
 using namespace rive;
 using namespace rive::pls;
 
-#ifdef RIVE_DESKTOP_GL
-#ifdef DEBUG
+#if RIVE_DESKTOP_GL && DEBUG
 static void GLAPIENTRY err_msg_callback(GLenum source,
                                         GLenum type,
                                         GLuint id,
@@ -52,76 +53,73 @@ static void GLAPIENTRY err_msg_callback(GLenum source,
 {
     if (type == GL_DEBUG_TYPE_ERROR)
     {
-        printf("GL ERROR: %s\n", message);
-        fflush(stdout);
-        assert(0);
+        printf ("GL ERROR: %s\n", message);
+        fflush (stdout);
+
+        assert (false);
     }
     else if (type == GL_DEBUG_TYPE_PERFORMANCE)
     {
-        if (strcmp(message,
-                   "API_ID_REDUNDANT_FBO performance warning has been generated. Redundant state "
-                   "change in glBindFramebuffer API call, FBO 0, \"\", already bound.") == 0)
+        if (strcmp (message,
+                    "API_ID_REDUNDANT_FBO performance warning has been generated. Redundant state "
+                    "change in glBindFramebuffer API call, FBO 0, \"\", already bound.") == 0)
         {
             return;
         }
-        if (strstr(message, "is being recompiled based on GL state."))
+
+        if (strstr (message, "is being recompiled based on GL state."))
         {
             return;
         }
-        printf("GL PERF: %s\n", message);
-        fflush(stdout);
+
+        printf ("GL PERF: %s\n", message);
+        fflush (stdout);
     }
 }
 #endif
-#endif
 
-class LowLevelRenderContextGLPLS : public LowLevelRenderContext
+class LowLevelRenderContextGLPLS : public GraphicsContext
 {
 public:
     LowLevelRenderContextGLPLS()
     {
-        if (!m_plsContext)
+        if (! m_plsContext)
         {
-            fprintf(stderr, "Failed to create a PLS renderer.\n");
-            exit(-1);
+            fprintf (stderr, "Failed to create a PLS renderer.\n");
+            exit (-1);
         }
 
-#ifdef RIVE_DESKTOP_GL
+#if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
-        if (!gladLoadCustomLoader((GLADloadproc)glfwGetProcAddress))
+        if (!gladLoadCustomLoader ((GLADloadproc) glfwGetProcAddress))
         {
-            fprintf(stderr, "Failed to initialize glad.\n");
-            exit(-1);
+            fprintf (stderr, "Failed to initialize glad.\n");
+            exit (-1);
         }
 #endif
 
-        printf("GL_VENDOR:   %s\n", glGetString(GL_VENDOR));
-        printf("GL_RENDERER: %s\n", glGetString(GL_RENDERER));
-        printf("GL_VERSION:  %s\n", glGetString(GL_VERSION));
+        printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
+        printf ("GL_RENDERER: %s\n", glGetString (GL_RENDERER));
+        printf ("GL_VERSION:  %s\n", glGetString (GL_VERSION));
 
-#ifdef RIVE_DESKTOP_GL
-        printf("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n",
-               GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
+#if RIVE_DESKTOP_GL
+        printf ("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n", GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 #endif
 
-#if 0
+#if DEBUG
         int n;
-        glGetIntegerv(GL_NUM_EXTENSIONS, &n);
+        glGetIntegerv (GL_NUM_EXTENSIONS, &n);
         for (size_t i = 0; i < n; ++i)
-        {
-            printf("  %s\n", glGetStringi(GL_EXTENSIONS, i));
-        }
+            printf ("  %s\n", glGetStringi (GL_EXTENSIONS, i));
 #endif
 
-#ifdef RIVE_DESKTOP_GL
-#ifdef DEBUG
+#if RIVE_DESKTOP_GL && DEBUG
         if (GLAD_GL_KHR_debug)
         {
-            glEnable(GL_DEBUG_OUTPUT);
-            glDebugMessageControlKHR(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, NULL, GL_TRUE);
-            glDebugMessageCallbackKHR(&err_msg_callback, nullptr);
+            glEnable (GL_DEBUG_OUTPUT);
+            glDebugMessageControlKHR (GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+            glDebugMessageCallbackKHR (&err_msg_callback, nullptr);
         }
-#endif
 #endif
     }
 
@@ -131,7 +129,7 @@ public:
 
     float dpiScale(void*) const override
     {
-#ifdef __APPLE__
+#if RIVE_DESKTOP_GL && __APPLE__
         return 2;
 #else
         return 1;
@@ -146,23 +144,23 @@ public:
 
     void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
     {
-        m_renderTarget = make_rcp<FramebufferRenderTargetGL>(width, height, 0, sampleCount);
+        m_renderTarget = make_rcp<FramebufferRenderTargetGL> (width, height, 0, sampleCount);
     }
 
     std::unique_ptr<Renderer> makeRenderer(int width, int height) override
     {
-        return std::make_unique<PLSRenderer>(m_plsContext.get());
+        return std::make_unique<PLSRenderer> (m_plsContext.get());
     }
 
     void begin(const PLSRenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->invalidateGLState();
-        m_plsContext->beginFrame(frameDescriptor);
+        m_plsContext->beginFrame (frameDescriptor);
     }
 
     void flushPLSContext() override
     {
-        m_plsContext->flush({ .renderTarget = m_renderTarget.get() });
+        m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
     }
 
     void end (void*) final
@@ -174,12 +172,12 @@ public:
 
 private:
     std::unique_ptr<PLSRenderContext> m_plsContext =
-        PLSRenderContextGLImpl::MakeContext(PLSRenderContextGLImpl::ContextOptions());
+        PLSRenderContextGLImpl::MakeContext (PLSRenderContextGLImpl::ContextOptions());
 
     rcp<PLSRenderTargetGL> m_renderTarget;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeGLPLS()
+std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsContext::Options)
 {
     return std::make_unique<LowLevelRenderContextGLPLS>();
 }

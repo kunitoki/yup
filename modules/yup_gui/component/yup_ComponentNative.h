@@ -44,6 +44,11 @@ public:
 
     virtual void* getNativeHandle() const = 0;
 
+    virtual float getScaleDpi() const = 0;
+
+    virtual rive::Factory* getFactory() = 0;
+
+    void handlePaint (Graphics& g, float frameRate);
     void handleMouseMove (const MouseEvent& event);
     void handleMouseDrag (const MouseEvent& event);
     void handleMouseDown (const MouseEvent& event);
@@ -52,7 +57,7 @@ public:
     void handleKeyUp (const KeyPress& keys, double x, double y);
     void handleUserTriedToCloseWindow();
 
-    static std::unique_ptr<ComponentNative> createFor (Component& component);
+    static std::unique_ptr<ComponentNative> createFor (Component& component, std::optional<float> framerateRedraw);
 
 private:
     Component& component;

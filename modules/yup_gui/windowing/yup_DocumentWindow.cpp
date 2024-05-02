@@ -34,4 +34,4 @@ DocumentWindow::~DocumentWindow()
     removeFromDesktop();
 }
 
-}
+} // namespace juce

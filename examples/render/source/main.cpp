@@ -43,39 +43,19 @@ enum class API
 
 //==============================================================================
 
-class CustomWindow : public juce::DocumentWindow, public juce::Timer
+class CustomWindow : public juce::DocumentWindow
 {
 public:
     CustomWindow()
     {
-        switch (api)
+        rive::Factory* factory = getNativeComponent()->getFactory();
+        if (factory == nullptr)
         {
-        case API::metal:
-            fiddleContext = juce::LowLevelRenderContext::makeMetalPLS (options);
-            break;
-
-        case API::d3d:
-            fiddleContext = juce::LowLevelRenderContext::makeD3DPLS (options);
-            break;
-
-        case API::dawn:
-            fiddleContext = juce::LowLevelRenderContext::makeDawnPLS (options);
-            break;
-
-        case API::gl:
-            fiddleContext = juce::LowLevelRenderContext::makeGLPLS();
-            break;
-        }
-
-        if (!fiddleContext)
-        {
-            juce::Logger::outputDebugString ("Failed to create a fiddle context");
+            juce::Logger::outputDebugString ("Failed to create a graphics context");
 
             juce::JUCEApplicationBase::getInstance()->systemRequestedQuit();
             return;
         }
-
-        rive::Factory* factory = fiddleContext->factory();
 
 #if JUCE_WASM
         juce::File riveFilePath = juce::File ("/data");
@@ -94,8 +74,6 @@ public:
                 rivFile = rive::File::import( { static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
             }
         }
-
-        startTimerHz (static_cast<int> (framerate));
     }
 
     void mouseDown(const juce::MouseEvent& event) override
@@ -104,10 +82,6 @@ public:
             return;
 
         auto [x, y] = event.getPosition();
-
-        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
-        x *= dpiScale;
-        y *= dpiScale;
 
         auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
         for (auto& scene : scenes)
@@ -121,10 +95,6 @@ public:
 
         auto [x, y] = event.getPosition();
 
-        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
-        x *= dpiScale;
-        y *= dpiScale;
-
         auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
         for (auto& scene : scenes)
             scene->pointerUp (xy);
@@ -137,10 +107,6 @@ public:
 
         auto [x, y] = event.getPosition();
 
-        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
-        x *= dpiScale;
-        y *= dpiScale;
-
         const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
         for (auto& scene : scenes)
             scene->pointerMove (xy);
@@ -152,10 +118,6 @@ public:
             return;
 
         auto [x, y] = event.getPosition();
-
-        float dpiScale = fiddleContext->dpiScale (getNativeHandle());
-        x *= dpiScale;
-        y *= dpiScale;
 
         const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
         for (auto& scene : scenes)
@@ -218,7 +180,7 @@ public:
         {
             float oldScale = scale;
             scale *= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (getNativeHandle());
+            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
@@ -227,48 +189,90 @@ public:
         {
             float oldScale = scale;
             scale /= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y } * fiddleContext->dpiScale (getNativeHandle());
+            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
         }
     }
 
-    void updateWindowTitle (double fps, int instances, int width, int height)
+    void paint (juce::Graphics& g, float frameRate) override
     {
-        juce::String title;
+        double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 
-        if (fps != 0)
-            title << "[" << fps << " FPS]";
+        auto [width, height] = getContentSize();
+        if (lastWidth != width || lastHeight != height)
+        {
+            DBG ("size changed to " << width << "x" << height << "\n");
 
-        if (instances > 1)
-            title << " (x" << instances << " instances)";
+            lastWidth = width;
+            lastHeight = height;
 
-        title << " | " << "YUP On Rive Renderer";
+            needsTitleUpdate = true;
+        }
 
-        if (forceAtomicMode)
-            title << " (atomic)";
+        if (needsTitleUpdate)
+        {
+            updateWindowTitle (0, 1, width, height);
+            needsTitleUpdate = false;
+        }
 
-        title << " | " << width << " x " << height;
+        auto* renderer = g.getRenderer();
 
-        setTitle (title);
+        int instances = 1;
+        if (rivFile)
+        {
+            instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
+            if (artboards.size() != instances || scenes.size() != instances)
+            {
+                updateScenesFromFile (instances);
+            }
+            else if (!paused)
+            {
+                for (const auto& scene : scenes)
+                    scene->advanceAndApply (1.0f / frameRate);
+            }
+
+            rive::Mat2D m = computeAlignment (rive::Fit::contain,
+                                              rive::Alignment::center,
+                                              rive::AABB (0, 0, width, height),
+                                              artboards.front()->bounds());
+            renderer->save();
+
+            m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
+            viewTransform = m;
+
+            renderer->transform (m);
+
+            const float spacing = 200 / m.findMaxScale();
+
+            auto scene = scenes.begin();
+            for (int j = 0; j < upRepeat + 1 + downRepeat; ++j)
+            {
+                renderer->save();
+                renderer->transform(
+                    rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
+
+                for (int i = 0; i < horzRepeat * 2 + 1; ++i)
+                {
+                    (*scene++)->draw (renderer);
+                    renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
+                }
+
+                renderer->restore();
+            }
+            renderer->restore();
+        }
+
+        updateFrameTime (time, width, height);
     }
 
     void userTriedToCloseWindow() override
     {
-        stopTimer();
-
-        juce::MessageManager::callAsync ([this] { juce::JUCEApplication::getInstance()->systemRequestedQuit(); });
+        juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 
 private:
-    void timerCallback() override
-    {
-        mainLoop (juce::Time::getMillisecondCounterHiRes() / 1000.0);
-
-        fiddleContext->tick();
-    }
-
     void updateScenesFromFile (std::size_t count)
     {
         jassert (rivFile != nullptr);
@@ -311,89 +315,24 @@ private:
         }
     }
 
-    void mainLoop (double time)
+    void updateWindowTitle (double fps, int instances, int width, int height)
     {
-        auto [width, height] = getContentSize();
-        if (lastWidth != width || lastHeight != height)
-        {
-            DBG ("size changed to " << width << "x" << height << "\n");
+        juce::String title;
 
-            lastWidth = width;
-            lastHeight = height;
+        if (fps != 0)
+            title << "[" << fps << " FPS]";
 
-            fiddleContext->onSizeChanged (getNativeHandle(), width, height, 0);
-            renderer = fiddleContext->makeRenderer (width, height);
+        if (instances > 1)
+            title << " (x" << instances << " instances)";
 
-            needsTitleUpdate = true;
-        }
+        title << " | " << "YUP On Rive Renderer";
 
-        if (needsTitleUpdate)
-        {
-            updateWindowTitle (0, 1, width, height);
-            needsTitleUpdate = false;
-        }
+        if (forceAtomicMode)
+            title << " (atomic)";
 
-        fiddleContext->begin ({
-            .renderTargetWidth = static_cast<uint32_t> (width),
-            .renderTargetHeight = static_cast<uint32_t> (height),
-            .clearColor = 0xff404040,
-            .msaaSampleCount = 0,
-            .disableRasterOrdering = forceAtomicMode,
-            .wireframe = wireframe,
-            .fillsDisabled = disableFill,
-            .strokesDisabled = disableStroke,
-        });
+        title << " | " << width << " x " << height;
 
-        int instances = 1;
-        if (rivFile)
-        {
-            instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
-            if (artboards.size() != instances || scenes.size() != instances)
-            {
-                updateScenesFromFile (instances);
-            }
-            else if (!paused)
-            {
-                for (const auto& scene : scenes)
-                {
-                    scene->advanceAndApply (1 / framerate);
-                }
-            }
-
-            rive::Mat2D m = computeAlignment (rive::Fit::contain,
-                                              rive::Alignment::center,
-                                              rive::AABB (0, 0, width, height),
-                                              artboards.front()->bounds());
-            renderer->save();
-
-            m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
-            viewTransform = m;
-
-            renderer->transform (m);
-
-            const float spacing = 200 / m.findMaxScale();
-
-            auto scene = scenes.begin();
-            for (int j = 0; j < upRepeat + 1 + downRepeat; ++j)
-            {
-                renderer->save();
-                renderer->transform(
-                    rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
-
-                for (int i = 0; i < horzRepeat * 2 + 1; ++i)
-                {
-                    (*scene++)->draw (renderer.get());
-                    renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
-                }
-
-                renderer->restore();
-            }
-            renderer->restore();
-        }
-
-        fiddleContext->end (getNativeHandle());
-
-        updateFrameTime (time, width, height);
+        setTitle (title);
     }
 
     void updateFrameTime (double time, int width, int height)
@@ -413,26 +352,10 @@ private:
         }
     }
 
-    juce::LowLevelRenderContext::Options options;
     bool forceAtomicMode = false;
     bool wireframe = false;
     bool disableFill = false;
     bool disableStroke = false;
-
-    float framerate = 60.0f;
-
-    API api =
-    #if JUCE_MAC || JUCE_IOS
-        API::metal
-    #elif JUCE_WINDOWS
-        API::d3d
-    #else
-        API::gl
-    #endif
-    ;
-
-    std::unique_ptr<juce::LowLevelRenderContext> fiddleContext;
-    std::unique_ptr<rive::Renderer> renderer;
 
     std::unique_ptr<rive::File> rivFile;
     std::vector<std::unique_ptr<rive::Artboard>> artboards;

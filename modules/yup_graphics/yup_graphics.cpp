@@ -45,3 +45,7 @@
 
 #include "native/yup_LowLevelRenderContext_dawn.cpp"
 #include "native/yup_LowLevelRenderContext_dawn_helper.cpp"
+#include "native/yup_GraphicsContext_impl.cpp"
+
+//==============================================================================
+#include "graphics/yup_Graphics.cpp"

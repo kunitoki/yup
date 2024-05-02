@@ -33,6 +33,15 @@ ComponentNative::~ComponentNative ()
 {
 }
 
+//==============================================================================
+
+void ComponentNative::handlePaint (Graphics& g, float frameRate)
+{
+    component.internalPaint (g, frameRate);
+}
+
+//==============================================================================
+
 void ComponentNative::handleMouseMove (const MouseEvent& event)
 {
     component.internalMouseMove (event);
@@ -57,6 +66,8 @@ void ComponentNative::handleKeyDown (const KeyPress& keys, double x, double y)
 {
     component.internalKeyDown (keys, x, y);
 }
+
+//==============================================================================
 
 void ComponentNative::handleKeyUp (const KeyPress& keys, double x, double y)
 {

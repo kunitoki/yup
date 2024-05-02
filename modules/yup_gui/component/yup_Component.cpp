@@ -118,6 +118,19 @@ void Component::resized()
 
 //==============================================================================
 
+float Component::getScaleDpi() const
+{
+    if (native != nullptr)
+        return native->getScaleDpi();
+
+    if (parentComponent == nullptr)
+        return 1.0f;
+
+    return parentComponent->getScaleDpi();
+}
+
+//==============================================================================
+
 void* Component::getNativeHandle() const
 {
     if (options.onDesktop)
@@ -128,7 +141,20 @@ void* Component::getNativeHandle() const
 
 //==============================================================================
 
-void Component::addToDesktop()
+ComponentNative* Component::getNativeComponent()
+{
+    if (native != nullptr)
+        return native.get();
+
+    if (parentComponent == nullptr)
+        return nullptr;
+
+    return parentComponent->getNativeComponent();
+}
+
+//==============================================================================
+
+void Component::addToDesktop (std::optional<float> framerateRedraw)
 {
     if (options.onDesktop)
         return;
@@ -141,7 +167,7 @@ void Component::addToDesktop()
 
     options.onDesktop = true;
 
-    native = ComponentNative::createFor (*this);
+    native = ComponentNative::createFor (*this, framerateRedraw);
 }
 
 void Component::removeFromDesktop()
@@ -191,7 +217,7 @@ void Component::removeChildComponent (Component* component)
 
 //==============================================================================
 
-void Component::paint (Graphics& g) {}
+void Component::paint (Graphics& g, float frameRate) {}
 
 //==============================================================================
 
@@ -207,6 +233,11 @@ void Component::keyUp (const KeyPress& keys, double x, double y) {}
 void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
+
+void Component::internalPaint (Graphics& g, float frameRate)
+{
+    paint (g, frameRate);
+}
 
 void Component::internalMouseDown (const MouseEvent& event)
 {

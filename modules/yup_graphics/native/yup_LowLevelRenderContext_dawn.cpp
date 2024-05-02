@@ -96,7 +96,7 @@ static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescript
 }
 #endif
 
-class LowLevelRenderContextDawnPLS : public LowLevelRenderContext
+class LowLevelRenderContextDawnPLS : public GraphicsContext
 {
 public:
     LowLevelRenderContextDawnPLS(Options options) : m_options(options)
@@ -259,9 +259,9 @@ private:
     wgpu::Buffer m_pixelReadBuff;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(Options options)
+std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsContext::Options options)
 {
-    return std::make_unique<LowLevelRenderContextDawnPLS>(options);
+    return std::make_unique<LowLevelRenderContextDawnPLS> (options);
 }
 
 } // namespace juce
@@ -270,7 +270,7 @@ std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(Option
 
 namespace juce {
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeDawnPLS(Options options)
+std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsContext::Options options)
 {
     return nullptr;
 }

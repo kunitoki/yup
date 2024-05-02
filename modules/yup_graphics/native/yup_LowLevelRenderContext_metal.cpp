@@ -34,11 +34,11 @@ namespace juce
 using namespace rive;
 using namespace rive::pls;
 
-class LowLevelRenderContextMetalPLS : public LowLevelRenderContext
+class LowLevelRenderContextMetalPLS : public GraphicsContext
 {
 public:
-    LowLevelRenderContextMetalPLS(Options fiddleOptions)
-        : m_fiddleOptions(fiddleOptions)
+    LowLevelRenderContextMetalPLS (Options fiddleOptions)
+        : m_fiddleOptions (fiddleOptions)
     {
         PLSRenderContextMetalImpl::ContextOptions metalOptions;
         if (m_fiddleOptions.synchronousShaderCompilations)
@@ -55,8 +55,8 @@ public:
             metalOptions.disableFramebufferReads = true;
         }
 
-        m_plsContext = PLSRenderContextMetalImpl::MakeContext(m_gpu, metalOptions);
-        printf("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
+        m_plsContext = PLSRenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
+        printf ("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
     }
 
     float dpiScale(void* window) const override
@@ -68,10 +68,9 @@ public:
     Factory* factory() override { return m_plsContext.get(); }
 
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
-
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
-    void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
         NSWindow* nsWindow = (NSWindow*)window; // glfwGetCocoaWindow(window);
         NSView* view = [nsWindow contentView];
@@ -87,17 +86,17 @@ public:
         view.layer = m_swapchain;
 
         auto plsContextImpl = m_plsContext->static_impl_cast<PLSRenderContextMetalImpl>();
-        m_renderTarget = plsContextImpl->makeRenderTarget(MTLPixelFormatBGRA8Unorm, width, height);
+        m_renderTarget = plsContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
     }
 
-    std::unique_ptr<Renderer> makeRenderer(int width, int height) override
+    std::unique_ptr<Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer>(m_plsContext.get());
+        return std::make_unique<PLSRenderer> (m_plsContext.get());
     }
 
     void begin(const PLSRenderContext::FrameDescriptor& frameDescriptor) override
     {
-        m_plsContext->beginFrame(frameDescriptor);
+        m_plsContext->beginFrame (frameDescriptor);
     }
 
     void flushPLSContext() final
@@ -105,18 +104,17 @@ public:
         if (m_currentFrameSurface == nil)
         {
             m_currentFrameSurface = [m_swapchain nextDrawable];
-            assert(m_currentFrameSurface.texture.width == m_renderTarget->width());
-            assert(m_currentFrameSurface.texture.height == m_renderTarget->height());
-            m_renderTarget->setTargetTexture(m_currentFrameSurface.texture);
+            assert (m_currentFrameSurface.texture.width == m_renderTarget->width());
+            assert (m_currentFrameSurface.texture.height == m_renderTarget->height());
+            m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
         }
 
         id<MTLCommandBuffer> flushCommandBuffer = [m_queue commandBuffer];
-        m_plsContext->flush({.renderTarget = m_renderTarget.get(),
-                             .externalCommandBuffer = (__bridge void*)flushCommandBuffer});
+        m_plsContext->flush({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*)flushCommandBuffer });
         [flushCommandBuffer commit];
     }
 
-    void end(void*) final
+    void end (void*) final
     {
         flushPLSContext();
 
@@ -125,11 +123,11 @@ public:
         [presentCommandBuffer commit];
 
         m_currentFrameSurface = nil;
-        m_renderTarget->setTargetTexture(nil);
+        m_renderTarget->setTargetTexture (nil);
     }
 
 private:
-    const LowLevelRenderContext::Options m_fiddleOptions;
+    const Options m_fiddleOptions;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     std::unique_ptr<PLSRenderContext> m_plsContext;
@@ -138,9 +136,9 @@ private:
     id<CAMetalDrawable> m_currentFrameSurface = nil;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeMetalPLS(Options fiddleOptions)
+std::unique_ptr<GraphicsContext> juce_constructMetalGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
-    return std::make_unique<LowLevelRenderContextMetalPLS>(fiddleOptions);
+    return std::make_unique<LowLevelRenderContextMetalPLS> (fiddleOptions);
 }
 
 } // namespace juce

@@ -39,28 +39,28 @@ namespace juce
 using namespace rive;
 using namespace rive::pls;
 
-class LowLevelRenderContextD3DPLS : public LowLevelRenderContext
+class LowLevelRenderContextD3DPLS : public GraphicsContext
 {
 public:
-    LowLevelRenderContextD3DPLS(ComPtr<IDXGIFactory2> d3dFactory,
-                        ComPtr<ID3D11Device> gpu,
-                        ComPtr<ID3D11DeviceContext> gpuContext,
-                        const PLSRenderContextD3DImpl::ContextOptions& contextOptions) :
-        m_d3dFactory(std::move(d3dFactory)),
-        m_gpu(std::move(gpu)),
-        m_gpuContext(std::move(gpuContext)),
-        m_plsContext(PLSRenderContextD3DImpl::MakeContext(m_gpu, m_gpuContext, contextOptions))
-    {}
+    LowLevelRenderContextD3DPLS (ComPtr<IDXGIFactory2> d3dFactory,
+                                 ComPtr<ID3D11Device> gpu,
+                                 ComPtr<ID3D11DeviceContext> gpuContext,
+                                 const PLSRenderContextD3DImpl::ContextOptions& contextOptions)
+        : m_d3dFactory (std::move (d3dFactory))
+        , m_gpu (std::move (gpu))
+        , m_gpuContext (std::move (gpuContext))
+        , m_plsContext (PLSRenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
+    {
+    }
 
-    float dpiScale(void*) const override { return 1; }
+    float dpiScale (void*) const override { return 1; }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
-
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
-    void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
         m_swapchain.Reset();
 
@@ -72,26 +72,27 @@ public:
         scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_UNORDERED_ACCESS;
         scd.BufferCount = 2;
         scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-        VERIFY_OK(m_d3dFactory->CreateSwapChainForHwnd(m_gpu.Get(),
-                                                       (HWND) window, // glfwGetWin32Window(window),
-                                                       &scd,
-                                                       NULL,
-                                                       NULL,
-                                                       m_swapchain.ReleaseAndGetAddressOf()));
+
+        VERIFY_OK (m_d3dFactory->CreateSwapChainForHwnd (m_gpu.Get(),
+                                                         (HWND) window, // glfwGetWin32Window(window),
+                                                         &scd,
+                                                         nullptr,
+                                                         nullptr,
+                                                         m_swapchain.ReleaseAndGetAddressOf()));
 
         auto plsContextImpl = m_plsContext->static_impl_cast<PLSRenderContextD3DImpl>();
-        m_renderTarget = plsContextImpl->makeRenderTarget(width, height);
+        m_renderTarget = plsContextImpl->makeRenderTarget (width, height);
         m_readbackTexture = nullptr;
     }
 
-    std::unique_ptr<Renderer> makeRenderer(int width, int height) override
+    std::unique_ptr<Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer>(m_plsContext.get());
+        return std::make_unique<PLSRenderer> (m_plsContext.get());
     }
 
-    void begin(const rive::pls::PLSRenderContext::FrameDescriptor& frameDescriptor) override
+    void begin (const rive::pls::PLSRenderContext::FrameDescriptor& frameDescriptor) override
     {
-        m_plsContext->beginFrame(frameDescriptor);
+        m_plsContext->beginFrame (frameDescriptor);
     }
 
     void flushPLSContext() final
@@ -99,22 +100,23 @@ public:
         if (m_renderTarget->targetTexture() == nullptr)
         {
             ComPtr<ID3D11Texture2D> backbuffer;
-            VERIFY_OK(m_swapchain->GetBuffer(
-                0,
-                __uuidof(ID3D11Texture2D),
-                reinterpret_cast<void**>(backbuffer.ReleaseAndGetAddressOf())));
-            m_renderTarget->setTargetTexture(backbuffer);
+            VERIFY_OK (m_swapchain->GetBuffer (0,
+                                               __uuidof (ID3D11Texture2D),
+                                               reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf())));
+
+            m_renderTarget->setTargetTexture (backbuffer);
         }
-        m_plsContext->flush({.renderTarget = m_renderTarget.get()});
+
+        m_plsContext->flush({ .renderTarget = m_renderTarget.get() });
     }
 
-    void end(void*) override
+    void end (void*) override
     {
         flushPLSContext();
 
-        m_swapchain->Present(0, 0);
+        m_swapchain->Present (0, 0);
 
-        m_renderTarget->setTargetTexture(nullptr);
+        m_renderTarget->setTargetTexture (nullptr);
     }
 
 private:
@@ -127,58 +129,60 @@ private:
     rcp<PLSRenderTargetD3D> m_renderTarget;
 };
 
-std::unique_ptr<LowLevelRenderContext> LowLevelRenderContext::makeD3DPLS(Options fiddleOptions)
+std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options fiddleOptions)
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;
-    VERIFY_OK(CreateDXGIFactory(__uuidof(IDXGIFactory2),
-                                reinterpret_cast<void**>(factory.ReleaseAndGetAddressOf())));
+    VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
 
     ComPtr<IDXGIAdapter> adapter;
     DXGI_ADAPTER_DESC adapterDesc{};
     PLSRenderContextD3DImpl::ContextOptions contextOptions;
+
     if (fiddleOptions.disableRasterOrdering)
     {
         contextOptions.disableRasterizerOrderedViews = true;
         // Also disable typed UAVs in atomic mode, to get more complete test coverage.
         contextOptions.disableTypedUAVLoadStore = true;
     }
-    for (UINT i = 0; factory->EnumAdapters(i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
+
+    for (UINT i = 0; factory->EnumAdapters (i, &adapter) != DXGI_ERROR_NOT_FOUND; ++i)
     {
-        adapter->GetDesc(&adapterDesc);
-        contextOptions.isIntel = adapterDesc.VendorId == 0x163C || adapterDesc.VendorId == 0x8086 ||
-                                 adapterDesc.VendorId == 0x8087;
+        adapter->GetDesc (&adapterDesc);
+        contextOptions.isIntel = adapterDesc.VendorId == 0x163C || adapterDesc.VendorId == 0x8086 || adapterDesc.VendorId == 0x8087;
+
         break;
     }
 
     ComPtr<ID3D11Device> gpu;
     ComPtr<ID3D11DeviceContext> gpuContext;
-    D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_11_1};
+    D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1 };
+
     UINT creationFlags = 0;
 #ifdef DEBUG
     creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
-    VERIFY_OK(D3D11CreateDevice(adapter.Get(),
-                                D3D_DRIVER_TYPE_UNKNOWN,
-                                NULL,
-                                creationFlags,
-                                featureLevels,
-                                std::size(featureLevels),
-                                D3D11_SDK_VERSION,
-                                gpu.ReleaseAndGetAddressOf(),
-                                NULL,
-                                gpuContext.ReleaseAndGetAddressOf()));
+
+    VERIFY_OK (D3D11CreateDevice (adapter.Get(),
+                                  D3D_DRIVER_TYPE_UNKNOWN,
+                                  nullptr,
+                                  creationFlags,
+                                  featureLevels,
+                                  std::size (featureLevels),
+                                  D3D11_SDK_VERSION,
+                                  gpu.ReleaseAndGetAddressOf(),
+                                  nullptr,
+                                  gpuContext.ReleaseAndGetAddressOf()));
     if (!gpu || !gpuContext)
-    {
         return nullptr;
-    }
 
-    printf("D3D device: %S\n", adapterDesc.Description);
+    printf ("D3D device: %S\n", adapterDesc.Description);
 
-    return std::make_unique<LowLevelRenderContextD3DPLS>(std::move(factory),
-                                                 std::move(gpu),
-                                                 std::move(gpuContext),
-                                                 contextOptions);
+    return std::make_unique<LowLevelRenderContextD3DPLS> (
+        std::move (factory),
+        std::move (gpu),
+        std::move (gpuContext),
+        contextOptions);
 }
 
 } // namespace juce

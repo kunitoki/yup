@@ -183,11 +183,12 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
 //==============================================================================
 
-class GLFWComponentNative : public ComponentNative
+class GLFWComponentNative final : public ComponentNative, public Timer
 {
 public:
-    GLFWComponentNative (Component& component)
+    GLFWComponentNative (Component& component, std::optional<float> framerateRedraw)
         : ComponentNative (component)
+        , frameRate (framerateRedraw.value_or (60.0f))
     {
        #if JUCE_MAC
         gpu = MTLCreateSystemDefaultDevice();
@@ -197,7 +198,7 @@ public:
         swapchain.opaque = YES;
        #endif
 
-        window = glfwCreateWindow (800, 800, "GLFW Metal", nullptr, nullptr);
+        window = glfwCreateWindow (800, 800, "", nullptr, nullptr);
 
        #if JUCE_MAC
         NSWindow* nswindow = glfwGetCocoaWindow (window);
@@ -205,17 +206,25 @@ public:
         nswindow.contentView.wantsLayer = YES;
        #endif
 
+        context = GraphicsContext::createContext (GraphicsContext::Options{});
+        if (context == nullptr)
+            return;
+
         glfwSetWindowUserPointer (window, this);
 
         glfwSetWindowCloseCallback (window, juce_glfwWindowClose);
         glfwSetCursorPosCallback (window, juce_glfwMouseMove);
         glfwSetMouseButtonCallback (window, juce_glfwMousePress);
         glfwSetKeyCallback (window, juce_glfwKeyPress);
+
+        startTimerHz (static_cast<int> (frameRate));
     }
 
     ~GLFWComponentNative()
     {
         jassert (window != nullptr);
+
+        stopTimer();
 
         glfwSetWindowUserPointer (window, nullptr);
         glfwDestroyWindow (window);
@@ -295,6 +304,16 @@ public:
         return { width, height };
     }
 
+    float getScaleDpi() const override
+    {
+        return context->dpiScale (getNativeHandle());
+    }
+
+    rive::Factory* getFactory() override
+    {
+        return context->factory();
+    }
+
     void* getNativeHandle() const override
     {
         jassert (window != nullptr);
@@ -310,8 +329,54 @@ public:
        #endif
     }
 
+    void timerCallback() override
+    {
+        auto [width, height] = getContentSize();
+
+        if (currentWidth != width || currentHeight != height)
+        {
+            currentWidth = width;
+            currentHeight = height;
+
+            context->onSizeChanged (getNativeHandle(), width, height, 0);
+            renderer = context->makeRenderer (width, height);
+        }
+
+        bool forceAtomicMode = false;
+        bool wireframe = false;
+        bool disableFill = false;
+        bool disableStroke = false;
+
+        jassert (context != nullptr);
+        jassert (renderer != nullptr);
+
+        context->begin (
+        {
+            .renderTargetWidth = static_cast<uint32_t> (width),
+            .renderTargetHeight = static_cast<uint32_t> (height),
+            .clearColor = 0xff404040,
+            .msaaSampleCount = 0,
+            .disableRasterOrdering = forceAtomicMode,
+            .wireframe = wireframe,
+            .fillsDisabled = disableFill,
+            .strokesDisabled = disableStroke,
+        });
+
+        Graphics g (*context, *renderer);
+        handlePaint (g, frameRate);
+
+        context->end (getNativeHandle());
+
+        context->tick();
+    }
+
 private:
     GLFWwindow* window = nullptr;
+    float frameRate = 60.0f;
+    std::unique_ptr<GraphicsContext> context;
+    std::unique_ptr<rive::Renderer> renderer;
+    int currentWidth = 0;
+    int currentHeight = 0;
 
    #if JUCE_MAC
     id<MTLDevice> gpu = nil;
@@ -322,9 +387,9 @@ private:
 
 //==============================================================================
 
-std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component)
+std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, std::optional<float> framerateRedraw)
 {
-    return std::make_unique<GLFWComponentNative> (component);
+    return std::make_unique<GLFWComponentNative> (component, framerateRedraw);
 }
 
 //==============================================================================
@@ -340,15 +405,15 @@ void juce_glfwWindowClose (GLFWwindow* window)
 
 void juce_glfwMouseMove (GLFWwindow* window, double x, double y)
 {
-    //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
-    //x *= dpiScale;
-    //y *= dpiScale;
-
     auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     const auto leftButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     const auto middleButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
     const auto rightButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+
+    float dpiScale = component->getScaleDpi();
+    x *= dpiScale;
+    y *= dpiScale;
 
     if (leftButtonDown || middleButtonDown || rightButtonDown)
     {
@@ -371,11 +436,11 @@ void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
     double x, y;
     glfwGetCursorPos (window, &x, &y);
 
-    //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
-    //x *= dpiScale;
-    //y *= dpiScale;
-
     auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    float dpiScale = component->getScaleDpi();
+    x *= dpiScale;
+    y *= dpiScale;
 
     if (action == GLFW_PRESS)
         component->handleMouseDown (toMouseEvent (button, mods, x, y));
@@ -390,11 +455,11 @@ void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, i
     double x = 0, y = 0;
     glfwGetCursorPos (window, &x, &y);
 
-    //float dpiScale = s_fiddleContext->dpiScale(glfwGetCocoaWindow(s_window));
-    //x *= dpiScale;
-    //y *= dpiScale;
-
     auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    float dpiScale = component->getScaleDpi();
+    x *= dpiScale;
+    y *= dpiScale;
 
     if (action == GLFW_PRESS)
         component->handleKeyDown (toKeyPress (key, scancode, mods), x, y);

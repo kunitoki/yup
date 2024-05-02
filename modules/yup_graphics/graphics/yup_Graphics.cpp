@@ -22,19 +22,20 @@
 namespace juce
 {
 
-class GraphicsContext;
-
-class JUCE_API Graphics
+Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer) noexcept
+    : context (context)
+    , renderer (renderer)
 {
-public:
-    Graphics (GraphicsContext& context, rive::Renderer& renderer) noexcept;
+}
 
-    rive::Factory* getFactory();
-    rive::Renderer* getRenderer();
+rive::Factory* Graphics::getFactory()
+{
+    return context.factory();
+}
 
-private:
-    GraphicsContext& context;
-    rive::Renderer& renderer;
-};
+rive::Renderer* Graphics::getRenderer()
+{
+    return &renderer;
+}
 
 } // namespace juce
