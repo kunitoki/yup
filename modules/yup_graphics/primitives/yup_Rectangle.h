@@ -34,10 +34,30 @@ public:
     {
     }
 
+    constexpr Rectangle (ValueType x, ValueType y, const Size<ValueType>& size) noexcept
+        : xy (x, y)
+        , size (size)
+    {
+    }
+
+    constexpr Rectangle (const Point<ValueType>& xy, ValueType width, ValueType height) noexcept
+        : xy (xy)
+        , size (width, height)
+    {
+    }
+
     constexpr Rectangle (const Point<ValueType>& xy, const Size<ValueType>& size) noexcept
         : xy (xy)
         , size (size)
     {
+    }
+
+    template <class T, class = std::enable_if_t<!std::is_same_v<T, ValueType>>>
+    constexpr Rectangle (const Rectangle<T>& other) noexcept
+        : xy (other.getTopLeft().template to<ValueType>())
+        , size (other.getSize().template to<ValueType>())
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
     }
 
     constexpr Rectangle (const Rectangle& other) noexcept = default;
@@ -76,8 +96,18 @@ public:
     }
 
     template <class T>
+    constexpr Rectangle withPosition (const Point<T>& newPosition) noexcept
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        return { newPosition.template to<ValueType>(), size };
+    }
+
+    template <class T>
     constexpr Rectangle withSize (const Size<T>& newSize) noexcept
     {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
         return { xy, newSize.template to<ValueType>() };
     }
 
