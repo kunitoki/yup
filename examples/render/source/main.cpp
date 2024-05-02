@@ -33,14 +33,6 @@
 
 #include <memory>
 
-enum class API
-{
-    gl,
-    metal,
-    d3d,
-    dawn,
-};
-
 //==============================================================================
 
 class CustomWindow : public juce::DocumentWindow
