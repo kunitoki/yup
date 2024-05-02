@@ -31,11 +31,11 @@ public:
     {
         constexpr Options() noexcept = default;
 
-        bool retinaDisplay                 : 1 = true;
-        bool readableFramebuffer           : 1 = true;
-        bool synchronousShaderCompilations : 1 = false;
-        bool enableReadPixels              : 1 = false;
-        bool disableRasterOrdering         : 1 = false;
+        bool retinaDisplay                 = true;
+        bool readableFramebuffer           = true;
+        bool synchronousShaderCompilations = false;
+        bool enableReadPixels              = false;
+        bool disableRasterOrdering         = false;
     };
 
     enum Api
@@ -46,7 +46,7 @@ public:
         Dawn
     };
 
-    GraphicsContext () noexcept = default;
+    GraphicsContext() noexcept = default;
     virtual ~GraphicsContext() = default;
 
     GraphicsContext (const GraphicsContext& other) noexcept = delete;

@@ -235,17 +235,24 @@ public:
     {
         jassert (window != nullptr);
 
-        glfwSetWindowTitle (window, title.toRawUTF8());
+        if (windowTitle != title)
+        {
+            glfwSetWindowTitle (window, title.toRawUTF8());
+
+            windowTitle = title;
+        }
     }
 
     String getTitle() const override
     {
+       #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
         jassert (window != nullptr);
 
         if (auto title = glfwGetWindowTitle (window))
             return String::fromUTF8 (title);
+       #endif
 
-        return {};
+        return windowTitle;
     }
 
     void setVisible (bool shouldBeVisible) override
@@ -278,7 +285,7 @@ public:
         {
             var canvas = document.getElementById("canvas");
             canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
-        }, size.getWidth(), height);
+        }, size.getWidth(), size.getHeight());
 
        #else
         glfwSetWindowSize (window, size.getWidth(), size.getHeight());
@@ -372,6 +379,7 @@ public:
 
 private:
     GLFWwindow* window = nullptr;
+    String windowTitle;
     float frameRate = 60.0f;
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
