@@ -34,4 +34,23 @@ DocumentWindow::~DocumentWindow()
     removeFromDesktop();
 }
 
+void DocumentWindow::centreWithSize (const Size<int>& size)
+{
+    auto desktop = Desktop::getInstance();
+
+    if (auto display = desktop->getPrimaryDisplay())
+    {
+        auto posX = jmax (0, (display->workArea.getWidth() - size.getWidth()) / 2);
+        auto posY = jmax (0, (display->workArea.getHeight() - size.getHeight()) / 2);
+
+        // TODO - take into account the frame and taskbar
+
+        setBounds ({ posX, posY, size.getWidth(), size.getHeight() });
+    }
+    else
+    {
+        setSize (size);
+    }
+}
+
 } // namespace juce

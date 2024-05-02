@@ -50,10 +50,25 @@ public:
     int getWidth() const;
     int getHeight() const;
 
+    Point<int> getPosition() const;
+    int getX() const;
+    int getY() const;
+
+    virtual void setBounds (const Rectangle<int>& newBounds);
+    Rectangle<int> getBounds() const;
+
     virtual void resized();
 
     //==============================================================================
+    virtual void setFullScreen (bool shouldBeFullScreen);
+    bool isFullScreen() const;
+
+    //==============================================================================
     float getScaleDpi() const;
+
+    //==============================================================================
+    virtual void setOpacity (float opacity);
+    float getOpacity() const;
 
     //==============================================================================
     void* getNativeHandle() const;
@@ -108,12 +123,14 @@ private:
     Rectangle<float> boundsInParent;
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
+    uint8 opacity = 255;
 
     struct Options
     {
-        bool isVisible : 1;
-        bool hasFrame  : 1;
-        bool onDesktop : 1;
+        bool isVisible    : 1;
+        bool hasFrame     : 1;
+        bool onDesktop    : 1;
+        bool isFullScreen : 1;
     };
 
     union

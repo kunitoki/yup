@@ -55,7 +55,7 @@ public:
 
     float dpiScale(void* window) const override
     {
-        NSWindow* nsWindow = (NSWindow*)window; // glfwGetCocoaWindow(window);
+        NSWindow* nsWindow = (NSWindow*)window;
         return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1;
     }
 
@@ -66,7 +66,7 @@ public:
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-        NSWindow* nsWindow = (NSWindow*)window; // glfwGetCocoaWindow(window);
+        NSWindow* nsWindow = (NSWindow*)window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
 

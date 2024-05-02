@@ -22,18 +22,37 @@
 namespace juce
 {
 
+class JUCE_API Display
+{
+public:
+    Display() {}
+
+    Size<int> physicalSizeMillimeters;
+    float contentScaleX = 1.0f;
+    float contentScaleY = 1.0f;
+    Point<int> virtualPosition;
+    Rectangle<int> workArea;
+    String name;
+    bool isPrimary = false;
+};
+
 class JUCE_API Desktop
 {
 public:
-    Desktop() noexcept;
+    Desktop();
+    ~Desktop();
 
-    Desktop (const Desktop& other) noexcept = delete;
-    Desktop (Desktop&& other) noexcept = default;
-    Desktop& operator=(const Desktop& other) noexcept = delete;
-    Desktop& operator=(Desktop&& other) noexcept = default;
+    int getNumDisplays() const;
+    Display* getDisplay (int displayIndex) const;
+    Display* getPrimaryDisplay() const;
+
+    /** @internal */
+    void updateDisplays();
+
+    JUCE_DECLARE_SINGLETON (Desktop, true)
 
 private:
-
+    OwnedArray<Display> displays;
 };
 
 } // namespace juce

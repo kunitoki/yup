@@ -88,7 +88,7 @@ String Component::getTitle() const
 
 void Component::setSize (const Size<int>& newSize)
 {
-    boundsInParent = boundsInParent.withSize (newSize.to<float>());
+    boundsInParent = boundsInParent.withSize (newSize);
 
     if (options.onDesktop)
         native->setSize (newSize);
@@ -122,8 +122,56 @@ int Component::getHeight() const
     return static_cast<int> (boundsInParent.getHeight());
 }
 
+Point<int> Component::getPosition() const
+{
+    return boundsInParent.getTopLeft().to<int>();
+}
+
+int Component::getX() const
+{
+    return static_cast<int> (boundsInParent.getX());
+}
+
+int Component::getY() const
+{
+    return static_cast<int> (boundsInParent.getY());
+}
+
+void Component::setBounds (const Rectangle<int>& newBounds)
+{
+    boundsInParent = newBounds.to<float>();
+
+    if (options.onDesktop)
+        native->setBounds (newBounds);
+
+    resized();
+}
+
+Rectangle<int> Component::getBounds() const
+{
+    return boundsInParent.to<int>();
+}
+
 void Component::resized()
 {
+}
+
+//==============================================================================
+
+void Component::setFullScreen (bool shouldBeFullScreen)
+{
+    if (options.isFullScreen != shouldBeFullScreen)
+    {
+        options.isFullScreen = shouldBeFullScreen;
+
+        if (options.onDesktop)
+            native->setFullScreen (shouldBeFullScreen);
+    }
+}
+
+bool Component::isFullScreen() const
+{
+    return options.isFullScreen;
 }
 
 //==============================================================================
@@ -137,6 +185,23 @@ float Component::getScaleDpi() const
         return 1.0f;
 
     return parentComponent->getScaleDpi();
+}
+
+//==============================================================================
+
+void Component::setOpacity (float newOpacity)
+{
+    newOpacity = jlimit (0.0f, 1.0f, newOpacity);
+
+    opacity = static_cast<uint8> (newOpacity * 255);
+
+    if (native != nullptr)
+        native->setOpacity (newOpacity);
+}
+
+float Component::getOpacity() const
+{
+    return opacity / 255.0f;
 }
 
 //==============================================================================

@@ -25,29 +25,45 @@ namespace juce
 class Component;
 
 //==============================================================================
-
 class JUCE_API ComponentNative
 {
 public:
+    //==============================================================================
     ComponentNative (Component& newComponent);
     virtual ~ComponentNative();
 
+    //==============================================================================
     virtual void setTitle (const String& title) = 0;
     virtual String getTitle() const = 0;
 
+    //==============================================================================
     virtual void setVisible (bool shouldBeVisible) = 0;
     virtual bool isVisible() const = 0;
 
+    //==============================================================================
     virtual void setSize (const Size<int>& newSize) = 0;
     virtual Size<int> getSize() const = 0;
     virtual Size<int> getContentSize() const = 0;
+    virtual void setBounds (const Rectangle<int>& newBounds) = 0;
 
+    //==============================================================================
+    virtual void setFullScreen (bool shouldBeFullScreen) = 0;
+    virtual bool isFullScreen() const = 0;
+
+    //==============================================================================
+    virtual void setOpacity (float opacity) = 0;
+    virtual float getOpacity() const = 0;
+
+    //==============================================================================
     virtual void* getNativeHandle() const = 0;
 
+    //==============================================================================
     virtual float getScaleDpi() const = 0;
 
+    //==============================================================================
     virtual rive::Factory* getFactory() = 0;
 
+    //==============================================================================
     void handlePaint (Graphics& g, float frameRate);
     void handleMouseMove (const MouseEvent& event);
     void handleMouseDrag (const MouseEvent& event);
@@ -58,11 +74,13 @@ public:
     void handleResized (int width, int height);
     void handleUserTriedToCloseWindow();
 
+    //==============================================================================
     static std::unique_ptr<ComponentNative> createFor (Component& component, std::optional<float> framerateRedraw);
 
-private:
+protected:
     Component& component;
 
+private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)
 };
 

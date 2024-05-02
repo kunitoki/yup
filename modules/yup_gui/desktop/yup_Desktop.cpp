@@ -22,8 +22,33 @@
 namespace juce
 {
 
-Desktop::Desktop() noexcept
+Desktop::Desktop()
 {
 }
+
+Desktop::~Desktop()
+{
+    clearSingletonInstance();
+}
+
+int Desktop::getNumDisplays() const
+{
+    return displays.size();
+}
+
+Display* Desktop::getDisplay (int displayIndex) const
+{
+    if (isPositiveAndBelow (displayIndex, displays.size()))
+        return displays.getUnchecked (displayIndex);
+
+    return nullptr;
+}
+
+Display* Desktop::getPrimaryDisplay() const
+{
+    return !displays.isEmpty() ? getDisplay(0) : nullptr;
+}
+
+JUCE_IMPLEMENT_SINGLETON (Desktop)
 
 } // namespace juce

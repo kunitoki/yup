@@ -137,6 +137,10 @@ public:
         case juce::KeyPress::textFKey:
             disableFill = !disableFill;
             break;
+
+        case juce::KeyPress::textZKey:
+            setFullScreen (!isFullScreen());
+            break;
         }
     }
 
@@ -297,7 +301,7 @@ struct Application : juce::JUCEApplication
         juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-        window->setSize ({ 800, 800 });
+        window->centreWithSize ({ 800, 800 });
         window->setVisible (true);
     }
 

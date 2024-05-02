@@ -31,6 +31,8 @@ public:
     DocumentWindow();
     ~DocumentWindow() override;
 
+    void centreWithSize (const Size<int>& size);
+
 private:
     //==============================================================================
 

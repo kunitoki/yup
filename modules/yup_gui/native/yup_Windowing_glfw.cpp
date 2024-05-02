@@ -202,11 +202,15 @@ public:
         glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
         //glfwWindowHint (GLFW_DECORATED, GLFW_FALSE);
 
+        auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
+
         window = glfwCreateWindow (jmax (1, component.getWidth()),
                                    jmax (1, component.getHeight()),
                                    component.getTitle().toRawUTF8(),
-                                   nullptr,
+                                   monitor,
                                    nullptr);
+
+        glfwSetWindowPos (window, component.getX(), component.getY());
 
        #if JUCE_MAC
         NSWindow* nswindow = glfwGetCocoaWindow (window);
@@ -325,9 +329,79 @@ public:
         return { width, height };
     }
 
+    void setBounds (const Rectangle<int>& newBounds) override
+    {
+        jassert (window != nullptr);
+
+       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+        glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
+        glfwSetWindowSize (window, newBounds.getWidth() * 2, newBounds.getHeight() * 2);
+
+        //emscripten_set_canvas_element_size ("#canvas", newBounds.getWidth(), newBounds.getHeight());
+
+        EM_ASM (
+        {
+            var canvas = document.getElementById("canvas");
+            canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
+        }, newBounds.getWidth(), newBounds.getHeight());
+
+       #else
+        glfwSetWindowSize (window, newBounds.getWidth(), newBounds.getHeight());
+        glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
+
+       #endif
+    }
+
+    void setFullScreen (bool shouldBeFullScreen) override
+    {
+        jassert (window != nullptr);
+
+        if (shouldBeFullScreen)
+        {
+            auto monitor = glfwGetPrimaryMonitor();
+            const GLFWvidmode* mode = glfwGetVideoMode (monitor);
+
+            glfwSetWindowMonitor (window,
+                                  monitor,
+                                  0,
+                                  0,
+                                  mode->width,
+                                  mode->height,
+                                  mode->refreshRate);
+        }
+        else
+        {
+            glfwSetWindowMonitor (window,
+                                  nullptr,
+                                  component.getX(),
+                                  component.getY(),
+                                  component.getWidth(),
+                                  component.getHeight(),
+                                  GLFW_DONT_CARE);
+        }
+    }
+
+    bool isFullScreen() const override
+    {
+        return window != nullptr && glfwGetWindowMonitor (window) != nullptr;
+    }
+
     float getScaleDpi() const override
     {
         return context->dpiScale (getNativeHandle());
+    }
+
+    void setOpacity (float opacity) override
+    {
+        jassert (window != nullptr);
+        jassert (isPositiveAndBelow (opacity, 1.0f));
+
+        glfwSetWindowOpacity (window, opacity);
+    }
+
+    float getOpacity() const override
+    {
+        return window ? glfwGetWindowOpacity (window) : 1.0f;
     }
 
     rive::Factory* getFactory() override
@@ -500,6 +574,70 @@ void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, i
 
 //==============================================================================
 
+void juce_glfwMonitorCallback (GLFWmonitor* monitor, int event)
+{
+    auto desktop = Desktop::getInstance();
+
+    if (event == GLFW_CONNECTED)
+    {
+    }
+    else if (event == GLFW_DISCONNECTED)
+    {
+    }
+
+    desktop->updateDisplays();
+}
+
+void Desktop::updateDisplays()
+{
+    int count;
+    GLFWmonitor** monitors = glfwGetMonitors (&count);
+    auto primaryMonitor = glfwGetPrimaryMonitor();
+
+    for (int index = 0; index < count; ++index)
+    {
+        auto monitor = monitors[index];
+        if (monitor == nullptr)
+            continue;
+
+        auto display = std::make_unique<Display>();
+        glfwSetMonitorUserPointer (monitor, display.get());
+
+        int physicalWidth = 0, physicalHeight = 0;
+        glfwGetMonitorPhysicalSize (monitor, &physicalWidth, &physicalHeight);
+        display->physicalSizeMillimeters = Size<int> (physicalWidth, physicalHeight);
+
+        int posX = 0, posY = 0;
+        glfwGetMonitorPos (monitor, &posX, &posY);
+        display->virtualPosition = Point<int> (posX, posY);
+
+        int workX = 0, workY = 0, workWidth = 0, workHeight = 0;
+        glfwGetMonitorWorkarea (monitor, &workX, &workY, &workWidth, &workHeight);
+        display->workArea = Rectangle<int> (workX, workY, workWidth, workHeight);
+
+        float scaleX = 1.0f, scaleY = 1.0f;
+        glfwGetMonitorContentScale (monitor, &scaleX, &scaleY);
+        display->contentScaleX = scaleX;
+        display->contentScaleY = scaleY;
+
+        if (auto name = glfwGetMonitorName (monitor))
+            display->name = String::fromUTF8 (name);
+
+        if (primaryMonitor == monitor)
+        {
+            display->isPrimary = true;
+
+            displays.insert (0, display.release());
+        }
+        else
+        {
+            displays.add (display.release());
+        }
+    }
+}
+
+//==============================================================================
+
 void juce_glfwErrorCallback (int code, const char* message)
 {
     DBG ("GLFW Error: " << code << " - " << message);
@@ -525,6 +663,9 @@ void JUCEApplication::staticInitialisation()
     glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 6);
    #endif
+
+    Desktop::getInstance()->updateDisplays();
+    glfwSetMonitorCallback (juce_glfwMonitorCallback);
 }
 
 void JUCEApplication::staticFinalisation()

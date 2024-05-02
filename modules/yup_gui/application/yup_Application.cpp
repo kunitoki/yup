@@ -27,10 +27,14 @@ namespace juce
 JUCEApplication::JUCEApplication()
 {
     staticInitialisation();
+
+    Desktop::getInstance();
 }
 
 JUCEApplication::~JUCEApplication()
 {
+    Desktop::deleteInstance();
+
     staticFinalisation();
 }
 
