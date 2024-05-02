@@ -28,14 +28,6 @@
 
 #include <memory>
 
-enum class API
-{
-    gl,
-    metal,
-    d3d,
-    dawn,
-};
-
 //==============================================================================
 
 class CustomWindow : public juce::DocumentWindow
@@ -78,7 +70,7 @@ public:
 
         if (event.isLeftButtoDown())
         {
-            rive::float2 pos = rive::float2 { (float)x, (float)y };
+            rive::float2 pos = rive::float2 { x, y };
             if (dragIdx >= 0)
                 pts[dragIdx] += (pos - dragLastPos);
             else
@@ -100,7 +92,7 @@ public:
             forceAtomicMode = !forceAtomicMode;
             fpsLastTime = 0;
             fpsFrames = 0;
-            needsTitleUpdate = true;
+            resized();
             break;
 
         case juce::KeyPress::textDKey:
@@ -145,52 +137,20 @@ public:
         case juce::KeyPress::textFKey:
             disableFill = !disableFill;
             break;
-
-        case juce::KeyPress::textPKey:
-            paused = !paused;
-            break;
-
-        case juce::KeyPress::upKey:
-        {
-            float oldScale = scale;
-            scale *= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
-            translate = cursorPos + (translate - cursorPos) * scale / oldScale;
-            break;
         }
+    }
 
-        case juce::KeyPress::downKey:
-        {
-            float oldScale = scale;
-            scale /= 1.25;
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
-            translate = cursorPos + (translate - cursorPos) * scale / oldScale;
-            break;
-        }
-        }
+    void resized() override
+    {
+        auto [width, height] = getContentSize();
+
+        updateWindowTitle (width, height);
     }
 
     void paint (juce::Graphics& g, float frameRate) override
     {
         double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-
         auto [width, height] = getContentSize();
-        if (lastWidth != width || lastHeight != height)
-        {
-            DBG ("size changed to " << width << "x" << height << "\n");
-
-            lastWidth = width;
-            lastHeight = height;
-
-            needsTitleUpdate = true;
-        }
-
-        if (needsTitleUpdate)
-        {
-            updateWindowTitle (0, width, height);
-            needsTitleUpdate = false;
-        }
-
         auto renderer = g.getRenderer();
 
         rive::float2 p[9];
@@ -245,19 +205,16 @@ public:
 
     void userTriedToCloseWindow() override
     {
-        juce::MessageManager::callAsync ([this]
-        {
-            juce::JUCEApplication::getInstance()->systemRequestedQuit();
-        });
+        juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 
 private:
-    void updateWindowTitle(double fps, int width, int height)
+    void updateWindowTitle(int width, int height)
     {
         juce::String title;
 
-        if (fps != 0)
-            title << "[" << fps << " FPS]";
+        if (currentFps != 0)
+            title << "[" << currentFps << " FPS]";
 
         title << " | " << "YUP On Rive Renderer";
 
@@ -274,11 +231,11 @@ private:
         ++fpsFrames;
 
         double fpsElapsed = time - fpsLastTime;
-        if (fpsElapsed > 2)
+        if (fpsElapsed > 1)
         {
-            double fps = fpsLastTime == 0 ? 0 : fpsFrames / fpsElapsed;
+            currentFps = fpsLastTime == 0 ? 0 : fpsFrames / fpsElapsed;
 
-            updateWindowTitle (fps, width, height);
+            updateWindowTitle (width, height);
 
             fpsFrames = 0;
             fpsLastTime = time;
@@ -310,14 +267,13 @@ private:
     rive::StrokeJoin join = rive::StrokeJoin::miter;
     rive::StrokeCap cap = rive::StrokeCap::butt;
     bool doClose = false;
-    bool paused = false;
     int dragIdx = -1;
     rive::float2 dragLastPos;
 
     int lastWidth = 0, lastHeight = 0;
     double fpsLastTime = 0;
+    double currentFps = 0;
     int fpsFrames = 0;
-    bool needsTitleUpdate = false;
 };
 
 //==============================================================================

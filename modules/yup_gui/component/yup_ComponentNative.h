@@ -55,6 +55,7 @@ public:
     void handleMouseUp (const MouseEvent& event);
     void handleKeyDown (const KeyPress& keys, double x, double y);
     void handleKeyUp (const KeyPress& keys, double x, double y);
+    void handleResized (int width, int height);
     void handleUserTriedToCloseWindow();
 
     static std::unique_ptr<ComponentNative> createFor (Component& component, std::optional<float> framerateRedraw);

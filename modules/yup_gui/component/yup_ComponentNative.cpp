@@ -62,16 +62,23 @@ void ComponentNative::handleMouseUp (const MouseEvent& event)
     component.internalMouseUp (event);
 }
 
+//==============================================================================
+
 void ComponentNative::handleKeyDown (const KeyPress& keys, double x, double y)
 {
     component.internalKeyDown (keys, x, y);
 }
 
-//==============================================================================
-
 void ComponentNative::handleKeyUp (const KeyPress& keys, double x, double y)
 {
     component.internalKeyUp (keys, x, y);
+}
+
+//==============================================================================
+
+void ComponentNative::handleResized (int width, int height)
+{
+    component.internalResized();
 }
 
 void ComponentNative::handleUserTriedToCloseWindow()

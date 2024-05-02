@@ -25,6 +25,7 @@ namespace juce
 //==============================================================================
 
 void juce_glfwWindowClose (GLFWwindow* window);
+void juce_glfwWindowSize (GLFWwindow* window, int width, int height);
 void juce_glfwMouseMove (GLFWwindow* window, double x, double y);
 void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods);
 void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -198,7 +199,14 @@ public:
         swapchain.opaque = YES;
        #endif
 
-        window = glfwCreateWindow (800, 800, "", nullptr, nullptr);
+        glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
+        //glfwWindowHint (GLFW_DECORATED, GLFW_FALSE);
+
+        window = glfwCreateWindow (jmax (1, component.getWidth()),
+                                   jmax (1, component.getHeight()),
+                                   component.getTitle().toRawUTF8(),
+                                   nullptr,
+                                   nullptr);
 
        #if JUCE_MAC
         NSWindow* nswindow = glfwGetCocoaWindow (window);
@@ -210,12 +218,18 @@ public:
         if (context == nullptr)
             return;
 
+       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+        glfwMakeContextCurrent (window);
+        glfwSwapInterval (1);
+       #endif
+
         glfwSetWindowUserPointer (window, this);
 
         glfwSetWindowCloseCallback (window, juce_glfwWindowClose);
         glfwSetCursorPosCallback (window, juce_glfwMouseMove);
         glfwSetMouseButtonCallback (window, juce_glfwMousePress);
         glfwSetKeyCallback (window, juce_glfwKeyPress);
+        glfwSetWindowSizeCallback (window, juce_glfwWindowSize);
 
         startTimerHz (static_cast<int> (frameRate));
     }
@@ -407,6 +421,15 @@ void juce_glfwWindowClose (GLFWwindow* window)
     auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     component->handleUserTriedToCloseWindow();
+}
+
+//==============================================================================
+
+void juce_glfwWindowSize (GLFWwindow* window, int width, int height)
+{
+    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    component->handleResized(width, height);
 }
 
 //==============================================================================

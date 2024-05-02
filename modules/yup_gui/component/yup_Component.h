@@ -47,6 +47,8 @@ public:
     virtual void setSize (const Size<int>& newSize);
     Size<int> getSize() const;
     Size<int> getContentSize() const;
+    int getWidth() const;
+    int getHeight() const;
 
     virtual void resized();
 
@@ -94,6 +96,7 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalKeyDown (const KeyPress& keys, double x, double y);
     void internalKeyUp (const KeyPress& keys, double x, double y);
+    void internalResized();
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;

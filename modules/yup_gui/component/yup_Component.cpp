@@ -112,6 +112,16 @@ Size<int> Component::getContentSize() const
     return getSize();
 }
 
+int Component::getWidth() const
+{
+    return static_cast<int> (boundsInParent.getWidth());
+}
+
+int Component::getHeight() const
+{
+    return static_cast<int> (boundsInParent.getHeight());
+}
+
 void Component::resized()
 {
 }
@@ -267,6 +277,11 @@ void Component::internalKeyDown (const KeyPress& keys, double x, double y)
 void Component::internalKeyUp (const KeyPress& keys, double x, double y)
 {
     keyUp (keys, x, y);
+}
+
+void Component::internalResized()
+{
+    resized();
 }
 
 void Component::internalUserTriedToCloseWindow()
