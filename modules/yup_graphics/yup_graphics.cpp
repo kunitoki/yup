@@ -33,18 +33,31 @@
 //==============================================================================
 
 #if JUCE_WINDOWS
- #include "native/yup_LowLevelRenderContext_d3d.cpp"
+ #include <array>
+ #include <dxgi1_2.h>
+
+ #include "native/yup_GraphicsContext_d3d.cpp"
 
 #elif JUCE_MAC || JUCE_IOS
- #include "native/yup_LowLevelRenderContext_metal.cpp"
+ #import <Metal/Metal.h>
+ #import <Cocoa/Cocoa.h>
+ #import <QuartzCore/CAMetalLayer.h>
+
+ #include "native/yup_GraphicsContext_metal.cpp"
 
 #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
- #include "native/yup_LowLevelRenderContext_gl.cpp"
+
+ #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+   #include <emscripten/emscripten.h>
+   #include <emscripten/html5.h>
+ #endif
+
+ #include "native/yup_GraphicsContext_gl.cpp"
 
 #endif
 
-#include "native/yup_LowLevelRenderContext_dawn.cpp"
-#include "native/yup_LowLevelRenderContext_dawn_helper.cpp"
+#include "native/yup_GraphicsContext_dawn.cpp"
+#include "native/yup_GraphicsContext_dawn_helper.cpp"
 #include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================

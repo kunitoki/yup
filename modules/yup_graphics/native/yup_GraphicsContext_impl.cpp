@@ -27,7 +27,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Options options
     return createContext (Api::Metal, options);
    #elif JUCE_WINDOWS
     return createContext (Api::Direct3D, options);
-   #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
+   #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
     return createContext (Api::OpenGL, options);
    #else
     return nullptr;
@@ -42,7 +42,7 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
     case Api::Metal:        return juce_constructMetalGraphicsContext (options);
    #elif JUCE_WINDOWS
     case Api::Direct3D:     return juce_constructDirect3DGraphicsContext (options);
-   #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
+   #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
     case Api::OpenGL:       return juce_constructOpenGLGraphicsContext (options);
    #endif
     case Api::Dawn:         return juce_constructDawnGraphicsContext (options);

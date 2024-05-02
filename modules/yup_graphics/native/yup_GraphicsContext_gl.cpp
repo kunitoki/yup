@@ -19,17 +19,10 @@
   ==============================================================================
 */
 
-#include "yup_LowLevelRenderContext.h"
-
 #include "rive/pls/gl/gles3.hpp"
 #include "rive/pls/pls_renderer.hpp"
 #include "rive/pls/gl/pls_render_context_gl_impl.hpp"
 #include "rive/pls/gl/pls_render_target_gl.hpp"
-
-#if RIVE_WEBGL
-#include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
-#endif
 
 #if RIVE_DESKTOP_GL
 #define GLFW_INCLUDE_NONE

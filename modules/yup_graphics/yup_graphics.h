@@ -61,6 +61,5 @@
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"
 #include "primitives/yup_Rectangle.h"
-#include "native/yup_LowLevelRenderContext.h"
 #include "graphics/yup_Graphics.h"
 #include "context/yup_GraphicsContext.h"

@@ -19,19 +19,9 @@
   ==============================================================================
 */
 
-#include "yup_LowLevelRenderContext.h"
-
 #include "rive/pls/pls_renderer.hpp"
 #include "rive/pls/d3d/pls_render_context_d3d_impl.hpp"
 #include "rive/pls/d3d/d3d11.hpp"
-
-#include <array>
-#include <dxgi1_2.h>
-
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
 
 namespace juce
 {
@@ -74,7 +64,7 @@ public:
         scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
         VERIFY_OK (m_d3dFactory->CreateSwapChainForHwnd (m_gpu.Get(),
-                                                         (HWND) window, // glfwGetWin32Window(window),
+                                                         (HWND) window,
                                                          &scd,
                                                          nullptr,
                                                          nullptr,

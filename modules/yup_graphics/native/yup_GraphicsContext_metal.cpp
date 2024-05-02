@@ -19,14 +19,8 @@
   ==============================================================================
 */
 
-#include "yup_LowLevelRenderContext.h"
-
 #include "rive/pls/pls_renderer.hpp"
 #include "rive/pls/metal/pls_render_context_metal_impl.h"
-
-#import <Metal/Metal.h>
-#import <Cocoa/Cocoa.h>
-#import <QuartzCore/CAMetalLayer.h>
 
 namespace juce
 {

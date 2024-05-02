@@ -19,8 +19,6 @@
   ==============================================================================
 */
 
-#include "yup_LowLevelRenderContext.h"
-
 #if RIVE_DAWN
 #include "dawn/native/DawnNative.h"
 #include "dawn/dawn_proc.h"
