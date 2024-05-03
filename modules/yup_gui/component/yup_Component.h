@@ -56,6 +56,7 @@ public:
 
     virtual void setBounds (const Rectangle<int>& newBounds);
     Rectangle<int> getBounds() const;
+    Rectangle<int> getLocalBounds() const;
 
     virtual void resized();
 
@@ -87,11 +88,15 @@ public:
     void addChildComponent (Component& component);
     void addChildComponent (Component* component);
 
+    void addAndMakeVisible (Component& component);
+    void addAndMakeVisible (Component* component);
+
     void removeChildComponent (Component& component);
     void removeChildComponent (Component* component);
 
     //==============================================================================
     virtual void paint (Graphics& g, float frameRate);
+    virtual void paintOverChildren (Graphics& g, float frameRate);
 
     //==============================================================================
     virtual void mouseDown (const MouseEvent& event);
@@ -111,7 +116,7 @@ private:
     void internalMouseUp (const MouseEvent& event);
     void internalKeyDown (const KeyPress& keys, double x, double y);
     void internalKeyUp (const KeyPress& keys, double x, double y);
-    void internalResized();
+    void internalResized (int width, int height);
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;

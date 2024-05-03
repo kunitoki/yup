@@ -26,6 +26,7 @@ template <class ValueType>
 class JUCE_API Rectangle
 {
 public:
+    //==============================================================================
     constexpr Rectangle() noexcept = default;
 
     constexpr Rectangle (ValueType x, ValueType y, ValueType width, ValueType height) noexcept
@@ -54,17 +55,19 @@ public:
 
     template <class T, class = std::enable_if_t<!std::is_same_v<T, ValueType>>>
     constexpr Rectangle (const Rectangle<T>& other) noexcept
-        : xy (other.getTopLeft().template to<ValueType>())
+        : xy (other.getPosition().template to<ValueType>())
         , size (other.getSize().template to<ValueType>())
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
     }
 
+    //==============================================================================
     constexpr Rectangle (const Rectangle& other) noexcept = default;
     constexpr Rectangle (Rectangle&& other) noexcept = default;
     constexpr Rectangle& operator=(const Rectangle& other) noexcept = default;
     constexpr Rectangle& operator=(Rectangle&& other) noexcept = default;
 
+    //==============================================================================
     constexpr ValueType getX() const noexcept
     {
         return xy.getX();
@@ -75,6 +78,7 @@ public:
         return xy.getY();
     }
 
+    //==============================================================================
     constexpr ValueType getWidth() const noexcept
     {
         return size.getWidth();
@@ -85,18 +89,21 @@ public:
         return size.getHeight();
     }
 
-    constexpr Point<ValueType> getTopLeft() const noexcept
+    //==============================================================================
+    constexpr Point<ValueType> getPosition() const noexcept
     {
         return xy;
     }
 
-    constexpr Size<ValueType> getSize() const noexcept
+    constexpr Rectangle& setPosition (const Point<ValueType>& newPosition) noexcept
     {
-        return size;
+        xy = newPosition;
+
+        return *this;
     }
 
     template <class T>
-    constexpr Rectangle withPosition (const Point<T>& newPosition) noexcept
+    constexpr Rectangle withPosition (const Point<T>& newPosition) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
 
@@ -104,13 +111,84 @@ public:
     }
 
     template <class T>
-    constexpr Rectangle withSize (const Size<T>& newSize) noexcept
+    constexpr Rectangle withPosition (T x, T y) const noexcept
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        return { static_cast<ValueType> (x), static_cast<ValueType> (y), size };
+    }
+
+    constexpr Rectangle withZeroPosition() const noexcept
+    {
+        return { 0, 0, size };
+    }
+
+    //==============================================================================
+    constexpr Size<ValueType> getSize() const noexcept
+    {
+        return size;
+    }
+
+    constexpr Rectangle& setSize (const Size<ValueType>& newSize) noexcept
+    {
+        size = newSize;
+
+        return *this;
+    }
+
+    template <class T>
+    constexpr Rectangle withSize (const Size<T>& newSize) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
 
         return { xy, newSize.template to<ValueType>() };
     }
 
+    template <class T>
+    constexpr Rectangle withSize (T width, T height) const noexcept
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        return { xy, static_cast<ValueType> (width), static_cast<ValueType> (height) };
+    }
+
+    template <class T>
+    constexpr auto withScaledSize (T scaleFactor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle>
+    {
+        return withSize (size * scaleFactor);
+    }
+
+    constexpr Rectangle withZeroSize() const noexcept
+    {
+        return { xy, 0, 0 };
+    }
+
+    //==============================================================================
+    constexpr Rectangle& setBounds (int x, int y, int w, int h) noexcept
+    {
+        xy = { x, y };
+        size = { w, h };
+
+        return *this;
+    }
+
+    //==============================================================================
+    constexpr Rectangle& setCentre (ValueType centreX, ValueType centreY) noexcept
+    {
+        xy = { centreX - size.getWidth() / static_cast<ValueType> (2), centreY - size.getHeight() / static_cast<ValueType> (2) };
+
+        return *this;
+    }
+
+    constexpr Rectangle& setCentre (const Point<ValueType> centre) noexcept
+    {
+        setCentre (centre.getX(), centre.getY());
+
+        return *this;
+    }
+
+    //==============================================================================
     constexpr Rectangle& translate (ValueType deltaX, ValueType deltaY) noexcept
     {
         xy.translate (deltaX, deltaY);
@@ -128,12 +206,90 @@ public:
         return { xy.translated (delta), size };
     }
 
+    //==============================================================================
+    constexpr Rectangle removeFromTop (ValueType delta) noexcept
+    {
+        const Rectangle result { xy, size.withHeight (jmax (0, delta)) };
+
+        xy = xy.withY (xy.getY() + delta);
+        size = size.withHeight (jmax (0, size.getHeight() - delta));
+
+        return result;
+    }
+
+    constexpr Rectangle removeFromLeft (ValueType delta) noexcept
+    {
+        const Rectangle result { xy, size.withWidth (jmax (0, delta)) };
+
+        xy = xy.withX (xy.getX() + delta);
+        size = size.withWidth (jmax (0, size.getWidth() - delta));
+
+        return result;
+    }
+
+    constexpr Rectangle removeFromBottom (ValueType delta) noexcept
+    {
+        const Rectangle result { xy.withY (jmax (0, xy.getY() + xy.getHeight() - delta)), size.withHeight (jmax (0, delta)) };
+
+        size = size.withHeight (jmax (0, size.getHeight() - delta));
+
+        return result;
+    }
+
+    constexpr Rectangle removeFromRight (ValueType delta) noexcept
+    {
+        const Rectangle result { xy.withX (jmax (0, xy.getX() + xy.getWidth() - delta)), size.withWidth (jmax (0, delta)) };
+
+        size = size.withWidth (jmax (0, size.getWidth() - delta));
+
+        return result;
+    }
+
+    //==============================================================================
     template <class T>
     constexpr Rectangle<T> to() const noexcept
     {
         return { xy.template to<T>(), size.template to<T>() };
     }
 
+    //==============================================================================
+    template <class T>
+    constexpr auto operator* (T scaleFactor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle>
+    {
+        Rectangle r (*this);
+        r *= scaleFactor;
+        return r;
+    }
+
+    template <class T>
+    constexpr auto operator*= (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle&>
+    {
+        xy = { static_cast<ValueType> (xy.getX() * scaleFactor), static_cast<ValueType> (xy.getY() * scaleFactor) };
+        size = { static_cast<ValueType> (size.getWidth() * scaleFactor), static_cast<ValueType> (size.getHeight() * scaleFactor) };
+        return *this;
+    }
+
+    template <class T>
+    constexpr auto operator/ (T scaleFactor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle>
+    {
+        Rectangle r (*this);
+        r /= scaleFactor;
+        return r;
+    }
+
+    template <class T>
+    constexpr auto operator/= (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle&>
+    {
+        xy = { static_cast<ValueType> (xy.getX() / scaleFactor), static_cast<ValueType> (xy.getY() / scaleFactor) };
+        size = { static_cast<ValueType> (size.getWidth() / scaleFactor), static_cast<ValueType> (size.getHeight() / scaleFactor) };
+        return *this;
+    }
+
+    //==============================================================================
     constexpr bool operator== (const Rectangle& other) const noexcept
     {
         return xy == other.xy && size == other.size;

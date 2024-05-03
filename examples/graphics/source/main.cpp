@@ -30,11 +30,94 @@
 
 //==============================================================================
 
+class CustomComponent : public juce::Component
+{
+public:
+    CustomComponent()
+    {
+        random.setSeedRandomly();
+    }
+
+    void paint (juce::Graphics& g, float frameRate) override
+    {
+    }
+
+private:
+    juce::Random& random = juce::Random::getSystemRandom();
+};
+
+//==============================================================================
+
 class CustomWindow : public juce::DocumentWindow
 {
+    CustomComponent c;
+
 public:
     CustomWindow()
     {
+        addAndMakeVisible (c);
+    }
+
+    void resized() override
+    {
+        c.setBounds (getLocalBounds());
+    }
+
+    void paint (juce::Graphics& g, float frameRate) override
+    {
+        double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+
+        auto renderer = g.getRenderer();
+        auto factory = g.getFactory();
+
+        rive::float2 p[9];
+        for (int i = 0; i < 9; ++i)
+            p[i] = pts[i] + translate;
+
+        rive::RawPath rawPath;
+        rawPath.moveTo (p[0].x, p[0].y);
+        rawPath.cubicTo (p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
+        rive::float2 c0 = rive::simd::mix (p[3], p[4], rive::float2 (2 / 3.f));
+        rive::float2 c1 = rive::simd::mix (p[5], p[4], rive::float2 (2 / 3.f));
+        rawPath.cubicTo (c0.x, c0.y, c1.x, c1.y, p[5].x, p[5].y);
+        rawPath.cubicTo (p[6].x, p[6].y, p[7].x, p[7].y, p[8].x, p[8].y);
+        if (doClose)
+            rawPath.close();
+
+        auto path = factory->makeRenderPath (rawPath, rive::FillRule::nonZero);
+
+        auto fillPaint = factory->makeRenderPaint();
+        fillPaint->style (rive::RenderPaintStyle::fill);
+        fillPaint->color (-1);
+
+        auto strokePaint = factory->makeRenderPaint();
+        strokePaint->style (rive::RenderPaintStyle::stroke);
+        strokePaint->color (0x8000ffff);
+        strokePaint->thickness (strokeWidth);
+        strokePaint->join (join);
+        strokePaint->cap (cap);
+
+        renderer->drawPath (path.get(), fillPaint.get());
+        renderer->drawPath (path.get(), strokePaint.get());
+
+        // Draw the interactive points.
+        auto pointPaint = factory->makeRenderPaint();
+        pointPaint->style (rive::RenderPaintStyle::stroke);
+        pointPaint->color (0xff0000ff);
+        pointPaint->thickness (14);
+        pointPaint->cap (rive::StrokeCap::round);
+
+        auto pointPath = factory->makeEmptyRenderPath();
+        for (int i : { 1, 2, 4, 6, 7 })
+        {
+            rive::float2 pt = pts[i] + translate;
+            pointPath->moveTo (pt.x, pt.y);
+        }
+
+        renderer->drawPath (pointPath.get(), pointPaint.get());
+
+        updateFrameTime (time);
+        updateWindowTitle();
     }
 
     void mouseDown (const juce::MouseEvent& event) override
@@ -47,7 +130,7 @@ public:
             dragIdx = -1;
             for (int i = 0; i < kNumInteractivePts; ++i)
             {
-                if (rive::simd::all (rive::simd::abs (dragLastPos - (pts[i] + translate)) < 100))
+                if (rive::simd::all (rive::simd::abs (dragLastPos - (pts[i] + translate)) < 20))
                 {
                     dragIdx = i;
                     break;
@@ -92,7 +175,6 @@ public:
             forceAtomicMode = !forceAtomicMode;
             fpsLastTime = 0;
             fpsFrames = 0;
-            resized();
             break;
 
         case juce::KeyPress::textDKey:
@@ -144,93 +226,28 @@ public:
         }
     }
 
-    void resized() override
-    {
-        auto [width, height] = getContentSize();
-
-        updateWindowTitle (width, height);
-    }
-
-    void paint (juce::Graphics& g, float frameRate) override
-    {
-        double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-        auto [width, height] = getContentSize();
-        auto renderer = g.getRenderer();
-
-        rive::float2 p[9];
-        for (int i = 0; i < 9; ++i)
-            p[i] = pts[i] + translate;
-
-        rive::RawPath rawPath;
-        rawPath.moveTo (p[0].x, p[0].y);
-        rawPath.cubicTo (p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        rive::float2 c0 = rive::simd::mix (p[3], p[4], rive::float2 (2 / 3.f));
-        rive::float2 c1 = rive::simd::mix (p[5], p[4], rive::float2 (2 / 3.f));
-        rawPath.cubicTo (c0.x, c0.y, c1.x, c1.y, p[5].x, p[5].y);
-        rawPath.cubicTo (p[6].x, p[6].y, p[7].x, p[7].y, p[8].x, p[8].y);
-        if (doClose)
-            rawPath.close();
-
-        rive::Factory* factory = g.getFactory();
-        auto path = factory->makeRenderPath (rawPath, rive::FillRule::nonZero);
-
-        auto fillPaint = factory->makeRenderPaint();
-        fillPaint->style (rive::RenderPaintStyle::fill);
-        fillPaint->color (-1);
-
-        auto strokePaint = factory->makeRenderPaint();
-        strokePaint->style (rive::RenderPaintStyle::stroke);
-        strokePaint->color (0x8000ffff);
-        strokePaint->thickness (strokeWidth);
-        strokePaint->join (join);
-        strokePaint->cap (cap);
-
-        renderer->drawPath (path.get(), fillPaint.get());
-        renderer->drawPath (path.get(), strokePaint.get());
-
-        // Draw the interactive points.
-        auto pointPaint = factory->makeRenderPaint();
-        pointPaint->style (rive::RenderPaintStyle::stroke);
-        pointPaint->color (0xff0000ff);
-        pointPaint->thickness (14);
-        pointPaint->cap (rive::StrokeCap::round);
-
-        auto pointPath = factory->makeEmptyRenderPath();
-        for (int i : { 1, 2, 4, 6, 7 })
-        {
-            rive::float2 pt = pts[i] + translate;
-            pointPath->moveTo (pt.x, pt.y);
-        }
-
-        renderer->drawPath (pointPath.get(), pointPaint.get());
-
-        updateFrameTime (time, width, height);
-    }
-
     void userTriedToCloseWindow() override
     {
         juce::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 
 private:
-    void updateWindowTitle(int width, int height)
+    void updateWindowTitle()
     {
         juce::String title;
 
         if (currentFps != 0)
-            title << "[" << currentFps << " FPS]";
+            title << "[" << juce::String (currentFps, 1) << " FPS]";
 
         title << " | " << "YUP On Rive Renderer";
 
         if (forceAtomicMode)
             title << " (atomic)";
 
-        title << " | " << width << " x " << height;
-
         setTitle (title);
     }
 
-    void updateFrameTime (double time, int width, int height)
+    void updateFrameTime (double time)
     {
         ++fpsFrames;
 
@@ -239,7 +256,7 @@ private:
         {
             currentFps = fpsLastTime == 0 ? 0 : fpsFrames / fpsElapsed;
 
-            updateWindowTitle (width, height);
+            updateWindowTitle ();
 
             fpsFrames = 0;
             fpsLastTime = time;

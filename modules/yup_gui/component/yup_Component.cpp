@@ -88,10 +88,16 @@ String Component::getTitle() const
 
 void Component::setSize (const Size<int>& newSize)
 {
-    boundsInParent = boundsInParent.withSize (newSize);
-
     if (options.onDesktop)
+    {
+        boundsInParent = boundsInParent.withSize (newSize * getScaleDpi());
+
         native->setSize (newSize);
+    }
+    else
+    {
+        boundsInParent = boundsInParent.withSize (newSize);
+    }
 
     resized();
 }
@@ -124,7 +130,7 @@ int Component::getHeight() const
 
 Point<int> Component::getPosition() const
 {
-    return boundsInParent.getTopLeft().to<int>();
+    return boundsInParent.getPosition().to<int>();
 }
 
 int Component::getX() const
@@ -139,10 +145,16 @@ int Component::getY() const
 
 void Component::setBounds (const Rectangle<int>& newBounds)
 {
-    boundsInParent = newBounds.to<float>();
-
     if (options.onDesktop)
+    {
+        boundsInParent = newBounds.withScaledSize (getScaleDpi()).to<float>();
+
         native->setBounds (newBounds);
+    }
+    else
+    {
+        boundsInParent = newBounds.to<float>();
+    }
 
     resized();
 }
@@ -150,6 +162,11 @@ void Component::setBounds (const Rectangle<int>& newBounds)
 Rectangle<int> Component::getBounds() const
 {
     return boundsInParent.to<int>();
+}
+
+Rectangle<int> Component::getLocalBounds() const
+{
+    return boundsInParent.withZeroPosition().to<int>();
 }
 
 void Component::resized()
@@ -276,6 +293,20 @@ void Component::addChildComponent (Component* component)
     children.addIfNotAlreadyThere (component);
 }
 
+void Component::addAndMakeVisible (Component& component)
+{
+    addChildComponent (component);
+
+    component.setVisible (true);
+}
+
+void Component::addAndMakeVisible (Component* component)
+{
+    addChildComponent (component);
+
+    component->setVisible (true);
+}
+
 void Component::removeChildComponent (Component& component)
 {
     component.parentComponent = nullptr;
@@ -293,6 +324,7 @@ void Component::removeChildComponent (Component* component)
 //==============================================================================
 
 void Component::paint (Graphics& g, float frameRate) {}
+void Component::paintOverChildren (Graphics& g, float frameRate) {}
 
 //==============================================================================
 
@@ -311,7 +343,18 @@ void Component::userTriedToCloseWindow() {}
 
 void Component::internalPaint (Graphics& g, float frameRate)
 {
+    if (! isVisible())
+        return;
+
     paint (g, frameRate);
+
+    for (auto child : children)
+    {
+        if (child->isVisible())
+            child->internalPaint (g, frameRate);
+    }
+
+    paintOverChildren (g, frameRate);
 }
 
 void Component::internalMouseDown (const MouseEvent& event)
@@ -344,8 +387,13 @@ void Component::internalKeyUp (const KeyPress& keys, double x, double y)
     keyUp (keys, x, y);
 }
 
-void Component::internalResized()
+void Component::internalResized (int width, int height)
 {
+    if (options.onDesktop)
+        boundsInParent = boundsInParent.withSize (Size<float> (width, height) * getScaleDpi());
+    else
+        boundsInParent = boundsInParent.withSize (width, height);
+
     resized();
 }
 

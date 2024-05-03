@@ -503,7 +503,7 @@ void juce_glfwWindowSize (GLFWwindow* window, int width, int height)
 {
     auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    component->handleResized(width, height);
+    component->handleResized (width, height);
 }
 
 //==============================================================================

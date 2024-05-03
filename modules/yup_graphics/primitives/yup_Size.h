@@ -26,6 +26,7 @@ template <class ValueType>
 class JUCE_API Size
 {
 public:
+    //==============================================================================
     constexpr Size() noexcept = default;
 
     constexpr Size (ValueType newWidth, ValueType newHeight) noexcept
@@ -34,11 +35,13 @@ public:
     {
     }
 
+    //==============================================================================
     constexpr Size (const Size& other) noexcept = default;
     constexpr Size (Size&& other) noexcept = default;
     constexpr Size& operator=(const Size& other) noexcept = default;
     constexpr Size& operator=(Size&& other) noexcept = default;
 
+    //==============================================================================
     constexpr ValueType getWidth() const noexcept
     {
         return width;
@@ -49,6 +52,7 @@ public:
         return height;
     }
 
+    //==============================================================================
     constexpr Size withWidth (ValueType newWidth) const noexcept
     {
         return { newWidth, height };
@@ -59,12 +63,47 @@ public:
         return { width, newHeight };
     }
 
+    //==============================================================================
     template <class T>
     constexpr Size<T> to() const noexcept
     {
         return { static_cast<T> (width), static_cast<T> (height) };
     }
 
+    //==============================================================================
+    template <class T>
+    constexpr auto operator* (T scaleFactor) const noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    {
+        Size r (*this);
+        r *= scaleFactor;
+        return r;
+    }
+
+    template <class T>
+    constexpr auto operator*= (T scaleFactor) noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
+    {
+        width = static_cast<ValueType> (width * scaleFactor);
+        height = static_cast<ValueType> (height * scaleFactor);
+        return *this;
+    }
+
+    template <class T>
+    constexpr auto operator/ (T scaleFactor) const noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    {
+        Size r (*this);
+        r /= scaleFactor;
+        return r;
+    }
+
+    template <class T>
+    constexpr auto operator/= (T scaleFactor) noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
+    {
+        width = static_cast<ValueType> (width / scaleFactor);
+        height = static_cast<ValueType> (height / scaleFactor);
+        return *this;
+    }
+
+    //==============================================================================
     constexpr bool operator== (const Size& other) const noexcept
     {
         return width == other.width && height == other.height;

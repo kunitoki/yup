@@ -78,7 +78,7 @@ void ComponentNative::handleKeyUp (const KeyPress& keys, double x, double y)
 
 void ComponentNative::handleResized (int width, int height)
 {
-    component.internalResized();
+    component.internalResized (width, height);
 }
 
 void ComponentNative::handleUserTriedToCloseWindow()

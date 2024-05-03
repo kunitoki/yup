@@ -168,6 +168,10 @@ public:
                 --downRepeat;
             break;
 
+        case juce::KeyPress::textZKey:
+            setFullScreen (!isFullScreen());
+            break;
+
         case juce::KeyPress::upKey:
         {
             float oldScale = scale;
@@ -312,7 +316,7 @@ private:
         juce::String title;
 
         if (fps != 0)
-            title << "[" << fps << " FPS]";
+            title << "[" << juce::String (fps, 1) << " FPS]";
 
         if (instances > 1)
             title << " (x" << instances << " instances)";
@@ -393,7 +397,7 @@ struct Application : juce::JUCEApplication
         juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-        window->setSize ({ 1280, 866 });
+        window->centreWithSize ({ 1280, 866 });
         window->setVisible (true);
     }
 

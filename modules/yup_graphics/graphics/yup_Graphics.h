@@ -22,19 +22,122 @@
 namespace juce
 {
 
+//==============================================================================
 class GraphicsContext;
 
+//==============================================================================
 class JUCE_API Graphics
 {
 public:
+
+    //==============================================================================
+    class JUCE_API SavedState
+    {
+    public:
+        SavedState (Graphics& g);
+
+        SavedState (SavedState&&);
+        SavedState& operator= (SavedState&&);
+
+        SavedState (const SavedState&) = delete;
+        SavedState& operator= (const SavedState&) = delete;
+
+        ~SavedState();
+
+    private:
+        Graphics* g = nullptr;
+    };
+
+    //==============================================================================
     Graphics (GraphicsContext& context, rive::Renderer& renderer) noexcept;
 
+    //==============================================================================
+    SavedState saveState();
+
+    //==============================================================================
+    void setColor (Color color);
+    Color getColor() const;
+
+    void setColorGradient (ColorGradient gradient);
+    ColorGradient getColorGradient() const;
+
+    void setOpacity (uint8 opacity);
+    uint8 getOpacity() const;
+
+    void setStrokeJoin (StrokeJoin join);
+    StrokeJoin getStrokeJoin() const;
+
+    void setStrokeCap (StrokeCap cap);
+    StrokeCap getStrokeCap() const;
+
+    //==============================================================================
+    void drawLine (float x1, float y1, float x2, float y2, float thickness);
+    void drawLine (const Point<float>& p1, const Point<float>& p2, float thickness);
+
+    //==============================================================================
+    void fillRect (float x, float y, float width, float height);
+    void fillRect (const Rectangle<float>& r);
+
+    void drawRect (float x, float y, float width, float height, float thickness);
+    void drawRect (const Rectangle<float>& r, float thickness);
+
+    //==============================================================================
+    void fillRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    void fillRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    void fillRoundedRect (float x, float y, float width, float height, float radius);
+    void fillRoundedRect (const Rectangle<float>& r, float radius);
+
+    void drawRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness);
+    void drawRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness);
+    void drawRoundedRect (float x, float y, float width, float height, float radius, float thickness);
+    void drawRoundedRect (const Rectangle<float>& r, float radius, float thickness);
+
+    //==============================================================================
     rive::Factory* getFactory();
     rive::Renderer* getRenderer();
 
 private:
+    struct RenderOptions
+    {
+        RenderOptions() noexcept = default;
+
+        bool isColor() const noexcept
+        {
+            return isCurrentBrushColor;
+        }
+
+        Color getColor() const noexcept
+        {
+            return color;
+        }
+
+        bool isColorGradient() const noexcept
+        {
+            return ! isCurrentBrushColor;
+        }
+
+        ColorGradient getColorGradient() const noexcept
+        {
+            return gradient;
+        }
+
+        StrokeJoin join = StrokeJoin::Miter;
+        StrokeCap cap = StrokeCap::Square;
+        Color color = 0xff000000;
+        ColorGradient gradient;
+        bool isCurrentBrushColor = true;
+    };
+
+    RenderOptions& currentRenderOptions();
+    const RenderOptions& currentRenderOptions() const;
+    void restoreState();
+
     GraphicsContext& context;
+
+    rive::Factory& factory;
     rive::Renderer& renderer;
+
+    std::vector<RenderOptions> renderOptions;
 };
 
 } // namespace juce
