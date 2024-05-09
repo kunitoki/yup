@@ -43,8 +43,6 @@ public:
     void mouseDown (const juce::MouseEvent& event) override
     {
         origin = event.getPosition();
-
-        DBG ("Hit: " << index);
     }
 
     void mouseUp (const juce::MouseEvent& event) override
