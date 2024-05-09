@@ -95,7 +95,7 @@ public:
 
             // don't wait for too long because running this loop also helps keep the
             // Time::getApproximateMillisecondTimer value stay up-to-date
-            wait (jlimit (1, 100, timeUntilFirstTimer));
+            wait (jlimit (1, 10, timeUntilFirstTimer));
         }
     }
 
