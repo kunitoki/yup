@@ -60,6 +60,7 @@
 
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"
+#include "primitives/yup_Line.h"
 #include "primitives/yup_Rectangle.h"
 #include "primitives/yup_Path.h"
 #include "graphics/yup_Color.h"

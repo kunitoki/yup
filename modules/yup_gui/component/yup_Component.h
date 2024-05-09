@@ -58,6 +58,9 @@ public:
     Rectangle<int> getBounds() const;
     Rectangle<int> getLocalBounds() const;
 
+    int proportionOfWidth (float proportion) const;
+    int proportionOfHeight (float proportion) const;
+
     virtual void resized();
 
     //==============================================================================

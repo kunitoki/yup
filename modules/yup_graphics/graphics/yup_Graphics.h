@@ -70,6 +70,9 @@ public:
     void setStrokeCap (StrokeCap cap);
     StrokeCap getStrokeCap() const;
 
+    void setDrawingArea (const Rectangle<float>& r);
+    Rectangle<float> getDrawingArea() const;
+
     //==============================================================================
     void drawLine (float x1, float y1, float x2, float y2, float thickness);
     void drawLine (const Point<float>& p1, const Point<float>& p2, float thickness);
@@ -125,16 +128,30 @@ private:
             return gradient;
         }
 
+        float translateX (float x) const noexcept
+        {
+            return x + drawingArea.getX();
+        }
+
+        float translateY (float y) const noexcept
+        {
+            return y + drawingArea.getY();
+        }
+
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
         Color color = 0xff000000;
         ColorGradient gradient;
+        Rectangle<float> drawingArea;
         bool isCurrentBrushColor = true;
     };
 
     RenderOptions& currentRenderOptions();
     const RenderOptions& currentRenderOptions() const;
     void restoreState();
+
+    void renderDrawPath (rive::RawPath& rawPath, const RenderOptions& options, float thickness);
+    void renderFillPath (rive::RawPath& rawPath, const RenderOptions& options);
 
     GraphicsContext& context;
 

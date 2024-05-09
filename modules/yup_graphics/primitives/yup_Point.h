@@ -26,6 +26,7 @@ template <class ValueType>
 class JUCE_API Point
 {
 public:
+    //==============================================================================
     constexpr Point() noexcept = default;
 
     constexpr Point (ValueType newX, ValueType newY) noexcept
@@ -34,11 +35,21 @@ public:
     {
     }
 
+    template <class T, std::enable_if_t<! std::is_same_v<T, ValueType>, int> = 0>
+    constexpr Point (T newX, T newY) noexcept
+        : x (static_cast<ValueType> (newX))
+        , y (static_cast<ValueType> (newY))
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+    }
+
+    //==============================================================================
     constexpr Point (const Point& other) noexcept = default;
     constexpr Point (Point&& other) noexcept = default;
     constexpr Point& operator=(const Point& other) noexcept = default;
     constexpr Point& operator=(Point&& other) noexcept = default;
 
+    //==============================================================================
     constexpr ValueType getX() const noexcept
     {
         return x;
@@ -49,6 +60,7 @@ public:
         return y;
     }
 
+    //==============================================================================
     constexpr Point withX (ValueType newX) const noexcept
     {
         return { newX, y };
@@ -59,11 +71,13 @@ public:
         return { x, newY };
     }
 
+    //==============================================================================
     constexpr Point withXY (ValueType newX, ValueType newY) const noexcept
     {
         return { newX, newY };
     }
 
+    //==============================================================================
     constexpr Point& translate (ValueType deltaX, ValueType deltaY) noexcept
     {
         x += deltaX;
@@ -71,7 +85,7 @@ public:
         return *this;
     }
 
-    constexpr Point& translate (Point<ValueType> delta) noexcept
+    constexpr Point& translate (const Point<ValueType>& delta) noexcept
     {
         x += delta.x;
         y += delta.y;
@@ -83,17 +97,57 @@ public:
         return { x + deltaX, y + deltaY };
     }
 
-    constexpr Point translated (Point<ValueType> delta) const noexcept
+    constexpr Point translated (const Point<ValueType>& delta) const noexcept
     {
         return { x + delta.x, y + delta.y };
     }
 
+    //==============================================================================
+    constexpr float distance (Point<ValueType> other) const noexcept
+    {
+        return std::sqrt (distanceSquared (other));
+    }
+
+    constexpr float distanceSquared (Point<ValueType> other) const noexcept
+    {
+        return square (other.x - x) + square (other.y - y);
+    }
+
+    constexpr float distanceX (Point<ValueType> other) const noexcept
+    {
+        return other.x - x;
+    }
+
+    constexpr float distanceY (Point<ValueType> other) const noexcept
+    {
+        return other.y - y;
+    }
+
+    //==============================================================================
+    constexpr Point getPointOnCircumference (float radius, float angleRadians) const noexcept
+    {
+        return { x + (std::cos (angleRadians) * radius), y + std::sin (angleRadians) * radius };
+    }
+
+    constexpr Point getPointOnCircumference (float radiusX, float radiusY, float angleRadians) const noexcept
+    {
+        return { x + (std::cos (angleRadians) * radiusX), y + std::sin (angleRadians) * radiusY };
+    }
+
+    //==============================================================================
     template <class T>
     constexpr Point<T> to() const noexcept
     {
         return { static_cast<T> (x), static_cast<T> (y) };
     }
 
+    //==============================================================================
+    constexpr Point operator- () const noexcept
+    {
+        return { -x, -y };
+    }
+
+    //==============================================================================
     constexpr bool operator== (const Point& other) const noexcept
     {
         return x == other.x && y == other.y;

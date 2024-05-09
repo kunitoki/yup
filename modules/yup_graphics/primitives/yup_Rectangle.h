@@ -165,27 +165,46 @@ public:
     }
 
     //==============================================================================
-    constexpr Rectangle& setBounds (int x, int y, int w, int h) noexcept
+    constexpr Rectangle& setBounds (int x, int y, int width, int height) noexcept
     {
         xy = { x, y };
-        size = { w, h };
+        size = { width, height };
 
         return *this;
     }
 
     //==============================================================================
-    constexpr Rectangle& setCentre (ValueType centreX, ValueType centreY) noexcept
+    constexpr Point<ValueType> getCenter() const noexcept
     {
-        xy = { centreX - size.getWidth() / static_cast<ValueType> (2), centreY - size.getHeight() / static_cast<ValueType> (2) };
+        return { xy.getX() + size.getWidth() / 2.0f, xy.getY() + size.getHeight() / 2.0f };
+    }
+
+    constexpr Rectangle& setCenter (ValueType centerX, ValueType centerY) noexcept
+    {
+        xy = { centerX - size.getWidth() / static_cast<ValueType> (2), centerY - size.getHeight() / static_cast<ValueType> (2) };
 
         return *this;
     }
 
-    constexpr Rectangle& setCentre (const Point<ValueType> centre) noexcept
+    constexpr Rectangle& setCenter (const Point<ValueType>& center) noexcept
     {
-        setCentre (centre.getX(), centre.getY());
+        setCenter (center.getX(), center.getY());
 
         return *this;
+    }
+
+    constexpr Rectangle withCenter (ValueType centerX, ValueType centerY) noexcept
+    {
+        Rectangle result = *this;
+        result.setCenter (centerX, centerY);
+        return result;
+    }
+
+    constexpr Rectangle withCenter (const Point<ValueType>& center) noexcept
+    {
+        Rectangle result = *this;
+        result.setCenter (center);
+        return result;
     }
 
     //==============================================================================
@@ -246,15 +265,34 @@ public:
     }
 
     //==============================================================================
+    constexpr Rectangle& reduce (ValueType delta) noexcept
+    {
+        xy = { xy.getX() + delta, xy.getY() + delta };
+        size = { jmax (0, size.getWidth () - 2 * delta), jmax (0, size.getHeight () - 2 * delta) };
+
+        return *this;
+    }
+
     constexpr Rectangle reduced (ValueType delta) noexcept
     {
+        Rectangle result = *this;
+        result.reduce (delta);
+        return result;
+    }
+
+    //==============================================================================
+    constexpr bool contains (ValueType x, ValueType y) const noexcept
+    {
         return
-        {
-            xy.getX() + delta,
-            xy.getY() + delta,
-            jmax (0, size.getWidth () - 2 * delta),
-            jmax (0, size.getHeight () - 2 * delta)
-        };
+            x >= xy.getX()
+            && y >= xy.getY()
+            && x <= xy.getX() + size.getWidth()
+            && y <= xy.getY() + size.getHeight();
+    }
+
+    constexpr bool contains (const Point<ValueType>& p) const noexcept
+    {
+        return contains (p.getX(), p.getY());
     }
 
     //==============================================================================

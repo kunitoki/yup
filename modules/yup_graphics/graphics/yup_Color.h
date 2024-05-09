@@ -67,15 +67,26 @@ public:
         return a;
     }
 
+    constexpr float getAlphaFloat() const noexcept
+    {
+        return componentToNormalized (a);
+    }
+
     constexpr Color& setAlpha (uint8 alpha) noexcept
     {
         a = alpha;
         return *this;
     }
 
+    constexpr Color& setAlpha (float alpha) noexcept
+    {
+        a = normalizedToComponent (alpha);
+        return *this;
+    }
+
     constexpr Color withAlpha (uint8 alpha) const noexcept
     {
-        return Color (alpha, r, g, b);
+        return { alpha, r, g, b };
     }
 
     //==============================================================================
@@ -84,15 +95,26 @@ public:
         return r;
     }
 
+    constexpr float getRedFloat() const noexcept
+    {
+        return componentToNormalized (r);
+    }
+
     constexpr Color& setRed (uint8 red) noexcept
     {
         r = red;
         return *this;
     }
 
+    constexpr Color& setRed (float red) noexcept
+    {
+        r = normalizedToComponent (red);
+        return *this;
+    }
+
     constexpr Color withRed (uint8 red) const noexcept
     {
-        return Color (a, red, g, b);
+        return { a, red, g, b };
     }
 
     //==============================================================================
@@ -101,15 +123,26 @@ public:
         return g;
     }
 
+    constexpr float getGreenFloat() const noexcept
+    {
+        return componentToNormalized (g);
+    }
+
     constexpr Color& setGreen (uint8 green) noexcept
     {
         g = green;
         return *this;
     }
 
+    constexpr Color& setGreen (float green) noexcept
+    {
+        g = normalizedToComponent (green);
+        return *this;
+    }
+
     constexpr Color withGreen (uint8 green) const noexcept
     {
-        return Color (a, r, green, b);
+        return { a, r, green, b };
     }
 
     //==============================================================================
@@ -118,18 +151,74 @@ public:
         return b;
     }
 
+    constexpr float getBlueFloat() const noexcept
+    {
+        return componentToNormalized (b);
+    }
+
     constexpr Color& setBlue (uint8 blue) noexcept
     {
         b = blue;
         return *this;
     }
 
+    constexpr Color& setBlue (float blue) noexcept
+    {
+        b = normalizedToComponent (blue);
+        return *this;
+    }
+
     constexpr Color withBlue (uint8 blue) const noexcept
     {
-        return Color (a, r, g, blue);
+        return { a, r, g, blue };
+    }
+
+    //==============================================================================
+    constexpr Color brighter (float amount) noexcept
+    {
+        amount = amount * 0.1f;
+
+        return
+        {
+            a,
+            normalizedToComponent (getRedFloat() + amount),
+            normalizedToComponent (getGreenFloat() + amount),
+            normalizedToComponent (getBlueFloat() + amount)
+        };
+    }
+
+    constexpr Color darker (float amount) noexcept
+    {
+        return brighter (-amount);
+    }
+
+    //==============================================================================
+    constexpr Color contrasting() const noexcept
+    {
+        constexpr float middleLuminance = 128.0;
+
+        if (luminance() > middleLuminance)
+            return Color (255, 0, 0, 0);
+        else
+            return Color (255, 255, 255, 255);
     }
 
 private:
+    constexpr static float componentToNormalized (uint8 component) noexcept
+    {
+        return static_cast<float> (component) / 255.0f;
+    }
+
+    constexpr static uint8 normalizedToComponent (float normalized) noexcept
+    {
+        return static_cast<uint8> (jlimit (0.0f, 1.0f, normalized) * 255.0f);
+    }
+
+    constexpr float luminance() const
+    {
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
     union
     {
         struct

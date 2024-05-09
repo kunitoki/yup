@@ -23,10 +23,10 @@ namespace juce
 {
 
 //==============================================================================
-
 class JUCE_API MouseEvent
 {
 public:
+    //==============================================================================
     enum Buttons
     {
         noButtons = 0x0000,
@@ -37,6 +37,7 @@ public:
         allButtons = leftButton | middleButton | rightButton,
     };
 
+    //==============================================================================
     constexpr MouseEvent() noexcept = default;
 
     constexpr MouseEvent (Buttons newButtons, KeyModifiers newModifiers, Point<float> newPosition) noexcept
@@ -46,11 +47,13 @@ public:
     {
     }
 
+    //==============================================================================
     constexpr MouseEvent (const MouseEvent& other) noexcept = default;
     constexpr MouseEvent (MouseEvent&& other) noexcept = default;
     constexpr MouseEvent& operator= (const MouseEvent& other) noexcept = default;
     constexpr MouseEvent& operator= (MouseEvent&& other) noexcept = default;
 
+    //==============================================================================
     constexpr bool isLeftButtoDown() const noexcept
     {
         return buttons & leftButton;
@@ -71,16 +74,6 @@ public:
         return buttons & allButtons;
     }
 
-    constexpr KeyModifiers getModifiers() const noexcept
-    {
-        return modifiers;
-    }
-
-    constexpr Point<float> getPosition() const noexcept
-    {
-        return position;
-    }
-
     constexpr MouseEvent withButtons (Buttons buttonsToAdd) const noexcept
     {
         return { static_cast<Buttons> (buttons | buttonsToAdd), modifiers, position };
@@ -91,16 +84,34 @@ public:
         return { static_cast<Buttons> (buttons & ~buttonsToRemove), modifiers, position };
     }
 
+    //==============================================================================
+    constexpr KeyModifiers getModifiers() const noexcept
+    {
+        return modifiers;
+    }
+
     constexpr MouseEvent withModifiers (KeyModifiers newModifiers) const noexcept
     {
         return { buttons, newModifiers, position };
     }
 
-    constexpr MouseEvent withPosition (Point<float> newPosition) const noexcept
+    //==============================================================================
+    constexpr Point<float> getPosition() const noexcept
+    {
+        return position;
+    }
+
+    constexpr MouseEvent withPosition (const Point<float>& newPosition) const noexcept
     {
         return { buttons, modifiers, newPosition };
     }
 
+    constexpr MouseEvent withTranslatedPosition (const Point<float>& translation) const noexcept
+    {
+        return { buttons, modifiers, position.translated (translation) };
+    }
+
+    //==============================================================================
     constexpr bool operator== (const MouseEvent& other) const noexcept
     {
         return buttons == other.buttons && modifiers == other.modifiers && position == other.position;

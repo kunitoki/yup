@@ -169,6 +169,16 @@ Rectangle<int> Component::getLocalBounds() const
     return boundsInParent.withZeroPosition().to<int>();
 }
 
+int Component::proportionOfWidth (float proportion) const
+{
+    return static_cast<int> (getWidth() * proportion);
+}
+
+int Component::proportionOfHeight (float proportion) const
+{
+    return static_cast<int> (getHeight() * proportion);
+}
+
 void Component::resized()
 {
 }
@@ -346,44 +356,112 @@ void Component::internalPaint (Graphics& g, float frameRate)
     if (! isVisible())
         return;
 
+    g.setDrawingArea (getBounds().to<float>());
     paint (g, frameRate);
 
     for (auto child : children)
     {
         if (child->isVisible())
+        {
+            g.setDrawingArea (child->getBounds().to<float>());
+
             child->internalPaint (g, frameRate);
+        }
     }
 
+    g.setDrawingArea (getBounds().to<float>());
     paintOverChildren (g, frameRate);
 }
 
 void Component::internalMouseDown (const MouseEvent& event)
 {
+    if (! isVisible())
+        return;
+
     mouseDown (event);
+
+    for (auto child : children)
+    {
+        const auto childBounds = child->getBounds().to<float> ();
+
+        if (child->isVisible() && childBounds.contains (event.getPosition()))
+        {
+            child->internalMouseDown (event);
+            break;
+        }
+    }
 }
 
 void Component::internalMouseMove (const MouseEvent& event)
 {
+    if (! isVisible())
+        return;
+
     mouseMove (event);
+
+    for (auto child : children)
+    {
+        const auto childBounds = child->getBounds().to<float> ();
+
+        if (child->isVisible() && childBounds.contains (event.getPosition()))
+        {
+            child->internalMouseMove (event);
+            break;
+        }
+    }
 }
 
 void Component::internalMouseDrag (const MouseEvent& event)
 {
+    if (! isVisible())
+        return;
+
     mouseDrag (event);
+
+    for (auto child : children)
+    {
+        const auto childBounds = child->getBounds().to<float> ();
+
+        if (child->isVisible() && childBounds.contains (event.getPosition()))
+        {
+            child->internalMouseDrag (event);
+            break;
+        }
+    }
 }
 
 void Component::internalMouseUp (const MouseEvent& event)
 {
+    if (! isVisible())
+        return;
+
     mouseUp (event);
+
+    for (auto child : children)
+    {
+        const auto childBounds = child->getBounds().to<float> ();
+
+        if (child->isVisible() && childBounds.contains (event.getPosition()))
+        {
+            child->internalMouseUp (event);
+            break;
+        }
+    }
 }
 
 void Component::internalKeyDown (const KeyPress& keys, double x, double y)
 {
+    if (! isVisible())
+        return;
+
     keyDown (keys, x, y);
 }
 
 void Component::internalKeyUp (const KeyPress& keys, double x, double y)
 {
+    if (! isVisible())
+        return;
+
     keyUp (keys, x, y);
 }
 

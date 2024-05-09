@@ -50,6 +50,14 @@ int Path::size() const
 
 //==============================================================================
 
+void Path::clear()
+{
+    data.clear();
+    lastSubpathIndex = -1;
+}
+
+//==============================================================================
+
 void Path::moveTo (float x, float y)
 {
     if (!data.empty())
@@ -124,6 +132,20 @@ void Path::close()
 
 //==============================================================================
 
+void Path::addLine (const Point<float>& p1, const Point<float>& p2)
+{
+    moveTo (p1);
+    lineTo (p2);
+}
+
+void Path::addLine (const Line<float>& line)
+{
+    moveTo (line.getStart());
+    lineTo (line.getEnd());
+}
+
+//==============================================================================
+
 void Path::addRectangle (float x, float y, float width, float height)
 {
     reserveSpace (size() + 5);
@@ -135,9 +157,9 @@ void Path::addRectangle (float x, float y, float width, float height)
     lineTo (x, y);
 }
 
-void Path::addRectangle (const Rectangle<float>& r)
+void Path::addRectangle (const Rectangle<float>& rect)
 {
-    addRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight());
+    addRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
 }
 
 //==============================================================================
@@ -163,9 +185,9 @@ void Path::addRoundedRectangle (float x, float y, float width, float height, flo
     lineTo (x + radiusTopLeft, y);
 }
 
-void Path::addRoundedRectangle (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
+void Path::addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    addRoundedRectangle (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+    addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 }
 
 //==============================================================================
@@ -208,18 +230,18 @@ void Path::addArc (float x, float y, float width, float height,
                     startAsNewSubPath);
 }
 
-void Path::addArc (const Rectangle<float>& r,
+void Path::addArc (const Rectangle<float>& rect,
                    float fromRadians, float toRadians,
                    bool startAsNewSubPath)
 {
-    addArc (r.getX(), r.getY(), r.getWidth(), r.getHeight(), fromRadians, toRadians, startAsNewSubPath);
+    addArc (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), fromRadians, toRadians, startAsNewSubPath);
 }
 
 void Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY,
                            float rotationOfEllipse, float fromRadians, float toRadians,
                            bool startAsNewSubPath)
 {
-    const int segments = jlimit (2, 36, static_cast<int> ((toRadians - fromRadians) / 0.1f));
+    const int segments = jlimit (2, 54, static_cast<int> ((toRadians - fromRadians) / 0.1f));
 
     const float delta = (toRadians - fromRadians) / segments;
     const float cosTheta = std::cos (rotationOfEllipse);
@@ -270,10 +292,13 @@ void Path::appendPath (const Path& other)
     {
         if (segment.type == Path::SegmentType::MoveTo)
             moveTo (segment.x, segment.y);
+
         else if (segment.type == Path::SegmentType::LineTo)
             lineTo (segment.x, segment.y);
+
         else if (segment.type == Path::SegmentType::QuadTo)
             quadTo (segment.x, segment.y, segment.x1, segment.y1);
+
         else if (segment.type == Path::SegmentType::CubicTo)
             cubicTo (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
     }

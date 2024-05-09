@@ -60,7 +60,7 @@ public:
 
     void resized() override
     {
-        c.setBounds (getLocalBounds());
+        c.setBounds (getLocalBounds().reduced (100));
     }
 
     void paint (juce::Graphics& g, float frameRate) override

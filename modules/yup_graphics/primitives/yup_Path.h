@@ -52,6 +52,9 @@ public:
     int size() const;
 
     //==============================================================================
+    void clear();
+
+    //==============================================================================
     void moveTo (float x, float y);
     void moveTo (const Point<float>& p);
 
@@ -71,23 +74,27 @@ public:
     void close();
 
     //==============================================================================
+    void addLine (const Point<float>& p1, const Point<float>& p2);
+    void addLine (const Line<float>& line);
+
+    //==============================================================================
     void addRectangle (float x, float y, float width, float height);
-    void addRectangle (const Rectangle<float>& r);
+    void addRectangle (const Rectangle<float>& rect);
 
     //==============================================================================
     void addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
-    void addRoundedRectangle (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    void addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     //==============================================================================
     void addEllipse (float x, float y, float width, float height);
-    void addEllipse (const Rectangle<float>& r);
+    void addEllipse (const Rectangle<float>& rect);
 
     //==============================================================================
     void addArc (float x, float y, float width, float height,
                  float fromRadians, float toRadians,
                  bool startAsNewSubPath);
 
-    void addArc (const Rectangle<float>& r,
+    void addArc (const Rectangle<float>& rect,
                  float fromRadians, float toRadians,
                  bool startAsNewSubPath);
 
