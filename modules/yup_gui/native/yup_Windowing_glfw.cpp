@@ -184,12 +184,15 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
 //==============================================================================
 
-class GLFWComponentNative final : public ComponentNative, public Timer
+class GLFWComponentNative final : public ComponentNative, public Thread, public AsyncUpdater
 {
 public:
+    //==============================================================================
+
     GLFWComponentNative (Component& component, std::optional<float> framerateRedraw)
         : ComponentNative (component)
-        , frameRate (framerateRedraw.value_or (60.0f))
+        , Thread ("YUP Render Thread")
+        , desiredFrameRate (framerateRedraw.value_or (60.0f))
     {
        #if JUCE_MAC
         gpu = MTLCreateSystemDefaultDevice();
@@ -235,19 +238,23 @@ public:
         glfwSetKeyCallback (window, juce_glfwKeyPress);
         glfwSetWindowSizeCallback (window, juce_glfwWindowSize);
 
-        startTimerHz (static_cast<int> (frameRate));
+        startThread();
     }
 
     ~GLFWComponentNative()
     {
         jassert (window != nullptr);
 
-        stopTimer();
+        signalThreadShouldExit();
+        renderEvent.signal();
+        stopThread(-1);
 
         glfwSetWindowUserPointer (window, nullptr);
         glfwDestroyWindow (window);
         window = nullptr;
     }
+
+    //==============================================================================
 
     void setTitle (const String& title) override
     {
@@ -273,6 +280,8 @@ public:
         return windowTitle;
     }
 
+    //==============================================================================
+
     void setVisible (bool shouldBeVisible) override
     {
         jassert (window != nullptr);
@@ -289,6 +298,8 @@ public:
 
         return false;
     }
+
+    //==============================================================================
 
     void setSize (const Size<int>& size) override
     {
@@ -352,6 +363,8 @@ public:
        #endif
     }
 
+    //==============================================================================
+
     void setFullScreen (bool shouldBeFullScreen) override
     {
         jassert (window != nullptr);
@@ -386,10 +399,19 @@ public:
         return window != nullptr && glfwGetWindowMonitor (window) != nullptr;
     }
 
+    //==============================================================================
+
     float getScaleDpi() const override
     {
         return context->dpiScale (getNativeHandle());
     }
+
+    float getCurrentFrameRate() const override
+    {
+        return currentFrameRate.load (std::memory_order_relaxed);
+    }
+
+    //==============================================================================
 
     void setOpacity (float opacity) override
     {
@@ -404,10 +426,14 @@ public:
         return window ? glfwGetWindowOpacity (window) : 1.0f;
     }
 
+    //==============================================================================
+
     rive::Factory* getFactory() override
     {
         return context->factory();
     }
+
+    //==============================================================================
 
     void* getNativeHandle() const override
     {
@@ -424,8 +450,50 @@ public:
        #endif
     }
 
-    void timerCallback() override
+    //==============================================================================
+
+    void run() override
     {
+        const double maxFrameTime = 1.0 / static_cast<double> (desiredFrameRate);
+        const double maxFrameTimeMs = maxFrameTime * 1000.0;
+        const uint64 frameUpdateCounter = static_cast<uint64> (desiredFrameRate);
+
+        double currentTime = Time::getMillisecondCounterHiRes() / 1000.0;
+
+        while (! threadShouldExit())
+        {
+            // Trigger and wait for rendering
+            renderEvent.reset();
+            triggerAsyncUpdate();
+            renderEvent.wait (maxFrameTimeMs);
+
+            // Update framerate
+            if (++frameCounter >= frameUpdateCounter)
+            {
+                const auto newFrameRate = static_cast<float> (frameCounter) * 0.75f
+                    + currentFrameRate.load (std::memory_order_relaxed) * 0.25f;
+
+                currentFrameRate.store (newFrameRate, std::memory_order_relaxed);
+                frameCounter = 0;
+            }
+
+            // Wait for a stable frame time
+            const double newTime = Time::getMillisecondCounterHiRes() / 1000.0;
+            const double remainingTime = maxFrameTime - (newTime - currentTime);
+            currentTime = newTime;
+
+            if (remainingTime > 0.0f)
+                Thread::sleep (roundToInt (remainingTime * 1000.0));
+        }
+    }
+
+    //==============================================================================
+
+    void handleAsyncUpdate() override
+    {
+        if (! isThreadRunning())
+            return;
+
         auto [width, height] = getContentSize();
 
         if (currentWidth != width || currentHeight != height)
@@ -459,21 +527,26 @@ public:
         });
 
         Graphics g (*context, *renderer);
-        handlePaint (g, frameRate);
+        handlePaint (g, desiredFrameRate);
 
         context->end (getNativeHandle());
 
         context->tick();
+
+        renderEvent.signal();
     }
 
 private:
     GLFWwindow* window = nullptr;
     String windowTitle;
-    float frameRate = 60.0f;
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
+    float desiredFrameRate = 60.0f;
+    std::atomic<float> currentFrameRate = 0.0f;
+    uint64 frameCounter = 0;
     int currentWidth = 0;
     int currentHeight = 0;
+    WaitableEvent renderEvent{ true };
 
    #if JUCE_MAC
     id<MTLDevice> gpu = nil;

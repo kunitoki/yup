@@ -94,8 +94,20 @@ public:
     void addAndMakeVisible (Component& component);
     void addAndMakeVisible (Component* component);
 
+    void insertChildComponent (Component& component, int index);
+    void insertChildComponent (Component* component, int index);
+
     void removeChildComponent (Component& component);
     void removeChildComponent (Component* component);
+
+    //==============================================================================
+    int getNumChildComponents() const;
+    Component* getComponentAt (int index) const;
+    Component* getComponentAt (const Point<float>& p) const;
+
+    //==============================================================================
+    void toFront();
+    void toBack();
 
     //==============================================================================
     virtual void paint (Graphics& g, float frameRate);

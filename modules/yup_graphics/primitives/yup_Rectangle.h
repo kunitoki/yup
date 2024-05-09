@@ -273,10 +273,25 @@ public:
         return *this;
     }
 
+    constexpr Rectangle& reduce (ValueType deltaX, ValueType deltaY) noexcept
+    {
+        xy = { xy.getX() + deltaX, xy.getY() + deltaY };
+        size = { jmax (0, size.getWidth () - 2 * deltaX), jmax (0, size.getHeight () - 2 * deltaY) };
+
+        return *this;
+    }
+
     constexpr Rectangle reduced (ValueType delta) noexcept
     {
         Rectangle result = *this;
         result.reduce (delta);
+        return result;
+    }
+
+    constexpr Rectangle reduced (ValueType deltaX, ValueType deltaY) noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (deltaX, deltaY);
         return result;
     }
 
@@ -293,6 +308,24 @@ public:
     constexpr bool contains (const Point<ValueType>& p) const noexcept
     {
         return contains (p.getX(), p.getY());
+    }
+
+    //==============================================================================
+    constexpr Rectangle largerSquareFitting() const noexcept
+    {
+        if (getWidth() == getHeight())
+            return *this;
+
+        if (getWidth() > getHeight())
+        {
+            const auto newPosX = static_cast<ValueType> ((getWidth() - getHeight()) / 2.0f);
+            return { xy.getX() + newPosX, xy.getY(), getHeight(), getHeight() };
+        }
+        else
+        {
+            const auto newPosY = static_cast<ValueType> ((getHeight() - getWidth()) / 2.0f);
+            return { xy.getX(), xy.getY() + newPosY, getWidth(), getWidth() };
+        }
     }
 
     //==============================================================================

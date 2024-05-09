@@ -291,9 +291,7 @@ bool Component::isOnDesktop() const noexcept
 
 void Component::addChildComponent (Component& component)
 {
-    component.parentComponent = this;
-
-    children.addIfNotAlreadyThere (&component);
+    addChildComponent (&component);
 }
 
 void Component::addChildComponent (Component* component)
@@ -305,9 +303,7 @@ void Component::addChildComponent (Component* component)
 
 void Component::addAndMakeVisible (Component& component)
 {
-    addChildComponent (component);
-
-    component.setVisible (true);
+    addAndMakeVisible (&component);
 }
 
 void Component::addAndMakeVisible (Component* component)
@@ -317,11 +313,22 @@ void Component::addAndMakeVisible (Component* component)
     component->setVisible (true);
 }
 
+void Component::insertChildComponent (Component& component, int index)
+{
+    insertChildComponent (&component, index);
+}
+
+void Component::insertChildComponent (Component* component, int index)
+{
+    const int currentIndex = children.indexOf (component);
+
+    if (isPositiveAndBelow (currentIndex, children.size()))
+        children.move (currentIndex, index);
+}
+
 void Component::removeChildComponent (Component& component)
 {
-    component.parentComponent = nullptr;
-
-    children.removeAllInstancesOf (&component);
+    removeChildComponent (&component);
 }
 
 void Component::removeChildComponent (Component* component)
@@ -329,6 +336,47 @@ void Component::removeChildComponent (Component* component)
     component->parentComponent = nullptr;
 
     children.removeAllInstancesOf (component);
+}
+
+//==============================================================================
+
+int Component::getNumChildComponents() const
+{
+    return children.size();
+}
+
+Component* Component::getComponentAt (int index) const
+{
+    return children.getUnchecked (index);
+}
+
+Component* Component::getComponentAt (const Point<float>& p) const
+{
+    for (int index = children.size(); --index >= 0;)
+    {
+        if (auto child = children.getUnchecked (index); child != nullptr && child->boundsInParent.contains (p))
+            return child;
+    }
+
+    return nullptr;
+}
+
+//==============================================================================
+
+void Component::toFront()
+{
+    if (parentComponent == nullptr)
+        return;
+
+    parentComponent->insertChildComponent (this, parentComponent->getNumChildComponents());
+}
+
+void Component::toBack()
+{
+    if (parentComponent == nullptr)
+        return;
+
+    parentComponent->insertChildComponent (this, 0);
 }
 
 //==============================================================================

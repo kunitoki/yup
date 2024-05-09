@@ -30,94 +30,137 @@
 
 //==============================================================================
 
-class CustomComponent : public juce::Component
+class CustomSlider : public juce::Component
 {
+    int index = 0;
+
 public:
-    CustomComponent()
+    CustomSlider (int index)
+         : index (index)
     {
-        random.setSeedRandomly();
+    }
+
+    void mouseDown (const juce::MouseEvent& event) override
+    {
+        origin = event.getPosition();
+
+        DBG ("Hit: " << index);
+    }
+
+    void mouseUp (const juce::MouseEvent& event) override
+    {
+    }
+
+    void mouseDrag (const juce::MouseEvent& event) override
+    {
+        //auto [x, y] = event.getPosition();
+
+        const float distance = origin.distanceX (event.getPosition()) * 0.005f;
+        origin = event.getPosition();
+
+        value = juce::jlimit (0.0f, 1.0f, value + distance);
     }
 
     void paint (juce::Graphics& g, float frameRate) override
     {
+        auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
+
+        juce::Path path;
+        path.addEllipse (bounds.reduced (proportionOfWidth (0.1f)));
+
+        g.setColor (0xff3d3d3d);
+        g.fillPath (path);
+
+        g.setColor (0xff2b2b2b);
+        g.drawPath (path, proportionOfWidth (0.01f));
+
+        const auto fromRadians = juce::degreesToRadians(135.0f);
+        const auto toRadians = fromRadians + juce::degreesToRadians(270.0f);
+        const auto toCurrentRadians = fromRadians + juce::degreesToRadians(270.0f) * value;
+
+        const auto center = bounds.to<float>().getCenter();
+
+        juce::Path arc;
+
+        {
+            arc.addCenteredArc (center,
+                                bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
+                                fromRadians, toRadians, true);
+
+            g.setStrokeCap (juce::StrokeCap::Butt);
+            g.setColor (0xff636363);
+            g.drawPath (arc, proportionOfWidth (0.1f));
+        }
+
+        {
+            arc.clear();
+            arc.addCenteredArc (center,
+                                bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
+                                fromRadians, toCurrentRadians, true);
+
+            g.setStrokeCap (juce::StrokeCap::Round);
+            g.setColor (0xff4ebfff);
+            g.drawPath (arc, proportionOfWidth (0.1f));
+        }
+
+        {
+            const auto reducedBounds = bounds.reduced (proportionOfWidth (0.175f));
+
+            auto pos = center.getPointOnCircumference (
+                reducedBounds.getWidth() / 2.0f,
+                reducedBounds.getHeight() / 2.0f,
+                toCurrentRadians);
+
+            arc.clear();
+            arc.addLine (juce::Line<float> (pos, center).keepOnlyStart (0.2f));
+
+            g.setStrokeCap (juce::StrokeCap::Round);
+            g.setColor (0xffffffff);
+            g.drawPath (arc, proportionOfWidth (0.04f));
+        }
     }
 
 private:
-    juce::Random& random = juce::Random::getSystemRandom();
+    juce::Point<float> origin;
+    float value = 0.0f;
 };
 
 //==============================================================================
 
 class CustomWindow : public juce::DocumentWindow
 {
-    CustomComponent c;
+    juce::OwnedArray<CustomSlider> sliders;
+    int totalRows = 4;
+    int totalColumns = 4;
 
 public:
     CustomWindow()
     {
-        addAndMakeVisible (c);
+        for (int i = 0; i < totalRows * totalColumns; ++i)
+            addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i)));
     }
 
     void resized() override
     {
-        c.setBounds (getLocalBounds().reduced (100));
+        auto bounds = getLocalBounds().reduced (200);
+        auto width = bounds.getWidth() / totalColumns;
+        auto height = bounds.getHeight() / totalRows;
+
+        for (int i = 0; i < totalRows; ++i)
+        {
+            auto row = bounds.removeFromTop (height);
+            for (int j = 0; j < totalColumns; ++j)
+            {
+                auto col = row.removeFromLeft (width);
+                sliders.getUnchecked (i * totalRows + j)->setBounds (col.largerSquareFitting());
+            }
+        }
     }
 
     void paint (juce::Graphics& g, float frameRate) override
     {
-        double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-
-        auto renderer = g.getRenderer();
-        auto factory = g.getFactory();
-
-        rive::float2 p[9];
-        for (int i = 0; i < 9; ++i)
-            p[i] = pts[i] + translate;
-
-        rive::RawPath rawPath;
-        rawPath.moveTo (p[0].x, p[0].y);
-        rawPath.cubicTo (p[1].x, p[1].y, p[2].x, p[2].y, p[3].x, p[3].y);
-        rive::float2 c0 = rive::simd::mix (p[3], p[4], rive::float2 (2 / 3.f));
-        rive::float2 c1 = rive::simd::mix (p[5], p[4], rive::float2 (2 / 3.f));
-        rawPath.cubicTo (c0.x, c0.y, c1.x, c1.y, p[5].x, p[5].y);
-        rawPath.cubicTo (p[6].x, p[6].y, p[7].x, p[7].y, p[8].x, p[8].y);
-        if (doClose)
-            rawPath.close();
-
-        auto path = factory->makeRenderPath (rawPath, rive::FillRule::nonZero);
-
-        auto fillPaint = factory->makeRenderPaint();
-        fillPaint->style (rive::RenderPaintStyle::fill);
-        fillPaint->color (-1);
-
-        auto strokePaint = factory->makeRenderPaint();
-        strokePaint->style (rive::RenderPaintStyle::stroke);
-        strokePaint->color (0x8000ffff);
-        strokePaint->thickness (strokeWidth);
-        strokePaint->join (join);
-        strokePaint->cap (cap);
-
-        renderer->drawPath (path.get(), fillPaint.get());
-        renderer->drawPath (path.get(), strokePaint.get());
-
-        // Draw the interactive points.
-        auto pointPaint = factory->makeRenderPaint();
-        pointPaint->style (rive::RenderPaintStyle::stroke);
-        pointPaint->color (0xff0000ff);
-        pointPaint->thickness (14);
-        pointPaint->cap (rive::StrokeCap::round);
-
-        auto pointPath = factory->makeEmptyRenderPath();
-        for (int i : { 1, 2, 4, 6, 7 })
-        {
-            rive::float2 pt = pts[i] + translate;
-            pointPath->moveTo (pt.x, pt.y);
-        }
-
-        renderer->drawPath (pointPath.get(), pointPaint.get());
-
+        const double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
         updateFrameTime (time);
-        updateWindowTitle();
     }
 
     void mouseDown (const juce::MouseEvent& event) override
@@ -174,7 +217,6 @@ public:
         case juce::KeyPress::textAKey:
             forceAtomicMode = !forceAtomicMode;
             fpsLastTime = 0;
-            fpsFrames = 0;
             break;
 
         case juce::KeyPress::textDKey:
@@ -232,6 +274,18 @@ public:
     }
 
 private:
+    void updateFrameTime (double time)
+    {
+        double fpsElapsed = time - fpsLastTime;
+        if (fpsElapsed > 1)
+        {
+            currentFps = getNativeComponent()->getCurrentFrameRate();
+            updateWindowTitle();
+
+            fpsLastTime = time;
+        }
+    }
+
     void updateWindowTitle()
     {
         juce::String title;
@@ -245,22 +299,6 @@ private:
             title << " (atomic)";
 
         setTitle (title);
-    }
-
-    void updateFrameTime (double time)
-    {
-        ++fpsFrames;
-
-        double fpsElapsed = time - fpsLastTime;
-        if (fpsElapsed > 1)
-        {
-            currentFps = fpsLastTime == 0 ? 0 : fpsFrames / fpsElapsed;
-
-            updateWindowTitle ();
-
-            fpsFrames = 0;
-            fpsLastTime = time;
-        }
     }
 
     bool forceAtomicMode = false;
@@ -294,7 +332,6 @@ private:
     int lastWidth = 0, lastHeight = 0;
     double fpsLastTime = 0;
     double currentFps = 0;
-    int fpsFrames = 0;
 };
 
 //==============================================================================

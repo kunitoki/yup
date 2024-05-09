@@ -59,6 +59,7 @@ public:
 
     //==============================================================================
     virtual float getScaleDpi() const = 0;
+    virtual float getCurrentFrameRate() const = 0;
 
     //==============================================================================
     virtual rive::Factory* getFactory() = 0;

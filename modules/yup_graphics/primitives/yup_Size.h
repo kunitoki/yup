@@ -72,7 +72,8 @@ public:
 
     //==============================================================================
     template <class T>
-    constexpr auto operator* (T scaleFactor) const noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    constexpr auto operator* (T scaleFactor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
     {
         Size r (*this);
         r *= scaleFactor;
@@ -80,7 +81,8 @@ public:
     }
 
     template <class T>
-    constexpr auto operator*= (T scaleFactor) noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
+    constexpr auto operator*= (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
     {
         width = static_cast<ValueType> (width * scaleFactor);
         height = static_cast<ValueType> (height * scaleFactor);
@@ -88,7 +90,8 @@ public:
     }
 
     template <class T>
-    constexpr auto operator/ (T scaleFactor) const noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    constexpr auto operator/ (T scaleFactor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
     {
         Size r (*this);
         r /= scaleFactor;
@@ -96,7 +99,8 @@ public:
     }
 
     template <class T>
-    constexpr auto operator/= (T scaleFactor) noexcept -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
+    constexpr auto operator/= (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
     {
         width = static_cast<ValueType> (width / scaleFactor);
         height = static_cast<ValueType> (height / scaleFactor);
