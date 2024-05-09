@@ -35,24 +35,21 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
     return static_cast<rive::StrokeCap> (cap);
 }
 
-rive::RawPath createRoundedRectPath (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
+rive::RawPath toRawPath (Path path)
 {
-    radiusTopLeft = jmin (radiusTopLeft, jmin (width / 2.0f, height / 2.0f));
-    radiusTopRight = jmin (radiusTopRight, jmin (width / 2.0f, height / 2.0f));
-    radiusBottomLeft = jmin (radiusBottomLeft, jmin (width / 2.0f, height / 2.0f));
-    radiusBottomRight = jmin (radiusBottomRight, jmin (width / 2.0f, height / 2.0f));
-
     rive::RawPath rawPath;
-    rawPath.moveTo (x + radiusTopLeft, y);
-    rawPath.lineTo (x + width - radiusTopRight, y);
-    rawPath.cubicTo (x + width - radiusTopRight * 0.55f, y, x + width, y + radiusTopRight * 0.45f, x + width, y + radiusTopRight);
-    rawPath.lineTo (x + width, y + height - radiusBottomRight);
-    rawPath.cubicTo (x + width, y + height - radiusBottomRight * 0.55f, x + width - radiusBottomRight * 0.55f, y + height, x + width - radiusBottomRight, y + height);
-    rawPath.lineTo (x + radiusBottomLeft, y + height);
-    rawPath.cubicTo (x + radiusBottomLeft * 0.55f, y + height, x, y + height - radiusBottomLeft * 0.55f, x, y + height - radiusBottomLeft);
-    rawPath.lineTo (x, y + radiusTopLeft);
-    rawPath.cubicTo (x, y + radiusTopLeft * 0.55f, x + radiusTopLeft * 0.55f, y, x + radiusTopLeft, y);
-    rawPath.lineTo (x + radiusTopLeft, y);
+
+    for (const auto& segment : path)
+    {
+        if (segment.type == Path::SegmentType::MoveTo)
+            rawPath.moveTo (segment.x, segment.y);
+        else if (segment.type == Path::SegmentType::LineTo)
+            rawPath.lineTo (segment.x, segment.y);
+        else if (segment.type == Path::SegmentType::QuadTo)
+            rawPath.quadTo (segment.x, segment.y, segment.x1, segment.y1);
+        else if (segment.type == Path::SegmentType::CubicTo)
+            rawPath.cubicTo (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
+    }
 
     return rawPath;
 }
@@ -236,8 +233,8 @@ void Graphics::drawLine (float x1, float y1, float x2, float y2, float thickness
     else
         paint->shader (toColorGradient (factory, options.getColorGradient()));
 
-    auto path = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
-    renderer.drawPath (path.get(), paint.get());
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
 }
 
 void Graphics::drawLine (const Point<float>& p1, const Point<float>& p2, float thickness)
@@ -261,8 +258,8 @@ void Graphics::fillRect (float x, float y, float width, float height)
     else
         paint->shader (toColorGradient (factory, options.getColorGradient()));
 
-    auto path = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
-    renderer.drawPath (path.get(), paint.get());
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
 }
 
 void Graphics::fillRect (const Rectangle<float>& r)
@@ -289,8 +286,8 @@ void Graphics::drawRect (float x, float y, float width, float height, float thic
     else
         paint->shader (toColorGradient (factory, options.getColorGradient()));
 
-    auto path = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
-    renderer.drawPath (path.get(), paint.get());
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
 }
 
 void Graphics::drawRect (const Rectangle<float>& r, float thickness)
@@ -301,7 +298,10 @@ void Graphics::drawRect (const Rectangle<float>& r, float thickness)
 //==============================================================================
 void Graphics::fillRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    rive::RawPath rawPath = createRoundedRectPath (x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+    Path path;
+    path.addRoundedRectangle(x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+
+    rive::RawPath rawPath = toRawPath (path);
 
     auto& options = currentRenderOptions();
 
@@ -313,8 +313,8 @@ void Graphics::fillRoundedRect (float x, float y, float width, float height, flo
     else
         paint->shader (toColorGradient (factory, options.getColorGradient()));
 
-    auto path = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
-    renderer.drawPath (path.get(), paint.get());
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
 }
 
 void Graphics::fillRoundedRect (float x, float y, float width, float height, float radius)
@@ -335,7 +335,10 @@ void Graphics::fillRoundedRect (const Rectangle<float>& r, float radius)
 //==============================================================================
 void Graphics::drawRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness)
 {
-    rive::RawPath rawPath = createRoundedRectPath (x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+    Path path;
+    path.addRoundedRectangle(x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+
+    rive::RawPath rawPath = toRawPath (path);
 
     auto& options = currentRenderOptions();
 
@@ -350,8 +353,8 @@ void Graphics::drawRoundedRect (float x, float y, float width, float height, flo
     else
         paint->shader (toColorGradient (factory, options.getColorGradient()));
 
-    auto path = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
-    renderer.drawPath (path.get(), paint.get());
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
 }
 
 void Graphics::drawRoundedRect (float x, float y, float width, float height, float radius, float thickness)
@@ -367,6 +370,47 @@ void Graphics::drawRoundedRect (const Rectangle<float>& r, float radiusTopLeft, 
 void Graphics::drawRoundedRect (const Rectangle<float>& r, float radius, float thickness)
 {
     drawRoundedRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radius, radius, radius, radius, thickness);
+}
+
+//==============================================================================
+void Graphics::drawPath (const Path& path, float thickness)
+{
+    auto rawPath = toRawPath (path);
+
+    auto& options = currentRenderOptions();
+
+    auto paint = factory.makeRenderPaint();
+    paint->style (rive::RenderPaintStyle::stroke);
+    paint->thickness (thickness);
+    paint->join (toStrokeJoin (options.join));
+    paint->cap (toStrokeCap (options.cap));
+
+    if (options.isColor())
+        paint->color (options.getColor());
+    else
+        paint->shader (toColorGradient (factory, options.getColorGradient()));
+
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
+}
+
+//==============================================================================
+void Graphics::fillPath (const Path& path)
+{
+    auto rawPath = toRawPath (path);
+
+    auto& options = currentRenderOptions();
+
+    auto paint = factory.makeRenderPaint();
+    paint->style (rive::RenderPaintStyle::fill);
+
+    if (options.isColor())
+        paint->color (options.getColor());
+    else
+        paint->shader (toColorGradient (factory, options.getColorGradient()));
+
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.drawPath (renderPath.get(), paint.get());
 }
 
 } // namespace juce

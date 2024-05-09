@@ -93,6 +93,10 @@ public:
     void drawRoundedRect (const Rectangle<float>& r, float radius, float thickness);
 
     //==============================================================================
+    void drawPath (const Path& path, float thickness);
+    void fillPath (const Path& path);
+
+    //==============================================================================
     rive::Factory* getFactory();
     rive::Renderer* getRenderer();
 

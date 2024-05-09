@@ -449,6 +449,7 @@ public:
         {
             .renderTargetWidth = static_cast<uint32_t> (width),
             .renderTargetHeight = static_cast<uint32_t> (height),
+            //.loadAction = rive::pls::LoadAction::preserveRenderTarget,
             .clearColor = 0xff404040,
             .msaaSampleCount = 0,
             .disableRasterOrdering = forceAtomicMode,

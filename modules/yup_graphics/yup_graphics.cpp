@@ -61,4 +61,5 @@
 #include "native/yup_GraphicsContext_impl.cpp"
 
 //==============================================================================
+#include "primitives/yup_Path.cpp"
 #include "graphics/yup_Graphics.cpp"

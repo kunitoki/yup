@@ -229,7 +229,7 @@ public:
 
     constexpr Rectangle removeFromBottom (ValueType delta) noexcept
     {
-        const Rectangle result { xy.withY (jmax (0, xy.getY() + xy.getHeight() - delta)), size.withHeight (jmax (0, delta)) };
+        const Rectangle result { xy.withY (jmax (0, xy.getY() + size.getHeight() - delta)), size.withHeight (jmax (0, delta)) };
 
         size = size.withHeight (jmax (0, size.getHeight() - delta));
 
@@ -238,11 +238,23 @@ public:
 
     constexpr Rectangle removeFromRight (ValueType delta) noexcept
     {
-        const Rectangle result { xy.withX (jmax (0, xy.getX() + xy.getWidth() - delta)), size.withWidth (jmax (0, delta)) };
+        const Rectangle result { xy.withX (jmax (0, xy.getX() + size.getWidth() - delta)), size.withWidth (jmax (0, delta)) };
 
         size = size.withWidth (jmax (0, size.getWidth() - delta));
 
         return result;
+    }
+
+    //==============================================================================
+    constexpr Rectangle reduced (ValueType delta) noexcept
+    {
+        return
+        {
+            xy.getX() + delta,
+            xy.getY() + delta,
+            jmax (0, size.getWidth () - 2 * delta),
+            jmax (0, size.getHeight () - 2 * delta)
+        };
     }
 
     //==============================================================================
