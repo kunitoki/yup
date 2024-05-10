@@ -66,10 +66,10 @@ public:
         juce::Path path;
         path.addEllipse (bounds.reduced (proportionOfWidth (0.1f)));
 
-        g.setColor (0xff3d3d3d);
+        g.setColor (juce::Color (0xff3d3d3d));
         g.fillPath (path);
 
-        g.setColor (0xff2b2b2b);
+        g.setColor (juce::Color (0xff2b2b2b));
         g.drawPath (path, proportionOfWidth (0.01f));
 
         const auto fromRadians = juce::degreesToRadians(135.0f);
@@ -86,7 +86,7 @@ public:
                                 fromRadians, toRadians, true);
 
             g.setStrokeCap (juce::StrokeCap::Butt);
-            g.setColor (0xff636363);
+            g.setColor (juce::Color (0xff636363));
             g.drawPath (arc, proportionOfWidth (0.1f));
         }
 
@@ -97,7 +97,7 @@ public:
                                 fromRadians, toCurrentRadians, true);
 
             g.setStrokeCap (juce::StrokeCap::Round);
-            g.setColor (0xff4ebfff);
+            g.setColor (juce::Color (0xff4ebfff));
             g.drawPath (arc, proportionOfWidth (0.1f));
         }
 
@@ -113,7 +113,7 @@ public:
             arc.addLine (juce::Line<float> (pos, center).keepOnlyStart (0.2f));
 
             g.setStrokeCap (juce::StrokeCap::Round);
-            g.setColor (0xffffffff);
+            g.setColor (juce::Color (0xffffffff));
             g.drawPath (arc, proportionOfWidth (0.04f));
         }
     }
