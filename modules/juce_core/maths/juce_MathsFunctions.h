@@ -719,6 +719,22 @@ inline constexpr NumericType square (NumericType n) noexcept
     return n * n;
 }
 
+/** Returns the modulo of floating point types. */
+template <typename FloatType>
+constexpr auto modulo (FloatType x, FloatType y) -> std::enable_if_t<std::is_floating_point_v<FloatType>, FloatType>
+{
+    return static_cast<FloatType> ((x < FloatType() ? FloatType(-1) : FloatType(1))
+        * ((x < FloatType() ? -x : x) - static_cast<long long int> ((x / y < FloatType() ? -x / y : x / y))
+            * (y < FloatType() ? -y : y)));
+}
+
+/** Returns the modulo of integral types. */
+template <typename IntegerType>
+constexpr auto modulo (IntegerType x, IntegerType y) -> std::enable_if_t<!std::is_floating_point_v<IntegerType>, IntegerType>
+{
+    return static_cast<IntegerType> (x % y);
+}
+
 //==============================================================================
 /** Writes a number of bits into a memory buffer at a given bit index.
     The buffer is treated as a sequence of 8-bit bytes, and the value is encoded in little-endian order,
