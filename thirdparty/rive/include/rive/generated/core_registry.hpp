@@ -66,6 +66,7 @@
 #include "rive/assets/asset.hpp"
 #include "rive/assets/audio_asset.hpp"
 #include "rive/assets/drawable_asset.hpp"
+#include "rive/assets/export_audio.hpp"
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/file_asset_contents.hpp"
 #include "rive/assets/folder.hpp"
@@ -459,6 +460,9 @@ public:
             case ListenerFireEventBase::eventIdPropertyKey:
                 object->as<ListenerFireEventBase>()->eventId(value);
                 break;
+            case LayerStateBase::flagsPropertyKey:
+                object->as<LayerStateBase>()->flags(value);
+                break;
             case ListenerInputChangeBase::inputIdPropertyKey:
                 object->as<ListenerInputChangeBase>()->inputId(value);
                 break;
@@ -536,6 +540,9 @@ public:
                 break;
             case StateTransitionBase::interpolatorIdPropertyKey:
                 object->as<StateTransitionBase>()->interpolatorId(value);
+                break;
+            case StateTransitionBase::randomWeightPropertyKey:
+                object->as<StateTransitionBase>()->randomWeight(value);
                 break;
             case StateMachineFireEventBase::eventIdPropertyKey:
                 object->as<StateMachineFireEventBase>()->eventId(value);
@@ -1086,6 +1093,9 @@ public:
             case DrawableAssetBase::widthPropertyKey:
                 object->as<DrawableAssetBase>()->width(value);
                 break;
+            case ExportAudioBase::volumePropertyKey:
+                object->as<ExportAudioBase>()->volume(value);
+                break;
         }
     }
     static void setBool(Core* object, int propertyKey, bool value)
@@ -1127,6 +1137,9 @@ public:
                 break;
             case KeyFrameBoolBase::valuePropertyKey:
                 object->as<KeyFrameBoolBase>()->value(value);
+                break;
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
+                object->as<ListenerAlignTargetBase>()->preserveOffset(value);
                 break;
             case NestedBoolBase::nestedValuePropertyKey:
                 object->as<NestedBoolBase>()->nestedValue(value);
@@ -1252,6 +1265,8 @@ public:
                 return object->as<SoloBase>()->activeComponentId();
             case ListenerFireEventBase::eventIdPropertyKey:
                 return object->as<ListenerFireEventBase>()->eventId();
+            case LayerStateBase::flagsPropertyKey:
+                return object->as<LayerStateBase>()->flags();
             case ListenerInputChangeBase::inputIdPropertyKey:
                 return object->as<ListenerInputChangeBase>()->inputId();
             case ListenerInputChangeBase::nestedInputIdPropertyKey:
@@ -1304,6 +1319,8 @@ public:
                 return object->as<StateTransitionBase>()->interpolationType();
             case StateTransitionBase::interpolatorIdPropertyKey:
                 return object->as<StateTransitionBase>()->interpolatorId();
+            case StateTransitionBase::randomWeightPropertyKey:
+                return object->as<StateTransitionBase>()->randomWeight();
             case StateMachineFireEventBase::eventIdPropertyKey:
                 return object->as<StateMachineFireEventBase>()->eventId();
             case StateMachineFireEventBase::occursValuePropertyKey:
@@ -1673,6 +1690,8 @@ public:
                 return object->as<DrawableAssetBase>()->height();
             case DrawableAssetBase::widthPropertyKey:
                 return object->as<DrawableAssetBase>()->width();
+            case ExportAudioBase::volumePropertyKey:
+                return object->as<ExportAudioBase>()->volume();
         }
         return 0.0f;
     }
@@ -1704,6 +1723,8 @@ public:
                 return object->as<NestedSimpleAnimationBase>()->isPlaying();
             case KeyFrameBoolBase::valuePropertyKey:
                 return object->as<KeyFrameBoolBase>()->value();
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
+                return object->as<ListenerAlignTargetBase>()->preserveOffset();
             case NestedBoolBase::nestedValuePropertyKey:
                 return object->as<NestedBoolBase>()->nestedValue();
             case LinearAnimationBase::enableWorkAreaPropertyKey:
@@ -1773,6 +1794,7 @@ public:
             case NestedAnimationBase::animationIdPropertyKey:
             case SoloBase::activeComponentIdPropertyKey:
             case ListenerFireEventBase::eventIdPropertyKey:
+            case LayerStateBase::flagsPropertyKey:
             case ListenerInputChangeBase::inputIdPropertyKey:
             case ListenerInputChangeBase::nestedInputIdPropertyKey:
             case AnimationStateBase::animationIdPropertyKey:
@@ -1799,6 +1821,7 @@ public:
             case StateTransitionBase::exitTimePropertyKey:
             case StateTransitionBase::interpolationTypePropertyKey:
             case StateTransitionBase::interpolatorIdPropertyKey:
+            case StateTransitionBase::randomWeightPropertyKey:
             case StateMachineFireEventBase::eventIdPropertyKey:
             case StateMachineFireEventBase::occursValuePropertyKey:
             case LinearAnimationBase::fpsPropertyKey:
@@ -1981,6 +2004,7 @@ public:
             case TextBase::paragraphSpacingPropertyKey:
             case DrawableAssetBase::heightPropertyKey:
             case DrawableAssetBase::widthPropertyKey:
+            case ExportAudioBase::volumePropertyKey:
                 return CoreDoubleType::id;
             case TransformComponentConstraintBase::offsetPropertyKey:
             case TransformComponentConstraintBase::doesCopyPropertyKey:
@@ -1994,6 +2018,7 @@ public:
             case FollowPathConstraintBase::offsetPropertyKey:
             case NestedSimpleAnimationBase::isPlayingPropertyKey:
             case KeyFrameBoolBase::valuePropertyKey:
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
             case NestedBoolBase::nestedValuePropertyKey:
             case LinearAnimationBase::enableWorkAreaPropertyKey:
             case LinearAnimationBase::quantizePropertyKey:

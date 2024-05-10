@@ -1,6 +1,6 @@
 #ifdef VERTEX
-T0(P)q0(0,G3,LB);U0 N1 O1 U1 V1 e1(VD,P,r,j,L){g B=h2(LB.xy);uint X3=floatBitsToUint(LB.z)&0xffffu;B.z=I5(X3);f1(B);}
+U0(P)q0(0,H3,KB);V0 O1 P1 V1 W1 g1(TD,P,r,j,L){g B=i2(KB.xy);uint Y3=floatBitsToUint(KB.z)&0xffffu;B.z=J5(Y3);h1(B);}
 #endif
 #ifdef FRAGMENT
-E2 F2 q2(i,UC){r2(M0(0));}
+F2 G2 r2(i,SC){v2(M0(0));}
 #endif

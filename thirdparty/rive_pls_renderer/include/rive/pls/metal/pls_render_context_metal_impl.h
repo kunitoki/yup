@@ -27,11 +27,6 @@ public:
     bool compatibleWith(id<MTLTexture> texture) const
     {
         assert(texture.usage & MTLTextureUsageRenderTarget);
-
-        [[maybe_unused]] auto pixelFormat = texture.pixelFormat;
-        [[maybe_unused]] auto texWidth = texture.width;
-        [[maybe_unused]] auto texHeight = texture.height;
-
         return width() == texture.width && height() == texture.height &&
                m_pixelFormat == texture.pixelFormat;
     }

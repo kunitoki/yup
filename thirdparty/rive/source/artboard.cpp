@@ -4,6 +4,7 @@
 #include "rive/dependency_sorter.hpp"
 #include "rive/draw_rules.hpp"
 #include "rive/draw_target.hpp"
+#include "rive/audio_event.hpp"
 #include "rive/draw_target_placement.hpp"
 #include "rive/drawable.hpp"
 #include "rive/animation/keyed_object.hpp"
@@ -18,6 +19,7 @@
 #include "rive/shapes/shape.hpp"
 #include "rive/text/text_value_run.hpp"
 #include "rive/event.hpp"
+#include "rive/assets/audio_asset.hpp"
 
 #include <unordered_map>
 
@@ -25,6 +27,18 @@ using namespace rive;
 
 Artboard::~Artboard()
 {
+#ifdef WITH_RIVE_AUDIO
+#ifdef EXTERNAL_RIVE_AUDIO_ENGINE
+    auto audioEngine = m_audioEngine;
+#else
+    auto audioEngine = AudioEngine::RuntimeEngine(false);
+#endif
+    if (audioEngine)
+    {
+        audioEngine->stop(this);
+    }
+#endif
+
     for (auto object : m_Objects)
     {
         // First object is artboard
@@ -635,6 +649,25 @@ bool Artboard::isTranslucent() const
     return true;
 }
 
+bool Artboard::hasAudio() const
+{
+    for (auto object : m_Objects)
+    {
+        if (object != nullptr && object->coreType() == AudioEventBase::typeKey)
+        {
+            return true;
+        }
+    }
+    for (auto nestedArtboard : m_NestedArtboards)
+    {
+        if (nestedArtboard->artboard()->hasAudio())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool Artboard::isTranslucent(const LinearAnimation* anim) const
 {
     // For now we're conservative/lazy -- if we see that any of our paints are
@@ -794,6 +827,20 @@ StatusCode Artboard::import(ImportStack& importStack)
         backboardImporter->addMissingArtboard();
     }
     return result;
+}
+
+float Artboard::volume() const { return m_volume; }
+void Artboard::volume(float value)
+{
+    m_volume = value;
+    for (auto nestedArtboard : m_NestedArtboards)
+    {
+        auto artboard = nestedArtboard->artboard();
+        if (artboard != nullptr)
+        {
+            artboard->volume(value);
+        }
+    }
 }
 
 ////////// ArtboardInstance

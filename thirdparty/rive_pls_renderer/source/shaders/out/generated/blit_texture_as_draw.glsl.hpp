@@ -5,11 +5,11 @@
 namespace rive {
 namespace pls {
 namespace glsl {
-const char blit_texture_as_draw[] = R"===(#ifdef W
-N1 O1 U1 V1 e1(FD,P,r,j,L){d h1;h1.x=(j&1)==0?-1.:1.;h1.y=(j&2)==0?-1.:1.;g B=g(h1,0,1);f1(B);}
+const char blit_texture_as_draw[] = R"===(#ifdef V
+O1 P1 V1 W1 g1(DD,P,r,j,L){d j1;j1.x=(j&1)==0?-1.:1.;j1.y=(j&2)==0?-1.:1.;g B=g(j1,0,1);h1(B);}
 #endif
-#ifdef HB
-E2 w1(0,TC);F2 q2(i,UC){i f9=H1(TC,m0(floor(n0.xy)));r2(f9);}
+#ifdef GB
+F2 x1(0,RC);G2 r2(i,SC){i h9=I1(RC,m0(floor(n0.xy)));v2(h9);}
 #endif
 )===";
 } // namespace glsl

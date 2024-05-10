@@ -6,10 +6,8 @@
 
 using namespace rive;
 
-void AudioEvent::trigger(const CallbackData& value)
+void AudioEvent::play()
 {
-    Super::trigger(value);
-
 #ifdef WITH_RIVE_AUDIO
     auto audioAsset = (AudioAsset*)m_fileAsset;
     if (audioAsset == nullptr)
@@ -22,14 +20,35 @@ void AudioEvent::trigger(const CallbackData& value)
         return;
     }
 
+    auto volume = audioAsset->volume() * artboard()->volume();
+    if (volume <= 0.0f)
+    {
+        return;
+    }
+
     auto engine =
 #ifdef EXTERNAL_RIVE_AUDIO_ENGINE
         artboard()->audioEngine() != nullptr ? artboard()->audioEngine() :
 #endif
                                              AudioEngine::RuntimeEngine();
 
-    engine->play(audioSource, engine->timeInFrames(), 0, 0);
+    auto sound = engine->play(audioSource, engine->timeInFrames(), 0, 0, artboard());
+
+    if (volume != 1.0f)
+    {
+        sound->volume(volume);
+    }
 #endif
+}
+
+void AudioEvent::trigger(const CallbackData& value)
+{
+    Super::trigger(value);
+    if (!value.context()->playsAudio())
+    {
+        // Context won't play audio, we'll do it ourselves.
+        play();
+    }
 }
 
 StatusCode AudioEvent::import(ImportStack& importStack)

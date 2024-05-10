@@ -123,8 +123,8 @@ static void chop_cubic_around_cusps(const Vec2D p[4],
         // If the cusps are extremely close together, don't allow the straddle points to cross.
         float minT = i == 0 ? 0.f : (cuspT[i - 1] + cuspT[i]) * .5f;
         float maxT = i + 1 == n ? 1.f : (cuspT[i + 1] + cuspT[i]) * .5f;
-        t[i * 2 + 0] = std::max(cuspT[i] - math::EPSILON, minT);
-        t[i * 2 + 1] = std::min(cuspT[i] + math::EPSILON, maxT);
+        t[i * 2 + 0] = fmaxf(cuspT[i] - math::EPSILON, minT);
+        t[i * 2 + 1] = fminf(cuspT[i] + math::EPSILON, maxT);
     }
     pathutils::ChopCubicAt(p, dst, t, n * 2);
     for (int i = 0; i < n; ++i)
@@ -370,6 +370,7 @@ PLSDrawUniquePtr PLSPathDraw::Make(PLSRenderContext* context,
         const AABB& localBounds = path->getBounds();
         // FIXME! Implement interior triangulation in depthStencil mode.
         if (context->frameInterlockMode() != pls::InterlockMode::depthStencil &&
+            path->getRawPath().verbs().count() < 1000 &&
             pls::FindTransformedArea(localBounds, matrix) > 512 * 512)
         {
             return PLSDrawUniquePtr(context->make<InteriorTriangulationDraw>(
@@ -403,10 +404,10 @@ PLSPathDraw::PLSPathDraw(IAABB pixelBounds,
     PLSDraw(pixelBounds, matrix, paint->getBlendMode(), ref_rcp(paint->getImageTexture()), type),
     m_pathRef(path.release()),
     m_fillRule(paint->getIsStroked() ? FillRule::nonZero : fillRule),
-    m_paintType(paint->getType()),
-    m_strokeRadius(paint->getIsStroked() ? paint->getThickness() * .5f : 0)
+    m_paintType(paint->getType())
 {
     assert(m_pathRef != nullptr);
+    assert(!m_pathRef->getRawPath().empty());
     assert(paint != nullptr);
     if (m_blendMode == BlendMode::srcOver && paint->getIsOpaque())
     {
@@ -415,6 +416,11 @@ PLSPathDraw::PLSPathDraw(IAABB pixelBounds,
     if (paint->getIsStroked())
     {
         m_drawContents |= pls::DrawContents::stroke;
+        m_strokeRadius = paint->getThickness() * .5f;
+        // Ensure stroke radius is nonzero. (In PLS, zero radius means the path is filled.)
+        m_strokeRadius = fmaxf(m_strokeRadius, std::numeric_limits<float>::min());
+        assert(!std::isnan(m_strokeRadius)); // These should get culled in PLSRenderer::drawPath().
+        assert(m_strokeRadius > 0);
     }
     else if (m_fillRule == FillRule::evenOdd)
     {
@@ -459,30 +465,28 @@ PLSPathDraw::PLSPathDraw(IAABB pixelBounds,
     m_gradientRef = safe_ref(paint->getGradient());
     RIVE_DEBUG_CODE(m_pathRef->lockRawPathMutations();)
     RIVE_DEBUG_CODE(m_rawPathMutationID = m_pathRef->getRawPathMutationID();)
+    assert(isStroked() == (strokeRadius() > 0));
 }
 
 void PLSPathDraw::pushToRenderContext(PLSRenderContext::LogicalFlush* flush)
 {
     // Make sure the rawPath in our path reference hasn't changed since we began holding!
     assert(m_rawPathMutationID == m_pathRef->getRawPathMutationID());
+    assert(!m_pathRef->getRawPath().empty());
 
     size_t tessVertexCount = m_type == Type::midpointFanPath
                                  ? m_resourceCounts.midpointFanTessVertexCount
                                  : m_resourceCounts.outerCubicTessVertexCount;
-    if (tessVertexCount == 0)
+    if (tessVertexCount > 0)
     {
-        return;
+        // Push a path record.
+        flush->pushPath(this,
+                        m_type == Type::midpointFanPath ? PatchType::midpointFan
+                                                        : PatchType::outerCurves,
+                        tessVertexCount);
+
+        onPushToRenderContext(flush);
     }
-    assert(!m_pathRef->getRawPath().empty());
-
-    // Push a path record.
-    flush->pushPath(this,
-                    m_type == Type::midpointFanPath ? PatchType::midpointFan
-                                                    : PatchType::outerCurves,
-
-                    tessVertexCount);
-
-    onPushToRenderContext(flush);
 }
 
 void PLSPathDraw::releaseRefs()
@@ -516,11 +520,7 @@ MidpointFanPathDraw::MidpointFanPathDraw(PLSRenderContext* context,
     // Count up how much temporary storage this function will need to reserve in CPU buffers.
     const RawPath& rawPath = m_pathRef->getRawPath();
     size_t contourCount = rawPath.countMoveTos();
-    if (contourCount == 0)
-    {
-        // The entire batch is empty.
-        return;
-    }
+    assert(contourCount != 0);
 
     m_contours = reinterpret_cast<ContourInfo*>(
         context->perFrameAllocator().alloc(sizeof(ContourInfo) * contourCount));
@@ -597,7 +597,11 @@ MidpointFanPathDraw::MidpointFanPathDraw(PLSRenderContext* context,
         if (closed)
         {
             Vec2D finalPtInContour = iter.rawPtsPtr()[-1];
-            if (startOfContour.movePt() != finalPtInContour)
+            // Bit-cast to uint64_t because we don't want the special equality rules for NaN. If
+            // we're empty or otherwise return back to p0, we want to detect this, regardless of
+            // whether there are NaN values.
+            if (math::bit_cast<uint64_t>(startOfContour.movePt()) !=
+                math::bit_cast<uint64_t>(finalPtInContour))
             {
                 assert(preChopVerbCount > 0);
                 if (roundJoinStroked)
@@ -930,21 +934,23 @@ MidpointFanPathDraw::MidpointFanPathDraw(PLSRenderContext* context,
                 if (cap == StrokeCap::round)
                 {
                     // Round caps rotate 180 degrees.
-                    contour->strokeCapSegmentCount = ceilf(polarSegmentsPerRad * math::PI);
+                    float strokeCapSegmentCount = ceilf(polarSegmentsPerRad * math::PI);
                     // +2 because round caps emulated as joins need to emit vertices at T=0
                     // and T=1, unlike normal round joins.
-                    contour->strokeCapSegmentCount += 2;
+                    strokeCapSegmentCount += 2;
                     // Make sure not to exceed kMaxPolarSegments.
-                    contour->strokeCapSegmentCount =
-                        std::min(contour->strokeCapSegmentCount, kMaxPolarSegments);
+                    strokeCapSegmentCount = fminf(strokeCapSegmentCount, kMaxPolarSegments);
+                    contour->strokeCapSegmentCount = static_cast<uint32_t>(strokeCapSegmentCount);
                 }
                 else
                 {
                     contour->strokeCapSegmentCount = kNumSegmentsInMiterOrBevelJoin;
                 }
-                // pushContourToRenderContext() uses "strokeCapSegmentCount != 0" to tell if it
-                // needs stroke caps.
-                assert(contour->strokeCapSegmentCount != 0);
+                // PLS expects all patches to have >0 tessellation vertices, so for the case of an
+                // empty patch with a stroke cap, contour->strokeCapSegmentCount can't be zero.
+                // Also, pushContourToRenderContext() uses "strokeCapSegmentCount != 0" to tell if
+                // it needs stroke caps.
+                assert(contour->strokeCapSegmentCount >= 2);
                 // As long as a contour isn't empty, we can tack the end cap onto the join
                 // section of the final curve in the stroke. Otherwise, we need to introduce
                 // 0-tessellation-segment curves with non-empty joins to carry the caps.
@@ -1266,7 +1272,11 @@ void MidpointFanPathDraw::onPushToRenderContext(PLSRenderContext::LogicalFlush* 
         else if (contour.closed)
         {
             implicitClose[0] = end.rawPtsPtr()[-1];
-            if (implicitClose[0] != implicitClose[1])
+            // Bit-cast to uint64_t because we don't want the special equality rules for NaN. If
+            // we're empty or otherwise return back to p0, we want to detect this, regardless of
+            // whether there are NaN values.
+            if (math::bit_cast<uint64_t>(implicitClose[0]) !=
+                math::bit_cast<uint64_t>(implicitClose[1]))
             {
                 // Draw a line back to the beginning of the contour.
                 std::array<Vec2D, 4> cubic = convert_line_to_cubic(implicitClose);
@@ -1314,6 +1324,7 @@ void MidpointFanPathDraw::pushEmulatedStrokeCapAsJoinBeforeCubic(
     // Reverse the cubic and push it with zero parametric and polar segments, and a 180-degree join
     // tangent. This results in a solitary join, positioned immediately before the provided cubic,
     // that looks like the desired stroke cap.
+    assert(strokeCapSegmentCount >= 2);
     flush->pushCubic(std::array{cubic[3], cubic[2], cubic[1], cubic[0]}.data(),
                      find_cubic_tan0(cubic),
                      emulatedCapAsJoinFlags,
@@ -1504,18 +1515,22 @@ void InteriorTriangulationDraw::processPath(PathOp op,
         // We also draw each "grout" triangle using an outerCubic patch.
         patchCount += m_triangulator->groutList().count();
 
-        m_resourceCounts.pathCount = 1;
-        m_resourceCounts.contourCount = contourCount;
-        // maxTessellatedSegmentCount does not get doubled when we emit both forward and mirrored
-        // contours because the forward and mirrored pair both get packed into a single
-        // pls::TessVertexSpan.
-        m_resourceCounts.maxTessellatedSegmentCount = patchCount;
-        // outerCubic patches emit their tessellated geometry twice: once forward and once mirrored.
-        m_resourceCounts.outerCubicTessVertexCount =
-            m_contourDirections == pls::ContourDirections::reverseAndForward
-                ? patchCount * kOuterCurvePatchSegmentSpan * 2
-                : patchCount * kOuterCurvePatchSegmentSpan;
-        m_resourceCounts.maxTriangleVertexCount = m_triangulator->maxVertexCount();
+        if (patchCount > 0)
+        {
+            m_resourceCounts.pathCount = 1;
+            m_resourceCounts.contourCount = contourCount;
+            // maxTessellatedSegmentCount does not get doubled when we emit both forward and
+            // mirrored contours because the forward and mirrored pair both get packed into a single
+            // pls::TessVertexSpan.
+            m_resourceCounts.maxTessellatedSegmentCount = patchCount;
+            // outerCubic patches emit their tessellated geometry twice: once forward and once
+            // mirrored.
+            m_resourceCounts.outerCubicTessVertexCount =
+                m_contourDirections == pls::ContourDirections::reverseAndForward
+                    ? patchCount * kOuterCurvePatchSegmentSpan * 2
+                    : patchCount * kOuterCurvePatchSegmentSpan;
+            m_resourceCounts.maxTriangleVertexCount = m_triangulator->maxVertexCount();
+        }
     }
     else
     {

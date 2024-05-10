@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <vector>
 #include "rive/animation/linear_animation_instance.hpp"
+#include "rive/animation/state_instance.hpp"
+#include "rive/animation/state_transition.hpp"
 #include "rive/core/field_types/core_callback_type.hpp"
 #include "rive/hit_result.hpp"
 #include "rive/listener_type.hpp"
@@ -43,6 +45,7 @@ class StateMachineInstance : public Scene
     friend class SMIInput;
     friend class KeyedProperty;
     friend class HitComponent;
+    friend class StateMachineLayerInstance;
 
 private:
     /// Provide a hitListener if you want to process a down or an up for the pointer position
@@ -51,8 +54,11 @@ private:
 
     template <typename SMType, typename InstType>
     InstType* getNamedInput(const std::string& name) const;
-    void notifyEventListeners(std::vector<EventReport> events, NestedArtboard* source);
+    void notifyEventListeners(const std::vector<EventReport>& events, NestedArtboard* source);
     void sortHitComponents();
+    double randomValue();
+    StateTransition* findRandomTransition(StateInstance* stateFromInstance, bool ignoreTriggers);
+    StateTransition* findAllowedTransition(StateInstance* stateFromInstance, bool ignoreTriggers);
 
 public:
     StateMachineInstance(const StateMachine* machine, ArtboardInstance* instance);
@@ -120,6 +126,7 @@ public:
 
     /// Gets a reported event at an index < reportedEventCount().
     const EventReport reportedEventAt(std::size_t index) const;
+    bool playsAudio() override { return true; }
 
 private:
     std::vector<EventReport> m_reportedEvents;

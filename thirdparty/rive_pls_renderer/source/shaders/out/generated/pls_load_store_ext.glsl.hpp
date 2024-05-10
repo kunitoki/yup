@@ -5,62 +5,66 @@
 namespace rive {
 namespace pls {
 namespace glsl {
-const char pls_load_store_ext[] = R"===(#ifdef W
+const char pls_load_store_ext[] = R"===(#ifdef V
 void main(){gl_Position=vec4(mix(vec2(-1,1),vec2(1,-1),equal(gl_VertexID&ivec2(1,2),ivec2(0))),0,1);}
 #endif
-#ifdef HB
+#ifdef GB
 #extension GL_EXT_shader_pixel_local_storage:enable
 #extension GL_ARM_shader_framebuffer_fetch:enable
 #extension GL_EXT_shader_framebuffer_fetch:enable
-#ifdef XC
+#ifdef VC
 #if __VERSION__>=310
-layout(binding=0,std140)uniform bb{uniform highp vec4 oa;}pa;
+layout(binding=0,std140)uniform db{uniform highp vec4 qa;}ra;
 #else
-uniform mediump vec4 YC;
+uniform mediump vec4 WC;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
-#ifdef NC
+#ifdef LC
 __pixel_local_inEXT H0
 #else
 __pixel_local_outEXT H0
 #endif
-{layout(rgba8)mediump vec4 X;layout(r32ui)highp uint x0;layout(rgba8)mediump vec4 v2;layout(r32ui)highp uint r0;};
+{layout(rgba8)mediump vec4 c0;layout(r32ui)highp uint Q0;layout(rgba8)mediump vec4 w2;
+#ifdef BB
+layout(r32ui)highp uint w0;
+#endif
+};
 #ifndef GL_ARM_shader_framebuffer_fetch
-#ifdef ZC
-layout(location=0)inout mediump vec4 k6;
+#ifdef XC
+layout(location=0)inout mediump vec4 l6;
 #endif
 #endif
-#ifdef NC
-layout(location=0)out mediump vec4 k6;
+#ifdef LC
+layout(location=0)out mediump vec4 l6;
 #endif
 void main(){
-#ifdef XC
+#ifdef VC
 #if __VERSION__>=310
-X=pa.oa;
+c0=ra.qa;
 #else
-X=YC;
+c0=WC;
 #endif
 #endif
-#ifdef ZC
+#ifdef XC
 #ifdef GL_ARM_shader_framebuffer_fetch
-X=gl_LastFragColorARM;
+c0=gl_LastFragColorARM;
 #else
-X=k6;
+c0=l6;
 #endif
 #endif
-#ifdef TD
-x0=0u;
+#ifdef RD
+Q0=0u;
 #endif
-#ifdef UD
-r0=0u;
+#ifdef SD
+w0=0u;
 #endif
-#ifdef NC
-k6=X;
+#ifdef LC
+l6=c0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 qa;void main(){qa=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 sa;void main(){sa=vec4(0,1,0,1);}
 #endif
 #endif
 )===";

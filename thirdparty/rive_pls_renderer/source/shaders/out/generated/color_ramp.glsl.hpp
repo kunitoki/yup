@@ -5,15 +5,15 @@
 namespace rive {
 namespace pls {
 namespace glsl {
-const char color_ramp[] = R"===(#ifdef W
-T0(P)q0(0,T,RB);U0
+const char color_ramp[] = R"===(#ifdef V
+U0(P)q0(0,T,QB);V0
 #endif
-z1 k0 I(0,i,V3);A1
-#ifdef W
-N1 O1 U1 V1 i g9(uint f){return M0((T(f,f,f,f)>>T(16,8,0,24))&0xffu)/255.;}e1(GD,P,r,j,L){w0(L,r,RB,T);Q(V3,i);float x=float((j&1)==0?RB.x&0xffffu:RB.x>>16)/65536.;float C5=(j&2)==0?1.:.0;if(v.D5<.0){C5=1.-C5;}V3=g9((j&1)==0?RB.z:RB.w);g B;B.x=x*2.-1.;B.y=(float(RB.y)+C5)*v.D5-sign(v.D5);B.zw=d(0,1);S(V3);f1(B);}
+A1 k0 I(0,i,W3);B1
+#ifdef V
+O1 P1 V1 W1 i i9(uint f){return M0((T(f,f,f,f)>>T(16,8,0,24))&0xffu)/255.;}g1(ED,P,r,j,L){v0(L,r,QB,T);Q(W3,i);float x=float((j&1)==0?QB.x&0xffffu:QB.x>>16)/65536.;float D5=(j&2)==0?1.:.0;if(v.E5<.0){D5=1.-D5;}W3=i9((j&1)==0?QB.z:QB.w);g B;B.x=x*2.-1.;B.y=(float(QB.y)+D5)*v.E5-sign(v.E5);B.zw=d(0,1);S(W3);h1(B);}
 #endif
-#ifdef HB
-q2(i,HD){N(V3,i);r2(V3);}
+#ifdef GB
+r2(i,FD){N(W3,i);v2(W3);}
 #endif
 )===";
 } // namespace glsl

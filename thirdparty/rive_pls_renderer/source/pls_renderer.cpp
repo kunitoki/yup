@@ -103,8 +103,12 @@ void PLSRenderer::drawPath(RenderPath* renderPath, RenderPaint* renderPaint)
     LITE_RTTI_CAST_OR_RETURN(path, PLSPath*, renderPath);
     LITE_RTTI_CAST_OR_RETURN(paint, PLSPaint*, renderPaint);
 
-    bool stroked = paint->getIsStroked();
+    if (path->getRawPath().empty())
+    {
+        return;
+    }
 
+    bool stroked = paint->getIsStroked();
     if (stroked && m_context->frameDescriptor().strokesDisabled)
     {
         return;
@@ -113,9 +117,8 @@ void PLSRenderer::drawPath(RenderPath* renderPath, RenderPaint* renderPaint)
     {
         return;
     }
-    // A stroke width of zero in PLS means a path is filled.
-    if (stroked && paint->getThickness() <= 0)
-    {
+    if (stroked && !(paint->getThickness() > 0)) // Use inverse logic to ensure we abort when stroke
+    {                                            // thickness is NaN.
         return;
     }
 
@@ -130,6 +133,12 @@ void PLSRenderer::drawPath(RenderPath* renderPath, RenderPaint* renderPaint)
 void PLSRenderer::clipPath(RenderPath* renderPath)
 {
     LITE_RTTI_CAST_OR_RETURN(path, PLSPath*, renderPath);
+
+    if (path->getRawPath().empty())
+    {
+        m_stack.back().clipIsEmpty = true;
+        return;
+    }
 
     // First try to handle axis-aligned rectangles using the "ENABLE_CLIP_RECT" shader feature.
     // Multiple axis-aligned rectangles can be intersected into a single rectangle if their matrices
@@ -164,8 +173,8 @@ static bool transform_rect_to_new_space(AABB* rect,
         return false;
     }
     currentToNew = currentToNew * currentMatrix;
-    float maxSkew = std::max(fabsf(currentToNew.xy()), fabsf(currentToNew.yx()));
-    float maxScale = std::max(fabsf(currentToNew.xx()), fabsf(currentToNew.yy()));
+    float maxSkew = fmaxf(fabsf(currentToNew.xy()), fabsf(currentToNew.yx()));
+    float maxScale = fmaxf(fabsf(currentToNew.xx()), fabsf(currentToNew.yy()));
     if (maxSkew > math::EPSILON && maxScale > math::EPSILON)
     {
         // Transforming this rect to the new view matrix would turn it into something that isn't a
@@ -184,6 +193,11 @@ static bool transform_rect_to_new_space(AABB* rect,
 void PLSRenderer::clipRectImpl(AABB rect, const PLSPath* originalPath)
 {
     bool hasClipRect = m_stack.back().clipRectInverseMatrix != nullptr;
+    if (rect.isEmptyOrNaN())
+    {
+        m_stack.back().clipIsEmpty = true;
+        return;
+    }
 
     // If there already is a clipRect, we can only accept another one by intersecting it with the
     // existing one. This means the new rect must be axis-aligned with the existing clipRect.
@@ -217,6 +231,11 @@ void PLSRenderer::clipRectImpl(AABB rect, const PLSPath* originalPath)
 
 void PLSRenderer::clipPathImpl(const PLSPath* path)
 {
+    if (path->getBounds().isEmptyOrNaN())
+    {
+        m_stack.back().clipIsEmpty = true;
+        return;
+    }
     // Only write a new clip element if this path isn't already on the stack from before. e.g.:
     //
     //     clipPath(samePath);
@@ -306,6 +325,10 @@ void PLSRenderer::drawImageMesh(const RenderImage* renderImage,
 
 void PLSRenderer::clipAndPushDraw(PLSDrawUniquePtr draw)
 {
+    if (m_stack.back().clipIsEmpty)
+    {
+        return;
+    }
     if (m_context->isOutsideCurrentFrame(draw->pixelBounds()))
     {
         return;

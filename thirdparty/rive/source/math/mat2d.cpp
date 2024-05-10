@@ -90,11 +90,6 @@ void Mat2D::mapPoints(Vec2D dst[], const Vec2D pts[], size_t n) const
 
 AABB Mat2D::mapBoundingBox(const Vec2D pts[], size_t n) const
 {
-    if (n == 0)
-    {
-        return {0, 0, 0, 0};
-    }
-
     size_t i = 0;
     float4 scale = float2{m_buffer[0], m_buffer[3]}.xyxy;
     float4 skew = simd::load2f(&m_buffer[1]).yxyx;
@@ -140,12 +135,23 @@ AABB Mat2D::mapBoundingBox(const Vec2D pts[], size_t n) const
     }
 
     float4 bbox = simd::join(simd::min(mins.xy, mins.zw), simd::max(maxes.xy, maxes.zw));
-    assert(simd::all(bbox.xy <= bbox.zw));
+    // Use logic that takes the "nonfinite" branch when bbox has NaN values.
+    // Use "b - a >= 0" instead of "a >= b" because it fails when b == a == inf.
+    if (!simd::all(bbox.zw - bbox.xy >= 0))
+    {
+        // The given points were NaN or empty, or infinite.
+        bbox = float4(0);
+    }
+    else
+    {
+        float4 trans = simd::load2f(&m_buffer[4]).xyxy;
+        bbox += trans;
+    }
 
-    float4 trans = simd::load2f(&m_buffer[4]).xyxy;
-    bbox += trans;
-
-    return math::bit_cast<AABB>(bbox);
+    auto aabb = math::bit_cast<AABB>(bbox);
+    assert(aabb.width() >= 0);
+    assert(aabb.height() >= 0);
+    return aabb;
 }
 
 AABB Mat2D::mapBoundingBox(const AABB& aabb) const

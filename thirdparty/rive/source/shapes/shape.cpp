@@ -1,6 +1,7 @@
 #include "rive/constraints/constraint.hpp"
 #include "rive/hittest_command_path.hpp"
 #include "rive/shapes/path.hpp"
+#include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/shapes/clipping_shape.hpp"
 #include "rive/shapes/paint/blend_mode.hpp"
@@ -23,8 +24,28 @@ void Shape::addPath(Path* path)
 
 bool Shape::canDeferPathUpdate()
 {
-    return renderOpacity() == 0 && (pathSpace() & PathSpace::Clipping) != PathSpace::Clipping &&
-           (pathSpace() & PathSpace::FollowPath) != PathSpace::FollowPath;
+    auto canDefer = renderOpacity() == 0 &&
+                    (pathSpace() & PathSpace::Clipping) != PathSpace::Clipping &&
+                    (pathSpace() & PathSpace::FollowPath) != PathSpace::FollowPath;
+    if (canDefer)
+    {
+        // If we have a dependent Skin, don't defer the update
+        for (auto d : dependents())
+        {
+            if (d->is<PointsPath>() && d->as<PointsPath>()->skin() != nullptr)
+            {
+                return false;
+            }
+        }
+        for (auto path : m_Paths)
+        {
+            if (!path->canDeferPathUpdate())
+            {
+                return false;
+            }
+        }
+    }
+    return canDefer;
 }
 
 void Shape::update(ComponentDirt value)

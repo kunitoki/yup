@@ -7,9 +7,9 @@ void main(){gl_Position=vec4(mix(vec2(-1,1),vec2(1,-1),equal(gl_VertexID&ivec2(1
 #extension GL_EXT_shader_framebuffer_fetch:enable
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-layout(binding=0,std140)uniform bb{uniform highp vec4 oa;}pa;
+layout(binding=0,std140)uniform db{uniform highp vec4 qa;}ra;
 #else
-uniform mediump vec4 YC;
+uniform mediump vec4 WC;
 #endif
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
@@ -18,41 +18,45 @@ __pixel_local_inEXT H0
 #else
 __pixel_local_outEXT H0
 #endif
-{layout(rgba8)mediump vec4 X;layout(r32ui)highp uint x0;layout(rgba8)mediump vec4 v2;layout(r32ui)highp uint r0;};
+{layout(rgba8)mediump vec4 c0;layout(r32ui)highp uint Q0;layout(rgba8)mediump vec4 w2;
+#ifdef ENABLE_CLIPPING
+layout(r32ui)highp uint w0;
+#endif
+};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef LOAD_COLOR
-layout(location=0)inout mediump vec4 k6;
+layout(location=0)inout mediump vec4 l6;
 #endif
 #endif
 #ifdef STORE_COLOR
-layout(location=0)out mediump vec4 k6;
+layout(location=0)out mediump vec4 l6;
 #endif
 void main(){
 #ifdef CLEAR_COLOR
 #if __VERSION__>=310
-X=pa.oa;
+c0=ra.qa;
 #else
-X=YC;
+c0=WC;
 #endif
 #endif
 #ifdef LOAD_COLOR
 #ifdef GL_ARM_shader_framebuffer_fetch
-X=gl_LastFragColorARM;
+c0=gl_LastFragColorARM;
 #else
-X=k6;
+c0=l6;
 #endif
 #endif
 #ifdef CLEAR_COVERAGE
-x0=0u;
+Q0=0u;
 #endif
 #ifdef CLEAR_CLIP
-r0=0u;
+w0=0u;
 #endif
 #ifdef STORE_COLOR
-k6=X;
+l6=c0;
 #endif
 }
 #else
-layout(location=0)out mediump vec4 qa;void main(){qa=vec4(0,1,0,1);}
+layout(location=0)out mediump vec4 sa;void main(){sa=vec4(0,1,0,1);}
 #endif
 #endif

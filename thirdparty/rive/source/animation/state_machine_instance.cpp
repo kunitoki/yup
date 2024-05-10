@@ -3,6 +3,7 @@
 #include "rive/animation/any_state.hpp"
 #include "rive/animation/cubic_interpolator.hpp"
 #include "rive/animation/entry_state.hpp"
+#include "rive/animation/layer_state_flags.hpp"
 #include "rive/animation/nested_state_machine.hpp"
 #include "rive/animation/state_instance.hpp"
 #include "rive/animation/state_machine_bool.hpp"
@@ -24,6 +25,7 @@
 #include "rive/nested_artboard.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/math/math_types.hpp"
+#include "rive/audio_event.hpp"
 #include <unordered_map>
 
 using namespace rive;
@@ -139,6 +141,13 @@ public:
         }
     }
 
+    bool canChangeState(const LayerState* stateTo)
+    {
+        return !((m_currentState == nullptr ? nullptr : m_currentState->state()) == stateTo);
+    }
+
+    double randomValue() { return ((double)rand() / (RAND_MAX)); }
+
     bool changeState(const LayerState* stateTo)
     {
         if ((m_currentState == nullptr ? nullptr : m_currentState->state()) == stateTo)
@@ -163,80 +172,148 @@ public:
         return true;
     }
 
+    StateTransition* findRandomTransition(StateInstance* stateFromInstance, bool ignoreTriggers)
+    {
+        uint32_t totalWeight = 0;
+        auto stateFrom = stateFromInstance->state();
+        // printf("stateFrom->transitionCount(): %zu\n", stateFrom->transitionCount());
+        for (size_t i = 0, length = stateFrom->transitionCount(); i < length; i++)
+        {
+            auto transition = stateFrom->transition(i);
+            auto allowed =
+                transition->allowed(stateFromInstance, m_stateMachineInstance, ignoreTriggers);
+            if (allowed == AllowTransition::yes && canChangeState(transition->stateTo()))
+            {
+                transition->evaluatedRandomWeight(transition->randomWeight());
+                totalWeight += transition->randomWeight();
+            }
+            else
+            {
+                transition->evaluatedRandomWeight(0);
+                if (allowed == AllowTransition::waitingForExit)
+                {
+                    m_waitingForExit = true;
+                }
+            }
+        }
+        if (totalWeight > 0)
+        {
+            double randomWeight = randomValue() * totalWeight * 1.0;
+            float currentWeight = 0;
+            size_t index = 0;
+            StateTransition* transition;
+            while (index < stateFrom->transitionCount())
+            {
+                transition = stateFrom->transition(index);
+                auto transitionWeight = transition->evaluatedRandomWeight();
+                if (currentWeight + transitionWeight > randomWeight)
+                {
+                    return transition;
+                }
+                currentWeight += transitionWeight;
+                index++;
+            }
+        }
+        return nullptr;
+    }
+
+    StateTransition* findAllowedTransition(StateInstance* stateFromInstance, bool ignoreTriggers)
+    {
+        auto stateFrom = stateFromInstance->state();
+        // If it should randomize
+        if ((static_cast<LayerStateFlags>(stateFrom->flags()) & LayerStateFlags::Random) ==
+            LayerStateFlags::Random)
+        {
+            return findRandomTransition(stateFromInstance, ignoreTriggers);
+        }
+        // Else search the first valid transition
+        for (size_t i = 0, length = stateFrom->transitionCount(); i < length; i++)
+        {
+            auto transition = stateFrom->transition(i);
+            auto allowed =
+                transition->allowed(stateFromInstance, m_stateMachineInstance, ignoreTriggers);
+            if (allowed == AllowTransition::yes && canChangeState(transition->stateTo()))
+            {
+                transition->evaluatedRandomWeight(transition->randomWeight());
+                return transition;
+            }
+            else
+            {
+                transition->evaluatedRandomWeight(0);
+                if (allowed == AllowTransition::waitingForExit)
+                {
+                    m_waitingForExit = true;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     bool tryChangeState(StateInstance* stateFromInstance, bool ignoreTriggers)
     {
         if (stateFromInstance == nullptr)
         {
             return false;
         }
-        auto stateFrom = stateFromInstance->state();
         auto outState = m_currentState;
-        for (size_t i = 0, length = stateFrom->transitionCount(); i < length; i++)
+        auto transition = findAllowedTransition(stateFromInstance, ignoreTriggers);
+        if (transition != nullptr)
         {
-            auto transition = stateFrom->transition(i);
-            auto allowed =
-                transition->allowed(stateFromInstance, m_stateMachineInstance, ignoreTriggers);
-            if (allowed == AllowTransition::yes && changeState(transition->stateTo()))
+            changeState(transition->stateTo());
+            m_stateMachineChangedOnAdvance = true;
+            // state actually has changed
+            m_transition = transition;
+            fireEvents(StateMachineFireOccurance::atStart, transition->events());
+            if (transition->duration() == 0)
             {
-                m_stateMachineChangedOnAdvance = true;
-                // state actually has changed
-                m_transition = transition;
-                fireEvents(StateMachineFireOccurance::atStart, transition->events());
-                if (transition->duration() == 0)
-                {
-                    m_transitionCompleted = true;
-                    fireEvents(StateMachineFireOccurance::atEnd, transition->events());
-                }
-                else
-                {
-                    m_transitionCompleted = false;
-                }
-
-                if (m_stateFrom != m_anyStateInstance)
-                {
-                    // Old state from is done.
-                    delete m_stateFrom;
-                }
-                m_stateFrom = outState;
-
-                // If we had an exit time and wanted to pause on exit, make
-                // sure to hold the exit time. Delegate this to the
-                // transition by telling it that it was completed.
-                if (outState != nullptr && transition->applyExitCondition(outState))
-                {
-                    // Make sure we apply this state. This only returns true
-                    // when it's an animation state instance.
-                    auto instance =
-                        static_cast<AnimationStateInstance*>(m_stateFrom)->animationInstance();
-
-                    m_holdAnimation = instance->animation();
-                    m_holdTime = instance->time();
-                }
-                m_mixFrom = m_mix;
-
-                // Keep mixing last animation that was mixed in.
-                if (m_mix != 0.0f)
-                {
-                    m_holdAnimationFrom = transition->pauseOnExit();
-                }
-                if (m_stateFrom != nullptr && m_stateFrom->state()->is<AnimationState>() &&
-                    m_currentState != nullptr)
-                {
-                    auto instance =
-                        static_cast<AnimationStateInstance*>(m_stateFrom)->animationInstance();
-
-                    auto spilledTime = instance->spilledTime();
-                    m_currentState->advance(spilledTime, m_stateMachineInstance);
-                }
-                m_mix = 0.0f;
-                updateMix(0.0f);
-                m_waitingForExit = false;
-                return true;
+                m_transitionCompleted = true;
+                fireEvents(StateMachineFireOccurance::atEnd, transition->events());
             }
-            else if (allowed == AllowTransition::waitingForExit)
+            else
             {
-                m_waitingForExit = true;
+                m_transitionCompleted = false;
             }
+
+            if (m_stateFrom != m_anyStateInstance)
+            {
+                // Old state from is done.
+                delete m_stateFrom;
+            }
+            m_stateFrom = outState;
+
+            // If we had an exit time and wanted to pause on exit, make
+            // sure to hold the exit time. Delegate this to the
+            // transition by telling it that it was completed.
+            if (outState != nullptr && transition->applyExitCondition(outState))
+            {
+                // Make sure we apply this state. This only returns true
+                // when it's an animation state instance.
+                auto instance =
+                    static_cast<AnimationStateInstance*>(m_stateFrom)->animationInstance();
+
+                m_holdAnimation = instance->animation();
+                m_holdTime = instance->time();
+            }
+            m_mixFrom = m_mix;
+
+            // Keep mixing last animation that was mixed in.
+            if (m_mix != 0.0f)
+            {
+                m_holdAnimationFrom = transition->pauseOnExit();
+            }
+            if (m_stateFrom != nullptr && m_stateFrom->state()->is<AnimationState>() &&
+                m_currentState != nullptr)
+            {
+                auto instance =
+                    static_cast<AnimationStateInstance*>(m_stateFrom)->animationInstance();
+
+                auto spilledTime = instance->spilledTime();
+                m_currentState->advance(spilledTime, m_stateMachineInstance);
+            }
+            m_mix = 0.0f;
+            updateMix(0.0f);
+            m_waitingForExit = false;
+            return true;
         }
         return false;
     }
@@ -315,7 +392,7 @@ public:
     HitComponent(Component* component, StateMachineInstance* stateMachineInstance) :
         m_component(component), m_stateMachineInstance(stateMachineInstance)
     {}
-    virtual ~HitComponent(){};
+    virtual ~HitComponent() {}
     virtual HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) = 0;
 
 protected:
@@ -332,9 +409,9 @@ public:
     HitShape(Component* shape, StateMachineInstance* stateMachineInstance) :
         HitComponent(shape, stateMachineInstance)
     {}
-    ~HitShape() {}
     bool isHovered = false;
     float hitRadius = 2;
+    Vec2D previousPosition;
     std::vector<const StateMachineListener*> listeners;
     HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) override
     {
@@ -347,6 +424,11 @@ public:
         bool isOver = canHit ? shape->hitTest(hitArea) : false;
         bool hoverChange = isHovered != isOver;
         isHovered = isOver;
+        if (hoverChange && isHovered)
+        {
+            previousPosition.x = position.x;
+            previousPosition.y = position.y;
+        }
 
         // // iterate all listeners associated with this hit shape
         for (auto listener : listeners)
@@ -357,21 +439,23 @@ public:
             {
                 if (isOver && listener->listenerType() == ListenerType::enter)
                 {
-                    listener->performChanges(m_stateMachineInstance, position);
+                    listener->performChanges(m_stateMachineInstance, position, previousPosition);
                     m_stateMachineInstance->markNeedsAdvance();
                 }
                 else if (!isOver && listener->listenerType() == ListenerType::exit)
                 {
-                    listener->performChanges(m_stateMachineInstance, position);
+                    listener->performChanges(m_stateMachineInstance, position, previousPosition);
                     m_stateMachineInstance->markNeedsAdvance();
                 }
             }
             if (isOver && hitType == listener->listenerType())
             {
-                listener->performChanges(m_stateMachineInstance, position);
+                listener->performChanges(m_stateMachineInstance, position, previousPosition);
                 m_stateMachineInstance->markNeedsAdvance();
             }
         }
+        previousPosition.x = position.x;
+        previousPosition.y = position.y;
         return isOver ? shape->isTargetOpaque() ? HitResult::hitOpaque : HitResult::hit
                       : HitResult::none;
     }
@@ -382,7 +466,7 @@ public:
     HitNestedArtboard(Component* nestedArtboard, StateMachineInstance* stateMachineInstance) :
         HitComponent(nestedArtboard, stateMachineInstance)
     {}
-    ~HitNestedArtboard() {}
+    ~HitNestedArtboard() override {}
     HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) override
     {
         auto nestedArtboard = m_component->as<NestedArtboard>();
@@ -660,9 +744,9 @@ bool StateMachineInstance::advance(float seconds)
 
 bool StateMachineInstance::advanceAndApply(float seconds)
 {
-    bool more = this->advance(seconds);
-    m_artboardInstance->advance(seconds);
-    return more;
+    bool keepGoing = this->advance(seconds);
+    keepGoing = m_artboardInstance->advance(seconds) || keepGoing;
+    return keepGoing;
 }
 
 void StateMachineInstance::markNeedsAdvance() { m_needsAdvance = true; }
@@ -782,7 +866,7 @@ const EventReport StateMachineInstance::reportedEventAt(std::size_t index) const
     return m_reportedEvents[index];
 }
 
-void StateMachineInstance::notifyEventListeners(std::vector<EventReport> events,
+void StateMachineInstance::notifyEventListeners(const std::vector<EventReport>& events,
                                                 NestedArtboard* source)
 {
     if (events.size() > 0)
@@ -815,7 +899,7 @@ void StateMachineInstance::notifyEventListeners(std::vector<EventReport> events,
                     auto listenerEvent = sourceArtboard->resolve(listener->eventId());
                     if (listenerEvent == event.event())
                     {
-                        listener->performChanges(this, Vec2D());
+                        listener->performChanges(this, Vec2D(), Vec2D());
                         break;
                     }
                 }
@@ -825,6 +909,15 @@ void StateMachineInstance::notifyEventListeners(std::vector<EventReport> events,
         if (m_parentStateMachineInstance != nullptr)
         {
             m_parentStateMachineInstance->notifyEventListeners(events, m_parentNestedArtboard);
+        }
+
+        for (auto report : events)
+        {
+            auto event = report.event();
+            if (event->is<AudioEvent>())
+            {
+                event->as<AudioEvent>()->play();
+            }
         }
     }
 }

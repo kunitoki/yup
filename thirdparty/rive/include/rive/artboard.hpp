@@ -101,8 +101,8 @@ public:
     void onDirty(ComponentDirt dirt) override;
 
     bool advance(double elapsedSeconds);
-    bool hasChangedDrawOrderInLastUpdate() { return m_HasChangedDrawOrderInLastUpdate; };
-    Drawable* firstDrawable() { return m_FirstDrawable; };
+    bool hasChangedDrawOrderInLastUpdate() { return m_HasChangedDrawOrderInLastUpdate; }
+    Drawable* firstDrawable() { return m_FirstDrawable; }
 
     enum class DrawOption
     {
@@ -127,6 +127,7 @@ public:
     bool isTranslucent() const;
     bool isTranslucent(const LinearAnimation*) const;
     bool isTranslucent(const LinearAnimationInstance*) const;
+    bool hasAudio() const;
 
     template <typename T = Component> T* find(const std::string& name)
     {
@@ -260,10 +261,15 @@ public:
 
     StatusCode import(ImportStack& importStack) override;
 
+    float volume() const;
+    void volume(float value);
+
 #ifdef EXTERNAL_RIVE_AUDIO_ENGINE
     rcp<AudioEngine> audioEngine() const;
     void audioEngine(rcp<AudioEngine> audioEngine);
 #endif
+private:
+    float m_volume = 1.0f;
 };
 
 class ArtboardInstance : public Artboard

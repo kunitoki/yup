@@ -4,7 +4,6 @@
 
 #include "rive/pls/gl/gles3.hpp"
 
-#ifdef RIVE_ANDROID
 #include <EGL/egl.h>
 
 PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEEXTPROC glDrawArraysInstancedBaseInstanceEXT = nullptr;
@@ -13,6 +12,7 @@ PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEEXTPROC
 glDrawElementsInstancedBaseVertexBaseInstanceEXT = nullptr;
 PFNGLFRAMEBUFFERFETCHBARRIERQCOMPROC glFramebufferFetchBarrierQCOM = nullptr;
 PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC glFramebufferTexture2DMultisampleEXT = nullptr;
+PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC glRenderbufferStorageMultisampleEXT = nullptr;
 
 void LoadGLESExtensions(const GLCapabilities& extensions)
 {
@@ -43,7 +43,9 @@ void LoadGLESExtensions(const GLCapabilities& extensions)
         glFramebufferTexture2DMultisampleEXT =
             (PFNGLFRAMEBUFFERTEXTURE2DMULTISAMPLEEXTPROC)eglGetProcAddress(
                 "glFramebufferTexture2DMultisampleEXT");
+        glRenderbufferStorageMultisampleEXT =
+            (PFNGLRENDERBUFFERSTORAGEMULTISAMPLEEXTPROC)eglGetProcAddress(
+                "glRenderbufferStorageMultisampleEXT");
         loadedExtensions.EXT_multisampled_render_to_texture = true;
     }
 }
-#endif
