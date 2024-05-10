@@ -174,10 +174,123 @@ public:
     }
 
     //==============================================================================
+    constexpr float getHue() const
+    {
+        const float rf = getRedFloat();
+        const float gf = getGreenFloat();
+        const float bf = getBlueFloat();
+        const float max = jmax (rf, gf, bf);
+        const float min = jmin (rf, gf, bf);
+
+        if (max == min)
+            return 0.0f;
+
+        const float d = max - min;
+        float h = 0.0f;
+
+        if (max == rf)
+            h = (gf - bf) / d + (gf < bf ? 6.0f : 0.0f);
+
+        else if (max == gf)
+            h = (bf - rf) / d + 2.0f;
+
+        else if (max == bf)
+            h = (rf - gf) / d + 4.0f;
+
+        h /= 6.0f;
+        return h;
+    }
+
+    constexpr float getSaturation() const
+    {
+        const float rf = getRedFloat();
+        const float gf = getGreenFloat();
+        const float bf = getBlueFloat();
+        const float max = jmax (rf, gf, bf);
+        const float min = jmin (rf, gf, bf);
+
+        if (max == min)
+            return 0.0f;
+
+        const float l = (max + min) / 2.0f;
+        const float d = max - min;
+
+        return l > 0.5f ? d / (2.0f - max - min) : d / (max + min);
+    }
+
+    constexpr float getLuminance() const
+    {
+        const float rf = getRedFloat();
+        const float gf = getGreenFloat();
+        const float bf = getBlueFloat();
+        const float max = jmax (rf, gf, bf);
+        const float min = jmin (rf, gf, bf);
+
+        return (max + min) / 2.0f;
+    }
+
+    //==============================================================================
+    constexpr std::tuple<float, float, float> toHSL () const noexcept
+    {
+        const float rf = getRedFloat();
+        const float gf = getGreenFloat();
+        const float bf = getBlueFloat();
+        const float max = jmax (rf, gf, bf);
+        const float min = jmin (rf, gf, bf);
+
+        const float l = (max + min) / 2.0f;
+        if (max == min)
+            return std::make_tuple (0.0f, 0.0f, l); // achromatic
+
+        const float d = max - min;
+
+        float h = 0.0f;
+        float s = l > 0.5f ? d / (2.0f - max - min) : d / (max + min);
+
+        if (max == rf)
+            h = (gf - bf) / d + (gf < bf ? 6.0f : 0.0f);
+
+        else if (max == gf)
+            h = (bf - rf) / d + 2.0f;
+
+        else if (max == bf)
+            h = (rf - gf) / d + 4.0f;
+
+        h /= 6.0f;
+
+        return std::make_tuple (h, s, l);
+    }
+
+    constexpr static Color fromHSL (float h, float s, float l) noexcept
+    {
+        auto hue2rgb = [](float p, float q, float t)
+        {
+            if (t < 0.0f) t += 1.0f;
+            if (t > 1.0f) t -= 1.0f;
+            if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
+            if (t < 1.0f / 2.0f) return q;
+            if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
+            return p;
+        };
+
+        float r = l, g = l, b = l;
+
+        if (s != 0.0f)
+        {
+            const float q = l < 0.5f ? l * (1.0f + s) : l + s - l * s;
+            const float p = 2.0f * l - q;
+
+            r = hue2rgb(p, q, h + 1.0f / 3.0f);
+            g = hue2rgb(p, q, h);
+            b = hue2rgb(p, q, h - 1.0f / 3.0f);
+        }
+
+        return { static_cast<uint8> (r * 255), static_cast<uint8> (g * 255), static_cast<uint8> (b * 255) };
+    }
+
+    //==============================================================================
     constexpr Color brighter (float amount) noexcept
     {
-        amount = amount * 0.1f;
-
         return
         {
             a,
@@ -195,12 +308,44 @@ public:
     //==============================================================================
     constexpr Color contrasting() const noexcept
     {
-        constexpr float middleLuminance = 128.0;
+        return contrasting (0.5f);
+    }
 
-        if (luminance() > middleLuminance)
-            return Color (255, 0, 0, 0);
-        else
-            return Color (255, 255, 255, 255);
+    constexpr Color contrasting (float amount) const noexcept
+    {
+        const auto [h, s, l] = inverted().toHSL();
+
+        return fromHSL (modulo (h + jlimit (0.0f, 1.0f, amount), 1.0f), s, l).withAlpha (a);
+    }
+
+    //==============================================================================
+    constexpr Color& invert() noexcept
+    {
+        r = 255 - r;
+        g = 255 - g;
+        b = 255 - b;
+        return *this;
+    }
+
+    constexpr Color inverted() const noexcept
+    {
+        Color result (*this);
+        result.invert();
+        return result;
+    }
+
+    //==============================================================================
+    constexpr Color& invertAlpha() noexcept
+    {
+        a = 255 - a;
+        return *this;
+    }
+
+    constexpr Color invertedAlpha() const noexcept
+    {
+        Color result (*this);
+        result.invertAlpha();
+        return result;
     }
 
 private:
@@ -212,11 +357,6 @@ private:
     constexpr static uint8 normalizedToComponent (float normalized) noexcept
     {
         return static_cast<uint8> (jlimit (0.0f, 1.0f, normalized) * 255.0f);
-    }
-
-    constexpr float luminance() const
-    {
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     }
 
     union
