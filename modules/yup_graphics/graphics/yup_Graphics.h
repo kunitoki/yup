@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -161,4 +161,4 @@ private:
     std::vector<RenderOptions> renderOptions;
 };
 
-} // namespace juce
+} // namespace yup

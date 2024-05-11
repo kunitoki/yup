@@ -23,7 +23,7 @@
 #include "rive/pls/d3d/pls_render_context_d3d_impl.hpp"
 #include "rive/pls/d3d/d3d11.hpp"
 
-namespace juce
+namespace yup
 {
 
 using namespace rive;
@@ -175,4 +175,4 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options 
         contextOptions);
 }
 
-} // namespace juce
+} // namespace yup

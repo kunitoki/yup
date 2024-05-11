@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -53,4 +53,4 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
     }
 }
 
-} // namespace juce
+} // namespace yup

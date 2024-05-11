@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -42,7 +42,7 @@ public:
         , finish (color2, x2, y2, 1.0f)
     {
         if (type == Radial)
-            radius = std::sqrt (juce::square (x2 - x1) + juce::square (y2 - y1));
+            radius = std::sqrt (square (x2 - x1) + square (y2 - y1));
     }
 
     ColorGradient (const ColorGradient& other) = default;
@@ -143,4 +143,4 @@ private:
     float radius = 0.0f;
 };
 
-} // namespace juce
+} // namespace yup

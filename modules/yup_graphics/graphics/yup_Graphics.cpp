@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -422,4 +422,4 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
     auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
     renderer.drawPath (renderPath.get(), paint.get());
 }
-} // namespace juce
+} // namespace yup

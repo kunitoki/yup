@@ -29,7 +29,7 @@
 #include <GLFW/glfw3.h>
 #endif
 
-namespace juce
+namespace yup
 {
 
 using namespace rive;
@@ -175,4 +175,4 @@ std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsCo
     return std::make_unique<LowLevelRenderContextGLPLS>();
 }
 
-} // namespace juce
+} // namespace yup

@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce {
+namespace yup {
 
 std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Options options)
 {
@@ -48,12 +48,12 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
     case Api::Dawn:         return juce_constructDawnGraphicsContext (options);
 
     default:
-        juce::Logger::outputDebugString ("Invalid API requested for current platform");
+        Logger::outputDebugString ("Invalid API requested for current platform");
         return nullptr;
     }
 
-    juce::Logger::outputDebugString ("Failed to create the graphics context");
+    Logger::outputDebugString ("Failed to create the graphics context");
     return nullptr;
 }
 
-} // namespace juce
+} // namespace yup

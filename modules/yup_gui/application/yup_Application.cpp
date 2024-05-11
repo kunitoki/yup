@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -68,4 +68,4 @@ void JUCEApplication::unhandledException (const std::exception* ex,
     ignoreUnused (ex, sourceFilename, lineNumber);
 }
 
-} // namespace juce
+} // namespace yup

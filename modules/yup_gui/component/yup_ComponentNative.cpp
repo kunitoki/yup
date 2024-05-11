@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -86,4 +86,4 @@ void ComponentNative::handleUserTriedToCloseWindow()
     component.internalUserTriedToCloseWindow();
 }
 
-} // namespace juce
+} // namespace yup

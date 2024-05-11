@@ -2274,20 +2274,25 @@ static String reduceLengthOfFloatString (const String& input)
     return input;
 }
 
-static String serialiseDouble (double input)
+/*  maxDecimalPlaces <= 0 means "use as many decimal places as necessary"
+*/
+static String serialiseDouble (double input, int maxDecimalPlaces = 0)
 {
     auto absInput = std::abs (input);
 
     if (absInput >= 1.0e6 || absInput <= 1.0e-5)
-        return reduceLengthOfFloatString ({ input, 15, true });
+        return reduceLengthOfFloatString ({ input, maxDecimalPlaces > 0 ? maxDecimalPlaces : 15, true });
 
     int intInput = (int) input;
 
     if (exactlyEqual ((double) intInput, input))
         return { input, 1 };
 
-    auto numberOfDecimalPlaces = [absInput]
+    auto numberOfDecimalPlaces = [absInput, maxDecimalPlaces]
     {
+        if (maxDecimalPlaces > 0)
+            return maxDecimalPlaces;
+
         if (absInput < 1.0)
         {
             if (absInput >= 1.0e-3)

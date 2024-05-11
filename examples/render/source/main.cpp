@@ -35,7 +35,7 @@
 
 //==============================================================================
 
-class CustomWindow : public juce::DocumentWindow
+class CustomWindow : public yup::DocumentWindow
 {
 public:
     CustomWindow()
@@ -43,16 +43,16 @@ public:
         rive::Factory* factory = getNativeComponent()->getFactory();
         if (factory == nullptr)
         {
-            juce::Logger::outputDebugString ("Failed to create a graphics context");
+            yup::Logger::outputDebugString ("Failed to create a graphics context");
 
-            juce::JUCEApplicationBase::getInstance()->systemRequestedQuit();
+            yup::JUCEApplicationBase::getInstance()->systemRequestedQuit();
             return;
         }
 
 #if JUCE_WASM
-        juce::File riveFilePath = juce::File ("/data");
+        yup::File riveFilePath = yup::File ("/data");
 #else
-        juce::File riveFilePath = juce::File (__FILE__).getParentDirectory().getSiblingFile("data");
+        yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
 #endif
         riveFilePath = riveFilePath.getChildFile("alien.riv");
 
@@ -60,7 +60,7 @@ public:
         {
             if (auto is = riveFilePath.createInputStream(); is != nullptr && is->openedOk())
             {
-                juce::MemoryBlock mb;
+                yup::MemoryBlock mb;
                 is->readIntoMemoryBlock (mb);
 
                 rivFile = rive::File::import( { static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
@@ -68,7 +68,7 @@ public:
         }
     }
 
-    void mouseDown(const juce::MouseEvent& event) override
+    void mouseDown(const yup::MouseEvent& event) override
     {
         if (scenes.empty() || ! event.isLeftButtoDown())
             return;
@@ -80,7 +80,7 @@ public:
             scene->pointerDown (xy);
     }
 
-    void mouseUp (const juce::MouseEvent& event) override
+    void mouseUp (const yup::MouseEvent& event) override
     {
         if (scenes.empty() || ! event.isLeftButtoDown())
             return;
@@ -92,7 +92,7 @@ public:
             scene->pointerUp (xy);
     }
 
-    void mouseMove (const juce::MouseEvent& event) override
+    void mouseMove (const yup::MouseEvent& event) override
     {
         if (scenes.empty())
             return;
@@ -104,7 +104,7 @@ public:
             scene->pointerMove (xy);
     }
 
-    void mouseDrag (const juce::MouseEvent& event) override
+    void mouseDrag (const yup::MouseEvent& event) override
     {
         if (scenes.empty() || ! event.isLeftButtoDown())
             return;
@@ -116,63 +116,63 @@ public:
             scene->pointerMove (xy);
     }
 
-    void keyDown (const juce::KeyPress& keys, double x, double y) override
+    void keyDown (const yup::KeyPress& keys, double x, double y) override
     {
         const bool shift = keys.getModifiers().isShiftDown();
 
         switch (keys.getKey())
         {
-        case juce::KeyPress::escapeKey:
+        case yup::KeyPress::escapeKey:
             userTriedToCloseWindow();
             break;
 
-        case juce::KeyPress::textAKey:
+        case yup::KeyPress::textAKey:
             forceAtomicMode = !forceAtomicMode;
             fpsLastTime = 0;
             fpsFrames = 0;
             needsTitleUpdate = true;
             break;
 
-        case juce::KeyPress::textDKey:
+        case yup::KeyPress::textDKey:
             printf ("static float scale = %f;\n", scale);
             printf ("static float2 translate = {%f, %f};\n", translate.x, translate.y);
             fflush(stdout);
             break;
 
-        case juce::KeyPress::textWKey:
+        case yup::KeyPress::textWKey:
             wireframe = !wireframe;
             break;
 
-        case juce::KeyPress::textPKey:
+        case yup::KeyPress::textPKey:
             paused = !paused;
             break;
 
-        case juce::KeyPress::textHKey:
+        case yup::KeyPress::textHKey:
             if (!shift)
                 ++horzRepeat;
             else if (horzRepeat > 0)
                 --horzRepeat;
             break;
 
-        case juce::KeyPress::textKKey:
+        case yup::KeyPress::textKKey:
             if (!shift)
                 ++upRepeat;
             else if (upRepeat > 0)
                 --upRepeat;
             break;
 
-        case juce::KeyPress::textJKey:
+        case yup::KeyPress::textJKey:
             if (!shift)
                 ++downRepeat;
             else if (downRepeat > 0)
                 --downRepeat;
             break;
 
-        case juce::KeyPress::textZKey:
+        case yup::KeyPress::textZKey:
             setFullScreen (!isFullScreen());
             break;
 
-        case juce::KeyPress::upKey:
+        case yup::KeyPress::upKey:
         {
             float oldScale = scale;
             scale *= 1.25;
@@ -181,7 +181,7 @@ public:
             break;
         }
 
-        case juce::KeyPress::downKey:
+        case yup::KeyPress::downKey:
         {
             float oldScale = scale;
             scale /= 1.25;
@@ -192,9 +192,9 @@ public:
         }
     }
 
-    void paint (juce::Graphics& g, float frameRate) override
+    void paint (yup::Graphics& g, float frameRate) override
     {
-        double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+        double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
         auto [width, height] = getContentSize();
         if (lastWidth != width || lastHeight != height)
@@ -265,7 +265,7 @@ public:
 
     void userTriedToCloseWindow() override
     {
-        juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        yup::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 
 private:
@@ -313,10 +313,10 @@ private:
 
     void updateWindowTitle (double fps, int instances, int width, int height)
     {
-        juce::String title;
+        yup::String title;
 
         if (fps != 0)
-            title << "[" << juce::String (fps, 1) << " FPS]";
+            title << "[" << yup::String (fps, 1) << " FPS]";
 
         if (instances > 1)
             title << " (x" << instances << " instances)";
@@ -378,23 +378,23 @@ private:
 
 //==============================================================================
 
-struct Application : juce::JUCEApplication
+struct Application : yup::JUCEApplication
 {
     Application() = default;
 
-    const juce::String getApplicationName() override
+    const yup::String getApplicationName() override
     {
         return "yup!";
     }
 
-    const juce::String getApplicationVersion() override
+    const yup::String getApplicationVersion() override
     {
         return "1.0";
     }
 
-    void initialise (const juce::String& commandLineParameters) override
+    void initialise (const yup::String& commandLineParameters) override
     {
-        juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
+        yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
         window->centreWithSize ({ 1280, 866 });
@@ -403,7 +403,7 @@ struct Application : juce::JUCEApplication
 
     void shutdown() override
     {
-        juce::Logger::outputDebugString ("Shutting down");
+        yup::Logger::outputDebugString ("Shutting down");
 
         window.reset();
     }

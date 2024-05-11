@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class LowLevelRenderContext;
@@ -77,4 +77,4 @@ public:
     static std::unique_ptr<GraphicsContext> createContext (Api graphicsApi, Options options);
 };
 
-} // namespace juce
+} // namespace yup

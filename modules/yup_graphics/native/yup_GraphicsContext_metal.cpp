@@ -22,7 +22,7 @@
 #include "rive/pls/pls_renderer.hpp"
 #include "rive/pls/metal/pls_render_context_metal_impl.h"
 
-namespace juce
+namespace yup
 {
 
 using namespace rive;
@@ -135,4 +135,4 @@ std::unique_ptr<GraphicsContext> juce_constructMetalGraphicsContext (GraphicsCon
     return std::make_unique<LowLevelRenderContextMetalPLS> (fiddleOptions);
 }
 
-} // namespace juce
+} // namespace yup

@@ -47,7 +47,7 @@
 
 #include <cstdlib>
 
-namespace juce
+namespace yup
 {
 
 float GetDawnWindowBackingScaleFactor(GLFWwindow* window, bool retina)
@@ -79,6 +79,6 @@ std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor(GLFW
     }
 }
 
-} // namespace juce
+} // namespace yup
 
 #endif

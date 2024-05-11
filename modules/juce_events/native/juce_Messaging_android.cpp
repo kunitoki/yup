@@ -272,7 +272,7 @@ private:
 
             JUCEApplicationBase::createInstance = createApplicationSymbol;
 
-            initialiseJuce_GUI();
+            initialiser.emplace();
 
             if (! JUCEApplicationBase::createInstance())
                 jassertfalse; // you must supply an application object for an android app!
@@ -297,6 +297,7 @@ private:
         }
     }
 
+    std::optional<ScopedJuceInitialiser_GUI> initialiser;
     GlobalRef myself;
     juce::JUCEApplicationBase* (*createApplicationSymbol)();
     bool hasBeenInitialised = false;

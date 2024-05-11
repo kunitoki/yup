@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -528,4 +528,4 @@ void Component::internalUserTriedToCloseWindow()
     userTriedToCloseWindow();
 }
 
-} // namespace juce
+} // namespace yup

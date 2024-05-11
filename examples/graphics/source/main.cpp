@@ -30,7 +30,7 @@
 
 //==============================================================================
 
-class CustomSlider : public juce::Component
+class CustomSlider : public yup::Component
 {
     int index = 0;
 
@@ -40,53 +40,53 @@ public:
     {
     }
 
-    void mouseDown (const juce::MouseEvent& event) override
+    void mouseDown (const yup::MouseEvent& event) override
     {
         origin = event.getPosition();
     }
 
-    void mouseUp (const juce::MouseEvent& event) override
+    void mouseUp (const yup::MouseEvent& event) override
     {
     }
 
-    void mouseDrag (const juce::MouseEvent& event) override
+    void mouseDrag (const yup::MouseEvent& event) override
     {
         //auto [x, y] = event.getPosition();
 
         const float distance = origin.distanceX (event.getPosition()) * 0.005f;
         origin = event.getPosition();
 
-        value = juce::jlimit (0.0f, 1.0f, value + distance);
+        value = yup::jlimit (0.0f, 1.0f, value + distance);
     }
 
-    void paint (juce::Graphics& g, float frameRate) override
+    void paint (yup::Graphics& g, float frameRate) override
     {
         auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
 
-        juce::Path path;
+        yup::Path path;
         path.addEllipse (bounds.reduced (proportionOfWidth (0.1f)));
 
-        g.setColor (juce::Color (0xff3d3d3d));
+        g.setColor (yup::Color (0xff3d3d3d));
         g.fillPath (path);
 
-        g.setColor (juce::Color (0xff2b2b2b));
-        g.drawPath (path, proportionOfWidth (0.01f));
+        g.setColor (yup::Color (0xff2b2b2b));
+        g.drawPath (path, proportionOfWidth (0.015f));
 
-        const auto fromRadians = juce::degreesToRadians(135.0f);
-        const auto toRadians = fromRadians + juce::degreesToRadians(270.0f);
-        const auto toCurrentRadians = fromRadians + juce::degreesToRadians(270.0f) * value;
+        const auto fromRadians = yup::degreesToRadians(135.0f);
+        const auto toRadians = fromRadians + yup::degreesToRadians(270.0f);
+        const auto toCurrentRadians = fromRadians + yup::degreesToRadians(270.0f) * value;
 
         const auto center = bounds.to<float>().getCenter();
 
-        juce::Path arc;
+        yup::Path arc;
 
         {
             arc.addCenteredArc (center,
                                 bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
                                 fromRadians, toRadians, true);
 
-            g.setStrokeCap (juce::StrokeCap::Butt);
-            g.setColor (juce::Color (0xff636363));
+            g.setStrokeCap (yup::StrokeCap::Butt);
+            g.setColor (yup::Color (0xff636363));
             g.drawPath (arc, proportionOfWidth (0.1f));
         }
 
@@ -96,8 +96,8 @@ public:
                                 bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
                                 fromRadians, toCurrentRadians, true);
 
-            g.setStrokeCap (juce::StrokeCap::Round);
-            g.setColor (juce::Color (0xff4ebfff));
+            g.setStrokeCap (yup::StrokeCap::Round);
+            g.setColor (yup::Color (0xff4ebfff));
             g.drawPath (arc, proportionOfWidth (0.1f));
         }
 
@@ -110,24 +110,24 @@ public:
                 toCurrentRadians);
 
             arc.clear();
-            arc.addLine (juce::Line<float> (pos, center).keepOnlyStart (0.2f));
+            arc.addLine (yup::Line<float> (pos, center).keepOnlyStart (0.2f));
 
-            g.setStrokeCap (juce::StrokeCap::Round);
-            g.setColor (juce::Color (0xffffffff));
+            g.setStrokeCap (yup::StrokeCap::Round);
+            g.setColor (yup::Color (0xffffffff));
             g.drawPath (arc, proportionOfWidth (0.04f));
         }
     }
 
 private:
-    juce::Point<float> origin;
+    yup::Point<float> origin;
     float value = 0.0f;
 };
 
 //==============================================================================
 
-class CustomWindow : public juce::DocumentWindow
+class CustomWindow : public yup::DocumentWindow
 {
-    juce::OwnedArray<CustomSlider> sliders;
+    yup::OwnedArray<CustomSlider> sliders;
     int totalRows = 4;
     int totalColumns = 4;
 
@@ -155,13 +155,13 @@ public:
         }
     }
 
-    void paint (juce::Graphics& g, float frameRate) override
+    void paint (yup::Graphics& g, float frameRate) override
     {
-        const double time = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+        const double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
         updateFrameTime (time);
     }
 
-    void mouseDown (const juce::MouseEvent& event) override
+    void mouseDown (const yup::MouseEvent& event) override
     {
         auto [x, y] = event.getPosition();
 
@@ -180,15 +180,15 @@ public:
         }
     }
 
-    void mouseUp (const juce::MouseEvent& event) override
+    void mouseUp (const yup::MouseEvent& event) override
     {
     }
 
-    void mouseMove (const juce::MouseEvent& event) override
+    void mouseMove (const yup::MouseEvent& event) override
     {
     }
 
-    void mouseDrag (const juce::MouseEvent& event) override
+    void mouseDrag (const yup::MouseEvent& event) override
     {
         auto [x, y] = event.getPosition();
 
@@ -204,20 +204,20 @@ public:
         }
     }
 
-    void keyDown (const juce::KeyPress& keys, double x, double y) override
+    void keyDown (const yup::KeyPress& keys, double x, double y) override
     {
         switch (keys.getKey())
         {
-        case juce::KeyPress::escapeKey:
+        case yup::KeyPress::escapeKey:
             userTriedToCloseWindow();
             break;
 
-        case juce::KeyPress::textAKey:
+        case yup::KeyPress::textAKey:
             forceAtomicMode = !forceAtomicMode;
             fpsLastTime = 0;
             break;
 
-        case juce::KeyPress::textDKey:
+        case yup::KeyPress::textDKey:
             printf ("static float scale = %f;\n", scale);
             printf ("static float2 translate = {%f, %f};\n", translate.x, translate.y);
             printf ("static float2 pts[] = {");
@@ -232,35 +232,35 @@ public:
             fflush(stdout);
             break;
 
-        case juce::KeyPress::number1Key:
+        case yup::KeyPress::number1Key:
             strokeWidth /= 1.5f;
             break;
 
-        case juce::KeyPress::number2Key:
+        case yup::KeyPress::number2Key:
             strokeWidth *= 1.5f;
             break;
 
-        case juce::KeyPress::textWKey:
+        case yup::KeyPress::textWKey:
             wireframe = !wireframe;
             break;
 
-        case juce::KeyPress::textCKey:
+        case yup::KeyPress::textCKey:
             cap = static_cast<rive::StrokeCap> ((static_cast<int> (cap) + 1) % 3);
             break;
 
-        case juce::KeyPress::textOKey:
+        case yup::KeyPress::textOKey:
             doClose = !doClose;
             break;
 
-        case juce::KeyPress::textSKey:
+        case yup::KeyPress::textSKey:
             disableStroke = !disableStroke;
             break;
 
-        case juce::KeyPress::textFKey:
+        case yup::KeyPress::textFKey:
             disableFill = !disableFill;
             break;
 
-        case juce::KeyPress::textZKey:
+        case yup::KeyPress::textZKey:
             setFullScreen (!isFullScreen());
             break;
         }
@@ -268,7 +268,7 @@ public:
 
     void userTriedToCloseWindow() override
     {
-        juce::JUCEApplication::getInstance()->systemRequestedQuit();
+        yup::JUCEApplication::getInstance()->systemRequestedQuit();
     }
 
 private:
@@ -286,10 +286,10 @@ private:
 
     void updateWindowTitle()
     {
-        juce::String title;
+        yup::String title;
 
         if (currentFps != 0)
-            title << "[" << juce::String (currentFps, 1) << " FPS]";
+            title << "[" << yup::String (currentFps, 1) << " FPS]";
 
         title << " | " << "YUP On Rive Renderer";
 
@@ -334,23 +334,23 @@ private:
 
 //==============================================================================
 
-struct Application : juce::JUCEApplication
+struct Application : yup::JUCEApplication
 {
     Application() = default;
 
-    const juce::String getApplicationName() override
+    const yup::String getApplicationName() override
     {
         return "yup graphics!";
     }
 
-    const juce::String getApplicationVersion() override
+    const yup::String getApplicationVersion() override
     {
         return "1.0";
     }
 
-    void initialise (const juce::String& commandLineParameters) override
+    void initialise (const yup::String& commandLineParameters) override
     {
-        juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
+        yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
         window->centreWithSize ({ 800, 800 });
@@ -359,7 +359,7 @@ struct Application : juce::JUCEApplication
 
     void shutdown() override
     {
-        juce::Logger::outputDebugString ("Shutting down");
+        yup::Logger::outputDebugString ("Shutting down");
 
         window.reset();
     }

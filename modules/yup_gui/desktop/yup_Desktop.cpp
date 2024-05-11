@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 Desktop::Desktop()
@@ -51,4 +51,4 @@ Display* Desktop::getPrimaryDisplay() const
 
 JUCE_IMPLEMENT_SINGLETON (Desktop)
 
-} // namespace juce
+} // namespace yup

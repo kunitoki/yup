@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class JUCE_API Desktop
@@ -41,4 +41,4 @@ private:
     OwnedArray<Display> displays;
 };
 
-} // namespace juce
+} // namespace yup

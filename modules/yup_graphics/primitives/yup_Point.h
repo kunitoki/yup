@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 template <class ValueType>
@@ -174,19 +174,19 @@ ValueType get (const Point<ValueType>& point)
         return {}; // TODO - error
 }
 
-} // namespace juce
+} // namespace yup
 
 namespace std
 {
 
 template <class ValueType>
-struct tuple_size<juce::Point<ValueType>>
+struct tuple_size<yup::Point<ValueType>>
 {
     inline static constexpr std::size_t value = 2;
 };
 
 template <std::size_t I, class ValueType>
-struct tuple_element<I, juce::Point<ValueType>>
+struct tuple_element<I, yup::Point<ValueType>>
 {
     using type = ValueType;
 };

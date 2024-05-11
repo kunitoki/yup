@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class JUCE_API Display
@@ -36,4 +36,4 @@ public:
     bool isPrimary = false;
 };
 
-} // namespace juce
+} // namespace yup

@@ -30,7 +30,7 @@
 #include <array>
 #include <thread>
 
-namespace juce
+namespace yup
 {
 
 using namespace rive;
@@ -262,17 +262,17 @@ std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsCont
     return std::make_unique<LowLevelRenderContextDawnPLS> (options);
 }
 
-} // namespace juce
+} // namespace yup
 
 #else
 
-namespace juce {
+namespace yup {
 
 std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsContext::Options options)
 {
     return nullptr;
 }
 
-} // namespace juce
+} // namespace yup
 
 #endif

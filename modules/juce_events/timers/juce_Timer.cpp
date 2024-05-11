@@ -40,21 +40,20 @@
 namespace juce
 {
 
-class Timer::TimerThread final : private Thread
+class Timer::TimerThread final : private Thread,
+                                 private DeletedAtShutdown
 {
 public:
     using LockType = CriticalSection; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
 
-    TimerThread()  : Thread ("JUCE Timer")
-    {
-        timers.reserve (32);
-    }
+    JUCE_DECLARE_SINGLETON (TimerThread, true)
 
     ~TimerThread() override
     {
         signalThreadShouldExit();
         callbackArrived.signal();
         stopThread (-1);
+        clearSingletonInstance();
     }
 
     void run() override
@@ -101,8 +100,7 @@ public:
 
     void callTimers()
     {
-        auto now = Time::getMillisecondCounter();
-        auto timeout = now + 100;
+        auto timeout = Time::getMillisecondCounter() + 100;
 
        #if JUCE_WASM
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
@@ -235,8 +233,8 @@ private:
 
         void messageCallback() override
         {
-            if (auto instance = SharedResourcePointer<TimerThread>::getSharedObjectWithoutCreating())
-                (*instance)->callTimers();
+            if (auto* instance = TimerThread::getInstanceWithoutCreating())
+                instance->callTimers();
         }
     };
 
@@ -309,8 +307,10 @@ private:
             t.countdownMs -= numMillisecsElapsed;
     }
 
+    TimerThread()  : Thread ("JUCE Timer") { timers.reserve (32); }
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimerThread)
 };
+JUCE_IMPLEMENT_SINGLETON (Timer::TimerThread)
 
 //==============================================================================
 Timer::Timer() noexcept {}
@@ -335,13 +335,16 @@ void Timer::startTimer (int interval) noexcept
     // running, then you're not going to get any timer callbacks!
     JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
 
+    if (auto* instance = TimerThread::getInstance())
+    {
     bool wasStopped = (timerPeriodMs == 0);
     timerPeriodMs = jmax (1, interval);
 
     if (wasStopped)
-        timerThread->addTimer (this);
+            instance->addTimer (this);
     else
-        timerThread->resetTimerCounter (this);
+            instance->resetTimerCounter (this);
+    }
 }
 
 void Timer::startTimerHz (int timerFrequencyHz) noexcept
@@ -356,15 +359,16 @@ void Timer::stopTimer() noexcept
 {
     if (timerPeriodMs > 0)
     {
-        timerThread->removeTimer (this);
+        if (auto* instance = TimerThread::getInstanceWithoutCreating())
+            instance->removeTimer (this);
         timerPeriodMs = 0;
     }
 }
 
 void JUCE_CALLTYPE Timer::callPendingTimersSynchronously()
 {
-    if (auto instance = SharedResourcePointer<TimerThread>::getSharedObjectWithoutCreating())
-        (*instance)->callTimersSynchronously();
+    if (auto* instance = TimerThread::getInstanceWithoutCreating())
+        instance->callTimersSynchronously();
 }
 
 struct LambdaInvoker final : private Timer,

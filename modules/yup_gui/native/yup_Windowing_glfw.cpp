@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -747,4 +747,4 @@ void JUCEApplication::staticFinalisation()
     glfwTerminate();
 }
 
-} // namespace juce
+} // namespace yup
