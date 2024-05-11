@@ -45,7 +45,7 @@ public:
         {
             yup::Logger::outputDebugString ("Failed to create a graphics context");
 
-            yup::JUCEApplicationBase::getInstance()->systemRequestedQuit();
+            yup::YUPApplication::getInstance()->systemRequestedQuit();
             return;
         }
 
@@ -265,7 +265,7 @@ public:
 
     void userTriedToCloseWindow() override
     {
-        yup::JUCEApplication::getInstance()->systemRequestedQuit();
+        yup::YUPApplication::getInstance()->systemRequestedQuit();
     }
 
 private:
@@ -378,7 +378,7 @@ private:
 
 //==============================================================================
 
-struct Application : yup::JUCEApplication
+struct Application : yup::YUPApplication
 {
     Application() = default;
 

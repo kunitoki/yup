@@ -717,7 +717,7 @@ void juce_glfwErrorCallback (int code, const char* message)
     DBG ("GLFW Error: " << code << " - " << message);
 }
 
-void JUCEApplication::staticInitialisation()
+void YUPApplication::staticInitialisation()
 {
     glfwSetErrorCallback (juce_glfwErrorCallback);
 
@@ -742,7 +742,7 @@ void JUCEApplication::staticInitialisation()
     glfwSetMonitorCallback (juce_glfwMonitorCallback);
 }
 
-void JUCEApplication::staticFinalisation()
+void YUPApplication::staticFinalisation()
 {
     glfwTerminate();
 }

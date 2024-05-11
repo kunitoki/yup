@@ -24,11 +24,11 @@ namespace yup
 
 //==============================================================================
 
-class JUCE_API JUCEApplication : public JUCEApplicationBase
+class JUCE_API YUPApplication : public JUCEApplicationBase
 {
 public:
-    JUCEApplication();
-    ~JUCEApplication() override;
+    YUPApplication();
+    ~YUPApplication() override;
 
     bool moreThanOneInstanceAllowed() override;
 
@@ -48,7 +48,7 @@ private:
     static void staticInitialisation();
     static void staticFinalisation();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JUCEApplication)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YUPApplication)
 };
 
 } // namespace yup

@@ -24,44 +24,44 @@ namespace yup
 
 //==============================================================================
 
-JUCEApplication::JUCEApplication()
+YUPApplication::YUPApplication()
 {
     staticInitialisation();
 
     Desktop::getInstance();
 }
 
-JUCEApplication::~JUCEApplication()
+YUPApplication::~YUPApplication()
 {
     Desktop::deleteInstance();
 
     staticFinalisation();
 }
 
-bool JUCEApplication::moreThanOneInstanceAllowed()
+bool YUPApplication::moreThanOneInstanceAllowed()
 {
     return true;
 }
 
-void JUCEApplication::anotherInstanceStarted (const String& commandLine)
+void YUPApplication::anotherInstanceStarted (const String& commandLine)
 {
     ignoreUnused (commandLine);
 }
 
-void JUCEApplication::systemRequestedQuit()
+void YUPApplication::systemRequestedQuit()
 {
     quit();
 }
 
-void JUCEApplication::suspended()
+void YUPApplication::suspended()
 {
 }
 
-void JUCEApplication::resumed()
+void YUPApplication::resumed()
 {
 }
 
-void JUCEApplication::unhandledException (const std::exception* ex,
+void YUPApplication::unhandledException (const std::exception* ex,
                                           const String& sourceFilename,
                                           int lineNumber)
 {

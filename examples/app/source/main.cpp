@@ -21,7 +21,7 @@
 
 #include <yup_gui/yup_gui.h>
 
-class Application : public juce::JUCEApplication, public juce::Timer
+class Application : public juce::YUPApplication, public juce::Timer
 {
 public:
     Application() = default;
