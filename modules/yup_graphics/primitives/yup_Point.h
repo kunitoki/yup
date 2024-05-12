@@ -23,6 +23,9 @@ namespace yup
 {
 
 template <class ValueType>
+class JUCE_API Line;
+
+template <class ValueType>
 class JUCE_API Point
 {
 public:
@@ -78,49 +81,59 @@ public:
     }
 
     //==============================================================================
-    constexpr Point& translate (ValueType deltaX, ValueType deltaY) noexcept
+    constexpr bool isOrigin() const noexcept
     {
-        x += deltaX;
-        y += deltaY;
-        return *this;
+        return isOnXAxis() && isOnYAxis();
     }
 
-    constexpr Point& translate (const Point<ValueType>& delta) noexcept
+    constexpr bool isOnXAxis() const noexcept
     {
-        x += delta.x;
-        y += delta.y;
-        return *this;
+        return y == ValueType (0);
     }
 
-    constexpr Point translated (ValueType deltaX, ValueType deltaY) const noexcept
+    constexpr bool isOnYAxis() const noexcept
     {
-        return { x + deltaX, y + deltaY };
-    }
-
-    constexpr Point translated (const Point<ValueType>& delta) const noexcept
-    {
-        return { x + delta.x, y + delta.y };
+        return x == ValueType (0);
     }
 
     //==============================================================================
-    constexpr float distance (Point<ValueType> other) const noexcept
+    template <class T = ValueType>
+    constexpr auto isFinite() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, bool>
     {
-        return std::sqrt (distanceSquared (other));
+        return std::isfinite (x) && std::isfinite (y);
     }
 
-    constexpr float distanceSquared (Point<ValueType> other) const noexcept
+    //==============================================================================
+    constexpr float distanceTo (const Point& other) const noexcept
+    {
+        return static_cast<float> (std::sqrt (static_cast<float> (distanceToSquared (other))));
+    }
+
+    constexpr ValueType distanceToSquared (const Point& other) const noexcept
     {
         return square (other.x - x) + square (other.y - y);
     }
 
-    constexpr float distanceX (Point<ValueType> other) const noexcept
+    constexpr ValueType horizontalDistanceTo (const Point& other) const noexcept
     {
         return other.x - x;
     }
 
-    constexpr float distanceY (Point<ValueType> other) const noexcept
+    constexpr ValueType verticalDistanceTo (const Point& other) const noexcept
     {
         return other.y - y;
+    }
+
+    constexpr ValueType manhattanDistanceTo (const Point& other) const noexcept
+    {
+        return std::abs (x - other.x) + std::abs (y - other.y);
+    }
+
+    //==============================================================================
+    constexpr float magnitude() const noexcept
+    {
+        return static_cast<float> (std::sqrt (static_cast<float> (square (x) + square (y))));
     }
 
     //==============================================================================
@@ -135,6 +148,233 @@ public:
     }
 
     //==============================================================================
+    constexpr Point& translate (ValueType deltaX, ValueType deltaY) noexcept
+    {
+        x += deltaX;
+        y += deltaY;
+        return *this;
+    }
+
+    constexpr Point& translate (const Point& delta) noexcept
+    {
+        x += delta.x;
+        y += delta.y;
+        return *this;
+    }
+
+    constexpr Point translated (ValueType deltaX, ValueType deltaY) const noexcept
+    {
+        return { x + deltaX, y + deltaY };
+    }
+
+    constexpr Point translated (const Point& delta) const noexcept
+    {
+        return { x + delta.x, y + delta.y };
+    }
+
+    //==============================================================================
+    template <class T>
+    constexpr auto scale (T factor) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point&>
+    {
+        scale (factor, factor);
+        return *this;
+    }
+
+    template <class T>
+    constexpr auto scale (T factorX, T factorY) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point&>
+    {
+        x = static_cast<ValueType> (x * factorX);
+        y = static_cast<ValueType> (y * factorY);
+        return *this;
+    }
+
+    template <class T>
+    constexpr auto scaled (float factor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point>
+    {
+        Point result (*this);
+        result.scale (factor);
+        return result;
+    }
+
+    template <class T>
+    constexpr auto scaled (float factorX, float factorY) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point>
+    {
+        Point result (*this);
+        result.scale (factorX, factorY);
+        return result;
+    }
+
+    //==============================================================================
+    constexpr Point& rotateClockwise (float angleInRadians) noexcept
+    {
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
+
+        x = static_cast<ValueType> (x * cosTheta - y * sinTheta);
+        y = static_cast<ValueType> (x * sinTheta + y * cosTheta);
+        return *this;
+    }
+
+    constexpr Point rotatedClockwise (float angleInRadians) const noexcept
+    {
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
+
+        return { static_cast<ValueType> (x * cosTheta - y * sinTheta), static_cast<ValueType> (x * sinTheta + y * cosTheta) };
+    }
+
+    constexpr Point& rotateCounterClockwise (float angleInRadians) noexcept
+    {
+        *this = rotatedCounterClockwise (angleInRadians);
+        return *this;
+    }
+
+    constexpr Point rotatedCounterClockwise (float angleInRadians) const noexcept
+    {
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
+
+        return { static_cast<ValueType> (x * cosTheta + y * sinTheta), static_cast<ValueType> (-x * sinTheta + y * cosTheta) };
+    }
+
+    //==============================================================================
+    constexpr Point midpoint (const Point& other) const noexcept
+    {
+        return { (x + other.x) / ValueType (2), (y + other.y) / ValueType (2) };
+    }
+
+    constexpr Point pointBetween (const Point& other, float delta) const noexcept
+    {
+        delta = jlimit (0.0f, 1.0f, delta);
+
+        return { static_cast<ValueType> (x + (other.x - x) * delta), static_cast<ValueType> (y + (other.y - y) * delta) };
+    }
+
+    //==============================================================================
+    constexpr ValueType dotProduct (const Point& other) const noexcept
+    {
+        return x * other.x + y * other.y;
+    }
+
+    constexpr ValueType crossProduct (const Point& other) const noexcept
+    {
+        return x * other.y - y * other.x;
+    }
+
+    //==============================================================================
+    constexpr float angleTo (const Point& other) const noexcept
+    {
+        const auto magProduct = magnitude() * other.magnitude();
+
+        return magProduct == 0.0f ? 0.0f : std::acos (dotProduct (other) / magProduct);
+    }
+
+    //==============================================================================
+    constexpr Point normalized() const noexcept
+    {
+        const auto mag = magnitude();
+
+        return mag == 0.0f ? Point() : Point (static_cast<ValueType> (x / mag), static_cast<ValueType> (y / mag));
+    }
+
+    constexpr bool isNormalized() const noexcept
+    {
+        return magnitude() == ValueType (1);
+    }
+
+    //==============================================================================
+    constexpr bool isCollinear (const Point& other) const noexcept
+    {
+        return crossProduct (other) == ValueType (0);
+    }
+
+    //==============================================================================
+    constexpr bool isWithinCircle (const Point& center, float radius) const noexcept
+    {
+        return distanceTo (center) <= radius;
+    }
+
+    constexpr bool isWithinRectangle (const Point& topLeft, const Point& bottomRight) const noexcept
+    {
+        return x >= topLeft.x && x <= bottomRight.x_ && y >= topLeft.y && y <= bottomRight.y;
+    }
+
+    //==============================================================================
+    constexpr Point& reflectOverXAxis() noexcept
+    {
+        y = -y;
+        return *this;
+    }
+
+    constexpr Point reflectedOverXAxis() const noexcept
+    {
+        return { x, -y };
+    }
+
+    constexpr Point& reflectOverYAxis() noexcept
+    {
+        x = -x;
+        return *this;
+    }
+
+    constexpr Point reflectedOverYAxis() const noexcept
+    {
+        return { -x, y };
+    }
+
+    constexpr Point& reflectOverOrigin() const noexcept
+    {
+        x = -x;
+        y = -y;
+        return *this;
+    }
+
+    constexpr Point reflectedOverOrigin() noexcept
+    {
+        return { -x, -y };
+    }
+
+    //==============================================================================
+    constexpr Point min (const Point& other) const noexcept
+    {
+        return { std::min (x, other.x), std::min (y, other.y) };
+    }
+
+    constexpr Point max (const Point& other) const noexcept
+    {
+        return { std::max (x, other.x), std::max (y, other.y) };
+    }
+
+    constexpr Point abs() const noexcept
+    {
+        return { std::abs (x), std::abs(y) };
+    }
+
+    template <class T = ValueType>
+    constexpr auto floor() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point>
+    {
+        return { std::floor (x), std::floor (y) };
+    }
+
+    template <class T = ValueType>
+    constexpr auto ceil() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point>
+    {
+        return { std::ceil (x), std::ceil (y) };
+    }
+
+    //==============================================================================
+    constexpr Point lerp (const Point& other, float delta) const noexcept
+    {
+        return { static_cast<ValueType> ((1.0f - delta) * x + delta * other.x), static_cast<ValueType> ((1.0f - delta) * y + delta * other.y) };
+    }
+
+    //==============================================================================
     template <class T>
     constexpr Point<T> to() const noexcept
     {
@@ -142,9 +382,69 @@ public:
     }
 
     //==============================================================================
+    constexpr Point operator+ (const Point& other) const noexcept
+    {
+        Point result (*this);
+        result += other;
+        return result;
+    }
+
+    constexpr Point& operator+= (const Point& other) noexcept
+    {
+        x += other.x;
+        y += other.y;
+        return *this;
+    }
+
+    constexpr Point& operator- (const Point& other) const noexcept
+    {
+        Point result (*this);
+        result -= other;
+        return result;
+    }
+
+    constexpr Point operator-= (const Point& other) const noexcept
+    {
+        x -= other.x;
+        y -= other.y;
+        return *this;
+    }
+
+    constexpr Point operator* (const Point& other) const noexcept
+    {
+        Point result (*this);
+        result *= other;
+        return result;
+    }
+
+    constexpr Point& operator*= (const Point& other) noexcept
+    {
+        x *= other.x;
+        y *= other.y;
+        return *this;
+    }
+
+    constexpr Point operator/ (const Point& other) const noexcept
+    {
+        Point result (*this);
+        result /= other;
+        return result;
+    }
+
+    constexpr Point& operator/= (const Point& other) noexcept
+    {
+        if (other.x != ValueType (0))
+            x /= other.x;
+
+        if (other.y != ValueType (0))
+            y /= other.y;
+
+        return *this;
+    }
+
     constexpr Point operator- () const noexcept
     {
-        return { -x, -y };
+        return reflectedOverOrigin();
     }
 
     //==============================================================================

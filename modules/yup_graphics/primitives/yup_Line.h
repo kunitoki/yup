@@ -61,20 +61,82 @@ public:
         return p1;
     }
 
-    constexpr Point<ValueType> getEnd() const noexcept
+    constexpr Line& setStart (const Point<ValueType>& newStart) noexcept
     {
-        return p2;
+        p1 = newStart;
+        return *this;
     }
 
-    //==============================================================================
     constexpr Line withStart (const Point<ValueType>& newStart) const noexcept
     {
         return { newStart, p2 };
     }
 
+    //==============================================================================
+    constexpr Point<ValueType> getEnd() const noexcept
+    {
+        return p2;
+    }
+
+    constexpr Line& setEnd (const Point<ValueType>& newEnd) noexcept
+    {
+        p2 = newEnd;
+        return *this;
+    }
+
     constexpr Line withEnd (const Point<ValueType>& newEnd) const noexcept
     {
         return { p1, newEnd };
+    }
+
+    //==============================================================================
+    constexpr Line& reverse() noexcept
+    {
+        using std::swap;
+
+        swap (p1, p2);
+
+        return *this;
+    }
+
+    constexpr Line reversed() const noexcept
+    {
+        Line result (*this);
+        result.reverse();
+        return result;
+    }
+
+    //==============================================================================
+    constexpr float length() const noexcept
+    {
+        return p1.distanceTo (p2);
+    }
+
+    //==============================================================================
+    constexpr float slope() const noexcept
+    {
+        const float divisor = static_cast<float> (p2.getX() - p1.getX());
+        if (divisor == 0.0f)
+            return 0.0f;
+
+        return (p2.getY() - p1.getY()) / divisor;
+    }
+
+    //==============================================================================
+    constexpr bool contains (const Point<ValueType>& point) const noexcept
+    {
+        return contains (point, 1e-6f);
+    }
+
+    constexpr bool contains (const Point<ValueType>& point, float tolerance) const noexcept
+    {
+        return std::abs ((point.getY() - p1.getY()) * (p2.getX() - p1.getX()) - (point.getX() - p1.getX()) * (p2.getY() - p1.getY())) < tolerance;
+    }
+
+    //==============================================================================
+    constexpr Point<ValueType> pointAlong (float proportionOfLength) const noexcept
+    {
+        return p1.lerp (p2, proportionOfLength);
     }
 
     //==============================================================================
@@ -103,20 +165,98 @@ public:
     }
 
     //==============================================================================
-    template <class T>
-    constexpr Line keepOnlyStart (T proportionOfLength) noexcept
+    constexpr Line& extend (ValueType length) noexcept
     {
-        proportionOfLength = jlimit (0.0f, 1.0f, proportionOfLength);
+        const float currentSlope = std::atan (slope());
+        const float xAxisLength = static_cast<ValueType> (length * std::cos (currentSlope));
+        const float yAxisLength = static_cast<ValueType> (length * std::sin (currentSlope));
 
-        return { p1, { p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength, p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength } };
+        p1.setX (p1.getX() - xAxisLength);
+        p1.setY (p1.getY() - yAxisLength);
+        p2.setX (p2.getX() + xAxisLength);
+        p2.setY (p2.getY() + yAxisLength);
+
+        return *this;
     }
 
-    template <class T>
-    constexpr Line keepOnlyEnd (T proportionOfLength) noexcept
+    constexpr Line extended (ValueType length) const noexcept
+    {
+        Line result (*this);
+        result.extend (length);
+        return result;
+    }
+
+    constexpr Line& extendBefore (ValueType length) noexcept
+    {
+        const float currentSlope = std::atan (slope());
+
+        p1.setX (p1.getX() - static_cast<ValueType> (length * std::cos (currentSlope)));
+        p1.setY (p1.getY() - static_cast<ValueType> (length * std::sin (currentSlope)));
+
+        return *this;
+    }
+
+    constexpr Line extendedBefore (ValueType length) const noexcept
+    {
+        Line result (*this);
+        result.extendBefore (length);
+        return result;
+    }
+
+    constexpr Line& extendAfter (ValueType length) noexcept
+    {
+        const float currentSlope = std::atan (slope());
+
+        p2.setX (p2.getX() + static_cast<ValueType> (length * std::cos (currentSlope)));
+        p2.setY (p2.getY() + static_cast<ValueType> (length * std::sin (currentSlope)));
+
+        return *this;
+    }
+
+    constexpr Line extendedAfter (ValueType length) const noexcept
+    {
+        Line result (*this);
+        result.extendAfter (length);
+        return result;
+    }
+
+    //==============================================================================
+    constexpr Line keepOnlyStart (float proportionOfLength) noexcept
     {
         proportionOfLength = jlimit (0.0f, 1.0f, proportionOfLength);
 
-        return { { p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength, p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength }, p2 };
+        return { p1, {
+            static_cast<ValueType> (p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength),
+            static_cast<ValueType> (p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength)
+        } };
+    }
+
+    constexpr Line keepOnlyEnd (float proportionOfLength) noexcept
+    {
+        proportionOfLength = jlimit (0.0f, 1.0f, proportionOfLength);
+
+        return { {
+            static_cast<ValueType> (p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength),
+            static_cast<ValueType> (p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength) }, p2 };
+    }
+
+    //==============================================================================
+    constexpr Line rotateAtPoint (const Point<ValueType>& point, float angleRadians) const noexcept
+    {
+        const float cosTheta = std::cos (angleRadians);
+        const float sinTheta = std::sin (angleRadians);
+
+        const auto pointFloat = point.template to<float>();
+
+        auto xy1 = p1.translated (-point).template to<float>();
+        xy1 = { xy1.getX() * cosTheta - xy1.getY() * sinTheta, xy1.getX() * sinTheta + xy1.getY() * cosTheta };
+        xy1.translate (pointFloat);
+
+        auto xy2 = p2.translated (-point).template to<float>();
+        xy2 = { xy2.getX() * cosTheta - xy2.getY() * sinTheta, xy2.getX() * sinTheta + xy2.getY() * cosTheta };
+        xy2.translate (pointFloat);
+
+        return { xy1.template to<ValueType>(), xy2.template to<ValueType>() };
     }
 
     //==============================================================================

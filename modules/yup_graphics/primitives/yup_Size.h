@@ -47,20 +47,176 @@ public:
         return width;
     }
 
-    constexpr ValueType getHeight() const noexcept
+    constexpr Size& setWidth (ValueType newWidth) noexcept
     {
-        return height;
+        width = newWidth;
+        return *this;
     }
 
-    //==============================================================================
     constexpr Size withWidth (ValueType newWidth) const noexcept
     {
         return { newWidth, height };
     }
 
+    //==============================================================================
+    constexpr ValueType getHeight() const noexcept
+    {
+        return height;
+    }
+
+    constexpr Size& setHeight (ValueType newHeight) noexcept
+    {
+        height = newHeight;
+        return *this;
+    }
+
     constexpr Size withHeight (ValueType newHeight) const noexcept
     {
         return { width, newHeight };
+    }
+
+    //==============================================================================
+    constexpr bool isZero() const noexcept
+    {
+        return width == ValueType (0) && height == ValueType (0);
+    }
+
+    constexpr bool isEmpty() const noexcept
+    {
+        return width == ValueType (0) || height == ValueType (0);
+    }
+
+    constexpr bool isVerticallyEmpty() const noexcept
+    {
+        return width == ValueType (0) && height != ValueType (0);
+    }
+
+    constexpr bool isHorizontallyEmpty() const noexcept
+    {
+        return width != ValueType (0) && height == ValueType (0);
+    }
+
+    //==============================================================================
+    constexpr bool isSquare() const noexcept
+    {
+        return width == height;
+    }
+
+    //==============================================================================
+    constexpr ValueType area() const noexcept
+    {
+        return width * height;
+    }
+
+    //==============================================================================
+    constexpr Size& reverse() noexcept
+    {
+        using std::swap;
+
+        swap (width, height);
+
+        return *this;
+    }
+
+    constexpr Size reversed() const noexcept
+    {
+        Size result (*this);
+        result.reverse();
+        return result;
+    }
+
+    //==============================================================================
+    constexpr Size& enlarge (ValueType amount) noexcept
+    {
+        width += amount;
+        height += amount;
+        return *this;
+    }
+
+    constexpr Size& enlarge (ValueType widthAmount, ValueType heightAmount) noexcept
+    {
+        width += widthAmount;
+        height += heightAmount;
+        return *this;
+    }
+
+    constexpr Size enlarged (ValueType amount) const noexcept
+    {
+        Size result (*this);
+        result.enlarge (amount);
+        return result;
+    }
+
+    constexpr Size enlarged (ValueType widthAmount, ValueType heightAmount) const noexcept
+    {
+        Size result (*this);
+        result.enlarge (widthAmount, heightAmount);
+        return result;
+    }
+
+    //==============================================================================
+    constexpr Size& reduce (ValueType amount) noexcept
+    {
+        width -= amount;
+        height -= amount;
+        return *this;
+    }
+
+    constexpr Size& reduce (ValueType widthAmount, ValueType heightAmount) noexcept
+    {
+        width -= widthAmount;
+        height -= heightAmount;
+        return *this;
+    }
+
+    constexpr Size reduced (ValueType amount) const noexcept
+    {
+        Size result (*this);
+        result.reduce (amount);
+        return result;
+    }
+
+    constexpr Size reduced (ValueType widthAmount, ValueType heightAmount) const noexcept
+    {
+        Size result (*this);
+        result.reduce (widthAmount, heightAmount);
+        return result;
+    }
+
+    //==============================================================================
+    template <class T>
+    constexpr auto scale (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
+    {
+        scale (scaleFactor, scaleFactor);
+        return *this;
+    }
+
+    template <class T>
+    constexpr auto scale (T scaleFactorX, T scaleFactorY) noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
+    {
+        width = static_cast<ValueType> (width * scaleFactorX);
+        height = static_cast<ValueType> (height * scaleFactorY);
+        return *this;
+    }
+
+    template <class T>
+    constexpr auto scaled (T scaleFactor) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    {
+        Size result (*this);
+        result.scale (scaleFactor);
+        return result;
+    }
+
+    template <class T>
+    constexpr auto scaled (T scaleFactorX, T scaleFactorY) const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    {
+        Size result (*this);
+        result.scale (scaleFactorX, scaleFactorY);
+        return result;
     }
 
     //==============================================================================
@@ -75,9 +231,9 @@ public:
     constexpr auto operator* (T scaleFactor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size>
     {
-        Size r (*this);
-        r *= scaleFactor;
-        return r;
+        Size result (*this);
+        result *= scaleFactor;
+        return result;
     }
 
     template <class T>
@@ -93,9 +249,9 @@ public:
     constexpr auto operator/ (T scaleFactor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size>
     {
-        Size r (*this);
-        r /= scaleFactor;
-        return r;
+        Size result (*this);
+        result /= scaleFactor;
+        return result;
     }
 
     template <class T>

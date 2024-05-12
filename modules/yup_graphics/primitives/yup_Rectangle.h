@@ -124,6 +124,27 @@ public:
     }
 
     //==============================================================================
+    constexpr Point<ValueType> getTopLeft() const noexcept
+    {
+        return xy;
+    }
+
+    constexpr Point<ValueType> getTopRight() const noexcept
+    {
+        return xy.translated (getWidth(), ValueType (0));
+    }
+
+    constexpr Point<ValueType> getBottomLeft() const noexcept
+    {
+        return xy.translated (ValueType (0), getHeight());
+    }
+
+    constexpr Point<ValueType> getBottomRight() const noexcept
+    {
+        return xy.translated (getWidth(), getHeight());
+    }
+
+    //==============================================================================
     constexpr Size<ValueType> getSize() const noexcept
     {
         return size;
@@ -208,6 +229,58 @@ public:
     }
 
     //==============================================================================
+    constexpr bool isPoint() const noexcept
+    {
+        return size.isZero();
+    }
+
+    constexpr bool isLine() const noexcept
+    {
+        return isVerticalLine() || isHorizontalLine();
+    }
+
+    constexpr bool isVerticalLine() const noexcept
+    {
+        return size.isHorizontallyEmpty();
+    }
+
+    constexpr bool isHorizontalLine() const noexcept
+    {
+        return size.isVerticallyEmpty();
+    }
+
+    //==============================================================================
+    constexpr Line<ValueType> leftSide() const noexcept
+    {
+        return { xy, xy.translated (ValueType (0), getHeight()) };
+    }
+
+    constexpr Line<ValueType> topSide() const noexcept
+    {
+        return { xy, xy.translated (getWidth(), ValueType (0)) };
+    }
+
+    constexpr Line<ValueType> rightSide() const noexcept
+    {
+        return { xy.translated (getWidth(), ValueType (0)), xy.translated (getWidth(), getHeight()) };
+    }
+
+    constexpr Line<ValueType> bottomSide() const noexcept
+    {
+        return { xy.translated (ValueType (0), getHeight()), xy.translated (getWidth(), getHeight()) };
+    }
+
+    constexpr Line<ValueType> diagonalTopToBottom() const noexcept
+    {
+        return { xy, xy.translated (getWidth(), getHeight()) };
+    }
+
+    constexpr Line<ValueType> diagonalBottomToTop() const noexcept
+    {
+        return { xy.translated (ValueType (0), getHeight()), xy.translated (getWidth(), ValueType (0)) };
+    }
+
+    //==============================================================================
     constexpr Rectangle& translate (ValueType deltaX, ValueType deltaY) noexcept
     {
         xy.translate (deltaX, deltaY);
@@ -223,6 +296,18 @@ public:
     constexpr Rectangle<ValueType> translated (Point<ValueType> delta) const noexcept
     {
         return { xy.translated (delta), size };
+    }
+
+    //==============================================================================
+    constexpr Rectangle& scale (float deltaX, float deltaY) noexcept
+    {
+        size.scale (deltaX, deltaY);
+        return *this;
+    }
+
+    constexpr Rectangle<ValueType> scaled (float deltaX, float deltaY) const noexcept
+    {
+        return { xy, size.scaled (deltaX, deltaY) };
     }
 
     //==============================================================================
@@ -301,8 +386,8 @@ public:
         return
             x >= xy.getX()
             && y >= xy.getY()
-            && x <= xy.getX() + size.getWidth()
-            && y <= xy.getY() + size.getHeight();
+            && x <= (xy.getX() + size.getWidth())
+            && y <= (xy.getY() + size.getHeight());
     }
 
     constexpr bool contains (const Point<ValueType>& p) const noexcept
@@ -311,7 +396,23 @@ public:
     }
 
     //==============================================================================
-    constexpr Rectangle largerSquareFitting() const noexcept
+    constexpr ValueType area() const noexcept
+    {
+        return size.area();
+    }
+
+    //==============================================================================
+    constexpr bool intersects (const Rectangle& other) const noexcept
+    {
+        const auto bottomRight = getBottomRight();
+        const auto otherBottomRight = other.getBottomRight();
+
+        return !(getX() > otherBottomRight.getX() || bottomRight.getX() < other.getX() ||
+                 getY() > otherBottomRight.getY() || bottomRight.getY() < other.getY());
+    }
+
+    //==============================================================================
+    constexpr Rectangle largestSquareFitting() const noexcept
     {
         if (getWidth() == getHeight())
             return *this;

@@ -53,7 +53,7 @@ public:
     {
         //auto [x, y] = event.getPosition();
 
-        const float distance = origin.distanceX (event.getPosition()) * 0.005f;
+        const float distance = origin.horizontalDistanceTo (event.getPosition()) * 0.005f;
         origin = event.getPosition();
 
         value = yup::jlimit (0.0f, 1.0f, value + distance);
@@ -150,7 +150,7 @@ public:
             for (int j = 0; j < totalColumns; ++j)
             {
                 auto col = row.removeFromLeft (width);
-                sliders.getUnchecked (i * totalRows + j)->setBounds (col.largerSquareFitting());
+                sliders.getUnchecked (i * totalRows + j)->setBounds (col.largestSquareFitting());
             }
         }
     }
