@@ -58,6 +58,12 @@ public:
     virtual void* getNativeHandle() const = 0;
 
     //==============================================================================
+    virtual bool isAtomicModeEnabled() const = 0;
+    virtual void enableAtomicMode (bool shouldBeEnabled) = 0;
+    virtual bool isWireframeEnabled() const = 0;
+    virtual void enableWireframe (bool shouldBeEnabld) = 0;
+
+    //==============================================================================
     virtual float getScaleDpi() const = 0;
     virtual float getCurrentFrameRate() const = 0;
 

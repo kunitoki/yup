@@ -24,8 +24,6 @@
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
-#include "rive/math/simd.hpp"
-
 #include <memory>
 
 //==============================================================================
@@ -164,20 +162,12 @@ public:
             break;
 
         case yup::KeyPress::textAKey:
-            forceAtomicMode = !forceAtomicMode;
+            getNativeComponent()->enableAtomicMode (!getNativeComponent()->isAtomicModeEnabled());
             fpsLastTime = 0;
             break;
 
         case yup::KeyPress::textWKey:
-            wireframe = !wireframe;
-            break;
-
-        case yup::KeyPress::textSKey:
-            disableStroke = !disableStroke;
-            break;
-
-        case yup::KeyPress::textFKey:
-            disableFill = !disableFill;
+            getNativeComponent()->enableWireframe (!getNativeComponent()->isWireframeEnabled());
             break;
 
         case yup::KeyPress::textZKey:
@@ -212,16 +202,11 @@ private:
 
         title << " | " << "YUP On Rive Renderer";
 
-        if (forceAtomicMode)
+        if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
         setTitle (title);
     }
-
-    bool forceAtomicMode = false;
-    bool wireframe = false;
-    bool disableFill = false;
-    bool disableStroke = false;
 
     yup::OwnedArray<CustomSlider> sliders;
     int totalRows = 4;

@@ -24,7 +24,6 @@
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
-#include "rive/math/simd.hpp"
 #include "rive/artboard.hpp"
 #include "rive/file.hpp"
 #include "rive/layout.hpp"
@@ -127,10 +126,8 @@ public:
             break;
 
         case yup::KeyPress::textAKey:
-            forceAtomicMode = !forceAtomicMode;
+            getNativeComponent()->enableAtomicMode (!getNativeComponent()->isAtomicModeEnabled());
             fpsLastTime = 0;
-            fpsFrames = 0;
-            needsTitleUpdate = true;
             break;
 
         case yup::KeyPress::textDKey:
@@ -140,7 +137,7 @@ public:
             break;
 
         case yup::KeyPress::textWKey:
-            wireframe = !wireframe;
+            getNativeComponent()->enableWireframe (!getNativeComponent()->isWireframeEnabled());
             break;
 
         case yup::KeyPress::textPKey:
@@ -176,6 +173,7 @@ public:
         {
             float oldScale = scale;
             scale *= 1.25;
+
             rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
@@ -185,6 +183,7 @@ public:
         {
             float oldScale = scale;
             scale /= 1.25;
+
             rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
@@ -196,71 +195,59 @@ public:
     {
         double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
+        const yup::ScopeGuard sg { [this] { updateFrameTime(); } };
+
+        if (rivFile == nullptr)
+            return;
+
         auto [width, height] = getContentSize();
-        if (lastWidth != width || lastHeight != height)
-        {
-            DBG ("size changed to " << width << "x" << height << "\n");
-
-            lastWidth = width;
-            lastHeight = height;
-
-            needsTitleUpdate = true;
-        }
-
-        if (needsTitleUpdate)
-        {
-            updateWindowTitle (0, 1, width, height);
-            needsTitleUpdate = false;
-        }
-
         auto* renderer = g.getRenderer();
 
-        int instances = 1;
-        if (rivFile)
+        int instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
+        if (artboards.size() != instances || scenes.size() != instances)
         {
-            instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
-            if (artboards.size() != instances || scenes.size() != instances)
-            {
-                updateScenesFromFile (instances);
-            }
-            else if (!paused)
-            {
-                for (const auto& scene : scenes)
-                    scene->advanceAndApply (1.0f / frameRate);
-            }
+            updateScenesFromFile (instances);
+        }
+        else if (!paused)
+        {
+            for (const auto& scene : scenes)
+                scene->advanceAndApply (1.0f / frameRate);
+        }
 
-            rive::Mat2D m = computeAlignment (rive::Fit::contain,
-                                              rive::Alignment::center,
-                                              rive::AABB (0, 0, width, height),
-                                              artboards.front()->bounds());
+        if (scenes.empty())
+            return;
+
+        rive::Mat2D m = computeAlignment (rive::Fit::contain,
+                                          rive::Alignment::center,
+                                          rive::AABB (0, 0, width, height),
+                                          artboards.front()->bounds());
+        renderer->save();
+
+        m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
+        viewTransform = m;
+
+        renderer->transform (m);
+
+        const float spacing = 200 / m.findMaxScale();
+
+        auto scene = scenes.begin();
+        for (int j = 0; j < upRepeat + 1 + downRepeat; ++j)
+        {
             renderer->save();
 
-            m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
-            viewTransform = m;
+            renderer->transform(
+                rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
 
-            renderer->transform (m);
-
-            const float spacing = 200 / m.findMaxScale();
-
-            auto scene = scenes.begin();
-            for (int j = 0; j < upRepeat + 1 + downRepeat; ++j)
+            for (int i = 0; i < horzRepeat * 2 + 1; ++i)
             {
-                renderer->save();
-                renderer->transform(
-                    rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
-
-                for (int i = 0; i < horzRepeat * 2 + 1; ++i)
-                {
-                    (*scene++)->draw (renderer);
-                    renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
-                }
-
-                renderer->restore();
+                (*scene++)->draw (renderer);
+                renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
             }
+
             renderer->restore();
         }
 
-        updateFrameTime (time, width, height);
+        renderer->restore();
     }
 
     void userTriedToCloseWindow() override
@@ -275,6 +262,7 @@ private:
 
         artboards.clear();
         scenes.clear();
+
         for (size_t i = 0; i < count; ++i)
         {
             auto artboard = rivFile->artboardDefault();
@@ -285,24 +273,17 @@ private:
             if (scene == nullptr)
             {
                 if (stateMachine >= 0)
-                {
                     scene = artboard->stateMachineAt(stateMachine);
-                }
+
                 else if (animation >= 0)
-                {
                     scene = artboard->animationAt(animation);
-                }
+
                 else
-                {
                     scene = artboard->animationAt(0);
-                }
             }
 
             if (scene == nullptr)
-            {
-                // This is a riv without any animations or state machines. Just draw the artboard.
                 scene = std::make_unique<rive::StaticScene>(artboard.get());
-            }
 
             scene->advanceAndApply(scene->durationSeconds() * i / count);
 
@@ -311,47 +292,39 @@ private:
         }
     }
 
-    void updateWindowTitle (double fps, int instances, int width, int height)
+    void updateWindowTitle (int instances)
     {
         yup::String title;
 
-        if (fps != 0)
-            title << "[" << yup::String (fps, 1) << " FPS]";
+        auto currentFps = getNativeComponent()->getCurrentFrameRate();
+        if (currentFps != 0)
+            title << "[" << yup::String (currentFps, 1) << " FPS]";
 
         if (instances > 1)
             title << " (x" << instances << " instances)";
 
         title << " | " << "YUP On Rive Renderer";
 
-        if (forceAtomicMode)
+        if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
+        auto [width, height] = getContentSize();
         title << " | " << width << " x " << height;
 
         setTitle (title);
     }
 
-    void updateFrameTime (double time, int width, int height)
+    void updateFrameTime()
     {
-        ++fpsFrames;
-
-        double fpsElapsed = time - fpsLastTime;
-        if (fpsElapsed > 2)
+        double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        if (time - fpsLastTime > 2)
         {
-            int instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
-            double fps = fpsLastTime == 0 ? 0 : fpsFrames / fpsElapsed;
+            const int instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
+            updateWindowTitle (instances);
 
-            updateWindowTitle (fps, instances, width, height);
-
-            fpsFrames = 0;
             fpsLastTime = time;
         }
     }
-
-    bool forceAtomicMode = false;
-    bool wireframe = false;
-    bool disableFill = false;
-    bool disableStroke = false;
 
     std::unique_ptr<rive::File> rivFile;
     std::vector<std::unique_ptr<rive::Artboard>> artboards;
@@ -370,10 +343,7 @@ private:
     int upRepeat = 0;
     int downRepeat = 0;
 
-    int lastWidth = 0, lastHeight = 0;
     double fpsLastTime = 0;
-    int fpsFrames = 0;
-    bool needsTitleUpdate = false;
 };
 
 //==============================================================================

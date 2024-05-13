@@ -184,7 +184,11 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
 //==============================================================================
 
-class GLFWComponentNative final : public ComponentNative, public Thread, public AsyncUpdater
+class GLFWComponentNative final
+    : public ComponentNative
+    , public Timer
+    , public Thread
+    , public AsyncUpdater
 {
 public:
     //==============================================================================
@@ -238,16 +242,24 @@ public:
         glfwSetKeyCallback (window, juce_glfwKeyPress);
         glfwSetWindowSizeCallback (window, juce_glfwWindowSize);
 
+       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+        startTimerHz (desiredFrameRate);
+       #else
         startThread();
+       #endif
     }
 
     ~GLFWComponentNative()
     {
         jassert (window != nullptr);
 
+       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+        stopTimer();
+       #else
         signalThreadShouldExit();
         renderEvent.signal();
         stopThread(-1);
+       #endif
 
         glfwSetWindowUserPointer (window, nullptr);
         glfwDestroyWindow (window);
@@ -401,6 +413,28 @@ public:
 
     //==============================================================================
 
+    bool isAtomicModeEnabled() const override
+    {
+        return renderAtomicMode;
+    }
+
+    void enableAtomicMode (bool shouldBeEnabled) override
+    {
+        renderAtomicMode = shouldBeEnabled;
+    }
+
+    bool isWireframeEnabled() const override
+    {
+        return renderWireframe;
+    }
+
+    void enableWireframe (bool shouldBeEnabled) override
+    {
+        renderWireframe = shouldBeEnabled;
+    }
+
+    //==============================================================================
+
     float getScaleDpi() const override
     {
         return context->dpiScale (getNativeHandle());
@@ -487,13 +521,28 @@ public:
         }
     }
 
-    //==============================================================================
-
     void handleAsyncUpdate() override
     {
+       #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
         if (! isThreadRunning())
             return;
+       #endif
 
+        renderContext();
+
+        renderEvent.signal();
+    }
+
+    //==============================================================================
+
+    void timerCallback() override
+    {
+        renderContext();
+    }
+
+private:
+    void renderContext()
+    {
         auto [width, height] = getContentSize();
 
         if (currentWidth != width || currentHeight != height)
@@ -505,11 +554,6 @@ public:
             renderer = context->makeRenderer (width, height);
         }
 
-        bool forceAtomicMode = false;
-        bool wireframe = false;
-        bool disableFill = false;
-        bool disableStroke = false;
-
         jassert (context != nullptr);
         jassert (renderer != nullptr);
 
@@ -520,10 +564,10 @@ public:
             //.loadAction = rive::pls::LoadAction::preserveRenderTarget,
             .clearColor = 0xff404040,
             .msaaSampleCount = 0,
-            .disableRasterOrdering = forceAtomicMode,
-            .wireframe = wireframe,
-            .fillsDisabled = disableFill,
-            .strokesDisabled = disableStroke,
+            .disableRasterOrdering = renderAtomicMode,
+            .wireframe = renderWireframe,
+            .fillsDisabled = false,
+            .strokesDisabled = false,
         });
 
         Graphics g (*context, *renderer);
@@ -532,11 +576,8 @@ public:
         context->end (getNativeHandle());
 
         context->tick();
-
-        renderEvent.signal();
     }
 
-private:
     GLFWwindow* window = nullptr;
     String windowTitle;
     std::unique_ptr<GraphicsContext> context;
@@ -547,6 +588,8 @@ private:
     int currentWidth = 0;
     int currentHeight = 0;
     WaitableEvent renderEvent{ true };
+    bool renderAtomicMode = false;
+    bool renderWireframe = false;
 
    #if JUCE_MAC
     id<MTLDevice> gpu = nil;
