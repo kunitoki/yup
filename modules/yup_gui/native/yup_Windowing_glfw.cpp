@@ -440,7 +440,7 @@ public:
         jassert (window != nullptr);
 
        #if JUCE_MAC
-        return glfwGetCocoaWindow (window);
+        return (__bridge void*) glfwGetCocoaWindow (window);
        #elif JUCE_WINDOWS
         return glfwGetWin32Window (window);
        #elif JUCE_LINUX

@@ -40,6 +40,7 @@
   dependencies:       juce_events
   OSXFrameworks:      Metal
   iOSFrameworks:      Metal
+  enableARC:          1
 
  END_JUCE_MODULE_DECLARATION
 

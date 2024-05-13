@@ -41,6 +41,7 @@
   OSXFrameworks:      Metal
   iOSFrameworks:      Metal
   searchpaths:        native
+  enableARC:          1
 
  END_JUCE_MODULE_DECLARATION
 

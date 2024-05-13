@@ -412,7 +412,7 @@ public:
     }
 
     //==============================================================================
-    constexpr Rectangle largestSquareFitting() const noexcept
+    constexpr Rectangle largestFittingSquare() const noexcept
     {
         if (getWidth() == getHeight())
             return *this;
