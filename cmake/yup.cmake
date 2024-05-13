@@ -42,6 +42,16 @@ function (_yup_comma_or_space_separated_list input_list output_variable)
     set (${output_variable} "${final_list}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_boolean_property input_bool output_variable)
+    string (STRIP "${input_bool}" ${input_bool})
+    string (TOLOWER "${input_bool}" ${input_bool})
+    if ("${input_bool}" STREQUAL "on" OR "${input_bool}" STREQUAL "true" OR "${input_bool}" STREQUAL "1")
+        set (${output_variable} ON PARENT_SCOPE)
+    else()
+        set (${output_variable} OFF PARENT_SCOPE)
+    endif()
+endfunction()
+
 function (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
@@ -247,6 +257,7 @@ function (yup_add_module module_path)
     set (module_windows_libs "")
     set (module_mingw_libs "")
     set (module_wasm_libs "")
+    set (module_arc_enabled OFF)
 
     set (parsed_dependencies "")
     foreach (module_config ${module_configs})
@@ -285,6 +296,8 @@ function (yup_add_module module_path)
             _yup_comma_or_space_separated_list (${module_config_value} module_mingw_libs)
         elseif (${module_config_key} STREQUAL "wasmLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_wasm_libs)
+        elseif (${module_config_key} STREQUAL "enableARC")
+            _yup_boolean_property (${module_config_value} module_arc_enabled)
         endif()
     endforeach()
 
@@ -362,6 +375,11 @@ function (yup_add_module module_path)
         else()
             list (APPEND module_defines "NDEBUG=1")
         endif()
+    endif()
+
+    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+        set_target_properties (${module_name} PROPERTIES
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
     endif()
 
     target_compile_definitions (${module_name} INTERFACE
@@ -455,6 +473,11 @@ function (yup_standalone_app)
                 ${YUP_ARG_LINK_OPTIONS})
 
         endif()
+    endif()
+
+    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+        set_target_properties (${target_name} PROPERTIES
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF)
     endif()
 
     target_compile_definitions (${target_name} PRIVATE
