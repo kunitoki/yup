@@ -32,8 +32,6 @@
 
 class CustomSlider : public yup::Component
 {
-    int index = 0;
-
 public:
     CustomSlider (int index)
          : index (index)
@@ -121,16 +119,13 @@ public:
 private:
     yup::Point<float> origin;
     float value = 0.0f;
+    int index = 0;
 };
 
 //==============================================================================
 
 class CustomWindow : public yup::DocumentWindow
 {
-    yup::OwnedArray<CustomSlider> sliders;
-    int totalRows = 4;
-    int totalColumns = 4;
-
 public:
     CustomWindow()
     {
@@ -150,58 +145,14 @@ public:
             for (int j = 0; j < totalColumns; ++j)
             {
                 auto col = row.removeFromLeft (width);
-                sliders.getUnchecked (i * totalRows + j)->setBounds (col.largestSquareFitting());
+                sliders.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
             }
         }
     }
 
     void paint (yup::Graphics& g, float frameRate) override
     {
-        const double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
-        updateFrameTime (time);
-    }
-
-    void mouseDown (const yup::MouseEvent& event) override
-    {
-        auto [x, y] = event.getPosition();
-
-        dragLastPos = rive::float2 { x, y };
-        if (event.isLeftButtoDown())
-        {
-            dragIdx = -1;
-            for (int i = 0; i < kNumInteractivePts; ++i)
-            {
-                if (rive::simd::all (rive::simd::abs (dragLastPos - (pts[i] + translate)) < 20))
-                {
-                    dragIdx = i;
-                    break;
-                }
-            }
-        }
-    }
-
-    void mouseUp (const yup::MouseEvent& event) override
-    {
-    }
-
-    void mouseMove (const yup::MouseEvent& event) override
-    {
-    }
-
-    void mouseDrag (const yup::MouseEvent& event) override
-    {
-        auto [x, y] = event.getPosition();
-
-        if (event.isLeftButtoDown())
-        {
-            rive::float2 pos = rive::float2 { x, y };
-            if (dragIdx >= 0)
-                pts[dragIdx] += (pos - dragLastPos);
-            else
-                translate += (pos - dragLastPos);
-
-            dragLastPos = pos;
-        }
+        updateFrameTime();
     }
 
     void keyDown (const yup::KeyPress& keys, double x, double y) override
@@ -217,39 +168,8 @@ public:
             fpsLastTime = 0;
             break;
 
-        case yup::KeyPress::textDKey:
-            printf ("static float scale = %f;\n", scale);
-            printf ("static float2 translate = {%f, %f};\n", translate.x, translate.y);
-            printf ("static float2 pts[] = {");
-            for (int i = 0; i < kNumInteractivePts; i++)
-            {
-                printf("{%g, %g}", pts[i].x, pts[i].y);
-                if (i < kNumInteractivePts - 1)
-                    printf(", ");
-                else
-                    printf("};\n");
-            }
-            fflush(stdout);
-            break;
-
-        case yup::KeyPress::number1Key:
-            strokeWidth /= 1.5f;
-            break;
-
-        case yup::KeyPress::number2Key:
-            strokeWidth *= 1.5f;
-            break;
-
         case yup::KeyPress::textWKey:
             wireframe = !wireframe;
-            break;
-
-        case yup::KeyPress::textCKey:
-            cap = static_cast<rive::StrokeCap> ((static_cast<int> (cap) + 1) % 3);
-            break;
-
-        case yup::KeyPress::textOKey:
-            doClose = !doClose;
             break;
 
         case yup::KeyPress::textSKey:
@@ -272,14 +192,12 @@ public:
     }
 
 private:
-    void updateFrameTime (double time)
+    void updateFrameTime()
     {
-        double fpsElapsed = time - fpsLastTime;
-        if (fpsElapsed > 1)
+        double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
+        if (time - fpsLastTime > 1.0)
         {
-            currentFps = getNativeComponent()->getCurrentFrameRate();
             updateWindowTitle();
-
             fpsLastTime = time;
         }
     }
@@ -288,6 +206,7 @@ private:
     {
         yup::String title;
 
+        auto currentFps = getNativeComponent()->getCurrentFrameRate();
         if (currentFps != 0)
             title << "[" << yup::String (currentFps, 1) << " FPS]";
 
@@ -304,32 +223,11 @@ private:
     bool disableFill = false;
     bool disableStroke = false;
 
-    rive::float2 pts[9] = {
-        {260 + 2 * 100, 60 + 2 * 500},
-        {260 + 2 * 257, 60 + 2 * 233},
-        {260 + 2 * -100, 60 + 2 * 300},
-        {260 + 2 * 100, 60 + 2 * 200},
-        {260 + 2 * 250, 60 + 2 * 0},
-        {260 + 2 * 400, 60 + 2 * 200},
-        {260 + 2 * 213, 60 + 2 * 200},
-        {260 + 2 * 213, 60 + 2 * 300},
-        {260 + 2 * 391, 60 + 2 * 480}
-    };
+    yup::OwnedArray<CustomSlider> sliders;
+    int totalRows = 4;
+    int totalColumns = 4;
 
-    static constexpr int kNumInteractivePts = sizeof(pts) / sizeof(*pts);
-
-    float strokeWidth = 70;
-    rive::float2 translate;
-    float scale = 1;
-    rive::StrokeJoin join = rive::StrokeJoin::miter;
-    rive::StrokeCap cap = rive::StrokeCap::butt;
-    bool doClose = false;
-    int dragIdx = -1;
-    rive::float2 dragLastPos;
-
-    int lastWidth = 0, lastHeight = 0;
     double fpsLastTime = 0;
-    double currentFps = 0;
 };
 
 //==============================================================================
