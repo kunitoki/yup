@@ -279,6 +279,16 @@ private:
     ValueType height = 0;
 };
 
+template <class ValueType>
+JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Size<ValueType>& s)
+{
+    auto [w, h] = s;
+
+    string1 << w << ", " << h;
+
+    return string1;
+}
+
 template <std::size_t I, class ValueType>
 ValueType get (const Size<ValueType>& point)
 {

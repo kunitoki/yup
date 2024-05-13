@@ -21,38 +21,38 @@
 
 #include <yup_gui/yup_gui.h>
 
-class Application : public juce::YUPApplication, public juce::Timer
+class Application : public yup::YUPApplication, public juce::Timer
 {
 public:
     Application() = default;
 
-    const juce::String getApplicationName() override
+    const yup::String getApplicationName() override
     {
         return "yup app!";
     }
 
-    const juce::String getApplicationVersion() override
+    const yup::String getApplicationVersion() override
     {
         return "1.0";
     }
 
-    void initialise (const juce::String& commandLineParameters) override
+    void initialise (const yup::String& commandLineParameters) override
     {
-        juce::Logger::outputDebugString ("Starting app " + commandLineParameters);
+        yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         startTimer (1000);
     }
 
     void shutdown() override
     {
-        juce::Logger::outputDebugString ("Shutting down");
+        yup::Logger::outputDebugString ("Shutting down");
     }
 
     void timerCallback() override
     {
         stopTimer();
 
-        juce::MessageManager::callAsync([this] { systemRequestedQuit(); });
+        yup::MessageManager::callAsync([this] { systemRequestedQuit(); });
     }
 };
 

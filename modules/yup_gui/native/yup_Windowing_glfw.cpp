@@ -24,11 +24,14 @@ namespace yup
 
 //==============================================================================
 
-void juce_glfwWindowClose (GLFWwindow* window);
-void juce_glfwWindowSize (GLFWwindow* window, int width, int height);
-void juce_glfwMouseMove (GLFWwindow* window, double x, double y);
-void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods);
-void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
+void yup_glfwWindowClose (GLFWwindow* window);
+void yup_glfwWindowPos (GLFWwindow* window, int xpos, int ypos);
+void yup_glfwWindowSize (GLFWwindow* window, int width, int height);
+void yup_glfwWindowFocus (GLFWwindow* window, int focused);
+void yup_glfwMouseMove (GLFWwindow* window, double x, double y);
+void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods);
+void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset);
+void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
 
 //==============================================================================
 
@@ -37,7 +40,31 @@ MouseEvent toMouseEvent (int buttons, int modifiers, double x, double y) noexcep
     return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
 }
 
+MouseEvent toMouseEvent (int buttons, int modifiers, const Point<float>& p) noexcept
+{
+    return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, p };
+}
+
 //==============================================================================
+
+int keyToModifier (int key)
+{
+    int mod = 0;
+
+    if (key == GLFW_KEY_LEFT_CONTROL || key == GLFW_KEY_RIGHT_CONTROL)
+        mod = GLFW_MOD_CONTROL;
+
+    else if (key == GLFW_KEY_LEFT_SHIFT || key == GLFW_KEY_RIGHT_SHIFT)
+        mod = GLFW_MOD_SHIFT;
+
+    else if (key == GLFW_KEY_LEFT_ALT || key == GLFW_KEY_RIGHT_ALT)
+        mod = GLFW_MOD_ALT;
+
+    else if (key == GLFW_KEY_LEFT_SUPER || key == GLFW_KEY_RIGHT_SUPER)
+        mod = GLFW_MOD_SUPER;
+
+    return mod;
+}
 
 KeyModifiers toKeyModifiers (int modifiers) noexcept
 {
@@ -193,401 +220,108 @@ class GLFWComponentNative final
 public:
     //==============================================================================
 
-    GLFWComponentNative (Component& component, std::optional<float> framerateRedraw)
-        : ComponentNative (component)
-        , Thread ("YUP Render Thread")
-        , desiredFrameRate (framerateRedraw.value_or (60.0f))
-    {
-       #if JUCE_MAC
-        gpu = MTLCreateSystemDefaultDevice();
-        queue = [gpu newCommandQueue];
-        swapchain = [CAMetalLayer layer];
-        swapchain.device = gpu;
-        swapchain.opaque = YES;
-       #endif
-
-        glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
-        //glfwWindowHint (GLFW_DECORATED, GLFW_FALSE);
-
-        auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
-
-        window = glfwCreateWindow (jmax (1, component.getWidth()),
-                                   jmax (1, component.getHeight()),
-                                   component.getTitle().toRawUTF8(),
-                                   monitor,
-                                   nullptr);
-
-        glfwSetWindowPos (window, component.getX(), component.getY());
-
-       #if JUCE_MAC
-        NSWindow* nswindow = glfwGetCocoaWindow (window);
-        nswindow.contentView.layer = swapchain;
-        nswindow.contentView.wantsLayer = YES;
-       #endif
-
-        context = GraphicsContext::createContext (GraphicsContext::Options{});
-        if (context == nullptr)
-            return;
-
-       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-        glfwMakeContextCurrent (window);
-        glfwSwapInterval (1);
-       #endif
-
-        glfwSetWindowUserPointer (window, this);
-
-        glfwSetWindowCloseCallback (window, juce_glfwWindowClose);
-        glfwSetCursorPosCallback (window, juce_glfwMouseMove);
-        glfwSetMouseButtonCallback (window, juce_glfwMousePress);
-        glfwSetKeyCallback (window, juce_glfwKeyPress);
-        glfwSetWindowSizeCallback (window, juce_glfwWindowSize);
-
-       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-        startTimerHz (desiredFrameRate);
-       #else
-        startThread();
-       #endif
-    }
-
-    ~GLFWComponentNative()
-    {
-        jassert (window != nullptr);
-
-       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-        stopTimer();
-       #else
-        signalThreadShouldExit();
-        renderEvent.signal();
-        stopThread(-1);
-       #endif
-
-        glfwSetWindowUserPointer (window, nullptr);
-        glfwDestroyWindow (window);
-        window = nullptr;
-    }
+    GLFWComponentNative (Component& component, std::optional<float> framerateRedraw);
+    ~GLFWComponentNative() override;
 
     //==============================================================================
 
-    void setTitle (const String& title) override
-    {
-        jassert (window != nullptr);
-
-        if (windowTitle != title)
-        {
-            glfwSetWindowTitle (window, title.toRawUTF8());
-
-            windowTitle = title;
-        }
-    }
-
-    String getTitle() const override
-    {
-       #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
-        jassert (window != nullptr);
-
-        if (auto title = glfwGetWindowTitle (window))
-            return String::fromUTF8 (title);
-       #endif
-
-        return windowTitle;
-    }
+    void setTitle (const String& title) override;
+    String getTitle() const override;
 
     //==============================================================================
 
-    void setVisible (bool shouldBeVisible) override
-    {
-        jassert (window != nullptr);
-
-        if (shouldBeVisible)
-            glfwShowWindow (window);
-        else
-            glfwHideWindow (window);
-    }
-
-    bool isVisible() const override
-    {
-        jassert (window != nullptr);
-
-        return false;
-    }
+    void setVisible (bool shouldBeVisible) override;
+    bool isVisible() const override;
 
     //==============================================================================
 
-    void setSize (const Size<int>& size) override
-    {
-        jassert (window != nullptr);
+    void setSize (const Size<int>& size) override;
+    Size<int> getSize() const override;
+    Size<int> getContentSize() const override;
 
-       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-        glfwSetWindowSize (window, size.getWidth() * 2, size.getHeight() * 2);
+    Point<int> getPosition() const override;
+    void setPosition (const Point<int>& newPosition) override;
 
-        //emscripten_set_canvas_element_size ("#canvas", size.getWidth(), size.getHeight());
-
-        EM_ASM (
-        {
-            var canvas = document.getElementById("canvas");
-            canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
-        }, size.getWidth(), size.getHeight());
-
-       #else
-        glfwSetWindowSize (window, size.getWidth(), size.getHeight());
-
-       #endif
-    }
-
-    Size<int> getSize() const override
-    {
-        jassert (window != nullptr);
-
-        int width = 0, height = 0;
-        glfwGetWindowSize (window, &width, &height);
-        return { width, height };
-    }
-
-    Size<int> getContentSize() const override
-    {
-        jassert (window != nullptr);
-
-        int width = 0, height = 0;
-        glfwGetFramebufferSize (window, &width, &height);
-        return { width, height };
-    }
-
-    void setBounds (const Rectangle<int>& newBounds) override
-    {
-        jassert (window != nullptr);
-
-       #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-        glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
-        glfwSetWindowSize (window, newBounds.getWidth() * 2, newBounds.getHeight() * 2);
-
-        //emscripten_set_canvas_element_size ("#canvas", newBounds.getWidth(), newBounds.getHeight());
-
-        EM_ASM (
-        {
-            var canvas = document.getElementById("canvas");
-            canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
-        }, newBounds.getWidth(), newBounds.getHeight());
-
-       #else
-        glfwSetWindowSize (window, newBounds.getWidth(), newBounds.getHeight());
-        glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
-
-       #endif
-    }
+    Rectangle<int> getBounds() const override;
+    void setBounds (const Rectangle<int>& newBounds) override;
 
     //==============================================================================
 
-    void setFullScreen (bool shouldBeFullScreen) override
-    {
-        jassert (window != nullptr);
-
-        if (shouldBeFullScreen)
-        {
-            auto monitor = glfwGetPrimaryMonitor();
-            const GLFWvidmode* mode = glfwGetVideoMode (monitor);
-
-            glfwSetWindowMonitor (window,
-                                  monitor,
-                                  0,
-                                  0,
-                                  mode->width,
-                                  mode->height,
-                                  mode->refreshRate);
-        }
-        else
-        {
-            glfwSetWindowMonitor (window,
-                                  nullptr,
-                                  component.getX(),
-                                  component.getY(),
-                                  component.getWidth(),
-                                  component.getHeight(),
-                                  GLFW_DONT_CARE);
-        }
-    }
-
-    bool isFullScreen() const override
-    {
-        return window != nullptr && glfwGetWindowMonitor (window) != nullptr;
-    }
+    void setFullScreen (bool shouldBeFullScreen) override;
+    bool isFullScreen() const override;
 
     //==============================================================================
 
-    bool isAtomicModeEnabled() const override
-    {
-        return renderAtomicMode;
-    }
+    bool isAtomicModeEnabled() const override;
+    void enableAtomicMode (bool shouldBeEnabled) override;
 
-    void enableAtomicMode (bool shouldBeEnabled) override
-    {
-        renderAtomicMode = shouldBeEnabled;
-    }
-
-    bool isWireframeEnabled() const override
-    {
-        return renderWireframe;
-    }
-
-    void enableWireframe (bool shouldBeEnabled) override
-    {
-        renderWireframe = shouldBeEnabled;
-    }
+    bool isWireframeEnabled() const override;
+    void enableWireframe (bool shouldBeEnabled) override;
 
     //==============================================================================
 
-    float getScaleDpi() const override
-    {
-        return context->dpiScale (getNativeHandle());
-    }
-
-    float getCurrentFrameRate() const override
-    {
-        return currentFrameRate.load (std::memory_order_relaxed);
-    }
+    float getScaleDpi() const override;
+    float getCurrentFrameRate() const override;
 
     //==============================================================================
 
-    void setOpacity (float opacity) override
-    {
-        jassert (window != nullptr);
-        jassert (isPositiveAndBelow (opacity, 1.0f));
-
-        glfwSetWindowOpacity (window, opacity);
-    }
-
-    float getOpacity() const override
-    {
-        return window ? glfwGetWindowOpacity (window) : 1.0f;
-    }
+    void setOpacity (float opacity) override;
+    float getOpacity() const override;
 
     //==============================================================================
 
-    rive::Factory* getFactory() override
-    {
-        return context->factory();
-    }
+    rive::Factory* getFactory() override;
 
     //==============================================================================
 
-    void* getNativeHandle() const override
-    {
-        jassert (window != nullptr);
-
-       #if JUCE_MAC
-        return (__bridge void*) glfwGetCocoaWindow (window);
-       #elif JUCE_WINDOWS
-        return glfwGetWin32Window (window);
-       #elif JUCE_LINUX
-        return glfwGetX11Window (window);
-       #else
-        return nullptr;
-       #endif
-    }
+    void* getNativeHandle() const override;
 
     //==============================================================================
 
-    void run() override
-    {
-        const double maxFrameTime = 1.0 / static_cast<double> (desiredFrameRate);
-        const double maxFrameTimeMs = maxFrameTime * 1000.0;
-        const uint64 frameUpdateCounter = static_cast<uint64> (desiredFrameRate);
-
-        double currentTime = Time::getMillisecondCounterHiRes() / 1000.0;
-
-        while (! threadShouldExit())
-        {
-            // Trigger and wait for rendering
-            renderEvent.reset();
-            triggerAsyncUpdate();
-            renderEvent.wait (maxFrameTimeMs);
-
-            // Update framerate
-            if (++frameCounter >= frameUpdateCounter)
-            {
-                const auto newFrameRate = static_cast<float> (frameCounter) * 0.75f
-                    + currentFrameRate.load (std::memory_order_relaxed) * 0.25f;
-
-                currentFrameRate.store (newFrameRate, std::memory_order_relaxed);
-                frameCounter = 0;
-            }
-
-            // Wait for a stable frame time
-            const double newTime = Time::getMillisecondCounterHiRes() / 1000.0;
-            const double remainingTime = maxFrameTime - (newTime - currentTime);
-            currentTime = newTime;
-
-            if (remainingTime > 0.0f)
-                Thread::sleep (roundToInt (remainingTime * 1000.0));
-        }
-    }
-
-    void handleAsyncUpdate() override
-    {
-       #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
-        if (! isThreadRunning())
-            return;
-       #endif
-
-        renderContext();
-
-        renderEvent.signal();
-    }
+    void run() override;
+    void handleAsyncUpdate() override;
+    void timerCallback() override;
 
     //==============================================================================
+    void handlePaint (Graphics& g, float frameRate);
+    void handleMouseMove (const MouseEvent& event);
+    void handleMouseDrag (const MouseEvent& event);
+    void handleMouseDown (const MouseEvent& event);
+    void handleMouseUp (const MouseEvent& event);
+    void handleKeyDown (const KeyPress& keys, const Point<float>& position);
+    void handleKeyUp (const KeyPress& keys, const Point<float>& position);
+    void handleMoved (int xpos, int ypos);
+    void handleResized (int width, int height);
+    void handleUserTriedToCloseWindow();
 
-    void timerCallback() override
-    {
-        renderContext();
-    }
+    //==============================================================================
+    KeyModifiers getCurrentKeyModifiers() const;
+    Point<float> getScaledCursorPosition() const;
 
 private:
-    void renderContext()
-    {
-        auto [width, height] = getContentSize();
-
-        if (currentWidth != width || currentHeight != height)
-        {
-            currentWidth = width;
-            currentHeight = height;
-
-            context->onSizeChanged (getNativeHandle(), width, height, 0);
-            renderer = context->makeRenderer (width, height);
-        }
-
-        jassert (context != nullptr);
-        jassert (renderer != nullptr);
-
-        context->begin (
-        {
-            .renderTargetWidth = static_cast<uint32_t> (width),
-            .renderTargetHeight = static_cast<uint32_t> (height),
-            //.loadAction = rive::pls::LoadAction::preserveRenderTarget,
-            .clearColor = 0xff404040,
-            .msaaSampleCount = 0,
-            .disableRasterOrdering = renderAtomicMode,
-            .wireframe = renderWireframe,
-            .fillsDisabled = false,
-            .strokesDisabled = false,
-        });
-
-        Graphics g (*context, *renderer);
-        handlePaint (g, desiredFrameRate);
-
-        context->end (getNativeHandle());
-
-        context->tick();
-    }
+    void updateComponentUnderMouse (const MouseEvent& event);
+    void renderContext();
 
     GLFWwindow* window = nullptr;
     String windowTitle;
+
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
+
+    Rectangle<int> screenBounds = { 0, 0, 1, 1 };
+    Point<float> lastScreenMousePosition = { -1.0f, -1.0f };
+    Component* lastComponentClicked = nullptr;
+    Component* lastComponentUnderMouse = nullptr;
+    KeyModifiers lastKeyModifiers;
+
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
     uint64 frameCounter = 0;
+
     int currentWidth = 0;
     int currentHeight = 0;
-    WaitableEvent renderEvent{ true };
+
+    WaitableEvent renderEvent { true };
     bool renderAtomicMode = false;
     bool renderWireframe = false;
 
@@ -600,6 +334,589 @@ private:
 
 //==============================================================================
 
+GLFWComponentNative::GLFWComponentNative (Component& component, std::optional<float> framerateRedraw)
+    : ComponentNative (component)
+    , Thread ("YUP Render Thread")
+    , screenBounds (component.getBounds())
+    , desiredFrameRate (framerateRedraw.value_or (60.0f))
+{
+   #if JUCE_MAC
+    gpu = MTLCreateSystemDefaultDevice();
+    queue = [gpu newCommandQueue];
+    swapchain = [CAMetalLayer layer];
+    swapchain.device = gpu;
+    swapchain.opaque = YES;
+   #endif
+
+    glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
+    //glfwWindowHint (GLFW_DECORATED, GLFW_FALSE);
+
+    auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
+
+    window = glfwCreateWindow (jmax (1, screenBounds.getWidth()),
+                               jmax (1, screenBounds.getHeight()),
+                               component.getTitle().toRawUTF8(),
+                               monitor,
+                               nullptr);
+
+    glfwSetWindowPos (window, screenBounds.getX(), screenBounds.getY());
+
+   #if JUCE_MAC
+    NSWindow* nswindow = glfwGetCocoaWindow (window);
+    nswindow.contentView.layer = swapchain;
+    nswindow.contentView.wantsLayer = YES;
+   #endif
+
+    context = GraphicsContext::createContext (GraphicsContext::Options{});
+    if (context == nullptr)
+        return;
+
+   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+    glfwMakeContextCurrent (window);
+    glfwSwapInterval (1);
+   #endif
+
+    glfwSetWindowUserPointer (window, this);
+
+    glfwSetWindowCloseCallback (window, yup_glfwWindowClose);
+    glfwSetWindowSizeCallback (window, yup_glfwWindowSize);
+    glfwSetWindowPosCallback (window, yup_glfwWindowPos);
+    glfwSetWindowFocusCallback (window, yup_glfwWindowFocus);
+    glfwSetCursorPosCallback (window, yup_glfwMouseMove);
+    glfwSetMouseButtonCallback (window, yup_glfwMousePress);
+    glfwSetScrollCallback (window, yup_glfwMouseScroll);
+    glfwSetKeyCallback (window, yup_glfwKeyPress);
+
+   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+    startTimerHz (desiredFrameRate);
+   #else
+    startThread();
+   #endif
+}
+
+GLFWComponentNative::~GLFWComponentNative()
+{
+    jassert (window != nullptr);
+
+   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+    stopTimer();
+   #else
+    signalThreadShouldExit();
+    renderEvent.signal();
+    stopThread(-1);
+   #endif
+
+    glfwSetWindowUserPointer (window, nullptr);
+    glfwDestroyWindow (window);
+    window = nullptr;
+}
+
+//==============================================================================
+
+void GLFWComponentNative::setTitle (const String& title)
+{
+    jassert (window != nullptr);
+
+    if (windowTitle != title)
+    {
+        glfwSetWindowTitle (window, title.toRawUTF8());
+
+        windowTitle = title;
+    }
+}
+
+String GLFWComponentNative::getTitle() const
+{
+   #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
+    jassert (window != nullptr);
+
+    if (auto title = glfwGetWindowTitle (window))
+        return String::fromUTF8 (title);
+   #endif
+
+    return windowTitle;
+}
+
+//==============================================================================
+
+void GLFWComponentNative::setVisible (bool shouldBeVisible)
+{
+    jassert (window != nullptr);
+
+    if (shouldBeVisible)
+        glfwShowWindow (window);
+    else
+        glfwHideWindow (window);
+}
+
+bool GLFWComponentNative::isVisible() const
+{
+    jassert (window != nullptr);
+
+    return false;
+}
+
+//==============================================================================
+
+void GLFWComponentNative::setSize (const Size<int>& size)
+{
+    jassert (window != nullptr);
+
+   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+    glfwSetWindowSize (window, size.getWidth() * 2, size.getHeight() * 2);
+
+    //emscripten_set_canvas_element_size ("#canvas", size.getWidth(), size.getHeight());
+
+    EM_ASM (
+    {
+        var canvas = document.getElementById("canvas");
+        canvas.style = "width:" + $0 + "px; height:" + $1 + "px;";
+    }, size.getWidth(), size.getHeight());
+
+   #else
+    glfwSetWindowSize (window, size.getWidth(), size.getHeight());
+
+   #endif
+
+   screenBounds = screenBounds.withSize (size);
+}
+
+Size<int> GLFWComponentNative::getSize() const
+{
+    jassert (window != nullptr);
+
+    int width = 0, height = 0;
+    glfwGetWindowSize (window, &width, &height);
+    return { width, height };
+}
+
+Size<int> GLFWComponentNative::getContentSize() const
+{
+    jassert (window != nullptr);
+
+    int width = 0, height = 0;
+    glfwGetFramebufferSize (window, &width, &height);
+    return { width, height };
+}
+
+Point<int> GLFWComponentNative::getPosition() const
+{
+    return screenBounds.getPosition();
+}
+
+void GLFWComponentNative::setPosition (const Point<int>& newPosition)
+{
+    glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
+
+    screenBounds = screenBounds.withPosition (newPosition * getScaleDpi());
+}
+
+Rectangle<int> GLFWComponentNative::getBounds() const
+{
+    return screenBounds;
+}
+
+void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
+{
+    jassert (window != nullptr);
+
+    glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
+
+   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+    glfwSetWindowSize (window, newBounds.getWidth() * 2, newBounds.getHeight() * 2);
+
+    //emscripten_set_canvas_element_size ("#canvas", newBounds.getWidth(), newBounds.getHeight());
+
+    EM_ASM (
+    {
+        var canvas = document.getElementById("canvas");
+        canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
+    }, newBounds.getWidth(), newBounds.getHeight());
+
+   #else
+    glfwSetWindowSize (window, newBounds.getWidth(), newBounds.getHeight());
+
+   #endif
+
+   screenBounds = newBounds * getScaleDpi();
+}
+
+//==============================================================================
+
+void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
+{
+    jassert (window != nullptr);
+
+    if (shouldBeFullScreen)
+    {
+        auto monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode (monitor);
+
+        glfwSetWindowMonitor (window,
+                              monitor,
+                              0,
+                              0,
+                              mode->width,
+                              mode->height,
+                              mode->refreshRate);
+    }
+    else
+    {
+        glfwSetWindowMonitor (window,
+                              nullptr,
+                              component.getX(),
+                              component.getY(),
+                              component.getWidth(),
+                              component.getHeight(),
+                              GLFW_DONT_CARE);
+    }
+}
+
+bool GLFWComponentNative::isFullScreen() const
+{
+    return window != nullptr && glfwGetWindowMonitor (window) != nullptr;
+}
+
+//==============================================================================
+
+bool GLFWComponentNative::isAtomicModeEnabled() const
+{
+    return renderAtomicMode;
+}
+
+void GLFWComponentNative::enableAtomicMode (bool shouldBeEnabled)
+{
+    renderAtomicMode = shouldBeEnabled;
+}
+
+bool GLFWComponentNative::isWireframeEnabled() const
+{
+    return renderWireframe;
+}
+
+void GLFWComponentNative::enableWireframe (bool shouldBeEnabled)
+{
+    renderWireframe = shouldBeEnabled;
+}
+
+//==============================================================================
+
+float GLFWComponentNative::getScaleDpi() const
+{
+    return context->dpiScale (getNativeHandle());
+}
+
+float GLFWComponentNative::getCurrentFrameRate() const
+{
+    return currentFrameRate.load (std::memory_order_relaxed);
+}
+
+//==============================================================================
+
+Point<float> GLFWComponentNative::getScaledCursorPosition() const
+{
+    double x, y;
+    glfwGetCursorPos (window, &x, &y);
+
+    const float dpiScale = getScaleDpi();
+    x *= dpiScale;
+    y *= dpiScale;
+
+    return { static_cast<float> (x), static_cast<float> (y) };
+}
+
+//==============================================================================
+
+void GLFWComponentNative::setOpacity (float opacity)
+{
+    jassert (window != nullptr);
+    jassert (isPositiveAndBelow (opacity, 1.0f));
+
+    glfwSetWindowOpacity (window, opacity);
+}
+
+float GLFWComponentNative::getOpacity() const
+{
+    return window ? glfwGetWindowOpacity (window) : 1.0f;
+}
+
+//==============================================================================
+
+rive::Factory* GLFWComponentNative::getFactory()
+{
+    return context->factory();
+}
+
+//==============================================================================
+
+void* GLFWComponentNative::getNativeHandle() const
+{
+    jassert (window != nullptr);
+
+   #if JUCE_MAC
+    return (__bridge void*) glfwGetCocoaWindow (window);
+
+   #elif JUCE_WINDOWS
+    return glfwGetWin32Window (window);
+
+   #elif JUCE_LINUX
+    return glfwGetX11Window (window);
+
+   #else
+    return nullptr;
+
+   #endif
+}
+
+//==============================================================================
+
+void GLFWComponentNative::run()
+{
+    const double maxFrameTime = 1.0 / static_cast<double> (desiredFrameRate);
+    const double maxFrameTimeMs = maxFrameTime * 1000.0;
+    const uint64 frameUpdateCounter = static_cast<uint64> (desiredFrameRate);
+
+    double currentTime = Time::getMillisecondCounterHiRes() / 1000.0;
+
+    while (! threadShouldExit())
+    {
+        // Trigger and wait for rendering
+        renderEvent.reset();
+        triggerAsyncUpdate();
+        renderEvent.wait (maxFrameTimeMs);
+
+        // Update framerate
+        if (++frameCounter >= frameUpdateCounter)
+        {
+            const auto newFrameRate = static_cast<float> (frameCounter) * 0.75f
+                + currentFrameRate.load (std::memory_order_relaxed) * 0.25f;
+
+            currentFrameRate.store (newFrameRate, std::memory_order_relaxed);
+            frameCounter = 0;
+        }
+
+        // Wait for a stable frame time
+        const double newTime = Time::getMillisecondCounterHiRes() / 1000.0;
+        const double remainingTime = maxFrameTime - (newTime - currentTime);
+        currentTime = newTime;
+
+        if (remainingTime > 0.0f)
+            Thread::sleep (roundToInt (remainingTime * 1000.0));
+    }
+}
+
+void GLFWComponentNative::handleAsyncUpdate()
+{
+    if (! isThreadRunning())
+        return;
+
+    renderContext();
+
+    renderEvent.signal();
+}
+
+void GLFWComponentNative::timerCallback()
+{
+    renderContext();
+}
+
+//==============================================================================
+
+void GLFWComponentNative::renderContext()
+{
+    auto [width, height] = getContentSize();
+
+    if (currentWidth != width || currentHeight != height)
+    {
+        currentWidth = width;
+        currentHeight = height;
+
+        context->onSizeChanged (getNativeHandle(), width, height, 0);
+        renderer = context->makeRenderer (width, height);
+    }
+
+    jassert (context != nullptr);
+    jassert (renderer != nullptr);
+
+    context->begin (
+    {
+        .renderTargetWidth = static_cast<uint32_t> (width),
+        .renderTargetHeight = static_cast<uint32_t> (height),
+        //.loadAction = rive::pls::LoadAction::preserveRenderTarget,
+        .clearColor = 0xff404040,
+        .msaaSampleCount = 0,
+        .disableRasterOrdering = renderAtomicMode,
+        .wireframe = renderWireframe,
+        .fillsDisabled = false,
+        .strokesDisabled = false,
+    });
+
+    Graphics g (*context, *renderer);
+    handlePaint (g, desiredFrameRate);
+
+    context->end (getNativeHandle());
+
+    context->tick();
+}
+
+//==============================================================================
+
+void GLFWComponentNative::handlePaint (Graphics& g, float frameRate)
+{
+    component.internalPaint (g, frameRate);
+}
+
+//==============================================================================
+
+void GLFWComponentNative::handleMouseMove (const MouseEvent& event)
+{
+    auto localPosition = event.getPosition();
+    auto globalPosition = localPosition + getPosition().to<float>();
+
+    //DBG ("handleMouseMove: " << screenPosition);
+    //DBG ("  size:          " << getBounds());
+
+    updateComponentUnderMouse (event);
+
+    if (lastComponentUnderMouse != nullptr)
+        lastComponentUnderMouse->internalMouseMove (event);
+
+    lastScreenMousePosition = globalPosition;
+}
+
+void GLFWComponentNative::handleMouseDrag (const MouseEvent& event)
+{
+    auto localPosition = event.getPosition();
+    auto globalPosition = localPosition + getPosition().to<float>();
+
+    //DBG ("handleMouseDrag: " << globalPosition);
+
+    if (lastComponentClicked != nullptr)
+        lastComponentClicked->internalMouseDrag (event);
+
+    lastScreenMousePosition = globalPosition;
+}
+
+void GLFWComponentNative::handleMouseDown (const MouseEvent& event)
+{
+    auto localPosition = event.getPosition();
+    auto globalPosition = localPosition + getPosition().to<float>();
+
+    //DBG ("handleMouseDown: " << globalPosition);
+
+    if (auto child = component.findComponentAt (localPosition))
+    {
+        lastComponentClicked = child;
+
+        DBG ("handleMouseDown: " << lastComponentClicked->getTitle());
+    }
+
+    if (lastComponentClicked != nullptr)
+        lastComponentClicked->internalMouseDown (event);
+
+    lastScreenMousePosition = globalPosition;
+    lastKeyModifiers = event.getModifiers();
+}
+
+void GLFWComponentNative::handleMouseUp (const MouseEvent& event)
+{
+    auto localPosition = event.getPosition();
+    auto globalPosition = localPosition + getPosition().to<float>();
+
+    if (lastComponentClicked != nullptr)
+    {
+        DBG ("handleMouseUp: " << lastComponentClicked->getTitle());
+
+        lastComponentClicked->internalMouseUp (event);
+        lastComponentClicked = nullptr;
+    }
+
+    updateComponentUnderMouse (event);
+
+    lastScreenMousePosition = globalPosition;
+    lastKeyModifiers = {};
+}
+
+//==============================================================================
+
+void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
+{
+    component.internalKeyDown (keys, cursorPosition);
+
+    lastKeyModifiers = keys.getModifiers();
+}
+
+void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
+{
+    component.internalKeyUp (keys, cursorPosition);
+
+    lastKeyModifiers = keys.getModifiers();
+}
+
+//==============================================================================
+
+void GLFWComponentNative::handleMoved (int xpos, int ypos)
+{
+    DBG ("handleMoved: " << xpos << ", " << ypos);
+    DBG ("  size:      " << getBounds());
+
+    component.internalMoved (xpos, ypos);
+
+    screenBounds = screenBounds.withPosition (xpos, ypos);
+}
+
+void GLFWComponentNative::handleResized (int width, int height)
+{
+    DBG ("handleResized: " << width << ", " << height);
+    DBG ("  size:        " << getBounds());
+
+    component.internalResized (width, height);
+
+    screenBounds = screenBounds.withSize (width, height);
+}
+
+void GLFWComponentNative::handleUserTriedToCloseWindow()
+{
+    component.internalUserTriedToCloseWindow();
+}
+
+//==============================================================================
+
+KeyModifiers GLFWComponentNative::getCurrentKeyModifiers() const
+{
+    return lastKeyModifiers;
+}
+
+//==============================================================================
+
+void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
+{
+    Component* child = component.findComponentAt (event.getPosition());
+    if (child != nullptr)
+    {
+        if (lastComponentUnderMouse == nullptr)
+        {
+            child->internalMouseEnter (event);
+        }
+        else if (lastComponentUnderMouse != child)
+        {
+            lastComponentUnderMouse->internalMouseExit (event);
+            child->internalMouseEnter (event);
+        }
+    }
+    else
+    {
+        if (lastComponentUnderMouse)
+        {
+            lastComponentUnderMouse->internalMouseExit (event);
+        }
+    }
+
+    lastComponentUnderMouse = child;
+}
+
+//==============================================================================
+
 std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, std::optional<float> framerateRedraw)
 {
     return std::make_unique<GLFWComponentNative> (component, framerateRedraw);
@@ -607,35 +924,46 @@ std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& componen
 
 //==============================================================================
 
-void juce_glfwWindowClose (GLFWwindow* window)
+void yup_glfwWindowClose (GLFWwindow* window)
 {
-    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    component->handleUserTriedToCloseWindow();
+    nativeComponent->handleUserTriedToCloseWindow();
 }
 
-//==============================================================================
-
-void juce_glfwWindowSize (GLFWwindow* window, int width, int height)
+void yup_glfwWindowPos (GLFWwindow* window, int xpos, int ypos)
 {
-    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    component->handleResized (width, height);
+    nativeComponent->handleMoved (xpos, ypos);
 }
 
-//==============================================================================
-
-void juce_glfwMouseMove (GLFWwindow* window, double x, double y)
+void yup_glfwWindowSize (GLFWwindow* window, int width, int height)
 {
-    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    nativeComponent->handleResized (width, height);
+}
+
+void yup_glfwWindowFocus (GLFWwindow* window, int focused)
+{
+    // auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+    // TODO
+}
+
+void yup_glfwMouseMove (GLFWwindow* window, double x, double y)
+{
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     const auto leftButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
     const auto middleButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
     const auto rightButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
 
-    float dpiScale = component->getScaleDpi();
+    float dpiScale = nativeComponent->getScaleDpi();
     x *= dpiScale;
     y *= dpiScale;
+
+    auto mods = nativeComponent->getCurrentKeyModifiers();
 
     if (leftButtonDown || middleButtonDown || rightButtonDown)
     {
@@ -643,55 +971,56 @@ void juce_glfwMouseMove (GLFWwindow* window, double x, double y)
             | (middleButtonDown ? GLFW_MOUSE_BUTTON_MIDDLE : 0)
             | (rightButtonDown ? GLFW_MOUSE_BUTTON_RIGHT : 0);
 
-        component->handleMouseDrag (toMouseEvent (buttons, 0, x, y));
+        nativeComponent->handleMouseDrag (toMouseEvent (buttons, 0, x, y).withModifiers (mods));
     }
     else
     {
-        component->handleMouseMove (toMouseEvent (0, 0, x, y));
+        nativeComponent->handleMouseMove (toMouseEvent (0, 0, x, y).withModifiers (mods));
+    }
+}
+
+void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
+{
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    auto cursorPosition = nativeComponent->getScaledCursorPosition();
+
+    if (action == GLFW_PRESS)
+        nativeComponent->handleMouseDown (toMouseEvent (button, mods, cursorPosition));
+    else
+        nativeComponent->handleMouseUp (toMouseEvent (button, mods, cursorPosition));
+}
+
+void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
+{
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    auto cursorPosition = nativeComponent->getScaledCursorPosition();
+
+    // nativeComponent->handleMouseWheel (toMouseEvent (button, mods, x, y));
+}
+
+void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    auto cursorPosition = nativeComponent->getScaledCursorPosition();
+
+    if (action == GLFW_PRESS)
+    {
+        mods |= keyToModifier (key);
+        nativeComponent->handleKeyDown (toKeyPress (key, scancode, mods), cursorPosition);
+    }
+    else
+    {
+        mods &= ~keyToModifier (key);
+        nativeComponent->handleKeyUp (toKeyPress (key, scancode, mods), cursorPosition);
     }
 }
 
 //==============================================================================
 
-void juce_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
-{
-    double x, y;
-    glfwGetCursorPos (window, &x, &y);
-
-    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    float dpiScale = component->getScaleDpi();
-    x *= dpiScale;
-    y *= dpiScale;
-
-    if (action == GLFW_PRESS)
-        component->handleMouseDown (toMouseEvent (button, mods, x, y));
-    else
-        component->handleMouseUp (toMouseEvent (button, mods, x, y));
-}
-
-//==============================================================================
-
-void juce_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    double x = 0, y = 0;
-    glfwGetCursorPos (window, &x, &y);
-
-    auto* component = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    float dpiScale = component->getScaleDpi();
-    x *= dpiScale;
-    y *= dpiScale;
-
-    if (action == GLFW_PRESS)
-        component->handleKeyDown (toKeyPress (key, scancode, mods), x, y);
-    else
-        component->handleKeyUp (toKeyPress (key, scancode, mods), x, y);
-}
-
-//==============================================================================
-
-void juce_glfwMonitorCallback (GLFWmonitor* monitor, int event)
+void yup_glfwMonitorCallback (GLFWmonitor* monitor, int event)
 {
     auto desktop = Desktop::getInstance();
 
@@ -755,14 +1084,14 @@ void Desktop::updateDisplays()
 
 //==============================================================================
 
-void juce_glfwErrorCallback (int code, const char* message)
+void yup_glfwErrorCallback (int code, const char* message)
 {
     DBG ("GLFW Error: " << code << " - " << message);
 }
 
 void YUPApplication::staticInitialisation()
 {
-    glfwSetErrorCallback (juce_glfwErrorCallback);
+    glfwSetErrorCallback (yup_glfwErrorCallback);
 
     glfwInit();
 
@@ -782,7 +1111,8 @@ void YUPApplication::staticInitialisation()
    #endif
 
     Desktop::getInstance()->updateDisplays();
-    glfwSetMonitorCallback (juce_glfwMonitorCallback);
+
+    glfwSetMonitorCallback (yup_glfwMonitorCallback);
 }
 
 void YUPApplication::staticFinalisation()

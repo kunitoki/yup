@@ -44,15 +44,18 @@ public:
     String getTitle() const;
 
     //==============================================================================
+    Point<int> getPosition() const;
+    int getX() const;
+    int getY() const;
+
+    virtual void moved();
+
+    //==============================================================================
     virtual void setSize (const Size<int>& newSize);
     Size<int> getSize() const;
     Size<int> getContentSize() const;
     int getWidth() const;
     int getHeight() const;
-
-    Point<int> getPosition() const;
-    int getX() const;
-    int getY() const;
 
     virtual void setBounds (const Rectangle<int>& newBounds);
     Rectangle<int> getBounds() const;
@@ -103,7 +106,7 @@ public:
     //==============================================================================
     int getNumChildComponents() const;
     Component* getComponentAt (int index) const;
-    Component* getComponentAt (const Point<float>& p) const;
+    Component* findComponentAt (const Point<float>& p);
 
     //==============================================================================
     void toFront();
@@ -114,27 +117,33 @@ public:
     virtual void paintOverChildren (Graphics& g, float frameRate);
 
     //==============================================================================
+    virtual void mouseEnter (const MouseEvent& event);
+    virtual void mouseExit (const MouseEvent& event);
     virtual void mouseDown (const MouseEvent& event);
     virtual void mouseMove (const MouseEvent& event);
     virtual void mouseDrag (const MouseEvent& event);
     virtual void mouseUp (const MouseEvent& event);
 
     //==============================================================================
-    virtual void keyDown (const KeyPress& keys, double x, double y);
-    virtual void keyUp (const KeyPress& keys, double x, double y);
+    virtual void keyDown (const KeyPress& keys, const Point<float>& position);
+    virtual void keyUp (const KeyPress& keys, const Point<float>& position);
 
 private:
     void internalPaint (Graphics& g, float frameRate);
+    void internalMouseEnter (const MouseEvent& event);
+    void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
     void internalMouseMove (const MouseEvent& event);
     void internalMouseDrag (const MouseEvent& event);
     void internalMouseUp (const MouseEvent& event);
-    void internalKeyDown (const KeyPress& keys, double x, double y);
-    void internalKeyUp (const KeyPress& keys, double x, double y);
+    void internalKeyDown (const KeyPress& keys, const Point<float>& position);
+    void internalKeyUp (const KeyPress& keys, const Point<float>& position);
+    void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;
+    friend class GLFWComponentNative;
     friend class WeakReference<Component>;
 
     String componentID, componentTitle;

@@ -489,6 +489,16 @@ private:
     Size<ValueType> size;
 };
 
+template <class ValueType>
+JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Rectangle<ValueType>& r)
+{
+    auto [x, y, w, h] = r;
+
+    string1 << x << ", " << y << ", " << w << ", " << h;
+
+    return string1;
+}
+
 template <std::size_t I, class ValueType>
 ValueType get (const Rectangle<ValueType>& point)
 {

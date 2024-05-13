@@ -86,6 +86,27 @@ String Component::getTitle() const
 
 //==============================================================================
 
+int Component::getX() const
+{
+    return static_cast<int> (boundsInParent.getX());
+}
+
+int Component::getY() const
+{
+    return static_cast<int> (boundsInParent.getY());
+}
+
+Point<int> Component::getPosition() const
+{
+    return boundsInParent.getPosition().to<int>();
+}
+
+void Component::moved()
+{
+}
+
+//==============================================================================
+
 void Component::setSize (const Size<int>& newSize)
 {
     if (options.onDesktop)
@@ -126,21 +147,6 @@ int Component::getWidth() const
 int Component::getHeight() const
 {
     return static_cast<int> (boundsInParent.getHeight());
-}
-
-Point<int> Component::getPosition() const
-{
-    return boundsInParent.getPosition().to<int>();
-}
-
-int Component::getX() const
-{
-    return static_cast<int> (boundsInParent.getX());
-}
-
-int Component::getY() const
-{
-    return static_cast<int> (boundsInParent.getY());
 }
 
 void Component::setBounds (const Rectangle<int>& newBounds)
@@ -350,12 +356,22 @@ Component* Component::getComponentAt (int index) const
     return children.getUnchecked (index);
 }
 
-Component* Component::getComponentAt (const Point<float>& p) const
+Component* Component::findComponentAt (const Point<float>& p)
 {
-    for (int index = children.size(); --index >= 0;)
+    if (options.isVisible && boundsInParent.withZeroPosition().contains (p))
     {
-        if (auto child = children.getUnchecked (index); child != nullptr && child->boundsInParent.contains (p))
-            return child;
+        for (int index = children.size(); --index >= 0;)
+        {
+            auto child = children.getUnchecked (index);
+            if (child == nullptr || ! child->isVisible() || ! child->boundsInParent.contains (p))
+                continue;
+
+            child = child->findComponentAt (p - child->boundsInParent.getPosition());
+            if (child != nullptr)
+                return child;
+        }
+
+        return this;
     }
 
     return nullptr;
@@ -386,12 +402,14 @@ void Component::paintOverChildren (Graphics& g, float frameRate) {}
 
 //==============================================================================
 
+void Component::mouseEnter (const MouseEvent& event) {}
+void Component::mouseExit (const MouseEvent& event) {}
 void Component::mouseDown (const MouseEvent& event) {}
 void Component::mouseMove (const MouseEvent& event) {}
 void Component::mouseDrag (const MouseEvent& event) {}
 void Component::mouseUp (const MouseEvent& event) {}
-void Component::keyDown (const KeyPress& keys, double x, double y) {}
-void Component::keyUp (const KeyPress& keys, double x, double y) {}
+void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
+void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
 
 //==============================================================================
 
@@ -421,23 +439,28 @@ void Component::internalPaint (Graphics& g, float frameRate)
     paintOverChildren (g, frameRate);
 }
 
+void Component::internalMouseEnter (const MouseEvent& event)
+{
+    if (! isVisible())
+        return;
+
+    mouseEnter (event);
+}
+
+void Component::internalMouseExit (const MouseEvent& event)
+{
+    if (! isVisible())
+        return;
+
+    mouseExit (event);
+}
+
 void Component::internalMouseDown (const MouseEvent& event)
 {
     if (! isVisible())
         return;
 
     mouseDown (event);
-
-    for (auto child : children)
-    {
-        const auto childBounds = child->getBounds().to<float> ();
-
-        if (child->isVisible() && childBounds.contains (event.getPosition()))
-        {
-            child->internalMouseDown (event);
-            break;
-        }
-    }
 }
 
 void Component::internalMouseMove (const MouseEvent& event)
@@ -446,17 +469,6 @@ void Component::internalMouseMove (const MouseEvent& event)
         return;
 
     mouseMove (event);
-
-    for (auto child : children)
-    {
-        const auto childBounds = child->getBounds().to<float> ();
-
-        if (child->isVisible() && childBounds.contains (event.getPosition()))
-        {
-            child->internalMouseMove (event);
-            break;
-        }
-    }
 }
 
 void Component::internalMouseDrag (const MouseEvent& event)
@@ -465,17 +477,6 @@ void Component::internalMouseDrag (const MouseEvent& event)
         return;
 
     mouseDrag (event);
-
-    for (auto child : children)
-    {
-        const auto childBounds = child->getBounds().to<float> ();
-
-        if (child->isVisible() && childBounds.contains (event.getPosition()))
-        {
-            child->internalMouseDrag (event);
-            break;
-        }
-    }
 }
 
 void Component::internalMouseUp (const MouseEvent& event)
@@ -484,33 +485,22 @@ void Component::internalMouseUp (const MouseEvent& event)
         return;
 
     mouseUp (event);
-
-    for (auto child : children)
-    {
-        const auto childBounds = child->getBounds().to<float> ();
-
-        if (child->isVisible() && childBounds.contains (event.getPosition()))
-        {
-            child->internalMouseUp (event);
-            break;
-        }
-    }
 }
 
-void Component::internalKeyDown (const KeyPress& keys, double x, double y)
+void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     if (! isVisible())
         return;
 
-    keyDown (keys, x, y);
+    keyDown (keys, position);
 }
 
-void Component::internalKeyUp (const KeyPress& keys, double x, double y)
+void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
     if (! isVisible())
         return;
 
-    keyUp (keys, x, y);
+    keyUp (keys, position);
 }
 
 void Component::internalResized (int width, int height)
@@ -521,6 +511,16 @@ void Component::internalResized (int width, int height)
         boundsInParent = boundsInParent.withSize (width, height);
 
     resized();
+}
+
+void Component::internalMoved (int xpos, int ypos)
+{
+    if (options.onDesktop)
+        boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos) * getScaleDpi());
+    else
+        boundsInParent = boundsInParent.withPosition (xpos, ypos);
+
+    moved();
 }
 
 void Component::internalUserTriedToCloseWindow()

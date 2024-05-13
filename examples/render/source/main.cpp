@@ -115,7 +115,7 @@ public:
             scene->pointerMove (xy);
     }
 
-    void keyDown (const yup::KeyPress& keys, double x, double y) override
+    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
         const bool shift = keys.getModifiers().isShiftDown();
 
@@ -174,7 +174,7 @@ public:
             float oldScale = scale;
             scale *= 1.25;
 
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
+            rive::float2 cursorPos = rive::float2 { position.getX(), position.getY() };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }
@@ -184,7 +184,7 @@ public:
             float oldScale = scale;
             scale /= 1.25;
 
-            rive::float2 cursorPos = rive::float2 { (float)x, (float)y };
+            rive::float2 cursorPos = rive::float2 { position.getX(), position.getY() };
             translate = cursorPos + (translate - cursorPos) * scale / oldScale;
             break;
         }

@@ -34,6 +34,17 @@ public:
     CustomSlider (int index)
          : index (index)
     {
+        setTitle (yup::String (index));
+    }
+
+    void mouseEnter (const yup::MouseEvent& event) override
+    {
+        isInside = true;
+    }
+
+    void mouseExit (const yup::MouseEvent& event) override
+    {
+        isInside = false;
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -49,7 +60,9 @@ public:
     {
         //auto [x, y] = event.getPosition();
 
-        const float distance = origin.horizontalDistanceTo (event.getPosition()) * 0.005f;
+        const float multiplier = event.getModifiers().isShiftDown() ? 0.0001f : 0.0025f;
+        const float distance = origin.horizontalDistanceTo (event.getPosition()) * multiplier;
+
         origin = event.getPosition();
 
         value = yup::jlimit (0.0f, 1.0f, value + distance);
@@ -93,7 +106,7 @@ public:
                                 fromRadians, toCurrentRadians, true);
 
             g.setStrokeCap (yup::StrokeCap::Round);
-            g.setColor (yup::Color (0xff4ebfff));
+            g.setColor (isInside ? yup::Color (0xff4ebfff).brighter (0.3f) : yup::Color (0xff4ebfff));
             g.drawPath (arc, proportionOfWidth (0.1f));
         }
 
@@ -118,6 +131,7 @@ private:
     yup::Point<float> origin;
     float value = 0.0f;
     int index = 0;
+    bool isInside = false;
 };
 
 //==============================================================================
@@ -127,6 +141,8 @@ class CustomWindow : public yup::DocumentWindow
 public:
     CustomWindow()
     {
+        setTitle ("main");
+
         for (int i = 0; i < totalRows * totalColumns; ++i)
             addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i)));
     }
@@ -153,7 +169,17 @@ public:
         updateFrameTime();
     }
 
-    void keyDown (const yup::KeyPress& keys, double x, double y) override
+    void mouseEnter (const yup::MouseEvent& event) override
+    {
+        DBG ("main enter");
+    }
+
+    void mouseExit (const yup::MouseEvent& event) override
+    {
+        DBG ("main exit");
+    }
+
+    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
         switch (keys.getKey())
         {

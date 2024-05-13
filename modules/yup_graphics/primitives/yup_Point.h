@@ -396,17 +396,45 @@ public:
         return *this;
     }
 
-    constexpr Point& operator- (const Point& other) const noexcept
+    constexpr Point operator+ (ValueType amount) const noexcept
+    {
+        Point result (*this);
+        result += amount;
+        return result;
+    }
+
+    constexpr Point& operator+= (ValueType amount) noexcept
+    {
+        x += amount;
+        y += amount;
+        return *this;
+    }
+
+    constexpr Point operator- (const Point& other) const noexcept
     {
         Point result (*this);
         result -= other;
         return result;
     }
 
-    constexpr Point operator-= (const Point& other) const noexcept
+    constexpr Point& operator-= (const Point& other) noexcept
     {
         x -= other.x;
         y -= other.y;
+        return *this;
+    }
+
+    constexpr Point operator- (ValueType amount) const noexcept
+    {
+        Point result (*this);
+        result -= amount;
+        return result;
+    }
+
+    constexpr Point& operator-= (ValueType amount) noexcept
+    {
+        x -= amount;
+        y -= amount;
         return *this;
     }
 
@@ -424,6 +452,20 @@ public:
         return *this;
     }
 
+    constexpr Point operator* (ValueType scale) const noexcept
+    {
+        Point result (*this);
+        result *= scale;
+        return result;
+    }
+
+    constexpr Point& operator*= (ValueType scale) noexcept
+    {
+        x *= scale;
+        y *= scale;
+        return *this;
+    }
+
     constexpr Point operator/ (const Point& other) const noexcept
     {
         Point result (*this);
@@ -438,6 +480,24 @@ public:
 
         if (other.y != ValueType (0))
             y /= other.y;
+
+        return *this;
+    }
+
+    constexpr Point operator/ (ValueType scale) const noexcept
+    {
+        Point result (*this);
+        result /= scale;
+        return result;
+    }
+
+    constexpr Point& operator/= (ValueType scale) noexcept
+    {
+        if (scale != ValueType (0))
+        {
+            x /= scale;
+            y /= scale;
+        }
 
         return *this;
     }
@@ -462,6 +522,16 @@ private:
     ValueType x = 0;
     ValueType y = 0;
 };
+
+template <class ValueType>
+JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Point<ValueType>& p)
+{
+    auto [x, y] = p;
+
+    string1 << x << ", " << y;
+
+    return string1;
+}
 
 template <std::size_t I, class ValueType>
 ValueType get (const Point<ValueType>& point)

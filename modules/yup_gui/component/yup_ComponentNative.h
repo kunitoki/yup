@@ -44,6 +44,11 @@ public:
     virtual void setSize (const Size<int>& newSize) = 0;
     virtual Size<int> getSize() const = 0;
     virtual Size<int> getContentSize() const = 0;
+
+    virtual Point<int> getPosition() const = 0;
+    virtual void setPosition (const Point<int>& newPosition) = 0;
+
+    virtual Rectangle<int> getBounds() const = 0;
     virtual void setBounds (const Rectangle<int>& newBounds) = 0;
 
     //==============================================================================
@@ -55,9 +60,6 @@ public:
     virtual float getOpacity() const = 0;
 
     //==============================================================================
-    virtual void* getNativeHandle() const = 0;
-
-    //==============================================================================
     virtual bool isAtomicModeEnabled() const = 0;
     virtual void enableAtomicMode (bool shouldBeEnabled) = 0;
     virtual bool isWireframeEnabled() const = 0;
@@ -65,21 +67,15 @@ public:
 
     //==============================================================================
     virtual float getScaleDpi() const = 0;
+
+    //==============================================================================
     virtual float getCurrentFrameRate() const = 0;
 
     //==============================================================================
-    virtual rive::Factory* getFactory() = 0;
+    virtual void* getNativeHandle() const = 0;
 
     //==============================================================================
-    void handlePaint (Graphics& g, float frameRate);
-    void handleMouseMove (const MouseEvent& event);
-    void handleMouseDrag (const MouseEvent& event);
-    void handleMouseDown (const MouseEvent& event);
-    void handleMouseUp (const MouseEvent& event);
-    void handleKeyDown (const KeyPress& keys, double x, double y);
-    void handleKeyUp (const KeyPress& keys, double x, double y);
-    void handleResized (int width, int height);
-    void handleUserTriedToCloseWindow();
+    virtual rive::Factory* getFactory() = 0;
 
     //==============================================================================
     static std::unique_ptr<ComponentNative> createFor (Component& component, std::optional<float> framerateRedraw);

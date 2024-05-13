@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class JUCE_API Component;
+
 //==============================================================================
 class JUCE_API MouseEvent
 {
@@ -38,94 +40,46 @@ public:
     };
 
     //==============================================================================
-    constexpr MouseEvent() noexcept = default;
-
-    constexpr MouseEvent (Buttons newButtons, KeyModifiers newModifiers, Point<float> newPosition) noexcept
-        : buttons (newButtons)
-        , modifiers (newModifiers)
-        , position (newPosition)
-    {
-    }
+    MouseEvent() noexcept = default;
+    MouseEvent (Buttons newButtons, KeyModifiers newModifiers, const Point<float>& newPosition) noexcept;
+    MouseEvent (Buttons newButtons, KeyModifiers newModifiers, const Point<float>& newPosition, Component* sourceComponent) noexcept;
 
     //==============================================================================
-    constexpr MouseEvent (const MouseEvent& other) noexcept = default;
-    constexpr MouseEvent (MouseEvent&& other) noexcept = default;
-    constexpr MouseEvent& operator= (const MouseEvent& other) noexcept = default;
-    constexpr MouseEvent& operator= (MouseEvent&& other) noexcept = default;
+    MouseEvent (const MouseEvent& other) noexcept = default;
+    MouseEvent (MouseEvent&& other) noexcept = default;
+    MouseEvent& operator= (const MouseEvent& other) noexcept = default;
+    MouseEvent& operator= (MouseEvent&& other) noexcept = default;
 
     //==============================================================================
-    constexpr bool isLeftButtoDown() const noexcept
-    {
-        return buttons & leftButton;
-    }
-
-    constexpr bool isMiddleButtonDown() const noexcept
-    {
-        return buttons & middleButton;
-    }
-
-    constexpr bool isRightButtonDown() const noexcept
-    {
-        return buttons & rightButton;
-    }
-
-    constexpr bool isAnyButtonDown() const noexcept
-    {
-        return buttons & allButtons;
-    }
-
-    constexpr MouseEvent withButtons (Buttons buttonsToAdd) const noexcept
-    {
-        return { static_cast<Buttons> (buttons | buttonsToAdd), modifiers, position };
-    }
-
-    constexpr MouseEvent withoutButtons (Buttons buttonsToRemove) const noexcept
-    {
-        return { static_cast<Buttons> (buttons & ~buttonsToRemove), modifiers, position };
-    }
+    bool isLeftButtoDown() const noexcept;
+    bool isMiddleButtonDown() const noexcept;
+    bool isRightButtonDown() const noexcept;
+    bool isAnyButtonDown() const noexcept;
+    MouseEvent withButtons (Buttons buttonsToAdd) const noexcept;
+    MouseEvent withoutButtons (Buttons buttonsToRemove) const noexcept;
 
     //==============================================================================
-    constexpr KeyModifiers getModifiers() const noexcept
-    {
-        return modifiers;
-    }
-
-    constexpr MouseEvent withModifiers (KeyModifiers newModifiers) const noexcept
-    {
-        return { buttons, newModifiers, position };
-    }
+    KeyModifiers getModifiers() const noexcept;
+    MouseEvent withModifiers (KeyModifiers newModifiers) const noexcept;
 
     //==============================================================================
-    constexpr Point<float> getPosition() const noexcept
-    {
-        return position;
-    }
-
-    constexpr MouseEvent withPosition (const Point<float>& newPosition) const noexcept
-    {
-        return { buttons, modifiers, newPosition };
-    }
-
-    constexpr MouseEvent withTranslatedPosition (const Point<float>& translation) const noexcept
-    {
-        return { buttons, modifiers, position.translated (translation) };
-    }
+    Point<float> getPosition() const noexcept;
+    MouseEvent withPosition (const Point<float>& newPosition) const noexcept;
+    MouseEvent withTranslatedPosition (const Point<float>& translation) const noexcept;
 
     //==============================================================================
-    constexpr bool operator== (const MouseEvent& other) const noexcept
-    {
-        return buttons == other.buttons && modifiers == other.modifiers && position == other.position;
-    }
+    Component* getSourceComponent() const noexcept;
+    MouseEvent withSourceComponent (Component* newComponent) const noexcept;
 
-    constexpr bool operator!= (const MouseEvent& other) const noexcept
-    {
-        return !(*this == other);
-    }
+    //==============================================================================
+    bool operator== (const MouseEvent& other) const noexcept;
+    bool operator!= (const MouseEvent& other) const noexcept;
 
 private:
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;
+    Component* sourceComponent = nullptr;
 };
 
 } // namespace yup
