@@ -106,44 +106,44 @@ public:
 private:
     struct RenderOptions
     {
-        RenderOptions() noexcept = default;
+        constexpr RenderOptions() noexcept = default;
 
-        bool isColor() const noexcept
+        constexpr bool isColor() const noexcept
         {
             return isCurrentBrushColor;
         }
 
-        Color getColor() const noexcept
+        constexpr Color getColor() const noexcept
         {
             return color.withAlpha (alpha);
         }
 
-        bool isColorGradient() const noexcept
+        constexpr bool isColorGradient() const noexcept
         {
             return ! isCurrentBrushColor;
         }
 
-        ColorGradient getColorGradient() const noexcept
+        constexpr ColorGradient getColorGradient() const noexcept
         {
             return gradient.withAlpha (alpha);
         }
 
-        float translateX (float x) const noexcept
+        constexpr float translateX (float x) const noexcept
         {
             return x + drawingArea.getX();
         }
 
-        float translateY (float y) const noexcept
+        constexpr float translateY (float y) const noexcept
         {
             return y + drawingArea.getY();
         }
 
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
-        uint8 alpha = 255;
         Color color = 0xff000000;
         ColorGradient gradient;
         Rectangle<float> drawingArea;
+        uint8 alpha = 255;
         bool isCurrentBrushColor = true;
     };
 

@@ -107,8 +107,8 @@ public:
     //==============================================================================
     void setAlpha (uint8 alpha)
     {
-        start.color = start.color.withAlpha (alpha);
-        finish.color = finish.color.withAlpha (alpha);
+        start.color.setAlpha (alpha);
+        finish.color.setAlpha (alpha);
     }
 
     ColorGradient withAlpha (uint8 alpha) const
