@@ -307,6 +307,13 @@ bool Component::isOnDesktop() const noexcept
 
 //==============================================================================
 
+Component* Component::getParentComponent()
+{
+    return parentComponent;
+}
+
+//==============================================================================
+
 void Component::addChildComponent (Component& component)
 {
     addChildComponent (&component);
@@ -450,7 +457,7 @@ void Component::internalPaint (Graphics& g, float frameRate)
     const auto state = g.saveState();
 
     g.setOpacity (static_cast<uint8> (getOpacity() * 255));
-    g.setDrawingArea (getBounds().to<float>());
+    g.setDrawingArea (options.onDesktop ? getLocalBounds() : getBounds());
 
     if (! options.onDesktop && ! options.unclippedRendering)
         g.clipPath (getLocalBounds().to<float>());

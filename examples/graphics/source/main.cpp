@@ -21,6 +21,7 @@
 
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
+#include <juce_audio_devices/juce_audio_devices.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
@@ -150,7 +151,10 @@ private:
 
 //==============================================================================
 
-class CustomWindow : public yup::DocumentWindow
+class CustomWindow
+    : public yup::DocumentWindow
+    , public yup::Timer
+    , public yup::AudioIODeviceCallback
 {
 public:
     CustomWindow()
@@ -161,6 +165,19 @@ public:
 
         for (int i = 0; i < totalRows * totalColumns; ++i)
             addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i)));
+
+        deviceManager.addAudioCallback (this);
+        deviceManager.initialiseWithDefaultDevices (1, 0);
+
+        startTimerHz (1);
+    }
+
+    ~CustomWindow() override
+    {
+        inputReady.signal();
+        renderReady.signal();
+
+        deviceManager.closeAudioDevice();
     }
 
     void resized() override
@@ -182,7 +199,20 @@ public:
 
     void paint (yup::Graphics& g, float frameRate) override
     {
-        updateFrameTime();
+        //inputReady.wait();
+        //std::swap (inputData, renderData);
+        //renderReady.signal();
+
+        float xSize = getWidth() / float (renderData.size());
+
+        yup::Path path;
+        path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
+
+        for (size_t i = 1; i < renderData.size(); ++i)
+            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
+
+        g.setColor (0xff004bff);
+        g.drawPath (path, 5.0f);
     }
 
     void mouseEnter (const yup::MouseEvent& event) override
@@ -216,22 +246,53 @@ public:
         }
     }
 
+    void timerCallback() override
+    {
+        updateWindowTitle();
+    }
+
     void userTriedToCloseWindow() override
     {
         yup::YUPApplication::getInstance()->systemRequestedQuit();
     }
 
-private:
-    void updateFrameTime()
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
+                                           int numInputChannels,
+                                           float* const* outputChannelData,
+                                           int numOutputChannels,
+                                           int numSamples,
+                                           const yup::AudioIODeviceCallbackContext& context) override
     {
-        double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
-        if (time - fpsLastTime > 1.0)
+        int copiedSamples = 0;
+        while (copiedSamples < numSamples)
         {
-            updateWindowTitle();
-            fpsLastTime = time;
+            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples];
+
+            ++copiedSamples;
+            ++readPos;
+
+            readPos %= renderData.size();
         }
+
+        //inputReady.signal();
+        //renderReady.wait();
     }
 
+    void audioDeviceAboutToStart (yup::AudioIODevice* device) override
+    {
+        DBG ("audioDeviceAboutToStart");
+
+        inputData.resize (device->getDefaultBufferSize());
+        renderData.resize (device->getDefaultBufferSize());
+        readPos = 0;
+    }
+
+    void audioDeviceStopped() override
+    {
+        DBG ("audioDeviceStopped");
+    }
+
+private:
     void updateWindowTitle()
     {
         yup::String title;
@@ -247,6 +308,14 @@ private:
 
         setTitle (title);
     }
+
+    yup::AudioDeviceManager deviceManager;
+
+    std::vector<float> inputData;
+    yup::WaitableEvent inputReady;
+    std::vector<float> renderData;
+    yup::WaitableEvent renderReady;
+    int readPos = 0;
 
     yup::OwnedArray<CustomSlider> sliders;
     int totalRows = 4;

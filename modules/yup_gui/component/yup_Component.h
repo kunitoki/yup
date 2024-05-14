@@ -95,6 +95,24 @@ public:
     virtual void userTriedToCloseWindow();
 
     //==============================================================================
+    Component* getParentComponent();
+
+    template <class T>
+    T* getParentComponentOfType()
+    {
+        auto parent = parentComponent;
+        while (parent != nullptr)
+        {
+            if (auto foundParent = dynamic_cast<T*> (parent))
+                return foundParent;
+
+            parent = parent->getParentComponent();
+        }
+
+        return nullptr;
+    }
+
+    //==============================================================================
     void addChildComponent (Component& component);
     void addChildComponent (Component* component);
 
