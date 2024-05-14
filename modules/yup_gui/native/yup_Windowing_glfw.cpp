@@ -35,14 +35,19 @@ void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, in
 
 //==============================================================================
 
+MouseEvent::Buttons toMouseButton (int buttons) noexcept
+{
+    return static_cast<MouseEvent::Buttons> (buttons + 1);
+}
+
 MouseEvent toMouseEvent (int buttons, int modifiers, double x, double y) noexcept
 {
-    return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
+    return { toMouseButton (buttons), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
 }
 
 MouseEvent toMouseEvent (int buttons, int modifiers, const Point<float>& p) noexcept
 {
-    return { static_cast<MouseEvent::Buttons> (buttons + 1), modifiers, p };
+    return { toMouseButton (buttons), modifiers, p };
 }
 
 //==============================================================================
@@ -270,6 +275,11 @@ public:
 
     //==============================================================================
 
+    void setFocusedComponent (Component* comp) override;
+    Component* getFocusedComponent() const override;
+
+    //==============================================================================
+
     rive::Factory* getFactory() override;
 
     //==============================================================================
@@ -284,10 +294,10 @@ public:
 
     //==============================================================================
     void handlePaint (Graphics& g, float frameRate);
-    void handleMouseMove (const MouseEvent& event);
-    void handleMouseDrag (const MouseEvent& event);
-    void handleMouseDown (const MouseEvent& event);
-    void handleMouseUp (const MouseEvent& event);
+    void handleMouseMoveOrDrag (const Point<float>& localPosition);
+    void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleMoved (int xpos, int ypos);
@@ -295,7 +305,6 @@ public:
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
-    KeyModifiers getCurrentKeyModifiers() const;
     Point<float> getScaledCursorPosition() const;
 
 private:
@@ -309,10 +318,15 @@ private:
     std::unique_ptr<rive::Renderer> renderer;
 
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
-    Point<float> lastScreenMousePosition = { -1.0f, -1.0f };
-    Component* lastComponentClicked = nullptr;
-    Component* lastComponentUnderMouse = nullptr;
-    KeyModifiers lastKeyModifiers;
+    Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
+    Point<float> lastMouseDownPosition = { -1.0f, -1.0f };
+
+    WeakReference<Component> lastComponentClicked;
+    WeakReference<Component> lastComponentFocused;
+    WeakReference<Component> lastComponentUnderMouse;
+
+    MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
+    KeyModifiers currentKeyModifiers;
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
@@ -579,6 +593,36 @@ bool GLFWComponentNative::isFullScreen() const
 
 //==============================================================================
 
+void GLFWComponentNative::setOpacity (float opacity)
+{
+    jassert (window != nullptr);
+    jassert (isPositiveAndBelow (opacity, 1.0f));
+
+    glfwSetWindowOpacity (window, opacity);
+}
+
+float GLFWComponentNative::getOpacity() const
+{
+    return window ? glfwGetWindowOpacity (window) : 1.0f;
+}
+
+//==============================================================================
+
+void GLFWComponentNative::setFocusedComponent (Component* comp)
+{
+    if (lastComponentFocused != nullptr)
+        ;
+
+    lastComponentFocused = comp;
+}
+
+Component* GLFWComponentNative::getFocusedComponent() const
+{
+    return lastComponentFocused;
+}
+
+//==============================================================================
+
 bool GLFWComponentNative::isAtomicModeEnabled() const
 {
     return renderAtomicMode;
@@ -623,21 +667,6 @@ Point<float> GLFWComponentNative::getScaledCursorPosition() const
     y *= dpiScale;
 
     return { static_cast<float> (x), static_cast<float> (y) };
-}
-
-//==============================================================================
-
-void GLFWComponentNative::setOpacity (float opacity)
-{
-    jassert (window != nullptr);
-    jassert (isPositiveAndBelow (opacity, 1.0f));
-
-    glfwSetWindowOpacity (window, opacity);
-}
-
-float GLFWComponentNative::getOpacity() const
-{
-    return window ? glfwGetWindowOpacity (window) : 1.0f;
 }
 
 //==============================================================================
@@ -768,89 +797,136 @@ void GLFWComponentNative::handlePaint (Graphics& g, float frameRate)
 
 //==============================================================================
 
-void GLFWComponentNative::handleMouseMove (const MouseEvent& event)
+void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
 {
-    auto localPosition = event.getPosition();
-    auto globalPosition = localPosition + getPosition().to<float>();
-
-    //DBG ("handleMouseMove: " << screenPosition);
-    //DBG ("  size:          " << getBounds());
-
-    updateComponentUnderMouse (event);
-
-    if (lastComponentUnderMouse != nullptr)
-        lastComponentUnderMouse->internalMouseMove (event);
-
-    lastScreenMousePosition = globalPosition;
-}
-
-void GLFWComponentNative::handleMouseDrag (const MouseEvent& event)
-{
-    auto localPosition = event.getPosition();
-    auto globalPosition = localPosition + getPosition().to<float>();
-
-    //DBG ("handleMouseDrag: " << globalPosition);
+    const auto event = MouseEvent()
+        .withButtons (currentMouseButtons)
+        .withModifiers (currentKeyModifiers)
+        .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
-        lastComponentClicked->internalMouseDrag (event);
+    {
+        lastComponentClicked->internalMouseDrag (event
+            .withSourceComponent (lastComponentClicked)
+            //.withSourcePosition (lastMouseDownPosition)
+        );
+    }
+    else
+    {
+        updateComponentUnderMouse (event);
 
-    lastScreenMousePosition = globalPosition;
+        if (lastComponentUnderMouse != nullptr)
+            lastComponentUnderMouse->internalMouseMove (event);
+    }
+
+    lastMouseMovePosition = localPosition;
 }
 
-void GLFWComponentNative::handleMouseDown (const MouseEvent& event)
+void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
-    auto localPosition = event.getPosition();
-    auto globalPosition = localPosition + getPosition().to<float>();
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
+    currentKeyModifiers = modifiers;
 
     //DBG ("handleMouseDown: " << globalPosition);
 
-    if (auto child = component.findComponentAt (localPosition))
-    {
-        lastComponentClicked = child;
+    const auto event = MouseEvent()
+        .withButtons (currentMouseButtons)
+        .withModifiers (currentKeyModifiers)
+        .withPosition (localPosition);
 
-        DBG ("handleMouseDown: " << lastComponentClicked->getTitle());
+    if (lastComponentClicked == nullptr)
+    {
+        if (auto child = component.findComponentAt (localPosition))
+        {
+            lastComponentClicked = child;
+
+            DBG ("handleMouseDown: " << lastComponentClicked->getTitle());
+        }
     }
 
     if (lastComponentClicked != nullptr)
-        lastComponentClicked->internalMouseDown (event);
+    {
+        lastMouseDownPosition = localPosition;
 
-    lastScreenMousePosition = globalPosition;
-    lastKeyModifiers = event.getModifiers();
+        lastComponentClicked->internalMouseDown (event
+            .withSourceComponent (lastComponentClicked)
+            //.withSourcePosition (lastMouseDownPosition)
+        );
+    }
+
+    lastMouseMovePosition = localPosition;
 }
 
-void GLFWComponentNative::handleMouseUp (const MouseEvent& event)
+void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
-    auto localPosition = event.getPosition();
-    auto globalPosition = localPosition + getPosition().to<float>();
+    currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
+    currentKeyModifiers = modifiers;
+
+    const auto event = MouseEvent()
+        .withButtons (currentMouseButtons)
+        .withModifiers (currentKeyModifiers)
+        .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
     {
         DBG ("handleMouseUp: " << lastComponentClicked->getTitle());
 
-        lastComponentClicked->internalMouseUp (event);
+        lastComponentClicked->internalMouseUp (event
+            .withSourceComponent (lastComponentClicked)
+            //.withSourcePosition (lastMouseDownPosition)
+        );
+    }
+
+    if (currentMouseButtons == MouseEvent::noButtons)
+    {
+        updateComponentUnderMouse (event);
+
         lastComponentClicked = nullptr;
     }
 
-    updateComponentUnderMouse (event);
+    lastMouseMovePosition = localPosition;
+}
 
-    lastScreenMousePosition = globalPosition;
-    lastKeyModifiers = {};
+//==============================================================================
+
+void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
+{
+    const auto event = MouseEvent()
+        .withButtons (currentMouseButtons)
+        .withModifiers (currentKeyModifiers)
+        .withPosition (localPosition);
+
+    if (lastComponentClicked != nullptr)
+    {
+        DBG ("handleMouseWheel: " << lastComponentClicked->getTitle());
+
+        lastComponentClicked->internalMouseWheel (event, wheelData);
+    }
+    else if (lastComponentFocused != nullptr)
+    {
+        DBG ("handleMouseWheel: " << lastComponentFocused->getTitle());
+
+        lastComponentFocused->internalMouseWheel (event, wheelData);
+    }
+
+    //updateComponentUnderMouse (event);
+    //lastMouseMovePosition = localPosition;
 }
 
 //==============================================================================
 
 void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
 {
-    component.internalKeyDown (keys, cursorPosition);
+    currentKeyModifiers = keys.getModifiers();
 
-    lastKeyModifiers = keys.getModifiers();
+    component.internalKeyDown (keys, cursorPosition);
 }
 
 void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
 {
-    component.internalKeyUp (keys, cursorPosition);
+    currentKeyModifiers = keys.getModifiers();
 
-    lastKeyModifiers = keys.getModifiers();
+    component.internalKeyUp (keys, cursorPosition);
 }
 
 //==============================================================================
@@ -878,13 +954,6 @@ void GLFWComponentNative::handleResized (int width, int height)
 void GLFWComponentNative::handleUserTriedToCloseWindow()
 {
     component.internalUserTriedToCloseWindow();
-}
-
-//==============================================================================
-
-KeyModifiers GLFWComponentNative::getCurrentKeyModifiers() const
-{
-    return lastKeyModifiers;
 }
 
 //==============================================================================
@@ -955,28 +1024,11 @@ void yup_glfwMouseMove (GLFWwindow* window, double x, double y)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    const auto leftButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    const auto middleButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS;
-    const auto rightButtonDown = glfwGetMouseButton (window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-
     float dpiScale = nativeComponent->getScaleDpi();
     x *= dpiScale;
     y *= dpiScale;
 
-    auto mods = nativeComponent->getCurrentKeyModifiers();
-
-    if (leftButtonDown || middleButtonDown || rightButtonDown)
-    {
-        int buttons = (leftButtonDown ? GLFW_MOUSE_BUTTON_LEFT : 0)
-            | (middleButtonDown ? GLFW_MOUSE_BUTTON_MIDDLE : 0)
-            | (rightButtonDown ? GLFW_MOUSE_BUTTON_RIGHT : 0);
-
-        nativeComponent->handleMouseDrag (toMouseEvent (buttons, 0, x, y).withModifiers (mods));
-    }
-    else
-    {
-        nativeComponent->handleMouseMove (toMouseEvent (0, 0, x, y).withModifiers (mods));
-    }
+    nativeComponent->handleMouseMoveOrDrag ({ static_cast<float> (x), static_cast<float> (y) });
 }
 
 void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
@@ -986,9 +1038,9 @@ void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
     auto cursorPosition = nativeComponent->getScaledCursorPosition();
 
     if (action == GLFW_PRESS)
-        nativeComponent->handleMouseDown (toMouseEvent (button, mods, cursorPosition));
+        nativeComponent->handleMouseDown (cursorPosition, toMouseButton (button), toKeyModifiers (mods));
     else
-        nativeComponent->handleMouseUp (toMouseEvent (button, mods, cursorPosition));
+        nativeComponent->handleMouseUp (cursorPosition, toMouseButton (button), toKeyModifiers (mods));
 }
 
 void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
@@ -997,7 +1049,7 @@ void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
 
     auto cursorPosition = nativeComponent->getScaledCursorPosition();
 
-    // nativeComponent->handleMouseWheel (toMouseEvent (button, mods, x, y));
+    nativeComponent->handleMouseWheel (cursorPosition, { static_cast<float> (xoffset), static_cast<float> (yoffset) });
 }
 
 void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)

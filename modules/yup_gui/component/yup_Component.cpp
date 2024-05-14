@@ -397,6 +397,18 @@ void Component::toBack()
 
 //==============================================================================
 
+void Component::takeFocus()
+{
+    getNativeComponent()->setFocusedComponent (this);
+}
+
+void Component::leaveFocus()
+{
+    getNativeComponent()->setFocusedComponent (nullptr);
+}
+
+//==============================================================================
+
 void Component::paint (Graphics& g, float frameRate) {}
 void Component::paintOverChildren (Graphics& g, float frameRate) {}
 
@@ -408,6 +420,7 @@ void Component::mouseDown (const MouseEvent& event) {}
 void Component::mouseMove (const MouseEvent& event) {}
 void Component::mouseDrag (const MouseEvent& event) {}
 void Component::mouseUp (const MouseEvent& event) {}
+void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
 
@@ -490,6 +503,14 @@ void Component::internalMouseUp (const MouseEvent& event)
         return;
 
     mouseUp (event);
+}
+
+void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    if (! isVisible())
+        return;
+
+    mouseWheel (event, wheelData);
 }
 
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)

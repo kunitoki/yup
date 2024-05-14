@@ -60,6 +60,10 @@ public:
     virtual float getOpacity() const = 0;
 
     //==============================================================================
+    virtual void setFocusedComponent (Component* comp) = 0;
+    virtual Component* getFocusedComponent() const = 0;
+
+    //==============================================================================
     virtual bool isAtomicModeEnabled() const = 0;
     virtual void enableAtomicMode (bool shouldBeEnabled) = 0;
     virtual bool isWireframeEnabled() const = 0;

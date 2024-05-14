@@ -59,6 +59,11 @@ bool MouseEvent::isAnyButtonDown() const noexcept
     return buttons & allButtons;
 }
 
+MouseEvent::Buttons MouseEvent::getButtons() const noexcept
+{
+    return buttons;
+}
+
 MouseEvent MouseEvent::withButtons (Buttons buttonsToAdd) const noexcept
 {
     return { static_cast<Buttons> (buttons | buttonsToAdd), modifiers, position, sourceComponent };

@@ -55,6 +55,7 @@ public:
     bool isMiddleButtonDown() const noexcept;
     bool isRightButtonDown() const noexcept;
     bool isAnyButtonDown() const noexcept;
+    Buttons getButtons() const noexcept;
     MouseEvent withButtons (Buttons buttonsToAdd) const noexcept;
     MouseEvent withoutButtons (Buttons buttonsToRemove) const noexcept;
 

@@ -50,6 +50,8 @@ public:
     void mouseDown (const yup::MouseEvent& event) override
     {
         origin = event.getPosition();
+
+        takeFocus();
     }
 
     void mouseUp (const yup::MouseEvent& event) override
@@ -61,7 +63,19 @@ public:
         //auto [x, y] = event.getPosition();
 
         const float multiplier = event.getModifiers().isShiftDown() ? 0.0001f : 0.0025f;
-        const float distance = origin.horizontalDistanceTo (event.getPosition()) * multiplier;
+        const float distance = origin.verticalDistanceTo (event.getPosition()) * multiplier;
+
+        origin = event.getPosition();
+
+        value = yup::jlimit (0.0f, 1.0f, value + distance);
+    }
+
+    void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& data) override
+    {
+        //auto [x, y] = event.getPosition();
+
+        const float multiplier = event.getModifiers().isShiftDown() ? 0.001f : 0.0025f;
+        const float distance = (data.getDeltaX() + data.getDeltaY()) * multiplier;
 
         origin = event.getPosition();
 
