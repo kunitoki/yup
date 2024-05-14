@@ -25,16 +25,13 @@
 namespace yup
 {
 
-using namespace rive;
-using namespace rive::pls;
-
 class LowLevelRenderContextMetalPLS : public GraphicsContext
 {
 public:
     LowLevelRenderContextMetalPLS (Options fiddleOptions)
         : m_fiddleOptions (fiddleOptions)
     {
-        PLSRenderContextMetalImpl::ContextOptions metalOptions;
+        rive::pls::PLSRenderContextMetalImpl::ContextOptions metalOptions;
         if (m_fiddleOptions.synchronousShaderCompilations)
         {
             // Turn on synchronous shader compilations to ensure deterministic rendering and to make
@@ -49,18 +46,17 @@ public:
             metalOptions.disableFramebufferReads = true;
         }
 
-        m_plsContext = PLSRenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
+        m_plsContext = rive::pls::PLSRenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
         printf ("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
     }
 
-    float dpiScale(void* window) const override
+    float dpiScale (void* window) const override
     {
         NSWindow* nsWindow = (__bridge NSWindow*)window;
         return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1;
     }
 
-    Factory* factory() override { return m_plsContext.get(); }
-
+    rive::Factory* factory() override { return m_plsContext.get(); }
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
@@ -79,21 +75,21 @@ public:
         m_swapchain.displaySyncEnabled = NO;
         view.layer = m_swapchain;
 
-        auto plsContextImpl = m_plsContext->static_impl_cast<PLSRenderContextMetalImpl>();
+        auto plsContextImpl = m_plsContext->static_impl_cast<rive::pls::PLSRenderContextMetalImpl>();
         m_renderTarget = plsContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
     }
 
-    std::unique_ptr<Renderer> makeRenderer (int width, int height) override
+    std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer> (m_plsContext.get());
+        return std::make_unique<rive::pls::PLSRenderer> (m_plsContext.get());
     }
 
-    void begin(const PLSRenderContext::FrameDescriptor& frameDescriptor) override
+    void begin(const rive::pls::PLSRenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_plsContext->beginFrame (frameDescriptor);
     }
 
-    void flushPLSContext() final
+    void end (void*) override
     {
         if (m_currentFrameSurface == nil)
         {
@@ -106,11 +102,6 @@ public:
         id<MTLCommandBuffer> flushCommandBuffer = [m_queue commandBuffer];
         m_plsContext->flush({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*)flushCommandBuffer });
         [flushCommandBuffer commit];
-    }
-
-    void end (void*) final
-    {
-        flushPLSContext();
 
         id<MTLCommandBuffer> presentCommandBuffer = [m_queue commandBuffer];
         [presentCommandBuffer presentDrawable:m_currentFrameSurface];
@@ -124,9 +115,9 @@ private:
     const Options m_fiddleOptions;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
-    std::unique_ptr<PLSRenderContext> m_plsContext;
+    std::unique_ptr<rive::pls::PLSRenderContext> m_plsContext;
     CAMetalLayer* m_swapchain = nil;
-    rcp<PLSRenderTargetMetal> m_renderTarget;
+    rive::rcp<rive::pls::PLSRenderTargetMetal> m_renderTarget;
     id<CAMetalDrawable> m_currentFrameSurface = nil;
 };
 

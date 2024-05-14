@@ -66,9 +66,6 @@ public:
     virtual std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) = 0;
 
     virtual void begin (const rive::pls::PLSRenderContext::FrameDescriptor&) = 0;
-
-    virtual void flushPLSContext() = 0; // Called by end()
-
     virtual void end (void* nativeHandle) = 0;
 
     virtual void tick() {}

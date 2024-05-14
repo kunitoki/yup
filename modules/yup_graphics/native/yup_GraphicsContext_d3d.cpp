@@ -43,10 +43,9 @@ public:
     {
     }
 
-    float dpiScale (void*) const override { return 1; }
+    float dpiScale (void*) const override { return 1.0f; }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
-
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
@@ -85,7 +84,7 @@ public:
         m_plsContext->beginFrame (frameDescriptor);
     }
 
-    void flushPLSContext() final
+    void end (void*) override
     {
         if (m_renderTarget->targetTexture() == nullptr)
         {
@@ -97,12 +96,7 @@ public:
             m_renderTarget->setTargetTexture (backbuffer);
         }
 
-        m_plsContext->flush({ .renderTarget = m_renderTarget.get() });
-    }
-
-    void end (void*) override
-    {
-        flushPLSContext();
+        m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
 
         m_swapchain->Present (0, 0);
 

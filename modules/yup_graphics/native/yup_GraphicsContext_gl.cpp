@@ -36,13 +36,13 @@ using namespace rive;
 using namespace rive::pls;
 
 #if RIVE_DESKTOP_GL && DEBUG
-static void GLAPIENTRY err_msg_callback(GLenum source,
-                                        GLenum type,
-                                        GLuint id,
-                                        GLenum severity,
-                                        GLsizei length,
-                                        const GLchar* message,
-                                        const void* userParam)
+static void GLAPIENTRY err_msg_callback (GLenum source,
+                                         GLenum type,
+                                         GLuint id,
+                                         GLenum severity,
+                                         GLsizei length,
+                                         const GLchar* message,
+                                         const void* userParam)
 {
     if (type == GL_DEBUG_TYPE_ERROR)
     {
@@ -116,11 +116,7 @@ public:
 #endif
     }
 
-    ~LowLevelRenderContextGLPLS()
-    {
-    }
-
-    float dpiScale(void*) const override
+    float dpiScale (void*) const override
     {
 #if RIVE_DESKTOP_GL && __APPLE__
         return 2;
@@ -130,35 +126,28 @@ public:
     }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
-
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
-
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
-    void onSizeChanged(void* window, int width, int height, uint32_t sampleCount) override
+    void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
         m_renderTarget = make_rcp<FramebufferRenderTargetGL> (width, height, 0, sampleCount);
     }
 
-    std::unique_ptr<Renderer> makeRenderer(int width, int height) override
+    std::unique_ptr<Renderer> makeRenderer (int width, int height) override
     {
         return std::make_unique<PLSRenderer> (m_plsContext.get());
     }
 
-    void begin(const PLSRenderContext::FrameDescriptor& frameDescriptor) override
+    void begin (const PLSRenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->invalidateGLState();
         m_plsContext->beginFrame (frameDescriptor);
     }
 
-    void flushPLSContext() override
+    void end (void*) override
     {
         m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
-    }
-
-    void end (void*) final
-    {
-        flushPLSContext();
 
         m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->unbindGLInternalResources();
     }

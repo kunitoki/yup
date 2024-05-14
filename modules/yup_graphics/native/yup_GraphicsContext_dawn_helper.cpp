@@ -50,30 +50,27 @@
 namespace yup
 {
 
-float GetDawnWindowBackingScaleFactor(GLFWwindow* window, bool retina)
+float GetDawnWindowBackingScaleFactor (void* window, bool retina)
 {
-    NSWindow* nsWindow = glfwGetCocoaWindow(window);
+    NSWindow* nsWindow = (__bridge NSWindow*)window;
     return retina ? nsWindow.backingScaleFactor : 1;
 }
 
-std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor(GLFWwindow* window,
-                                                                            bool retina)
+std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor (void* window, bool retina)
 {
     @autoreleasepool
     {
-        NSWindow* nsWindow = glfwGetCocoaWindow(window);
+        NSWindow* nsWindow = (__bridge NSWindow*)window;
         NSView* view = [nsWindow contentView];
 
-        // Create a CAMetalLayer that covers the whole window that will be passed to
-        // CreateSurface.
-        [view setWantsLayer:YES];
-        [view setLayer:[CAMetalLayer layer]];
+        // Create a CAMetalLayer that covers the whole window that will be passed to CreateSurface.
+        [view setWantsLayer: YES];
+        [view setLayer: [CAMetalLayer layer]];
 
         // Use retina if the window was created with retina support.
-        [[view layer] setContentsScale:GetDawnWindowBackingScaleFactor(window, retina)];
+        [[view layer] setContentsScale:GetDawnWindowBackingScaleFactor (window, retina)];
 
-        std::unique_ptr<wgpu::SurfaceDescriptorFromMetalLayer> desc =
-            std::make_unique<wgpu::SurfaceDescriptorFromMetalLayer>();
+        auto desc = std::make_unique<wgpu::SurfaceDescriptorFromMetalLayer>();
         desc->layer = (__bridge void*)[view layer];
         return std::move(desc);
     }
