@@ -239,6 +239,18 @@ float Component::getOpacity() const
 
 //==============================================================================
 
+void Component::enableRenderingUnclipped (bool shouldBeEnabled)
+{
+    options.unclippedRendering = shouldBeEnabled;
+}
+
+bool Component::isRenderingUnclipped() const
+{
+    return options.unclippedRendering;
+}
+
+//==============================================================================
+
 void* Component::getNativeHandle() const
 {
     if (options.onDesktop)
@@ -262,7 +274,7 @@ ComponentNative* Component::getNativeComponent()
 
 //==============================================================================
 
-void Component::addToDesktop (std::optional<float> framerateRedraw)
+void Component::addToDesktop (bool continuousRepaint, std::optional<float> framerateRedraw)
 {
     if (options.onDesktop)
         return;
@@ -275,7 +287,7 @@ void Component::addToDesktop (std::optional<float> framerateRedraw)
 
     options.onDesktop = true;
 
-    native = ComponentNative::createFor (*this, framerateRedraw);
+    native = ComponentNative::createFor (*this, continuousRepaint, framerateRedraw);
 }
 
 void Component::removeFromDesktop()
@@ -440,16 +452,15 @@ void Component::internalPaint (Graphics& g, float frameRate)
     g.setOpacity (static_cast<uint8> (getOpacity() * 255));
     g.setDrawingArea (getBounds().to<float>());
 
+    if (! options.onDesktop && ! options.unclippedRendering)
+        g.clipPath (getLocalBounds().to<float>());
+
     paint (g, frameRate);
 
     for (auto child : children)
     {
         if (! child->isVisible())
             continue;
-
-        const auto state = g.saveState();
-
-        g.setDrawingArea (child->getBounds().to<float>());
 
         child->internalPaint (g, frameRate);
     }

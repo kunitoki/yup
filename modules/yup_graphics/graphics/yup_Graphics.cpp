@@ -271,6 +271,22 @@ void Graphics::drawLine (const Point<float>& p1, const Point<float>& p2, float t
 }
 
 //==============================================================================
+void Graphics::fillAll()
+{
+    const auto& options = currentRenderOptions();
+    const auto& area = options.getDrawingArea();
+
+    rive::RawPath rawPath;
+    rawPath.addRect (rive::AABB (
+        area.getX(),
+        area.getY(),
+        area.getX() + area.getWidth(),
+        area.getY() + area.getHeight()));
+
+    renderFillPath (rawPath, options);
+}
+
+//==============================================================================
 void Graphics::fillRect (float x, float y, float width, float height)
 {
     const auto& options = currentRenderOptions();
@@ -391,6 +407,32 @@ void Graphics::fillPath (const Path& path)
 }
 
 //==============================================================================
+void Graphics::clipPath (const Rectangle<float>& r)
+{
+    const auto& options = currentRenderOptions();
+
+    rive::RawPath rawPath;
+    rawPath.addRect (rive::AABB (
+        options.translateX (r.getX()),
+        options.translateY (r.getY()),
+        options.translateX (r.getX()) + r.getWidth(),
+        options.translateY (r.getY()) + r.getHeight()));
+
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.clipPath (renderPath.get());
+}
+
+void Graphics::clipPath (const Path& path)
+{
+    const auto& options = currentRenderOptions();
+
+    auto rawPath = toRawPath (path, options.translateX (0.0f), options.translateY (0.0f));
+
+    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    renderer.clipPath (renderPath.get());
+}
+
+//==============================================================================
 void Graphics::renderDrawPath (rive::RawPath& rawPath, const RenderOptions& options, float thickness)
 {
     auto paint = factory.makeRenderPaint();
@@ -421,4 +463,5 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
     auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
     renderer.drawPath (renderPath.get(), paint.get());
 }
+
 } // namespace yup

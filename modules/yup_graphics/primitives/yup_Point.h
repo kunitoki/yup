@@ -326,14 +326,14 @@ public:
         return { -x, y };
     }
 
-    constexpr Point& reflectOverOrigin() const noexcept
+    constexpr Point& reflectOverOrigin() noexcept
     {
         x = -x;
         y = -y;
         return *this;
     }
 
-    constexpr Point reflectedOverOrigin() noexcept
+    constexpr Point reflectedOverOrigin() const noexcept
     {
         return { -x, -y };
     }

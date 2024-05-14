@@ -78,6 +78,9 @@ public:
     void drawLine (const Point<float>& p1, const Point<float>& p2, float thickness);
 
     //==============================================================================
+    void fillAll();
+
+    //==============================================================================
     void fillRect (float x, float y, float width, float height);
     void fillRect (const Rectangle<float>& r);
 
@@ -98,6 +101,10 @@ public:
     //==============================================================================
     void drawPath (const Path& path, float thickness);
     void fillPath (const Path& path);
+
+    //==============================================================================
+    void clipPath (const Rectangle<float>& r);
+    void clipPath (const Path& path);
 
     //==============================================================================
     rive::Factory* getFactory();
@@ -126,6 +133,11 @@ private:
         constexpr ColorGradient getColorGradient() const noexcept
         {
             return gradient.withAlpha (alpha);
+        }
+
+        constexpr const Rectangle<float>& getDrawingArea() const noexcept
+        {
+            return drawingArea;
         }
 
         constexpr float translateX (float x) const noexcept

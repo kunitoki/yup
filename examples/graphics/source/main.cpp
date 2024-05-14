@@ -155,6 +155,8 @@ class CustomWindow : public yup::DocumentWindow
 public:
     CustomWindow()
     {
+        //getNativeComponent()->enableContinuousRepainting (true);
+
         setTitle ("main");
 
         for (int i = 0; i < totalRows * totalColumns; ++i)

@@ -64,6 +64,8 @@ public:
     virtual Component* getFocusedComponent() const = 0;
 
     //==============================================================================
+    virtual bool isContinuousRepaintingEnabled() const = 0;
+    virtual void enableContinuousRepainting (bool shouldBeEnabled) = 0;
     virtual bool isAtomicModeEnabled() const = 0;
     virtual void enableAtomicMode (bool shouldBeEnabled) = 0;
     virtual bool isWireframeEnabled() const = 0;
@@ -82,7 +84,9 @@ public:
     virtual rive::Factory* getFactory() = 0;
 
     //==============================================================================
-    static std::unique_ptr<ComponentNative> createFor (Component& component, std::optional<float> framerateRedraw);
+    static std::unique_ptr<ComponentNative> createFor (Component& component,
+                                                       bool continuousRepaint,
+                                                       std::optional<float> framerateRedraw);
 
 protected:
     Component& component;

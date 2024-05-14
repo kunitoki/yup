@@ -225,7 +225,7 @@ class GLFWComponentNative final
 public:
     //==============================================================================
 
-    GLFWComponentNative (Component& component, std::optional<float> framerateRedraw);
+    GLFWComponentNative (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw);
     ~GLFWComponentNative() override;
 
     //==============================================================================
@@ -256,10 +256,10 @@ public:
     bool isFullScreen() const override;
 
     //==============================================================================
-
+    bool isContinuousRepaintingEnabled() const override;
+    void enableContinuousRepainting (bool shouldBeEnabled) override;
     bool isAtomicModeEnabled() const override;
     void enableAtomicMode (bool shouldBeEnabled) override;
-
     bool isWireframeEnabled() const override;
     void enableWireframe (bool shouldBeEnabled) override;
 
@@ -310,6 +310,7 @@ public:
 
 private:
     void updateComponentUnderMouse (const MouseEvent& event);
+    void triggerRenderingUpdate();
     void renderContext();
 
     GLFWwindow* window = nullptr;
@@ -337,8 +338,10 @@ private:
     int currentHeight = 0;
 
     WaitableEvent renderEvent { true };
+    WaitableEvent commandEvent;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
+    std::atomic<bool> renderContinuous = false;
 
    #if JUCE_MAC
     id<MTLDevice> gpu = nil;
@@ -349,11 +352,12 @@ private:
 
 //==============================================================================
 
-GLFWComponentNative::GLFWComponentNative (Component& component, std::optional<float> framerateRedraw)
+GLFWComponentNative::GLFWComponentNative (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw)
     : ComponentNative (component)
     , Thread ("YUP Render Thread")
     , screenBounds (component.getBounds())
     , desiredFrameRate (framerateRedraw.value_or (60.0f))
+    , renderContinuous (continuousRepaint)
 {
    #if JUCE_MAC
     gpu = MTLCreateSystemDefaultDevice();
@@ -388,7 +392,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component, std::optional<fl
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     glfwMakeContextCurrent (window);
-    glfwSwapInterval (1);
+    glfwSwapInterval (0);
    #endif
 
     glfwSetWindowUserPointer (window, this);
@@ -418,6 +422,7 @@ GLFWComponentNative::~GLFWComponentNative()
    #else
     signalThreadShouldExit();
     renderEvent.signal();
+    commandEvent.signal();
     stopThread(-1);
    #endif
 
@@ -624,6 +629,16 @@ Component* GLFWComponentNative::getFocusedComponent() const
 
 //==============================================================================
 
+bool GLFWComponentNative::isContinuousRepaintingEnabled() const
+{
+    return renderContinuous;
+}
+
+void GLFWComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
+{
+    renderContinuous = shouldBeEnabled;
+}
+
 bool GLFWComponentNative::isAtomicModeEnabled() const
 {
     return renderAtomicMode;
@@ -718,8 +733,8 @@ void GLFWComponentNative::run()
         // Update framerate
         if (++frameCounter >= frameUpdateCounter)
         {
-            const auto newFrameRate = static_cast<float> (frameCounter) * 0.75f
-                + currentFrameRate.load (std::memory_order_relaxed) * 0.25f;
+            const auto newFrameRate =
+                static_cast<float> (frameCounter) * 0.75f + currentFrameRate.load (std::memory_order_relaxed) * 0.25f;
 
             currentFrameRate.store (newFrameRate, std::memory_order_relaxed);
             frameCounter = 0;
@@ -730,8 +745,15 @@ void GLFWComponentNative::run()
         const double remainingTime = maxFrameTime - (newTime - currentTime);
         currentTime = newTime;
 
-        if (remainingTime > 0.0f)
-            Thread::sleep (roundToInt (remainingTime * 1000.0));
+        if (renderContinuous)
+        {
+            if (remainingTime > 0.0f)
+                Thread::sleep (roundToInt (remainingTime * 1000.0));
+        }
+        else
+        {
+            commandEvent.wait();
+        }
     }
 }
 
@@ -772,7 +794,6 @@ void GLFWComponentNative::renderContext()
     {
         .renderTargetWidth = static_cast<uint32_t> (width),
         .renderTargetHeight = static_cast<uint32_t> (height),
-        //.loadAction = rive::pls::LoadAction::preserveRenderTarget,
         .clearColor = 0xff404040,
         .msaaSampleCount = 0,
         .disableRasterOrdering = renderAtomicMode,
@@ -787,6 +808,16 @@ void GLFWComponentNative::renderContext()
     context->end (getNativeHandle());
 
     context->tick();
+}
+
+//==============================================================================
+
+void GLFWComponentNative::triggerRenderingUpdate()
+{
+    if (renderContinuous)
+        return;
+
+    commandEvent.signal();
 }
 
 //==============================================================================
@@ -821,6 +852,8 @@ void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPositi
     }
 
     lastMouseMovePosition = localPosition;
+
+    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
@@ -856,6 +889,8 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     }
 
     lastMouseMovePosition = localPosition;
+
+    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
@@ -886,6 +921,8 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     }
 
     lastMouseMovePosition = localPosition;
+
+    triggerRenderingUpdate();
 }
 
 //==============================================================================
@@ -910,8 +947,7 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
         lastComponentFocused->internalMouseWheel (event, wheelData);
     }
 
-    //updateComponentUnderMouse (event);
-    //lastMouseMovePosition = localPosition;
+    triggerRenderingUpdate();
 }
 
 //==============================================================================
@@ -924,6 +960,8 @@ void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
         lastComponentFocused->internalKeyDown (keys, cursorPosition);
     else
         component.internalKeyDown (keys, cursorPosition);
+
+    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
@@ -934,6 +972,8 @@ void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
         lastComponentFocused->internalKeyUp (keys, cursorPosition);
     else
         component.internalKeyUp (keys, cursorPosition);
+
+    triggerRenderingUpdate();
 }
 
 //==============================================================================
@@ -956,11 +996,15 @@ void GLFWComponentNative::handleResized (int width, int height)
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
+
+    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleFocusChanged (bool gotFocus)
 {
     DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
+
+    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleUserTriedToCloseWindow()
@@ -998,9 +1042,9 @@ void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 
 //==============================================================================
 
-std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, std::optional<float> framerateRedraw)
+std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw)
 {
-    return std::make_unique<GLFWComponentNative> (component, framerateRedraw);
+    return std::make_unique<GLFWComponentNative> (component, continuousRepaint, framerateRedraw);
 }
 
 //==============================================================================

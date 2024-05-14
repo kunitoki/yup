@@ -26,7 +26,7 @@ namespace yup
 
 DocumentWindow::DocumentWindow()
 {
-    addToDesktop();
+    addToDesktop (true);
 }
 
 DocumentWindow::~DocumentWindow()

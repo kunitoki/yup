@@ -78,13 +78,17 @@ public:
     float getOpacity() const;
 
     //==============================================================================
+    virtual void enableRenderingUnclipped (bool shouldBeEnabled);
+    bool isRenderingUnclipped() const;
+
+    //==============================================================================
     void* getNativeHandle() const;
 
     //==============================================================================
     ComponentNative* getNativeComponent();
 
     //==============================================================================
-    void addToDesktop (std::optional<float> framerateRedraw = std::nullopt);
+    void addToDesktop (bool continuousRepaint, std::optional<float> framerateRedraw = std::nullopt);
     void removeFromDesktop();
     bool isOnDesktop() const noexcept;
 
@@ -162,10 +166,11 @@ private:
 
     struct Options
     {
-        bool isVisible    : 1;
-        bool hasFrame     : 1;
-        bool onDesktop    : 1;
-        bool isFullScreen : 1;
+        bool isVisible          : 1;
+        bool hasFrame           : 1;
+        bool onDesktop          : 1;
+        bool isFullScreen       : 1;
+        bool unclippedRendering : 1;
     };
 
     union
