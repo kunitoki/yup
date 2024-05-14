@@ -752,10 +752,10 @@ public:
      */
     constexpr Rectangle removeFromTop (ValueType delta) noexcept
     {
-        const Rectangle result { xy, size.withHeight (jmax (0, delta)) };
+        const Rectangle result { xy, size.withHeight (jmax (ValueType (0), delta)) };
 
         xy = xy.withY (xy.getY() + delta);
-        size = size.withHeight (jmax (0, size.getHeight() - delta));
+        size = size.withHeight (jmax (ValueType (0), size.getHeight() - delta));
 
         return result;
     }
@@ -771,10 +771,10 @@ public:
      */
     constexpr Rectangle removeFromLeft (ValueType delta) noexcept
     {
-        const Rectangle result { xy, size.withWidth (jmax (0, delta)) };
+        const Rectangle result { xy, size.withWidth (jmax (ValueType (0), delta)) };
 
         xy = xy.withX (xy.getX() + delta);
-        size = size.withWidth (jmax (0, size.getWidth() - delta));
+        size = size.withWidth (jmax (ValueType (0), size.getWidth() - delta));
 
         return result;
     }
@@ -790,9 +790,9 @@ public:
      */
     constexpr Rectangle removeFromBottom (ValueType delta) noexcept
     {
-        const Rectangle result { xy.withY (jmax (0, xy.getY() + size.getHeight() - delta)), size.withHeight (jmax (0, delta)) };
+        const Rectangle result { xy.withY (jmax (ValueType (0), xy.getY() + size.getHeight() - delta)), size.withHeight (jmax (ValueType (0), delta)) };
 
-        size = size.withHeight (jmax (0, size.getHeight() - delta));
+        size = size.withHeight (jmax (ValueType (0), size.getHeight() - delta));
 
         return result;
     }
@@ -808,9 +808,10 @@ public:
      */
     constexpr Rectangle removeFromRight (ValueType delta) noexcept
     {
-        const Rectangle result { xy.withX (jmax (0, xy.getX() + size.getWidth() - delta)), size.withWidth (jmax (0, delta)) };
+        const Rectangle result { xy.withX (jmax (ValueType (0), xy.getX() + size.getWidth() - delta)),
+                                 size.withWidth (jmax (ValueType (0), delta)) };
 
-        size = size.withWidth (jmax (0, size.getWidth() - delta));
+        size = size.withWidth (jmax (ValueType (0), size.getWidth() - delta));
 
         return result;
     }
@@ -828,7 +829,8 @@ public:
     constexpr Rectangle& reduce (ValueType delta) noexcept
     {
         xy = { xy.getX() + delta, xy.getY() + delta };
-        size = { jmax (0, size.getWidth () - 2 * delta), jmax (0, size.getHeight () - 2 * delta) };
+        size = { jmax (ValueType (0), size.getWidth () - ValueType (2) * delta),
+                 jmax (ValueType (0), size.getHeight () - ValueType (2) * delta) };
 
         return *this;
     }
@@ -846,7 +848,8 @@ public:
     constexpr Rectangle& reduce (ValueType deltaX, ValueType deltaY) noexcept
     {
         xy = { xy.getX() + deltaX, xy.getY() + deltaY };
-        size = { jmax (0, size.getWidth () - 2 * deltaX), jmax (0, size.getHeight () - 2 * deltaY) };
+        size = { jmax (ValueType (0), size.getWidth () - ValueType (2) * deltaX),
+                 jmax (ValueType (0), size.getHeight () - ValueType (2) * deltaY) };
 
         return *this;
     }
