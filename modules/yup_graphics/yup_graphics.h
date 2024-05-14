@@ -19,33 +19,30 @@
   ==============================================================================
 */
 
-/*******************************************************************************
- The block below describes the properties of this module, and is read by
- the Projucer to automatically generate project code that uses it.
- For details about the syntax and how to create or use a module, see the
- JUCE Module Format.md file.
+/*
+  ==============================================================================
 
+  BEGIN_JUCE_MODULE_DECLARATION
 
- BEGIN_JUCE_MODULE_DECLARATION
+    ID:                 yup_graphics
+    vendor:             yup
+    version:            1.0.0
+    name:               YUP Graphics Classes
+    description:        The essential set of basic YUP graphics classes.
+    website:            https://github.com/kunitoki/yup
+    license:            ISC
+    minimumCppStandard: 17
 
-  ID:                 yup_graphics
-  vendor:             yup
-  version:            1.0.0
-  name:               YUP Graphics Classes
-  description:        The essential set of basic YUP graphics classes.
-  website:            https://github.com/kunitoki/yup
-  license:            ISC
-  minimumCppStandard: 17
+    dependencies:       juce_core rive rive_pls_renderer
+    OSXFrameworks:      Metal
+    iOSFrameworks:      Metal
+    searchpaths:        native
+    enableARC:          1
 
-  dependencies:       juce_core rive rive_pls_renderer
-  OSXFrameworks:      Metal
-  iOSFrameworks:      Metal
-  searchpaths:        native
-  enableARC:          1
+  END_JUCE_MODULE_DECLARATION
 
- END_JUCE_MODULE_DECLARATION
-
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 #define YUP_GRAPHICS_H_INCLUDED
@@ -60,7 +57,7 @@
 //==============================================================================
 
 namespace yup {
-using namespace ::juce;
+using namespace ::juce; // TODO - move it out
 } // namespace yup
 
 #include "primitives/yup_AffineTransform.h"

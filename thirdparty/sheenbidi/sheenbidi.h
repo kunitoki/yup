@@ -19,24 +19,26 @@
   ==============================================================================
 */
 
-/*******************************************************************************
+/*
+  ==============================================================================
 
- BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_JUCE_MODULE_DECLARATION
 
-  ID:               sheenbidi
-  vendor:           sheenbidi
-  version:          2.6
-  name:             SheenBidi implements Unicode Bidirectional Algorithm
-  description:      It is a sophisticated implementation which provides the developers an easy way to use UBA in their applications.
-  website:          https://github.com/Tehreer/SheenBidi
-  license:          Apache-2.0
+    ID:               sheenbidi
+    vendor:           sheenbidi
+    version:          2.6
+    name:             SheenBidi implements Unicode Bidirectional Algorithm
+    description:      It is a sophisticated implementation which provides the developers an easy way to use UBA in their applications.
+    website:          https://github.com/Tehreer/SheenBidi
+    license:          Apache-2.0
 
-  dependencies:
-  searchpaths:      include
+    dependencies:
+    searchpaths:      include
 
- END_JUCE_MODULE_DECLARATION
+  END_JUCE_MODULE_DECLARATION
 
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 

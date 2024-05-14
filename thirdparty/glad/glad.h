@@ -19,24 +19,26 @@
   ==============================================================================
 */
 
-/*******************************************************************************
+/*
+  ==============================================================================
 
- BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_JUCE_MODULE_DECLARATION
 
-  ID:               glad
-  vendor:           glad
-  version:          1.0.0
-  name:             Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator
-  description:      Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specifications for multiple languages..
-  website:          https://glad.dav1d.de/
-  license:          MIT
+    ID:               glad
+    vendor:           glad
+    version:          1.0.0
+    name:             Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator
+    description:      Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specifications for multiple languages..
+    website:          https://glad.dav1d.de/
+    license:          MIT
 
-  dependencies:
-  searchpaths:      include
+    dependencies:
+    searchpaths:      include
 
- END_JUCE_MODULE_DECLARATION
+  END_JUCE_MODULE_DECLARATION
 
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 

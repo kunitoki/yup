@@ -19,24 +19,26 @@
   ==============================================================================
 */
 
-/*******************************************************************************
+/*
+  ==============================================================================
 
- BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_JUCE_MODULE_DECLARATION
 
-  ID:               harfbuzz
-  vendor:           harfbuzz
-  version:          1.0.0
-  name:             Harfbuzz Text Shaping Engine
-  description:      HarfBuzz is a text shaping engine.
-  website:          https://github.com/harfbuzz/harfbuzz
-  license:          MIT
+    ID:               harfbuzz
+    vendor:           harfbuzz
+    version:          1.0.0
+    name:             Harfbuzz Text Shaping Engine
+    description:      HarfBuzz is a text shaping engine.
+    website:          https://github.com/harfbuzz/harfbuzz
+    license:          MIT
 
-  defines:          HAVE_ATEXIT=1 HB_ONLY_ONE_SHAPER HAVE_OT HB_NO_FALLBACK_SHAPE HB_NO_FALLBACK_SHAPE HB_NO_WIN1256 HB_NO_EXTERN_HELPERS HB_DISABLE_DEPRECATED HB_NO_COLOR HB_NO_BITMAP HB_NO_BUFFER_SERIALIZE HB_NO_BUFFER_VERIFY HB_NO_BUFFER_MESSAGE HB_NO_SETLOCALE HB_NO_STYLE HB_NO_VERTICAL HB_NO_LAYOUT_COLLECT_GLYPHS HB_NO_LAYOUT_RARELY_USED HB_NO_LAYOUT_UNUSED HB_NO_OT_FONT_GLYPH_NAMES HB_NO_PAINT HB_NO_MMAP HB_NO_META
-  searchpaths:      include
+    defines:          HAVE_ATEXIT=1 HB_ONLY_ONE_SHAPER HAVE_OT HB_NO_FALLBACK_SHAPE HB_NO_FALLBACK_SHAPE HB_NO_WIN1256 HB_NO_EXTERN_HELPERS HB_DISABLE_DEPRECATED HB_NO_COLOR HB_NO_BITMAP HB_NO_BUFFER_SERIALIZE HB_NO_BUFFER_VERIFY HB_NO_BUFFER_MESSAGE HB_NO_SETLOCALE HB_NO_STYLE HB_NO_VERTICAL HB_NO_LAYOUT_COLLECT_GLYPHS HB_NO_LAYOUT_RARELY_USED HB_NO_LAYOUT_UNUSED HB_NO_OT_FONT_GLYPH_NAMES HB_NO_PAINT HB_NO_MMAP HB_NO_META
+    searchpaths:      include
 
- END_JUCE_MODULE_DECLARATION
+  END_JUCE_MODULE_DECLARATION
 
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 

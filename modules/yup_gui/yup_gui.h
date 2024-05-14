@@ -19,32 +19,29 @@
   ==============================================================================
 */
 
-/*******************************************************************************
- The block below describes the properties of this module, and is read by
- the Projucer to automatically generate project code that uses it.
- For details about the syntax and how to create or use a module, see the
- JUCE Module Format.md file.
+/*
+  ==============================================================================
 
+  BEGIN_JUCE_MODULE_DECLARATION
 
- BEGIN_JUCE_MODULE_DECLARATION
+    ID:                 yup_gui
+    vendor:             yup
+    version:            1.0.0
+    name:               YUP Graphical User Interface
+    description:        The essential set of basic YUP user interface.
+    website:            https://github.com/kunitoki/yup
+    license:            ISC
+    minimumCppStandard: 17
 
-  ID:                 yup_gui
-  vendor:             yup
-  version:            1.0.0
-  name:               YUP Graphical User Interface
-  description:        The essential set of basic YUP user interface.
-  website:            https://github.com/kunitoki/yup
-  license:            ISC
-  minimumCppStandard: 17
+    dependencies:       juce_events
+    OSXFrameworks:      Metal
+    iOSFrameworks:      Metal
+    enableARC:          1
 
-  dependencies:       juce_events
-  OSXFrameworks:      Metal
-  iOSFrameworks:      Metal
-  enableARC:          1
+  END_JUCE_MODULE_DECLARATION
 
- END_JUCE_MODULE_DECLARATION
-
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 #define YUP_GUI_H_INCLUDED
