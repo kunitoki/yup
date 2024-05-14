@@ -63,7 +63,7 @@ public:
         //auto [x, y] = event.getPosition();
 
         const float multiplier = event.getModifiers().isShiftDown() ? 0.0001f : 0.0025f;
-        const float distance = origin.verticalDistanceTo (event.getPosition()) * multiplier;
+        const float distance = -origin.verticalDistanceTo (event.getPosition()) * multiplier;
 
         origin = event.getPosition();
 
@@ -163,7 +163,7 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced (200);
+        auto bounds = getLocalBounds().reduced (100);
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
@@ -185,12 +185,10 @@ public:
 
     void mouseEnter (const yup::MouseEvent& event) override
     {
-        DBG ("main enter");
     }
 
     void mouseExit (const yup::MouseEvent& event) override
     {
-        DBG ("main exit");
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override

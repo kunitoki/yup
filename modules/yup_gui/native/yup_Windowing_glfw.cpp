@@ -302,6 +302,7 @@ public:
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
+    void handleFocusChanged (bool gotFocus);
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
@@ -919,22 +920,28 @@ void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
 {
     currentKeyModifiers = keys.getModifiers();
 
-    component.internalKeyDown (keys, cursorPosition);
+    if (lastComponentFocused != nullptr)
+        lastComponentFocused->internalKeyDown (keys, cursorPosition);
+    else
+        component.internalKeyDown (keys, cursorPosition);
 }
 
 void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
 {
     currentKeyModifiers = keys.getModifiers();
 
-    component.internalKeyUp (keys, cursorPosition);
+    if (lastComponentFocused != nullptr)
+        lastComponentFocused->internalKeyUp (keys, cursorPosition);
+    else
+        component.internalKeyUp (keys, cursorPosition);
 }
 
 //==============================================================================
 
 void GLFWComponentNative::handleMoved (int xpos, int ypos)
 {
-    DBG ("handleMoved: " << xpos << ", " << ypos);
-    DBG ("  size:      " << getBounds());
+    //DBG ("handleMoved: " << xpos << ", " << ypos);
+    //DBG ("  size:      " << getBounds());
 
     component.internalMoved (xpos, ypos);
 
@@ -943,12 +950,17 @@ void GLFWComponentNative::handleMoved (int xpos, int ypos)
 
 void GLFWComponentNative::handleResized (int width, int height)
 {
-    DBG ("handleResized: " << width << ", " << height);
-    DBG ("  size:        " << getBounds());
+    //DBG ("handleResized: " << width << ", " << height);
+    //DBG ("  size:        " << getBounds());
 
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
+}
+
+void GLFWComponentNative::handleFocusChanged (bool gotFocus)
+{
+    DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
 }
 
 void GLFWComponentNative::handleUserTriedToCloseWindow()
@@ -1016,8 +1028,9 @@ void yup_glfwWindowSize (GLFWwindow* window, int width, int height)
 
 void yup_glfwWindowFocus (GLFWwindow* window, int focused)
 {
-    // auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-    // TODO
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    nativeComponent->handleFocusChanged (focused != 0);
 }
 
 void yup_glfwMouseMove (GLFWwindow* window, double x, double y)

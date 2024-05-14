@@ -432,7 +432,7 @@ void Component::userTriedToCloseWindow() {}
 
 void Component::internalPaint (Graphics& g, float frameRate)
 {
-    if (! isVisible())
+    if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
         return;
 
     const auto state = g.saveState();
