@@ -23,23 +23,50 @@ namespace yup
 {
 
 //==============================================================================
-
+/**
+ * @brief Represents a single key press, encapsulating information about the key and any associated modifiers.
+ *
+ * This class is designed to represent a key press in a platform-independent manner, storing details about the key code,
+ * any modifier keys that were active (like Shift, Ctrl, etc.), and the Unicode character for key presses that generate text.
+ */
 class JUCE_API KeyPress
 {
 public:
+    //==============================================================================
+    /**
+     * @brief Default constructor, initializes a key press with no key or modifiers.
+     */
     constexpr KeyPress () noexcept = default;
 
+    /**
+     * @brief Constructs a KeyPress with a specified key code.
+     *
+     * @param newKey The key code associated with the key press.
+     */
     constexpr KeyPress (int newKey) noexcept
         : key (newKey)
     {
     }
 
+    /**
+     * @brief Constructs a KeyPress with a specified key code and modifiers.
+     *
+     * @param newKey The key code for the key press.
+     * @param newModifiers The modifiers that were active during the key press.
+     */
     constexpr KeyPress (int newKey, KeyModifiers newModifiers) noexcept
         : key (newKey)
         , modifiers (newModifiers)
     {
     }
 
+    /**
+     * @brief Constructs a KeyPress with a specified key code, modifiers, and a scancode representing the text character.
+     *
+     * @param newKey The key code for the key press.
+     * @param newModifiers The modifiers that were active during the key press.
+     * @param newScancode The Unicode scancode that represents the text character produced by the key press.
+     */
     constexpr KeyPress (int newKey, KeyModifiers newModifiers, char32_t newScancode) noexcept
         : key (newKey)
         , modifiers (newModifiers)
@@ -47,36 +74,76 @@ public:
     {
     }
 
+    //==============================================================================
     constexpr KeyPress (const KeyPress& other) noexcept = default;
     constexpr KeyPress (KeyPress&& other) noexcept = default;
     constexpr KeyPress& operator= (const KeyPress& other) noexcept = default;
     constexpr KeyPress& operator= (KeyPress&& other) noexcept = default;
 
+    //==============================================================================
+    /**
+     * @brief Gets the key code of the key press.
+     *
+     * @return The key code.
+     */
     constexpr int getKey() const noexcept
     {
         return key;
     }
 
+    //==============================================================================
+    /**
+     * @brief Gets the modifiers associated with the key press.
+     *
+     * @return The modifiers.
+     */
     constexpr KeyModifiers getModifiers() const noexcept
     {
         return modifiers;
     }
 
+    //==============================================================================
+    /**
+     * @brief Gets the Unicode text character produced by the key press, if any.
+     *
+     * This is typically relevant for key presses that result in a printable character.
+     *
+     * @return The Unicode character code.
+     */
     constexpr char32_t getTextCharacter() const noexcept
     {
         return scancode;
     }
 
+    //==============================================================================
+    /**
+     * @brief Compares two KeyPress objects for equality.
+     *
+     * Two key presses are considered equal if they have the same key code, modifiers, and scancode.
+     *
+     * @param other The other KeyPress to compare with.
+     *
+     * @return True if the KeyPress objects are equal, false otherwise.
+     */
     constexpr bool operator== (const KeyPress& other) const noexcept
     {
         return key == other.key && modifiers == other.modifiers && scancode == other.scancode;
     }
 
+    /**
+     * @brief Compares two KeyPress objects for inequality.
+     *
+     * @param other The other KeyPress to compare with.
+     *
+     * @return True if the KeyPress objects are not equal, false otherwise.
+     */
     constexpr bool operator!= (const KeyPress& other) const noexcept
     {
         return !(*this == other);
     }
 
+    //==============================================================================
+    /** @brief Aliases for commonly used keys. */
     static constexpr int spaceKey = 32;
     static constexpr int apostropheKey = 39;
     static constexpr int commaKey = 44;
