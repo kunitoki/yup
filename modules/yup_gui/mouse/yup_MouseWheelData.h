@@ -27,27 +27,64 @@ class JUCE_API MouseWheelData
 {
 public:
     //==============================================================================
-    MouseWheelData() noexcept = default;
-    MouseWheelData (float deltaX, float deltaY) noexcept;
+    constexpr MouseWheelData() noexcept = default;
+
+    constexpr MouseWheelData (float deltaX, float deltaY) noexcept
+        : deltaX (deltaX)
+        , deltaY (deltaY)
+    {
+    }
 
     //==============================================================================
-    MouseWheelData (const MouseWheelData& other) noexcept = default;
-    MouseWheelData (MouseWheelData&& other) noexcept = default;
-    MouseWheelData& operator= (const MouseWheelData& other) noexcept = default;
-    MouseWheelData& operator= (MouseWheelData&& other) noexcept = default;
+    constexpr MouseWheelData (const MouseWheelData& other) noexcept = default;
+    constexpr MouseWheelData (MouseWheelData&& other) noexcept = default;
+    constexpr MouseWheelData& operator= (const MouseWheelData& other) noexcept = default;
+    constexpr MouseWheelData& operator= (MouseWheelData&& other) noexcept = default;
 
     //==============================================================================
-    float getDeltaX() const noexcept;
-    MouseWheelData& setDeltaX (float newDeltaX) noexcept;
-    MouseWheelData withDeltaX (float newDeltaX) const noexcept;
+    constexpr float getDeltaX() const noexcept
+    {
+        return deltaX;
+    }
 
-    float getDeltaY() const noexcept;
-    MouseWheelData& setDeltaY (float newDeltaY) noexcept;
-    MouseWheelData withDeltaY (float newDeltaY) const noexcept;
+    constexpr MouseWheelData& setDeltaX (float newDeltaX) noexcept
+    {
+        deltaX = newDeltaX;
+        return *this;
+    }
+
+    constexpr MouseWheelData withDeltaX (float newDeltaX) const noexcept
+    {
+        return { newDeltaX, deltaY };
+    }
 
     //==============================================================================
-    bool operator== (const MouseWheelData& other) const noexcept;
-    bool operator!= (const MouseWheelData& other) const noexcept;
+    constexpr float getDeltaY() const noexcept
+    {
+        return deltaY;
+    }
+
+    constexpr MouseWheelData& setDeltaY (float newDeltaY) noexcept
+    {
+        deltaY = newDeltaY;
+        return *this;
+    }
+
+    constexpr MouseWheelData withDeltaY (float newDeltaY) const noexcept
+    {
+        return { deltaX, newDeltaY };
+    }
+
+    //==============================================================================
+    constexpr bool operator== (const MouseWheelData& other) const noexcept
+    {
+        return deltaX == other.deltaX && deltaY == other.deltaY;
+    }
+
+    constexpr bool operator!= (const MouseWheelData& other) const noexcept
+    {
+        return !(*this == other);
+    }
 
 private:
     float deltaX = 0.0f;

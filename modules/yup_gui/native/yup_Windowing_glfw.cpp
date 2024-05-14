@@ -332,7 +332,6 @@ private:
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
-    uint64 frameCounter = 0;
 
     int currentWidth = 0;
     int currentHeight = 0;
@@ -355,7 +354,7 @@ private:
 GLFWComponentNative::GLFWComponentNative (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw)
     : ComponentNative (component)
     , Thread ("YUP Render Thread")
-    , screenBounds (component.getBounds())
+    , screenBounds (component.getBounds().to<int>())
     , desiredFrameRate (framerateRedraw.value_or (60.0f))
     , renderContinuous (continuousRepaint)
 {
@@ -409,7 +408,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component, bool continuousR
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     startTimerHz (desiredFrameRate);
    #else
-    startThread();
+    startThread (Priority::high);
    #endif
 }
 
@@ -713,42 +712,56 @@ void* GLFWComponentNative::getNativeHandle() const
 
 void GLFWComponentNative::run()
 {
-    const double maxFrameTime = 1.0 / static_cast<double> (desiredFrameRate);
-    const double maxFrameTimeMs = maxFrameTime * 1000.0;
-    const uint64 frameUpdateCounter = static_cast<uint64> (desiredFrameRate);
+    const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
+    const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    double currentTime = Time::getMillisecondCounterHiRes() / 1000.0;
+    double fpsMeasureStartTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+    uint64_t frameCounter = 0;
 
     while (! threadShouldExit())
     {
+        double frameStartTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+
         // Trigger and wait for rendering
         renderEvent.reset();
         triggerAsyncUpdate();
         renderEvent.wait (maxFrameTimeMs);
 
-        // Update framerate
-        if (++frameCounter >= frameUpdateCounter)
-        {
-            const auto newFrameRate =
-                static_cast<float> (frameCounter) * 0.75f + currentFrameRate.load (std::memory_order_relaxed) * 0.25f;
-
-            currentFrameRate.store (newFrameRate, std::memory_order_relaxed);
-            frameCounter = 0;
-        }
+        // Measure spent time
+        double currentTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+        double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
         // Wait for a stable frame time
-        const double newTime = Time::getMillisecondCounterHiRes() / 1000.0;
-        const double remainingTime = maxFrameTime - (newTime - currentTime);
-        currentTime = newTime;
-
         if (renderContinuous)
         {
-            if (remainingTime > 0.0f)
-                Thread::sleep (roundToInt (remainingTime * 1000.0));
+            const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
+            if (secondsToWait > 0.0f)
+            {
+                const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
+
+                while (Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
+                    Thread::sleep (1);
+
+                while (Time::getMillisecondCounterHiRes() < waitUntilMs)
+                    Thread::sleep (0);
+            }
         }
         else
         {
             commandEvent.wait();
+        }
+
+        // Measure current framerate
+        ++frameCounter;
+
+        const double timeSinceFpsMeasure = currentTimeSeconds - fpsMeasureStartTimeSeconds;
+        if (timeSinceFpsMeasure >= 1.0)
+        {
+            double currentFps = frameCounter / timeSinceFpsMeasure;
+            currentFrameRate.store (currentFps, std::memory_order_relaxed);
+
+            fpsMeasureStartTimeSeconds = currentTimeSeconds;
+            frameCounter = 0;
         }
     }
 }

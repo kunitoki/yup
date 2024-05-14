@@ -235,12 +235,12 @@ public:
         {
             renderer->save();
 
-            renderer->transform(
-                rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
+            renderer->transform (rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
 
             for (int i = 0; i < horzRepeat * 2 + 1; ++i)
             {
                 (*scene++)->draw (renderer);
+
                 renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
             }
 
@@ -269,26 +269,26 @@ private:
 
             std::unique_ptr<rive::Scene> scene;
 
-            scene = artboard->defaultStateMachine();
+            //scene = artboard->defaultStateMachine();
             if (scene == nullptr)
             {
                 if (stateMachine >= 0)
-                    scene = artboard->stateMachineAt(stateMachine);
+                    scene = artboard->stateMachineAt (stateMachine);
 
                 else if (animation >= 0)
-                    scene = artboard->animationAt(animation);
+                    scene = artboard->animationAt (animation);
 
                 else
-                    scene = artboard->animationAt(0);
+                    scene = artboard->animationAt (0);
             }
 
             if (scene == nullptr)
-                scene = std::make_unique<rive::StaticScene>(artboard.get());
+                scene = std::make_unique<rive::StaticScene> (artboard.get());
 
-            scene->advanceAndApply(scene->durationSeconds() * i / count);
+            scene->advanceAndApply (scene->durationSeconds() * i / count);
 
-            artboards.push_back(std::move(artboard));
-            scenes.push_back(std::move(scene));
+            artboards.push_back (std::move (artboard));
+            scenes.push_back (std::move (scene));
         }
     }
 

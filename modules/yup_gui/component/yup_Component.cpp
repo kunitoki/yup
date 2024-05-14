@@ -86,19 +86,19 @@ String Component::getTitle() const
 
 //==============================================================================
 
-int Component::getX() const
+float Component::getX() const
 {
-    return static_cast<int> (boundsInParent.getX());
+    return boundsInParent.getX();
 }
 
-int Component::getY() const
+float Component::getY() const
 {
-    return static_cast<int> (boundsInParent.getY());
+    return boundsInParent.getY();
 }
 
-Point<int> Component::getPosition() const
+Point<float> Component::getPosition() const
 {
-    return boundsInParent.getPosition().to<int>();
+    return boundsInParent.getPosition();
 }
 
 void Component::moved()
@@ -107,13 +107,13 @@ void Component::moved()
 
 //==============================================================================
 
-void Component::setSize (const Size<int>& newSize)
+void Component::setSize (const Size<float>& newSize)
 {
     if (options.onDesktop)
     {
         boundsInParent = boundsInParent.withSize (newSize * getScaleDpi());
 
-        native->setSize (newSize);
+        native->setSize (newSize.to<int>());
     }
     else
     {
@@ -123,66 +123,66 @@ void Component::setSize (const Size<int>& newSize)
     resized();
 }
 
-Size<int> Component::getSize() const
+Size<float> Component::getSize() const
 {
     if (options.onDesktop)
-        return native->getSize ();
+        return native->getSize().to<float>();
 
-    return boundsInParent.getSize().to<int>();
+    return boundsInParent.getSize();
 }
 
-Size<int> Component::getContentSize() const
+Size<float> Component::getContentSize() const
 {
     if (options.onDesktop)
-        return native->getContentSize ();
+        return native->getContentSize().to<float>();
 
     return getSize();
 }
 
-int Component::getWidth() const
+float Component::getWidth() const
 {
-    return static_cast<int> (boundsInParent.getWidth());
+    return boundsInParent.getWidth();
 }
 
-int Component::getHeight() const
+float Component::getHeight() const
 {
-    return static_cast<int> (boundsInParent.getHeight());
+    return boundsInParent.getHeight();
 }
 
-void Component::setBounds (const Rectangle<int>& newBounds)
+void Component::setBounds (const Rectangle<float>& newBounds)
 {
     if (options.onDesktop)
     {
-        boundsInParent = newBounds.withScaledSize (getScaleDpi()).to<float>();
+        boundsInParent = newBounds.withScaledSize (getScaleDpi());
 
-        native->setBounds (newBounds);
+        native->setBounds (newBounds.to<int>());
     }
     else
     {
-        boundsInParent = newBounds.to<float>();
+        boundsInParent = newBounds;
     }
 
     resized();
 }
 
-Rectangle<int> Component::getBounds() const
+Rectangle<float> Component::getBounds() const
 {
-    return boundsInParent.to<int>();
+    return boundsInParent;
 }
 
-Rectangle<int> Component::getLocalBounds() const
+Rectangle<float> Component::getLocalBounds() const
 {
-    return boundsInParent.withZeroPosition().to<int>();
+    return boundsInParent.withZeroPosition();
 }
 
-int Component::proportionOfWidth (float proportion) const
+float Component::proportionOfWidth (float proportion) const
 {
-    return static_cast<int> (getWidth() * proportion);
+    return getWidth() * proportion;
 }
 
-int Component::proportionOfHeight (float proportion) const
+float Component::proportionOfHeight (float proportion) const
 {
-    return static_cast<int> (getHeight() * proportion);
+    return getHeight() * proportion;
 }
 
 void Component::resized()

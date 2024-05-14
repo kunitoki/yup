@@ -59,7 +59,6 @@
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "mouse/yup_MouseEvent.cpp"
-#include "mouse/yup_MouseWheelData.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"
 #include "windowing/yup_DocumentWindow.cpp"

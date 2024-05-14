@@ -44,25 +44,25 @@ public:
     String getTitle() const;
 
     //==============================================================================
-    Point<int> getPosition() const;
-    int getX() const;
-    int getY() const;
+    Point<float> getPosition() const;
+    float getX() const;
+    float getY() const;
 
     virtual void moved();
 
     //==============================================================================
-    virtual void setSize (const Size<int>& newSize);
-    Size<int> getSize() const;
-    Size<int> getContentSize() const;
-    int getWidth() const;
-    int getHeight() const;
+    virtual void setSize (const Size<float>& newSize);
+    Size<float> getSize() const;
+    Size<float> getContentSize() const;
+    float getWidth() const;
+    float getHeight() const;
 
-    virtual void setBounds (const Rectangle<int>& newBounds);
-    Rectangle<int> getBounds() const;
-    Rectangle<int> getLocalBounds() const;
+    virtual void setBounds (const Rectangle<float>& newBounds);
+    Rectangle<float> getBounds() const;
+    Rectangle<float> getLocalBounds() const;
 
-    int proportionOfWidth (float proportion) const;
-    int proportionOfHeight (float proportion) const;
+    float proportionOfWidth (float proportion) const;
+    float proportionOfHeight (float proportion) const;
 
     virtual void resized();
 
