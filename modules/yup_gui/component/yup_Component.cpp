@@ -422,20 +422,25 @@ void Component::internalPaint (Graphics& g, float frameRate)
     if (! isVisible())
         return;
 
+    const auto state = g.saveState();
+
+    g.setOpacity (static_cast<uint8> (getOpacity() * 255));
     g.setDrawingArea (getBounds().to<float>());
+
     paint (g, frameRate);
 
     for (auto child : children)
     {
-        if (child->isVisible())
-        {
-            g.setDrawingArea (child->getBounds().to<float>());
+        if (! child->isVisible())
+            continue;
 
-            child->internalPaint (g, frameRate);
-        }
+        const auto state = g.saveState();
+
+        g.setDrawingArea (child->getBounds().to<float>());
+
+        child->internalPaint (g, frameRate);
     }
 
-    g.setDrawingArea (getBounds().to<float>());
     paintOverChildren (g, frameRate);
 }
 

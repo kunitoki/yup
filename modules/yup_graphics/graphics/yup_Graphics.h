@@ -115,7 +115,7 @@ private:
 
         Color getColor() const noexcept
         {
-            return color;
+            return color.withAlpha (alpha);
         }
 
         bool isColorGradient() const noexcept
@@ -125,7 +125,7 @@ private:
 
         ColorGradient getColorGradient() const noexcept
         {
-            return gradient;
+            return gradient.withAlpha (alpha);
         }
 
         float translateX (float x) const noexcept
@@ -140,6 +140,7 @@ private:
 
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
+        uint8 alpha = 255;
         Color color = 0xff000000;
         ColorGradient gradient;
         Rectangle<float> drawingArea;

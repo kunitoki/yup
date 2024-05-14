@@ -111,7 +111,7 @@ public:
         finish.color = finish.color.withAlpha (alpha);
     }
 
-    ColorGradient withAlpha (uint8 alpha)
+    ColorGradient withAlpha (uint8 alpha) const
     {
         ColorGradient result (*this);
         result.setAlpha (alpha);

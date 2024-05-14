@@ -215,13 +215,12 @@ ColorGradient Graphics::getColorGradient() const
 
 void Graphics::setOpacity (uint8 opacity)
 {
-    currentRenderOptions().color.setAlpha (opacity);
-    currentRenderOptions().gradient.setAlpha (opacity);
+    currentRenderOptions().alpha = opacity;
 }
 
 uint8 Graphics::getOpacity() const
 {
-    return currentRenderOptions().color.getAlpha();
+    return currentRenderOptions().alpha;
 }
 
 void Graphics::setStrokeJoin (StrokeJoin join)

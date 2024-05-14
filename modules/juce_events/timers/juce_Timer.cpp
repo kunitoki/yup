@@ -100,7 +100,8 @@ public:
 
     void callTimers()
     {
-        auto timeout = Time::getMillisecondCounter() + 100;
+        auto now = Time::getMillisecondCounter();
+        auto timeout = now + 100;
 
        #if JUCE_WASM
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
