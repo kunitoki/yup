@@ -483,9 +483,8 @@ void GLFWComponentNative::setSize (const Size<int>& size)
     jassert (window != nullptr);
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-    glfwSetWindowSize (window, size.getWidth() * 2, size.getHeight() * 2);
-
-    //emscripten_set_canvas_element_size ("#canvas", size.getWidth(), size.getHeight());
+    double devicePixelRatio = emscripten_get_device_pixel_ratio();
+    glfwSetWindowSize (window, static_cast<int> (size.getWidth() * devicePixelRatio), static_cast<int> (size.getHeight() * devicePixelRatio));
 
     EM_ASM (
     {
@@ -543,15 +542,12 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
     glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-    glfwSetWindowSize (window, newBounds.getWidth() * 2, newBounds.getHeight() * 2);
+    const double devicePixelRatio = emscripten_get_device_pixel_ratio();
+    glfwSetWindowSize (window,
+        static_cast<int> (newBounds.getWidth() * devicePixelRatio),
+        static_cast<int> (newBounds.getHeight() * devicePixelRatio));
 
-    //emscripten_set_canvas_element_size ("#canvas", newBounds.getWidth(), newBounds.getHeight());
-
-    EM_ASM (
-    {
-        var canvas = document.getElementById("canvas");
-        canvas.style = "width:" + $0 + "px;height:" + $1 + "px;";
-    }, newBounds.getWidth(), newBounds.getHeight());
+    emscripten_set_element_css_size("#canvas", newBounds.getWidth(), newBounds.getHeight());
 
    #else
     glfwSetWindowSize (window, newBounds.getWidth(), newBounds.getHeight());
@@ -1156,7 +1152,9 @@ void Desktop::updateDisplays()
             continue;
 
         auto display = std::make_unique<Display>();
+       #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
         glfwSetMonitorUserPointer (monitor, display.get());
+       #endif
 
         int physicalWidth = 0, physicalHeight = 0;
         glfwGetMonitorPhysicalSize (monitor, &physicalWidth, &physicalHeight);

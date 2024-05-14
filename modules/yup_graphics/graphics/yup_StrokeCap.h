@@ -23,11 +23,17 @@ namespace yup
 {
 
 //==============================================================================
+/**
+ * @brief Defines types of stroke caps used in graphical contexts.
+ *
+ * This enumeration specifies the style of caps that could be applied to the ends of lines in a graphical drawing context.
+ * Each cap style provides a different appearance for the ends of lines.
+ */
 enum class StrokeCap : unsigned int
 {
-    Butt = 0,
-    Round = 1,
-    Square = 2
+    Butt = 0,   ///< A butt cap displays the end of the line exactly at the end point with no extension.
+    Round = 1,  ///< A round cap extends the line with a half-circle that is centered at the end point of the line.
+    Square = 2  ///< A square cap extends the line by adding a square outline that projects beyond the end point.
 };
 
 } // namespace yup
