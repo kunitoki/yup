@@ -40,14 +40,17 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
     if (auto display = desktop->getPrimaryDisplay())
     {
-        auto posX = jmax (0.0f, static_cast<float> (display->workArea.getWidth() - size.getWidth()) / 2);
-        auto posY = jmax (0.0f, static_cast<float> (display->workArea.getHeight() - size.getHeight()) / 2);
-        auto width = static_cast<float> (size.getWidth());
-        auto height = static_cast<float> (size.getHeight());
+        auto bounds = Rectangle<float>
+        {
+            jmax (0.0f, static_cast<float> (display->workArea.getWidth() - size.getWidth()) / 2),
+            jmax (0.0f, static_cast<float> (display->workArea.getHeight() - size.getHeight()) / 2),
+            static_cast<float> (size.getWidth()),
+            static_cast<float> (size.getHeight())
+        };
 
         // TODO - take into account the frame and taskbar
 
-        setBounds ({ posX, posY, width, height });
+        setBounds (bounds);
     }
     else
     {
