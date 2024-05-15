@@ -109,9 +109,9 @@ public:
                                 bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
                                 fromRadians, toRadians, true);
 
-            g.setStrokeCap (yup::StrokeCap::Butt);
+            g.setStrokeCap (yup::StrokeCap::Round);
             g.setColor (yup::Color (0xff636363));
-            g.drawPath (arc, proportionOfWidth (0.1f));
+            g.drawPath (arc, proportionOfWidth (0.075f));
         }
 
         {
@@ -122,7 +122,7 @@ public:
 
             g.setStrokeCap (yup::StrokeCap::Round);
             g.setColor (isInside ? yup::Color (0xff4ebfff).brighter (0.3f) : yup::Color (0xff4ebfff));
-            g.drawPath (arc, proportionOfWidth (0.1f));
+            g.drawPath (arc, proportionOfWidth (0.075f));
         }
 
         {
