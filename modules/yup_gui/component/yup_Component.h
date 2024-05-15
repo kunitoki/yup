@@ -30,24 +30,26 @@ public:
     //==============================================================================
     Component();
     Component (StringRef componentID);
-
     virtual ~Component();
 
     //==============================================================================
-    virtual void setVisible (bool shouldBeVisible);
-    bool isVisible() const;
+    bool isEnabled() const;
+    virtual void setEnabled (bool shouldBeEnabled);
+    virtual void enablementChanged();
 
+    //==============================================================================
+    bool isVisible() const;
+    virtual void setVisible (bool shouldBeVisible);
     virtual void visibilityChanged();
 
     //==============================================================================
-    virtual void setTitle (const String& title);
     String getTitle() const;
+    virtual void setTitle (const String& title);
 
     //==============================================================================
     Point<float> getPosition() const;
     float getX() const;
     float getY() const;
-
     virtual void moved();
 
     //==============================================================================
@@ -56,14 +58,11 @@ public:
     Size<float> getContentSize() const;
     float getWidth() const;
     float getHeight() const;
-
     virtual void setBounds (const Rectangle<float>& newBounds);
     Rectangle<float> getBounds() const;
     Rectangle<float> getLocalBounds() const;
-
     float proportionOfWidth (float proportion) const;
     float proportionOfHeight (float proportion) const;
-
     virtual void resized();
 
     //==============================================================================
@@ -74,8 +73,8 @@ public:
     float getScaleDpi() const;
 
     //==============================================================================
-    virtual void setOpacity (float opacity);
     float getOpacity() const;
+    virtual void setOpacity (float opacity);
 
     //==============================================================================
     virtual void enableRenderingUnclipped (bool shouldBeEnabled);
@@ -89,9 +88,9 @@ public:
     const ComponentNative* getNativeComponent() const;
 
     //==============================================================================
-    void addToDesktop (bool continuousRepaint, std::optional<float> framerateRedraw = std::nullopt);
+    bool isOnDesktop() const;
+    void addToDesktop (ComponentNative::Flags flags, std::optional<float> framerateRedraw = std::nullopt);
     void removeFromDesktop();
-    bool isOnDesktop() const noexcept;
 
     virtual void userTriedToCloseWindow();
 
@@ -187,6 +186,7 @@ private:
     struct Options
     {
         bool isVisible          : 1;
+        bool isDisabled         : 1;
         bool hasFrame           : 1;
         bool onDesktop          : 1;
         bool isFullScreen       : 1;

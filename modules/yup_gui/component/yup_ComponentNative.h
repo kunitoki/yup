@@ -27,9 +27,20 @@ class Component;
 //==============================================================================
 class JUCE_API ComponentNative
 {
+    struct decoratedWindowTag;
+    struct renderContinuousTag;
+
 public:
     //==============================================================================
-    ComponentNative (Component& newComponent);
+    using Flags = FlagSet<uint32, decoratedWindowTag, renderContinuousTag>;
+
+    static inline constexpr Flags noFlags = Flags();
+    static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
+    static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
+    static inline constexpr Flags defaultFlags = decoratedWindow | renderContinuous;
+
+    //==============================================================================
+    ComponentNative (Component& newComponent, const Flags& newFlags);
     virtual ~ComponentNative();
 
     //==============================================================================
@@ -54,6 +65,9 @@ public:
     //==============================================================================
     virtual void setFullScreen (bool shouldBeFullScreen) = 0;
     virtual bool isFullScreen() const = 0;
+
+    //==============================================================================
+    virtual bool isDecorated() const = 0;
 
     //==============================================================================
     virtual void setOpacity (float opacity) = 0;
@@ -85,11 +99,12 @@ public:
 
     //==============================================================================
     static std::unique_ptr<ComponentNative> createFor (Component& component,
-                                                       bool continuousRepaint,
+                                                       const Flags& flags,
                                                        std::optional<float> framerateRedraw);
 
 protected:
     Component& component;
+    Flags flags;
 
 private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)

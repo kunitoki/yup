@@ -24,30 +24,18 @@ namespace yup
 
 //==============================================================================
 
-void yup_glfwWindowClose (GLFWwindow* window);
-void yup_glfwWindowPos (GLFWwindow* window, int xpos, int ypos);
-void yup_glfwWindowSize (GLFWwindow* window, int width, int height);
-void yup_glfwWindowFocus (GLFWwindow* window, int focused);
-void yup_glfwMouseMove (GLFWwindow* window, double x, double y);
-void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods);
-void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset);
-void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
-
-//==============================================================================
-
-MouseEvent::Buttons toMouseButton (int buttons) noexcept
+MouseEvent::Buttons toMouseButton (int button) noexcept
 {
-    return static_cast<MouseEvent::Buttons> (buttons + 1);
-}
+    if (button == GLFW_MOUSE_BUTTON_LEFT)
+        return MouseEvent::Buttons::leftButton;
 
-MouseEvent toMouseEvent (int buttons, int modifiers, double x, double y) noexcept
-{
-    return { toMouseButton (buttons), modifiers, { static_cast<float> (x), static_cast<float> (y) } };
-}
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT)
+        return MouseEvent::Buttons::rightButton;
 
-MouseEvent toMouseEvent (int buttons, int modifiers, const Point<float>& p) noexcept
-{
-    return { toMouseButton (buttons), modifiers, p };
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
+        return MouseEvent::Buttons::middleButton;
+
+    return MouseEvent::Buttons::noButtons;
 }
 
 //==============================================================================
@@ -225,7 +213,7 @@ class GLFWComponentNative final
 public:
     //==============================================================================
 
-    GLFWComponentNative (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw);
+    GLFWComponentNative (Component& component, const Flags& flags, std::optional<float> framerateRedraw);
     ~GLFWComponentNative() override;
 
     //==============================================================================
@@ -254,6 +242,10 @@ public:
 
     void setFullScreen (bool shouldBeFullScreen) override;
     bool isFullScreen() const override;
+
+    //==============================================================================
+
+    bool isDecorated() const override;
 
     //==============================================================================
     bool isContinuousRepaintingEnabled() const override;
@@ -308,6 +300,16 @@ public:
     //==============================================================================
     Point<float> getScaledCursorPosition() const;
 
+    //==============================================================================
+    static void glfwWindowClose (GLFWwindow* window);
+    static void glfwWindowPos (GLFWwindow* window, int xpos, int ypos);
+    static void glfwWindowSize (GLFWwindow* window, int width, int height);
+    static void glfwWindowFocus (GLFWwindow* window, int focused);
+    static void glfwMouseMove (GLFWwindow* window, double x, double y);
+    static void glfwMousePress (GLFWwindow* window, int button, int action, int mods);
+    static void glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset);
+    static void glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
+
 private:
     void updateComponentUnderMouse (const MouseEvent& event);
     void triggerRenderingUpdate();
@@ -328,20 +330,21 @@ private:
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
 
+    int keyState[GLFW_KEY_LAST] = {};
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
     KeyModifiers currentKeyModifiers;
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
 
-    int currentWidth = 0;
-    int currentHeight = 0;
+    int currentContentWidth = 0;
+    int currentContentHeight = 0;
 
     WaitableEvent renderEvent { true };
     WaitableEvent commandEvent;
+    std::atomic<bool> shouldRenderContinuous = false;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
-    std::atomic<bool> renderContinuous = false;
 
    #if JUCE_MAC
     id<MTLDevice> gpu = nil;
@@ -352,12 +355,12 @@ private:
 
 //==============================================================================
 
-GLFWComponentNative::GLFWComponentNative (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw)
-    : ComponentNative (component)
+GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& flags, std::optional<float> framerateRedraw)
+    : ComponentNative (component, flags)
     , Thread ("YUP Render Thread")
     , screenBounds (component.getBounds().to<int>())
     , desiredFrameRate (framerateRedraw.value_or (60.0f))
-    , renderContinuous (continuousRepaint)
+    , shouldRenderContinuous (flags.test (renderContinuous))
 {
    #if JUCE_MAC
     gpu = MTLCreateSystemDefaultDevice();
@@ -368,7 +371,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component, bool continuousR
    #endif
 
     glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
-    //glfwWindowHint (GLFW_DECORATED, GLFW_FALSE);
+    glfwWindowHint (GLFW_DECORATED, flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
 
     auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
 
@@ -397,14 +400,14 @@ GLFWComponentNative::GLFWComponentNative (Component& component, bool continuousR
 
     glfwSetWindowUserPointer (window, this);
 
-    glfwSetWindowCloseCallback (window, yup_glfwWindowClose);
-    glfwSetWindowSizeCallback (window, yup_glfwWindowSize);
-    glfwSetWindowPosCallback (window, yup_glfwWindowPos);
-    glfwSetWindowFocusCallback (window, yup_glfwWindowFocus);
-    glfwSetCursorPosCallback (window, yup_glfwMouseMove);
-    glfwSetMouseButtonCallback (window, yup_glfwMousePress);
-    glfwSetScrollCallback (window, yup_glfwMouseScroll);
-    glfwSetKeyCallback (window, yup_glfwKeyPress);
+    glfwSetWindowCloseCallback (window, glfwWindowClose);
+    glfwSetWindowSizeCallback (window, glfwWindowSize);
+    glfwSetWindowPosCallback (window, glfwWindowPos);
+    glfwSetWindowFocusCallback (window, glfwWindowFocus);
+    glfwSetCursorPosCallback (window, glfwMouseMove);
+    glfwSetMouseButtonCallback (window, glfwMousePress);
+    glfwSetScrollCallback (window, glfwMouseScroll);
+    glfwSetKeyCallback (window, glfwKeyPress);
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     startTimerHz (desiredFrameRate);
@@ -550,7 +553,7 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
     emscripten_set_element_css_size("#canvas", newBounds.getWidth(), newBounds.getHeight());
 
    #else
-    if (! isFullScreen() && glfwGetWindowAttrib (window, GLFW_DECORATED) != 0)
+    if (! isFullScreen() && isDecorated())
         glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
     glfwSetWindowSize (window,
@@ -606,6 +609,13 @@ bool GLFWComponentNative::isFullScreen() const
 
 //==============================================================================
 
+bool GLFWComponentNative::isDecorated() const
+{
+    return window != nullptr && glfwGetWindowAttrib (window, GLFW_DECORATED) != 0;
+}
+
+//==============================================================================
+
 void GLFWComponentNative::setOpacity (float opacity)
 {
     jassert (window != nullptr);
@@ -638,12 +648,12 @@ Component* GLFWComponentNative::getFocusedComponent() const
 
 bool GLFWComponentNative::isContinuousRepaintingEnabled() const
 {
-    return renderContinuous;
+    return shouldRenderContinuous;
 }
 
 void GLFWComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
 {
-    renderContinuous = shouldBeEnabled;
+    shouldRenderContinuous = shouldBeEnabled;
 }
 
 bool GLFWComponentNative::isAtomicModeEnabled() const
@@ -744,7 +754,7 @@ void GLFWComponentNative::run()
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
         // Wait for a stable frame time
-        if (renderContinuous)
+        if (shouldRenderContinuous)
         {
             const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
             if (secondsToWait > 0.0f)
@@ -769,7 +779,7 @@ void GLFWComponentNative::run()
         const double timeSinceFpsMeasure = currentTimeSeconds - fpsMeasureStartTimeSeconds;
         if (timeSinceFpsMeasure >= 1.0)
         {
-            double currentFps = frameCounter / timeSinceFpsMeasure;
+            const double currentFps = static_cast<double> (frameCounter) / timeSinceFpsMeasure;
             currentFrameRate.store (currentFps, std::memory_order_relaxed);
 
             fpsMeasureStartTimeSeconds = currentTimeSeconds;
@@ -797,15 +807,15 @@ void GLFWComponentNative::timerCallback()
 
 void GLFWComponentNative::renderContext()
 {
-    auto [width, height] = getContentSize();
+    auto [contentWidth, contentHeight] = getContentSize();
 
-    if (currentWidth != width || currentHeight != height)
+    if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
-        currentWidth = width;
-        currentHeight = height;
+        currentContentWidth = contentWidth;
+        currentContentHeight = contentHeight;
 
-        context->onSizeChanged (getNativeHandle(), width, height, 0);
-        renderer = context->makeRenderer (width, height);
+        context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
+        renderer = context->makeRenderer (contentWidth, contentHeight);
     }
 
     jassert (context != nullptr);
@@ -813,8 +823,8 @@ void GLFWComponentNative::renderContext()
 
     context->begin (
     {
-        .renderTargetWidth = static_cast<uint32_t> (width),
-        .renderTargetHeight = static_cast<uint32_t> (height),
+        .renderTargetWidth = static_cast<uint32_t> (contentWidth),
+        .renderTargetHeight = static_cast<uint32_t> (contentHeight),
         .clearColor = 0xff404040,
         .msaaSampleCount = 0,
         .disableRasterOrdering = renderAtomicMode,
@@ -835,7 +845,7 @@ void GLFWComponentNative::renderContext()
 
 void GLFWComponentNative::triggerRenderingUpdate()
 {
-    if (renderContinuous)
+    if (shouldRenderContinuous)
         return;
 
     commandEvent.signal();
@@ -892,15 +902,13 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     if (lastComponentClicked == nullptr)
     {
         if (auto child = component.findComponentAt (localPosition))
-        {
             lastComponentClicked = child;
-
-            DBG ("handleMouseDown: " << lastComponentClicked->getTitle());
-        }
     }
 
     if (lastComponentClicked != nullptr)
     {
+        //DBG ("handleMouseDown: " << lastComponentClicked->getTitle());
+
         lastMouseDownPosition = localPosition;
 
         lastComponentClicked->internalMouseDown (event
@@ -926,7 +934,7 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
 
     if (lastComponentClicked != nullptr)
     {
-        DBG ("handleMouseUp: " << lastComponentClicked->getTitle());
+        //DBG ("handleMouseUp: " << lastComponentClicked->getTitle());
 
         lastComponentClicked->internalMouseUp (event
             .withSourceComponent (lastComponentClicked)
@@ -957,13 +965,13 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 
     if (lastComponentClicked != nullptr)
     {
-        DBG ("handleMouseWheel: " << lastComponentClicked->getTitle());
+        //DBG ("handleMouseWheel: " << lastComponentClicked->getTitle());
 
         lastComponentClicked->internalMouseWheel (event, wheelData);
     }
     else if (lastComponentFocused != nullptr)
     {
-        DBG ("handleMouseWheel: " << lastComponentFocused->getTitle());
+        //DBG ("handleMouseWheel: " << lastComponentFocused->getTitle());
 
         lastComponentFocused->internalMouseWheel (event, wheelData);
     }
@@ -976,6 +984,7 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
 {
     currentKeyModifiers = keys.getModifiers();
+    keyState[keys.getKey()] = 1;
 
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalKeyDown (keys, cursorPosition);
@@ -988,6 +997,7 @@ void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
 void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
 {
     currentKeyModifiers = keys.getModifiers();
+    keyState[keys.getKey()] = 0;
 
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalKeyUp (keys, cursorPosition);
@@ -1023,7 +1033,7 @@ void GLFWComponentNative::handleResized (int width, int height)
 
 void GLFWComponentNative::handleFocusChanged (bool gotFocus)
 {
-    DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
+    //DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
 
     triggerRenderingUpdate();
 }
@@ -1063,42 +1073,42 @@ void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 
 //==============================================================================
 
-std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, bool continuousRepaint, std::optional<float> framerateRedraw)
+std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, const Flags& flags, std::optional<float> framerateRedraw)
 {
-    return std::make_unique<GLFWComponentNative> (component, continuousRepaint, framerateRedraw);
+    return std::make_unique<GLFWComponentNative> (component, flags, framerateRedraw);
 }
 
 //==============================================================================
 
-void yup_glfwWindowClose (GLFWwindow* window)
+void GLFWComponentNative::glfwWindowClose (GLFWwindow* window)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     nativeComponent->handleUserTriedToCloseWindow();
 }
 
-void yup_glfwWindowPos (GLFWwindow* window, int xpos, int ypos)
+void GLFWComponentNative::glfwWindowPos (GLFWwindow* window, int xpos, int ypos)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     nativeComponent->handleMoved (xpos, ypos);
 }
 
-void yup_glfwWindowSize (GLFWwindow* window, int width, int height)
+void GLFWComponentNative::glfwWindowSize (GLFWwindow* window, int width, int height)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     nativeComponent->handleResized (width, height);
 }
 
-void yup_glfwWindowFocus (GLFWwindow* window, int focused)
+void GLFWComponentNative::glfwWindowFocus (GLFWwindow* window, int focused)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
     nativeComponent->handleFocusChanged (focused != 0);
 }
 
-void yup_glfwMouseMove (GLFWwindow* window, double x, double y)
+void GLFWComponentNative::glfwMouseMove (GLFWwindow* window, double x, double y)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
@@ -1109,7 +1119,7 @@ void yup_glfwMouseMove (GLFWwindow* window, double x, double y)
     nativeComponent->handleMouseMoveOrDrag ({ static_cast<float> (x), static_cast<float> (y) });
 }
 
-void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
+void GLFWComponentNative::glfwMousePress (GLFWwindow* window, int button, int action, int mods)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
@@ -1121,7 +1131,7 @@ void yup_glfwMousePress (GLFWwindow* window, int button, int action, int mods)
         nativeComponent->handleMouseUp (cursorPosition, toMouseButton (button), toKeyModifiers (mods));
 }
 
-void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
+void GLFWComponentNative::glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
@@ -1130,7 +1140,7 @@ void yup_glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
     nativeComponent->handleMouseWheel (cursorPosition, { static_cast<float> (xoffset), static_cast<float> (yoffset) });
 }
 
-void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
+void GLFWComponentNative::glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
@@ -1149,20 +1159,6 @@ void yup_glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, in
 }
 
 //==============================================================================
-
-void yup_glfwMonitorCallback (GLFWmonitor* monitor, int event)
-{
-    auto desktop = Desktop::getInstance();
-
-    if (event == GLFW_CONNECTED)
-    {
-    }
-    else if (event == GLFW_DISCONNECTED)
-    {
-    }
-
-    desktop->updateDisplays();
-}
 
 void Desktop::updateDisplays()
 {
@@ -1216,14 +1212,12 @@ void Desktop::updateDisplays()
 
 //==============================================================================
 
-void yup_glfwErrorCallback (int code, const char* message)
-{
-    DBG ("GLFW Error: " << code << " - " << message);
-}
-
 void YUPApplication::staticInitialisation()
 {
-    glfwSetErrorCallback (yup_glfwErrorCallback);
+    glfwSetErrorCallback (+[](int code, const char* message)
+    {
+        DBG ("GLFW Error: " << code << " - " << message);
+    });
 
     glfwInit();
 
@@ -1244,7 +1238,15 @@ void YUPApplication::staticInitialisation()
 
     Desktop::getInstance()->updateDisplays();
 
-    glfwSetMonitorCallback (yup_glfwMonitorCallback);
+    glfwSetMonitorCallback (+[](GLFWmonitor* monitor, int event)
+    {
+        auto desktop = Desktop::getInstance();
+
+        if (event == GLFW_CONNECTED) {}
+        else if (event == GLFW_DISCONNECTED) {}
+
+        desktop->updateDisplays();
+    });
 }
 
 void YUPApplication::staticFinalisation()

@@ -38,15 +38,15 @@ namespace juce
 
     @code
 
-    namespace Detail {
+    namespace detail {
     struct verboseLog;
     struct noErrorLog;
-    } // namespace Detail
+    }
 
-    using LogOption = FlagSet<uint32, Detail::verboseLog, Detail::noErrorLog>;
+    using LogOption = FlagSet<uint32, detail::verboseLog, detail::noErrorLog>;
     static inline constexpr LogOption defaultLog = LogOption();
-    static inline constexpr LogOption verboseLog = LogOption::declareValue<Detail::verboseLog>();
-    static inline constexpr LogOption noErrorLog = LogOption::declareValue<Detail::noErrorLog>();
+    static inline constexpr LogOption verboseLog = LogOption::declareValue<detail::verboseLog>();
+    static inline constexpr LogOption noErrorLog = LogOption::declareValue<detail::noErrorLog>();
 
     LogOption option = verboseLog | noErrorLog;
     if (option.test (verboseLog))

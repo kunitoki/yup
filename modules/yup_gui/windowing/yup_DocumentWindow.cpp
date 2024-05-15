@@ -26,7 +26,7 @@ namespace yup
 
 DocumentWindow::DocumentWindow()
 {
-    addToDesktop (true);
+    addToDesktop (ComponentNative::defaultFlags);
 }
 
 DocumentWindow::~DocumentWindow()

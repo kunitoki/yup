@@ -47,6 +47,35 @@ Component::~Component()
 
 //==============================================================================
 
+bool Component::isEnabled() const
+{
+    return !options.isDisabled;
+}
+
+void Component::setEnabled (bool shouldBeEnabled)
+{
+    if (options.isDisabled != !shouldBeEnabled)
+    {
+        options.isDisabled = !shouldBeEnabled;
+
+        //if (native != nullptr)
+        //    native->setEnabled (shouldBeEnabled);
+
+        enablementChanged();
+    }
+}
+
+void Component::enablementChanged()
+{
+}
+
+//==============================================================================
+
+bool Component::isVisible() const
+{
+    return options.isVisible;
+}
+
 void Component::setVisible (bool shouldBeVisible)
 {
     if (options.isVisible != shouldBeVisible)
@@ -60,16 +89,16 @@ void Component::setVisible (bool shouldBeVisible)
     }
 }
 
-bool Component::isVisible() const
-{
-    return options.isVisible;
-}
-
 void Component::visibilityChanged()
 {
 }
 
 //==============================================================================
+
+String Component::getTitle() const
+{
+    return componentTitle;
+}
 
 void Component::setTitle (const String& title)
 {
@@ -77,11 +106,6 @@ void Component::setTitle (const String& title)
 
     if (options.onDesktop)
         native->setTitle (title);
-}
-
-String Component::getTitle() const
-{
-    return componentTitle;
 }
 
 //==============================================================================
@@ -191,6 +215,11 @@ void Component::resized()
 
 //==============================================================================
 
+bool Component::isFullScreen() const
+{
+    return options.isFullScreen;
+}
+
 void Component::setFullScreen (bool shouldBeFullScreen)
 {
     if (options.isFullScreen != shouldBeFullScreen)
@@ -200,11 +229,6 @@ void Component::setFullScreen (bool shouldBeFullScreen)
         if (options.onDesktop)
             native->setFullScreen (shouldBeFullScreen);
     }
-}
-
-bool Component::isFullScreen() const
-{
-    return options.isFullScreen;
 }
 
 //==============================================================================
@@ -285,7 +309,12 @@ const ComponentNative* Component::getNativeComponent() const
 
 //==============================================================================
 
-void Component::addToDesktop (bool continuousRepaint, std::optional<float> framerateRedraw)
+bool Component::isOnDesktop() const
+{
+    return options.onDesktop;
+}
+
+void Component::addToDesktop (ComponentNative::Flags flags, std::optional<float> framerateRedraw)
 {
     if (options.onDesktop)
         return;
@@ -298,7 +327,7 @@ void Component::addToDesktop (bool continuousRepaint, std::optional<float> frame
 
     options.onDesktop = true;
 
-    native = ComponentNative::createFor (*this, continuousRepaint, framerateRedraw);
+    native = ComponentNative::createFor (*this, flags, framerateRedraw);
 }
 
 void Component::removeFromDesktop()
@@ -309,11 +338,6 @@ void Component::removeFromDesktop()
     options.onDesktop = false;
 
     native.reset();
-}
-
-bool Component::isOnDesktop() const noexcept
-{
-    return options.onDesktop;
 }
 
 //==============================================================================

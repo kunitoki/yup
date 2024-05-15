@@ -24,12 +24,13 @@ namespace yup
 
 //==============================================================================
 
-ComponentNative::ComponentNative (Component& newComponent)
+ComponentNative::ComponentNative (Component& newComponent, const Flags& newFlags)
     : component (newComponent)
+    , flags (newFlags)
 {
 }
 
-ComponentNative::~ComponentNative ()
+ComponentNative::~ComponentNative()
 {
 }
 

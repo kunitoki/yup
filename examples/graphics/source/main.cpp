@@ -63,7 +63,9 @@ public:
     {
         //auto [x, y] = event.getPosition();
 
-        const float multiplier = event.getModifiers().isShiftDown() ? 0.0001f : 0.0025f;
+        const float multiplier =
+            (event.getModifiers().isShiftDown() || event.isRightButtonDown()) ? 0.0001f : 0.0025f;
+
         const float distance = -origin.verticalDistanceTo (event.getPosition()) * multiplier;
 
         origin = event.getPosition();
@@ -88,13 +90,13 @@ public:
         auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
 
         yup::Path path;
-        path.addEllipse (bounds.reduced (proportionOfWidth (0.1f)));
+        path.addEllipse (bounds.reduced (proportionOfWidth (0.045f)));
 
         g.setColor (yup::Color (0xff3d3d3d));
         g.fillPath (path);
 
         g.setColor (yup::Color (0xff2b2b2b));
-        g.drawPath (path, proportionOfWidth (0.015f));
+        g.drawPath (path, proportionOfWidth (0.0175f));
 
         const auto fromRadians = yup::degreesToRadians(135.0f);
         const auto toRadians = fromRadians + yup::degreesToRadians(270.0f);
@@ -139,6 +141,12 @@ public:
             g.setStrokeCap (yup::StrokeCap::Round);
             g.setColor (yup::Color (0xffffffff));
             g.drawPath (arc, proportionOfWidth (0.04f));
+        }
+
+        if (hasFocus())
+        {
+            g.setColor (yup::Color (0xffff5f2b));
+            g.drawRect (getLocalBounds(), proportionOfWidth (0.0175f));
         }
     }
 
@@ -211,12 +219,13 @@ public:
         for (size_t i = 1; i < renderData.size(); ++i)
             path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
-        g.setColor (0xff004bff);
+        g.setColor (0xff4b4bff);
         g.drawPath (path, 5.0f);
     }
 
-    void mouseEnter (const yup::MouseEvent& event) override
+    void mouseDown (const yup::MouseEvent& event) override
     {
+        takeFocus();
     }
 
     void mouseExit (const yup::MouseEvent& event) override
@@ -227,6 +236,10 @@ public:
     {
         switch (keys.getKey())
         {
+        case yup::KeyPress::textQKey:
+            std::cout << 'a';
+            break;
+
         case yup::KeyPress::escapeKey:
             userTriedToCloseWindow();
             break;
