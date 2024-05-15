@@ -86,6 +86,7 @@ public:
 
     //==============================================================================
     ComponentNative* getNativeComponent();
+    const ComponentNative* getNativeComponent() const;
 
     //==============================================================================
     void addToDesktop (bool continuousRepaint, std::optional<float> framerateRedraw = std::nullopt);
@@ -137,6 +138,7 @@ public:
     //==============================================================================
     void takeFocus();
     void leaveFocus();
+    bool hasFocus() const;
 
     //==============================================================================
     virtual void paint (Graphics& g, float frameRate);

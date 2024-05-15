@@ -272,6 +272,17 @@ ComponentNative* Component::getNativeComponent()
     return parentComponent->getNativeComponent();
 }
 
+const ComponentNative* Component::getNativeComponent() const
+{
+    if (native != nullptr)
+        return native.get();
+
+    if (parentComponent == nullptr)
+        return nullptr;
+
+    return parentComponent->getNativeComponent();
+}
+
 //==============================================================================
 
 void Component::addToDesktop (bool continuousRepaint, std::optional<float> framerateRedraw)
@@ -424,6 +435,11 @@ void Component::takeFocus()
 void Component::leaveFocus()
 {
     getNativeComponent()->setFocusedComponent (nullptr);
+}
+
+bool Component::hasFocus() const
+{
+    return getNativeComponent()->getFocusedComponent() == this;
 }
 
 //==============================================================================
