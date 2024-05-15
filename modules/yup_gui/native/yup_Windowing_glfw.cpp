@@ -320,6 +320,7 @@ private:
     std::unique_ptr<rive::Renderer> renderer;
 
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
+    Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
     Point<float> lastMouseDownPosition = { -1.0f, -1.0f };
 
@@ -538,7 +539,7 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 {
     jassert (window != nullptr);
 
-    glfwSetWindowPos (window, newBounds.getX(), newBounds.getY());
+    int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     const double devicePixelRatio = emscripten_get_device_pixel_ratio();
@@ -549,11 +550,18 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
     emscripten_set_element_css_size("#canvas", newBounds.getWidth(), newBounds.getHeight());
 
    #else
-    glfwSetWindowSize (window, newBounds.getWidth(), newBounds.getHeight());
+    if (! isFullScreen() && glfwGetWindowAttrib (window, GLFW_DECORATED) != 0)
+        glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
+
+    glfwSetWindowSize (window,
+        newBounds.getWidth() - leftMargin - rightMargin,
+        newBounds.getHeight() - topMargin - bottomMargin);
 
    #endif
 
-   screenBounds = newBounds * getScaleDpi();
+    glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
+
+    screenBounds = newBounds * getScaleDpi();
 }
 
 //==============================================================================
@@ -564,6 +572,8 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
 
     if (shouldBeFullScreen)
     {
+        lastScreenBounds = screenBounds / getScaleDpi();
+
         auto monitor = glfwGetPrimaryMonitor();
         const GLFWvidmode* mode = glfwGetVideoMode (monitor);
 
@@ -584,6 +594,8 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
                               component.getWidth(),
                               component.getHeight(),
                               GLFW_DONT_CARE);
+
+        setBounds (lastScreenBounds);
     }
 }
 
