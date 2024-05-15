@@ -23,12 +23,11 @@ namespace yup
 {
 
 //==============================================================================
-/**
- * @brief Defines types of stroke joins used in graphical contexts.
- *
- * This enumeration specifies the style of joins that could be applied where two lines meet in a graphical drawing context.
- * Each join type affects how the corner is shaped.
- */
+/** Defines types of stroke joins used in graphical contexts.
+
+    This enumeration specifies the style of joins that could be applied where two lines meet in a graphical drawing context.
+    Each join type affects how the corner is shaped.
+*/
 enum class StrokeJoin : unsigned int
 {
     Miter = 0, ///< A miter join creates a sharp corner or a clipped corner if the join angle is too sharp.

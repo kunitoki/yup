@@ -23,45 +23,41 @@ namespace yup
 {
 
 //==============================================================================
-/**
- * @brief Represents an RGBA color for graphical use.
- *
- * This class encapsulates color information in RGBA format, where each component (red, green, blue, alpha)
- * is represented as an 8-bit value. It provides methods for adjusting color components individually,
- * converting to and from HSL (Hue, Saturation, Luminance), and for performing operations like brightening,
- * darkening, and contrasting.
- */
+/** Represents an RGBA color for graphical use.
+
+    This class encapsulates color information in RGBA format, where each component (red, green, blue, alpha)
+    is represented as an 8-bit value. It provides methods for adjusting color components individually,
+    converting to and from HSL (Hue, Saturation, Luminance), and for performing operations like brightening,
+    darkening, and contrasting.
+*/
 class JUCE_API Color
 {
 public:
     //==============================================================================
-    /**
-     * @brief Default constructor, initializes the color to transparent black.
-     *
-     * Creates a color with all components set to zero, which is fully transparent black.
-     */
+    /** Default constructor, initializes the color to transparent black.
+
+        Creates a color with all components set to zero, which is fully transparent black.
+    */
     constexpr Color() noexcept = default;
 
-    /**
-     * @brief Constructs a color from a 32-bit integer.
-     *
-     * This constructor initializes the color from a 32-bit integer, assuming a format
-     * where the highest byte is alpha, followed by red, green, and blue.
-     *
-     * @param color The 32-bit integer representing the color.
-     */
+    /** Constructs a color from a 32-bit integer.
+
+        This constructor initializes the color from a 32-bit integer, assuming a format
+        where the highest byte is alpha, followed by red, green, and blue.
+
+        @param color The 32-bit integer representing the color.
+    */
     constexpr Color (uint32 color) noexcept
         : data (color)
     {
     }
 
-    /**
-     * @brief Constructs a color with specified red, green, and blue components, defaulting alpha to opaque.
-     *
-     * @param r The red component, from 0 to 255.
-     * @param g The green component, from 0 to 255.
-     * @param b The blue component, from 0 to 255.
-     */
+    /** Constructs a color with specified red, green, and blue components, defaulting alpha to opaque.
+
+        @param r The red component, from 0 to 255.
+        @param g The green component, from 0 to 255.
+        @param b The blue component, from 0 to 255.
+    */
     constexpr Color (uint8 r, uint8 g, uint8 b) noexcept
         : b (b)
         , g (g)
@@ -70,14 +66,13 @@ public:
     {
     }
 
-    /**
-     * @brief Constructs a color with specified alpha, red, green, and blue components.
-     *
-     * @param a The alpha component, from 0 (transparent) to 255 (opaque).
-     * @param r The red component, from 0 to 255.
-     * @param g The green component, from 0 to 255.
-     * @param b The blue component, from 0 to 255.
-     */
+    /** Constructs a color with specified alpha, red, green, and blue components.
+
+        @param a The alpha component, from 0 (transparent) to 255 (opaque).
+        @param r The red component, from 0 to 255.
+        @param g The green component, from 0 to 255.
+        @param b The blue component, from 0 to 255.
+    */
     constexpr Color (uint8 a, uint8 r, uint8 g, uint8 b) noexcept
         : b (b)
         , g (g)
@@ -87,291 +82,265 @@ public:
     }
 
     //==============================================================================
-    /**
-     * @brief Copy and move constructors and assignment operators.
-     */
+    /** Copy and move constructors and assignment operators. */
     constexpr Color (const Color& other) noexcept = default;
     constexpr Color (Color&& other) noexcept = default;
     constexpr Color& operator=(const Color& other) noexcept = default;
     constexpr Color& operator=(Color&& other) noexcept = default;
-    
+
     //==============================================================================
-    /**
-     * @brief Returns the color as a 32-bit integer in ARGB format.
-     *
-     * @return The color as a 32-bit integer.
-     */
+    /** Returns the color as a 32-bit integer in ARGB format.
+
+        @return The color as a 32-bit integer.
+    */
     constexpr uint32 getARGB() const noexcept
     {
         return data;
     }
 
-    /**
-     * @brief Implicit conversion to a 32-bit integer.
-     *
-     * Allows the color to be used wherever a 32-bit integer color is expected.
-     *
-     * @return The color as a 32-bit integer.
-     */
+    /** Implicit conversion to a 32-bit integer.
+
+        Allows the color to be used wherever a 32-bit integer color is expected.
+
+        @return The color as a 32-bit integer.
+    */
     constexpr operator uint32() const noexcept
     {
         return data;
     }
 
     //==============================================================================
-    /**
-     * @brief Returns the alpha component of the color.
-     *
-     * @return The alpha component as an 8-bit integer.
-     */
+    /** Returns the alpha component of the color.
+
+        @return The alpha component as an 8-bit integer.
+    */
     constexpr uint8 getAlpha() const noexcept
     {
         return a;
     }
 
-    /**
-     * @brief Returns the alpha component of the color as a floating point value.
-     *
-     * @return The alpha component, normalized to the range [0, 1].
-     */
+    /** Returns the alpha component of the color as a floating point value.
+
+        @return The alpha component, normalized to the range [0, 1].
+    */
     constexpr float getAlphaFloat() const noexcept
     {
         return componentToNormalized (a);
     }
 
-    /**
-     * @brief Sets the alpha component of the color.
-     *
-     * @param alpha The new alpha value as an 8-bit integer.
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the alpha component of the color.
+
+        @param alpha The new alpha value as an 8-bit integer.
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setAlpha (uint8 alpha) noexcept
     {
         a = alpha;
         return *this;
     }
 
-    /**
-     * @brief Sets the alpha component of the color using a floating point value.
-     *
-     * @param alpha The new alpha value, normalized to the range [0, 1].
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the alpha component of the color using a floating point value.
+
+        @param alpha The new alpha value, normalized to the range [0, 1].
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setAlpha (float alpha) noexcept
     {
         a = normalizedToComponent (alpha);
         return *this;
     }
 
-    /**
-     * @brief Returns a new color with the specified alpha value.
-     *
-     * This method creates a new color with the same red, green, and blue values but a different alpha.
-     *
-     * @param alpha The new alpha value as an 8-bit integer.
-     *
-     * @return A new color with the specified alpha value.
-     */
+    /** Returns a new color with the specified alpha value.
+
+        This method creates a new color with the same red, green, and blue values but a different alpha.
+
+        @param alpha The new alpha value as an 8-bit integer.
+
+        @return A new color with the specified alpha value.
+    */
     constexpr Color withAlpha (uint8 alpha) const noexcept
     {
         return { alpha, r, g, b };
     }
 
     //==============================================================================
-    /**
-     * @brief Returns the red component of the color.
-     *
-     * @return The red component as an 8-bit integer.
-     */
+    /** Returns the red component of the color.
+
+        @return The red component as an 8-bit integer.
+    */
     constexpr uint8 getRed() const noexcept
     {
         return r;
     }
 
-    /**
-     * @brief Returns the red component of the color as a floating point value.
-     *
-     * @return The red component, normalized to the range [0, 1].
-     */
+    /** Returns the red component of the color as a floating point value.
+
+        @return The red component, normalized to the range [0, 1].
+    */
     constexpr float getRedFloat() const noexcept
     {
         return componentToNormalized (r);
     }
 
-    /**
-     * @brief Sets the red component of the color.
-     *
-     * @param red The new red value as an 8-bit integer.
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the red component of the color.
+
+        @param red The new red value as an 8-bit integer.
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setRed (uint8 red) noexcept
     {
         r = red;
         return *this;
     }
 
-    /**
-     * @brief Sets the red component of the color using a floating point value.
-     *
-     * @param red The new red value, normalized to the range [0, 1].
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the red component of the color using a floating point value.
+
+        @param red The new red value, normalized to the range [0, 1].
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setRed (float red) noexcept
     {
         r = normalizedToComponent (red);
         return *this;
     }
 
-    /**
-     * @brief Returns a new color with the specified red value.
-     *
-     * This method creates a new color with the same green, blue, and alpha values but a different red.
-     *
-     * @param red The new red value as an 8-bit integer.
-     *
-     * @return A new color with the specified red value.
-     */
+    /** Returns a new color with the specified red value.
+
+        This method creates a new color with the same green, blue, and alpha values but a different red.
+
+        @param red The new red value as an 8-bit integer.
+
+        @return A new color with the specified red value.
+    */
     constexpr Color withRed (uint8 red) const noexcept
     {
         return { a, red, g, b };
     }
 
     //==============================================================================
-    /**
-     * @brief Returns the green component of the color.
-     *
-     * @return The green component as an 8-bit integer.
-     */
+    /** Returns the green component of the color.
+
+        @return The green component as an 8-bit integer.
+    */
     constexpr uint8 getGreen() const noexcept
     {
         return g;
     }
 
-    /**
-     * @brief Returns the green component of the color as a floating point value.
-     *
-     * @return The green component, normalized to the range [0, 1].
-     */
+    /** Returns the green component of the color as a floating point value.
+
+        @return The green component, normalized to the range [0, 1].
+    */
     constexpr float getGreenFloat() const noexcept
     {
         return componentToNormalized (g);
     }
 
-    /**
-     * @brief Sets the green component of the color.
-     *
-     * @param green The new green value as an 8-bit integer.
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the green component of the color.
+
+        @param green The new green value as an 8-bit integer.
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setGreen (uint8 green) noexcept
     {
         g = green;
         return *this;
     }
 
-    /**
-     * @brief Sets the green component of the color using a floating point value.
-     *
-     * @param green The new green value, normalized to the range [0, 1].
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the green component of the color using a floating point value.
+
+        @param green The new green value, normalized to the range [0, 1].
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setGreen (float green) noexcept
     {
         g = normalizedToComponent (green);
         return *this;
     }
 
+    /** Returns a new color with the specified green value.
 
-    /**
-     * @brief Returns a new color with the specified green value.
-     *
-     * This method creates a new color with the same red, blue, and alpha values but a different green.
-     *
-     * @param green The new green value as an 8-bit integer.
-     *
-     * @return A new color with the specified green value.
-     */
+        This method creates a new color with the same red, blue, and alpha values but a different green.
+
+        @param green The new green value as an 8-bit integer.
+
+        @return A new color with the specified green value.
+    */
     constexpr Color withGreen (uint8 green) const noexcept
     {
         return { a, r, green, b };
     }
 
     //==============================================================================
-    /**
-     * @brief Returns the blue component of the color.
-     *
-     * @return The blue component as an 8-bit integer.
-     */
+    /** Returns the blue component of the color.
+
+        @return The blue component as an 8-bit integer.
+    */
     constexpr uint8 getBlue() const noexcept
     {
         return b;
     }
 
-    /**
-     * @brief Returns the blue component of the color as a floating point value.
-     *
-     * @return The blue component, normalized to the range [0, 1].
-     */
+    /** Returns the blue component of the color as a floating point value.
+
+        @return The blue component, normalized to the range [0, 1].
+    */
     constexpr float getBlueFloat() const noexcept
     {
         return componentToNormalized (b);
     }
 
-    /**
-     * @brief Sets the blue component of the color.
-     *
-     * @param blue The new blue value as an 8-bit integer.
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the blue component of the color.
+
+        @param blue The new blue value as an 8-bit integer.
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setBlue (uint8 blue) noexcept
     {
         b = blue;
         return *this;
     }
 
-    /**
-     * @brief Sets the blue component of the color using a floating point value.
-     *
-     * @param blue The new blue value, normalized to the range [0, 1].
-     *
-     * @return A reference to this color object to allow for method chaining.
-     */
+    /** Sets the blue component of the color using a floating point value.
+
+        @param blue The new blue value, normalized to the range [0, 1].
+
+        @return A reference to this color object to allow for method chaining.
+    */
     constexpr Color& setBlue (float blue) noexcept
     {
         b = normalizedToComponent (blue);
         return *this;
     }
 
-    /**
-     * @brief Returns a new color with the specified blue value.
-     *
-     * This method creates a new color with the same red, green, and alpha values but a different blue.
-     *
-     * @param blue The new blue value as an 8-bit integer.
-     *
-     * @return A new color with the specified blue value.
-     */
+    /** Returns a new color with the specified blue value.
+
+        This method creates a new color with the same red, green, and alpha values but a different blue.
+
+        @param blue The new blue value as an 8-bit integer.
+
+        @return A new color with the specified blue value.
+    */
     constexpr Color withBlue (uint8 blue) const noexcept
     {
         return { a, r, g, blue };
     }
 
     //==============================================================================
-    /**
-     * @brief Calculates the hue component of the color in HSL representation.
-     *
-     * Hue is measured as a location on the standard color wheel, expressed as a fraction between 0 and 1.0.
-     * This function calculates hue by converting RGB values to HSL and then extracting the hue component.
-     *
-     * @return The hue component of the color, normalized to the range [0, 1].
-     */
+    /** Calculates the hue component of the color in HSL representation.
+
+        Hue is measured as a location on the standard color wheel, expressed as a fraction between 0 and 1.0.
+        This function calculates hue by converting RGB values to HSL and then extracting the hue component.
+
+        @return The hue component of the color, normalized to the range [0, 1].
+    */
     constexpr float getHue() const noexcept
     {
         const float rf = getRedFloat();
@@ -399,15 +368,14 @@ public:
         return h;
     }
 
-    /**
-     * @brief Calculates the saturation component of the color in HSL representation.
-     *
-     * Saturation measures the intensity of color. A saturation value of 0 corresponds to a shade of grey,
-     * while a value of 1 indicates the full intensity of the color. This method calculates saturation by converting
-     * RGB values to HSL and then extracting the saturation component.
-     *
-     * @return The saturation component of the color, normalized to the range [0, 1].
-     */
+    /** Calculates the saturation component of the color in HSL representation.
+
+        Saturation measures the intensity of color. A saturation value of 0 corresponds to a shade of grey,
+        while a value of 1 indicates the full intensity of the color. This method calculates saturation by converting
+        RGB values to HSL and then extracting the saturation component.
+
+        @return The saturation component of the color, normalized to the range [0, 1].
+    */
     constexpr float getSaturation() const noexcept
     {
         const float rf = getRedFloat();
@@ -425,14 +393,13 @@ public:
         return l > 0.5f ? d / (2.0f - max - min) : d / (max + min);
     }
 
-    /**
-     * @brief Calculates the luminance of the color.
-     *
-     * Luminance is a measure of the brightness of a color, normalized to a range from 0 (black) to 1 (white).
-     * This method calculates luminance by averaging the maximum and minimum RGB components.
-     *
-     * @return The luminance component of the color, normalized to the range [0, 1].
-     */
+    /** Calculates the luminance of the color.
+
+        Luminance is a measure of the brightness of a color, normalized to a range from 0 (black) to 1 (white).
+        This method calculates luminance by averaging the maximum and minimum RGB components.
+
+        @return The luminance component of the color, normalized to the range [0, 1].
+    */
     constexpr float getLuminance() const noexcept
     {
         const float rf = getRedFloat();
@@ -445,14 +412,13 @@ public:
     }
 
     //==============================================================================
-    /**
-     * @brief Converts the color to its HSL (Hue, Saturation, Luminance) components.
-     *
-     * This method provides a way to obtain the HSL representation of the color, which can be useful for color manipulation
-     * and effects. The returned tuple contains the hue, saturation, and luminance components, respectively.
-     *
-     * @return A tuple consisting of hue, saturation, and luminance.
-     */
+    /** Converts the color to its HSL (Hue, Saturation, Luminance) components.
+
+        This method provides a way to obtain the HSL representation of the color, which can be useful for color manipulation
+        and effects. The returned tuple contains the hue, saturation, and luminance components, respectively.
+
+        @return A tuple consisting of hue, saturation, and luminance.
+    */
     constexpr std::tuple<float, float, float> toHSL () const noexcept
     {
         const float rf = getRedFloat();
@@ -484,18 +450,17 @@ public:
         return std::make_tuple (h, s, l);
     }
 
-    /**
-     * @brief Constructs a color from HSL values.
-     *
-     * This static method allows for the creation of a color from its HSL representation.
-     * It is useful for generating colors based on more perceptual components rather than direct color component manipulation.
-     *
-     * @param h The hue component, normalized to [0, 1].
-     * @param s The saturation component, normalized to [0, 1].
-     * @param l The luminance component, normalized to [0, 1].
-     *
-     * @return A Color object corresponding to the given HSL values.
-     */
+    /** Constructs a color from HSL values.
+
+        This static method allows for the creation of a color from its HSL representation.
+        It is useful for generating colors based on more perceptual components rather than direct color component manipulation.
+
+        @param h The hue component, normalized to [0, 1].
+        @param s The saturation component, normalized to [0, 1].
+        @param l The luminance component, normalized to [0, 1].
+
+        @return A Color object corresponding to the given HSL values.
+    */
     constexpr static Color fromHSL (float h, float s, float l) noexcept
     {
         auto hue2rgb = [](float p, float q, float t)
@@ -524,16 +489,15 @@ public:
     }
 
     //==============================================================================
-    /**
-     * @brief Makes the color brighter by a specified amount.
-     *
-     * This method increases the RGB components of the color by the given amount, capped at 1.0 to maintain valid color values.
-     * It is useful for creating lighter variations of the color without altering the hue and saturation significantly.
-     *
-     * @param amount The amount by which to increase the RGB components, normalized to the range [0, 1].
-     *
-     * @return A new Color object that is brighter than the original.
-     */
+    /** Makes the color brighter by a specified amount.
+
+        This method increases the RGB components of the color by the given amount, capped at 1.0 to maintain valid color values.
+        It is useful for creating lighter variations of the color without altering the hue and saturation significantly.
+
+        @param amount The amount by which to increase the RGB components, normalized to the range [0, 1].
+
+        @return A new Color object that is brighter than the original.
+    */
     constexpr Color brighter (float amount) noexcept
     {
         return
@@ -545,45 +509,42 @@ public:
         };
     }
 
-    /**
-     * @brief Makes the color darker by a specified amount.
-     *
-     * This method decreases the RGB components of the color by the given amount, capped at 0 to maintain valid color values.
-     * It is useful for creating darker variations of the color without altering the hue and saturation significantly.
-     *
-     * @param amount The amount by which to decrease the RGB components, normalized to the range [0, 1].
-     *
-     * @return A new Color object that is darker than the original.
-     */
+    /** Makes the color darker by a specified amount.
+
+        This method decreases the RGB components of the color by the given amount, capped at 0 to maintain valid color values.
+        It is useful for creating darker variations of the color without altering the hue and saturation significantly.
+
+        @param amount The amount by which to decrease the RGB components, normalized to the range [0, 1].
+
+        @return A new Color object that is darker than the original.
+    */
     constexpr Color darker (float amount) noexcept
     {
         return brighter (-amount);
     }
 
     //==============================================================================
-    /**
-     * @brief Returns a contrasting color.
-     *
-     * This method calculates a color that contrasts with the current color based on its luminance.
-     * It is particularly useful for ensuring text or UI elements are readable when placed on backgrounds of varying colors.
-     *
-     * @return A new Color object that contrasts with the current color.
-     */
+    /** Returns a contrasting color.
+
+        This method calculates a color that contrasts with the current color based on its luminance.
+        It is particularly useful for ensuring text or UI elements are readable when placed on backgrounds of varying colors.
+
+        @return A new Color object that contrasts with the current color.
+    */
     constexpr Color contrasting() const noexcept
     {
         return contrasting (0.5f);
     }
 
-    /**
-     * @brief Returns a contrasting color adjusted by a specified amount.
-     *
-     * This method provides finer control over the contrast calculation by allowing adjustment of the hue shift used in
-     * determining the contrasting color. The luminance and saturation of the original color are maintained.
-     *
-     * @param amount The amount to adjust the hue by, normalized to the range [0, 1].
-     *
-     * @return A new Color object that contrasts with the current color.
-     */
+    /** Returns a contrasting color adjusted by a specified amount.
+
+        This method provides finer control over the contrast calculation by allowing adjustment of the hue shift used in
+        determining the contrasting color. The luminance and saturation of the original color are maintained.
+
+        @param amount The amount to adjust the hue by, normalized to the range [0, 1].
+
+        @return A new Color object that contrasts with the current color.
+    */
     constexpr Color contrasting (float amount) const noexcept
     {
         const auto [h, s, l] = inverted().toHSL();
@@ -592,13 +553,12 @@ public:
     }
 
     //==============================================================================
-    /**
-     * @brief Inverts the color components (RGB) of the current color.
-     *
-     * This method changes each RGB component to its complementary value, which is useful for creating negative effects or for visual highlights.
-     *
-     * @return A reference to this Color object, now with inverted RGB values.
-     */
+    /** Inverts the color components (RGB) of the current color.
+
+        This method changes each RGB component to its complementary value, which is useful for creating negative effects or for visual highlights.
+
+        @return A reference to this Color object, now with inverted RGB values.
+    */
     constexpr Color& invert() noexcept
     {
         r = 255 - r;
@@ -607,13 +567,12 @@ public:
         return *this;
     }
 
-    /**
-     * @brief Returns a new color that is the inverse of the current color.
-     *
-     * This method creates a new Color object with each RGB component set to its complementary value, effectively providing the negative of the color.
-     *
-     * @return A new Color object with inverted RGB values.
-     */
+    /** Returns a new color that is the inverse of the current color.
+
+        This method creates a new Color object with each RGB component set to its complementary value, effectively providing the negative of the color.
+
+        @return A new Color object with inverted RGB values.
+    */
     constexpr Color inverted() const noexcept
     {
         Color result (*this);
@@ -622,26 +581,24 @@ public:
     }
 
     //==============================================================================
-    /**
-     * @brief Inverts the alpha component of the current color.
-     *
-     * This method changes the alpha component to its complementary value, which is useful for reversing transparency effects.
-     *
-     * @return A reference to this Color object, now with an inverted alpha value.
-     */
+    /** Inverts the alpha component of the current color.
+
+        This method changes the alpha component to its complementary value, which is useful for reversing transparency effects.
+
+        @return A reference to this Color object, now with an inverted alpha value.
+    */
     constexpr Color& invertAlpha() noexcept
     {
         a = 255 - a;
         return *this;
     }
 
-    /**
-     * @brief Returns a new color that is the inverse of the current color in terms of alpha transparency.
-     *
-     * This method creates a new Color object with the alpha component set to its complementary value, effectively reversing the transparency of the color.
-     *
-     * @return A new Color object with an inverted alpha value.
-     */
+    /** Returns a new color that is the inverse of the current color in terms of alpha transparency.
+
+        This method creates a new Color object with the alpha component set to its complementary value, effectively reversing the transparency of the color.
+
+        @return A new Color object with an inverted alpha value.
+    */
     constexpr Color invertedAlpha() const noexcept
     {
         Color result (*this);

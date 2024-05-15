@@ -23,12 +23,11 @@ namespace yup
 {
 
 //==============================================================================
-/**
- * @brief Defines types of stroke caps used in graphical contexts.
- *
- * This enumeration specifies the style of caps that could be applied to the ends of lines in a graphical drawing context.
- * Each cap style provides a different appearance for the ends of lines.
- */
+/** Defines types of stroke caps used in graphical contexts.
+
+    This enumeration specifies the style of caps that could be applied to the ends of lines in a graphical drawing context.
+    Each cap style provides a different appearance for the ends of lines.
+*/
 enum class StrokeCap : unsigned int
 {
     Butt = 0,   ///< A butt cap displays the end of the line exactly at the end point with no extension.
