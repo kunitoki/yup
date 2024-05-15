@@ -296,6 +296,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "text/juce_Base64.h"
 #include "misc/juce_Functional.h"
 #include "containers/juce_Span.h"
+#include "misc/juce_FlagSet.h"
 #include "misc/juce_Result.h"
 #include "misc/juce_Uuid.h"
 #include "misc/juce_ConsoleApplication.h"

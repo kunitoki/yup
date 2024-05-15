@@ -1837,6 +1837,21 @@ bool String::containsNonWhitespaceChars() const noexcept
     return false;
 }
 
+String String::reverse() const
+{
+    auto end = text.findTerminatingNull();
+    String t;
+
+    while (end > text)
+    {
+        --end;
+
+        t.append (end, 1);
+    }
+
+    return t;
+}
+
 String String::formattedRaw (const char* pf, ...)
 {
     size_t bufferSize = 256;

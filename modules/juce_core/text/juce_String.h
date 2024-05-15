@@ -859,6 +859,10 @@ public:
     String initialSectionNotContaining (StringRef charactersToStopAt) const;
 
     //==============================================================================
+    /** Reverse the string. */
+    String reverse() const;
+
+    //==============================================================================
     /** Checks whether the string might be in quotation marks.
 
         @returns    true if the string begins with a quote character (either a double or single quote).
