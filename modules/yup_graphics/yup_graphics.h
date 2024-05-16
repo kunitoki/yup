@@ -50,6 +50,8 @@
 #include <juce_core/juce_core.h>
 
 #include <rive/rive.h>
+#include <rive/text/utf.hpp>
+
 #include <rive/pls/pls_render_context.hpp>
 
 #include <tuple>
@@ -66,6 +68,8 @@ using namespace ::juce; // TODO - move it out
 #include "primitives/yup_Line.h"
 #include "primitives/yup_Rectangle.h"
 #include "primitives/yup_Path.h"
+#include "fonts/yup_Font.h"
+#include "fonts/yup_StyledText.h"
 #include "graphics/yup_Color.h"
 #include "graphics/yup_ColorGradient.h"
 #include "graphics/yup_StrokeJoin.h"

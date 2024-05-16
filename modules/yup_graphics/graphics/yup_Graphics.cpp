@@ -35,54 +35,68 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
     return static_cast<rive::StrokeCap> (cap);
 }
 
-rive::RawPath toRawPath (Path path)
+rive::RawPath toRawPath (const Path& path, const AffineTransform& transform)
 {
     rive::RawPath rawPath;
 
     for (const auto& segment : path)
     {
         if (segment.type == Path::SegmentType::MoveTo)
-            rawPath.moveTo (segment.x, segment.y);
+        {
+            auto x = segment.x;
+            auto y = segment.y;
 
+            transform.transformPoints (x, y);
+
+            rawPath.moveTo (x, y);
+        }
         else if (segment.type == Path::SegmentType::LineTo)
-            rawPath.lineTo (segment.x, segment.y);
+        {
+            auto x = segment.x;
+            auto y = segment.y;
 
+            transform.transformPoints (x, y);
+
+            rawPath.lineTo (x, y);
+        }
         else if (segment.type == Path::SegmentType::QuadTo)
-            rawPath.quadTo (segment.x, segment.y,
-                            segment.x1, segment.y1);
+        {
+            auto x = segment.x;
+            auto y = segment.y;
+            auto x1 = segment.x1;
+            auto y1 = segment.y1;
 
+            transform.transformPoints (x, y, x1, y1);
+
+            rawPath.quadTo (x, y, x1, y1);
+        }
         else if (segment.type == Path::SegmentType::CubicTo)
-            rawPath.cubicTo (segment.x, segment.y,
-                             segment.x1, segment.y1,
-                             segment.x2, segment.y2);
+        {
+            auto x = segment.x;
+            auto y = segment.y;
+            auto x1 = segment.x1;
+            auto y1 = segment.y1;
+            auto x2 = segment.x2;
+            auto y2 = segment.y2;
+
+            transform.transformPoints (x, y, x1, y1, x2, y2);
+
+            rawPath.cubicTo (x, y, x1, y1, x2, y2);
+        }
     }
 
     return rawPath;
 }
 
-rive::RawPath toRawPath (Path path, float translateX, float translateY)
+void convertRawPathToCommandPath (const rive::RawPath& input, rive::CommandPath* output, const AffineTransform& transform)
 {
-    rive::RawPath rawPath;
-
-    for (const auto& segment : path)
+    auto morphed = input.morph ([&transform](rive::Vec2D v)
     {
-        if (segment.type == Path::SegmentType::MoveTo)
-            rawPath.moveTo (segment.x + translateX, segment.y + translateY);
+        transform.transformPoints (v.x, v.y);
+        return v;
+    });
 
-        else if (segment.type == Path::SegmentType::LineTo)
-            rawPath.lineTo (segment.x + translateX, segment.y + translateY);
-
-        else if (segment.type == Path::SegmentType::QuadTo)
-            rawPath.quadTo (segment.x + translateX, segment.y + translateY,
-                            segment.x1 + translateX, segment.y1 + translateY);
-
-        else if (segment.type == Path::SegmentType::CubicTo)
-            rawPath.cubicTo (segment.x + translateX, segment.y + translateY,
-                             segment.x1 + translateX, segment.y1 + translateY,
-                             segment.x2 + translateX, segment.y2 + translateY);
-    }
-
-    return rawPath;
+    morphed.addTo (output);
 }
 
 rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient)
@@ -109,6 +123,103 @@ rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const Col
                                            stops,
                                            2);
     }
+}
+
+float drawText (Graphics& g,
+                const rive::GlyphRun& run,
+                unsigned startIndex,
+                unsigned endIndex,
+                rive::rcp<rive::RenderPaint> paint,
+                const AffineTransform& transform,
+                rive::Vec2D origin)
+{
+    auto font = run.font.get();
+    const auto scale = rive::Mat2D::fromScale (run.size, run.size);
+
+    float x = origin.x;
+    jassert (startIndex >= 0 && endIndex <= run.glyphs.size());
+
+    int i, end, inc;
+    if (run.dir == rive::TextDirection::rtl)
+    {
+        i = endIndex - 1;
+        end = startIndex - 1;
+        inc = -1;
+    }
+    else
+    {
+        i = startIndex;
+        end = endIndex;
+        inc = 1;
+    }
+
+    auto renderer = g.getRenderer();
+    auto factory = g.getFactory();
+
+    while (i != end)
+    {
+        auto trans = rive::Mat2D::fromTranslate (x, origin.y);
+        x += run.advances[i];
+
+        auto rawpath = font->getPath (run.glyphs[i]);
+        rawpath.transformInPlace (trans * scale);
+
+        auto path = factory->makeEmptyRenderPath();
+        convertRawPathToCommandPath (rawpath, path.get(), transform);
+
+        renderer->drawPath (path.get(), paint.get());
+
+        i += inc;
+    }
+
+    return x;
+}
+
+float drawParagraph (Graphics& g,
+                     const rive::Paragraph& paragraph,
+                     const rive::SimpleArray<rive::GlyphLine>& lines,
+                     rive::rcp<rive::RenderPaint> paint,
+                     const AffineTransform& transform,
+                     rive::Vec2D origin)
+{
+    for (const auto& line : lines)
+    {
+        float x = line.startX + origin.x;
+
+        int runIndex, endRun, runInc;
+        if (paragraph.baseDirection == rive::TextDirection::rtl)
+        {
+            runIndex = line.endRunIndex;
+            endRun = line.startRunIndex - 1;
+            runInc = -1;
+        }
+        else
+        {
+            runIndex = line.startRunIndex;
+            endRun = line.endRunIndex + 1;
+            runInc = 1;
+        }
+
+        while (runIndex != endRun)
+        {
+            const auto& run = paragraph.runs[runIndex];
+
+            int startGIndex = runIndex == line.startRunIndex ? line.startGlyphIndex : 0;
+            int endGIndex = runIndex == line.endRunIndex ? line.endGlyphIndex : static_cast<int> (run.glyphs.size());
+
+            x = drawText (g,
+                          run,
+                          startGIndex,
+                          endGIndex,
+                          paint,
+                          transform,
+                          { x, origin.y + line.baseline });
+
+            runIndex += runInc;
+        }
+    }
+
+    return origin.y + lines.back().bottom;
 }
 
 } // namespace
@@ -253,15 +364,26 @@ Rectangle<float> Graphics::getDrawingArea() const
     return currentRenderOptions().drawingArea;
 }
 
+void Graphics::setTransform (const AffineTransform& transform)
+{
+    currentRenderOptions().transform = transform;
+}
+
+AffineTransform Graphics::getTransform() const
+{
+    return currentRenderOptions().transform;
+}
+
 //==============================================================================
 void Graphics::drawLine (float x1, float y1, float x2, float y2, float thickness)
 {
     const auto& options = currentRenderOptions();
 
-    rive::RawPath rawPath;
-    rawPath.moveTo (options.translateX (x1), options.translateY (y1));
-    rawPath.lineTo (options.translateX (x2), options.translateY (y2));
+    Path path;
+    path.moveTo (x1, y1);
+    path.lineTo (x2, y2);
 
+    auto rawPath = toRawPath (path, options.getTransform());
     renderDrawPath (rawPath, options, thickness);
 }
 
@@ -276,13 +398,14 @@ void Graphics::fillAll()
     const auto& options = currentRenderOptions();
     const auto& area = options.getDrawingArea();
 
-    rive::RawPath rawPath;
-    rawPath.addRect (rive::AABB (
-        area.getX(),
-        area.getY(),
-        area.getX() + area.getWidth(),
-        area.getY() + area.getHeight()));
+    Path path;
+    path.moveTo (area.getX(), area.getY());
+    path.lineTo (area.getX() + area.getWidth(), area.getY());
+    path.lineTo (area.getX() + area.getWidth(), area.getY() + area.getHeight());
+    path.lineTo (area.getX(), area.getY() + area.getHeight());
+    path.lineTo (area.getX(), area.getY());
 
+    auto rawPath = toRawPath (path, options.getTransform());
     renderFillPath (rawPath, options);
 }
 
@@ -291,13 +414,14 @@ void Graphics::fillRect (float x, float y, float width, float height)
 {
     const auto& options = currentRenderOptions();
 
-    rive::RawPath rawPath;
-    rawPath.addRect (rive::AABB (
-        options.translateX (x),
-        options.translateY (y),
-        options.translateX (x) + width,
-        options.translateY (y) + height));
+    Path path;
+    path.moveTo (x, y);
+    path.lineTo (x + width, y);
+    path.lineTo (x + width, y + height);
+    path.lineTo (x, y + height);
+    path.lineTo (x, y);
 
+    auto rawPath = toRawPath (path, options.getTransform());
     renderFillPath (rawPath, options);
 }
 
@@ -311,13 +435,14 @@ void Graphics::drawRect (float x, float y, float width, float height, float thic
 {
     const auto& options = currentRenderOptions();
 
-    rive::RawPath rawPath;
-    rawPath.addRect (rive::AABB (
-        options.translateX (x),
-        options.translateY (y),
-        options.translateX (x) + width,
-        options.translateY (y) + height));
+    Path path;
+    path.moveTo (x, y);
+    path.lineTo (x + width, y);
+    path.lineTo (x + width, y + height);
+    path.lineTo (x, y + height);
+    path.lineTo (x, y);
 
+    auto rawPath = toRawPath (path, options.getTransform());
     renderDrawPath (rawPath, options, thickness);
 }
 
@@ -333,12 +458,10 @@ void Graphics::fillRoundedRect (float x, float y, float width, float height, flo
 
     Path path;
     path.addRoundedRectangle (
-        options.translateX (x),
-        options.translateY (y),
-        width, height,
+        x, y, width, height,
         radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
-    auto rawPath = toRawPath (path);
+    auto rawPath = toRawPath (path, options.getTransform());
     renderFillPath (rawPath, options);
 }
 
@@ -364,12 +487,10 @@ void Graphics::drawRoundedRect (float x, float y, float width, float height, flo
 
     Path path;
     path.addRoundedRectangle (
-        options.translateX (x),
-        options.translateY (y),
-        width, height,
+        x, y, width, height,
         radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
-    auto rawPath = toRawPath (path);
+    auto rawPath = toRawPath (path, options.getTransform());
     renderDrawPath (rawPath, options, thickness);
 }
 
@@ -393,7 +514,7 @@ void Graphics::drawPath (const Path& path, float thickness)
 {
     const auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (path, options.translateX (0.0f), options.translateY (0.0f));
+    auto rawPath = toRawPath (path, options.getTransform());
     renderDrawPath (rawPath, options, thickness);
 }
 
@@ -402,31 +523,30 @@ void Graphics::fillPath (const Path& path)
 {
     const auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (path, options.translateX (0.0f), options.translateY (0.0f));
+    auto rawPath = toRawPath (path, options.getTransform());
     renderFillPath (rawPath, options);
 }
 
 //==============================================================================
-void Graphics::clipPath (const Rectangle<float>& r)
+void Graphics::clipPath (const Rectangle<float>& area)
 {
     const auto& options = currentRenderOptions();
 
-    rive::RawPath rawPath;
-    rawPath.addRect (rive::AABB (
-        options.translateX (r.getX()),
-        options.translateY (r.getY()),
-        options.translateX (r.getX()) + r.getWidth(),
-        options.translateY (r.getY()) + r.getHeight()));
+    Path path;
+    path.moveTo (area.getX(), area.getY());
+    path.lineTo (area.getX() + area.getWidth(), area.getY());
+    path.lineTo (area.getX() + area.getWidth(), area.getY() + area.getHeight());
+    path.lineTo (area.getX(), area.getY() + area.getHeight());
+    path.lineTo (area.getX(), area.getY());
 
-    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
-    renderer.clipPath (renderPath.get());
+    clipPath (path);
 }
 
 void Graphics::clipPath (const Path& path)
 {
     const auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (path, options.translateX (0.0f), options.translateY (0.0f));
+    auto rawPath = toRawPath (path, options.getTransform());
 
     auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
     renderer.clipPath (renderPath.get());
@@ -462,6 +582,68 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
 
     auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
     renderer.drawPath (renderPath.get(), paint.get());
+}
+
+//==============================================================================
+void Graphics::drawFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+{
+    const auto& options = currentRenderOptions();
+
+    auto transform = getTransform();
+
+    float y = rect.getY();
+    float paragraphWidth = rect.getWidth(); // -1.0
+    float lineHeight = 21.0f;
+
+    float totalTextHeight = text.getParagraphs().size() * lineHeight;
+
+    auto paint = factory.makeRenderPaint();
+    paint->style (rive::RenderPaintStyle::fill);
+
+    if (options.isColor())
+        paint->color (options.getColor());
+    else
+        paint->shader (toColorGradient (factory, options.getColorGradient()));
+
+    rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> linesArray (text.getParagraphs().size());
+
+    std::size_t paragraphIndex = 0;
+    for (const auto& paragraph : text.getParagraphs())
+    {
+        linesArray[paragraphIndex] = rive::GlyphLine::BreakLines (paragraph.runs, paragraphWidth); // -1.0f
+
+        //if (autoWidth)
+        //{
+        //    paragraphWidth =
+        //        std::max (paragraphWidth,
+        //                  rive::GlyphLine::ComputeMaxWidth (linesArray[paragraphIndex], paragraph.runs));
+        //}
+
+        ++paragraphIndex;
+    }
+
+    paragraphIndex = 0;
+    for (const auto& paragraph : text.getParagraphs())
+    {
+        rive::SimpleArray<rive::GlyphLine>& lines = linesArray[paragraphIndex];
+
+        rive::GlyphLine::ComputeLineSpacing (paragraphIndex == 0,
+                                             lines,
+                                             paragraph.runs,
+                                             paragraphWidth,
+                                             align);
+
+        y = drawParagraph (*this,
+                           paragraph,
+                           lines,
+                           paint,
+                           options.getTransform(),
+                           { 0, y });
+
+        y += lineHeight;
+
+        ++paragraphIndex;
+    }
 }
 
 } // namespace yup

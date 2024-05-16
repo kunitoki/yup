@@ -155,6 +155,18 @@ public:
     */
     Rectangle<float> getDrawingArea() const;
 
+    /** Defines the affine transformation to use when drawing.
+
+        @param transform The affine transformation used when drawing.
+    */
+    void setTransform (const AffineTransform& transform);
+
+    /** Retrieves the current affine transformation.
+
+        @return The current affine transformation.
+    */
+    AffineTransform getTransform() const;
+
     //==============================================================================
     /** Draws a line between two points with a specified thickness.
 
@@ -312,6 +324,11 @@ public:
     void fillPath (const Path& path);
 
     //==============================================================================
+    /** Draws an attributed text.
+    */
+    void drawFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
+
+    //==============================================================================
     /** Clips the drawing area to the specified rectangle.
 
         @param r The rectangle to clip to.
@@ -367,14 +384,10 @@ private:
             return drawingArea;
         }
 
-        constexpr float translateX (float x) const noexcept
+        constexpr AffineTransform getTransform() const noexcept
         {
-            return x + drawingArea.getX();
-        }
-
-        constexpr float translateY (float y) const noexcept
-        {
-            return y + drawingArea.getY();
+            return transform
+                .translated (drawingArea.getX(), drawingArea.getY());
         }
 
         StrokeJoin join = StrokeJoin::Miter;
@@ -382,6 +395,7 @@ private:
         Color color = 0xff000000;
         ColorGradient gradient;
         Rectangle<float> drawingArea;
+        AffineTransform transform;
         uint8 alpha = 255;
         bool isCurrentBrushColor = true;
     };

@@ -177,7 +177,7 @@ void Component::setBounds (const Rectangle<float>& newBounds)
 {
     if (options.onDesktop)
     {
-        boundsInParent = newBounds.withScaledSize (getScaleDpi());
+        boundsInParent = newBounds; // .withScaledSize (getScaleDpi());
 
         native->setBounds (newBounds.to<int>());
     }

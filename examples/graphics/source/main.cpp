@@ -32,10 +32,17 @@
 class CustomSlider : public yup::Component
 {
 public:
-    CustomSlider (int index)
+    CustomSlider (int index, const yup::Font& font)
          : index (index)
+         , font (font)
     {
         setTitle (yup::String (index));
+        setValue (0.0f);
+    }
+
+    void resized() override
+    {
+        updateText();
     }
 
     void mouseEnter (const yup::MouseEvent& event) override
@@ -70,7 +77,7 @@ public:
 
         origin = event.getPosition();
 
-        value = yup::jlimit (0.0f, 1.0f, value + distance);
+        setValue (value + distance);
     }
 
     void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& data) override
@@ -82,12 +89,13 @@ public:
 
         origin = event.getPosition();
 
-        value = yup::jlimit (0.0f, 1.0f, value + distance);
+        setValue (value + distance);
     }
 
     void paint (yup::Graphics& g, float frameRate) override
     {
         auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
+        const auto center = bounds.getCenter();
 
         yup::Path path;
         path.addEllipse (bounds.reduced (proportionOfWidth (0.045f)));
@@ -101,8 +109,6 @@ public:
         const auto fromRadians = yup::degreesToRadians(135.0f);
         const auto toRadians = fromRadians + yup::degreesToRadians(270.0f);
         const auto toCurrentRadians = fromRadians + yup::degreesToRadians(270.0f) * value;
-
-        const auto center = bounds.to<float>().getCenter();
 
         yup::Path arc;
 
@@ -143,6 +149,11 @@ public:
             g.drawPath (arc, proportionOfWidth (0.04f));
         }
 
+        {
+            g.setColor (yup::Color (0xffffffff));
+            g.drawFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
+        }
+
         if (hasFocus())
         {
             g.setColor (yup::Color (0xffff5f2b));
@@ -150,8 +161,29 @@ public:
         }
     }
 
+    void setValue (float newValue)
+    {
+        value = yup::jlimit (0.0f, 1.0f, newValue);
+
+        valueChanged();
+
+        updateText();
+    }
+
+    virtual void valueChanged()
+    {
+    }
+
 private:
+    void updateText()
+    {
+        text.clear();
+        text.appendText (font, proportionOfHeight(0.1f), proportionOfHeight(0.1f), yup::String (value, 3).toRawUTF8());
+    }
+
     yup::Point<float> origin;
+    const yup::Font& font;
+    yup::StyledText text;
     float value = 0.0f;
     int index = 0;
     bool isInside = false;
@@ -167,12 +199,33 @@ class CustomWindow
 public:
     CustomWindow()
     {
+        rive::Factory* factory = getNativeComponent()->getFactory();
+        if (factory == nullptr)
+        {
+            yup::Logger::outputDebugString ("Failed to create a graphics context");
+
+            yup::YUPApplication::getInstance()->systemRequestedQuit();
+            return;
+        }
+
+#if JUCE_WASM
+        yup::File fontFilePath = yup::File ("/data");
+#else
+        yup::File fontFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
+#endif
+        fontFilePath = fontFilePath.getChildFile("Roboto-Regular.ttf");
+
+        if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
+            yup::Logger::outputDebugString (result.getErrorMessage());
+
+        styleText.appendText (font, 64.0f, 72.0f, "this is even more fun and longer than anything longer");
+
         //getNativeComponent()->enableContinuousRepainting (true);
 
         setTitle ("main");
 
         for (int i = 0; i < totalRows * totalColumns; ++i)
-            addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i)));
+            addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i, font)));
 
         deviceManager.addAudioCallback (this);
         deviceManager.initialiseWithDefaultDevices (1, 0);
@@ -194,7 +247,7 @@ public:
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
-        for (int i = 0; i < totalRows; ++i)
+        for (int i = 0; i < totalRows && sliders.size(); ++i)
         {
             auto row = bounds.removeFromTop (height);
             for (int j = 0; j < totalColumns; ++j)

@@ -487,7 +487,10 @@ void GLFWComponentNative::setSize (const Size<int>& size)
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     double devicePixelRatio = emscripten_get_device_pixel_ratio();
-    glfwSetWindowSize (window, static_cast<int> (size.getWidth() * devicePixelRatio), static_cast<int> (size.getHeight() * devicePixelRatio));
+
+    glfwSetWindowSize (window,
+        static_cast<int> (size.getWidth() * devicePixelRatio),
+        static_cast<int> (size.getHeight() * devicePixelRatio));
 
     EM_ASM (
     {
@@ -530,7 +533,7 @@ void GLFWComponentNative::setPosition (const Point<int>& newPosition)
 {
     glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
 
-    screenBounds = screenBounds.withPosition (newPosition * getScaleDpi());
+    screenBounds = screenBounds.withPosition (newPosition);
 }
 
 Rectangle<int> GLFWComponentNative::getBounds() const
@@ -564,7 +567,7 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 
     glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
 
-    screenBounds = newBounds * getScaleDpi();
+    screenBounds = newBounds;
 }
 
 //==============================================================================
@@ -575,7 +578,7 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
 
     if (shouldBeFullScreen)
     {
-        lastScreenBounds = screenBounds / getScaleDpi();
+        lastScreenBounds = screenBounds;
 
         auto monitor = glfwGetPrimaryMonitor();
         const GLFWvidmode* mode = glfwGetVideoMode (monitor);

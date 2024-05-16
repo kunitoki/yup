@@ -62,4 +62,6 @@
 
 //==============================================================================
 #include "primitives/yup_Path.cpp"
+#include "fonts/yup_Font.cpp"
+#include "fonts/yup_StyledText.cpp"
 #include "graphics/yup_Graphics.cpp"

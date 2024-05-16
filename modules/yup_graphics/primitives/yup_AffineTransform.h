@@ -150,7 +150,7 @@ public:
 
         @return A span to constant matrix components array.
     */
-    constexpr Span<const float> getMatrixPoints() const noexcept
+    [[nodiscard]] constexpr Span<const float> getMatrixPoints() const noexcept
     {
         return { std::addressof (m[0]), 6 };
     }
@@ -185,28 +185,12 @@ public:
 
         @return An AffineTransform object initialized as the identity transformation.
     */
-    static constexpr AffineTransform identity() noexcept
+    [[nodiscard]] static constexpr AffineTransform identity() noexcept
     {
         return { 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f };
     }
 
     //==============================================================================
-    /** Translate the transformation
-
-        Modifies this AffineTransform by translating it by specified amounts in the x and y directions.
-
-        @param tx The amount to translate in the x-direction.
-        @param ty The amount to translate in the y-direction.
-
-        @return A reference to this translated AffineTransform object.
-    */
-    constexpr AffineTransform& translate (float tx, float ty) noexcept
-    {
-        translateX += tx;
-        translateY += ty;
-        return *this;
-    }
-
     /** Create a translated transformation
 
         Creates a new AffineTransform object that represents this transformation translated by specified amounts in the x and y directions.
@@ -216,11 +200,9 @@ public:
 
         @return A new AffineTransform object representing the translated transformation.
     */
-    constexpr AffineTransform translated (float tx, float ty) const noexcept
+    [[nodiscard]] constexpr AffineTransform translated (float tx, float ty) const noexcept
     {
-        AffineTransform result (*this);
-        result.translated (tx, ty);
-        return result;
+        return { scaleX, shearX, translateX + tx, shearY, scaleY, translateY + ty };
     }
 
     /** Create a translation transformation
@@ -232,50 +214,12 @@ public:
 
         @return An AffineTransform object representing the specified translation.
     */
-    static constexpr AffineTransform translation (float tx, float ty) noexcept
+    [[nodiscard]] static constexpr AffineTransform translation (float tx, float ty) noexcept
     {
         return AffineTransform (1.0f, 0.0f, tx, 0.0f, 1.0f, ty);
     }
 
     //==============================================================================
-    /** Rotate the transformation
-
-        Modifies this AffineTransform by rotating it by a specified angle around the origin.
-
-        @param angleInRadians The angle in radians by which to rotate.
-
-        @return A reference to this rotated AffineTransform object.
-    */
-    constexpr AffineTransform& rotate (float angleInRadians) noexcept
-    {
-        const float cosTheta = std::cosf (angleInRadians);
-        const float sinTheta = std::sinf (angleInRadians);
-
-        scaleX = cosTheta * scaleX - sinTheta * shearX;
-        shearX = cosTheta * shearX - sinTheta * scaleY;
-        translateX = cosTheta * translateX - sinTheta * translateY;
-        shearY = sinTheta * scaleX + cosTheta * shearX;
-        scaleY = sinTheta * shearX + cosTheta * scaleY;
-        translateY = sinTheta * translateX + cosTheta * translateY;
-        return *this;
-    }
-
-    /** Rotate the transformation around a point
-
-        Modifies this AffineTransform by rotating it by a specified angle around a specified point.
-
-        @param angleInRadians The angle in radians by which to rotate.
-        @param centerX The x-coordinate of the point around which to rotate.
-        @param centerY The y-coordinate of the point around which to rotate.
-
-        @return A reference to this rotated AffineTransform object.
-    */
-    constexpr AffineTransform& rotate (float angleInRadians, float centerX, float centerY) noexcept
-    {
-        followBy (rotation (angleInRadians, centerX, centerY));
-        return *this;
-    }
-
     /** Create a rotated transformation
 
         Creates a new AffineTransform object that represents this transformation rotated by a specified angle around the origin.
@@ -284,11 +228,23 @@ public:
 
         @return A new AffineTransform object representing the rotated transformation.
     */
-    constexpr AffineTransform rotated (float angleInRadians) const noexcept
+    [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians) const noexcept
     {
-        AffineTransform result (*this);
-        result.rotate (angleInRadians);
-        return result;
+        if (angleInRadians == 0.0f)
+            return {};
+
+        const float cosTheta = std::cosf (angleInRadians);
+        const float sinTheta = std::sinf (angleInRadians);
+
+        return
+        {
+            cosTheta * scaleX - sinTheta * shearY,
+            cosTheta * shearX - sinTheta * scaleY,
+            cosTheta * translateX - sinTheta * translateY,
+            sinTheta * scaleX + cosTheta * shearY,
+            sinTheta * shearX + cosTheta * scaleY,
+            sinTheta * translateX + cosTheta * translateY
+        };
     }
 
     /** Create a rotated transformation around a point
@@ -301,11 +257,9 @@ public:
 
         @return A new AffineTransform object representing the rotated transformation.
     */
-    constexpr AffineTransform rotated (float angleInRadians, float centerX, float centerY) const noexcept
+    [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians, float centerX, float centerY) const noexcept
     {
-        AffineTransform result (*this);
-        result.rotate (angleInRadians, centerX, centerY);
-        return result;
+        return followedBy (rotation (angleInRadians, centerX, centerY));
     }
 
     /** Create a rotation transformation
@@ -316,8 +270,11 @@ public:
 
         @return An AffineTransform object representing the specified rotation.
     */
-    static constexpr AffineTransform rotation (float angleInRadians) noexcept
+    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians) noexcept
     {
+        if (angleInRadians == 0.0f)
+            return {};
+
         const float cosTheta = std::cosf (angleInRadians);
         const float sinTheta = std::sinf (angleInRadians);
 
@@ -334,82 +291,24 @@ public:
 
         @return An AffineTransform object representing the specified rotation around the point.
     */
-    static constexpr AffineTransform rotation (float angleInRadians, float centerX, float centerY) noexcept
+    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, float centerX, float centerY) noexcept
     {
+        if (angleInRadians == 0.0f)
+            return {};
+
         const float cosTheta = std::cosf (angleInRadians);
         const float sinTheta = std::sinf (angleInRadians);
 
         return AffineTransform (
             cosTheta,
             -sinTheta,
-            centerX - centerX * cosTheta + centerY * sinTheta,
+            -cosTheta * centerX + sinTheta * centerY + centerY,
             sinTheta,
             cosTheta,
-            centerY - centerX * sinTheta - centerY * cosTheta);
+            -sinTheta * centerX + -cosTheta * centerY + centerY);
     }
 
     //==============================================================================
-    /** Scale the transformation
-
-        Modifies this AffineTransform by scaling it uniformly by a specified factor.
-
-        @param factor The uniform scale factor to apply.
-
-        @return A reference to this scaled AffineTransform object.
-    */
-    constexpr AffineTransform& scale (float factor) noexcept
-    {
-        scaleX *= factor;
-        shearX *= factor;
-        translateX *= factor;
-        shearY *= factor;
-        scaleY *= factor;
-        translateY *= factor;
-        return *this;
-    }
-
-    /** Scale the transformation non-uniformly
-
-        Modifies this AffineTransform by scaling it by specified factors along the x and y axes.
-
-        @param factorX The scale factor to apply to the x-axis.
-        @param factorY The scale factor to apply to the y-axis.
-
-        @return A reference to this scaled AffineTransform object.
-    */
-    constexpr AffineTransform& scale (float factorX, float factorY) noexcept
-    {
-        scaleX *= factorX;
-        shearX *= factorX;
-        translateX *= factorX;
-        shearY *= factorY;
-        scaleY *= factorY;
-        translateY *= factorY;
-        return *this;
-    }
-
-    /** Scale the transformation non-uniformly around a point
-
-        Modifies this AffineTransform by scaling it by specified factors along the x and y axes around a specified point.
-
-        @param factorX The scale factor to apply to the x-axis.
-        @param factorY The scale factor to apply to the y-axis.
-        @param centerX The x-coordinate of the center point for scaling.
-        @param centerY The y-coordinate of the center point for scaling.
-
-        @return A reference to this scaled AffineTransform object.
-    */
-    constexpr AffineTransform& scale (float factorX, float factorY, float centerX, float centerY) noexcept
-    {
-        scaleX *= factorX;
-        shearX *= factorX;
-        translateX = translateX * factorX + centerX * (1.0f - factorX);
-        shearY *= factorY;
-        scaleY *= factorY;
-        translateY = translateY * factorY + centerY * (1.0f - factorY);
-        return *this;
-    }
-
     /** Create a scaled transformation
 
         Creates a new AffineTransform object that represents this transformation scaled uniformly by a specified factor.
@@ -418,11 +317,17 @@ public:
 
         @return A new AffineTransform object representing the scaled transformation.
     */
-    constexpr AffineTransform scaled (float factor) const noexcept
+    [[nodiscard]] constexpr AffineTransform scaled (float factor) const noexcept
     {
-        AffineTransform result (*this);
-        result.scale (factor);
-        return result;
+        return
+        {
+            factor * scaleX,
+            factor * shearX,
+            factor * translateX,
+            factor * shearY,
+            factor * scaleY,
+            factor * translateY
+        };
     }
 
     /** Create a scaled transformation non-uniformly
@@ -434,11 +339,17 @@ public:
 
         @return A new AffineTransform object representing the non-uniformly scaled transformation.
     */
-    constexpr AffineTransform scaled (float factorX, float factorY) const noexcept
+    [[nodiscard]] constexpr AffineTransform scaled (float factorX, float factorY) const noexcept
     {
-        AffineTransform result (*this);
-        result.scale (factorX, factorY);
-        return result;
+        return
+        {
+            factorX * scaleX,
+            factorX * shearX,
+            factorX * translateX,
+            factorY * shearY,
+            factorY * scaleY,
+            factorY * translateY
+        };
     }
 
     /** Create a scaled transformation non-uniformly around a point
@@ -452,11 +363,17 @@ public:
 
         @return A new AffineTransform object representing the non-uniformly scaled transformation around the point.
     */
-    constexpr AffineTransform scaled (float factorX, float factorY, float centerX, float centerY) const noexcept
+    [[nodiscard]] constexpr AffineTransform scaled (float factorX, float factorY, float centerX, float centerY) const noexcept
     {
-        AffineTransform result (*this);
-        result.scale (factorX, factorY, centerX, centerY);
-        return result;
+        return
+        {
+            factorX * scaleX,
+            factorX * shearX,
+            factorX * translateX + centerX * (1.0f - factorX),
+            factorY * shearY,
+            factorY * scaleY,
+            factorY * translateY + centerY * (1.0f - factorY)
+        };
     }
 
     /** Create a scaling transformation
@@ -467,7 +384,7 @@ public:
 
         @return An AffineTransform object representing the specified scaling.
     */
-    static constexpr AffineTransform scaling (float factor) noexcept
+    [[nodiscard]] static constexpr AffineTransform scaling (float factor) noexcept
     {
         return { factor, 0.0f, 0.0f, 0.0f, factor, 0.0f };
     }
@@ -481,7 +398,7 @@ public:
 
         @return An AffineTransform object representing the specified non-uniform scaling.
     */
-    static constexpr AffineTransform scaling (float factorX, float factorY) noexcept
+    [[nodiscard]] static constexpr AffineTransform scaling (float factorX, float factorY) noexcept
     {
         return { factorX, 0.0f, 0.0f, 0.0f, factorY, 0.0f };
     }
@@ -497,32 +414,12 @@ public:
 
         @return An AffineTransform object representing the specified non-uniform scaling around the point.
     */
-    static constexpr AffineTransform scaling (float factorX, float factorY, float centerX, float centerY) noexcept
+    [[nodiscard]] static constexpr AffineTransform scaling (float factorX, float factorY, float centerX, float centerY) noexcept
     {
         return { factorX, 0.0f, centerX * (1.0f - factorX), 0.0f, factorY, centerY * (1.0f - factorY) };
     }
 
     //==============================================================================
-    /** Shear the transformation
-
-        Modifies this AffineTransform by shearing it by specified factors along the x and y axes.
-
-        @param factorX The shear factor to apply to the x-axis.
-        @param factorY The shear factor to apply to the y-axis.
-
-        @return A reference to this sheared AffineTransform object.
-    */
-    constexpr AffineTransform& shear (float factorX, float factorY) noexcept
-    {
-        scaleX += factorX * shearY;
-        shearX += factorX * scaleY;
-        translateX += factorX * translateY;
-        shearY += factorY * scaleX;
-        scaleY += factorY * shearX;
-        translateY += factorY * translateX;
-        return *this;
-    }
-
     /** Create a sheared transformation
 
         Creates a new AffineTransform object that represents this transformation sheared by specified factors along the x and y axes.
@@ -532,11 +429,17 @@ public:
 
         @return A new AffineTransform object representing the sheared transformation.
     */
-    constexpr AffineTransform sheared (float factorX, float factorY) const noexcept
+    [[nodiscard]] constexpr AffineTransform sheared (float factorX, float factorY) const noexcept
     {
-        AffineTransform result (*this);
-        result.shear (factorX, factorY);
-        return result;
+        return
+        {
+            scaleX + factorX * shearY,
+            shearX + factorX * shearX,
+            translateX + factorX * translateX,
+            shearY + factorY * scaleX,
+            scaleY + factorY * shearX,
+            translateY + factorY * translateX
+        };
     }
 
     /** Create a shearing transformation
@@ -548,31 +451,12 @@ public:
 
         @return An AffineTransform object representing the specified shearing.
     */
-    static constexpr AffineTransform shearing (float factorX, float factorY) noexcept
+    [[nodiscard]] static constexpr AffineTransform shearing (float factorX, float factorY) noexcept
     {
         return { 1.0f, factorX, 0.0f, factorY, 1.0f, 0.0f };
     }
 
     //==============================================================================
-    /** Apply another transformation to this one
-
-        Modifies this AffineTransform by applying another AffineTransform to it, combining their effects in sequence.
-
-        @param other The AffineTransform to apply to this one.
-
-        @return A reference to this updated AffineTransform object.
-    */
-    constexpr AffineTransform& followBy (const AffineTransform& other) noexcept
-    {
-        scaleX = scaleX * other.scaleX + shearX * other.shearY;
-        shearX = scaleX * other.shearX + shearX * other.scaleY;
-        translateX = scaleX * other.translateX + shearX * other.translateY + translateX;
-        shearY = shearY * other.scaleX + scaleY * other.shearY;
-        scaleY = shearY * other.shearX + scaleY * other.scaleY;
-        translateY = shearY * other.translateX + scaleY * other.translateY + translateY;
-        return *this;
-    }
-
     /** Create a transformation that follows another
 
         Creates a new AffineTransform object that represents this transformation followed by another specified AffineTransform.
@@ -581,11 +465,17 @@ public:
 
         @return A new AffineTransform object representing the combined transformation.
     */
-    constexpr AffineTransform followedBy (const AffineTransform& other) const noexcept
+    [[nodiscard]] constexpr AffineTransform followedBy (const AffineTransform& other) const noexcept
     {
-        AffineTransform result (*this);
-        result.followBy (other);
-        return result;
+        return
+        {
+            scaleX * other.scaleX + shearY * other.shearX,
+            shearX * other.scaleX + scaleY * other.shearX,
+            translateX * other.scaleX + translateY * other.shearX + other.translateX,
+            scaleX * other.shearY + shearY * other.scaleY,
+            shearX * other.shearY + scaleY * other.scaleY,
+            translateX * other.shearY + translateY * other.scaleY + other.translateY
+        };
     }
 
     //==============================================================================
@@ -615,7 +505,7 @@ public:
         @return A tuple representing the transformed coordinates of the last point processed.
     */
     template <class T, class... Args>
-    constexpr std::tuple<T, T> transformPoints (T& x, T& y, Args&&... args) const noexcept
+    constexpr void transformPoints (T& x, T& y, Args&&... args) const noexcept
     {
         transformPoint (x, y);
 
