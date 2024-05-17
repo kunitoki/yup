@@ -42,7 +42,7 @@ public:
         Constructs an AffineTransform object initialized to the identity transformation, which does not modify any points that it is applied to.
     */
     constexpr AffineTransform() noexcept
-        : AffineTransform (1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f)
+        : AffineTransform (identity())
     {
     }
 
@@ -231,7 +231,7 @@ public:
     [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians) const noexcept
     {
         if (angleInRadians == 0.0f)
-            return {};
+            return identity();
 
         const float cosTheta = std::cosf (angleInRadians);
         const float sinTheta = std::sinf (angleInRadians);
@@ -273,7 +273,7 @@ public:
     [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians) noexcept
     {
         if (angleInRadians == 0.0f)
-            return {};
+            return identity();
 
         const float cosTheta = std::cosf (angleInRadians);
         const float sinTheta = std::sinf (angleInRadians);
@@ -294,7 +294,7 @@ public:
     [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, float centerX, float centerY) noexcept
     {
         if (angleInRadians == 0.0f)
-            return {};
+            return identity();
 
         const float cosTheta = std::cosf (angleInRadians);
         const float sinTheta = std::sinf (angleInRadians);
