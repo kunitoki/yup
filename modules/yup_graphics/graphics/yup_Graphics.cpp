@@ -88,7 +88,7 @@ rive::RawPath toRawPath (const Path& path, const AffineTransform& transform)
     return rawPath;
 }
 
-void convertRawPathToCommandPath (const rive::RawPath& input, rive::CommandPath* output, const AffineTransform& transform)
+void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output, const AffineTransform& transform)
 {
     auto morphed = input.morph ([&transform](rive::Vec2D v)
     {
@@ -165,7 +165,7 @@ float drawText (Graphics& g,
         rawpath.transformInPlace (trans * scale);
 
         auto path = factory->makeEmptyRenderPath();
-        convertRawPathToCommandPath (rawpath, path.get(), transform);
+        convertRawPathToRenderPath (rawpath, path.get(), transform);
 
         renderer->drawPath (path.get(), paint.get());
 

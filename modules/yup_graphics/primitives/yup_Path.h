@@ -499,10 +499,14 @@ public:
 
 private:
     void updateBoundingBox (float x, float y);
+    void resetBoundingBox();
 
     std::vector<Segment> data;
     int lastSubpathIndex = -1;
-    Rectangle<float> boundingBox;
+    float minX = std::numeric_limits<float>::max();
+    float maxX = std::numeric_limits<float>::min();
+    float minY = std::numeric_limits<float>::max();
+    float maxY = std::numeric_limits<float>::min();
 };
 
 } // namespace yup

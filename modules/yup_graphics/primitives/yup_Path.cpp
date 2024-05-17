@@ -53,8 +53,9 @@ int Path::size() const
 void Path::clear()
 {
     data.clear();
+
     lastSubpathIndex = -1;
-    boundingBox = {};
+    resetBoundingBox();
 }
 
 //==============================================================================
@@ -68,6 +69,8 @@ void Path::moveTo (float x, float y)
         {
             segment.x = x;
             segment.y = y;
+
+            updateBoundingBox (x, y); // TODO this is wrong
             return;
         }
     }
@@ -300,7 +303,10 @@ void Path::appendPath (const Path& other)
     for (const auto& segment : other)
         data.push_back (segment);
 
-    boundingBox = boundingBox.smallestContainingRectangle (other.boundingBox);
+    minX = jmin (minX, other.minX);
+    maxX = jmax (maxX, other.maxX);
+    minY = jmin (minY, other.minY);
+    maxY = jmax (maxY, other.maxY);
 }
 
 void Path::appendPath (const Path& other, const AffineTransform& transform)
@@ -335,21 +341,23 @@ void Path::appendPath (const Path& other, const AffineTransform& transform)
 //==============================================================================
 Rectangle<float> Path::getBoundingBox() const
 {
-    return boundingBox;
+    return { minX, minY, maxX - minX, maxY - minY };
 }
 
-//==============================================================================
 void Path::updateBoundingBox (float x, float y)
 {
-    if (x < boundingBox.getX())
-        boundingBox = boundingBox.withX (x);
-    else if (auto right = boundingBox.getBottomRight().getY(); x > right)
-        boundingBox = boundingBox.enlargedRight (x - right);
+    minX = jmin (minX, x);
+    maxX = jmax (maxX, x);
+    minY = jmin (minY, y);
+    maxY = jmax (maxY, y);
+}
 
-    if (y < boundingBox.getY())
-        boundingBox = boundingBox.withY (y);
-    else if (auto left = boundingBox.getBottomRight().getY(); y > left)
-        boundingBox = boundingBox.enlargedBottom (y - left);
+void Path::resetBoundingBox()
+{
+    minX = std::numeric_limits<float>::max();
+    maxX = std::numeric_limits<float>::min();
+    minY = std::numeric_limits<float>::max();
+    maxY = std::numeric_limits<float>::min();
 }
 
 } // namespace yup

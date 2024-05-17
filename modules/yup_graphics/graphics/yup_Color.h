@@ -606,6 +606,21 @@ public:
         return result;
     }
 
+    //==============================================================================
+    static Color opaqueRandom() noexcept
+    {
+        auto random = Random();
+        random.setSeedRandomly();
+
+        return
+        {
+            255,
+            static_cast<uint8> (random.nextInt (255)),
+            static_cast<uint8> (random.nextInt (255)),
+            static_cast<uint8> (random.nextInt (255))
+        };
+    }
+
 private:
     constexpr static float componentToNormalized (uint8 component) noexcept
     {
