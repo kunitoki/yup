@@ -54,6 +54,7 @@ void Path::clear()
 {
     data.clear();
     lastSubpathIndex = -1;
+    boundingBox = {};
 }
 
 //==============================================================================
@@ -73,6 +74,8 @@ void Path::moveTo (float x, float y)
 
     lastSubpathIndex = static_cast<int> (data.size());
     data.emplace_back (SegmentType::MoveTo, x, y);
+
+    updateBoundingBox (x, y);
 }
 
 void Path::moveTo (const Point<float>& p)
@@ -85,6 +88,8 @@ void Path::moveTo (const Point<float>& p)
 void Path::lineTo (float x, float y)
 {
     data.emplace_back (SegmentType::LineTo, x, y);
+
+    updateBoundingBox (x, y);
 }
 
 void Path::lineTo (const Point<float>& p)
@@ -97,6 +102,8 @@ void Path::lineTo (const Point<float>& p)
 void Path::quadTo (float x, float y, float x1, float y1)
 {
     data.emplace_back (SegmentType::QuadTo, x, y, x1, y1);
+
+    updateBoundingBox (x, y);
 }
 
 void Path::quadTo (const Point<float>& p, float x1, float y1)
@@ -109,6 +116,8 @@ void Path::quadTo (const Point<float>& p, float x1, float y1)
 void Path::cubicTo (float x, float y, float x1, float y1, float x2, float y2)
 {
     data.emplace_back (SegmentType::CubicTo, x, y, x1, y1, x2, y2);
+
+    updateBoundingBox (x, y);
 }
 
 void Path::cubicTo (const Point<float>& p, float x1, float y1, float x2, float y2)
@@ -289,19 +298,58 @@ void Path::appendPath (const Path& other)
     reserveSpace (size() + other.size());
 
     for (const auto& segment : other)
+        data.push_back (segment);
+
+    boundingBox = boundingBox.smallestContainingRectangle (other.boundingBox);
+}
+
+void Path::appendPath (const Path& other, const AffineTransform& transform)
+{
+    reserveSpace (size() + other.size());
+
+    for (auto segment : other)
     {
         if (segment.type == Path::SegmentType::MoveTo)
+        {
+            transform.transformPoints (segment.x, segment.y);
             moveTo (segment.x, segment.y);
-
+        }
         else if (segment.type == Path::SegmentType::LineTo)
+        {
+            transform.transformPoints (segment.x, segment.y);
             lineTo (segment.x, segment.y);
-
+        }
         else if (segment.type == Path::SegmentType::QuadTo)
+        {
+            transform.transformPoints (segment.x, segment.y, segment.x1, segment.y1);
             quadTo (segment.x, segment.y, segment.x1, segment.y1);
-
+        }
         else if (segment.type == Path::SegmentType::CubicTo)
+        {
+            transform.transformPoints (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
             cubicTo (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
+        }
     }
+}
+
+//==============================================================================
+Rectangle<float> Path::getBoundingBox() const
+{
+    return boundingBox;
+}
+
+//==============================================================================
+void Path::updateBoundingBox (float x, float y)
+{
+    if (x < boundingBox.getX())
+        boundingBox = boundingBox.withX (x);
+    else if (auto right = boundingBox.getBottomRight().getY(); x > right)
+        boundingBox = boundingBox.enlargedRight (x - right);
+
+    if (y < boundingBox.getY())
+        boundingBox = boundingBox.withY (y);
+    else if (auto left = boundingBox.getBottomRight().getY(); y > left)
+        boundingBox = boundingBox.enlargedBottom (y - left);
 }
 
 } // namespace yup

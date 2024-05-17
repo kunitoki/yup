@@ -392,6 +392,19 @@ public:
     */
     void appendPath (const Path& other);
 
+    /** Appends another path to this one applying a transformation.
+
+        This method appends all segments of another path to this path applying an affine transformation to its point
+        before being added.
+
+        @param other The path with transformation to append to this path.
+    */
+    void appendPath (const Path& other, const AffineTransform& transform);
+
+    //==============================================================================
+    /** Returns the bounding box of this path. */
+    Rectangle<float> getBoundingBox() const;
+
     //==============================================================================
     /** Provides an iterator to the beginning of the path data.
 
@@ -485,8 +498,11 @@ public:
     };
 
 private:
+    void updateBoundingBox (float x, float y);
+
     std::vector<Segment> data;
     int lastSubpathIndex = -1;
+    Rectangle<float> boundingBox;
 };
 
 } // namespace yup

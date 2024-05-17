@@ -794,6 +794,15 @@ public:
         return *this;
     }
 
+    constexpr Rectangle& reduce (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
+    {
+        xy = { xy.getX() + left, xy.getY() + top };
+        size = { jmax (ValueType (0), size.getWidth () - (left + right)),
+                 jmax (ValueType (0), size.getHeight () - (top + bottom)) };
+
+        return *this;
+    }
+
     /** Returns a new rectangle with its size reduced by a uniform amount on all sides.
 
         This method creates a new rectangle with the same position but its width and height shrunk by the specified delta, equally from all edges.
@@ -802,7 +811,7 @@ public:
 
         @return A new rectangle with the reduced size.
     */
-    constexpr Rectangle reduced (ValueType delta) noexcept
+    constexpr Rectangle reduced (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.reduce (delta);
@@ -818,10 +827,149 @@ public:
 
         @return A new rectangle with the reduced size.
     */
-    constexpr Rectangle reduced (ValueType deltaX, ValueType deltaY) noexcept
+    constexpr Rectangle reduced (ValueType deltaX, ValueType deltaY) const noexcept
     {
         Rectangle result = *this;
         result.reduce (deltaX, deltaY);
+        return result;
+    }
+
+    constexpr Rectangle reduced (ValueType left, ValueType top, ValueType right, ValueType bottom) const noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (left, top, right, bottom);
+        return result;
+    }
+
+    constexpr Rectangle reducedLeft (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (delta, ValueType (0), ValueType (0), ValueType (0));
+        return result;
+    }
+
+    constexpr Rectangle reducedTop (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (ValueType (0), delta, ValueType (0), ValueType (0));
+        return result;
+    }
+
+    constexpr Rectangle reducedRight (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (ValueType (0), ValueType (0), delta, ValueType (0));
+        return result;
+    }
+
+    constexpr Rectangle reducedBottom (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.reduce (ValueType (0), ValueType (0), ValueType (0), delta);
+        return result;
+    }
+
+    //==============================================================================
+    /** Enlarges the size of the rectangle by a uniform amount on all sides.
+
+        This method expand the rectangle's width and height by the specified delta, equally increasing the size on all edges.
+
+        @param delta The amount to enlarge each side by.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& enlarge (ValueType delta) noexcept
+    {
+        xy = { xy.getX() - delta, xy.getY() - delta };
+        size = { jmax (ValueType (0), size.getWidth () + ValueType (2) * delta),
+                 jmax (ValueType (0), size.getHeight () + ValueType (2) * delta) };
+
+        return *this;
+    }
+
+    /** Enlarges the width and height of the rectangle by different amounts on all sides.
+
+        This method expand the rectangle's width by deltaX and height by deltaY, increasing the size on all edges by these respective amounts.
+
+        @param deltaX The amount to enlarge the width by on each side.
+        @param deltaY The amount to enlarge the height by on each side.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& enlarge (ValueType deltaX, ValueType deltaY) noexcept
+    {
+        xy = { xy.getX() - deltaX, xy.getY() - deltaY };
+        size = { jmax (ValueType (0), size.getWidth () + ValueType (2) * deltaX),
+                 jmax (ValueType (0), size.getHeight () + ValueType (2) * deltaY) };
+
+        return *this;
+    }
+
+    constexpr Rectangle& enlarge (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
+    {
+        xy = { xy.getX() - left, xy.getY() - top };
+        size = { jmax (ValueType (0), size.getWidth () + (left + right)),
+                 jmax (ValueType (0), size.getHeight () + (top + bottom)) };
+
+        return *this;
+    }
+
+    /** Returns a new rectangle with its size reduced by a uniform amount on all sides.
+
+        This method creates a new rectangle with the same position but its width and height shrunk by the specified delta, equally from all edges.
+
+        @param delta The amount to reduce each side by.
+
+        @return A new rectangle with the reduced size.
+    */
+    constexpr Rectangle enlarged (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (delta);
+        return result;
+    }
+
+    /** Returns a new rectangle with its width and height reduced by different amounts on all sides.
+
+        This method creates a new rectangle with the same position but its width and height shrunk by the specified deltaX and deltaY, respectively.
+
+        @param deltaX The amount to reduce the width by on each side.
+        @param deltaY The amount to reduce the height by on each side.
+
+        @return A new rectangle with the reduced size.
+    */
+    constexpr Rectangle enlarged (ValueType deltaX, ValueType deltaY) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (deltaX, deltaY);
+        return result;
+    }
+
+    constexpr Rectangle enlargedLeft (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (delta, ValueType (0), ValueType (0), ValueType (0));
+        return result;
+    }
+
+    constexpr Rectangle enlargedTop (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (ValueType (0), delta, ValueType (0), ValueType (0));
+        return result;
+    }
+
+    constexpr Rectangle enlargedRight (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (ValueType (0), ValueType (0), delta, ValueType (0));
+        return result;
+    }
+
+    constexpr Rectangle enlargedBottom (ValueType delta) const noexcept
+    {
+        Rectangle result = *this;
+        result.enlarge (ValueType (0), ValueType (0), ValueType (0), delta);
         return result;
     }
 
@@ -903,6 +1051,22 @@ public:
             const auto newPosY = static_cast<ValueType> ((getHeight() - getWidth()) / 2.0f);
             return { xy.getX(), xy.getY() + newPosY, getWidth(), getWidth() };
         }
+    }
+
+    //==============================================================================
+    /** Returns the smallest containing rectangle between this and another rectangle.
+
+        @return A Rectangle representing the smallest containing rectangle of two rectangles.
+    */
+    constexpr Rectangle smallestContainingRectangle (const Rectangle& other) const noexcept
+    {
+        return
+        {
+            jmin (getX(), other.getX()),
+            jmin (getY(), other.getY()),
+            jmax (getWidth(), other.getWidth()),
+            jmax (getHeight(), other.getHeight())
+        };
     }
 
     //==============================================================================
