@@ -251,6 +251,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
 
 JUCE_END_IGNORE_WARNINGS_MSVC
 
+#include "misc/juce_MetaProgramming.h"
 #include "text/juce_String.h"
 #include "text/juce_StringRef.h"
 #include "logging/juce_Logger.h"
