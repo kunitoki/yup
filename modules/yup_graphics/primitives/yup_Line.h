@@ -571,7 +571,7 @@ JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Line<ValueType
 }
 
 template <std::size_t I, class ValueType>
-ValueType get (const Line<ValueType>& line)
+constexpr ValueType get (const Line<ValueType>& line) noexcept
 {
     if constexpr (I == 0)
         return line.getStart().getX();
@@ -582,7 +582,7 @@ ValueType get (const Line<ValueType>& line)
     else if constexpr (I == 3)
         return line.getEnd().getY();
     else
-        return {}; // TODO - error
+        static_assert (dependentFalse<I>);
 }
 
 } // namespace yup

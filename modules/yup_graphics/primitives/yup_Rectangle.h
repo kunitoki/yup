@@ -1051,7 +1051,7 @@ JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Rectangle<Valu
 }
 
 template <std::size_t I, class ValueType>
-ValueType get (const Rectangle<ValueType>& point)
+constexpr ValueType get (const Rectangle<ValueType>& point) noexcept
 {
     if constexpr (I == 0)
         return point.getX();
@@ -1062,7 +1062,7 @@ ValueType get (const Rectangle<ValueType>& point)
     else if constexpr (I == 3)
         return point.getHeight();
     else
-        return {}; // TODO - error
+        static_assert (dependentFalse<I>);
 }
 
 } // namespace yup

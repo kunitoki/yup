@@ -575,14 +575,14 @@ JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Size<ValueType
 }
 
 template <std::size_t I, class ValueType>
-ValueType get (const Size<ValueType>& point)
+constexpr ValueType get (const Size<ValueType>& point) noexcept
 {
     if constexpr (I == 0)
         return point.getWidth();
     else if constexpr (I == 1)
         return point.getHeight();
     else
-        return {}; // TODO - error
+        static_assert (dependentFalse<I>);
 }
 
 } // namespace yup

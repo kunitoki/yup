@@ -563,7 +563,7 @@ private:
 };
 
 template <std::size_t I>
-float get (const AffineTransform& transform)
+constexpr float get (const AffineTransform& transform) noexcept
 {
     if constexpr (I == 0)
         return transform.getScaleX();
@@ -578,7 +578,7 @@ float get (const AffineTransform& transform)
     else if constexpr (I == 5)
         return transform.getTranslateY();
     else
-        return {}; // TODO - error
+        static_assert (dependentFalse<I>);
 }
 
 } // namespace yup
