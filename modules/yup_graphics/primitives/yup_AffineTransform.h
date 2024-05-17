@@ -434,11 +434,11 @@ public:
         return
         {
             scaleX + factorX * shearY,
-            shearX + factorX * shearX,
-            translateX + factorX * translateX,
+            shearX + factorX * scaleY,
+            translateX,
             shearY + factorY * scaleX,
             scaleY + factorY * shearX,
-            translateY + factorY * translateX
+            translateY
         };
     }
 
