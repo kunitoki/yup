@@ -37,7 +37,7 @@ public:
     static inline constexpr Flags noFlags = Flags();
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
-    static inline constexpr Flags defaultFlags = decoratedWindow | renderContinuous;
+    static inline constexpr Flags defaultFlags = decoratedWindow;
 
     //==============================================================================
     ComponentNative (Component& newComponent, const Flags& newFlags);
@@ -84,6 +84,10 @@ public:
     virtual void enableAtomicMode (bool shouldBeEnabled) = 0;
     virtual bool isWireframeEnabled() const = 0;
     virtual void enableWireframe (bool shouldBeEnabld) = 0;
+
+    //==============================================================================
+    virtual void repaint (const Rectangle<float>& rect) = 0;
+    virtual Rectangle<float> getRepaintArea() const = 0;
 
     //==============================================================================
     virtual float getScaleDpi() const = 0;

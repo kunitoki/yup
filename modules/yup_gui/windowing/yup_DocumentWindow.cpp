@@ -24,15 +24,18 @@ namespace yup
 
 //==============================================================================
 
-DocumentWindow::DocumentWindow()
+DocumentWindow::DocumentWindow (ComponentNative::Flags flags, const Color& backgroundColor)
+    : backgroundColor (backgroundColor)
 {
-    addToDesktop (ComponentNative::defaultFlags);
+    addToDesktop (flags);
 }
 
 DocumentWindow::~DocumentWindow()
 {
     removeFromDesktop();
 }
+
+//==============================================================================
 
 void DocumentWindow::centreWithSize (const Size<int>& size)
 {
@@ -56,6 +59,14 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
     {
         setSize (size.to<float> ());
     }
+}
+
+//==============================================================================
+
+void DocumentWindow::paint (Graphics& g)
+{
+    g.setColor (backgroundColor);
+    g.fillAll();
 }
 
 } // namespace yup

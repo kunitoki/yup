@@ -28,13 +28,18 @@ class JUCE_API DocumentWindow : public Component
 {
 public:
     //==============================================================================
-    DocumentWindow();
+    DocumentWindow (ComponentNative::Flags flags = ComponentNative::defaultFlags, const Color& backgroundColor = {});
     ~DocumentWindow() override;
 
+    //==============================================================================
     void centreWithSize (const Size<int>& size);
 
-private:
     //==============================================================================
+    /** @internal */
+    void paint (Graphics& g) override;
+
+private:
+    Color backgroundColor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DocumentWindow)
 };

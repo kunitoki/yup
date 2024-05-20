@@ -27,34 +27,31 @@ namespace yup
 class JUCE_API StyledText
 {
 public:
+    //==============================================================================
+    enum Alignment
+    {
+        left,
+        center,
+        right
+    };
+
+    //==============================================================================
     StyledText();
 
+    //==============================================================================
     void clear();
 
+    //==============================================================================
     void appendText (const Font& font,
                      float size,
                      float lineHeight,
                      const char text[]);
 
-    rive::SimpleArray<rive::Paragraph>& getParagraphs()
-    {
-        return paragraphs;
-    }
+    //==============================================================================
+    void layout (const Rectangle<float>& rect, Alignment align);
 
-    const rive::SimpleArray<rive::Paragraph>& getParagraphs() const
-    {
-        return paragraphs;
-    }
-
-    std::vector<rive::TextRun>& getTextRuns()
-    {
-        return textRuns;
-    }
-
-    const std::vector<rive::TextRun>& getTextRuns() const
-    {
-        return textRuns;
-    }
+    //==============================================================================
+    const std::vector<rive::RawPath>& getGlyphs() const;
 
 private:
     rive::TextRun append (const Font& font,
@@ -62,9 +59,19 @@ private:
                           float lineHeight,
                           const char text[]);
 
+    float layoutText (const rive::GlyphRun& run,
+                      unsigned startIndex,
+                      unsigned endIndex,
+                      rive::Vec2D origin);
+
+    float layoutParagraph (const rive::Paragraph& paragraph,
+                           const rive::SimpleArray<rive::GlyphLine>& lines,
+                           rive::Vec2D origin);
+
     std::vector<rive::Unichar> unicodeChars;
     rive::SimpleArray<rive::Paragraph> paragraphs;
     std::vector<rive::TextRun> textRuns;
+    std::vector<rive::RawPath> glyphPaths;
 };
 
 } // namespace yup

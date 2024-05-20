@@ -40,7 +40,7 @@ MouseEvent::Buttons toMouseButton (int button) noexcept
 
 //==============================================================================
 
-int keyToModifier (int key)
+int convertKeyToModifier (int key) noexcept
 {
     int mod = 0;
 
@@ -256,6 +256,10 @@ public:
     void enableWireframe (bool shouldBeEnabled) override;
 
     //==============================================================================
+    void repaint (const Rectangle<float>& rect) override;
+    Rectangle<float> getRepaintArea() const override;
+
+    //==============================================================================
 
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
@@ -285,7 +289,6 @@ public:
     void timerCallback() override;
 
     //==============================================================================
-    void handlePaint (Graphics& g, float frameRate);
     void handleMouseMoveOrDrag (const Point<float>& localPosition);
     void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
     void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
@@ -345,6 +348,9 @@ private:
     std::atomic<bool> shouldRenderContinuous = false;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
+    int forcedRedraws = 0;
+
+    Rectangle<float> currentRepaintArea;
 
    #if JUCE_MAC
     id<MTLDevice> gpu = nil;
@@ -483,27 +489,7 @@ bool GLFWComponentNative::isVisible() const
 
 void GLFWComponentNative::setSize (const Size<int>& size)
 {
-    jassert (window != nullptr);
-
-   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-    double devicePixelRatio = emscripten_get_device_pixel_ratio();
-
-    glfwSetWindowSize (window,
-        static_cast<int> (size.getWidth() * devicePixelRatio),
-        static_cast<int> (size.getHeight() * devicePixelRatio));
-
-    EM_ASM (
-    {
-        var canvas = document.getElementById("canvas");
-        canvas.style = "width:" + $0 + "px; height:" + $1 + "px;";
-    }, size.getWidth(), size.getHeight());
-
-   #else
-    glfwSetWindowSize (window, size.getWidth(), size.getHeight());
-
-   #endif
-
-   screenBounds = screenBounds.withSize (size);
+    setBounds (screenBounds.withSize (size));
 }
 
 Size<int> GLFWComponentNative::getSize() const
@@ -531,6 +517,8 @@ Point<int> GLFWComponentNative::getPosition() const
 
 void GLFWComponentNative::setPosition (const Point<int>& newPosition)
 {
+    jassert (window != nullptr);
+
     glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
 
     screenBounds = screenBounds.withPosition (newPosition);
@@ -622,9 +610,8 @@ bool GLFWComponentNative::isDecorated() const
 void GLFWComponentNative::setOpacity (float opacity)
 {
     jassert (window != nullptr);
-    jassert (isPositiveAndBelow (opacity, 1.0f));
 
-    glfwSetWindowOpacity (window, opacity);
+    glfwSetWindowOpacity (window, jlimit (0.0f, 1.0f, opacity));
 }
 
 float GLFWComponentNative::getOpacity() const
@@ -637,7 +624,7 @@ float GLFWComponentNative::getOpacity() const
 void GLFWComponentNative::setFocusedComponent (Component* comp)
 {
     if (lastComponentFocused != nullptr)
-        ;
+        ; // TODO
 
     lastComponentFocused = comp;
 }
@@ -677,6 +664,23 @@ bool GLFWComponentNative::isWireframeEnabled() const
 void GLFWComponentNative::enableWireframe (bool shouldBeEnabled)
 {
     renderWireframe = shouldBeEnabled;
+}
+
+//==============================================================================
+
+void GLFWComponentNative::repaint (const Rectangle<float>& rect)
+{
+    if (! currentRepaintArea.isEmpty())
+        currentRepaintArea = currentRepaintArea.smallestContainingRectangle (rect);
+    else
+        currentRepaintArea = rect;
+
+    triggerRenderingUpdate();
+}
+
+Rectangle<float> GLFWComponentNative::getRepaintArea() const
+{
+    return currentRepaintArea;
 }
 
 //==============================================================================
@@ -752,28 +756,27 @@ void GLFWComponentNative::run()
         triggerAsyncUpdate();
         renderEvent.wait (maxFrameTimeMs);
 
+        // Wait for any repaint command
+        if (! shouldRenderContinuous)
+        {
+            while (! commandEvent.wait (1000.0f))
+                currentFrameRate.store (0.0f, std::memory_order_relaxed);
+        }
+
         // Measure spent time
         double currentTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
-        // Wait for a stable frame time
-        if (shouldRenderContinuous)
+        const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
+        if (secondsToWait > 0.0f)
         {
-            const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
-            if (secondsToWait > 0.0f)
-            {
-                const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
+            const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
-                while (Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
-                    Thread::sleep (1);
+            while (Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
+                Thread::sleep (1);
 
-                while (Time::getMillisecondCounterHiRes() < waitUntilMs)
-                    Thread::sleep (0);
-            }
-        }
-        else
-        {
-            commandEvent.wait();
+            while (Time::getMillisecondCounterHiRes() < waitUntilMs)
+                Thread::sleep (0);
         }
 
         // Measure current framerate
@@ -811,6 +814,7 @@ void GLFWComponentNative::timerCallback()
 void GLFWComponentNative::renderContext()
 {
     auto [contentWidth, contentHeight] = getContentSize();
+    auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
 
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
@@ -819,16 +823,28 @@ void GLFWComponentNative::renderContext()
 
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
+
+        repaint (Rectangle<float> (0, 0, contentWidth, contentHeight));
+        forcedRedraws = 2;
     }
 
     jassert (context != nullptr);
     jassert (renderer != nullptr);
 
+    if (! renderContinuous && currentRepaintArea.isEmpty())
+        return;
+
+    const auto loadAction = renderContinuous
+        ? rive::pls::LoadAction::clear
+        : rive::pls::LoadAction::preserveRenderTarget;
+
+    // Begin context drawing
     context->begin (
     {
         .renderTargetWidth = static_cast<uint32_t> (contentWidth),
         .renderTargetHeight = static_cast<uint32_t> (contentHeight),
-        .clearColor = 0xff404040,
+        .loadAction = loadAction,
+        .clearColor = 0xff000000,
         .msaaSampleCount = 0,
         .disableRasterOrdering = renderAtomicMode,
         .wireframe = renderWireframe,
@@ -836,12 +852,21 @@ void GLFWComponentNative::renderContext()
         .strokesDisabled = false,
     });
 
+    // Repaint components hierarchy
     Graphics g (*context, *renderer);
-    handlePaint (g, desiredFrameRate);
+    component.internalPaint (g, desiredFrameRate);
 
+    // Finish context drawing
     context->end (getNativeHandle());
-
     context->tick();
+
+    if (! renderContinuous)
+    {
+        if (forcedRedraws > 0)
+            --forcedRedraws;
+        else
+            currentRepaintArea = {};
+    }
 }
 
 //==============================================================================
@@ -851,14 +876,8 @@ void GLFWComponentNative::triggerRenderingUpdate()
     if (shouldRenderContinuous)
         return;
 
+    forcedRedraws = 2;
     commandEvent.signal();
-}
-
-//==============================================================================
-
-void GLFWComponentNative::handlePaint (Graphics& g, float frameRate)
-{
-    component.internalPaint (g, frameRate);
 }
 
 //==============================================================================
@@ -886,16 +905,12 @@ void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPositi
     }
 
     lastMouseMovePosition = localPosition;
-
-    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
     currentKeyModifiers = modifiers;
-
-    //DBG ("handleMouseDown: " << globalPosition);
 
     const auto event = MouseEvent()
         .withButtons (currentMouseButtons)
@@ -910,8 +925,6 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
 
     if (lastComponentClicked != nullptr)
     {
-        //DBG ("handleMouseDown: " << lastComponentClicked->getTitle());
-
         lastMouseDownPosition = localPosition;
 
         lastComponentClicked->internalMouseDown (event
@@ -921,8 +934,6 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     }
 
     lastMouseMovePosition = localPosition;
-
-    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
@@ -937,8 +948,6 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
 
     if (lastComponentClicked != nullptr)
     {
-        //DBG ("handleMouseUp: " << lastComponentClicked->getTitle());
-
         lastComponentClicked->internalMouseUp (event
             .withSourceComponent (lastComponentClicked)
             //.withSourcePosition (lastMouseDownPosition)
@@ -953,8 +962,6 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     }
 
     lastMouseMovePosition = localPosition;
-
-    triggerRenderingUpdate();
 }
 
 //==============================================================================
@@ -968,18 +975,12 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 
     if (lastComponentClicked != nullptr)
     {
-        //DBG ("handleMouseWheel: " << lastComponentClicked->getTitle());
-
         lastComponentClicked->internalMouseWheel (event, wheelData);
     }
     else if (lastComponentFocused != nullptr)
     {
-        //DBG ("handleMouseWheel: " << lastComponentFocused->getTitle());
-
         lastComponentFocused->internalMouseWheel (event, wheelData);
     }
-
-    triggerRenderingUpdate();
 }
 
 //==============================================================================
@@ -993,8 +994,6 @@ void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
         lastComponentFocused->internalKeyDown (keys, cursorPosition);
     else
         component.internalKeyDown (keys, cursorPosition);
-
-    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
@@ -1006,17 +1005,12 @@ void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
         lastComponentFocused->internalKeyUp (keys, cursorPosition);
     else
         component.internalKeyUp (keys, cursorPosition);
-
-    triggerRenderingUpdate();
 }
 
 //==============================================================================
 
 void GLFWComponentNative::handleMoved (int xpos, int ypos)
 {
-    //DBG ("handleMoved: " << xpos << ", " << ypos);
-    //DBG ("  size:      " << getBounds());
-
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
@@ -1024,9 +1018,6 @@ void GLFWComponentNative::handleMoved (int xpos, int ypos)
 
 void GLFWComponentNative::handleResized (int width, int height)
 {
-    //DBG ("handleResized: " << width << ", " << height);
-    //DBG ("  size:        " << getBounds());
-
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
@@ -1037,8 +1028,6 @@ void GLFWComponentNative::handleResized (int width, int height)
 void GLFWComponentNative::handleFocusChanged (bool gotFocus)
 {
     //DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
-
-    triggerRenderingUpdate();
 }
 
 void GLFWComponentNative::handleUserTriedToCloseWindow()
@@ -1151,12 +1140,12 @@ void GLFWComponentNative::glfwKeyPress (GLFWwindow* window, int key, int scancod
 
     if (action == GLFW_PRESS)
     {
-        mods |= keyToModifier (key);
+        mods |= convertKeyToModifier (key);
         nativeComponent->handleKeyDown (toKeyPress (key, scancode, mods), cursorPosition);
     }
     else
     {
-        mods &= ~keyToModifier (key);
+        mods &= ~convertKeyToModifier (key);
         nativeComponent->handleKeyUp (toKeyPress (key, scancode, mods), cursorPosition);
     }
 }

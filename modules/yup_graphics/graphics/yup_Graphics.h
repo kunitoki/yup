@@ -167,6 +167,10 @@ public:
     */
     AffineTransform getTransform() const;
 
+    void setClipPath (const Rectangle<float>& clipRect);
+    void setClipPath (const Path& clipPath);
+    Path getClipPath() const;
+
     //==============================================================================
     /** Draws a line between two points with a specified thickness.
 
@@ -357,34 +361,34 @@ public:
 private:
     struct RenderOptions
     {
-        constexpr RenderOptions() noexcept = default;
+        RenderOptions() noexcept = default;
 
-        constexpr bool isColor() const noexcept
+        bool isColor() const noexcept
         {
             return isCurrentBrushColor;
         }
 
-        constexpr Color getColor() const noexcept
+        Color getColor() const noexcept
         {
-            return color.withAlpha (alpha);
+            return color.withMultipliedAlpha (alpha);
         }
 
-        constexpr bool isColorGradient() const noexcept
+        bool isColorGradient() const noexcept
         {
             return ! isCurrentBrushColor;
         }
 
-        constexpr ColorGradient getColorGradient() const noexcept
+        ColorGradient getColorGradient() const noexcept
         {
-            return gradient.withAlpha (alpha);
+            return gradient.withMultipliedAlpha (alpha);
         }
 
-        constexpr const Rectangle<float>& getDrawingArea() const noexcept
+        const Rectangle<float>& getDrawingArea() const noexcept
         {
             return drawingArea;
         }
 
-        constexpr AffineTransform getTransform() const noexcept
+        AffineTransform getTransform() const noexcept
         {
             return transform
                 .translated (drawingArea.getX(), drawingArea.getY());
@@ -396,6 +400,7 @@ private:
         ColorGradient gradient;
         Rectangle<float> drawingArea;
         AffineTransform transform;
+        Path clipPath;
         uint8 alpha = 255;
         bool isCurrentBrushColor = true;
     };

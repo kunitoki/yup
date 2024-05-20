@@ -39,6 +39,8 @@ class CustomWindow : public yup::DocumentWindow
 public:
     CustomWindow()
     {
+        getNativeComponent()->enableContinuousRepainting (true);
+
         rive::Factory* factory = getNativeComponent()->getFactory();
         if (factory == nullptr)
         {
@@ -53,7 +55,7 @@ public:
 #else
         yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
 #endif
-        riveFilePath = riveFilePath.getChildFile("alien.riv");
+        riveFilePath = riveFilePath.getChildFile("toymachine_3.riv");
 
         if (riveFilePath.existsAsFile())
         {
@@ -81,7 +83,7 @@ public:
 
     void mouseUp (const yup::MouseEvent& event) override
     {
-        if (scenes.empty() || ! event.isLeftButtoDown())
+        if (scenes.empty())
             return;
 
         auto [x, y] = event.getPosition();
@@ -191,8 +193,9 @@ public:
         }
     }
 
-    void paint (yup::Graphics& g, float frameRate) override
+    void paint (yup::Graphics& g) override
     {
+        double frameRate = 60.0f; // getNativeComponent()->getDesiredFrameRate();
         double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
 
         const yup::ScopeGuard sg { [this] { updateFrameTime(); } };
@@ -269,7 +272,7 @@ private:
 
             std::unique_ptr<rive::Scene> scene;
 
-            //scene = artboard->defaultStateMachine();
+            scene = artboard->defaultStateMachine();
             if (scene == nullptr)
             {
                 if (stateMachine >= 0)

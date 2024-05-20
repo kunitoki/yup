@@ -27,46 +27,28 @@ namespace yup
 class JUCE_API Font
 {
 public:
-    Font();
+    //==============================================================================
+    Font() = default;
 
-    Font (Span<const uint8> fontBytes, rive::Factory* factory)
-    {
-        loadFromData (fontBytes, factory);
-    }
+    //==============================================================================
+    Font (Span<const uint8> fontBytes, rive::Factory* factory);
+    Font (const File& fontFile, rive::Factory* factory);
 
-    Font (const File& fontFile, rive::Factory* factory)
-    {
-        loadFromFile (fontFile, factory);
-    }
+    //==============================================================================
+    /** Copy and move constructors and assignment operators. */
+    Font (const Font& other) noexcept = default;
+    Font (Font&& other) noexcept = default;
+    Font& operator=(const Font& other) noexcept = default;
+    Font& operator=(Font&& other) noexcept = default;
 
-    Result loadFromData (Span<const uint8> fontBytes, rive::Factory* factory)
-    {
-        font = factory->decodeFont (rive::Span<const uint8_t> { fontBytes.data(), fontBytes.size() });
-        return font ? Result::ok() : Result::fail ("Unable to load font");
-    }
+    //==============================================================================
+    Result loadFromData (Span<const uint8> fontBytes, rive::Factory* factory);
 
-    Result loadFromFile (const File& fontFile, rive::Factory* factory)
-    {
-        if (! fontFile.existsAsFile())
-            return Result::fail ("Unable to load font from non existing file");
+    //==============================================================================
+    Result loadFromFile (const File& fontFile, rive::Factory* factory);
 
-        if (auto is = fontFile.createInputStream(); is != nullptr && is->openedOk())
-        {
-            yup::MemoryBlock mb;
-            is->readIntoMemoryBlock (mb);
-
-            font = factory->decodeFont (rive::Span<const uint8_t> { static_cast<const uint8_t*> (mb.getData()), mb.getSize() });
-            if (! font)
-                return Result::fail ("Unable to load font");
-        }
-
-        return Result::ok();
-    }
-
-    rive::rcp<rive::Font> getFont() const
-    {
-        return font;
-    }
+    //==============================================================================
+    rive::rcp<rive::Font> getFont() const;
 
 private:
     rive::rcp<rive::Font> font;

@@ -165,6 +165,24 @@ public:
         return { alpha, r, g, b };
     }
 
+    // TODO - doxygen
+    constexpr Color withAlpha (float alpha) const noexcept
+    {
+        return { normalizedToComponent (alpha), r, g, b };
+    }
+
+    // TODO - doxygen
+    constexpr Color withMultipliedAlpha (uint8 alpha) const noexcept
+    {
+        return { normalizedToComponent (componentToNormalized (a) * componentToNormalized (alpha)), r, g, b };
+    }
+
+    // TODO - doxygen
+    constexpr Color withMultipliedAlpha (float alpha) const noexcept
+    {
+        return { normalizedToComponent (componentToNormalized (a) * alpha), r, g, b };
+    }
+
     //==============================================================================
     /** Returns the red component of the color.
 
@@ -219,6 +237,12 @@ public:
     constexpr Color withRed (uint8 red) const noexcept
     {
         return { a, red, g, b };
+    }
+
+    // TODO - doxygen
+    constexpr Color withRed (float red) const noexcept
+    {
+        return { a, normalizedToComponent (red), g, b };
     }
 
     //==============================================================================
@@ -277,6 +301,12 @@ public:
         return { a, r, green, b };
     }
 
+    // TODO - doxygen
+    constexpr Color withGreen (float green) const noexcept
+    {
+        return { a, r, normalizedToComponent (green), b };
+    }
+
     //==============================================================================
     /** Returns the blue component of the color.
 
@@ -331,6 +361,12 @@ public:
     constexpr Color withBlue (uint8 blue) const noexcept
     {
         return { a, r, g, blue };
+    }
+
+    // TODO - doxygen
+    constexpr Color withBlue (float blue) const noexcept
+    {
+        return { a, r, g, normalizedToComponent (blue) };
     }
 
     //==============================================================================

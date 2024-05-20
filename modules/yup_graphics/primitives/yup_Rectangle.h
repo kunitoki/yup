@@ -495,6 +495,15 @@ public:
     }
 
     //==============================================================================
+    /** Checks if the rectangle's size is zero.
+
+        @return True if both the width and height are zero, otherwise false.
+    */
+    constexpr bool isEmpty() const noexcept
+    {
+        return size.isZero();
+    }
+
     /** Checks if the rectangle's size is zero (i.e., it is a point).
 
         @return True if both the width and height are zero, otherwise false.
@@ -1029,6 +1038,19 @@ public:
                  getY() > otherBottomRight.getY() || bottomRight.getY() < other.getY());
     }
 
+    constexpr Rectangle intersection (const Rectangle& other) const noexcept
+    {
+        const auto x1 = jmax (getX(), other.getX());
+        const auto y1 = jmax (getY(), other.getY());
+        const auto x2 = jmin (getX() + getWidth(), other.getX() + other.getWidth());
+        const auto y2 = jmin (getY() + getHeight(), other.getY() + other.getHeight());
+
+        if (x1 < x2 && y1 < y2)
+            return { x1, y1, x2 - x1, y2 - y1 };
+
+        return {};
+    }
+
     //==============================================================================
     /** Returns the largest square that fits within the rectangle.
 
@@ -1060,13 +1082,15 @@ public:
     */
     constexpr Rectangle smallestContainingRectangle (const Rectangle& other) const noexcept
     {
-        return
-        {
-            jmin (getX(), other.getX()),
-            jmin (getY(), other.getY()),
-            jmax (getWidth(), other.getWidth()),
-            jmax (getHeight(), other.getHeight())
-        };
+        const auto x1 = jmin (getX(), other.getX());
+        const auto y1 = jmin (getY(), other.getY());
+        const auto x2 = jmax (getX() + getWidth(), other.getX() + other.getWidth());
+        const auto y2 = jmax (getY() + getHeight(), other.getY() + other.getHeight());
+
+        if (x1 < x2 && y1 < y2)
+            return { x1, y1, x2 - x1, y2 - y1 };
+
+        return {};
     }
 
     //==============================================================================

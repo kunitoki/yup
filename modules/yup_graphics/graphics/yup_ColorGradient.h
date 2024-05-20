@@ -179,6 +179,13 @@ public:
         finish.color.setAlpha (alpha);
     }
 
+    // TODO - doxygen
+    void setAlpha (float alpha)
+    {
+        start.color.setAlpha (alpha);
+        finish.color.setAlpha (alpha);
+    }
+
     /** Creates a new gradient with a specified alpha value for both color stops.
 
         This method allows you to create a new gradient identical to the current one but with a different transparency level.
@@ -194,18 +201,49 @@ public:
         return result;
     }
 
+    // TODO - doxygen
+    ColorGradient withAlpha (float alpha) const
+    {
+        ColorGradient result (*this);
+        result.setAlpha (alpha);
+        return result;
+    }
+
+    // TODO - doxygen
+    ColorGradient withMultipliedAlpha (uint8 alpha) const
+    {
+        ColorGradient result (*this);
+        result.start.color = result.start.color.withMultipliedAlpha (alpha);
+        result.finish.color = result.finish.color.withMultipliedAlpha (alpha);
+        return result;
+    }
+
+    // TODO - doxygen
+    ColorGradient withMultipliedAlpha (float alpha) const
+    {
+        ColorGradient result (*this);
+        result.start.color = result.start.color.withMultipliedAlpha (alpha);
+        result.finish.color = result.finish.color.withMultipliedAlpha (alpha);
+        return result;
+    }
+
 private:
     struct ColorStop
     {
-        ColorStop() = default;
+        constexpr ColorStop() = default;
 
-        ColorStop (Color color, float x, float y, float delta)
+        constexpr ColorStop (Color color, float x, float y, float delta)
             : color (color)
             , x (x)
             , y (y)
             , delta (delta)
         {
         }
+
+        constexpr ColorStop (const ColorStop& other) noexcept = default;
+        constexpr ColorStop (ColorStop&& other) noexcept = default;
+        constexpr ColorStop& operator= (const ColorStop& other) noexcept = default;
+        constexpr ColorStop& operator= (ColorStop&& other) noexcept = default;
 
         Color color;
         float x = 0.0f;

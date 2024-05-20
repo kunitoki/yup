@@ -29,6 +29,98 @@
 
 //==============================================================================
 
+class Button : public yup::Component
+{
+public:
+    Button (yup::StringRef componentID)
+         : yup::Component (componentID)
+         , font (font)
+    {
+    }
+
+    Button (const yup::Font& font)
+         : font (font)
+    {
+    }
+
+    virtual void paintButton (yup::Graphics& g, bool isButtonOver, bool isButtonDown) = 0;
+
+    void paint (yup::Graphics& g) override
+    {
+        paintButton (g, isButtonCurrentlyOver, isButtonCurrentlyDown);
+    }
+
+    void mouseEnter (const yup::MouseEvent& event) override
+    {
+        isButtonCurrentlyOver = true;
+
+        repaint();
+    }
+
+    void mouseExit (const yup::MouseEvent& event) override
+    {
+        isButtonCurrentlyOver = false;
+
+        repaint();
+    }
+
+    void mouseDown (const yup::MouseEvent& event) override
+    {
+        isButtonCurrentlyDown = true;
+
+        takeFocus();
+
+        repaint();
+    }
+
+    void mouseUp (const yup::MouseEvent& event) override
+    {
+        isButtonCurrentlyDown = false;
+
+        repaint();
+    }
+
+private:
+    yup::Font font;
+    bool isButtonCurrentlyOver = false;
+    bool isButtonCurrentlyDown = false;
+};
+
+class TextButton : public Button
+{
+public:
+    TextButton (yup::StringRef componentID, const yup::Font& font)
+         : Button (componentID)
+         , font (font)
+    {
+    }
+
+    void paintButton (yup::Graphics& g, bool isButtonOver, bool isButtonDown) override
+    {
+        auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
+        const auto center = bounds.getCenter();
+
+        yup::Path backgroundPath;
+        //backgroundPath.clear();
+        backgroundPath.addRoundedRectangle (bounds.reduced (proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
+        g.setColor (isButtonDown ? yup::Color (0xff000000) : yup::Color (0xffffffff));
+        g.fillPath (backgroundPath);
+
+        yup::StyledText text;
+        //text.clear();
+        text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, getComponentID().toRawUTF8());
+        text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
+
+        g.setColor (isButtonDown ? yup::Color (0xffffffff) : yup::Color (0xff000000));
+        g.drawFittedText (text, {});
+    }
+
+private:
+    const yup::Font& font;
+};
+
+//==============================================================================
+
 class CustomSlider : public yup::Component
 {
 public:
@@ -42,17 +134,21 @@ public:
 
     void resized() override
     {
-        updateText();
+        updateRenderItems (true);
     }
 
     void mouseEnter (const yup::MouseEvent& event) override
     {
         isInside = true;
+
+        repaint();
     }
 
     void mouseExit (const yup::MouseEvent& event) override
     {
         isInside = false;
+
+        repaint();
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -60,6 +156,8 @@ public:
         origin = event.getPosition();
 
         takeFocus();
+
+        repaint();
     }
 
     void mouseUp (const yup::MouseEvent& event) override
@@ -78,6 +176,8 @@ public:
         origin = event.getPosition();
 
         setValue (value + distance);
+
+        repaint();
     }
 
     void mouseWheel (const yup::MouseEvent& event, const yup::MouseWheelData& data) override
@@ -90,75 +190,40 @@ public:
         origin = event.getPosition();
 
         setValue (value + distance);
+
+        repaint();
     }
 
-    void paint (yup::Graphics& g, float frameRate) override
+    void paint (yup::Graphics& g) override
     {
         auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
-        const auto center = bounds.getCenter();
-
-        yup::Path path;
-        path.addEllipse (bounds.reduced (proportionOfWidth (0.045f)));
 
         g.setColor (yup::Color (0xff3d3d3d));
-        g.fillPath (path);
+        g.fillPath (backgroundPath);
 
         g.setColor (yup::Color (0xff2b2b2b));
-        g.drawPath (path, proportionOfWidth (0.0175f));
+        g.drawPath (backgroundPath, proportionOfWidth (0.0175f));
 
-        const auto fromRadians = yup::degreesToRadians(135.0f);
-        const auto toRadians = fromRadians + yup::degreesToRadians(270.0f);
-        const auto toCurrentRadians = fromRadians + yup::degreesToRadians(270.0f) * value;
+        g.setStrokeCap (yup::StrokeCap::Round);
+        g.setColor (yup::Color (0xff636363));
+        g.drawPath (backgroundArc, proportionOfWidth (0.075f));
 
-        yup::Path arc;
+        g.setStrokeCap (yup::StrokeCap::Round);
+        g.setColor (isInside ? yup::Color (0xff4ebfff).brighter (0.3f) : yup::Color (0xff4ebfff));
+        g.drawPath (foregroundArc, proportionOfWidth (0.075f));
 
-        {
-            arc.addCenteredArc (center,
-                                bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
-                                fromRadians, toRadians, true);
+        g.setStrokeCap (yup::StrokeCap::Round);
+        g.setColor (yup::Color (0xffffffff));
+        g.drawPath (foregroundLine, proportionOfWidth (0.04f));
 
-            g.setStrokeCap (yup::StrokeCap::Round);
-            g.setColor (yup::Color (0xff636363));
-            g.drawPath (arc, proportionOfWidth (0.075f));
-        }
+        g.setColor (yup::Color (0xffffffff));
+        g.drawFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
 
-        {
-            arc.clear();
-            arc.addCenteredArc (center,
-                                bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
-                                fromRadians, toCurrentRadians, true);
-
-            g.setStrokeCap (yup::StrokeCap::Round);
-            g.setColor (isInside ? yup::Color (0xff4ebfff).brighter (0.3f) : yup::Color (0xff4ebfff));
-            g.drawPath (arc, proportionOfWidth (0.075f));
-        }
-
-        {
-            const auto reducedBounds = bounds.reduced (proportionOfWidth (0.175f));
-
-            auto pos = center.getPointOnCircumference (
-                reducedBounds.getWidth() / 2.0f,
-                reducedBounds.getHeight() / 2.0f,
-                toCurrentRadians);
-
-            arc.clear();
-            arc.addLine (yup::Line<float> (pos, center).keepOnlyStart (0.2f));
-
-            g.setStrokeCap (yup::StrokeCap::Round);
-            g.setColor (yup::Color (0xffffffff));
-            g.drawPath (arc, proportionOfWidth (0.04f));
-        }
-
-        {
-            g.setColor (yup::Color (0xffffffff));
-            g.drawFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
-        }
-
-        if (hasFocus())
-        {
-            g.setColor (yup::Color (0xffff5f2b));
-            g.drawRect (getLocalBounds(), proportionOfWidth (0.0175f));
-        }
+        //if (hasFocus())
+        //{
+        //    g.setColor (yup::Color (0xffff5f2b));
+        //    g.drawRect (getLocalBounds(), proportionOfWidth (0.0175f));
+        //}
     }
 
     void setValue (float newValue)
@@ -167,7 +232,7 @@ public:
 
         valueChanged();
 
-        updateText();
+        updateRenderItems (false);
     }
 
     virtual void valueChanged()
@@ -175,15 +240,57 @@ public:
     }
 
 private:
-    void updateText()
+    void updateRenderItems (bool forceAll)
     {
+        auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
+        const auto center = bounds.getCenter();
+
+        constexpr auto fromRadians = yup::degreesToRadians(135.0f);
+        constexpr auto toRadians = fromRadians + yup::degreesToRadians(270.0f);
+
+        if (forceAll)
+        {
+            backgroundPath.clear();
+            backgroundPath.addEllipse (bounds.reduced (proportionOfWidth (0.045f)));
+
+            backgroundArc.clear();
+            backgroundArc.addCenteredArc (center,
+                                          bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
+                                          fromRadians, toRadians, true);
+        }
+
+        const auto toCurrentRadians = fromRadians + yup::degreesToRadians(270.0f) * value;
+
+        foregroundArc.clear();
+        foregroundArc.addCenteredArc (center,
+                                      bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
+                                      fromRadians, toCurrentRadians, true);
+
+        const auto reducedBounds = bounds.reduced (proportionOfWidth (0.175f));
+        const auto pos = center.getPointOnCircumference (
+            reducedBounds.getWidth() / 2.0f,
+            reducedBounds.getHeight() / 2.0f,
+            toCurrentRadians);
+
+        foregroundLine.clear();
+        foregroundLine.addLine (yup::Line<float> (pos, center).keepOnlyStart (0.2f));
+
         text.clear();
         text.appendText (font, proportionOfHeight(0.1f), proportionOfHeight(0.1f), yup::String (value, 3).toRawUTF8());
+        text.layout (getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)), yup::StyledText::center);
     }
+
+    struct
+    {
+        yup::Path backgroundPath;
+        yup::Path backgroundArc;
+        yup::Path foregroundArc;
+        yup::Path foregroundLine;
+        yup::StyledText text;
+    };
 
     yup::Point<float> origin;
     const yup::Font& font;
-    yup::StyledText text;
     float value = 0.0f;
     int index = 0;
     bool isInside = false;
@@ -198,6 +305,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
+        : yup::DocumentWindow (yup::ComponentNative::defaultFlags, yup::Color (0xff404040))
     {
         rive::Factory* factory = getNativeComponent()->getFactory();
         if (factory == nullptr)
@@ -218,17 +326,16 @@ public:
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
-        styleText.appendText (font, 64.0f, 72.0f, "this is even more fun and longer than anything longer");
-
-        //getNativeComponent()->enableContinuousRepainting (true);
-
         setTitle ("main");
 
         for (int i = 0; i < totalRows * totalColumns; ++i)
             addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i, font)));
 
-        deviceManager.addAudioCallback (this);
-        deviceManager.initialiseWithDefaultDevices (1, 0);
+        button = std::make_unique<TextButton> ("xyz", font);
+        addAndMakeVisible (*button);
+
+        //deviceManager.addAudioCallback (this);
+        //deviceManager.initialiseWithDefaultDevices (1, 0);
 
         startTimerHz (1);
     }
@@ -238,7 +345,7 @@ public:
         inputReady.signal();
         renderReady.signal();
 
-        deviceManager.closeAudioDevice();
+        //deviceManager.closeAudioDevice();
     }
 
     void resized() override
@@ -256,10 +363,15 @@ public:
                 sliders.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
             }
         }
+
+        button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth(0.4f), 0.0f));
     }
 
-    void paint (yup::Graphics& g, float frameRate) override
+    void paint (yup::Graphics& g) override
     {
+        yup::DocumentWindow::paint (g);
+
+        /*
         //inputReady.wait();
         //std::swap (inputData, renderData);
         //renderReady.signal();
@@ -274,6 +386,7 @@ public:
 
         g.setColor (0xff4b4bff);
         g.drawPath (path, 5.0f);
+        */
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -299,7 +412,6 @@ public:
 
         case yup::KeyPress::textAKey:
             getNativeComponent()->enableAtomicMode (!getNativeComponent()->isAtomicModeEnabled());
-            fpsLastTime = 0;
             break;
 
         case yup::KeyPress::textWKey:
@@ -363,10 +475,7 @@ private:
     {
         yup::String title;
 
-        auto currentFps = getNativeComponent()->getCurrentFrameRate();
-        if (currentFps != 0)
-            title << "[" << yup::String (currentFps, 1) << " FPS]";
-
+        title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
         title << " | " << "YUP On Rive Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
@@ -387,7 +496,10 @@ private:
     int totalRows = 4;
     int totalColumns = 4;
 
-    double fpsLastTime = 0;
+    std::unique_ptr<TextButton> button;
+
+    yup::Font font;
+    yup::StyledText styleText;
 };
 
 //==============================================================================

@@ -33,6 +33,9 @@ public:
     virtual ~Component();
 
     //==============================================================================
+    String getComponentID() const;
+
+    //==============================================================================
     bool isEnabled() const;
     virtual void setEnabled (bool shouldBeEnabled);
     virtual void enablementChanged();
@@ -79,6 +82,9 @@ public:
     //==============================================================================
     virtual void enableRenderingUnclipped (bool shouldBeEnabled);
     bool isRenderingUnclipped() const;
+
+    void repaint();
+    void repaint (const Rectangle<float>& rect);
 
     //==============================================================================
     void* getNativeHandle() const;
@@ -140,8 +146,12 @@ public:
     bool hasFocus() const;
 
     //==============================================================================
-    virtual void paint (Graphics& g, float frameRate);
-    virtual void paintOverChildren (Graphics& g, float frameRate);
+    NamedValueSet& getProperties();
+    const NamedValueSet& getProperties() const;
+
+    //==============================================================================
+    virtual void paint (Graphics& g);
+    virtual void paintOverChildren (Graphics& g);
 
     //==============================================================================
     virtual void mouseEnter (const MouseEvent& event);
@@ -157,7 +167,7 @@ public:
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
 
 private:
-    void internalPaint (Graphics& g, float frameRate);
+    void internalPaint (Graphics& g, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
@@ -181,6 +191,7 @@ private:
     Rectangle<float> boundsInParent;
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
+    NamedValueSet properties;
     uint8 opacity = 255;
 
     struct Options

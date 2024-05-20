@@ -33,18 +33,10 @@ public:
     {
         rive::pls::PLSRenderContextMetalImpl::ContextOptions metalOptions;
         if (m_fiddleOptions.synchronousShaderCompilations)
-        {
-            // Turn on synchronous shader compilations to ensure deterministic rendering and to make
-            // sure we test every unique shader.
             metalOptions.synchronousShaderCompilations = true;
-        }
 
         if (m_fiddleOptions.disableRasterOrdering)
-        {
-            // Turn on synchronous shader compilations to ensure deterministic rendering and to make
-            // sure we test every unique shader.
             metalOptions.disableFramebufferReads = true;
-        }
 
         m_plsContext = rive::pls::PLSRenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
         printf ("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
@@ -53,7 +45,7 @@ public:
     float dpiScale (void* window) const override
     {
         NSWindow* nsWindow = (__bridge NSWindow*)window;
-        return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1;
+        return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1.0f;
     }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
@@ -71,8 +63,9 @@ public:
         m_swapchain.opaque = YES;
         m_swapchain.framebufferOnly = !m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
-        m_swapchain.contentsScale = dpiScale(window);
+        m_swapchain.contentsScale = dpiScale (window);
         m_swapchain.displaySyncEnabled = NO;
+        m_swapchain.maximumDrawableCount = 2;
         view.layer = m_swapchain;
 
         auto plsContextImpl = m_plsContext->static_impl_cast<rive::pls::PLSRenderContextMetalImpl>();

@@ -76,8 +76,7 @@ public:
     }
 
     //==============================================================================
-    /** Copy and move constructors and assignment operators.
-    */
+    /** Copy and move constructors and assignment operators. */
     constexpr Point (const Point& other) noexcept = default;
     constexpr Point (Point&& other) noexcept = default;
     constexpr Point& operator=(const Point& other) noexcept = default;

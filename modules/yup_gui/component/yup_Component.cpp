@@ -47,6 +47,13 @@ Component::~Component()
 
 //==============================================================================
 
+String Component::getComponentID() const
+{
+    return componentID;
+}
+
+//==============================================================================
+
 bool Component::isEnabled() const
 {
     return !options.isDisabled;
@@ -86,6 +93,8 @@ void Component::setVisible (bool shouldBeVisible)
             native->setVisible (shouldBeVisible);
 
         visibilityChanged();
+
+        repaint();
     }
 }
 
@@ -133,16 +142,10 @@ void Component::moved()
 
 void Component::setSize (const Size<float>& newSize)
 {
-    if (options.onDesktop)
-    {
-        boundsInParent = boundsInParent.withSize (newSize * getScaleDpi());
+    boundsInParent = boundsInParent.withSize (newSize);
 
+    if (options.onDesktop)
         native->setSize (newSize.to<int>());
-    }
-    else
-    {
-        boundsInParent = boundsInParent.withSize (newSize);
-    }
 
     resized();
 }
@@ -175,16 +178,10 @@ float Component::getHeight() const
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
-    if (options.onDesktop)
-    {
-        boundsInParent = newBounds; // .withScaledSize (getScaleDpi());
+    boundsInParent = newBounds;
 
+    if (options.onDesktop)
         native->setBounds (newBounds.to<int>());
-    }
-    else
-    {
-        boundsInParent = newBounds;
-    }
 
     resized();
 }
@@ -271,6 +268,16 @@ void Component::enableRenderingUnclipped (bool shouldBeEnabled)
 bool Component::isRenderingUnclipped() const
 {
     return options.unclippedRendering;
+}
+
+void Component::repaint()
+{
+    getNativeComponent()->repaint (getBounds());
+}
+
+void Component::repaint (const Rectangle<float>& rect)
+{
+    getNativeComponent()->repaint (rect.translated (getBounds().getTopLeft()));
 }
 
 //==============================================================================
@@ -468,8 +475,20 @@ bool Component::hasFocus() const
 
 //==============================================================================
 
-void Component::paint (Graphics& g, float frameRate) {}
-void Component::paintOverChildren (Graphics& g, float frameRate) {}
+NamedValueSet& Component::getProperties()
+{
+    return properties;
+}
+
+const NamedValueSet& Component::getProperties() const
+{
+    return properties;
+}
+
+//==============================================================================
+
+void Component::paint (Graphics& g) {}
+void Component::paintOverChildren (Graphics& g) {}
 
 //==============================================================================
 
@@ -489,30 +508,35 @@ void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, float frameRate)
+void Component::internalPaint (Graphics& g, bool renderContinuous)
 {
     if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
+        return;
+
+    auto bounds = (options.onDesktop ? getLocalBounds() : getBounds());
+
+    auto dirtyBounds = getNativeComponent()->getRepaintArea();
+    auto boundsToRedraw = bounds.intersection (dirtyBounds);
+    if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
     const auto state = g.saveState();
 
     g.setOpacity (static_cast<uint8> (getOpacity() * 255));
-    g.setDrawingArea (options.onDesktop ? getLocalBounds() : getBounds());
+    g.setDrawingArea (bounds);
+    if (! options.unclippedRendering)
+        g.setClipPath (boundsToRedraw);
 
-    if (! options.onDesktop && ! options.unclippedRendering)
-        g.clipPath (getLocalBounds().to<float>());
-
-    paint (g, frameRate);
+    paint (g);
 
     for (auto child : children)
-    {
-        if (! child->isVisible())
-            continue;
+        child->internalPaint (g, renderContinuous);
 
-        child->internalPaint (g, frameRate);
-    }
+    g.setDrawingArea (bounds);
+    if (! options.unclippedRendering)
+        g.setClipPath (boundsToRedraw);
 
-    paintOverChildren (g, frameRate);
+    paintOverChildren (g);
 }
 
 void Component::internalMouseEnter (const MouseEvent& event)
