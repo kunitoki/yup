@@ -547,7 +547,6 @@ void Graphics::drawFittedText (const StyledText& text, const Rectangle<float>& r
     for (const auto& rawpath : text.getGlyphs())
         totalPathSize += rawpath.verbs().size();
 
-    path->reserve (totalPathSize);
     for (const auto& rawpath : text.getGlyphs())
         convertRawPathToRenderPath (rawpath, path.get(), options.getTransform());
 
