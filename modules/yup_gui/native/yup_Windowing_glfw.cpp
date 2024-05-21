@@ -703,10 +703,12 @@ Point<float> GLFWComponentNative::getScaledCursorPosition() const
     glfwGetCursorPos (window, &x, &y);
 
     const float dpiScale = getScaleDpi();
-    x *= dpiScale;
-    y *= dpiScale;
 
-    return { static_cast<float> (x), static_cast<float> (y) };
+    return
+    {
+        static_cast<float> (x * dpiScale),
+        static_cast<float> (y * dpiScale)
+    };
 }
 
 //==============================================================================
@@ -763,7 +765,7 @@ void GLFWComponentNative::run()
                 currentFrameRate.store (0.0f, std::memory_order_relaxed);
         }
 
-        // Measure spent time
+        // Measure spent time and cap the framerate
         double currentTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
