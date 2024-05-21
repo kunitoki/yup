@@ -850,7 +850,27 @@ public:
     */
     constexpr Point lerp (const Point& other, float delta) const noexcept
     {
-        return { static_cast<ValueType> ((1.0f - delta) * x + delta * other.x), static_cast<ValueType> ((1.0f - delta) * y + delta * other.y) };
+        return
+        {
+            static_cast<ValueType> ((1.0f - delta) * x + delta * other.x),
+            static_cast<ValueType> ((1.0f - delta) * y + delta * other.y)
+        };
+    }
+
+    //==============================================================================
+    // TODO - doxygen
+    constexpr Point& transform (const AffineTransform& t) noexcept
+    {
+        t.transformPoints (x, y);
+        return *this;
+    }
+
+    // TODO - doxygen
+    constexpr Point transformed (const AffineTransform& t) const noexcept
+    {
+        Point result (*this);
+        result.transform (t);
+        return result;
     }
 
     //==============================================================================

@@ -488,6 +488,33 @@ public:
     }
 
     //==============================================================================
+    // TODO - doxygen
+    constexpr Line& transform (const AffineTransform& t) noexcept
+    {
+        auto x1 = static_cast<float> (p1.x);
+        auto y1 = static_cast<float> (p1.y);
+        auto x2 = static_cast<float> (p2.x);
+        auto y2 = static_cast<float> (p2.y);
+
+        t.transformPoints (x1, y1, x2, y2);
+
+        p1.x = static_cast<ValueType> (x1);
+        p1.y = static_cast<ValueType> (y1);
+        p2.x = static_cast<ValueType> (x2);
+        p2.y = static_cast<ValueType> (y2);
+
+        return *this;
+    }
+
+    // TODO - doxygen
+    constexpr Line transformed (const AffineTransform& t) const noexcept
+    {
+        Line result (*this);
+        result.transform (t);
+        return result;
+    }
+
+    //==============================================================================
     /** Converts the line to another type.
 
         This template function converts both the start and end points of the line to another specified type `T`,

@@ -119,7 +119,7 @@ public:
 
         @return The x-coordinate value.
     */
-    constexpr ValueType getX() const noexcept
+    [[nodiscard]] constexpr ValueType getX() const noexcept
     {
         return xy.getX();
     }
@@ -132,7 +132,7 @@ public:
 
         @return A new rectangle with the updated x-coordinate.
     */
-    constexpr Rectangle withX (ValueType newX) const noexcept
+    [[nodiscard]] constexpr Rectangle withX (ValueType newX) const noexcept
     {
         return { xy.withX (newX), size };
     }
@@ -142,7 +142,7 @@ public:
 
         @return The y-coordinate value.
     */
-    constexpr ValueType getY() const noexcept
+    [[nodiscard]] constexpr ValueType getY() const noexcept
     {
         return xy.getY();
     }
@@ -155,7 +155,7 @@ public:
 
         @return A new rectangle with the updated y-coordinate.
     */
-    constexpr Rectangle withY (ValueType newY) const noexcept
+    [[nodiscard]] constexpr Rectangle withY (ValueType newY) const noexcept
     {
         return { xy.withY (newY), size };
     }
@@ -165,7 +165,7 @@ public:
 
         @return The width value.
     */
-    constexpr ValueType getWidth() const noexcept
+    [[nodiscard]] constexpr ValueType getWidth() const noexcept
     {
         return size.getWidth();
     }
@@ -179,7 +179,7 @@ public:
 
         @return A new rectangle with the updated width.
     */
-    constexpr Rectangle withWidth (ValueType newWidth) const noexcept
+    [[nodiscard]] constexpr Rectangle withWidth (ValueType newWidth) const noexcept
     {
         return { xy, size.withWidth (newWidth) };
     }
@@ -189,7 +189,7 @@ public:
 
         @return The height value.
     */
-    constexpr ValueType getHeight() const noexcept
+    [[nodiscard]] constexpr ValueType getHeight() const noexcept
     {
         return size.getHeight();
     }
@@ -203,7 +203,7 @@ public:
 
         @return A new rectangle with the updated height.
     */
-    constexpr Rectangle withHeight (ValueType newHeight) const noexcept
+    [[nodiscard]] constexpr Rectangle withHeight (ValueType newHeight) const noexcept
     {
         return { xy, size.withHeight (newHeight) };
     }
@@ -213,7 +213,7 @@ public:
 
         @return The position as a Point object.
     */
-    constexpr Point<ValueType> getPosition() const noexcept
+    [[nodiscard]] constexpr Point<ValueType> getPosition() const noexcept
     {
         return xy;
     }
@@ -242,7 +242,7 @@ public:
         @return A new rectangle with the updated position.
     */
     template <class T>
-    constexpr Rectangle withPosition (const Point<T>& newPosition) const noexcept
+    [[nodiscard]] constexpr Rectangle withPosition (const Point<T>& newPosition) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
 
@@ -261,7 +261,7 @@ public:
         @return A new rectangle with the updated position.
     */
     template <class T>
-    constexpr Rectangle withPosition (T x, T y) const noexcept
+    [[nodiscard]] constexpr Rectangle withPosition (T x, T y) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
 
@@ -274,7 +274,7 @@ public:
 
         @return A new rectangle positioned at (0, 0).
     */
-    constexpr Rectangle withZeroPosition() const noexcept
+    [[nodiscard]] constexpr Rectangle withZeroPosition() const noexcept
     {
         return { 0, 0, size };
     }
@@ -284,7 +284,7 @@ public:
 
         @return The position of the top-left corner as a Point.
     */
-    constexpr Point<ValueType> getTopLeft() const noexcept
+    [[nodiscard]] constexpr Point<ValueType> getTopLeft() const noexcept
     {
         return xy;
     }
@@ -293,7 +293,7 @@ public:
 
         @return The position of the top-right corner as a Point.
     */
-    constexpr Point<ValueType> getTopRight() const noexcept
+    [[nodiscard]] constexpr Point<ValueType> getTopRight() const noexcept
     {
         return xy.translated (getWidth(), ValueType (0));
     }
@@ -302,7 +302,7 @@ public:
 
         @return The position of the bottom-left corner as a Point.
     */
-    constexpr Point<ValueType> getBottomLeft() const noexcept
+    [[nodiscard]] constexpr Point<ValueType> getBottomLeft() const noexcept
     {
         return xy.translated (ValueType (0), getHeight());
     }
@@ -311,7 +311,7 @@ public:
 
         @return The position of the bottom-right corner as a Point.
     */
-    constexpr Point<ValueType> getBottomRight() const noexcept
+    [[nodiscard]] constexpr Point<ValueType> getBottomRight() const noexcept
     {
         return xy.translated (getWidth(), getHeight());
     }
@@ -321,7 +321,7 @@ public:
 
         @return The size of the rectangle as a Size object.
     */
-    constexpr Size<ValueType> getSize() const noexcept
+    [[nodiscard]] constexpr Size<ValueType> getSize() const noexcept
     {
         return size;
     }
@@ -350,7 +350,7 @@ public:
         @return A new rectangle with the updated size.
     */
     template <class T>
-    constexpr Rectangle withSize (const Size<T>& newSize) const noexcept
+    [[nodiscard]] constexpr Rectangle withSize (const Size<T>& newSize) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
 
@@ -369,7 +369,7 @@ public:
         @return A new rectangle with the updated size.
     */
     template <class T>
-    constexpr Rectangle withSize (T width, T height) const noexcept
+    [[nodiscard]] constexpr Rectangle withSize (T width, T height) const noexcept
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
 
@@ -387,7 +387,7 @@ public:
         @return A new rectangle with the size scaled.
     */
     template <class T>
-    constexpr auto withScaledSize (T scaleFactor) const noexcept
+    [[nodiscard]] constexpr auto withScaledSize (T scaleFactor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle>
     {
         return withSize (size * scaleFactor);
@@ -399,7 +399,7 @@ public:
 
         @return A new rectangle with zero size.
     */
-    constexpr Rectangle withZeroSize() const noexcept
+    [[nodiscard]] constexpr Rectangle withZeroSize() const noexcept
     {
         return { xy, 0, 0 };
     }
@@ -427,7 +427,7 @@ public:
 
         @return The center of the rectangle as a Point, calculated as the midpoint between the top-left and bottom-right corners.
     */
-    constexpr Point<ValueType> getCenter() const noexcept
+    [[nodiscard]] constexpr Point<ValueType> getCenter() const noexcept
     {
         return { xy.getX() + size.getWidth() / 2.0f, xy.getY() + size.getHeight() / 2.0f };
     }
@@ -472,7 +472,7 @@ public:
 
         @return A new rectangle with the updated center.
     */
-    constexpr Rectangle withCenter (ValueType centerX, ValueType centerY) noexcept
+    [[nodiscard]] constexpr Rectangle withCenter (ValueType centerX, ValueType centerY) noexcept
     {
         Rectangle result = *this;
         result.setCenter (centerX, centerY);
@@ -487,7 +487,7 @@ public:
 
         @return A new rectangle with the updated center.
     */
-    constexpr Rectangle withCenter (const Point<ValueType>& center) noexcept
+    [[nodiscard]] constexpr Rectangle withCenter (const Point<ValueType>& center) noexcept
     {
         Rectangle result = *this;
         result.setCenter (center);
@@ -499,7 +499,7 @@ public:
 
         @return True if both the width and height are zero, otherwise false.
     */
-    constexpr bool isEmpty() const noexcept
+    [[nodiscard]] constexpr bool isEmpty() const noexcept
     {
         return size.isZero();
     }
@@ -508,7 +508,7 @@ public:
 
         @return True if both the width and height are zero, otherwise false.
     */
-    constexpr bool isPoint() const noexcept
+    [[nodiscard]] constexpr bool isPoint() const noexcept
     {
         return size.isZero();
     }
@@ -517,7 +517,7 @@ public:
 
         @return True if the rectangle is strictly horizontal or vertical (i.e., width or height is zero but not both), otherwise false.
     */
-    constexpr bool isLine() const noexcept
+    [[nodiscard]] constexpr bool isLine() const noexcept
     {
         return isVerticalLine() || isHorizontalLine();
     }
@@ -526,7 +526,7 @@ public:
 
         @return True if the height is non-zero and the width is zero, otherwise false.
     */
-    constexpr bool isVerticalLine() const noexcept
+    [[nodiscard]] constexpr bool isVerticalLine() const noexcept
     {
         return size.isHorizontallyEmpty();
     }
@@ -535,7 +535,7 @@ public:
 
         @return True if the width is non-zero and the height is zero, otherwise false.
     */
-    constexpr bool isHorizontalLine() const noexcept
+    [[nodiscard]] constexpr bool isHorizontalLine() const noexcept
     {
         return size.isVerticallyEmpty();
     }
@@ -545,7 +545,7 @@ public:
 
         @return A Line object representing the left vertical edge of the rectangle.
     */
-    constexpr Line<ValueType> leftSide() const noexcept
+    [[nodiscard]] constexpr Line<ValueType> leftSide() const noexcept
     {
         return { xy, xy.translated (ValueType (0), getHeight()) };
     }
@@ -554,7 +554,7 @@ public:
 
         @return A Line object representing the top horizontal edge of the rectangle.
     */
-    constexpr Line<ValueType> topSide() const noexcept
+    [[nodiscard]] constexpr Line<ValueType> topSide() const noexcept
     {
         return { xy, xy.translated (getWidth(), ValueType (0)) };
     }
@@ -563,7 +563,7 @@ public:
 
         @return A Line object representing the right vertical edge of the rectangle.
     */
-    constexpr Line<ValueType> rightSide() const noexcept
+    [[nodiscard]] constexpr Line<ValueType> rightSide() const noexcept
     {
         return { xy.translated (getWidth(), ValueType (0)), xy.translated (getWidth(), getHeight()) };
     }
@@ -572,7 +572,7 @@ public:
 
         @return A Line object representing the bottom horizontal edge of the rectangle.
     */
-    constexpr Line<ValueType> bottomSide() const noexcept
+    [[nodiscard]] constexpr Line<ValueType> bottomSide() const noexcept
     {
         return { xy.translated (ValueType (0), getHeight()), xy.translated (getWidth(), getHeight()) };
     }
@@ -581,7 +581,7 @@ public:
 
         @return A Line object representing the diagonal crossing the rectangle from top-left to bottom-right.
     */
-    constexpr Line<ValueType> diagonalTopToBottom() const noexcept
+    [[nodiscard]] constexpr Line<ValueType> diagonalTopToBottom() const noexcept
     {
         return { xy, xy.translated (getWidth(), getHeight()) };
     }
@@ -590,7 +590,7 @@ public:
 
         @return A Line object representing the diagonal crossing the rectangle from bottom-left to top-right.
     */
-    constexpr Line<ValueType> diagonalBottomToTop() const noexcept
+    [[nodiscard]] constexpr Line<ValueType> diagonalBottomToTop() const noexcept
     {
         return { xy.translated (ValueType (0), getHeight()), xy.translated (getWidth(), ValueType (0)) };
     }
@@ -625,6 +625,12 @@ public:
         return *this;
     }
 
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle<ValueType> translated (ValueType deltaX, ValueType deltaY) const noexcept
+    {
+        return { xy.translated (deltaX, deltaY), size };
+    }
+
     /** Returns a new rectangle translated by the specified point.
 
         This method creates a new rectangle with the same size but its position adjusted by the point's x and y values.
@@ -633,7 +639,7 @@ public:
 
         @return A new rectangle with the updated position.
     */
-    constexpr Rectangle<ValueType> translated (const Point<ValueType>& delta) const noexcept
+    [[nodiscard]] constexpr Rectangle<ValueType> translated (const Point<ValueType>& delta) const noexcept
     {
         return { xy.translated (delta), size };
     }
@@ -677,7 +683,7 @@ public:
 
         @return A new rectangle with the scaled size.
     */
-    constexpr Rectangle scaled (float factor) const noexcept
+    [[nodiscard]] constexpr Rectangle scaled (float factor) const noexcept
     {
         return { xy, size.scaled (factor) };
     }
@@ -690,7 +696,7 @@ public:
         @param factorY The factor to multiply the height by.
         @return A new rectangle with the scaled size.
     */
-    constexpr Rectangle scaled (float factorX, float factorY) const noexcept
+    [[nodiscard]] constexpr Rectangle scaled (float factorX, float factorY) const noexcept
     {
         return { xy, size.scaled (factorX, factorY) };
     }
@@ -803,6 +809,7 @@ public:
         return *this;
     }
 
+    // TODO - doxygen
     constexpr Rectangle& reduce (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
     {
         xy = { xy.getX() + left, xy.getY() + top };
@@ -820,7 +827,7 @@ public:
 
         @return A new rectangle with the reduced size.
     */
-    constexpr Rectangle reduced (ValueType delta) const noexcept
+    [[nodiscard]] constexpr Rectangle reduced (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.reduce (delta);
@@ -836,42 +843,47 @@ public:
 
         @return A new rectangle with the reduced size.
     */
-    constexpr Rectangle reduced (ValueType deltaX, ValueType deltaY) const noexcept
+    [[nodiscard]] constexpr Rectangle reduced (ValueType deltaX, ValueType deltaY) const noexcept
     {
         Rectangle result = *this;
         result.reduce (deltaX, deltaY);
         return result;
     }
 
-    constexpr Rectangle reduced (ValueType left, ValueType top, ValueType right, ValueType bottom) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle reduced (ValueType left, ValueType top, ValueType right, ValueType bottom) const noexcept
     {
         Rectangle result = *this;
         result.reduce (left, top, right, bottom);
         return result;
     }
 
-    constexpr Rectangle reducedLeft (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle reducedLeft (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.reduce (delta, ValueType (0), ValueType (0), ValueType (0));
         return result;
     }
 
-    constexpr Rectangle reducedTop (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle reducedTop (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.reduce (ValueType (0), delta, ValueType (0), ValueType (0));
         return result;
     }
 
-    constexpr Rectangle reducedRight (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle reducedRight (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.reduce (ValueType (0), ValueType (0), delta, ValueType (0));
         return result;
     }
 
-    constexpr Rectangle reducedBottom (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle reducedBottom (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.reduce (ValueType (0), ValueType (0), ValueType (0), delta);
@@ -914,6 +926,7 @@ public:
         return *this;
     }
 
+    // TODO - doxygen
     constexpr Rectangle& enlarge (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
     {
         xy = { xy.getX() - left, xy.getY() - top };
@@ -931,7 +944,7 @@ public:
 
         @return A new rectangle with the reduced size.
     */
-    constexpr Rectangle enlarged (ValueType delta) const noexcept
+    [[nodiscard]] constexpr Rectangle enlarged (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.enlarge (delta);
@@ -947,35 +960,39 @@ public:
 
         @return A new rectangle with the reduced size.
     */
-    constexpr Rectangle enlarged (ValueType deltaX, ValueType deltaY) const noexcept
+    [[nodiscard]] constexpr Rectangle enlarged (ValueType deltaX, ValueType deltaY) const noexcept
     {
         Rectangle result = *this;
         result.enlarge (deltaX, deltaY);
         return result;
     }
 
-    constexpr Rectangle enlargedLeft (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle enlargedLeft (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.enlarge (delta, ValueType (0), ValueType (0), ValueType (0));
         return result;
     }
 
-    constexpr Rectangle enlargedTop (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle enlargedTop (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.enlarge (ValueType (0), delta, ValueType (0), ValueType (0));
         return result;
     }
 
-    constexpr Rectangle enlargedRight (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle enlargedRight (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.enlarge (ValueType (0), ValueType (0), delta, ValueType (0));
         return result;
     }
 
-    constexpr Rectangle enlargedBottom (ValueType delta) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle enlargedBottom (ValueType delta) const noexcept
     {
         Rectangle result = *this;
         result.enlarge (ValueType (0), ValueType (0), ValueType (0), delta);
@@ -990,7 +1007,7 @@ public:
 
         @return True if the point is within the rectangle, otherwise false.
     */
-    constexpr bool contains (ValueType x, ValueType y) const noexcept
+    [[nodiscard]] constexpr bool contains (ValueType x, ValueType y) const noexcept
     {
         return
             x >= xy.getX()
@@ -1005,7 +1022,7 @@ public:
 
         @return True if the point is within the rectangle, otherwise false.
     */
-    constexpr bool contains (const Point<ValueType>& p) const noexcept
+    [[nodiscard]] constexpr bool contains (const Point<ValueType>& p) const noexcept
     {
         return contains (p.getX(), p.getY());
     }
@@ -1015,7 +1032,7 @@ public:
 
         @return The area of the rectangle, computed as width multiplied by height.
     */
-    constexpr ValueType area() const noexcept
+    [[nodiscard]] constexpr ValueType area() const noexcept
     {
         return size.area();
     }
@@ -1029,7 +1046,7 @@ public:
 
         @return True if the rectangles intersect, otherwise false.
     */
-    constexpr bool intersects (const Rectangle& other) const noexcept
+    [[nodiscard]] constexpr bool intersects (const Rectangle& other) const noexcept
     {
         const auto bottomRight = getBottomRight();
         const auto otherBottomRight = other.getBottomRight();
@@ -1038,15 +1055,20 @@ public:
                  getY() > otherBottomRight.getY() || bottomRight.getY() < other.getY());
     }
 
-    constexpr Rectangle intersection (const Rectangle& other) const noexcept
+    // TODO - doxygen
+    [[nodiscard]] constexpr Rectangle intersection (const Rectangle& other) const noexcept
     {
         const auto x1 = jmax (getX(), other.getX());
-        const auto y1 = jmax (getY(), other.getY());
         const auto x2 = jmin (getX() + getWidth(), other.getX() + other.getWidth());
-        const auto y2 = jmin (getY() + getHeight(), other.getY() + other.getHeight());
 
-        if (x1 < x2 && y1 < y2)
-            return { x1, y1, x2 - x1, y2 - y1 };
+        if (x1 < x2)
+        {
+            const auto y1 = jmax (getY(), other.getY());
+            const auto y2 = jmin (getY() + getHeight(), other.getY() + other.getHeight());
+
+            if (y1 < y2)
+                return { x1, y1, x2 - x1, y2 - y1 };
+        }
 
         return {};
     }
@@ -1058,7 +1080,7 @@ public:
 
         @return A Rectangle representing the largest square that fits inside this rectangle.
     */
-    constexpr Rectangle largestFittingSquare() const noexcept
+    [[nodiscard]] constexpr Rectangle largestFittingSquare() const noexcept
     {
         if (getWidth() == getHeight())
             return *this;
@@ -1080,17 +1102,56 @@ public:
 
         @return A Rectangle representing the smallest containing rectangle of two rectangles.
     */
-    constexpr Rectangle smallestContainingRectangle (const Rectangle& other) const noexcept
+    [[nodiscard]] constexpr Rectangle smallestContainingRectangle (const Rectangle& other) const noexcept
     {
         const auto x1 = jmin (getX(), other.getX());
-        const auto y1 = jmin (getY(), other.getY());
         const auto x2 = jmax (getX() + getWidth(), other.getX() + other.getWidth());
-        const auto y2 = jmax (getY() + getHeight(), other.getY() + other.getHeight());
 
-        if (x1 < x2 && y1 < y2)
-            return { x1, y1, x2 - x1, y2 - y1 };
+        if (x1 < x2)
+        {
+            const auto y1 = jmin (getY(), other.getY());
+            const auto y2 = jmax (getY() + getHeight(), other.getY() + other.getHeight());
+
+            if (y1 < y2)
+                return { x1, y1, x2 - x1, y2 - y1 };
+        }
 
         return {};
+    }
+
+    //==============================================================================
+    // TODO - doxygen
+    [[nodiscard]] Rectangle& transform (const AffineTransform& t) noexcept
+    {
+        auto x1 = static_cast<float> (getX());
+        auto y1 = static_cast<float> (getY());
+        auto x2 = static_cast<float> (getX() + getWidth());
+        auto y2 = static_cast<float> (getY() + getHeight());
+
+        t.transformPoints (x1, y1, x2, y2);
+
+        auto rx1 = jmin (x1, x2);
+        auto rx2 = jmax (x1, x2);
+        auto ry1 = jmin (y1, y2);
+        auto ry2 = jmax (y1, y2);
+
+        xy = xy
+            .withX (static_cast<ValueType> (rx1))
+            .withY (static_cast<ValueType> (ry1));
+
+        size = size
+            .withWidth (static_cast<ValueType> (rx2 - rx1))
+            .withHeight (static_cast<ValueType> (ry2 - ry1));
+
+        return *this;
+    }
+
+    // TODO - doxygen
+    [[nodiscard]] Rectangle transformed (const AffineTransform& t) const noexcept
+    {
+        Rectangle result (*this);
+        result.transform (t);
+        return result;
     }
 
     //==============================================================================
@@ -1103,7 +1164,7 @@ public:
         @return A new rectangle of type T, with the position and size converted.
     */
     template <class T>
-    constexpr Rectangle<T> to() const noexcept
+    [[nodiscard]] constexpr Rectangle<T> to() const noexcept
     {
         return { xy.template to<T>(), size.template to<T>() };
     }

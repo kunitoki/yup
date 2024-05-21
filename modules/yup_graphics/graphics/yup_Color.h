@@ -455,7 +455,7 @@ public:
 
         @return A tuple consisting of hue, saturation, and luminance.
     */
-    constexpr std::tuple<float, float, float> toHSL () const noexcept
+    constexpr std::tuple<float, float, float> toHSL() const noexcept
     {
         const float rf = getRedFloat();
         const float gf = getGreenFloat();
@@ -643,6 +643,7 @@ public:
     }
 
     //==============================================================================
+    // TODO - doxygen
     static Color opaqueRandom() noexcept
     {
         auto random = Random();
