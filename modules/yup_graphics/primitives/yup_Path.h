@@ -402,6 +402,13 @@ public:
     void appendPath (const Path& other, const AffineTransform& transform);
 
     //==============================================================================
+    // TODO - doxygen
+    Path& transform (const AffineTransform& t) noexcept;
+
+    // TODO - doxygen
+    Path transformed (const AffineTransform& t) const;
+
+    //==============================================================================
     /** Returns the bounding box of this path. */
     Rectangle<float> getBoundingBox() const;
 

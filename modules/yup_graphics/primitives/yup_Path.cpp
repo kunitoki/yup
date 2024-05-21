@@ -339,6 +339,31 @@ void Path::appendPath (const Path& other, const AffineTransform& transform)
 }
 
 //==============================================================================
+Path& Path::transform (const AffineTransform& t) noexcept
+{
+    for (auto& segment : data)
+    {
+        if (segment.type == SegmentType::MoveTo || segment.type == SegmentType::LineTo)
+            t.transformPoints (segment.x, segment.y);
+
+        else if (segment.type == Path::SegmentType::QuadTo)
+            t.transformPoints (segment.x, segment.y, segment.x1, segment.y1);
+
+        else if (segment.type == Path::SegmentType::CubicTo)
+            t.transformPoints (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
+    }
+
+    return *this;
+}
+
+Path Path::transformed (const AffineTransform& t) const
+{
+    Path result (*this);
+    result.transform (t);
+    return result;
+}
+
+//==============================================================================
 Rectangle<float> Path::getBoundingBox() const
 {
     return { minX, minY, maxX - minX, maxY - minY };
