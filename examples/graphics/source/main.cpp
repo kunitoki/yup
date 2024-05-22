@@ -34,12 +34,12 @@ class Button : public yup::Component
 public:
     Button (yup::StringRef componentID)
          : yup::Component (componentID)
-         , font (font)
     {
     }
 
-    Button (const yup::Font& font)
-         : font (font)
+    Button (yup::StringRef componentID, const yup::Font& font)
+         : yup::Component (componentID)
+         , font (font)
     {
     }
 

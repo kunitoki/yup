@@ -31,7 +31,7 @@ public:
     Font() = default;
 
     //==============================================================================
-    Font (Span<const uint8> fontBytes, rive::Factory* factory);
+    Font (const MemoryBlock& fontBytes, rive::Factory* factory);
     Font (const File& fontFile, rive::Factory* factory);
 
     //==============================================================================
@@ -42,7 +42,7 @@ public:
     Font& operator=(Font&& other) noexcept = default;
 
     //==============================================================================
-    Result loadFromData (Span<const uint8> fontBytes, rive::Factory* factory);
+    Result loadFromData (const MemoryBlock& fontBytes, rive::Factory* factory);
 
     //==============================================================================
     Result loadFromFile (const File& fontFile, rive::Factory* factory);

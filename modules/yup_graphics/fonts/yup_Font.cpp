@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-Font::Font (Span<const uint8> fontBytes, rive::Factory* factory)
+Font::Font (const MemoryBlock& fontBytes, rive::Factory* factory)
 {
     loadFromData (fontBytes, factory);
 }
@@ -36,9 +36,9 @@ Font::Font (const File& fontFile, rive::Factory* factory)
 
 //==============================================================================
 
-Result Font::loadFromData (Span<const uint8> fontBytes, rive::Factory* factory)
+Result Font::loadFromData (const MemoryBlock& fontBytes, rive::Factory* factory)
 {
-    font = factory->decodeFont (rive::Span<const uint8_t> { fontBytes.data(), fontBytes.size() });
+    font = factory->decodeFont (rive::Span<const uint8_t> { static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize() });
     return font ? Result::ok() : Result::fail ("Unable to load font");
 }
 

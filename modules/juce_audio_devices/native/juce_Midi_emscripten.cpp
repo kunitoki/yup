@@ -24,6 +24,7 @@ namespace juce
 
 class MidiInput::Pimpl {};
 
+// (These are just stub functions if ALSA is unavailable...)
 MidiInput::MidiInput (const String& deviceName, const String& deviceID)
     : deviceInfo (deviceName, deviceID)
 {

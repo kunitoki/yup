@@ -420,8 +420,9 @@ function (yup_standalone_app)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
-    set (additional_libraries "")
     set (additional_definitions "")
+    set (additional_options "")
+    set (additional_libraries "")
     set (additional_link_options "")
 
     # ==== Find dependencies
@@ -435,7 +436,7 @@ function (yup_standalone_app)
         set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable (glfw)
 
-        set (additional_libraries "glfw")
+        list (APPEND additional_libraries glfw)
     endif()
 
     # ==== Prepare executable
@@ -468,15 +469,20 @@ function (yup_standalone_app)
         if (NOT YUP_ARG_CONSOLE)
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
 
-            set (additional_definitions "RIVE_WEBGL=1")
-
+            list (APPEND additional_definitions RIVE_WEBGL=1)
             list (APPEND additional_link_options -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2)
         endif()
 
+        list (APPEND additional_options
+            -fexceptions
+            -sDISABLE_EXCEPTION_CATCHING=0)
+
         list (APPEND additional_link_options
             $<$<CONFIG:DEBUG>:-gsource-map>
+            -fexceptions
             -sWASM=1
             -sASSERTIONS=1
+            -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sDEMANGLE_SUPPORT=1
             -sSTACK_OVERFLOW_CHECK=2
@@ -488,6 +494,10 @@ function (yup_standalone_app)
     endif()
 
     # ==== Definitions and link libraries
+    target_compile_options (${target_name} PRIVATE
+        ${additional_options}
+        ${YUP_ARG_OPTIONS})
+
     target_compile_definitions (${target_name} PRIVATE
         $<$<CONFIG:DEBUG>:DEBUG=1>
         $<$<CONFIG:RELEASE>:NDEBUG=1>
