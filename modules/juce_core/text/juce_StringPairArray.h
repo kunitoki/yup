@@ -58,11 +58,17 @@ public:
     /** Creates a copy of another array */
     StringPairArray (const StringPairArray& other);
 
+    /** Move constructs from another array */
+    StringPairArray (StringPairArray&& other);
+
     /** Destructor. */
     ~StringPairArray() = default;
 
     /** Copies the contents of another string array into this one */
     StringPairArray& operator= (const StringPairArray& other);
+
+    /** Moves the contents of another string array into this one */
+    StringPairArray& operator= (StringPairArray&& other);
 
     //==============================================================================
     /** Compares two arrays.

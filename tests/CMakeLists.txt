@@ -43,6 +43,7 @@ yup_standalone_app (
         juce_audio_basics
         juce_audio_devices
         GTest::gtest_main
+        GTest::gmock_main
 )
 
 # ==== Setup sources

@@ -196,7 +196,6 @@ public:
     */
     inline const String* end() const noexcept       { return strings.end(); }
 
-
     /** Searches for a string in the array.
 
         The comparison will be case-insensitive if the ignoreCase parameter is true.

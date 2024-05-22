@@ -149,6 +149,60 @@ public:
     }
 
     //==============================================================================
+    /** Copy constructor. */
+    HashMap (const HashMap& other)
+        : HashMap()
+    {
+        const ScopedLockType sl (other.getLock());
+
+        HashMap::Iterator i (other);
+
+        while (i.next())
+            set (i.getKey(), i.getValue());
+    }
+
+    /** Move constructor. */
+    HashMap (HashMap&& other)
+        : HashMap()
+    {
+        const ScopedLockType sl (other.getLock());
+
+        hashSlots.swapWith (other.hashSlots);
+        std::swap (totalNumItems, other.totalNumItems);
+    }
+
+    //==============================================================================
+    /** Copy assignment operator. */
+    HashMap& operator= (const HashMap& other)
+    {
+        const ScopedLockType sl1 (getLock());
+        const ScopedLockType sl2 (other.getLock());
+
+        clear();
+
+        HashMap::Iterator i (other);
+
+        while (i.next())
+            set (i.getKey(), i.getValue());
+
+        return *this;
+    }
+
+    /** Move assignment operator. */
+    HashMap& operator= (HashMap&& other)
+    {
+        const ScopedLockType sl1 (getLock());
+        const ScopedLockType sl2 (other.getLock());
+
+        clear();
+
+        hashSlots.swapWith (other.hashSlots);
+        std::swap (totalNumItems, other.totalNumItems);
+
+        return *this;
+    }
+
+    //==============================================================================
     /** Removes all values from the map.
         Note that this will clear the content, but won't affect the number of slots (see
         remapTable and getNumSlots).
@@ -517,7 +571,7 @@ private:
 
     inline HashEntry* getSlot (KeyType key) const noexcept     { return hashSlots.getUnchecked (generateHashFor (key, getNumSlots())); }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HashMap)
+    JUCE_LEAK_DETECTOR (HashMap)
 };
 
 } // namespace juce

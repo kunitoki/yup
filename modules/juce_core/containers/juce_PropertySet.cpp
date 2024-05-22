@@ -48,15 +48,48 @@ PropertySet::PropertySet (bool ignoreCaseOfKeyNames)
 }
 
 PropertySet::PropertySet (const PropertySet& other)
-    : properties (other.properties),
-      fallbackProperties (other.fallbackProperties),
+    : fallbackProperties (other.fallbackProperties),
       ignoreCaseOfKeys (other.ignoreCaseOfKeys)
 {
+    const ScopedLock sl (other.lock);
+
+    properties = other.properties;
+}
+
+PropertySet::PropertySet (PropertySet&& other)
+    : fallbackProperties (other.fallbackProperties),
+      ignoreCaseOfKeys (other.ignoreCaseOfKeys)
+{
+    const ScopedLock sl (other.lock);
+
+    properties = std::move (other.properties);
 }
 
 PropertySet& PropertySet::operator= (const PropertySet& other)
 {
-    properties = other.properties;
+    {
+        const ScopedLock sl1 (lock);
+        const ScopedLock sl2 (other.lock);
+
+        properties = other.properties;
+    }
+
+    fallbackProperties = other.fallbackProperties;
+    ignoreCaseOfKeys = other.ignoreCaseOfKeys;
+
+    propertyChanged();
+    return *this;
+}
+
+PropertySet& PropertySet::operator= (PropertySet&& other)
+{
+    {
+        const ScopedLock sl1 (lock);
+        const ScopedLock sl2 (other.lock);
+
+        properties = std::move (other.properties);
+    }
+
     fallbackProperties = other.fallbackProperties;
     ignoreCaseOfKeys = other.ignoreCaseOfKeys;
 
@@ -139,6 +172,7 @@ void PropertySet::setValue (StringRef keyName, const var& v)
     if (keyName.isNotEmpty())
     {
         auto value = v.toString();
+
         const ScopedLock sl (lock);
         auto index = properties.getAllKeys().indexOf (keyName, ignoreCaseOfKeys);
 

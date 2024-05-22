@@ -51,10 +51,24 @@ StringPairArray::StringPairArray (const StringPairArray& other)
 {
 }
 
+StringPairArray::StringPairArray (StringPairArray&& other)
+    : keys (std::move (other.keys)),
+      values (std::move (other.values)),
+      ignoreCase (other.ignoreCase)
+{
+}
+
 StringPairArray& StringPairArray::operator= (const StringPairArray& other)
 {
     keys = other.keys;
     values = other.values;
+    return *this;
+}
+
+StringPairArray& StringPairArray::operator= (StringPairArray&& other)
+{
+    keys = std::move (other.keys);
+    values = std::move (other.values);
     return *this;
 }
 

@@ -65,11 +65,17 @@ public:
     /** Creates a copy of another PropertySet. */
     PropertySet (const PropertySet& other);
 
-    /** Copies another PropertySet over this one. */
-    PropertySet& operator= (const PropertySet& other);
+    /** Moves another PropertySet. */
+    PropertySet (PropertySet&& other);
 
     /** Destructor. */
     virtual ~PropertySet();
+
+    /** Copies another PropertySet over this one. */
+    PropertySet& operator= (const PropertySet& other);
+
+    /** Moves another PropertySet over this one. */
+    PropertySet& operator= (PropertySet&& other);
 
     //==============================================================================
     /** Returns one of the properties as a string.
