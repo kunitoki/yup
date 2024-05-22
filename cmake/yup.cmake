@@ -422,6 +422,7 @@ function (yup_standalone_app)
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (additional_libraries "")
     set (additional_definitions "")
+    set (additional_link_options "")
 
     # ==== Find dependencies
     if (NOT "${yup_platform}" STREQUAL "emscripten")
@@ -437,13 +438,13 @@ function (yup_standalone_app)
         set (additional_libraries "glfw")
     endif()
 
-    # ==== Prepare sources
+    # ==== Prepare executable
     add_executable (${target_name})
-
     target_compile_features (${target_name} PRIVATE cxx_std_17)
 
-    if (NOT YUP_ARG_CONSOLE)
-        if ("${yup_platform}" MATCHES "^(osx|ios)$")
+    # ==== Per platform configuration
+    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+        if (NOT YUP_ARG_CONSOLE)
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
                 CXX_EXTENSIONS                                 OFF
@@ -458,38 +459,49 @@ function (yup_standalone_app)
                 XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
                 XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
                 XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
+        endif()
 
-        elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+        set_target_properties (${target_name} PROPERTIES
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF)
+
+    elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+        if (NOT YUP_ARG_CONSOLE)
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
 
             set (additional_definitions "RIVE_WEBGL=1")
 
-            target_link_options (${target_name} PRIVATE
-                $<$<CONFIG:DEBUG>:-gsource-map>
-                -sWASM=1 -sASSERTIONS=1 -sUSE_GLFW=3 -sERROR_ON_UNDEFINED_SYMBOLS=1
-                -sDEMANGLE_SUPPORT=1 -sSTACK_OVERFLOW_CHECK=2 -sFORCE_FILESYSTEM=1
-                -sALLOW_MEMORY_GROWTH=1 -sNODERAWFS=0 -sMAX_WEBGL_VERSION=2
-                -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
-                ${YUP_ARG_LINK_OPTIONS})
-
+            list (APPEND additional_link_options -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2)
         endif()
+
+        list (APPEND additional_link_options
+            $<$<CONFIG:DEBUG>:-gsource-map>
+            -sWASM=1
+            -sASSERTIONS=1
+            -sERROR_ON_UNDEFINED_SYMBOLS=1
+            -sDEMANGLE_SUPPORT=1
+            -sSTACK_OVERFLOW_CHECK=2
+            -sFORCE_FILESYSTEM=1
+            -sALLOW_MEMORY_GROWTH=1
+            -sNODERAWFS=0
+            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
+
     endif()
 
-    if ("${yup_platform}" MATCHES "^(osx|ios)$")
-        set_target_properties (${target_name} PROPERTIES
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF)
-    endif()
-
+    # ==== Definitions and link libraries
     target_compile_definitions (${target_name} PRIVATE
         $<$<CONFIG:DEBUG>:DEBUG=1>
         $<$<CONFIG:RELEASE>:NDEBUG=1>
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         JUCE_STANDALONE_APPLICATION=1
-        ${YUP_ARG_DEFINITIONS}
-        ${additional_definitions})
+        ${additional_definitions}
+        ${YUP_ARG_DEFINITIONS})
+
+    target_link_options (${target_name} PRIVATE
+        ${additional_link_options}
+        ${YUP_ARG_LINK_OPTIONS})
 
     target_link_libraries (${target_name} PRIVATE
-        ${YUP_ARG_MODULES}
-        ${additional_libraries})
+        ${additional_libraries}
+        ${YUP_ARG_MODULES})
 
 endfunction()
