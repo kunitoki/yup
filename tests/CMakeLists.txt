@@ -33,8 +33,14 @@ set (target_name yup_tests)
 
 enable_testing()
 
+set (link_options "")
+if ("${yup_platform}" MATCHES "^(emscripten)$")
+    set (link_options -sNO_DISABLE_EXCEPTION_CATCHING)
+endif()
+
 yup_standalone_app (
     TARGET_NAME ${target_name}
+    LINK_OPTIONS ${link_options}
     DEFINITIONS
         JUCE_USE_CURL=0
     MODULES
