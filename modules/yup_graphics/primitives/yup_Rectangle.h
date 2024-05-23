@@ -124,6 +124,13 @@ public:
         return xy.getX();
     }
 
+    // TODO - doxygen
+    constexpr Rectangle& setX (ValueType newX) noexcept
+    {
+        xy.setX (newX);
+        return *this;
+    }
+
     /** Returns a new rectangle with the x-coordinate of the top-left corner set to a new value.
 
         This method creates a new rectangle with the same size and y-coordinate, but with the x-coordinate of the top-left corner changed to the specified value.
@@ -145,6 +152,13 @@ public:
     [[nodiscard]] constexpr ValueType getY() const noexcept
     {
         return xy.getY();
+    }
+
+    // TODO - doxygen
+    constexpr Rectangle& setY (ValueType newY) noexcept
+    {
+        xy.setY (newY);
+        return *this;
     }
 
     /** Returns a new rectangle with the y-coordinate of the top-left corner set to a new value.
@@ -170,6 +184,13 @@ public:
         return size.getWidth();
     }
 
+    // TODO - doxygen
+    constexpr Rectangle& setWidth (ValueType newWidth) noexcept
+    {
+        size.setWidth (newWidth);
+        return *this;
+    }
+
     /** Returns a new rectangle with the width set to a new value.
 
         This method creates a new rectangle with the same position but changes the width to the specified value.
@@ -192,6 +213,13 @@ public:
     [[nodiscard]] constexpr ValueType getHeight() const noexcept
     {
         return size.getHeight();
+    }
+
+    // TODO - doxygen
+    constexpr Rectangle& setHeight (ValueType newHeight) noexcept
+    {
+        size.setHeight (newHeight);
+        return *this;
     }
 
     /** Returns a new rectangle with the height set to a new value.

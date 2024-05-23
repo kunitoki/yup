@@ -214,7 +214,7 @@ public:
 
         g.setStrokeCap (yup::StrokeCap::Round);
         g.setColor (yup::Color (0xffffffff));
-        g.drawPath (foregroundLine, proportionOfWidth (0.04f));
+        g.drawPath (foregroundLine, proportionOfWidth (0.03f));
 
         g.setColor (yup::Color (0xffffffff));
         g.drawFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
@@ -251,7 +251,7 @@ private:
         if (forceAll)
         {
             backgroundPath.clear();
-            backgroundPath.addEllipse (bounds.reduced (proportionOfWidth (0.045f)));
+            backgroundPath.addEllipse (bounds.reduced (proportionOfWidth (0.105f)));
 
             backgroundArc.clear();
             backgroundArc.addCenteredArc (center,
@@ -273,7 +273,7 @@ private:
             toCurrentRadians);
 
         foregroundLine.clear();
-        foregroundLine.addLine (yup::Line<float> (pos, center).keepOnlyStart (0.2f));
+        foregroundLine.addLine (yup::Line<float> (pos, center).keepOnlyStart (0.25f));
 
         text.clear();
         text.appendText (font, proportionOfHeight(0.1f), proportionOfHeight(0.1f), yup::String (value, 3).toRawUTF8());
@@ -370,6 +370,29 @@ public:
     void paint (yup::Graphics& g) override
     {
         yup::DocumentWindow::paint (g);
+
+        /*
+        yup::String svgPathData =
+            "M 250,0 "
+            "L 309,181 "
+            "L 500,181 "
+            "L 351,293 "
+            "L 405,475 "
+            "L 250,375 "
+            "L 95,475 "
+            "L 149,293 "
+            "L 0,181 "
+            "L 191,181 "
+            "Z";
+
+        yup::Path yupPath;
+
+        if (yupPath.parsePathData (svgPathData))
+        {
+            g.setColor (0xff4b4bff);
+            g.drawPath (yupPath, 5.0f);
+        }
+        */
 
         /*
         //inputReady.wait();

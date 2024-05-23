@@ -658,6 +658,9 @@ public:
         };
     }
 
+    //==============================================================================
+    static Color fromString (const String& colourString);
+
 private:
     constexpr static float componentToNormalized (uint8 component) noexcept
     {

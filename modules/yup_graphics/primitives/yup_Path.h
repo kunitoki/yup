@@ -403,7 +403,7 @@ public:
 
     //==============================================================================
     // TODO - doxygen
-    Path& transform (const AffineTransform& t) noexcept;
+    Path& transform (const AffineTransform& t);
 
     // TODO - doxygen
     Path transformed (const AffineTransform& t) const;
@@ -411,6 +411,10 @@ public:
     //==============================================================================
     /** Returns the bounding box of this path. */
     Rectangle<float> getBoundingBox() const;
+
+    //==============================================================================
+    // TODO - doxygen
+    bool parsePathData (const String& pathData);
 
     //==============================================================================
     /** Provides an iterator to the beginning of the path data.

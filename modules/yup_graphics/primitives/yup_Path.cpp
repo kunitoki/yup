@@ -339,7 +339,7 @@ void Path::appendPath (const Path& other, const AffineTransform& transform)
 }
 
 //==============================================================================
-Path& Path::transform (const AffineTransform& t) noexcept
+Path& Path::transform (const AffineTransform& t)
 {
     for (auto& segment : data)
     {
@@ -383,6 +383,304 @@ void Path::resetBoundingBox()
     maxX = std::numeric_limits<float>::min();
     minY = std::numeric_limits<float>::max();
     maxY = std::numeric_limits<float>::min();
+}
+
+//==============================================================================
+namespace {
+bool isControlMarker (String::CharPointerType& data)
+{
+    if (data.isEmpty())
+        return false;
+
+    return data.isLetter();
+}
+
+void skipWhitespace (String::CharPointerType& data)
+{
+    while (! data.isEmpty() && data.isWhitespace())
+        ++data;
+}
+
+bool parseCoordinates (String::CharPointerType& data, float& x, float& y)
+{
+    skipWhitespace (data);
+
+    String number;
+    bool isXCoordinate = true;
+    bool pointFound = false;
+
+    while (! data.isEmpty())
+    {
+        if (data.isWhitespace() || isControlMarker (data) || *data == ',' || *data == '-' || (pointFound && *data == '.'))
+        {
+            if (! number.isEmpty())
+            {
+                if (isXCoordinate)
+                {
+                    x = number.getFloatValue();
+                    isXCoordinate = false;
+                    pointFound = false;
+                }
+                else
+                {
+                    y = number.getFloatValue();
+                    return true;
+                }
+
+                number.clear();
+            }
+
+            if (*data == '-' || *data == '.')
+                number += *data;
+        }
+        else
+        {
+            if (*data == '.')
+                pointFound = true;
+
+            number += *data;
+        }
+
+        ++data;
+    }
+
+    return false;
+}
+
+bool parseSingleCoordinate (String::CharPointerType& data, float& coord)
+{
+    skipWhitespace (data);
+
+    juce::String number;
+    bool pointFound = false;
+
+    while (! data.isEmpty())
+    {
+        if (data.isWhitespace() || isControlMarker (data) || *data == ',' || (pointFound && *data == '.'))
+        {
+            if (! number.isEmpty())
+            {
+                coord = number.getFloatValue();
+                return true;
+            }
+        }
+        else
+        {
+            if (*data == '.')
+                pointFound = true;
+
+            number += *data;
+        }
+
+        ++data;
+    }
+
+    return false;
+}
+
+void handleMoveTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& startX, float& startY, bool relative)
+{
+    float x, y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseCoordinates (data, x, y))
+    {
+        if (relative)
+        {
+            x += currentX;
+            y += currentY;
+        }
+
+        path.moveTo (x, y);
+
+        currentX = startX = x;
+        currentY = startY = y;
+
+        skipWhitespace (data);
+    }
+}
+
+void handleLineTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+{
+    float x, y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseCoordinates (data, x, y))
+    {
+        if (relative)
+        {
+            x += currentX;
+            y += currentY;
+        }
+
+        path.lineTo (x, y);
+
+        currentX = x;
+        currentY = y;
+
+        skipWhitespace (data);
+    }
+}
+
+void handleHorizontalLineTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+{
+    float x;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseSingleCoordinate (data, x))
+    {
+        if (relative)
+            x += currentX;
+
+        path.lineTo (x, currentY);
+
+        currentX = x;
+
+        skipWhitespace (data);
+    }
+}
+
+void handleVerticalLineTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+{
+    float y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker(data)
+        && parseSingleCoordinate (data, y))
+    {
+        if (relative)
+            y += currentY;
+
+        path.lineTo (currentX, y);
+
+        currentY = y;
+
+        skipWhitespace (data);
+    }
+}
+
+void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+{
+    float x1, y1, x, y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseCoordinates (data, x1, y1)
+        && parseCoordinates (data, x, y))
+    {
+        if (relative)
+        {
+            x1 += currentX;
+            y1 += currentY;
+            x += currentX;
+            y += currentY;
+        }
+
+        path.quadTo (x, y, x1, y1);
+
+        currentX = x;
+        currentY = y;
+
+        skipWhitespace (data);
+    }
+}
+
+void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+{
+    float x1, y1, x2, y2, x, y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseCoordinates (data, x1, y1)
+        && parseCoordinates (data, x2, y2)
+        && parseCoordinates (data, x, y))
+    {
+        if (relative)
+        {
+            x1 += currentX;
+            y1 += currentY;
+            x2 += currentX;
+            y2 += currentY;
+            x += currentX;
+            y += currentY;
+        }
+
+        path.cubicTo (x, y, x1, y1, x2, y2);
+
+        currentX = x;
+        currentY = y;
+
+        skipWhitespace (data);
+    }
+}
+
+} // namespace
+
+bool Path::parsePathData (const String& pathData)
+{
+    String::CharPointerType data = pathData.getCharPointer();
+
+    float currentX = 0.0f, currentY = 0.0f;
+    float startX = 0.0f, startY = 0.0f;
+
+    while (! data.isEmpty())
+    {
+        juce_wchar command = *data;
+
+        data++;
+
+        skipWhitespace (data);
+
+        switch (command)
+        {
+            case 'M': // Move to absolute
+            case 'm': // Move to relative
+                handleMoveTo (data, *this, currentX, currentY, startX, startY, command == 'm');
+                break;
+
+            case 'L': // Line to absolute
+            case 'l': // Line to relative
+                handleLineTo (data, *this, currentX, currentY, command == 'l');
+                break;
+
+            case 'H': // Horizontal line to absolute
+            case 'h': // Horizontal line to relative
+                handleHorizontalLineTo (data, *this, currentX, currentY, command == 'h');
+                break;
+
+            case 'V': // Vertical line to absolute
+            case 'v': // Vertical line to relative
+                handleVerticalLineTo (data, *this, currentX, currentY, command == 'v');
+                break;
+
+            case 'Q': // Quadratic Bezier curve to absolute
+            case 'q': // Quadratic Bezier curve to relative
+                handleQuadTo (data, *this, currentX, currentY, command == 'q');
+                break;
+
+            case 'C': // Cubic Bezier curve to absolute
+            case 'c': // Cubic Bezier curve to relative
+                handleCubicTo (data, *this, currentX, currentY, command == 'c');
+                break;
+
+            case 'Z': // Close path
+            case 'z': // Close path
+                close();
+                currentX = startX;
+                currentY = startY;
+                break;
+
+            default:
+                break;
+        }
+
+        skipWhitespace (data);
+    }
+
+    return true;
 }
 
 } // namespace yup

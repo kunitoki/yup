@@ -87,9 +87,16 @@ public:
 
         @return The x coordinate of the point.
     */
-    constexpr ValueType getX() const noexcept
+    [[nodiscard]] constexpr ValueType getX() const noexcept
     {
         return x;
+    }
+
+    // TODO - doxygen
+    constexpr Point& setX (ValueType newX) noexcept
+    {
+        x = newX;
+        return *this;
     }
 
     /** Returns a new point with the x coordinate changed to the specified value, keeping the y coordinate the same.
@@ -98,7 +105,7 @@ public:
 
         @return A new point with the updated x coordinate.
     */
-    constexpr Point withX (ValueType newX) const noexcept
+    [[nodiscard]] constexpr Point withX (ValueType newX) const noexcept
     {
         return { newX, y };
     }
@@ -108,9 +115,16 @@ public:
 
         @return The y coordinate of the point.
     */
-    constexpr ValueType getY() const noexcept
+    [[nodiscard]] constexpr ValueType getY() const noexcept
     {
         return y;
+    }
+
+    // TODO - doxygen
+    constexpr Point& setY (ValueType newY) noexcept
+    {
+        y = newY;
+        return *this;
     }
 
     /** Returns a new point with the y coordinate changed to the specified value, keeping the x coordinate the same.
@@ -119,7 +133,7 @@ public:
 
         @return A new point with the updated y coordinate.
     */
-    constexpr Point withY (ValueType newY) const noexcept
+    [[nodiscard]] constexpr Point withY (ValueType newY) const noexcept
     {
         return { x, newY };
     }
@@ -132,7 +146,7 @@ public:
 
         @return A new point with the updated coordinates.
     */
-    constexpr Point withXY (ValueType newX, ValueType newY) const noexcept
+    [[nodiscard]] constexpr Point withXY (ValueType newX, ValueType newY) const noexcept
     {
         return { newX, newY };
     }
@@ -142,7 +156,7 @@ public:
 
         @return True if the point is at the origin, false otherwise.
     */
-    constexpr bool isOrigin() const noexcept
+    [[nodiscard]] constexpr bool isOrigin() const noexcept
     {
         return isOnXAxis() && isOnYAxis();
     }
@@ -151,7 +165,7 @@ public:
 
         @return True if the point is on the X-axis, false otherwise.
     */
-    constexpr bool isOnXAxis() const noexcept
+    [[nodiscard]] constexpr bool isOnXAxis() const noexcept
     {
         return y == ValueType (0);
     }
@@ -160,7 +174,7 @@ public:
 
         @return True if the point is on the Y-axis, false otherwise.
     */
-    constexpr bool isOnYAxis() const noexcept
+    [[nodiscard]] constexpr bool isOnYAxis() const noexcept
     {
         return x == ValueType (0);
     }
@@ -176,7 +190,7 @@ public:
         @return True if both coordinates are finite, false otherwise.
     */
     template <class T = ValueType>
-    constexpr auto isFinite() const noexcept
+    [[nodiscard]] constexpr auto isFinite() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, bool>
     {
         return std::isfinite (x) && std::isfinite (y);
@@ -189,7 +203,7 @@ public:
 
         @return The Euclidean distance as a floating-point value.
     */
-    constexpr float distanceTo (const Point& other) const noexcept
+    [[nodiscard]] constexpr float distanceTo (const Point& other) const noexcept
     {
         return static_cast<float> (std::sqrt (static_cast<float> (distanceToSquared (other))));
     }
@@ -203,7 +217,7 @@ public:
 
         @return The squared Euclidean distance as a value of type ValueType.
     */
-    constexpr ValueType distanceToSquared (const Point& other) const noexcept
+    [[nodiscard]] constexpr ValueType distanceToSquared (const Point& other) const noexcept
     {
         return square (other.x - x) + square (other.y - y);
     }
@@ -217,7 +231,7 @@ public:
 
         @return The horizontal distance as a value of type ValueType.
     */
-    constexpr ValueType horizontalDistanceTo (const Point& other) const noexcept
+    [[nodiscard]] constexpr ValueType horizontalDistanceTo (const Point& other) const noexcept
     {
         return other.x - x;
     }
@@ -231,7 +245,7 @@ public:
 
         @return The vertical distance as a value of type ValueType.
     */
-    constexpr ValueType verticalDistanceTo (const Point& other) const noexcept
+    [[nodiscard]] constexpr ValueType verticalDistanceTo (const Point& other) const noexcept
     {
         return other.y - y;
     }
@@ -245,7 +259,7 @@ public:
 
         @return The Manhattan distance as a value of type ValueType.
     */
-    constexpr ValueType manhattanDistanceTo (const Point& other) const noexcept
+    [[nodiscard]] constexpr ValueType manhattanDistanceTo (const Point& other) const noexcept
     {
         return std::abs (x - other.x) + std::abs (y - other.y);
     }
@@ -258,7 +272,7 @@ public:
 
         @return The magnitude of the vector as a floating-point value.
     */
-    constexpr float magnitude() const noexcept
+    [[nodiscard]] constexpr float magnitude() const noexcept
     {
         return static_cast<float> (std::sqrt (static_cast<float> (square (x) + square (y))));
     }
@@ -274,7 +288,7 @@ public:
 
         @return A new point on the specified circle.
     */
-    constexpr Point getPointOnCircumference (float radius, float angleRadians) const noexcept
+    [[nodiscard]] constexpr Point getPointOnCircumference (float radius, float angleRadians) const noexcept
     {
         return { x + (std::cos (angleRadians) * radius), y + std::sin (angleRadians) * radius };
     }
@@ -290,7 +304,7 @@ public:
 
         @return A new point on the specified ellipse.
     */
-    constexpr Point getPointOnCircumference (float radiusX, float radiusY, float angleRadians) const noexcept
+    [[nodiscard]] constexpr Point getPointOnCircumference (float radiusX, float radiusY, float angleRadians) const noexcept
     {
         return { x + (std::cos (angleRadians) * radiusX), y + std::sin (angleRadians) * radiusY };
     }
@@ -338,7 +352,7 @@ public:
 
         @return A new Point object with the translated coordinates.
     */
-    constexpr Point translated (ValueType deltaX, ValueType deltaY) const noexcept
+    [[nodiscard]] constexpr Point translated (ValueType deltaX, ValueType deltaY) const noexcept
     {
         return { x + deltaX, y + deltaY };
     }
@@ -352,7 +366,7 @@ public:
 
         @return A new Point object with the translated coordinates.
     */
-    constexpr Point translated (const Point& delta) const noexcept
+    [[nodiscard]] constexpr Point translated (const Point& delta) const noexcept
     {
         return { x + delta.x, y + delta.y };
     }
@@ -410,7 +424,7 @@ public:
         @return A new Point object with the scaled coordinates.
     */
     template <class T>
-    constexpr auto scaled (float factor) const noexcept
+    [[nodiscard]] constexpr auto scaled (float factor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
         Point result (*this);
@@ -431,7 +445,7 @@ public:
         @return A new Point object with the scaled coordinates.
     */
     template <class T>
-    constexpr auto scaled (float factorX, float factorY) const noexcept
+    [[nodiscard]] constexpr auto scaled (float factorX, float factorY) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
         Point result (*this);
@@ -469,7 +483,7 @@ public:
 
         @return A new Point object with the rotated coordinates.
     */
-    constexpr Point rotatedClockwise (float angleInRadians) const noexcept
+    [[nodiscard]] constexpr Point rotatedClockwise (float angleInRadians) const noexcept
     {
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
@@ -502,7 +516,7 @@ public:
 
         @return A new Point object with the rotated coordinates.
     */
-    constexpr Point rotatedCounterClockwise (float angleInRadians) const noexcept
+    [[nodiscard]] constexpr Point rotatedCounterClockwise (float angleInRadians) const noexcept
     {
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
@@ -521,7 +535,7 @@ public:
 
         @return A new Point object representing the midpoint between this point and the other point.
     */
-    constexpr Point midpoint (const Point& other) const noexcept
+    [[nodiscard]] constexpr Point midpoint (const Point& other) const noexcept
     {
         return { (x + other.x) / ValueType (2), (y + other.y) / ValueType (2) };
     }
@@ -537,7 +551,7 @@ public:
 
         @return A new Point object representing the interpolated position between this point and the other point.
     */
-    constexpr Point pointBetween (const Point& other, float delta) const noexcept
+    [[nodiscard]] constexpr Point pointBetween (const Point& other, float delta) const noexcept
     {
         delta = jlimit (0.0f, 1.0f, delta);
 
@@ -554,7 +568,7 @@ public:
 
         @return The dot product of this point with the other point as a ValueType.
     */
-    constexpr ValueType dotProduct (const Point& other) const noexcept
+    [[nodiscard]] constexpr ValueType dotProduct (const Point& other) const noexcept
     {
         return x * other.x + y * other.y;
     }
@@ -569,7 +583,7 @@ public:
 
         @return The cross product of this point with the other point as a ValueType.
     */
-    constexpr ValueType crossProduct (const Point& other) const noexcept
+    [[nodiscard]] constexpr ValueType crossProduct (const Point& other) const noexcept
     {
         return x * other.y - y * other.x;
     }
@@ -585,7 +599,7 @@ public:
 
         @return The angle in radians between this point and the other point.
     */
-    constexpr float angleTo (const Point& other) const noexcept
+    [[nodiscard]] constexpr float angleTo (const Point& other) const noexcept
     {
         const auto magProduct = magnitude() * other.magnitude();
 
@@ -619,7 +633,7 @@ public:
 
         @return A new Point object representing the normalized version of this point.
     */
-    constexpr Point normalized() const noexcept
+    [[nodiscard]] constexpr Point normalized() const noexcept
     {
         Point result (*this);
         result.normalize();
@@ -633,7 +647,7 @@ public:
 
         @return True if this point is a unit vector, false otherwise.
     */
-    constexpr bool isNormalized() const noexcept
+    [[nodiscard]] constexpr bool isNormalized() const noexcept
     {
         return magnitude() == ValueType (1);
     }
@@ -648,7 +662,7 @@ public:
 
         @return True if this point is collinear with the other point, false otherwise.
     */
-    constexpr bool isCollinear (const Point& other) const noexcept
+    [[nodiscard]] constexpr bool isCollinear (const Point& other) const noexcept
     {
         return crossProduct (other) == ValueType (0);
     }
@@ -664,7 +678,7 @@ public:
 
         @return True if this point is within the specified circle, false otherwise.
     */
-    constexpr bool isWithinCircle (const Point& center, float radius) const noexcept
+    [[nodiscard]] constexpr bool isWithinCircle (const Point& center, float radius) const noexcept
     {
         return distanceTo (center) <= radius;
     }
@@ -679,7 +693,7 @@ public:
 
         @return True if this point is within the specified rectangle, false otherwise.
     */
-    constexpr bool isWithinRectangle (const Point& topLeft, const Point& bottomRight) const noexcept
+    [[nodiscard]] constexpr bool isWithinRectangle (const Point& topLeft, const Point& bottomRight) const noexcept
     {
         return x >= topLeft.x && x <= bottomRight.x_ && y >= topLeft.y && y <= bottomRight.y;
     }
@@ -705,7 +719,7 @@ public:
 
         @return A new Point object representing this point reflected over the X-axis.
     */
-    constexpr Point reflectedOverXAxis() const noexcept
+    [[nodiscard]] constexpr Point reflectedOverXAxis() const noexcept
     {
         return { x, -y };
     }
@@ -730,7 +744,7 @@ public:
 
         @return A new Point object representing this point reflected over the Y-axis.
     */
-    constexpr Point reflectedOverYAxis() const noexcept
+    [[nodiscard]] constexpr Point reflectedOverYAxis() const noexcept
     {
         return { -x, y };
     }
@@ -756,7 +770,7 @@ public:
 
         @return A new Point object representing this point reflected over the origin.
     */
-    constexpr Point reflectedOverOrigin() const noexcept
+    [[nodiscard]] constexpr Point reflectedOverOrigin() const noexcept
     {
         return { -x, -y };
     }
@@ -771,7 +785,7 @@ public:
 
         @return A new Point object with the minimum x and y coordinates from this point and the other point.
     */
-    constexpr Point min (const Point& other) const noexcept
+    [[nodiscard]] constexpr Point min (const Point& other) const noexcept
     {
         return { std::min (x, other.x), std::min (y, other.y) };
     }
@@ -785,7 +799,7 @@ public:
 
         @return A new Point object with the maximum x and y coordinates from this point and the other point.
     */
-    constexpr Point max (const Point& other) const noexcept
+    [[nodiscard]] constexpr Point max (const Point& other) const noexcept
     {
         return { std::max (x, other.x), std::max (y, other.y) };
     }
@@ -797,7 +811,7 @@ public:
 
         @return A new Point object with the absolute values of the x and y coordinates.
     */
-    constexpr Point abs() const noexcept
+    [[nodiscard]] constexpr Point abs() const noexcept
     {
         return { std::abs (x), std::abs(y) };
     }
@@ -813,7 +827,7 @@ public:
         @return A new Point object with the floored coordinates.
     */
     template <class T = ValueType>
-    constexpr auto floor() const noexcept
+    [[nodiscard]] constexpr auto floor() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
         return { std::floor (x), std::floor (y) };
@@ -830,7 +844,7 @@ public:
         @return A new Point object with the ceiled coordinates.
     */
     template <class T = ValueType>
-    constexpr auto ceil() const noexcept
+    [[nodiscard]] constexpr auto ceil() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
         return { std::ceil (x), std::ceil (y) };
@@ -848,7 +862,7 @@ public:
 
         @return A new Point object representing the interpolated position between this point and the other point.
     */
-    constexpr Point lerp (const Point& other, float delta) const noexcept
+    [[nodiscard]] constexpr Point lerp (const Point& other, float delta) const noexcept
     {
         return
         {
@@ -866,7 +880,7 @@ public:
     }
 
     // TODO - doxygen
-    constexpr Point transformed (const AffineTransform& t) const noexcept
+    [[nodiscard]] constexpr Point transformed (const AffineTransform& t) const noexcept
     {
         Point result (*this);
         result.transform (t);
@@ -884,7 +898,7 @@ public:
         @return A new Point<T> object with the coordinates converted to type T.
     */
     template <class T>
-    constexpr Point<T> to() const noexcept
+    [[nodiscard]] constexpr Point<T> to() const noexcept
     {
         return { static_cast<T> (x), static_cast<T> (y) };
     }
@@ -1223,7 +1237,7 @@ JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Point<ValueTyp
 }
 
 template <std::size_t I, class ValueType>
-constexpr ValueType get (const Point<ValueType>& point) noexcept
+[[nodiscard]] constexpr ValueType get (const Point<ValueType>& point) noexcept
 {
     if constexpr (I == 0)
         return point.getX();
