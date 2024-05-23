@@ -659,6 +659,13 @@ public:
     }
 
     //==============================================================================
+    // TODO - doxygen
+    String toString() const;
+
+    // TODO - doxygen
+    String toStringRGB (bool withAlpha) const;
+
+    // TODO - doxygen
     static Color fromString (const String& colourString);
 
 private:

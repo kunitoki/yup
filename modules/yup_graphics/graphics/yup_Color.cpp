@@ -146,20 +146,38 @@ Color parseNamedColor (const String& name)
 
 //==============================================================================
 
+String Color::toString() const
+{
+    String result;
+    result << "#" << String::toHexString (r) << String::toHexString (g) << String::toHexString (b) << String::toHexString (a);
+    return result;
+}
+
+String Color::toStringRGB (bool withAlpha) const
+{
+    String result;
+    result << "rgb(" << String (r) << "," << String (g);
+
+    if (withAlpha)
+        result << "," << String (b);
+
+    result << ")";
+
+    return result;
+}
+
+//==============================================================================
+
 Color Color::fromString (const String& colorString)
 {
     if (colorString.startsWith("#"))
-    {
         return parseHexColor (colorString);
-    }
+
     else if (colorString.startsWithIgnoreCase("rgb"))
-    {
         return parseRGBColor (colorString);
-    }
+
     else
-    {
         return parseNamedColor (colorString);
-    }
 }
 
 } // namespace yup
