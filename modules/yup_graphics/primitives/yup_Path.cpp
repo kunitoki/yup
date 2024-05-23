@@ -387,12 +387,9 @@ void Path::resetBoundingBox()
 
 //==============================================================================
 namespace {
-bool isControlMarker (String::CharPointerType& data)
+bool isControlMarker (String::CharPointerType data)
 {
-    if (data.isEmpty())
-        return false;
-
-    return data.isLetter();
+    return !data.isEmpty() && String("MmLlHhVvQqCcZz").containsChar (*data);
 }
 
 void skipWhitespace (String::CharPointerType& data)
@@ -401,78 +398,62 @@ void skipWhitespace (String::CharPointerType& data)
         ++data;
 }
 
-bool parseCoordinates (String::CharPointerType& data, float& x, float& y)
+bool parseCoordinate (String::CharPointerType& data, float& coord)
 {
     skipWhitespace (data);
 
     String number;
-    bool isXCoordinate = true;
+    bool isNegative = false;
     bool pointFound = false;
 
-    while (! data.isEmpty())
+    if (*data == '-')
     {
-        if (data.isWhitespace() || isControlMarker (data) || *data == ',' || *data == '-' || (pointFound && *data == '.'))
-        {
-            if (! number.isEmpty())
-            {
-                if (isXCoordinate)
-                {
-                    x = number.getFloatValue();
-                    isXCoordinate = false;
-                    pointFound = false;
-                }
-                else
-                {
-                    y = number.getFloatValue();
-                    return true;
-                }
-
-                number.clear();
-            }
-
-            if (*data == '-' || *data == '.')
-                number += *data;
-        }
-        else
-        {
-            if (*data == '.')
-                pointFound = true;
-
-            number += *data;
-        }
-
+        isNegative = true;
         ++data;
+    }
+
+    while (!data.isEmpty())
+    {
+        if (data.isWhitespace() || *data == ',' || *data == '-' || isControlMarker (data))
+            break;
+
+        if (*data == '.')
+        {
+            if (pointFound) break;
+            pointFound = true;
+        }
+        else if (! (*data >= '0' && *data <= '9'))
+        {
+            break;
+        }
+
+        number += *data;
+        ++data;
+    }
+
+    if (number.isNotEmpty())
+    {
+        coord = number.getFloatValue();
+        if (isNegative)
+            coord = -coord;
+
+        return true;
     }
 
     return false;
 }
 
-bool parseSingleCoordinate (String::CharPointerType& data, float& coord)
+bool parseCoordinates (String::CharPointerType& data, float& x, float& y)
 {
-    skipWhitespace (data);
-
-    juce::String number;
-    bool pointFound = false;
-
-    while (! data.isEmpty())
+    if (parseCoordinate (data, x))
     {
-        if (data.isWhitespace() || isControlMarker (data) || *data == ',' || (pointFound && *data == '.'))
-        {
-            if (! number.isEmpty())
-            {
-                coord = number.getFloatValue();
-                return true;
-            }
-        }
-        else
-        {
-            if (*data == '.')
-                pointFound = true;
+        skipWhitespace (data);
 
-            number += *data;
-        }
+        if (*data == ',')
+            ++data;
 
-        ++data;
+        if (parseCoordinate (data, y))
+            return true;
     }
 
     return false;
@@ -530,7 +511,7 @@ void handleHorizontalLineTo (String::CharPointerType& data, Path& path, float& c
 
     while (! data.isEmpty()
         && ! isControlMarker (data)
-        && parseSingleCoordinate (data, x))
+        && parseCoordinate (data, x))
     {
         if (relative)
             x += currentX;
@@ -549,7 +530,7 @@ void handleVerticalLineTo (String::CharPointerType& data, Path& path, float& cur
 
     while (! data.isEmpty()
         && ! isControlMarker(data)
-        && parseSingleCoordinate (data, y))
+        && parseCoordinate (data, y))
     {
         if (relative)
             y += currentY;
