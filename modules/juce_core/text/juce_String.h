@@ -158,11 +158,12 @@ public:
     /** Creates a string from an ASCII character string */
     String (CharPointer_ASCII text);
 
-    /** Creates a string from a UTF-8 encoded std::string. */
-    String (const std::string&);
-
     /** Creates a string from a StringRef */
     String (StringRef);
+
+    //==============================================================================
+    /** Creates a string from a UTF-8 encoded std::string. */
+    explicit String (const std::string&);
 
     //==============================================================================
     /** Creates a string from a single character. */
@@ -1161,7 +1162,7 @@ public:
 
         std::stringstream ss;
         ss << std::fixed << std::setprecision (std::max (shift, 0)) << rounded;
-        return ss.str();
+        return String (ss.str());
     }
 
     //==============================================================================
