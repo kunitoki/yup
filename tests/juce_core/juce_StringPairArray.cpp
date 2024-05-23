@@ -48,7 +48,7 @@ static String operator"" _S(const char* chars, size_t)
     return String { chars };
 }
 
-class StringPairArrayTest : public ::testing::Test
+class StringPairArrayTests : public ::testing::Test
 {
 protected:
     void addDefaultPairs(StringPairArray& spa)
@@ -59,13 +59,76 @@ protected:
     }
 };
 
-TEST_F(StringPairArrayTest, EmptyOnInitialization)
+TEST_F(StringPairArrayTests, EmptyOnInitialization)
 {
     StringPairArray spa;
     EXPECT_EQ(spa.size(), 0);
+    EXPECT_TRUE(spa.getIgnoresCase());  // Default should ignore case
 }
 
-TEST_F(StringPairArrayTest, SetAndGetValues)
+TEST_F(StringPairArrayTests, ParameterizedConstructorCaseSensitivity)
+{
+    StringPairArray caseSensitive(false);
+    EXPECT_FALSE(caseSensitive.getIgnoresCase());
+
+    StringPairArray caseInsensitive(true);
+    EXPECT_TRUE(caseInsensitive.getIgnoresCase());
+}
+
+TEST_F(StringPairArrayTests, CopyConstructor)
+{
+    StringPairArray original;
+    addDefaultPairs(original);
+    StringPairArray copy(original);
+
+    EXPECT_EQ(copy.size(), 3);
+    EXPECT_EQ(copy["key1"], "value1");
+    EXPECT_EQ(copy["key2"], "value2");
+    EXPECT_EQ(copy["key3"], "value3");
+    EXPECT_TRUE(original == copy);  // Ensure the copy is identical
+}
+
+TEST_F(StringPairArrayTests, MoveConstructor)
+{
+    StringPairArray original;
+    addDefaultPairs(original);
+
+    StringPairArray moved(std::move(original));
+
+    EXPECT_EQ(moved.size(), 3);
+    EXPECT_EQ(moved["key1"], "value1");
+    EXPECT_EQ(moved["key2"], "value2");
+    EXPECT_EQ(moved["key3"], "value3");
+}
+
+TEST_F(StringPairArrayTests, CopyAssignmentOperator)
+{
+    StringPairArray original;
+    addDefaultPairs(original);
+    StringPairArray copy;
+    copy = original;
+
+    EXPECT_EQ(copy.size(), 3);
+    EXPECT_EQ(copy["key1"], "value1");
+    EXPECT_EQ(copy["key2"], "value2");
+    EXPECT_EQ(copy["key3"], "value3");
+    EXPECT_TRUE(original == copy);
+}
+
+TEST_F(StringPairArrayTests, MoveAssignmentOperator)
+{
+    StringPairArray original;
+    addDefaultPairs(original);
+    StringPairArray moved;
+    moved = std::move(original);
+
+    EXPECT_EQ(moved.size(), 3);
+    EXPECT_EQ(moved["key1"], "value1");
+    EXPECT_EQ(moved["key2"], "value2");
+    EXPECT_EQ(moved["key3"], "value3");
+}
+
+TEST_F(StringPairArrayTests, SetAndGetValues)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -75,7 +138,7 @@ TEST_F(StringPairArrayTest, SetAndGetValues)
     EXPECT_EQ(spa.size(), 3);
 }
 
-TEST_F(StringPairArrayTest, ContainsKey)
+TEST_F(StringPairArrayTests, ContainsKey)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -83,7 +146,7 @@ TEST_F(StringPairArrayTest, ContainsKey)
     EXPECT_FALSE(spa.containsKey("nonexistentKey"));
 }
 
-TEST_F(StringPairArrayTest, CaseSensitivity)
+TEST_F(StringPairArrayTests, CaseSensitivity)
 {
     StringPairArray spa(true);
     spa.set("Key", "value");
@@ -94,7 +157,7 @@ TEST_F(StringPairArrayTest, CaseSensitivity)
     EXPECT_TRUE(spa["key"].isEmpty());
 }
 
-TEST_F(StringPairArrayTest, RemoveByKey)
+TEST_F(StringPairArrayTests, RemoveByKey)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -103,7 +166,7 @@ TEST_F(StringPairArrayTest, RemoveByKey)
     EXPECT_EQ(spa.size(), 2);
 }
 
-TEST_F(StringPairArrayTest, RemoveByIndex)
+TEST_F(StringPairArrayTests, RemoveByIndex)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -112,7 +175,7 @@ TEST_F(StringPairArrayTest, RemoveByIndex)
     EXPECT_EQ(spa.size(), 2);
 }
 
-TEST_F(StringPairArrayTest, ClearAll)
+TEST_F(StringPairArrayTests, ClearAll)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -120,7 +183,7 @@ TEST_F(StringPairArrayTest, ClearAll)
     EXPECT_EQ(spa.size(), 0);
 }
 
-TEST_F(StringPairArrayTest, AssignmentOperator)
+TEST_F(StringPairArrayTests, AssignmentOperator)
 {
     StringPairArray spa1;
     addDefaultPairs(spa1);
@@ -128,7 +191,7 @@ TEST_F(StringPairArrayTest, AssignmentOperator)
     EXPECT_EQ(spa2["key1"], "value1");
 }
 
-TEST_F(StringPairArrayTest, EqualityOperator)
+TEST_F(StringPairArrayTests, EqualityOperator)
 {
     StringPairArray spa1, spa2;
     addDefaultPairs(spa1);
@@ -138,7 +201,7 @@ TEST_F(StringPairArrayTest, EqualityOperator)
     EXPECT_FALSE(spa1 == spa2);
 }
 
-TEST_F(StringPairArrayTest, AddArray)
+TEST_F(StringPairArrayTests, AddArray)
 {
     StringPairArray spa1, spa2;
     addDefaultPairs(spa1);
@@ -148,14 +211,14 @@ TEST_F(StringPairArrayTest, AddArray)
     EXPECT_EQ(spa2["key1"], "value1");
 }
 
-TEST_F(StringPairArrayTest, DescriptionNotEmpty)
+TEST_F(StringPairArrayTests, DescriptionNotEmpty)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
     EXPECT_FALSE(spa.getDescription().isEmpty());
 }
 
-TEST_F(StringPairArrayTest, MinimiseStorageOverheads)
+TEST_F(StringPairArrayTests, MinimiseStorageOverheads)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -163,7 +226,7 @@ TEST_F(StringPairArrayTest, MinimiseStorageOverheads)
     EXPECT_EQ(spa.size(), 3);
 }
 
-TEST_F(StringPairArrayTest, AddMapRespectsCaseSensitivity)
+TEST_F(StringPairArrayTests, AddMapRespectsCaseSensitivity)
 {
     StringPairArray insensitive{true};  // Case insensitive
     insensitive.addMap({{"duplicate", "a"}, {"Duplicate", "b"}});
@@ -178,7 +241,7 @@ TEST_F(StringPairArrayTest, AddMapRespectsCaseSensitivity)
     EXPECT_EQ(sensitive["DUPLICATE"], ""_S);
 }
 
-TEST_F(StringPairArrayTest, AddMapOverwritesExistingPairs)
+TEST_F(StringPairArrayTests, AddMapOverwritesExistingPairs)
 {
     StringPairArray insensitive{true};
     insensitive.set("key", "value");
@@ -195,7 +258,7 @@ TEST_F(StringPairArrayTest, AddMapOverwritesExistingPairs)
     EXPECT_EQ(sensitive.getAllValues(), (StringArray{"another value", "VALUE"}));
 }
 
-TEST_F(StringPairArrayTest, AddMapDoesNotChangeOrderOfExistingKeys)
+TEST_F(StringPairArrayTests, AddMapDoesNotChangeOrderOfExistingKeys)
 {
     StringPairArray array;
     array.set("a", "a");
@@ -209,7 +272,7 @@ TEST_F(StringPairArrayTest, AddMapDoesNotChangeOrderOfExistingKeys)
     EXPECT_EQ(array.getAllValues(), (StringArray{"a", "Z", "B", "y", "c", "0"}));
 }
 
-TEST_F(StringPairArrayTest, AddMapHasEquivalentBehaviourToAddArray)
+TEST_F(StringPairArrayTests, AddMapHasEquivalentBehaviourToAddArray)
 {
     StringPairArray initial;
     initial.set("aaa", "aaa");
