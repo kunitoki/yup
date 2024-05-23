@@ -67,6 +67,7 @@ using namespace ::juce; // TODO - move it out
 #include "primitives/yup_Point.h"
 #include "primitives/yup_Line.h"
 #include "primitives/yup_Rectangle.h"
+#include "primitives/yup_RectangleList.h"
 #include "primitives/yup_Path.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
