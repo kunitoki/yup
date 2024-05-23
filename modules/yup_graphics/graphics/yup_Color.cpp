@@ -70,25 +70,25 @@ Color parseHexColor (const String& hexString)
     if (length == 4) // #RGB
     {
         uint8 red = static_cast<uint8>(hexCharToInt(data[1]) * 16 + hexCharToInt(data[1]));
-        uint8 green = static_cast<uint8>(hexCharToInt(data[2]) * 16 + hexCharToInt(data[2]));
-        uint8 blue = static_cast<uint8>(hexCharToInt(data[3]) * 16 + hexCharToInt(data[3]));
+        uint8 green = static_cast<uint8> (hexCharToInt (data[2]) * 16 + hexCharToInt (data[2]));
+        uint8 blue = static_cast<uint8> (hexCharToInt (data[3]) * 16 + hexCharToInt (data[3]));
 
         return { red, green, blue };
     }
     else if (length == 7) // #RRGGBB
     {
-        uint8 red = static_cast<uint8>(hexCharToInt(data[1]) * 16 + hexCharToInt(data[2]));
-        uint8 green = static_cast<uint8>(hexCharToInt(data[3]) * 16 + hexCharToInt(data[4]));
-        uint8 blue = static_cast<uint8>(hexCharToInt(data[5]) * 16 + hexCharToInt(data[6]));
+        uint8 red = static_cast<uint8> (hexCharToInt (data[1]) * 16 + hexCharToInt (data[2]));
+        uint8 green = static_cast<uint8> (hexCharToInt (data[3]) * 16 + hexCharToInt (data[4]));
+        uint8 blue = static_cast<uint8> (hexCharToInt (data[5]) * 16 + hexCharToInt (data[6]));
 
         return { red, green, blue };
     }
     else if (length == 9) // #RRGGBBAA
     {
-        uint8 red = static_cast<uint8>(hexCharToInt(data[1]) * 16 + hexCharToInt(data[2]));
-        uint8 green = static_cast<uint8>(hexCharToInt(data[3]) * 16 + hexCharToInt(data[4]));
-        uint8 blue = static_cast<uint8>(hexCharToInt(data[5]) * 16 + hexCharToInt(data[6]));
-        uint8 alpha = static_cast<uint8>(hexCharToInt(data[7]) * 16 + hexCharToInt(data[8]));
+        uint8 red = static_cast<uint8> (hexCharToInt (data[1]) * 16 + hexCharToInt (data[2]));
+        uint8 green = static_cast<uint8> (hexCharToInt (data[3]) * 16 + hexCharToInt (data[4]));
+        uint8 blue = static_cast<uint8> (hexCharToInt (data[5]) * 16 + hexCharToInt (data[6]));
+        uint8 alpha = static_cast<uint8> (hexCharToInt (data[7]) * 16 + hexCharToInt (data[8]));
 
         return { red, green, blue, alpha };
     }
@@ -137,8 +137,7 @@ Color parseNamedColor (const String& name)
         // Add more named colors as needed
     };
 
-    auto it = namedColors.find (name.toLowerCase());
-    if (it != namedColors.end())
+    if (auto it = namedColors.find (name.toLowerCase()); it != namedColors.end())
         return it->second;
 
     return {};

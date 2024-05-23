@@ -317,11 +317,12 @@ public:
         }
 
 #if JUCE_WASM
-        yup::File fontFilePath = yup::File ("/data");
+        yup::File dataPath = yup::File ("/data");
 #else
-        yup::File fontFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
+        yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
 #endif
-        fontFilePath = fontFilePath.getChildFile("Roboto-Regular.ttf");
+
+        yup::File fontFilePath = dataPath.getChildFile("Roboto-Regular.ttf");
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());

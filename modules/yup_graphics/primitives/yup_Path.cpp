@@ -621,6 +621,8 @@ void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, 
 
 bool Path::parsePathData (const String& pathData)
 {
+    // https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
+
     String::CharPointerType data = pathData.getCharPointer();
 
     float currentX = 0.0f, currentY = 0.0f;
