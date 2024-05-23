@@ -115,7 +115,6 @@ public:
     /** Returns the number of strings in the array */
     inline int size() const noexcept                        { return keys.size(); }
 
-
     //==============================================================================
     /** Adds or amends a key/value pair.
         If a value already exists with this key, its value will be overwritten,
