@@ -60,7 +60,7 @@ public:
             auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
             addAndMakeVisible (art);
 
-            art->loadFromFile (riveFilePath, 2);
+            art->loadFromFile (riveFilePath, 0);
         }
 
         // Update titlebar
