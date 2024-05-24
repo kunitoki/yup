@@ -230,6 +230,32 @@ void Path::addEllipse (const Rectangle<float>& r)
 
 //==============================================================================
 
+void Path::addCentredEllipse (float centerX, float centerY, float radiusX, float radiusY)
+{
+    reserveSpace (size() + 6);
+
+    const float rx = radiusX;
+    const float ry = radiusY;
+    const float cx = centerX;
+    const float cy = centerY;
+    const float dx = rx * 0.5522847498;
+    const float dy = ry * 0.5522847498;
+
+    moveTo (cx + rx, cy);
+    cubicTo (cx + rx, cy - dy, cx + dx, cy - ry, cx, cy - ry);
+    cubicTo (cx - dx, cy - ry, cx - rx, cy - dy, cx - rx, cy);
+    cubicTo (cx - rx, cy + dy, cx - dx, cy + ry, cx, cy + ry);
+    cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
+    close();
+}
+
+void Path::addCentredEllipse (const Point<float>& center, float radiusX, float radiusY)
+{
+    addCentredEllipse (center.getX(), center.getY(), radiusX, radiusY);
+}
+
+//==============================================================================
+
 void Path::addArc (float x, float y, float width, float height,
                    float fromRadians, float toRadians,
                    bool startAsNewSubPath)
@@ -505,7 +531,7 @@ void handleLineTo (String::CharPointerType& data, Path& path, float& currentX, f
     }
 }
 
-void handleHorizontalLineTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+void handleHorizontalLineTo (String::CharPointerType& data, Path& path, float& currentX, float currentY, bool relative)
 {
     float x;
 
@@ -524,7 +550,7 @@ void handleHorizontalLineTo (String::CharPointerType& data, Path& path, float& c
     }
 }
 
-void handleVerticalLineTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+void handleVerticalLineTo (String::CharPointerType& data, Path& path, float currentX, float& currentY, bool relative)
 {
     float y;
 

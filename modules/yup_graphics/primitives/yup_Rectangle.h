@@ -107,8 +107,7 @@ public:
     }
 
     //==============================================================================
-    /** Copy and move constructors and assignment operators.
-    */
+    /** Copy and move constructors and assignment operators. */
     constexpr Rectangle (const Rectangle& other) noexcept = default;
     constexpr Rectangle (Rectangle&& other) noexcept = default;
     constexpr Rectangle& operator=(const Rectangle& other) noexcept = default;

@@ -314,6 +314,13 @@ public:
     void addEllipse (const Rectangle<float>& rect);
 
     //==============================================================================
+    // TODO - doxygen
+    void addCentredEllipse (float centerX, float centerY, float radiusX, float radiusY);
+
+    // TODO - doxygen
+    void addCentredEllipse (const Point<float>& center, float radiusX, float radiusY);
+
+    //==============================================================================
     /** Adds an arc to the path.
 
         This method appends an arc defined within a bounding rectangle, between two radial angles.
