@@ -34,13 +34,15 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : artboard ("Artboard")
-    {
         // Fluid and continuous animations needs continuous repainting
-        getNativeComponent()->enableContinuousRepainting (true);
+        : yup::DocumentWindow (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous, {}, 60.0f)
+        , artboard ("Artboard")
+    {
+        // Set title
+        setTitle ("main");
 
         // Intantiate and load the artboard
-        addAndMakeVisible (artboard);
+        //addAndMakeVisible (artboard);
 
 #if JUCE_WASM
         yup::File riveFilePath = yup::File ("/data");
@@ -49,7 +51,17 @@ public:
 #endif
         riveFilePath = riveFilePath.getChildFile("mixer_table.riv");
 
-        artboard.loadFromFile (riveFilePath, 2);
+        //artboard.loadFromFile (riveFilePath, 2);
+        //artboard.setNumberInput ("rotation", 90.0);
+
+        // Setup artboards
+        for (int i = 0; i < totalRows * totalColumns; ++i)
+        {
+            auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
+            addAndMakeVisible (art);
+
+            art->loadFromFile (riveFilePath, 2);
+        }
 
         // Update titlebar
         startTimerHz(1);
@@ -57,7 +69,21 @@ public:
 
     void resized() override
     {
-        artboard.setBounds (getLocalBounds());
+        // artboard.setBounds (getLocalBounds());
+
+        auto bounds = getLocalBounds().reduced (100);
+        auto width = bounds.getWidth() / totalColumns;
+        auto height = bounds.getHeight() / totalRows;
+
+        for (int i = 0; i < totalRows && artboards.size(); ++i)
+        {
+            auto row = bounds.removeFromTop (height);
+            for (int j = 0; j < totalColumns; ++j)
+            {
+                auto col = row.removeFromLeft (width);
+                artboards.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
+            }
+        }
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -79,15 +105,15 @@ public:
             break;
 
         case yup::KeyPress::textPKey:
-            artboard.setPaused (!artboard.isPaused());
+            //artboard.setPaused (!artboard.isPaused());
             break;
 
         case yup::KeyPress::textHKey:
-            artboard.addHorizontalRepeats (shift ? -1 : 1);
+            //artboard.addHorizontalRepeats (shift ? -1 : 1);
             break;
 
         case yup::KeyPress::textJKey:
-            artboard.addVerticalRepeats (shift ? -1 : 1);
+            //artboard.addVerticalRepeats (shift ? -1 : 1);
             break;
 
         case yup::KeyPress::textZKey:
@@ -95,11 +121,11 @@ public:
             break;
 
         case yup::KeyPress::upKey:
-            artboard.multiplyScale (1.25, position);
+            //artboard.multiplyScale (1.25, position);
             break;
 
         case yup::KeyPress::downKey:
-            artboard.multiplyScale (1.0 / 1.25, position);
+            //artboard.multiplyScale (1.0 / 1.25, position);
             break;
         }
     }
@@ -136,6 +162,9 @@ private:
     }
 
     yup::Artboard artboard;
+    yup::OwnedArray<yup::Artboard> artboards;
+    int totalRows = 4;
+    int totalColumns = 4;
 };
 
 //==============================================================================

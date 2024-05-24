@@ -28,7 +28,10 @@ class JUCE_API DocumentWindow : public Component
 {
 public:
     //==============================================================================
-    DocumentWindow (ComponentNative::Flags flags = ComponentNative::defaultFlags, const Color& backgroundColor = {});
+    DocumentWindow (
+        ComponentNative::Flags flags = ComponentNative::defaultFlags,
+        const Color& backgroundColor = {},
+        std::optional<float> framerateRedraw = std::nullopt);
     ~DocumentWindow() override;
 
     //==============================================================================

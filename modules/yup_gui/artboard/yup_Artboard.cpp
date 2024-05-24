@@ -52,6 +52,11 @@ Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex)
     rivFile = rive::File::import( { static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
     artboardIndex = jlimit (-1, static_cast<int> (rivFile->artboardCount()) - 1, defaultArtboardIndex);
 
+    horzRepeat = 0;
+    vertRepeat = 0;
+
+    updateScenesFromFile (getNumInstances());
+
     return Result::ok();
 }
 
@@ -125,7 +130,8 @@ void Artboard::paint (Graphics& g)
     if (rivFile == nullptr)
         return;
 
-    auto [width, height] = getContentSize();
+    //auto [width, height] = getContentSize();
+    auto bounds = getBounds().withPosition (g.getDrawingArea().getTopLeft());
     auto* renderer = g.getRenderer();
 
     const int instances = getNumInstances();
@@ -144,11 +150,12 @@ void Artboard::paint (Graphics& g)
 
     rive::Mat2D m = computeAlignment (rive::Fit::contain,
                                       rive::Alignment::center,
-                                      rive::AABB (0, 0, width, height),
+                                      rive::AABB (0, 0, bounds.getWidth(), bounds.getHeight()),
+                                      //rive::AABB (0, 0, width, height),
                                       artboards.front()->bounds());
-    renderer->save();
 
-    m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
+    //m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
+    m = rive::Mat2D (1.0, 0, 0, 1.0, bounds.getX(), bounds.getY()) * m;
     viewTransform = m;
 
     renderer->transform (m);
@@ -171,8 +178,6 @@ void Artboard::paint (Graphics& g)
 
         renderer->restore();
     }
-
-    renderer->restore();
 }
 
 //==============================================================================

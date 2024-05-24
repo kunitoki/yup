@@ -24,10 +24,10 @@ namespace yup
 
 //==============================================================================
 
-DocumentWindow::DocumentWindow (ComponentNative::Flags flags, const Color& backgroundColor)
+DocumentWindow::DocumentWindow (ComponentNative::Flags flags, const Color& backgroundColor, std::optional<float> framerateRedraw)
     : backgroundColor (backgroundColor)
 {
-    addToDesktop (flags);
+    addToDesktop (flags, framerateRedraw);
 }
 
 DocumentWindow::~DocumentWindow()
