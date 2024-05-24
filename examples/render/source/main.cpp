@@ -24,97 +24,40 @@
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
-#include "rive/artboard.hpp"
-#include "rive/file.hpp"
-#include "rive/layout.hpp"
-#include "rive/animation/state_machine_instance.hpp"
-#include "rive/static_scene.hpp"
-
 #include <memory>
 
 //==============================================================================
 
-class CustomWindow : public yup::DocumentWindow
+class CustomWindow
+    : public yup::DocumentWindow
+    , public yup::Timer
 {
 public:
     CustomWindow()
+        : artboard ("Artboard")
     {
+        // Fluid and continuous animations needs continuous repainting
         getNativeComponent()->enableContinuousRepainting (true);
 
-        rive::Factory* factory = getNativeComponent()->getFactory();
-        if (factory == nullptr)
-        {
-            yup::Logger::outputDebugString ("Failed to create a graphics context");
-
-            yup::YUPApplication::getInstance()->systemRequestedQuit();
-            return;
-        }
+        // Intantiate and load the artboard
+        addAndMakeVisible (artboard);
 
 #if JUCE_WASM
         yup::File riveFilePath = yup::File ("/data");
 #else
         yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
 #endif
-        riveFilePath = riveFilePath.getChildFile("toymachine_3.riv");
+        riveFilePath = riveFilePath.getChildFile("mixer_table.riv");
 
-        if (riveFilePath.existsAsFile())
-        {
-            if (auto is = riveFilePath.createInputStream(); is != nullptr && is->openedOk())
-            {
-                yup::MemoryBlock mb;
-                is->readIntoMemoryBlock (mb);
+        artboard.loadFromFile (riveFilePath, 2);
 
-                rivFile = rive::File::import( { static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
-            }
-        }
+        // Update titlebar
+        startTimerHz(1);
     }
 
-    void mouseDown(const yup::MouseEvent& event) override
+    void resized() override
     {
-        if (scenes.empty() || ! event.isLeftButtoDown())
-            return;
-
-        auto [x, y] = event.getPosition();
-
-        auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-        for (auto& scene : scenes)
-            scene->pointerDown (xy);
-    }
-
-    void mouseUp (const yup::MouseEvent& event) override
-    {
-        if (scenes.empty())
-            return;
-
-        auto [x, y] = event.getPosition();
-
-        auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-        for (auto& scene : scenes)
-            scene->pointerUp (xy);
-    }
-
-    void mouseMove (const yup::MouseEvent& event) override
-    {
-        if (scenes.empty())
-            return;
-
-        auto [x, y] = event.getPosition();
-
-        const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-        for (auto& scene : scenes)
-            scene->pointerMove (xy);
-    }
-
-    void mouseDrag (const yup::MouseEvent& event) override
-    {
-        if (scenes.empty() || ! event.isLeftButtoDown())
-            return;
-
-        auto [x, y] = event.getPosition();
-
-        const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-        for (auto& scene : scenes)
-            scene->pointerMove (xy);
+        artboard.setBounds (getLocalBounds());
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -129,13 +72,6 @@ public:
 
         case yup::KeyPress::textAKey:
             getNativeComponent()->enableAtomicMode (!getNativeComponent()->isAtomicModeEnabled());
-            fpsLastTime = 0;
-            break;
-
-        case yup::KeyPress::textDKey:
-            printf ("static float scale = %f;\n", scale);
-            printf ("static float2 translate = {%f, %f};\n", translate.x, translate.y);
-            fflush(stdout);
             break;
 
         case yup::KeyPress::textWKey:
@@ -143,28 +79,15 @@ public:
             break;
 
         case yup::KeyPress::textPKey:
-            paused = !paused;
+            artboard.setPaused (!artboard.isPaused());
             break;
 
         case yup::KeyPress::textHKey:
-            if (!shift)
-                ++horzRepeat;
-            else if (horzRepeat > 0)
-                --horzRepeat;
-            break;
-
-        case yup::KeyPress::textKKey:
-            if (!shift)
-                ++upRepeat;
-            else if (upRepeat > 0)
-                --upRepeat;
+            artboard.addHorizontalRepeats (shift ? -1 : 1);
             break;
 
         case yup::KeyPress::textJKey:
-            if (!shift)
-                ++downRepeat;
-            else if (downRepeat > 0)
-                --downRepeat;
+            artboard.addVerticalRepeats (shift ? -1 : 1);
             break;
 
         case yup::KeyPress::textZKey:
@@ -172,85 +95,13 @@ public:
             break;
 
         case yup::KeyPress::upKey:
-        {
-            float oldScale = scale;
-            scale *= 1.25;
-
-            rive::float2 cursorPos = rive::float2 { position.getX(), position.getY() };
-            translate = cursorPos + (translate - cursorPos) * scale / oldScale;
+            artboard.multiplyScale (1.25, position);
             break;
-        }
 
         case yup::KeyPress::downKey:
-        {
-            float oldScale = scale;
-            scale /= 1.25;
-
-            rive::float2 cursorPos = rive::float2 { position.getX(), position.getY() };
-            translate = cursorPos + (translate - cursorPos) * scale / oldScale;
+            artboard.multiplyScale (1.0 / 1.25, position);
             break;
         }
-        }
-    }
-
-    void paint (yup::Graphics& g) override
-    {
-        double frameRate = 60.0f; // getNativeComponent()->getDesiredFrameRate();
-        double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
-
-        const yup::ScopeGuard sg { [this] { updateFrameTime(); } };
-
-        if (rivFile == nullptr)
-            return;
-
-        auto [width, height] = getContentSize();
-        auto* renderer = g.getRenderer();
-
-        int instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
-        if (artboards.size() != instances || scenes.size() != instances)
-        {
-            updateScenesFromFile (instances);
-        }
-        else if (!paused)
-        {
-            for (const auto& scene : scenes)
-                scene->advanceAndApply (1.0f / frameRate);
-        }
-
-        if (scenes.empty())
-            return;
-
-        rive::Mat2D m = computeAlignment (rive::Fit::contain,
-                                          rive::Alignment::center,
-                                          rive::AABB (0, 0, width, height),
-                                          artboards.front()->bounds());
-        renderer->save();
-
-        m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
-        viewTransform = m;
-
-        renderer->transform (m);
-
-        const float spacing = 200 / m.findMaxScale();
-
-        auto scene = scenes.begin();
-        for (int j = 0; j < upRepeat + 1 + downRepeat; ++j)
-        {
-            renderer->save();
-
-            renderer->transform (rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - upRepeat) * spacing));
-
-            for (int i = 0; i < horzRepeat * 2 + 1; ++i)
-            {
-                (*scene++)->draw (renderer);
-
-                renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
-            }
-
-            renderer->restore();
-        }
-
-        renderer->restore();
     }
 
     void userTriedToCloseWindow() override
@@ -258,54 +109,21 @@ public:
         yup::YUPApplication::getInstance()->systemRequestedQuit();
     }
 
-private:
-    void updateScenesFromFile (std::size_t count)
+    void timerCallback() override
     {
-        jassert (rivFile != nullptr);
-
-        artboards.clear();
-        scenes.clear();
-
-        for (size_t i = 0; i < count; ++i)
-        {
-            auto artboard = rivFile->artboardDefault();
-
-            std::unique_ptr<rive::Scene> scene;
-
-            scene = artboard->defaultStateMachine();
-            if (scene == nullptr)
-            {
-                if (stateMachine >= 0)
-                    scene = artboard->stateMachineAt (stateMachine);
-
-                else if (animation >= 0)
-                    scene = artboard->animationAt (animation);
-
-                else
-                    scene = artboard->animationAt (0);
-            }
-
-            if (scene == nullptr)
-                scene = std::make_unique<rive::StaticScene> (artboard.get());
-
-            scene->advanceAndApply (scene->durationSeconds() * i / count);
-
-            artboards.push_back (std::move (artboard));
-            scenes.push_back (std::move (scene));
-        }
+        updateWindowTitle();
     }
 
-    void updateWindowTitle (int instances)
+private:
+    void updateWindowTitle ()
     {
         yup::String title;
 
         auto currentFps = getNativeComponent()->getCurrentFrameRate();
-        if (currentFps != 0)
-            title << "[" << yup::String (currentFps, 1) << " FPS]";
+        title << "[" << yup::String (currentFps, 1) << " FPS]";
 
-        if (instances > 1)
-            title << " (x" << instances << " instances)";
-
+        auto instances = artboard.getNumInstances();
+        title << " (x" << instances << " instances)";
         title << " | " << "YUP On Rive Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
@@ -317,36 +135,7 @@ private:
         setTitle (title);
     }
 
-    void updateFrameTime()
-    {
-        double time = yup::Time::getMillisecondCounterHiRes() / 1000.0;
-        if (time - fpsLastTime > 2)
-        {
-            const int instances = (1 + horzRepeat * 2) * (1 + upRepeat + downRepeat);
-            updateWindowTitle (instances);
-
-            fpsLastTime = time;
-        }
-    }
-
-    std::unique_ptr<rive::File> rivFile;
-    std::vector<std::unique_ptr<rive::Artboard>> artboards;
-    std::vector<std::unique_ptr<rive::Scene>> scenes;
-
-    rive::Mat2D viewTransform;
-    rive::float2 translate;
-    float scale = 1.0f;
-
-    bool paused = false;
-
-    int animation = -1;
-    int stateMachine = -1;
-
-    int horzRepeat = 0;
-    int upRepeat = 0;
-    int downRepeat = 0;
-
-    double fpsLastTime = 0;
+    yup::Artboard artboard;
 };
 
 //==============================================================================

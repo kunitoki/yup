@@ -50,6 +50,10 @@
 
 #include <yup_graphics/yup_graphics.h>
 
+#include <rive/artboard.hpp>
+#include <rive/file.hpp>
+#include <rive/static_scene.hpp>
+
 //==============================================================================
 
 #include "application/yup_Application.h"
@@ -61,4 +65,6 @@
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "component/yup_Component.h"
+#include "widgets/yup_Button.h"
+#include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"

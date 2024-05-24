@@ -263,6 +263,7 @@ public:
 
     float getScaleDpi() const override;
     float getCurrentFrameRate() const override;
+    float getDesiredFrameRate() const override;
 
     //==============================================================================
 
@@ -693,6 +694,11 @@ float GLFWComponentNative::getScaleDpi() const
 float GLFWComponentNative::getCurrentFrameRate() const
 {
     return currentFrameRate.load (std::memory_order_relaxed);
+}
+
+float GLFWComponentNative::getDesiredFrameRate() const
+{
+    return desiredFrameRate;
 }
 
 //==============================================================================

@@ -29,64 +29,7 @@
 
 //==============================================================================
 
-class Button : public yup::Component
-{
-public:
-    Button (yup::StringRef componentID)
-         : yup::Component (componentID)
-    {
-    }
-
-    Button (yup::StringRef componentID, const yup::Font& font)
-         : yup::Component (componentID)
-         , font (font)
-    {
-    }
-
-    virtual void paintButton (yup::Graphics& g, bool isButtonOver, bool isButtonDown) = 0;
-
-    void paint (yup::Graphics& g) override
-    {
-        paintButton (g, isButtonCurrentlyOver, isButtonCurrentlyDown);
-    }
-
-    void mouseEnter (const yup::MouseEvent& event) override
-    {
-        isButtonCurrentlyOver = true;
-
-        repaint();
-    }
-
-    void mouseExit (const yup::MouseEvent& event) override
-    {
-        isButtonCurrentlyOver = false;
-
-        repaint();
-    }
-
-    void mouseDown (const yup::MouseEvent& event) override
-    {
-        isButtonCurrentlyDown = true;
-
-        takeFocus();
-
-        repaint();
-    }
-
-    void mouseUp (const yup::MouseEvent& event) override
-    {
-        isButtonCurrentlyDown = false;
-
-        repaint();
-    }
-
-private:
-    yup::Font font;
-    bool isButtonCurrentlyOver = false;
-    bool isButtonCurrentlyDown = false;
-};
-
-class TextButton : public Button
+class TextButton : public yup::Button
 {
 public:
     TextButton (yup::StringRef componentID, const yup::Font& font)
@@ -319,10 +262,10 @@ public:
 #if JUCE_WASM
         yup::File dataPath = yup::File ("/data");
 #else
-        yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
+        yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
 
-        yup::File fontFilePath = dataPath.getChildFile("Roboto-Regular.ttf");
+        yup::File fontFilePath = dataPath.getChildFile ("Roboto-Regular.ttf");
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());

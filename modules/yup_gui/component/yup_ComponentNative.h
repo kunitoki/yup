@@ -94,6 +94,7 @@ public:
 
     //==============================================================================
     virtual float getCurrentFrameRate() const = 0;
+    virtual float getDesiredFrameRate() const = 0;
 
     //==============================================================================
     virtual void* getNativeHandle() const = 0;
