@@ -70,6 +70,8 @@ bool Artboard::isPaused() const
 void Artboard::setPaused (bool shouldPause)
 {
     paused = shouldPause;
+
+    repaint();
 }
 
 //==============================================================================
@@ -81,6 +83,8 @@ void Artboard::setNumberInput (const String& name, double value)
         if (auto numberInput = scene->getNumber (name.toStdString()))
             numberInput->value (static_cast<float> (value));
     }
+
+    repaint();
 }
 
 //==============================================================================
@@ -91,6 +95,8 @@ void Artboard::addHorizontalRepeats (int repeatsToAdd)
         horzRepeat += repeatsToAdd;
 
     horzRepeat = jmax (0, horzRepeat);
+
+    repaint();
 }
 
 void Artboard::addVerticalRepeats (int repeatsToAdd)
@@ -99,6 +105,8 @@ void Artboard::addVerticalRepeats (int repeatsToAdd)
         vertRepeat += repeatsToAdd;
 
     vertRepeat = jmax (0, vertRepeat);
+
+    repaint();
 }
 
 int Artboard::getNumInstances() const
@@ -108,14 +116,11 @@ int Artboard::getNumInstances() const
 
 //==============================================================================
 
-void Artboard::multiplyScale (float factor, const Point<float>& position)
+void Artboard::multiplyScale (float factor)
 {
-    float oldScale = scale;
     scale *= factor;
 
-    rive::float2 cursorPos = rive::float2 { position.getX(), position.getY() };
-
-    translate = cursorPos + (translate - cursorPos) * scale / oldScale;
+    repaint();
 }
 
 //==============================================================================
@@ -130,7 +135,6 @@ void Artboard::paint (Graphics& g)
     if (rivFile == nullptr)
         return;
 
-    //auto [width, height] = getContentSize();
     auto bounds = getBounds().withPosition (g.getDrawingArea().getTopLeft());
     auto* renderer = g.getRenderer();
 
@@ -151,10 +155,8 @@ void Artboard::paint (Graphics& g)
     rive::Mat2D m = computeAlignment (rive::Fit::contain,
                                       rive::Alignment::center,
                                       rive::AABB (0, 0, bounds.getWidth(), bounds.getHeight()),
-                                      //rive::AABB (0, 0, width, height),
                                       artboards.front()->bounds());
 
-    //m = rive::Mat2D (scale, 0, 0, scale, translate.x, translate.y) * m;
     m = rive::Mat2D (1.0, 0, 0, 1.0, bounds.getX(), bounds.getY()) * m;
     viewTransform = m;
 
@@ -309,6 +311,8 @@ void Artboard::updateScenesFromFile (std::size_t count)
         if (stateMachine)
             stateMachines.push_back (stateMachine);
     }
+
+    repaint();
 }
 
 //==============================================================================

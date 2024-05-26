@@ -46,7 +46,7 @@ public:
     int getNumInstances() const;
 
     //==============================================================================
-    void multiplyScale (float factor, const Point<float>& position);
+    void multiplyScale (float factor);
 
     //==============================================================================
     virtual void propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue);
@@ -71,7 +71,6 @@ private:
     HashMap<String, var> eventProperties;
 
     rive::Mat2D viewTransform;
-    rive::float2 translate;
     float scale = 1.0f;
 
     bool paused = false;

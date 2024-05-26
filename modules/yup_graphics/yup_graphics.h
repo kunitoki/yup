@@ -73,6 +73,7 @@ using namespace ::juce; // TODO - move it out
 #include "fonts/yup_StyledText.h"
 #include "graphics/yup_Color.h"
 #include "graphics/yup_ColorGradient.h"
+#include "graphics/yup_Colors.h"
 #include "graphics/yup_StrokeJoin.h"
 #include "graphics/yup_StrokeCap.h"
 #include "graphics/yup_Graphics.h"

@@ -135,7 +135,7 @@ void Path::close()
     if (data.empty())
         return;
 
-    if (isPositiveAndBelow(lastSubpathIndex, static_cast<int> (data.size())))
+    if (isPositiveAndBelow (lastSubpathIndex, static_cast<int> (data.size())))
     {
         const auto& segment = data[lastSubpathIndex];
         lineTo (segment.x, segment.y);
@@ -176,7 +176,11 @@ void Path::addRectangle (const Rectangle<float>& rect)
 
 //==============================================================================
 
-void Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
+void Path::addRoundedRectangle (float x, float y, float width, float height,
+                                float radiusTopLeft,
+                                float radiusTopRight,
+                                float radiusBottomLeft,
+                                float radiusBottomRight)
 {
     reserveSpace (size() + 10);
 
@@ -197,9 +201,19 @@ void Path::addRoundedRectangle (float x, float y, float width, float height, flo
     lineTo (x + radiusTopLeft, y);
 }
 
+void Path::addRoundedRectangle (float x, float y, float width, float height, float radius)
+{
+    addRoundedRectangle (x, y, width, height, radius, radius, radius, radius);
+}
+
 void Path::addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
     addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+}
+
+void Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
+{
+    addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radius, radius, radius, radius);
 }
 
 //==============================================================================
@@ -230,7 +244,7 @@ void Path::addEllipse (const Rectangle<float>& r)
 
 //==============================================================================
 
-void Path::addCentredEllipse (float centerX, float centerY, float radiusX, float radiusY)
+void Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
 {
     reserveSpace (size() + 6);
 
@@ -249,9 +263,14 @@ void Path::addCentredEllipse (float centerX, float centerY, float radiusX, float
     close();
 }
 
-void Path::addCentredEllipse (const Point<float>& center, float radiusX, float radiusY)
+void Path::addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY)
 {
-    addCentredEllipse (center.getX(), center.getY(), radiusX, radiusY);
+    addCenteredEllipse (center.getX(), center.getY(), radiusX, radiusY);
+}
+
+void Path::addCenteredEllipse (const Point<float>& center, const Size<float>& diameter)
+{
+    addCenteredEllipse (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f);
 }
 
 //==============================================================================
@@ -321,6 +340,15 @@ void Path::addCenteredArc (const Point<float>& center, float radiusX, float radi
                     startAsNewSubPath);
 }
 
+void Path::addCenteredArc (const Point<float>& center, const Size<float>& diameter,
+                           float rotationOfEllipse, float fromRadians, float toRadians,
+                           bool startAsNewSubPath)
+{
+    addCenteredArc (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f,
+                    rotationOfEllipse, fromRadians, toRadians,
+                    startAsNewSubPath);
+}
+
 //==============================================================================
 void Path::appendPath (const Path& other)
 {
@@ -367,6 +395,9 @@ void Path::appendPath (const Path& other, const AffineTransform& transform)
 //==============================================================================
 Path& Path::transform (const AffineTransform& t)
 {
+    if (t.isIdentity())
+        return *this;
+
     for (auto& segment : data)
     {
         if (segment.type == SegmentType::MoveTo || segment.type == SegmentType::LineTo)
@@ -415,12 +446,18 @@ void Path::resetBoundingBox()
 namespace {
 bool isControlMarker (String::CharPointerType data)
 {
-    return !data.isEmpty() && String("MmLlHhVvQqCcZz").containsChar (*data);
+    return !data.isEmpty() && String("MmLlHhVvQqCcSsZz").containsChar (*data);
 }
 
 void skipWhitespace (String::CharPointerType& data)
 {
     while (! data.isEmpty() && data.isWhitespace())
+        ++data;
+}
+
+void skipWhitespaceOrComma (String::CharPointerType& data)
+{
+    while (! data.isEmpty() && (data.isWhitespace() || *data == ','))
         ++data;
 }
 
@@ -473,13 +510,12 @@ bool parseCoordinates (String::CharPointerType& data, float& x, float& y)
 {
     if (parseCoordinate (data, x))
     {
-        skipWhitespace (data);
-
-        if (*data == ',')
-            ++data;
-
+        skipWhitespaceOrComma (data);
         if (parseCoordinate (data, y))
+        {
+            skipWhitespaceOrComma (data);
             return true;
+        }
     }
 
     return false;
@@ -595,6 +631,49 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
     }
 }
 
+void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& lastQuadX, float& lastQuadY, bool relative)
+{
+    float x, y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseCoordinates (data, x, y))
+    {
+        float cx, cy;
+
+        // Calculate the control point based on the reflection of the last control point
+        if (lastQuadX == currentX && lastQuadY == currentY)
+        {
+            cx = currentX;
+            cy = currentY;
+        }
+        else
+        {
+            cx = 2.0f * currentX - lastQuadX;
+            cy = 2.0f * currentY - lastQuadY;
+        }
+
+        // If the coordinates are relative, adjust them
+        if (relative)
+        {
+            x += currentX;
+            y += currentY;
+        }
+
+        path.quadTo(cx, cy, x, y);
+
+        // Update the current position
+        currentX = x;
+        currentY = y;
+
+        // Update the last control point for reflection
+        lastQuadX = cx;
+        lastQuadY = cy;
+
+        skipWhitespace(data);
+    }
+}
+
 void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
 {
     float x1, y1, x2, y2, x, y;
@@ -615,12 +694,166 @@ void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, 
             y += currentY;
         }
 
-        path.cubicTo (x, y, x1, y1, x2, y2);
+        path.cubicTo (x1, y1, x2, y2, x, y);
 
         currentX = x;
         currentY = y;
 
         skipWhitespace (data);
+    }
+}
+
+void handleSmoothCubicTo (String::CharPointerType& data, Path& path, float& currentX, float& currentY, float& lastControlX, float& lastControlY, bool relative)
+{
+    float x2, y2, x, y;
+
+    while (! data.isEmpty()
+        && ! isControlMarker (data)
+        && parseCoordinates (data, x2, y2)
+        && parseCoordinates (data, x, y))
+    {
+        float cx1, cy1;
+
+        // Calculate the first control point based on the reflection of the last control point
+        if (lastControlX == currentX && lastControlY == currentY)
+        {
+            cx1 = currentX;
+            cy1 = currentY;
+        }
+        else
+        {
+            cx1 = 2.0f * currentX - lastControlX;
+            cy1 = 2.0f * currentY - lastControlY;
+        }
+
+        // If the coordinates are relative, adjust them
+        if (relative)
+        {
+            x2 += currentX;
+            y2 += currentY;
+            x += currentX;
+            y += currentY;
+        }
+
+        path.cubicTo (cx1, cy1, x2, y2, x, y);
+
+        // Update the current position
+        currentX = x;
+        currentY = y;
+
+        // Update the last control point for reflection
+        lastControlX = x2;
+        lastControlY = y2;
+
+        skipWhitespace (data);
+    }
+}
+
+void handleEllipticalArc (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
+{
+    float rx, ry, xAxisRotation, x, y;
+    float largeArcFlag, sweepFlag; // int
+
+    while (! data.isEmpty() && ! isControlMarker(data))
+    {
+        if (parseCoordinates (data, rx, ry)
+            && parseCoordinate (data, xAxisRotation)
+            && parseCoordinate (data, largeArcFlag)
+            && parseCoordinate (data, sweepFlag)
+            && parseCoordinates (data, x, y))
+        {
+            if (relative)
+            {
+                x += currentX;
+                y += currentY;
+            }
+
+            if (rx == 0 || ry == 0)
+            {
+                path.lineTo(x, y);
+
+                currentX = x;
+                currentY = y;
+
+                skipWhitespace(data);
+                continue;
+            }
+
+            // Convert flags to boolean values
+            const bool largeArc = largeArcFlag != 0;
+            const bool sweep = sweepFlag != 0;
+
+            // Convert angle from degrees to radians
+            float angleRad = xAxisRotation * MathConstants<float>::pi / 180.0f;
+
+            // Calculate the midpoint between the start and end points
+            float dx = (currentX - x) / 2.0f;
+            float dy = (currentY - y) / 2.0f;
+
+            // Apply the rotation to the midpoint
+            float cosAngle = std::cosf (angleRad);
+            float sinAngle = std::sinf (angleRad);
+            float x1Prime = cosAngle * dx + sinAngle * dy;
+            float y1Prime = -sinAngle * dx + cosAngle * dy;
+
+            // Ensure radii are large enough
+            float rxSq = rx * rx;
+            float rySq = ry * ry;
+            float x1PrimeSq = x1Prime * x1Prime;
+            float y1PrimeSq = y1Prime * y1Prime;
+
+            // Correct radii if they are too small
+            float radiiScale = x1PrimeSq / rxSq + y1PrimeSq / rySq;
+            if (radiiScale > 1)
+            {
+                float scale = std::sqrtf (radiiScale);
+                rx *= scale;
+                ry *= scale;
+                rxSq = rx * rx;
+                rySq = ry * ry;
+            }
+
+            // Calculate the center point (cx, cy)
+            float sign = (largeArc != sweep) ? 1.0f : -1.0f;
+            float sqrtFactor = std::sqrtf ((rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq) / (rxSq * y1PrimeSq + rySq * x1PrimeSq));
+            float cxPrime = sign * sqrtFactor * (rx * y1Prime / ry);
+            float cyPrime = sign * sqrtFactor * (-ry * x1Prime / rx);
+
+            // Transform the center point back to the original coordinate system
+            float centreX = cosAngle * cxPrime - sinAngle * cyPrime + (currentX + x) / 2.0f;
+            float centreY = sinAngle * cxPrime + cosAngle * cyPrime + (currentY + y) / 2.0f;
+
+            // Calculate the start angle and delta angle
+            float ux = (x1Prime - cxPrime) / rx;
+            float uy = (y1Prime - cyPrime) / ry;
+            float vx = (-x1Prime - cxPrime) / rx;
+            float vy = (-y1Prime - cyPrime) / ry;
+
+            float startAngle = std::atan2f (uy, ux);
+            float deltaAngle = std::atan2f (ux * vy - uy * vx, ux * vx + uy * vy);
+
+            if (!sweep && deltaAngle > 0) {
+                deltaAngle -= MathConstants<float>::twoPi;
+            } else if (sweep && deltaAngle < 0) {
+                deltaAngle += MathConstants<float>::twoPi;
+            }
+
+            // Ensure the delta angle is within the range [-2π, 2π]
+            deltaAngle = std::fmodf (deltaAngle, MathConstants<float>::twoPi);
+
+            // Add the arc to the path
+            path.addCenteredArc (centreX, centreY, rx, ry, xAxisRotation, startAngle, startAngle + deltaAngle, true);
+
+            // Update the current position
+            currentX = x;
+            currentY = y;
+
+            skipWhitespace (data);
+        }
+        else
+        {
+            break;
+        }
     }
 }
 
@@ -634,6 +867,8 @@ bool Path::parsePathData (const String& pathData)
 
     float currentX = 0.0f, currentY = 0.0f;
     float startX = 0.0f, startY = 0.0f;
+    float lastControlX = currentX, lastControlY = currentY;
+    float lastQuadX = currentX, lastQuadY = currentY;
 
     while (! data.isEmpty())
     {
@@ -668,11 +903,30 @@ bool Path::parsePathData (const String& pathData)
             case 'Q': // Quadratic Bezier curve to absolute
             case 'q': // Quadratic Bezier curve to relative
                 handleQuadTo (data, *this, currentX, currentY, command == 'q');
+                lastQuadX = currentX;
+                lastQuadY = currentY;
+                break;
+
+            case 'T': // Quadratic Smooth Bezier curve to absolute
+            case 't': // Quadratic Smooth Bezier curve to relative
+                handleSmoothQuadTo (data, *this, currentX, currentY, lastQuadX, lastQuadY, command == 'q');
                 break;
 
             case 'C': // Cubic Bezier curve to absolute
             case 'c': // Cubic Bezier curve to relative
                 handleCubicTo (data, *this, currentX, currentY, command == 'c');
+                lastControlX = currentX;
+                lastControlY = currentY;
+                break;
+
+            case 'S': // Cubic Smooth Bezier curve to absolute
+            case 's': // Cubic Smooth Bezier curve to relative
+                handleSmoothCubicTo (data, *this, currentX, currentY, lastControlX, lastControlY, command == 's');
+                break;
+
+            case 'A': // Elliptical Arc to absolute
+            case 'a': // Elliptical Arc to relative
+                handleEllipticalArc (data, *this, currentX, currentY, command == 'a');
                 break;
 
             case 'Z': // Close path
@@ -680,6 +934,10 @@ bool Path::parsePathData (const String& pathData)
                 close();
                 currentX = startX;
                 currentY = startY;
+                lastControlX = currentX;
+                lastControlY = currentY;
+                lastQuadX = currentX;
+                lastQuadY = currentY;
                 break;
 
             default:

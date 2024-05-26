@@ -275,6 +275,9 @@ public:
     */
     void addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
+    // TODO - doxygen
+    void addRoundedRectangle (float x, float y, float width, float height, float radius);
+
     /** Adds a rounded rectangle described by a Rectangle object with specific corner radii to the path.
 
         This method appends a rounded rectangle specified by the Rectangle object and corner radii
@@ -288,6 +291,9 @@ public:
         @param radiusBottomRight The radius of the bottom-right corner.
     */
     void addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+
+    // TODO - doxygen
+    void addRoundedRectangle (const Rectangle<float>& rect, float radius);
 
     //==============================================================================
     /** Adds an ellipse to the path.
@@ -315,10 +321,13 @@ public:
 
     //==============================================================================
     // TODO - doxygen
-    void addCentredEllipse (float centerX, float centerY, float radiusX, float radiusY);
+    void addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY);
 
     // TODO - doxygen
-    void addCentredEllipse (const Point<float>& center, float radiusX, float radiusY);
+    void addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY);
+
+    // TODO - doxygen
+    void addCenteredEllipse (const Point<float>& center, const Size<float>& diameter);
 
     //==============================================================================
     /** Adds an arc to the path.
@@ -386,6 +395,10 @@ public:
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
     void addCenteredArc (const Point<float>& center, float radiusX, float radiusY,
+                         float rotationOfEllipse, float fromRadians, float toRadians,
+                         bool startAsNewSubPath);
+
+    void addCenteredArc (const Point<float>& center, const Size<float>& diameter,
                          float rotationOfEllipse, float fromRadians, float toRadians,
                          bool startAsNewSubPath);
 

@@ -72,6 +72,9 @@ rive::RawPath toRawPath (const Path& path)
 
 rive::RawPath toRawPath (const Path& path, const AffineTransform& transform)
 {
+    if (transform.isIdentity())
+        return toRawPath (path);
+
     rive::RawPath rawPath;
 
     for (const auto& segment : path)

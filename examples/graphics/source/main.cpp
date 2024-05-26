@@ -308,7 +308,8 @@ public:
             }
         }
 
-        button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth(0.4f), 0.0f));
+        if (button != nullptr)
+            button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth(0.4f), 0.0f));
     }
 
     void paint (yup::Graphics& g) override

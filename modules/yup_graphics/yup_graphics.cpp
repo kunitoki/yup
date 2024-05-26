@@ -65,4 +65,5 @@
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"
 #include "graphics/yup_Color.cpp"
+#include "graphics/yup_Colors.cpp"
 #include "graphics/yup_Graphics.cpp"

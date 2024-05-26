@@ -655,6 +655,8 @@ bool GLFWComponentNative::isAtomicModeEnabled() const
 void GLFWComponentNative::enableAtomicMode (bool shouldBeEnabled)
 {
     renderAtomicMode = shouldBeEnabled;
+
+    component.repaint();
 }
 
 bool GLFWComponentNative::isWireframeEnabled() const
@@ -665,6 +667,8 @@ bool GLFWComponentNative::isWireframeEnabled() const
 void GLFWComponentNative::enableWireframe (bool shouldBeEnabled)
 {
     renderWireframe = shouldBeEnabled;
+
+    component.repaint();
 }
 
 //==============================================================================
