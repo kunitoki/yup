@@ -27,13 +27,7 @@ namespace yup
 namespace {
 int hexCharToInt (juce_wchar c) noexcept
 {
-    if (c >= '0' && c <= '9')
-        return c - '0';
-    else if (c >= 'A' && c <= 'F')
-        return c - 'A' + 10;
-    else if (c >= 'a' && c <= 'f')
-        return c - 'a' + 10;
-    return 0;
+    return CharacterFunctions::getHexDigitValue (c);
 }
 
 int parseNextInt (String::CharPointerType& data)
@@ -69,7 +63,7 @@ Color parseHexColor (const String& hexString)
 
     if (length == 4) // #RGB
     {
-        uint8 red = static_cast<uint8>(hexCharToInt(data[1]) * 16 + hexCharToInt(data[1]));
+        uint8 red = static_cast<uint8>(hexCharToInt (data[1]) * 16 + hexCharToInt (data[1]));
         uint8 green = static_cast<uint8> (hexCharToInt (data[2]) * 16 + hexCharToInt (data[2]));
         uint8 blue = static_cast<uint8> (hexCharToInt (data[3]) * 16 + hexCharToInt (data[3]));
 
@@ -127,18 +121,8 @@ Color parseRGBColor (const String& rgbString)
 
 Color parseNamedColor (const String& name)
 {
-    static const std::map<String, Color> namedColors =
-    {
-        { "black",  Color (0, 0, 0) },
-        { "white",  Color (255, 255, 255) },
-        { "red",    Color (255, 0, 0) },
-        { "green",  Color (0, 255, 0) },
-        { "blue",   Color (0, 0, 255) },
-        // Add more named colors as needed
-    };
-
-    if (auto it = namedColors.find (name.toLowerCase()); it != namedColors.end())
-        return it->second;
+    if (auto color = Colors::getNamedColor (name))
+        return *color;
 
     return {};
 }

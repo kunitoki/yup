@@ -479,6 +479,19 @@ public:
     }
 
     //==============================================================================
+    // TODO - doxygen
+    [[nodiscard]] constexpr float getDeterminant() const noexcept
+    {
+        return (scaleX * scaleY) - (shearX * shearY);
+    }
+
+    // TODO - doxygen
+    [[nodiscard]] constexpr float getScaleFactor() const noexcept
+    {
+        return (std::abs (scaleX) + std::abs (scaleY)) / 2.0f;
+    }
+
+    //==============================================================================
     /** Transform a point
 
         Applies the transformation to a point represented by its x and y coordinates, modifying the coordinates in place.

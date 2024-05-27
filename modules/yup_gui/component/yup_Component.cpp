@@ -520,14 +520,22 @@ void Component::internalPaint (Graphics& g, bool renderContinuous)
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto state = g.saveState();
+    const auto opacity = g.getOpacity() * getOpacity();
+    if (opacity == 0.0f)
+        return;
 
-    g.setOpacity (static_cast<uint8> (getOpacity() * 255));
+    const auto globalState = g.saveState();
+
+    g.setOpacity (opacity);
     g.setDrawingArea (bounds);
     if (! options.unclippedRendering)
         g.setClipPath (boundsToRedraw);
 
-    paint (g);
+    {
+        const auto paintState = g.saveState();
+
+        paint (g);
+    }
 
     for (auto child : children)
         child->internalPaint (g, renderContinuous);

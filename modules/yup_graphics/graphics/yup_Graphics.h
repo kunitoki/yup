@@ -83,41 +83,71 @@ public:
     [[nodiscard]] SavedState saveState();
 
     //==============================================================================
-    /** Sets the current drawing color.
+    /** Sets the current drawing fill color.
 
-        @param color The new color to use for subsequent drawing operations.
+        @param color The new color to use for subsequent fill drawing operations.
     */
-    void setColor (Color color);
+    void setFillColor (Color color);
 
-    /** Retrieves the current drawing color.
+    /** Retrieves the current drawing fill color.
 
-        @return The current color.
+        @return The current color for fill drawing.
     */
-    Color getColor() const;
+    Color getFillColor() const;
 
-    /** Sets the current color gradient.
+    /** Sets the current drawing stroke color.
 
-        @param gradient The new color gradient to use for subsequent drawing operations.
+        @param color The new color to use for subsequent stroke drawing operations.
     */
-    void setColorGradient (ColorGradient gradient);
+    void setStrokeColor (Color color);
 
-    /** Retrieves the current color gradient.
+    /** Retrieves the current drawing stroke color.
 
-        @return The current color gradient.
+        @return The current color for stroke drawing.
     */
-    ColorGradient getColorGradient() const;
+    Color getStrokeColor() const;
+
+    /** Sets the current color gradient for fills.
+
+        @param gradient The new color gradient to use for subsequent fill drawing operations.
+    */
+    void setFillColorGradient (ColorGradient gradient);
+
+    /** Retrieves the current color gradient for fills.
+
+        @return The current color gradient for fill drawing.
+    */
+    ColorGradient getFillColorGradient() const;
+
+    /** Sets the current color gradient for strokes.
+
+        @param gradient The new color gradient to use for subsequent stroke drawing operations.
+    */
+    void setStrokeColorGradient (ColorGradient gradient);
+
+    /** Retrieves the current color gradient for strokes.
+
+        @return The current color gradient for stroke drawing.
+    */
+    ColorGradient getStrokeColorGradient() const;
+
+    // TODO - doxygen
+    void setStrokeWidth (float strokeWidth);
+
+    // TODO - doxygen
+    float getStrokeWidth() const;
 
     /** Sets the opacity for subsequent drawing operations.
 
-        @param opacity The new opacity level (0-255).
+        @param opacity The new opacity level (0.0-1.0).
     */
-    void setOpacity (uint8 opacity);
+    void setOpacity (float opacity);
 
     /** Retrieves the current opacity setting.
 
         @return The current opacity level.
     */
-    uint8 getOpacity() const;
+    float getOpacity() const;
 
     /** Sets the stroke join style for drawing lines and paths.
 
@@ -180,7 +210,7 @@ public:
         @param y2 The y-coordinate of the second point.
         @param thickness The thickness of the line.
     */
-    void drawLine (float x1, float y1, float x2, float y2, float thickness);
+     void strokeLine (float x1, float y1, float x2, float y2);
 
     /** Draws a line between two points with a specified thickness.
 
@@ -188,7 +218,7 @@ public:
         @param p2 The second point.
         @param thickness The thickness of the line.
     */
-    void drawLine (const Point<float>& p1, const Point<float>& p2, float thickness);
+     void strokeLine (const Point<float>& p1, const Point<float>& p2);
 
     //==============================================================================
     /** Fills the entire drawing area with the current color or gradient.
@@ -219,14 +249,14 @@ public:
         @param height The height of the rectangle.
         @param thickness The thickness of the line used to draw the rectangle.
     */
-    void drawRect (float x, float y, float width, float height, float thickness);
+     void strokeRect (float x, float y, float width, float height);
 
     /** Draws a rectangle with a specified thickness.
 
         @param r The rectangle to draw.
         @param thickness The thickness of the line used to draw the rectangle.
     */
-    void drawRect (const Rectangle<float>& r, float thickness);
+     void strokeRect (const Rectangle<float>& r);
 
     //==============================================================================
     /** Fills a rounded rectangle with specific corner radii.
@@ -281,7 +311,7 @@ public:
         @param radiusBottomRight The radius of the bottom-right corner.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-    void drawRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness);
+     void strokeRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     /** Draws a rounded rectangle with specific corner radii and a specified thickness.
 
@@ -292,7 +322,7 @@ public:
         @param radiusBottomRight The radius of the bottom-right corner.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-    void drawRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness);
+     void strokeRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     /** Draws a rounded rectangle with a uniform corner radius and a specified thickness.
 
@@ -303,7 +333,7 @@ public:
         @param radius The radius of all corners.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-    void drawRoundedRect (float x, float y, float width, float height, float radius, float thickness);
+     void strokeRoundedRect (float x, float y, float width, float height, float radius);
 
     /** Draws a rounded rectangle with a uniform corner radius and a specified thickness.
 
@@ -311,7 +341,7 @@ public:
         @param radius The radius of all corners.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-    void drawRoundedRect (const Rectangle<float>& r, float radius, float thickness);
+     void strokeRoundedRect (const Rectangle<float>& r, float radius);
 
     //==============================================================================
     /** Draws a path with a specified thickness.
@@ -319,7 +349,7 @@ public:
         @param path The path to draw.
         @param thickness The thickness of the line used to draw the path.
     */
-    void drawPath (const Path& path, float thickness);
+     void strokePath (const Path& path);
 
     /** Fills a path with the current color or gradient.
 
@@ -330,7 +360,7 @@ public:
     //==============================================================================
     /** Draws an attributed text.
     */
-    void drawFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
+     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
 
     //==============================================================================
     /** Clips the drawing area to the specified rectangle.
@@ -363,24 +393,44 @@ private:
     {
         RenderOptions() noexcept = default;
 
-        bool isColor() const noexcept
+        bool isFillColor() const noexcept
         {
-            return isCurrentBrushColor;
+            return isCurrentFillColor;
         }
 
-        Color getColor() const noexcept
+        bool isStrokeColor() const noexcept
         {
-            return color.withMultipliedAlpha (alpha);
+            return isCurrentStrokeColor;
         }
 
-        bool isColorGradient() const noexcept
+        Color getFillColor() const noexcept
         {
-            return ! isCurrentBrushColor;
+            return fillColor.withMultipliedAlpha (opacity);
         }
 
-        ColorGradient getColorGradient() const noexcept
+        Color getStrokeColor() const noexcept
         {
-            return gradient.withMultipliedAlpha (alpha);
+            return strokeColor.withMultipliedAlpha (opacity);
+        }
+
+        bool isFillColorGradient() const noexcept
+        {
+            return ! isCurrentFillColor;
+        }
+
+        bool isStrokeColorGradient() const noexcept
+        {
+            return ! isCurrentFillColor;
+        }
+
+        ColorGradient getFillColorGradient() const noexcept
+        {
+            return fillGradient.withMultipliedAlpha (opacity);
+        }
+
+        ColorGradient getStrokeColorGradient() const noexcept
+        {
+            return strokeGradient.withMultipliedAlpha (opacity);
         }
 
         const Rectangle<float>& getDrawingArea() const noexcept
@@ -396,20 +446,24 @@ private:
 
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
-        Color color = 0xff000000;
-        ColorGradient gradient;
+        Color fillColor = 0xff000000;
+        Color strokeColor = 0xff000000;
+        ColorGradient fillGradient;
+        ColorGradient strokeGradient;
+        float strokeWidth = 1.0f;
         Rectangle<float> drawingArea;
         AffineTransform transform;
         Path clipPath;
-        uint8 alpha = 255;
-        bool isCurrentBrushColor = true;
+        float opacity = 1.0f;
+        bool isCurrentFillColor = true;
+        bool isCurrentStrokeColor = true;
     };
 
     RenderOptions& currentRenderOptions();
     const RenderOptions& currentRenderOptions() const;
     void restoreState();
 
-    void renderDrawPath (rive::RawPath& rawPath, const RenderOptions& options, float thickness);
+    void renderStrokePath (rive::RawPath& rawPath, const RenderOptions& options);
     void renderFillPath (rive::RawPath& rawPath, const RenderOptions& options);
 
     GraphicsContext& context;

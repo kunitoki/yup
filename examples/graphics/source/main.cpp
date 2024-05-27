@@ -46,7 +46,7 @@ public:
         yup::Path backgroundPath;
         //backgroundPath.clear();
         backgroundPath.addRoundedRectangle (bounds.reduced (proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
-        g.setColor (isButtonDown ? yup::Color (0xff000000) : yup::Color (0xffffffff));
+        g.setFillColor (isButtonDown ? yup::Color (0xff000000) : yup::Color (0xffffffff));
         g.fillPath (backgroundPath);
 
         yup::StyledText text;
@@ -54,8 +54,8 @@ public:
         text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, getComponentID().toRawUTF8());
         text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
 
-        g.setColor (isButtonDown ? yup::Color (0xffffffff) : yup::Color (0xff000000));
-        g.drawFittedText (text, {});
+        g.setStrokeColor (isButtonDown ? yup::Color (0xffffffff) : yup::Color (0xff000000));
+        g.strokeFittedText (text, {});
     }
 
 private:
@@ -141,31 +141,35 @@ public:
     {
         auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
 
-        g.setColor (yup::Color (0xff3d3d3d));
+        g.setFillColor (yup::Color (0xff3d3d3d));
         g.fillPath (backgroundPath);
 
-        g.setColor (yup::Color (0xff2b2b2b));
-        g.drawPath (backgroundPath, proportionOfWidth (0.0175f));
+        g.setStrokeColor (yup::Color (0xff2b2b2b));
+        g.setStrokeWidth (proportionOfWidth (0.0175f));
+        g.strokePath (backgroundPath);
 
         g.setStrokeCap (yup::StrokeCap::Round);
-        g.setColor (yup::Color (0xff636363));
-        g.drawPath (backgroundArc, proportionOfWidth (0.075f));
+        g.setStrokeColor (yup::Color (0xff636363));
+        g.setStrokeWidth (proportionOfWidth (0.075f));
+        g.strokePath (backgroundArc);
 
         g.setStrokeCap (yup::StrokeCap::Round);
-        g.setColor (isInside ? yup::Color (0xff4ebfff).brighter (0.3f) : yup::Color (0xff4ebfff));
-        g.drawPath (foregroundArc, proportionOfWidth (0.075f));
+        g.setStrokeColor (isInside ? yup::Color (0xff4ebfff).brighter (0.3f) : yup::Color (0xff4ebfff));
+        g.setStrokeWidth (proportionOfWidth (0.075f));
+        g.strokePath (foregroundArc);
 
         g.setStrokeCap (yup::StrokeCap::Round);
-        g.setColor (yup::Color (0xffffffff));
-        g.drawPath (foregroundLine, proportionOfWidth (0.03f));
+        g.setStrokeColor (yup::Color (0xffffffff));
+        g.setStrokeWidth (proportionOfWidth (0.03f));
+        g.strokePath (foregroundLine);
 
-        g.setColor (yup::Color (0xffffffff));
-        g.drawFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
+        g.setStrokeColor (yup::Color (0xffffffff));
+        g.strokeFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
 
         //if (hasFocus())
         //{
-        //    g.setColor (yup::Color (0xffff5f2b));
-        //    g.drawRect (getLocalBounds(), proportionOfWidth (0.0175f));
+        //    g.setStrokeColor (yup::Color (0xffff5f2b));
+        //    g.strokeRect (getLocalBounds(), proportionOfWidth (0.0175f));
         //}
     }
 

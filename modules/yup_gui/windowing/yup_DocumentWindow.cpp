@@ -65,7 +65,7 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
 void DocumentWindow::paint (Graphics& g)
 {
-    g.setColor (backgroundColor);
+    g.setFillColor (backgroundColor);
     g.fillAll();
 }
 

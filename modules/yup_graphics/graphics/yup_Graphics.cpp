@@ -111,6 +111,11 @@ rive::RawPath toRawPath (const Path& path, const AffineTransform& transform)
     return rawPath;
 }
 
+void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output)
+{
+    input.addTo (output);
+}
+
 void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output, const AffineTransform& transform)
 {
     auto newInput = input.morph ([&transform](auto point)
@@ -228,36 +233,68 @@ void Graphics::restoreState()
 }
 
 //==============================================================================
-void Graphics::setColor (Color color)
+void Graphics::setFillColor (Color color)
 {
-    currentRenderOptions().color = color;
-    currentRenderOptions().isCurrentBrushColor = true;
+    currentRenderOptions().fillColor = color;
+    currentRenderOptions().isCurrentFillColor = true;
 }
 
-Color Graphics::getColor() const
+Color Graphics::getFillColor() const
 {
-    return currentRenderOptions().color;
+    return currentRenderOptions().fillColor;
 }
 
-void Graphics::setColorGradient (ColorGradient gradient)
+void Graphics::setStrokeColor (Color color)
 {
-    currentRenderOptions().gradient = std::move (gradient);
-    currentRenderOptions().isCurrentBrushColor = false;
+    currentRenderOptions().strokeColor = color;
+    currentRenderOptions().isCurrentStrokeColor = true;
 }
 
-ColorGradient Graphics::getColorGradient() const
+Color Graphics::getStrokeColor() const
 {
-    return currentRenderOptions().gradient;
+    return currentRenderOptions().strokeColor;
 }
 
-void Graphics::setOpacity (uint8 opacity)
+void Graphics::setFillColorGradient (ColorGradient gradient)
 {
-    currentRenderOptions().alpha = opacity;
+    currentRenderOptions().fillGradient = std::move (gradient);
+    currentRenderOptions().isCurrentFillColor = false;
 }
 
-uint8 Graphics::getOpacity() const
+ColorGradient Graphics::getFillColorGradient() const
 {
-    return currentRenderOptions().alpha;
+    return currentRenderOptions().fillGradient;
+}
+
+void Graphics::setStrokeColorGradient (ColorGradient gradient)
+{
+    currentRenderOptions().strokeGradient = std::move (gradient);
+    currentRenderOptions().isCurrentStrokeColor = false;
+}
+
+ColorGradient Graphics::getStrokeColorGradient() const
+{
+    return currentRenderOptions().strokeGradient;
+}
+
+void Graphics::setStrokeWidth (float strokeWidth)
+{
+    currentRenderOptions().strokeWidth = strokeWidth;
+}
+
+float Graphics::getStrokeWidth() const
+{
+    return currentRenderOptions().strokeWidth;
+}
+
+void Graphics::setOpacity (float opacity)
+{
+    currentRenderOptions().opacity = jlimit (0.0f, 1.0f, opacity);
+}
+
+float Graphics::getOpacity() const
+{
+    return currentRenderOptions().opacity;
 }
 
 void Graphics::setStrokeJoin (StrokeJoin join)
@@ -323,7 +360,7 @@ Path Graphics::getClipPath() const
 }
 
 //==============================================================================
-void Graphics::drawLine (float x1, float y1, float x2, float y2, float thickness)
+void Graphics::strokeLine (float x1, float y1, float x2, float y2)
 {
     const auto& options = currentRenderOptions();
 
@@ -332,12 +369,12 @@ void Graphics::drawLine (float x1, float y1, float x2, float y2, float thickness
     path.lineTo (x2, y2);
 
     auto rawPath = toRawPath (path, options.getTransform());
-    renderDrawPath (rawPath, options, thickness);
+    renderStrokePath (rawPath, options);
 }
 
-void Graphics::drawLine (const Point<float>& p1, const Point<float>& p2, float thickness)
+void Graphics::strokeLine (const Point<float>& p1, const Point<float>& p2)
 {
-    drawLine (p1.getX(), p1.getY(), p2.getX(), p2.getY(), thickness);
+    strokeLine (p1.getX(), p1.getY(), p2.getX(), p2.getY());
 }
 
 //==============================================================================
@@ -379,7 +416,7 @@ void Graphics::fillRect (const Rectangle<float>& r)
 }
 
 //==============================================================================
-void Graphics::drawRect (float x, float y, float width, float height, float thickness)
+void Graphics::strokeRect (float x, float y, float width, float height)
 {
     const auto& options = currentRenderOptions();
 
@@ -391,12 +428,12 @@ void Graphics::drawRect (float x, float y, float width, float height, float thic
     path.lineTo (x, y);
 
     auto rawPath = toRawPath (path, options.getTransform());
-    renderDrawPath (rawPath, options, thickness);
+    renderStrokePath (rawPath, options);
 }
 
-void Graphics::drawRect (const Rectangle<float>& r, float thickness)
+void Graphics::strokeRect (const Rectangle<float>& r)
 {
-    drawRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), thickness);
+    strokeRect (r.getX(), r.getY(), r.getWidth(), r.getHeight());
 }
 
 //==============================================================================
@@ -429,7 +466,7 @@ void Graphics::fillRoundedRect (const Rectangle<float>& r, float radius)
 }
 
 //==============================================================================
-void Graphics::drawRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness)
+void Graphics::strokeRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
     const auto& options = currentRenderOptions();
 
@@ -439,31 +476,31 @@ void Graphics::drawRoundedRect (float x, float y, float width, float height, flo
         radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
     auto rawPath = toRawPath (path, options.getTransform());
-    renderDrawPath (rawPath, options, thickness);
+    renderStrokePath (rawPath, options);
 }
 
-void Graphics::drawRoundedRect (float x, float y, float width, float height, float radius, float thickness)
+void Graphics::strokeRoundedRect (float x, float y, float width, float height, float radius)
 {
-    drawRoundedRect (x, y, width, height, radius, radius, radius, radius, thickness);
+    strokeRoundedRect (x, y, width, height, radius, radius, radius, radius);
 }
 
-void Graphics::drawRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight, float thickness)
+void Graphics::strokeRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    drawRoundedRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight, thickness);
+    strokeRoundedRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 }
 
-void Graphics::drawRoundedRect (const Rectangle<float>& r, float radius, float thickness)
+void Graphics::strokeRoundedRect (const Rectangle<float>& r, float radius)
 {
-    drawRoundedRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radius, radius, radius, radius, thickness);
+    strokeRoundedRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radius, radius, radius, radius);
 }
 
 //==============================================================================
-void Graphics::drawPath (const Path& path, float thickness)
+void Graphics::strokePath (const Path& path)
 {
     const auto& options = currentRenderOptions();
 
     auto rawPath = toRawPath (path, options.getTransform());
-    renderDrawPath (rawPath, options, thickness);
+    renderStrokePath (rawPath, options);
 }
 
 //==============================================================================
@@ -495,25 +532,30 @@ void Graphics::clipPath (const Path& path)
     const auto& options = currentRenderOptions();
 
     auto rawPath = toRawPath (path, options.getTransform());
-    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    auto renderPath = factory.makeEmptyRenderPath();
+
+    convertRawPathToRenderPath (rawPath, renderPath.get());
+
     renderer.clipPath (renderPath.get());
 }
 
 //==============================================================================
-void Graphics::renderDrawPath (rive::RawPath& rawPath, const RenderOptions& options, float thickness)
+void Graphics::renderStrokePath (rive::RawPath& rawPath, const RenderOptions& options)
 {
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::stroke);
-    paint->thickness (thickness);
+    paint->thickness (options.strokeWidth);
     paint->join (toStrokeJoin (options.join));
     paint->cap (toStrokeCap (options.cap));
 
-    if (options.isColor())
-        paint->color (options.getColor());
+    if (options.isStrokeColor())
+        paint->color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getColorGradient()));
+        paint->shader (toColorGradient (factory, options.getStrokeColorGradient()));
 
-    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    auto renderPath = factory.makeEmptyRenderPath();
+    convertRawPathToRenderPath (rawPath, renderPath.get());
+
     renderer.drawPath (renderPath.get(), paint.get());
 }
 
@@ -522,36 +564,38 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::fill);
 
-    if (options.isColor())
-        paint->color (options.getColor());
+    if (options.isFillColor())
+        paint->color (options.getFillColor());
     else
-        paint->shader (toColorGradient (factory, options.getColorGradient()));
+        paint->shader (toColorGradient (factory, options.getFillColorGradient()));
 
-    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    auto renderPath = factory.makeEmptyRenderPath();
+    convertRawPathToRenderPath (rawPath, renderPath.get());
+
     renderer.drawPath (renderPath.get(), paint.get());
 }
 
 //==============================================================================
-void Graphics::drawFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
 {
     const auto& options = currentRenderOptions();
 
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::fill);
 
-    if (options.isColor())
-        paint->color (options.getColor());
+    if (options.isStrokeColor())
+        paint->color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getColorGradient()));
+        paint->shader (toColorGradient (factory, options.getStrokeColorGradient()));
 
     auto path = factory.makeEmptyRenderPath();
 
     std::size_t totalPathSize = 0;
-    for (const auto& rawpath : text.getGlyphs())
-        totalPathSize += rawpath.verbs().size();
+    for (const auto& rawPath : text.getGlyphs())
+        totalPathSize += rawPath.verbs().size();
 
-    for (const auto& rawpath : text.getGlyphs())
-        convertRawPathToRenderPath (rawpath, path.get(), options.getTransform());
+    for (const auto& rawPath : text.getGlyphs())
+        convertRawPathToRenderPath (rawPath, path.get(), options.getTransform());
 
     renderer.drawPath (path.get(), paint.get());
 }

@@ -305,20 +305,21 @@ void Path::addCenteredArc (float centerX, float centerY, float radiusX, float ra
     const float sinTheta = std::sin (rotationOfEllipse);
 
     // Initialize variables for the loop
-    float angle = fromRadians;
-    float x = std::cos (angle) * radiusX;
-    float y = std::sin (angle) * radiusY;
+    float x = std::cos (fromRadians) * radiusX;
+    float y = std::sin (fromRadians) * radiusY;
     float rotatedX = x * cosTheta - y * sinTheta + centerX;
     float rotatedY = x * sinTheta + y * cosTheta + centerY;
 
     // Move to the first point if starting a new subpath
     if (startAsNewSubPath)
         moveTo (rotatedX, rotatedY);
+    else
+        lineTo (rotatedX, rotatedY);
 
     // Draw lines between points on the arc
     for (int i = 1; i <= segments; i++)
     {
-        angle = fromRadians + i * delta;
+        float angle = fromRadians + i * delta;
         x = std::cos (angle) * radiusX;
         y = std::sin (angle) * radiusY;
 
@@ -500,6 +501,7 @@ bool parseCoordinate (String::CharPointerType& data, float& coord)
         if (isNegative)
             coord = -coord;
 
+        skipWhitespaceOrComma (data);
         return true;
     }
 
@@ -622,7 +624,7 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
             y += currentY;
         }
 
-        path.quadTo (x, y, x1, y1);
+        path.quadTo (x1, y1, x, y);
 
         currentX = x;
         currentY = y;
