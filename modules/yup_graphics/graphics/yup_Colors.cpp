@@ -29,7 +29,7 @@ namespace Colors
 
 std::optional<Color> getNamedColor (StringRef colorName)
 {
-    static const std::unordered_map<const char*, Color> namedColors =
+    static const std::unordered_map<String, Color> namedColors =
     {
         { "aliceblue", aliceblue },
         { "antiquewhite", antiquewhite },
@@ -56,6 +56,7 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "darkcyan", darkcyan },
         { "darkgoldenrod", darkgoldenrod },
         { "darkgray", darkgray },
+        { "darkgrey", darkgray },
         { "darkgreen", darkgreen },
         { "darkkhaki", darkkhaki },
         { "darkmagenta", darkmagenta },
@@ -67,11 +68,13 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "darkseagreen", darkseagreen },
         { "darkslateblue", darkslateblue },
         { "darkslategray", darkslategray },
+        { "darkslategrey", darkslategray },
         { "darkturquoise", darkturquoise },
         { "darkviolet", darkviolet },
         { "deeppink", deeppink },
         { "deepskyblue", deepskyblue },
         { "dimgray", dimgray },
+        { "dimgrey", dimgray },
         { "dodgerblue", dodgerblue },
         { "firebrick", firebrick },
         { "floralwhite", floralwhite },
@@ -82,6 +85,7 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "gold", gold },
         { "goldenrod", goldenrod },
         { "gray", gray },
+        { "grey", gray },
         { "green", green },
         { "greenyellow", greenyellow },
         { "honeydew", honeydew },
@@ -99,12 +103,14 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "lightcyan", lightcyan },
         { "lightgoldenrodyellow", lightgoldenrodyellow },
         { "lightgray", lightgray },
+        { "lightgrey", lightgray },
         { "lightgreen", lightgreen },
         { "lightpink", lightpink },
         { "lightsalmon", lightsalmon },
         { "lightseagreen", lightseagreen },
         { "lightskyblue", lightskyblue },
         { "lightslategray", lightslategray },
+        { "lightslategrey", lightslategray },
         { "lightsteelblue", lightsteelblue },
         { "lightyellow", lightyellow },
         { "lime", lime },
@@ -157,6 +163,7 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "skyblue", skyblue },
         { "slateblue", slateblue },
         { "slategray", slategray },
+        { "slategrey", slategray },
         { "snow", snow },
         { "springgreen", springgreen },
         { "steelblue", steelblue },
@@ -173,7 +180,7 @@ std::optional<Color> getNamedColor (StringRef colorName)
         { "yellowgreen", yellowgreen },
     };
 
-    auto it = namedColors.find (String (colorName).toLowerCase().toRawUTF8());
+    auto it = namedColors.find (String (colorName).toLowerCase());
     if (it != namedColors.end())
         return it->second;
 

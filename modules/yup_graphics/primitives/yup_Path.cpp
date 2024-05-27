@@ -462,6 +462,35 @@ void skipWhitespaceOrComma (String::CharPointerType& data)
         ++data;
 }
 
+bool parseFlag (String::CharPointerType& data, int& flag)
+{
+    skipWhitespace (data);
+
+    String number;
+
+    while (!data.isEmpty())
+    {
+        if (data.isWhitespace() || *data == '.' || *data == ',' || *data == '-' || isControlMarker (data))
+            break;
+
+        if (! (*data >= '0' && *data <= '9'))
+            break;
+
+        number += *data;
+        ++data;
+    }
+
+    if (number.isNotEmpty())
+    {
+        flag = number.getIntValue();
+
+        skipWhitespaceOrComma (data);
+        return true;
+    }
+
+    return false;
+}
+
 bool parseCoordinate (String::CharPointerType& data, float& coord)
 {
     skipWhitespace (data);
@@ -754,14 +783,14 @@ void handleSmoothCubicTo (String::CharPointerType& data, Path& path, float& curr
 void handleEllipticalArc (String::CharPointerType& data, Path& path, float& currentX, float& currentY, bool relative)
 {
     float rx, ry, xAxisRotation, x, y;
-    float largeArcFlag, sweepFlag; // int
+    int largeArc, sweep;
 
     while (! data.isEmpty() && ! isControlMarker(data))
     {
         if (parseCoordinates (data, rx, ry)
             && parseCoordinate (data, xAxisRotation)
-            && parseCoordinate (data, largeArcFlag)
-            && parseCoordinate (data, sweepFlag)
+            && parseFlag (data, largeArc)
+            && parseFlag (data, sweep)
             && parseCoordinates (data, x, y))
         {
             if (relative)
@@ -781,16 +810,12 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
                 continue;
             }
 
-            // Convert flags to boolean values
-            const bool largeArc = largeArcFlag != 0;
-            const bool sweep = sweepFlag != 0;
-
             // Convert angle from degrees to radians
-            float angleRad = xAxisRotation * MathConstants<float>::pi / 180.0f;
+            const float angleRad = degreesToRadians (xAxisRotation);
 
             // Calculate the midpoint between the start and end points
-            float dx = (currentX - x) / 2.0f;
-            float dy = (currentY - y) / 2.0f;
+            const float dx = (currentX - x) / 2.0f;
+            const float dy = (currentY - y) / 2.0f;
 
             // Apply the rotation to the midpoint
             float cosAngle = std::cosf (angleRad);
