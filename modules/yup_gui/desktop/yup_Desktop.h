@@ -59,16 +59,20 @@ public:
     Display* getPrimaryDisplay() const;
 
     //==============================================================================
+    
+    void updateDisplays();
+
+    //==============================================================================
     JUCE_DECLARE_SINGLETON (Desktop, true)
 
 private:
     friend class YUPApplication;
 
-    void updateDisplays();
-
     Desktop();
 
     OwnedArray<Display> displays;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };
 
 } // namespace yup

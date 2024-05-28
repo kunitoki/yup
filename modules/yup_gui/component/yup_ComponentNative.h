@@ -105,6 +105,7 @@ public:
     //==============================================================================
     static std::unique_ptr<ComponentNative> createFor (Component& component,
                                                        const Flags& flags,
+                                                       void* parent,
                                                        std::optional<float> framerateRedraw);
 
 protected:

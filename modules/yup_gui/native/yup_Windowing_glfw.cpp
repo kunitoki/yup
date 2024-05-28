@@ -204,6 +204,73 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
 //==============================================================================
 
+Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
+{
+#if JUCE_WINDOWS
+    RECT windowRect;
+
+    GetWindowRect (reinterpret_cast<HWND> (nativeWindow), &windowRect);
+
+    return
+    {
+        windowRect.left,
+        windowRect.top,
+        windowRect.right - windowRect.left,
+        windowRect.bottom - windowRect.top
+    };
+
+#elif JUCE_MAC
+    NSView* view = reinterpret_cast<NSView*> (nativeWindow);
+    NSRect viewRect = [view convertRect:[view bounds] toView:nil];
+
+    NSRect windowRect = [[view window] convertRectToScreen:viewRect];
+    windowRect.origin.y = CGDisplayBounds (CGMainDisplayID()).size.height - (windowRect.origin.y + windowRect.size.height);
+
+    return
+    {
+        static_cast<int> (windowRect.origin.x),
+        static_cast<int> (windowRect.origin.y),
+        static_cast<int> (windowRect.size.width),
+        static_cast<int> (windowRect.size.height)
+    };
+
+#elif JUCE_LINUX
+    return {};
+
+#else
+    return {};
+
+#endif
+}
+
+void setNativeParent (void* nativeDisplay, void* nativeWindow, GLFWwindow* window)
+{
+#if JUCE_WINDOWS
+    HWND hpar = reinterpret_cast<HWND> (nativeWindow);
+    HWND hwnd = reinterpret_cast<HWND> (glfwGetWin32Window (window));
+    SetParent (hwnd, hpar);
+
+    long style = GetWindowLong (hwnd, GWL_STYLE);
+    style &= ~WS_POPUP;
+    style |= WS_CHILDWINDOW;
+    SetWindowLong (hwnd, GWL_STYLE, style);
+
+    SetWindowPos (hwnd, nullptr, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
+
+#elif JUCE_MAC
+    NSWindow* parentWindow = [reinterpret_cast<NSView*> (nativeWindow) window];
+    NSWindow* currentWindow = glfwGetCocoaWindow (window);
+    [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
+
+#elif JUCE_LINUX
+
+#else
+
+#endif
+}
+
+//==============================================================================
+
 class GLFWComponentNative final
     : public ComponentNative
     , public Timer
@@ -211,9 +278,11 @@ class GLFWComponentNative final
     , public AsyncUpdater
 {
 public:
+    static std::atomic_flag isInitialised;
+
     //==============================================================================
 
-    GLFWComponentNative (Component& component, const Flags& flags, std::optional<float> framerateRedraw);
+    GLFWComponentNative (Component& component, const Flags& flags, void* parent, std::optional<float> framerateRedraw);
     ~GLFWComponentNative() override;
 
     //==============================================================================
@@ -320,6 +389,7 @@ private:
     void renderContext();
 
     GLFWwindow* window = nullptr;
+    void* parentWindow = nullptr;
     String windowTitle;
 
     std::unique_ptr<GraphicsContext> context;
@@ -362,9 +432,14 @@ private:
 
 //==============================================================================
 
-GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& flags, std::optional<float> framerateRedraw)
+std::atomic_flag GLFWComponentNative::isInitialised = false;
+
+//==============================================================================
+
+GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& flags, void* parent, std::optional<float> framerateRedraw)
     : ComponentNative (component, flags)
     , Thread ("YUP Render Thread")
+    , parentWindow (parent)
     , screenBounds (component.getBounds().to<int>())
     , desiredFrameRate (framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (flags.test (renderContinuous))
@@ -387,6 +462,14 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
                                component.getTitle().toRawUTF8(),
                                monitor,
                                nullptr);
+
+    if (window == nullptr)
+        return;
+
+    if (parent != nullptr)
+    {
+        setNativeParent (nullptr, parent, window);
+    }
 
     glfwSetWindowPos (window, screenBounds.getX(), screenBounds.getY());
 
@@ -520,9 +603,12 @@ void GLFWComponentNative::setPosition (const Point<int>& newPosition)
 {
     jassert (window != nullptr);
 
-    glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
+    if (screenBounds.getPosition() != newPosition)
+    {
+        glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
 
-    screenBounds = screenBounds.withPosition (newPosition);
+        screenBounds = screenBounds.withPosition (newPosition);
+    }
 }
 
 Rectangle<int> GLFWComponentNative::getBounds() const
@@ -808,7 +894,7 @@ void GLFWComponentNative::run()
 
 void GLFWComponentNative::handleAsyncUpdate()
 {
-    if (! isThreadRunning())
+    if (! isThreadRunning() || ! isInitialised.test())
         return;
 
     renderContext();
@@ -838,6 +924,12 @@ void GLFWComponentNative::renderContext()
 
         repaint (Rectangle<float> (0, 0, contentWidth, contentHeight));
         forcedRedraws = 2;
+    }
+
+    if (parentWindow != nullptr)
+    {
+        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        setPosition (nativeWindowPos.getTopLeft());
     }
 
     jassert (context != nullptr);
@@ -1077,9 +1169,12 @@ void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 
 //==============================================================================
 
-std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component, const Flags& flags, std::optional<float> framerateRedraw)
+std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component,
+                                                             const Flags& flags,
+                                                             void* parent,
+                                                             std::optional<float> framerateRedraw)
 {
-    return std::make_unique<GLFWComponentNative> (component, flags, framerateRedraw);
+    return std::make_unique<GLFWComponentNative> (component, flags, parent, framerateRedraw);
 }
 
 //==============================================================================
@@ -1216,7 +1311,7 @@ void Desktop::updateDisplays()
 
 //==============================================================================
 
-void YUPApplication::staticInitialisation()
+void staticInitialisation()
 {
     glfwSetErrorCallback (+[](int code, const char* message)
     {
@@ -1251,10 +1346,16 @@ void YUPApplication::staticInitialisation()
 
         desktop->updateDisplays();
     });
+
+    GLFWComponentNative::isInitialised.test_and_set();
 }
 
-void YUPApplication::staticFinalisation()
+void staticFinalisation()
 {
+    GLFWComponentNative::isInitialised.clear();
+
+    Desktop::getInstance()->deleteInstance();
+
     glfwTerminate();
 }
 

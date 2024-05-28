@@ -96,10 +96,11 @@ public:
                              int lineNumber) override;
 
 private:
-    static void staticInitialisation();
-    static void staticFinalisation();
-
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YUPApplication)
 };
+
+/** These are called automatically by the YUPApplication class but must be called by plugins. */
+void staticInitialisation();
+void staticFinalisation();
 
 } // namespace yup

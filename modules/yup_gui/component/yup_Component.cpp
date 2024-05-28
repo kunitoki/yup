@@ -321,7 +321,7 @@ bool Component::isOnDesktop() const
     return options.onDesktop;
 }
 
-void Component::addToDesktop (ComponentNative::Flags flags, std::optional<float> framerateRedraw)
+void Component::addToDesktop (ComponentNative::Flags flags, void* parent, std::optional<float> framerateRedraw)
 {
     if (options.onDesktop)
         return;
@@ -334,7 +334,7 @@ void Component::addToDesktop (ComponentNative::Flags flags, std::optional<float>
 
     options.onDesktop = true;
 
-    native = ComponentNative::createFor (*this, flags, framerateRedraw);
+    native = ComponentNative::createFor (*this, flags, parent, framerateRedraw);
 }
 
 void Component::removeFromDesktop()

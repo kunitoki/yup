@@ -27,7 +27,7 @@ namespace yup
 DocumentWindow::DocumentWindow (ComponentNative::Flags flags, const Color& backgroundColor, std::optional<float> framerateRedraw)
     : backgroundColor (backgroundColor)
 {
-    addToDesktop (flags, framerateRedraw);
+    addToDesktop (flags, nullptr, framerateRedraw);
 }
 
 DocumentWindow::~DocumentWindow()

@@ -57,6 +57,7 @@ if (YUP_BUILD_EXAMPLES)
     add_subdirectory (examples/console)
     add_subdirectory (examples/graphics)
     add_subdirectory (examples/render)
+    add_subdirectory (examples/plugin)
 endif()
 
 if (YUP_BUILD_TESTS)

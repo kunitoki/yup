@@ -515,3 +515,93 @@ function (yup_standalone_app)
         ${YUP_ARG_MODULES})
 
 endfunction()
+
+#==============================================================================
+
+function (yup_audio_plugin)
+    # ==== Fetch options
+    set (options CONSOLE)
+    set (one_value_args TARGET_NAME PLUGIN_CREATE_CLAP)
+    set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
+
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (additional_definitions "")
+    set (additional_options "")
+    set (additional_libraries "")
+    set (additional_link_options "")
+
+    # ==== Find dependencies
+    include (FetchContent)
+
+    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable (glfw)
+    list (APPEND additional_libraries glfw)
+
+    # ==== Fetch plugins SDKS
+    if (YUP_ARG_PLUGIN_CREATE_CLAP)
+        FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
+        FetchContent_MakeAvailable (clap)
+        list (APPEND additional_libraries clap)
+    endif()
+
+    # ==== Prepare shared binary
+    add_library (${target_name} SHARED)
+    target_compile_features (${target_name} PRIVATE cxx_std_17)
+
+    # ==== Per platform configuration
+    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+        #if (NOT YUP_ARG_CONSOLE)
+        #    set_target_properties (${target_name} PROPERTIES
+        #        BUNDLE                                         ON
+        #        CXX_EXTENSIONS                                 OFF
+        #        MACOSX_BUNDLE_GUI_IDENTIFIER                   "org.kunitoki.yup.${target_name}"
+        #        MACOSX_BUNDLE_NAME                             "${target_name}"
+        #        MACOSX_BUNDLE_VERSION                          "1.0.0"
+        #        #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
+        #        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/platforms/macos/Info.plist"
+        #        #RESOURCE                                       "${RESOURCE_FILES}"
+        #        #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
+        #        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
+        #        XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
+        #        XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
+        #        XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
+        #endif()
+
+        set_target_properties (${target_name} PROPERTIES
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF)
+
+    endif()
+
+    if (YUP_ARG_PLUGIN_CREATE_CLAP)
+        set_target_properties (${target_name} PROPERTIES SUFFIX ".clap")
+    endif()
+
+    # ==== Definitions and link libraries
+    target_compile_options (${target_name} PRIVATE
+        ${additional_options}
+        ${YUP_ARG_OPTIONS})
+
+    target_compile_definitions (${target_name} PRIVATE
+        $<$<CONFIG:DEBUG>:DEBUG=1>
+        $<$<CONFIG:RELEASE>:NDEBUG=1>
+        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        JUCE_STANDALONE_APPLICATION=0
+        JUCE_MODAL_LOOPS_PERMITTED=1
+        ${additional_definitions}
+        ${YUP_ARG_DEFINITIONS})
+
+    target_link_options (${target_name} PRIVATE
+        ${additional_link_options}
+        ${YUP_ARG_LINK_OPTIONS})
+
+    target_link_libraries (${target_name} PRIVATE
+        ${additional_libraries}
+        ${YUP_ARG_MODULES})
+
+endfunction()

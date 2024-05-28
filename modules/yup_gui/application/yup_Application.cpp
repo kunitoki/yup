@@ -27,14 +27,10 @@ namespace yup
 YUPApplication::YUPApplication()
 {
     staticInitialisation();
-
-    Desktop::getInstance();
 }
 
 YUPApplication::~YUPApplication()
 {
-    Desktop::deleteInstance();
-
     staticFinalisation();
 }
 

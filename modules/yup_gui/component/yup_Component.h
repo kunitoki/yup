@@ -95,7 +95,9 @@ public:
 
     //==============================================================================
     bool isOnDesktop() const;
-    void addToDesktop (ComponentNative::Flags flags, std::optional<float> framerateRedraw = std::nullopt);
+    void addToDesktop (ComponentNative::Flags flags,
+                       void* parent = nullptr,
+                       std::optional<float> framerateRedraw = std::nullopt);
     void removeFromDesktop();
 
     virtual void userTriedToCloseWindow();
