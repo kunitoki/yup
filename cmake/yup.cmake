@@ -555,7 +555,7 @@ function (yup_audio_plugin)
     target_compile_features (${target_name} PRIVATE cxx_std_17)
 
     # ==== Per platform configuration
-    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+    if ("${yup_platform}" MATCHES "^(osx)$")
         #if (NOT YUP_ARG_CONSOLE)
         #    set_target_properties (${target_name} PROPERTIES
         #        BUNDLE                                         ON
