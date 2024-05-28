@@ -519,6 +519,10 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin)
+    if ("${yup_platform}" MATCHES "^(emscripten)$")
+        message (FATAL_ERROR "YUP -- Cannot enable audio plugins on WASM targets yet")
+    endif()
+
     # ==== Fetch options
     set (options CONSOLE)
     set (one_value_args TARGET_NAME PLUGIN_CREATE_CLAP)
