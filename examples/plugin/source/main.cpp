@@ -798,7 +798,7 @@ extern "C" const clap_plugin_entry_t clap_entry =
         DBG ("clap_plugin_entry_t::init");
 
         yup::initialiseJuce_GUI();
-        yup::staticInitialisation();
+        yup::initialiseYup_Windowing();
 
 		return true;
 	},
@@ -807,7 +807,7 @@ extern "C" const clap_plugin_entry_t clap_entry =
     {
         DBG ("clap_plugin_entry_t::deinit");
 
-        yup::staticFinalisation();
+        yup::shutdownYup_Windowing();
         yup::shutdownJuce_GUI();
     },
 
