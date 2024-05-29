@@ -23,45 +23,27 @@ namespace yup
 {
 
 //==============================================================================
-
-YUPApplication::YUPApplication()
+class JUCE_API AudioProcessor
 {
-    initialiseYup_Windowing();
-}
+public:
+    AudioProcessor();
+    virtual ~AudioProcessor();
 
-YUPApplication::~YUPApplication()
-{
-    shutdownYup_Windowing();
-}
+    virtual int getNumParameters() const = 0;
+    virtual AudioProcessorParameter& getParameter (int index) = 0;
 
-bool YUPApplication::moreThanOneInstanceAllowed()
-{
-    return true;
-}
+    virtual int getNumAudioOutputs() const = 0;
+    virtual int getNumAudioInputs() const = 0;
 
-void YUPApplication::anotherInstanceStarted (const String& commandLine)
-{
-    ignoreUnused (commandLine);
-}
+    virtual void prepareToPlay (float sampleRate, int maxBlockSize) = 0;
+    virtual void releaseResources() = 0;
 
-void YUPApplication::systemRequestedQuit()
-{
-    quit();
-}
+    virtual void processBlock (yup::AudioSampleBuffer& audioBuffer, yup::MidiBuffer& midiBuffer) = 0;
 
-void YUPApplication::suspended()
-{
-}
+    virtual void flush() {}
 
-void YUPApplication::resumed()
-{
-}
-
-void YUPApplication::unhandledException (const std::exception* ex,
-                                          const String& sourceFilename,
-                                          int lineNumber)
-{
-    ignoreUnused (ex, sourceFilename, lineNumber);
-}
+    virtual bool hasEditor() const = 0;
+    virtual Component* createEditor() { return nullptr; }
+};
 
 } // namespace yup

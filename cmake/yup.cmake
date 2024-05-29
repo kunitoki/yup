@@ -519,13 +519,9 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin)
-    if ("${yup_platform}" MATCHES "^(emscripten)$")
-        message (FATAL_ERROR "YUP -- Cannot enable audio plugins on WASM targets yet")
-    endif()
-
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME PLUGIN_CREATE_CLAP)
+    set (one_value_args TARGET_NAME PLUGIN_CREATE_CLAP PLUGIN_CREATE_STANDALONE)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -539,19 +535,30 @@ function (yup_audio_plugin)
     # ==== Find dependencies
     include (FetchContent)
 
-    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable (glfw)
-    list (APPEND additional_libraries glfw)
+    if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
+        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+        set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+        set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable (glfw)
+        list (APPEND additional_libraries glfw)
 
-    # ==== Fetch plugins SDKS
-    if (YUP_ARG_PLUGIN_CREATE_CLAP)
-        FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
-        FetchContent_MakeAvailable (clap)
-        list (APPEND additional_libraries clap)
+        # ==== Fetch plugins SDKS
+        if (YUP_ARG_PLUGIN_CREATE_CLAP)
+            FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
+            FetchContent_MakeAvailable (clap)
+            list (APPEND additional_libraries clap)
+            list (APPEND additional_definitions YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
+        endif()
+
+        if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT PLUGIN_CREATE_STANDALONE) #  AND NOT YUP_ARG_PLUGIN_CREATE_VST3 ...
+            message (FATAL_ERROR "YUP -- Cannot enable audio plugins on WASM targets yet")
+        endif()
+    endif()
+
+    if (YUP_ARG_PLUGIN_CREATE_STANDALONE)
+        list (APPEND additional_definitions YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1)
     endif()
 
     # ==== Prepare shared binary

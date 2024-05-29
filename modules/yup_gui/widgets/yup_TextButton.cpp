@@ -24,44 +24,30 @@ namespace yup
 
 //==============================================================================
 
-YUPApplication::YUPApplication()
-{
-    initialiseYup_Windowing();
-}
-
-YUPApplication::~YUPApplication()
-{
-    shutdownYup_Windowing();
-}
-
-bool YUPApplication::moreThanOneInstanceAllowed()
-{
-    return true;
-}
-
-void YUPApplication::anotherInstanceStarted (const String& commandLine)
-{
-    ignoreUnused (commandLine);
-}
-
-void YUPApplication::systemRequestedQuit()
-{
-    quit();
-}
-
-void YUPApplication::suspended()
+TextButton::TextButton (StringRef componentID, const Font& font)
+    : Button (componentID)
+    , font (font)
 {
 }
 
-void YUPApplication::resumed()
+void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 {
-}
+    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
+    const auto center = bounds.getCenter();
 
-void YUPApplication::unhandledException (const std::exception* ex,
-                                          const String& sourceFilename,
-                                          int lineNumber)
-{
-    ignoreUnused (ex, sourceFilename, lineNumber);
+    Path backgroundPath;
+    //backgroundPath.clear();
+    backgroundPath.addRoundedRectangle (bounds.reduced (proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
+    g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
+    g.fillPath (backgroundPath);
+
+    StyledText text;
+    //text.clear();
+    text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, getComponentID().toRawUTF8());
+    text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
+
+    g.setStrokeColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
+    g.strokeFittedText (text, {});
 }
 
 } // namespace yup

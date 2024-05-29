@@ -421,3 +421,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #if defined (JUCE_DLL_BUILD) || defined (JUCE_DLL)
  JUCE_IGNORE_MSVC (4251)
 #endif
+
+namespace yup {
+using namespace ::juce;
+} // namespace yup

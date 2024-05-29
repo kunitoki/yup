@@ -58,10 +58,6 @@
 
 //==============================================================================
 
-namespace yup {
-using namespace ::juce; // TODO - move it out
-} // namespace yup
-
 #include "primitives/yup_AffineTransform.h"
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"

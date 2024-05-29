@@ -59,11 +59,11 @@ public:
     Display* getPrimaryDisplay() const;
 
     //==============================================================================
-    
+    // TODO - doxygen
     void updateDisplays();
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (Desktop, true)
+    JUCE_DECLARE_SINGLETON (Desktop, false)
 
 private:
     friend class YUPApplication;

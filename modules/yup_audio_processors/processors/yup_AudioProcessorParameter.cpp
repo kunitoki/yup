@@ -24,44 +24,21 @@ namespace yup
 
 //==============================================================================
 
-YUPApplication::YUPApplication()
-{
-    initialiseYup_Windowing();
-}
-
-YUPApplication::~YUPApplication()
-{
-    shutdownYup_Windowing();
-}
-
-bool YUPApplication::moreThanOneInstanceAllowed()
-{
-    return true;
-}
-
-void YUPApplication::anotherInstanceStarted (const String& commandLine)
-{
-    ignoreUnused (commandLine);
-}
-
-void YUPApplication::systemRequestedQuit()
-{
-    quit();
-}
-
-void YUPApplication::suspended()
+AudioProcessorParameter::AudioProcessorParameter (
+        StringRef name,
+        float minValue,
+        float maxValue,
+        float defaultValue)
+    : currentValue (defaultValue)
+    , minValue (minValue)
+    , maxValue (maxValue)
+    , defaultValue (defaultValue)
+    , name (name)
 {
 }
 
-void YUPApplication::resumed()
+AudioProcessorParameter::~AudioProcessorParameter()
 {
-}
-
-void YUPApplication::unhandledException (const std::exception* ex,
-                                          const String& sourceFilename,
-                                          int lineNumber)
-{
-    ignoreUnused (ex, sourceFilename, lineNumber);
 }
 
 } // namespace yup

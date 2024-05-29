@@ -1311,7 +1311,7 @@ void Desktop::updateDisplays()
 
 //==============================================================================
 
-void staticInitialisation()
+void initialiseYup_Windowing()
 {
     glfwSetErrorCallback (+[](int code, const char* message)
     {
@@ -1350,7 +1350,7 @@ void staticInitialisation()
     GLFWComponentNative::isInitialised.test_and_set();
 }
 
-void staticFinalisation()
+void shutdownYup_Windowing()
 {
     GLFWComponentNative::isInitialised.clear();
 

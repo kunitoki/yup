@@ -100,7 +100,7 @@ private:
 };
 
 /** These are called automatically by the YUPApplication class but must be called by plugins. */
-void staticInitialisation();
-void staticFinalisation();
+void initialiseYup_Windowing();
+void shutdownYup_Windowing();
 
 } // namespace yup

@@ -23,45 +23,32 @@ namespace yup
 {
 
 //==============================================================================
-
-YUPApplication::YUPApplication()
+class JUCE_API AudioProcessorParameter
 {
-    initialiseYup_Windowing();
-}
+public:
+    AudioProcessorParameter (
+        StringRef name,
+        float minValue,
+        float maxValue,
+        float defaultValue);
 
-YUPApplication::~YUPApplication()
-{
-    shutdownYup_Windowing();
-}
+    virtual ~AudioProcessorParameter();
 
-bool YUPApplication::moreThanOneInstanceAllowed()
-{
-    return true;
-}
+    float getValue() const { return currentValue; }
+    void setValue (float value) { currentValue = jlimit (minValue, maxValue, value); }
 
-void YUPApplication::anotherInstanceStarted (const String& commandLine)
-{
-    ignoreUnused (commandLine);
-}
+    float getMinimumValue() const { return minValue; }
+    float getMaximumValue() const { return maxValue; }
+    float getDefaultValue() const { return defaultValue; }
 
-void YUPApplication::systemRequestedQuit()
-{
-    quit();
-}
+    const String& getName() const { return name; }
 
-void YUPApplication::suspended()
-{
-}
-
-void YUPApplication::resumed()
-{
-}
-
-void YUPApplication::unhandledException (const std::exception* ex,
-                                          const String& sourceFilename,
-                                          int lineNumber)
-{
-    ignoreUnused (ex, sourceFilename, lineNumber);
-}
+private:
+    std::atomic<float> currentValue;
+    const float minValue;
+    const float maxValue;
+    const float defaultValue;
+    String name;
+};
 
 } // namespace yup

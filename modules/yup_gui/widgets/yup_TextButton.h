@@ -23,45 +23,17 @@ namespace yup
 {
 
 //==============================================================================
-
-YUPApplication::YUPApplication()
+class JUCE_API TextButton : public Button
 {
-    initialiseYup_Windowing();
-}
+public:
+    //==============================================================================
+    TextButton (StringRef componentID, const Font& font);
 
-YUPApplication::~YUPApplication()
-{
-    shutdownYup_Windowing();
-}
+    //==============================================================================
+    void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) override;
 
-bool YUPApplication::moreThanOneInstanceAllowed()
-{
-    return true;
-}
-
-void YUPApplication::anotherInstanceStarted (const String& commandLine)
-{
-    ignoreUnused (commandLine);
-}
-
-void YUPApplication::systemRequestedQuit()
-{
-    quit();
-}
-
-void YUPApplication::suspended()
-{
-}
-
-void YUPApplication::resumed()
-{
-}
-
-void YUPApplication::unhandledException (const std::exception* ex,
-                                          const String& sourceFilename,
-                                          int lineNumber)
-{
-    ignoreUnused (ex, sourceFilename, lineNumber);
-}
+private:
+    const Font& font;
+};
 
 } // namespace yup
