@@ -50,4 +50,5 @@
 
 //==============================================================================
 #include "processors/yup_AudioProcessorParameter.h"
+#include "processors/yup_AudioProcessorEditor.h"
 #include "processors/yup_AudioProcessor.h"

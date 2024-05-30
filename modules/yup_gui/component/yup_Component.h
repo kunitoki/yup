@@ -179,8 +179,8 @@ private:
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
-    void internalMoved (int xpos, int ypos);
-    void internalResized (int width, int height);
+    void internalMoved (int xpos, int ypos, float scaleDpi);
+    void internalResized (int width, int height, float scaleDpi);
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;

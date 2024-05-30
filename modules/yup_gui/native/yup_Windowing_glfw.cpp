@@ -490,14 +490,19 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     glfwSetScrollCallback (window, glfwMouseScroll);
     glfwSetKeyCallback (window, glfwKeyPress);
 
+    setBounds (
+    {
+        screenBounds.getX(),
+        screenBounds.getY(),
+        jmax (1, screenBounds.getWidth()),
+        jmax (1, screenBounds.getHeight())
+    });
+
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     startTimerHz (desiredFrameRate);
    #else
     startThread (Priority::high);
    #endif
-
-    handleMoved (screenBounds.getX(), screenBounds.getY());
-    handleResized (jmax (1, screenBounds.getWidth()), jmax (1, screenBounds.getHeight()));
 }
 
 GLFWComponentNative::~GLFWComponentNative()
@@ -597,12 +602,12 @@ void GLFWComponentNative::setPosition (const Point<int>& newPosition)
 {
     jassert (window != nullptr);
 
-    if (screenBounds.getPosition() != newPosition)
-    {
-        glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
+    if (screenBounds.getPosition() == newPosition)
+        return;
 
-        screenBounds = screenBounds.withPosition (newPosition);
-    }
+    glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
+
+    screenBounds = screenBounds.withPosition (newPosition);
 }
 
 Rectangle<int> GLFWComponentNative::getBounds() const
@@ -634,6 +639,7 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 
    #endif
 
+    //setPosition (newBounds.getPosition().translated (leftMargin, topMargin));
     glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
 
     screenBounds = newBounds;
@@ -1109,14 +1115,14 @@ void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 void GLFWComponentNative::handleMoved (int xpos, int ypos)
 {
-    component.internalMoved (xpos, ypos);
+    component.internalMoved (xpos, ypos, getScaleDpi());
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
 }
 
 void GLFWComponentNative::handleResized (int width, int height)
 {
-    component.internalResized (width, height);
+    component.internalResized (width, height, getScaleDpi());
 
     screenBounds = screenBounds.withSize (width, height);
 

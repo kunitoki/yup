@@ -52,6 +52,17 @@ function (_yup_boolean_property input_bool output_variable)
     endif()
 endfunction()
 
+function (_yup_file_to_byte_array file_path output_variable)
+    file (READ ${file_path} hex_contents HEX)
+    string (REGEX MATCHALL "([A-Fa-f0-9][A-Fa-f0-9])" separated_hex ${hex_contents})
+
+    list (JOIN separated_hex ", 0x" formatted_hex)
+    string (PREPEND formatted_hex "0x")
+    string (APPEND formatted_hex "")
+
+    set (${output_variable} ${formatted_hex} PARENT_SCOPE)
+endfunction()
+
 function (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
@@ -667,5 +678,98 @@ function (yup_audio_plugin)
     target_link_libraries (${target_name} PRIVATE
         ${additional_libraries}
         ${YUP_ARG_MODULES})
+
+endfunction()
+
+#==============================================================================
+
+function (yup_add_embedded_binary_resources library_name)
+    set (options "")
+    set (one_value_args OUT_DIR HEADER NAMESPACE)
+    set (multi_value_args RESOURCE_NAMES RESOURCES)
+
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    set (binary_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
+    set (binary_header_path "${binary_path}/${YUP_ARG_HEADER}")
+
+    add_library (${library_name} OBJECT)
+
+    target_include_directories (${library_name} PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+    target_compile_features (${library_name} PUBLIC cxx_std_17)
+
+    set_target_properties (${library_name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+    file (WRITE "${binary_header_path}"
+        "#pragma once\n"
+        "\n"
+        "#include <cstddef>\n"
+        "#include <cstdint>\n"
+        "\n")
+
+    if (DEFINED YUP_ARG_NAMESPACE)
+        file (APPEND "${binary_header_path}"
+            "namespace ${YUP_ARG_NAMESPACE}\n"
+            "{\n"
+            "\n")
+    endif()
+
+    foreach (resource_name resource IN ZIP_LISTS YUP_ARG_RESOURCE_NAMES YUP_ARG_RESOURCES)
+        set (full_resource_unit_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/${resource_name}.cpp")
+        set (full_resource_hex_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}/${resource_name}.inc")
+
+        # Add symbol to header
+        file (APPEND "${binary_header_path}"
+            "extern const uint8_t ${resource_name}[];\n"
+            "extern const std::size_t ${resource_name}_size;\n"
+            "\n")
+
+        # Write .cpp
+        file (WRITE "${full_resource_unit_path}"
+            "#include \"${YUP_ARG_HEADER}\"\n"
+            "\n"
+            "#include <cstdint>\n"
+            "\n")
+
+        if (DEFINED YUP_ARG_NAMESPACE)
+            file (APPEND "${full_resource_unit_path}"
+                "namespace ${YUP_ARG_NAMESPACE}\n"
+                "{\n"
+                "\n")
+        endif()
+
+        file (APPEND "${full_resource_unit_path}"
+            "const uint8_t ${resource_name}_data[] = \n"
+            "{\n"
+            "#include \"${resource_name}.inc\"\n"
+            "};\n"
+            "\n"
+            "const std::size_t ${resource_name}_size = sizeof (${resource_name}_data);\n"
+            "\n")
+
+        if (DEFINED YUP_ARG_NAMESPACE)
+            file (APPEND "${full_resource_unit_path}"
+                "\n"
+                "} // namespace ${YUP_ARG_NAMESPACE}\n")
+        endif()
+
+        target_sources (${library_name} PRIVATE "${full_resource_unit_path}")
+
+        _yup_file_to_byte_array (${resource} resource_byte_array)
+        file (WRITE "${full_resource_hex_path}" "${resource_byte_array}")
+
+        list (APPEND resources_hex_files "${full_resource_hex_path}")
+    endforeach()
+
+    if (DEFINED YUP_ARG_NAMESPACE)
+        file (APPEND "${binary_header_path}"
+            "} // namespace ${YUP_ARG_NAMESPACE}\n")
+    endif()
+
+    target_sources (${library_name} PUBLIC "${binary_header_path}")
+    target_include_directories (${library_name} PUBLIC "${binary_path}")
+
+    add_custom_target ("${library_name}_content" DEPENDS "${resources_hex_files}")
+    add_dependencies (${library_name} "${library_name}_content")
 
 endfunction()

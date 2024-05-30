@@ -37,6 +37,9 @@ Component::Component (StringRef componentID)
 
 Component::~Component()
 {
+    if (options.onDesktop)
+        removeFromDesktop();
+
     for (auto component : children)
         component->parentComponent = nullptr;
 
@@ -337,6 +340,8 @@ void Component::addToDesktop (ComponentNative::Flags flags, void* parent, std::o
     options.onDesktop = true;
 
     native = ComponentNative::createFor (*this, flags, parent, framerateRedraw);
+
+    setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
 
 void Component::removeFromDesktop()
@@ -621,22 +626,16 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
     keyUp (keys, position);
 }
 
-void Component::internalResized (int width, int height)
+void Component::internalResized (int width, int height, float scaleDpi)
 {
-    if (options.onDesktop)
-        boundsInParent = boundsInParent.withSize (Size<float> (width, height) * getScaleDpi());
-    else
-        boundsInParent = boundsInParent.withSize (width, height);
+    boundsInParent = boundsInParent.withSize (Size<float> (width, height) * scaleDpi);
 
     resized();
 }
 
-void Component::internalMoved (int xpos, int ypos)
+void Component::internalMoved (int xpos, int ypos, float scaleDpi)
 {
-    if (options.onDesktop)
-        boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos) * getScaleDpi());
-    else
-        boundsInParent = boundsInParent.withPosition (xpos, ypos);
+    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos) * scaleDpi);
 
     moved();
 }

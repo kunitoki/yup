@@ -195,6 +195,7 @@ public:
 
 private:
     std::unique_ptr<AudioProcessor> audioProcessor;
+    std::unique_ptr<AudioProcessorEditor> audioProcessorEditor;
 
     const clap_host_t* host = nullptr;
 	clap_plugin_t plugin;
@@ -211,8 +212,6 @@ private:
     clap_id timerID;
 
     yup::MidiBuffer midiEvents;
-
-    std::unique_ptr<yup::Component> audioProcessorEditor;
 
     static std::atomic_int instancesCount;
 };
@@ -534,16 +533,16 @@ bool AudioPluginWrapperCLAP::initialise()
     // ==== Setup extensions: timer support
     extensionTimerSupport.on_timer = [](const clap_plugin_t* plugin, clap_id timerID)
     {
-        [[maybe_unused]] auto wrapper = getWrapper (plugin);
-
+       #if JUCE_LINUX
         yup::MessageManager::getInstance()->runDispatchLoopUntil (10);
+       #endif
     };
 
     // ==== Setup extensions: gui
     extensionGUI.is_api_supported = [](const clap_plugin_t* plugin, const char* api, bool isFloating) -> bool
     {
         auto wrapper = getWrapper (plugin);
-        if (! wrapper->audioProcessor->hasEditor())
+        if (wrapper->audioProcessor == nullptr || ! wrapper->audioProcessor->hasEditor())
             return false;
 
         return std::string_view (api) == preferredApi && ! isFloating;
@@ -569,9 +568,6 @@ bool AudioPluginWrapperCLAP::initialise()
         if (wrapper->audioProcessorEditor == nullptr)
             return false;
 
-        //wrapper->audioProcessorEditor->setVisible (true);
-        //wrapper->audioProcessorEditor->setSize ({ 600, 400 });
-
         return true;
     };
 
@@ -580,8 +576,6 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::destroy");
 
         auto wrapper = getWrapper (plugin);
-
-        wrapper->audioProcessorEditor->removeFromDesktop();
         wrapper->audioProcessorEditor.reset();
     };
 
@@ -597,35 +591,73 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::get_size");
 
         auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
 
-        *width = static_cast<uint32_t> (wrapper->audioProcessorEditor->getWidth());
-        *height = static_cast<uint32_t> (wrapper->audioProcessorEditor->getHeight());
+        if (wrapper->audioProcessorEditor->isResizable() && wrapper->audioProcessorEditor->getWidth() != 0)
+        {
+            *width = static_cast<uint32_t> (wrapper->audioProcessorEditor->getWidth());
+            *height = static_cast<uint32_t> (wrapper->audioProcessorEditor->getHeight());
+        }
+        else
+        {
+            *width = static_cast<uint32_t> (wrapper->audioProcessorEditor->getPreferredSize().getWidth());
+            *height = static_cast<uint32_t> (wrapper->audioProcessorEditor->getPreferredSize().getHeight());
+        }
 
         return true;
     };
 
     extensionGUI.can_resize = [] (const clap_plugin_t* plugin) -> bool
     {
-        return true;
+        DBG ("clap_plugin_gui_t::can_resize");
+
+        auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
+
+        return wrapper->audioProcessorEditor->isResizable();
     };
 
     extensionGUI.get_resize_hints = [] (const clap_plugin_t* plugin, clap_gui_resize_hints_t* hints) -> bool
     {
-        hints->can_resize_horizontally = true;
-        hints->can_resize_vertically = true;
-        hints->preserve_aspect_ratio = false;
-        hints->aspect_ratio_width = 0;
-        hints->aspect_ratio_height = 0;
+        DBG ("clap_plugin_gui_t::get_resize_hints");
+
+        auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
+
+        hints->can_resize_horizontally = wrapper->audioProcessorEditor->isResizable();
+        hints->can_resize_vertically = wrapper->audioProcessorEditor->isResizable();
+        hints->preserve_aspect_ratio = wrapper->audioProcessorEditor->shouldPreserveAspectRatio();
+        hints->aspect_ratio_width = wrapper->audioProcessorEditor->getPreferredSize().getWidth();
+        hints->aspect_ratio_height = wrapper->audioProcessorEditor->getPreferredSize().getHeight();
 
         return true;
     };
 
     extensionGUI.adjust_size = [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool
     {
-        auto wrapper = getWrapper (plugin);
+        DBG ("clap_plugin_gui_t::adjust_size " << (int32_t)*width << "," << (int32_t)*height);
 
-        *width = static_cast<uint32_t> (wrapper->audioProcessorEditor->getWidth());
-        *height = static_cast<uint32_t> (wrapper->audioProcessorEditor->getHeight());
+        auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
+
+        const auto preferredSize = wrapper->audioProcessorEditor->getPreferredSize();
+
+        if (! wrapper->audioProcessorEditor->isResizable())
+        {
+            *width = static_cast<uint32_t> (preferredSize.getWidth());
+            *height = static_cast<uint32_t> (preferredSize.getHeight());
+        }
+        else if (wrapper->audioProcessorEditor->shouldPreserveAspectRatio())
+        {
+            if (preferredSize.getWidth() > preferredSize.getHeight())
+                *height = static_cast<uint32_t> (*width * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
+            else
+                *width = static_cast<uint32_t> (*height * (preferredSize.getHeight() / static_cast<float> (preferredSize.getWidth())));
+        }
 
         return true;
     };
@@ -635,6 +667,16 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::set_size " << (int32_t)width << "," << (int32_t)height);
 
         auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
+
+        if (! wrapper->audioProcessorEditor->isResizable())
+        {
+            const auto preferredSize = wrapper->audioProcessorEditor->getPreferredSize();
+
+            width = static_cast<uint32_t> (preferredSize.getWidth());
+            height = static_cast<uint32_t> (preferredSize.getHeight());
+        }
 
         wrapper->audioProcessorEditor->setSize ({ static_cast<float> (width), static_cast<float> (height) });
 
@@ -648,6 +690,8 @@ bool AudioPluginWrapperCLAP::initialise()
         jassert (std::string_view (window->api) == preferredApi);
 
         auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
 
         wrapper->audioProcessorEditor->addToDesktop (
             yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow,
@@ -659,6 +703,7 @@ bool AudioPluginWrapperCLAP::initialise()
     extensionGUI.set_transient = [] (const clap_plugin_t* plugin, const clap_window_t* window) -> bool
     {
         DBG ("clap_plugin_gui_t::set_transient");
+
         return false;
     };
 
@@ -672,9 +717,10 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::show");
 
         auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
 
         wrapper->audioProcessorEditor->setVisible (true);
-
         return true;
     };
 
@@ -683,9 +729,10 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::hide");
 
         auto wrapper = getWrapper (plugin);
+        if (wrapper->audioProcessorEditor == nullptr)
+            return false;
 
-        wrapper->audioProcessorEditor->setVisible (true);
-
+        wrapper->audioProcessorEditor->setVisible (false);
         return true;
     };
 
@@ -809,7 +856,7 @@ static const clap_plugin_factory_t pluginFactory =
 
 //==============================================================================
 
-extern "C" const clap_plugin_entry_t clap_entry =
+extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry =
 {
 	.clap_version = CLAP_VERSION_INIT,
 

@@ -28,6 +28,7 @@
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
+#include <BinaryData.h>
 
 template <class T>
 struct Array
@@ -103,20 +104,32 @@ struct Voice
     float parameterOffsets[P_COUNT];
 };
 
-struct MyEditor : public yup::Component
+struct MyEditor : public yup::AudioProcessorEditor
 {
     MyEditor (yup::AudioProcessor& processor)
         : audioProcessor (processor)
     {
         x = std::make_unique<yup::Slider> ("Slider", yup::Font());
         x->setValue (audioProcessor.getParameter (0).getValue());
-
-        x->onValueChanged = [this](float value)
-        {
-            audioProcessor.getParameter (0).setValue (value);
-        };
-
+        x->onValueChanged = [this](float value) { audioProcessor.getParameter (0).setValue (value); };
         addAndMakeVisible (*x);
+
+        setSize (getPreferredSize().to<float>());
+    }
+
+    bool isResizable() const override
+    {
+        return true;
+    }
+
+    bool shouldPreserveAspectRatio() const override
+    {
+        return false;
+    }
+
+    yup::Size<int> getPreferredSize() const override
+    {
+        return { 600, 400 };
     }
 
     void resized() override
@@ -304,7 +317,7 @@ struct MyPlugin : public yup::AudioProcessor
         return true;
     }
 
-    yup::Component* createEditor() override
+    yup::AudioProcessorEditor* createEditor() override
     {
         return new MyEditor (*this);
     }

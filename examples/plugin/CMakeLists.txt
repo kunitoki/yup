@@ -22,6 +22,17 @@ cmake_minimum_required(VERSION 3.28)
 # ==== Prepare target
 set (target_name example_plugin)
 
+yup_add_embedded_binary_resources (
+    BinaryData
+    OUT_DIR BinaryData
+    HEADER BinaryData.h
+    NAMESPACE yup
+    RESOURCE_NAMES
+        RobotoRegularFont
+    RESOURCES
+        ${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf
+)
+
 yup_audio_plugin (
     TARGET_NAME ${target_name}
     PLUGIN_CREATE_CLAP ON
@@ -37,6 +48,7 @@ yup_audio_plugin (
         sheenbidi
         rive
         rive_pls_renderer
+        BinaryData
 )
 
 # ==== Prepare sources

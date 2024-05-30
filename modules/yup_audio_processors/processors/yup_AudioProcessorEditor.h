@@ -23,27 +23,17 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API AudioProcessor
+class JUCE_API AudioProcessorEditor : public Component
 {
 public:
-    AudioProcessor();
-    virtual ~AudioProcessor();
+    AudioProcessorEditor();
+    virtual ~AudioProcessorEditor();
 
-    virtual int getNumParameters() const = 0;
-    virtual AudioProcessorParameter& getParameter (int index) = 0;
+    virtual bool isResizable() const = 0;
+    virtual Size<int> getPreferredSize() const = 0;
 
-    virtual int getNumAudioOutputs() const = 0;
-    virtual int getNumAudioInputs() const = 0;
-
-    virtual void prepareToPlay (float sampleRate, int maxBlockSize) = 0;
-    virtual void releaseResources() = 0;
-
-    virtual void processBlock (yup::AudioSampleBuffer& audioBuffer, yup::MidiBuffer& midiBuffer) = 0;
-
-    virtual void flush() {}
-
-    virtual bool hasEditor() const = 0;
-    virtual AudioProcessorEditor* createEditor() { return nullptr; }
+    virtual bool shouldPreserveAspectRatio() const { return false; }
+    virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
 };
 
 } // namespace yup
