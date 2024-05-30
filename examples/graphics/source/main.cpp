@@ -277,10 +277,10 @@ public:
         setTitle ("main");
 
         for (int i = 0; i < totalRows * totalColumns; ++i)
-            addAndMakeVisible (sliders.add (std::make_unique<CustomSlider> (i, font)));
+            addAndMakeVisible (sliders.add (std::make_unique<yup::Slider> (yup::String (i), font)));
 
-        button = std::make_unique<TextButton> ("xyz", font);
-        addAndMakeVisible (*button);
+        //button = std::make_unique<yup::TextButton> ("xyz", font);
+        //addAndMakeVisible (*button);
 
         //deviceManager.addAudioCallback (this);
         //deviceManager.initialiseWithDefaultDevices (1, 0);
@@ -464,11 +464,11 @@ private:
     yup::WaitableEvent renderReady;
     int readPos = 0;
 
-    yup::OwnedArray<CustomSlider> sliders;
+    yup::OwnedArray<yup::Slider> sliders;
     int totalRows = 4;
     int totalColumns = 4;
 
-    std::unique_ptr<TextButton> button;
+    std::unique_ptr<yup::TextButton> button;
 
     yup::Font font;
     yup::StyledText styleText;

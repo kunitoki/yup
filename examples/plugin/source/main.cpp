@@ -103,6 +103,37 @@ struct Voice
     float parameterOffsets[P_COUNT];
 };
 
+struct MyEditor : public yup::Component
+{
+    MyEditor (yup::AudioProcessor& processor)
+        : audioProcessor (processor)
+    {
+        x = std::make_unique<yup::Slider> ("Slider", yup::Font());
+        x->setValue (audioProcessor.getParameter (0).getValue());
+
+        x->onValueChanged = [this](float value)
+        {
+            audioProcessor.getParameter (0).setValue (value);
+        };
+
+        addAndMakeVisible (*x);
+    }
+
+    void resized() override
+    {
+        x->setBounds (getLocalBounds().largestFittingSquare());
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (0xff404040);
+        g.fillAll();
+    }
+
+    yup::AudioProcessor& audioProcessor;
+    std::unique_ptr<yup::Slider> x;
+};
+
 struct MyPlugin : public yup::AudioProcessor
 {
 	float sampleRate;
@@ -275,7 +306,7 @@ struct MyPlugin : public yup::AudioProcessor
 
     yup::Component* createEditor() override
     {
-        return new yup::Component();
+        return new MyEditor (*this);
     }
 };
 

@@ -272,12 +272,14 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
-    getNativeComponent()->repaint (getBounds());
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->repaint (getBounds());
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
-    getNativeComponent()->repaint (rect.translated (getBounds().getTopLeft()));
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->repaint (rect.translated (getBounds().getTopLeft()));
 }
 
 //==============================================================================

@@ -27,13 +27,15 @@ class JUCE_API Slider : public Component
 {
 public:
     //==============================================================================
-    Slider (int index, const Font& font);
+    Slider (StringRef componentID, const Font& font);
 
     //==============================================================================
     void setValue (float newValue);
     float getValue() const;
 
     virtual void valueChanged();
+
+    std::function<void (float)> onValueChanged;
 
     //==============================================================================
     void resized() override;
@@ -47,6 +49,7 @@ public:
 
 private:
     void updateRenderItems (bool forceAll);
+    void sendValueChanged();
 
     struct
     {

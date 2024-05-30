@@ -455,6 +455,10 @@ function (yup_add_module module_path)
                                   "${module_frameworks}"
                                   "${module_dependencies}"
                                   "${module_arc_enabled}")
+
+        file (GLOB_RECURSE all_module_files_clap "${module_path}/clap/*")
+        add_library (${module_name}_clap-module INTERFACE ${all_module_files_clap})
+        source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
     endif()
 
 endfunction()

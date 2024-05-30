@@ -24,11 +24,10 @@ namespace yup
 
 //==============================================================================
 
-Slider::Slider (int index, const Font& font)
-    : index (index)
+Slider::Slider (StringRef componentID, const Font& font)
+    : Component (componentID)
     , font (font)
 {
-    setTitle (String (index));
     setValue (0.0f);
 }
 
@@ -38,7 +37,7 @@ void Slider::setValue (float newValue)
 {
     value = jlimit (0.0f, 1.0f, newValue);
 
-    valueChanged();
+    sendValueChanged();
 
     updateRenderItems (false);
 }
@@ -191,9 +190,24 @@ void Slider::updateRenderItems (bool forceAll)
     foregroundLine.clear();
     foregroundLine.addLine (Line<float> (pos, center).keepOnlyStart (0.25f));
 
-    text.clear();
-    text.appendText (font, proportionOfHeight(0.1f), proportionOfHeight(0.1f), String (value, 3).toRawUTF8());
-    text.layout (getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)), StyledText::center);
+    /*
+    if (font.getFont() != nullptr)
+    {
+        text.clear();
+        text.appendText (font, proportionOfHeight(0.1f), proportionOfHeight(0.1f), String (value, 3).toRawUTF8());
+        text.layout (getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)), StyledText::center);
+    }
+    */
+}
+
+//==============================================================================
+
+void Slider::sendValueChanged()
+{
+    valueChanged();
+
+    if (onValueChanged)
+        onValueChanged (getValue());
 }
 
 } // namespace yup

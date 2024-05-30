@@ -457,21 +457,12 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
 
     auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
 
-    window = glfwCreateWindow (jmax (1, screenBounds.getWidth()),
-                               jmax (1, screenBounds.getHeight()),
-                               component.getTitle().toRawUTF8(),
-                               monitor,
-                               nullptr);
-
+    window = glfwCreateWindow (1, 1, component.getTitle().toRawUTF8(), monitor, nullptr);
     if (window == nullptr)
         return;
 
     if (parent != nullptr)
-    {
         setNativeParent (nullptr, parent, window);
-    }
-
-    glfwSetWindowPos (window, screenBounds.getX(), screenBounds.getY());
 
    #if JUCE_MAC
     NSWindow* nswindow = glfwGetCocoaWindow (window);
@@ -504,6 +495,9 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
    #else
     startThread (Priority::high);
    #endif
+
+    handleMoved (screenBounds.getX(), screenBounds.getY());
+    handleResized (jmax (1, screenBounds.getWidth()), jmax (1, screenBounds.getHeight()));
 }
 
 GLFWComponentNative::~GLFWComponentNative()
