@@ -37,6 +37,7 @@ yup_standalone_app (
         juce_audio_devices
         yup_graphics
         yup_gui
+        yup_audio_processors
         harfbuzz
         sheenbidi
         rive

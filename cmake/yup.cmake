@@ -217,6 +217,56 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_module_setup_target module_name
+                                   module_cpp_standard
+                                   module_include_path
+                                   module_additional_include_paths
+                                   module_defines
+                                   module_sources
+                                   module_libs
+                                   module_frameworks
+                                   module_dependencies
+                                   module_arc_enabled)
+    target_sources (${module_name} INTERFACE ${module_sources})
+
+    if (module_cpp_standard)
+        target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
+    else()
+        target_compile_features (${module_name} INTERFACE cxx_std_11)
+    endif()
+
+    set_target_properties (${module_name} PROPERTIES
+        CXX_EXTENSIONS              OFF
+        CXX_VISIBILITY_PRESET       "hidden"
+        VISIBILITY_INLINES_HIDDEN   ON)
+
+    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+        set_target_properties (${module_name} PROPERTIES
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
+    endif()
+
+    target_compile_definitions (${module_name} INTERFACE
+        $<$<CONFIG:DEBUG>:DEBUG=1>
+        $<$<CONFIG:RELEASE>:NDEBUG=1>
+        JUCE_MODULE_AVAILABLE_${module_name}=1
+        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        ${module_defines})
+
+    target_include_directories (${module_name} INTERFACE
+        ${module_include_path}
+        ${module_additional_include_paths})
+
+    target_link_libraries (${module_name} INTERFACE
+        ${module_libs}
+        ${module_frameworks})
+
+    target_link_libraries (${module_name} INTERFACE
+        ${module_dependencies})
+
+endfunction()
+
+#==============================================================================
+
 function (yup_add_module module_path)
     get_filename_component (module_path ${module_path} ABSOLUTE)
     get_filename_component (module_name ${module_path} NAME)
@@ -329,7 +379,7 @@ function (yup_add_module module_path)
         endif()
     endif()
 
-    if ((${module_name} STREQUAL "juce_audio_devices") AND ("${yup_platform}" MATCHES "^(android)$"))
+    if (("${module_name}" STREQUAL "juce_audio_devices") AND ("${yup_platform}" MATCHES "^(android)$"))
         add_subdirectory("${module_path}/native/oboe")
         list (APPEND module_libs oboe)
     endif()
@@ -350,19 +400,6 @@ function (yup_add_module module_path)
     endif()
 
     # ==== Setup module sources and properties
-    target_sources (${module_name} INTERFACE ${module_sources})
-
-    if (module_cpp_standard)
-        target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
-    else()
-        target_compile_features (${module_name} INTERFACE cxx_std_11)
-    endif()
-
-    set_target_properties (${module_name} PROPERTIES
-        CXX_EXTENSIONS              OFF
-        CXX_VISIBILITY_PRESET       "hidden"
-        VISIBILITY_INLINES_HIDDEN   ON)
-
     get_cmake_property (multi_config GENERATOR_IS_MULTI_CONFIG)
     if (NOT multi_config)
         if (CMAKE_BUILD_TYPE)
@@ -377,28 +414,16 @@ function (yup_add_module module_path)
         endif()
     endif()
 
-    if ("${yup_platform}" MATCHES "^(osx|ios)$")
-        set_target_properties (${module_name} PROPERTIES
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
-    endif()
-
-    target_compile_definitions (${module_name} INTERFACE
-        $<$<CONFIG:DEBUG>:DEBUG=1>
-        $<$<CONFIG:RELEASE>:NDEBUG=1>
-        JUCE_MODULE_AVAILABLE_${module_name}=1
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        ${module_defines})
-
-    target_include_directories (${module_name} INTERFACE
-        ${module_include_path}
-        ${module_additional_include_paths})
-
-    target_link_libraries (${module_name} INTERFACE
-        ${module_libs}
-        ${module_frameworks})
-
-    target_link_libraries (${module_name} INTERFACE
-        ${module_dependencies})
+    _yup_module_setup_target (${module_name}
+                              "${module_cpp_standard}"
+                              "${module_include_path}"
+                              "${module_additional_include_paths}"
+                              "${module_defines}"
+                              "${module_sources}"
+                              "${module_libs}"
+                              "${module_frameworks}"
+                              "${module_dependencies}"
+                              "${module_arc_enabled}")
 
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
@@ -406,6 +431,31 @@ function (yup_add_module module_path)
     file (GLOB_RECURSE all_module_files "${module_path}/*")
     add_library (${module_name}-module INTERFACE ${all_module_files})
     source_group (TREE ${module_path}/ FILES ${all_module_files})
+
+    # ==== Handle specific libraries for plugin client
+    if ((NOT "${yup_platform}" MATCHES "^(emscripten)$") AND ("${module_name}" STREQUAL "yup_audio_plugin_client"))
+        if ("${yup_platform}" MATCHES "^(ios|osx)$")
+            file (GLOB_RECURSE module_sources_clap "${module_path}/clap/*.mm")
+        else()
+            file (GLOB_RECURSE module_sources_clap "${module_path}/clap/*.cpp")
+        endif()
+
+        add_library (${module_name}_clap INTERFACE)
+
+        set (module_defines_clap "${module_defines}")
+        list (APPEND module_defines_clap YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
+
+        _yup_module_setup_target (${module_name}_clap
+                                  "${module_cpp_standard}"
+                                  "${module_include_path}"
+                                  "${module_additional_include_paths}"
+                                  "${module_defines_clap}"
+                                  "${module_sources_clap}"
+                                  "${module_libs}"
+                                  "${module_frameworks}"
+                                  "${module_dependencies}"
+                                  "${module_arc_enabled}")
+    endif()
 
 endfunction()
 
@@ -529,7 +579,7 @@ function (yup_audio_plugin)
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (additional_definitions "")
     set (additional_options "")
-    set (additional_libraries "")
+    set (additional_libraries "yup_audio_plugin_client")
     set (additional_link_options "")
 
     # ==== Find dependencies
@@ -548,8 +598,7 @@ function (yup_audio_plugin)
         if (YUP_ARG_PLUGIN_CREATE_CLAP)
             FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
             FetchContent_MakeAvailable (clap)
-            list (APPEND additional_libraries clap)
-            list (APPEND additional_definitions YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
+            list (APPEND additional_libraries clap yup_audio_plugin_client_clap)
         endif()
 
         if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT PLUGIN_CREATE_STANDALONE) #  AND NOT YUP_ARG_PLUGIN_CREATE_VST3 ...
