@@ -32,7 +32,6 @@ DocumentWindow::DocumentWindow (ComponentNative::Flags flags, const Color& backg
 
 DocumentWindow::~DocumentWindow()
 {
-    removeFromDesktop();
 }
 
 //==============================================================================

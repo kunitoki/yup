@@ -145,20 +145,30 @@ bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 static const clap_plugin_descriptor_t pluginDescriptor =
 {
 	.clap_version = CLAP_VERSION_INIT,
-	.id = "kunitoki.YupCLAP",
-	.name = "YupCLAP",
-	.vendor = "kunitoki",
-	.url = "https://github.com/kunitoki/yup",
-	.manual_url = "https://github.com/kunitoki/yup",
-	.support_url = "https://github.com/kunitoki/yup",
-	.version = "1.0.0",
-	.description = "The best audio plugin ever.",
+	.id = YupPlugin_Id,
+	.name = YupPlugin_Name,
+	.vendor = YupPlugin_Vendor,
+	.url = YupPlugin_URL,
+	.manual_url = YupPlugin_URL,
+	.support_url = YupPlugin_URL,
+	.version = YupPlugin_Version,
+	.description = YupPlugin_Description,
 
 	.features = (const char *[])
     {
+       #if YupPlugin_IsSynth
 		CLAP_PLUGIN_FEATURE_INSTRUMENT,
 		CLAP_PLUGIN_FEATURE_SYNTHESIZER,
+       #else
+        CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
+       #endif
+
+       #if YupPlugin_IsMono
+		CLAP_PLUGIN_FEATURE_MONO,
+       #else
 		CLAP_PLUGIN_FEATURE_STEREO,
+       #endif
+
 		nullptr,
 	},
 };

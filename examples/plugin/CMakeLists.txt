@@ -34,8 +34,17 @@ yup_add_embedded_binary_resources (
 )
 
 yup_audio_plugin (
-    TARGET_NAME ${target_name}
-    PLUGIN_CREATE_CLAP ON
+    TARGET_NAME                 ${target_name}
+    PLUGIN_ID                   "kunitoki.YupCLAP"
+    PLUGIN_NAME                 "YupCLAPPZ"
+    PLUGIN_VENDOR               "kunitoki"
+    PLUGIN_VERSION              "1.0.0"
+    PLUGIN_DESCRIPTION          "The best audio plugin ever."
+    PLUGIN_URL                  "https://github.com/kunitoki/yup"
+    PLUGING_IS_SYNTH            ON
+    PLUGIN_IS_MONO              OFF
+    PLUGIN_CREATE_CLAP          ON
+    PLUGIN_CREATE_STANDALONE    OFF
     MODULES
         juce_core
         juce_events

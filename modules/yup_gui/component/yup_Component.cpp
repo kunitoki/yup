@@ -329,7 +329,7 @@ bool Component::isOnDesktop() const
 void Component::addToDesktop (ComponentNative::Flags flags, void* parent, std::optional<float> framerateRedraw)
 {
     if (options.onDesktop)
-        return;
+        removeFromDesktop();
 
     if (parentComponent != nullptr)
     {

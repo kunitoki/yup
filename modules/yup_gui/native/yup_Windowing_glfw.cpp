@@ -420,6 +420,7 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     int forcedRedraws = 0;
+    static constexpr int defaultForcedRedraws = 3;
 
     Rectangle<float> currentRepaintArea;
 
@@ -923,7 +924,7 @@ void GLFWComponentNative::renderContext()
         renderer = context->makeRenderer (contentWidth, contentHeight);
 
         repaint (Rectangle<float> (0, 0, contentWidth, contentHeight));
-        forcedRedraws = 2;
+        forcedRedraws = defaultForcedRedraws;
     }
 
     if (parentWindow != nullptr)
@@ -980,7 +981,7 @@ void GLFWComponentNative::triggerRenderingUpdate()
     if (shouldRenderContinuous)
         return;
 
-    forcedRedraws = 2;
+    forcedRedraws = defaultForcedRedraws;
     commandEvent.signal();
 }
 

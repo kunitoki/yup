@@ -230,8 +230,7 @@ endfunction()
 
 function (_yup_module_setup_target module_name
                                    module_cpp_standard
-                                   module_include_path
-                                   module_additional_include_paths
+                                   module_include_paths
                                    module_defines
                                    module_sources
                                    module_libs
@@ -264,8 +263,7 @@ function (_yup_module_setup_target module_name
         ${module_defines})
 
     target_include_directories (${module_name} INTERFACE
-        ${module_include_path}
-        ${module_additional_include_paths})
+        ${module_include_paths})
 
     target_link_libraries (${module_name} INTERFACE
         ${module_libs}
@@ -273,6 +271,72 @@ function (_yup_module_setup_target module_name
 
     target_link_libraries (${module_name} INTERFACE
         ${module_dependencies})
+
+endfunction()
+
+#==============================================================================
+
+function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
+    if ("${yup_platform}" MATCHES "^(emscripten)$")
+        return()
+    endif()
+
+    set (options "")
+    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGING_IS_SYNTH PLUGIN_IS_MONO)
+    set (multi_value_args "")
+
+    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    set (custom_target_name "${target_name}_clap")
+
+    add_library (${custom_target_name} INTERFACE)
+
+    get_target_property (module_path ${plugin_client_target} YUP_MODULE_PATH)
+    get_target_property (module_cpp_standard ${plugin_client_target} YUP_MODULE_CPP_STANDARD)
+    get_target_property (module_include_paths ${plugin_client_target} YUP_MODULE_INCLUDE_PATHS)
+    get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
+    get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
+    get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
+    get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
+    get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
+
+    list (APPEND module_defines YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
+    list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
+    list (APPEND module_defines YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}")
+    list (APPEND module_defines YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}")
+    list (APPEND module_defines YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}")
+    list (APPEND module_defines YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}")
+    list (APPEND module_defines YupPlugin_URL="${YUP_ARG_PLUGIN_URL}")
+    if (YUP_ARG_PLUGIN_IS_SYNTH)
+        list (APPEND module_defines YupPlugin_IsSynth=1)
+    else()
+        list (APPEND module_defines YupPlugin_IsSynth=0)
+    endif()
+    if (YUP_ARG_PLUGIN_IS_MONO)
+        list (APPEND module_defines YupPlugin_IsMono=1)
+    else()
+        list (APPEND module_defines YupPlugin_IsMono=0)
+    endif()
+
+    if ("${yup_platform}" MATCHES "^(ios|osx)$")
+        file (GLOB_RECURSE module_sources "${module_path}/clap/*.mm")
+    else()
+        file (GLOB_RECURSE module_sources "${module_path}/clap/*.cpp")
+    endif()
+
+    _yup_module_setup_target (${custom_target_name}
+                              "${module_cpp_standard}"
+                              "${module_include_paths}"
+                              "${module_defines}"
+                              "${module_sources}"
+                              "${module_libs}"
+                              "${module_frameworks}"
+                              "${module_dependencies}"
+                              "${module_arc_enabled}")
+
+    file (GLOB_RECURSE all_module_files_clap "${module_path}/clap/*")
+    add_library (${custom_target_name}-module INTERFACE ${all_module_files_clap})
+    source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
 
 endfunction()
 
@@ -303,6 +367,7 @@ function (yup_add_module module_path)
     # ==== Assign configs to variables from module declaration string
     set (module_cpp_standard "")
     set (module_dependencies "")
+    set (module_include_paths "")
     set (module_defines "")
     set (module_wasm_defines "")
     set (module_searchpaths "")
@@ -397,11 +462,11 @@ function (yup_add_module module_path)
 
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
+    list (APPEND module_include_paths "${module_include_path}")
 
-    set (module_additional_include_paths "")
     foreach (searchpath ${module_searchpaths})
         if (EXISTS "${module_path}/${searchpath}")
-            list (APPEND module_additional_include_paths "${module_path}/${searchpath}")
+            list (APPEND module_include_paths "${module_path}/${searchpath}")
         endif()
     endforeach()
 
@@ -427,8 +492,7 @@ function (yup_add_module module_path)
 
     _yup_module_setup_target (${module_name}
                               "${module_cpp_standard}"
-                              "${module_include_path}"
-                              "${module_additional_include_paths}"
+                              "${module_include_paths}"
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
@@ -443,34 +507,19 @@ function (yup_add_module module_path)
     add_library (${module_name}-module INTERFACE ${all_module_files})
     source_group (TREE ${module_path}/ FILES ${all_module_files})
 
-    # ==== Handle specific libraries for plugin client
-    if ((NOT "${yup_platform}" MATCHES "^(emscripten)$") AND ("${module_name}" STREQUAL "yup_audio_plugin_client"))
-        if ("${yup_platform}" MATCHES "^(ios|osx)$")
-            file (GLOB_RECURSE module_sources_clap "${module_path}/clap/*.mm")
-        else()
-            file (GLOB_RECURSE module_sources_clap "${module_path}/clap/*.cpp")
-        endif()
-
-        add_library (${module_name}_clap INTERFACE)
-
-        set (module_defines_clap "${module_defines}")
-        list (APPEND module_defines_clap YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
-
-        _yup_module_setup_target (${module_name}_clap
-                                  "${module_cpp_standard}"
-                                  "${module_include_path}"
-                                  "${module_additional_include_paths}"
-                                  "${module_defines_clap}"
-                                  "${module_sources_clap}"
-                                  "${module_libs}"
-                                  "${module_frameworks}"
-                                  "${module_dependencies}"
-                                  "${module_arc_enabled}")
-
-        file (GLOB_RECURSE all_module_files_clap "${module_path}/clap/*")
-        add_library (${module_name}_clap-module INTERFACE ${all_module_files_clap})
-        source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
-    endif()
+    # ==== Setup parent scope variables
+    set (${module_name}_Found ON PARENT_SCOPE)
+    set_target_properties (${module_name} PROPERTIES
+        YUP_MODULE_PATH "${module_path}"
+        YUP_MODULE_HEADER "${module_header}"
+        YUP_MODULE_CPP_STANDARD "${module_cpp_standard}"
+        YUP_MODULE_INCLUDE_PATHS "${module_include_paths}"
+        YUP_MODULE_DEFINES "${module_defines}"
+        YUP_MODULE_SOURCES "${module_sources}"
+        YUP_MODULE_LIBS "${module_libs}"
+        YUP_MODULE_FRAMEWORK "${module_frameworks}"
+        YUP_MODULE_DEPENDENCIES "${module_dependencies}"
+        YUP_MODULE_ARC_ENABLED "${module_arc_enabled}")
 
 endfunction()
 
@@ -613,7 +662,10 @@ function (yup_audio_plugin)
         if (YUP_ARG_PLUGIN_CREATE_CLAP)
             FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
             FetchContent_MakeAvailable (clap)
-            list (APPEND additional_libraries clap yup_audio_plugin_client_clap)
+
+            _yup_module_setup_plugin_client_clap (${target_name} yup_audio_plugin_client ${YUP_ARG_UNPARSED_ARGUMENTS})
+
+            list (APPEND additional_libraries clap ${target_name}_clap)
         endif()
 
         if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT PLUGIN_CREATE_STANDALONE) #  AND NOT YUP_ARG_PLUGIN_CREATE_VST3 ...
