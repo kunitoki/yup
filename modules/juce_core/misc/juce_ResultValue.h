@@ -116,16 +116,16 @@ public:
         return std::get<1> (valueOrErrorMessage);
     }
 
-    /** Returns the const reference that was set when this result was created. */
-    const T& getReference() const noexcept
+    /** Returns the mutable reference that was set when this result was created. */
+    T& getReference() noexcept
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
         return std::get<1> (valueOrErrorMessage);
     }
 
-    /** Returns the mutable reference that was set when this result was created. */
-    T& getReference() noexcept
+    /** Returns the const reference that was set when this result was created. */
+    const T& getReference() const noexcept
     {
         jassert (valueOrErrorMessage.index() == 1); // Trying to access the value of the result, when the result is holding an error instead!
 
@@ -178,7 +178,7 @@ private:
     {
     }
 
-    // These casts are private to prevent people trying to use the Result object in numeric contexts
+    // These casts are private to prevent people trying to use the ResultValue object in numeric contexts
     operator int() const;
     operator void*() const;
 };
