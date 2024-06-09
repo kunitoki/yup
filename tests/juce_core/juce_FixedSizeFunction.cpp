@@ -91,19 +91,19 @@ struct ConstructCounter
     ConstructCounts& counts;
 };
 
-TEST(FixedSizeFunctionTests, DefaultConstructor)
+TEST (FixedSizeFunctionTests, DefaultConstructor)
 {
     FixedSizeFunction<64, void()> fn;
     EXPECT_FALSE(fn);
 }
 
-TEST(FixedSizeFunctionTests, NullptrConstructor)
+TEST (FixedSizeFunctionTests, NullptrConstructor)
 {
     FixedSizeFunction<64, void()> fn(nullptr);
     EXPECT_FALSE(fn);
 }
 
-TEST(FixedSizeFunctionTests, CallableConstructor)
+TEST (FixedSizeFunctionTests, CallableConstructor)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn([&] { ++called; });
@@ -112,7 +112,7 @@ TEST(FixedSizeFunctionTests, CallableConstructor)
     EXPECT_EQ(called, 1);
 }
 
-TEST(FixedSizeFunctionTests, MoveConstructor)
+TEST (FixedSizeFunctionTests, MoveConstructor)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn1([&] { ++called; });
@@ -122,7 +122,7 @@ TEST(FixedSizeFunctionTests, MoveConstructor)
     EXPECT_EQ(called, 1);
 }
 
-TEST(FixedSizeFunctionTests, MoveAssignment)
+TEST (FixedSizeFunctionTests, MoveAssignment)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn1([&] { ++called; });
@@ -133,7 +133,7 @@ TEST(FixedSizeFunctionTests, MoveAssignment)
     EXPECT_EQ(called, 1);
 }
 
-TEST(FixedSizeFunctionTests, CallOperator)
+TEST (FixedSizeFunctionTests, CallOperator)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn([&] { ++called; });
@@ -141,19 +141,19 @@ TEST(FixedSizeFunctionTests, CallOperator)
     EXPECT_EQ(called, 1);
 }
 
-TEST(FixedSizeFunctionTests, ThrowOnCallEmpty)
+TEST (FixedSizeFunctionTests, ThrowOnCallEmpty)
 {
     FixedSizeFunction<64, void()> fn;
     EXPECT_THROW(fn(), std::bad_function_call);
 }
 
-TEST(FixedSizeFunctionTests, CallableWithArguments)
+TEST (FixedSizeFunctionTests, CallableWithArguments)
 {
     FixedSizeFunction<64, int(int, int)> fn([](int a, int b) { return a + b; });
     EXPECT_EQ(fn(2, 3), 5);
 }
 
-TEST(FixedSizeFunctionTests, AssignCallable)
+TEST (FixedSizeFunctionTests, AssignCallable)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn;
@@ -162,7 +162,7 @@ TEST(FixedSizeFunctionTests, AssignCallable)
     EXPECT_EQ(called, 1);
 }
 
-TEST(FixedSizeFunctionTests, ClearFunction)
+TEST (FixedSizeFunctionTests, ClearFunction)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn([&] { ++called; });
@@ -171,7 +171,7 @@ TEST(FixedSizeFunctionTests, ClearFunction)
     EXPECT_THROW(fn(), std::bad_function_call);
 }
 
-TEST(FixedSizeFunctionTests, DifferentSizes)
+TEST (FixedSizeFunctionTests, DifferentSizes)
 {
     int called = 0;
     FixedSizeFunction<128, void()> fn1([&] { ++called; });
@@ -181,7 +181,7 @@ TEST(FixedSizeFunctionTests, DifferentSizes)
     EXPECT_EQ(called, 1);
 }
 
-TEST(FixedSizeFunctionTests, NullAssignment)
+TEST (FixedSizeFunctionTests, NullAssignment)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn([&] { ++called; });
@@ -190,7 +190,7 @@ TEST(FixedSizeFunctionTests, NullAssignment)
     EXPECT_THROW(fn(), std::bad_function_call);
 }
 
-TEST(FixedSizeFunctionTests, ConstructedAndCalledFromLambda)
+TEST (FixedSizeFunctionTests, ConstructedAndCalledFromLambda)
 {
     const auto result = 5;
     bool wasCalled = false;
@@ -203,7 +203,7 @@ TEST(FixedSizeFunctionTests, ConstructedAndCalledFromLambda)
     EXPECT_EQ(result, out);
 }
 
-TEST(FixedSizeFunctionTests, VoidFunctionConstructedFromReturnValueFunction)
+TEST (FixedSizeFunctionTests, VoidFunctionConstructedFromReturnValueFunction)
 {
     bool wasCalled = false;
     const auto lambda = [&] { wasCalled = true; return 5; };
@@ -213,7 +213,7 @@ TEST(FixedSizeFunctionTests, VoidFunctionConstructedFromReturnValueFunction)
     EXPECT_TRUE(wasCalled);
 }
 
-TEST(FixedSizeFunctionTests, ConstructedAndCalledFromFunctionPointer)
+TEST (FixedSizeFunctionTests, ConstructedAndCalledFromFunctionPointer)
 {
     bool state = false;
     auto toggleBool = [](bool& b) { b = !b; };
@@ -230,7 +230,7 @@ TEST(FixedSizeFunctionTests, ConstructedAndCalledFromFunctionPointer)
     EXPECT_TRUE(state);
 }
 
-TEST(FixedSizeFunctionTests, DefaultConstructedFunctionsThrowIfCalled)
+TEST (FixedSizeFunctionTests, DefaultConstructedFunctionsThrowIfCalled)
 {
     const auto a = FixedSizeFunction<8, void()>();
     EXPECT_THROW(a(), std::bad_function_call);
@@ -239,7 +239,7 @@ TEST(FixedSizeFunctionTests, DefaultConstructedFunctionsThrowIfCalled)
     EXPECT_THROW(b(), std::bad_function_call);
 }
 
-TEST(FixedSizeFunctionTests, FunctionsCanBeMoved)
+TEST (FixedSizeFunctionTests, FunctionsCanBeMoved)
 {
     ConstructCounts counts;
 
@@ -259,7 +259,7 @@ TEST(FixedSizeFunctionTests, FunctionsCanBeMoved)
     EXPECT_EQ(counts, ConstructCounts().withMoves(2).withDestructions(1).withCalls(3));
 }
 
-TEST(FixedSizeFunctionTests, FunctionsAreDestructedProperly)
+TEST (FixedSizeFunctionTests, FunctionsAreDestructedProperly)
 {
     ConstructCounts counts;
     const ConstructCounter toCopy{ counts };
@@ -272,7 +272,7 @@ TEST(FixedSizeFunctionTests, FunctionsAreDestructedProperly)
     EXPECT_EQ(counts, ConstructCounts().withCopies(1).withDestructions(1));
 }
 
-TEST(FixedSizeFunctionTests, AvoidDestructingFunctionsThatFailToConstruct)
+TEST (FixedSizeFunctionTests, AvoidDestructingFunctionsThatFailToConstruct)
 {
     struct BadConstructor
     {
@@ -301,7 +301,7 @@ TEST(FixedSizeFunctionTests, AvoidDestructingFunctionsThatFailToConstruct)
     EXPECT_EQ(counts, ConstructCounts().withConstructions(1));
 }
 
-TEST(FixedSizeFunctionTests, EqualityChecksWork)
+TEST (FixedSizeFunctionTests, EqualityChecksWork)
 {
     FixedSizeFunction<8, void()> a;
     EXPECT_FALSE(bool(a));
@@ -318,7 +318,7 @@ TEST(FixedSizeFunctionTests, EqualityChecksWork)
     EXPECT_TRUE(nullptr != b);
 }
 
-TEST(FixedSizeFunctionTests, FunctionsCanBeCleared)
+TEST (FixedSizeFunctionTests, FunctionsCanBeCleared)
 {
     FixedSizeFunction<8, void()> fn([] {});
     EXPECT_TRUE(bool(fn));
@@ -327,7 +327,7 @@ TEST(FixedSizeFunctionTests, FunctionsCanBeCleared)
     EXPECT_FALSE(bool(fn));
 }
 
-TEST(FixedSizeFunctionTests, FunctionsCanBeAssigned)
+TEST (FixedSizeFunctionTests, FunctionsCanBeAssigned)
 {
     using Fn = FixedSizeFunction<8, void()>;
 
@@ -361,7 +361,7 @@ TEST(FixedSizeFunctionTests, FunctionsCanBeAssigned)
     EXPECT_EQ(numCallsB, 2);
 }
 
-TEST(FixedSizeFunctionTests, FunctionsMayMutateInternalState)
+TEST (FixedSizeFunctionTests, FunctionsMayMutateInternalState)
 {
     using Fn = FixedSizeFunction<64, void()>;
 
@@ -381,7 +381,7 @@ TEST(FixedSizeFunctionTests, FunctionsMayMutateInternalState)
     EXPECT_EQ(numCalls, 2);
 }
 
-TEST(FixedSizeFunctionTests, FunctionsCanSinkMoveOnlyParameters)
+TEST (FixedSizeFunctionTests, FunctionsCanSinkMoveOnlyParameters)
 {
     using FnA = FixedSizeFunction<64, int(std::unique_ptr<int>)>;
 
@@ -405,7 +405,7 @@ TEST(FixedSizeFunctionTests, FunctionsCanSinkMoveOnlyParameters)
     EXPECT_EQ(value, newValue);
 }
 
-TEST(FixedSizeFunctionTests, FunctionsCanBeConvertedFromSmallerFunctions)
+TEST (FixedSizeFunctionTests, FunctionsCanBeConvertedFromSmallerFunctions)
 {
     using SmallFn = FixedSizeFunction<20, void()>;
     using LargeFn = FixedSizeFunction<21, void()>;

@@ -59,14 +59,14 @@ protected:
     }
 };
 
-TEST_F(StringPairArrayTests, EmptyOnInitialization)
+TEST_F (StringPairArrayTests, EmptyOnInitialization)
 {
     StringPairArray spa;
     EXPECT_EQ(spa.size(), 0);
     EXPECT_TRUE(spa.getIgnoresCase());  // Default should ignore case
 }
 
-TEST_F(StringPairArrayTests, ParameterizedConstructorCaseSensitivity)
+TEST_F (StringPairArrayTests, ParameterizedConstructorCaseSensitivity)
 {
     StringPairArray caseSensitive(false);
     EXPECT_FALSE(caseSensitive.getIgnoresCase());
@@ -75,7 +75,7 @@ TEST_F(StringPairArrayTests, ParameterizedConstructorCaseSensitivity)
     EXPECT_TRUE(caseInsensitive.getIgnoresCase());
 }
 
-TEST_F(StringPairArrayTests, CopyConstructor)
+TEST_F (StringPairArrayTests, CopyConstructor)
 {
     StringPairArray original;
     addDefaultPairs(original);
@@ -88,7 +88,7 @@ TEST_F(StringPairArrayTests, CopyConstructor)
     EXPECT_TRUE(original == copy);  // Ensure the copy is identical
 }
 
-TEST_F(StringPairArrayTests, MoveConstructor)
+TEST_F (StringPairArrayTests, MoveConstructor)
 {
     StringPairArray original;
     addDefaultPairs(original);
@@ -101,7 +101,7 @@ TEST_F(StringPairArrayTests, MoveConstructor)
     EXPECT_EQ(moved["key3"], "value3");
 }
 
-TEST_F(StringPairArrayTests, CopyAssignmentOperator)
+TEST_F (StringPairArrayTests, CopyAssignmentOperator)
 {
     StringPairArray original;
     addDefaultPairs(original);
@@ -115,7 +115,7 @@ TEST_F(StringPairArrayTests, CopyAssignmentOperator)
     EXPECT_TRUE(original == copy);
 }
 
-TEST_F(StringPairArrayTests, MoveAssignmentOperator)
+TEST_F (StringPairArrayTests, MoveAssignmentOperator)
 {
     StringPairArray original;
     addDefaultPairs(original);
@@ -128,7 +128,7 @@ TEST_F(StringPairArrayTests, MoveAssignmentOperator)
     EXPECT_EQ(moved["key3"], "value3");
 }
 
-TEST_F(StringPairArrayTests, SetAndGetValues)
+TEST_F (StringPairArrayTests, SetAndGetValues)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -138,7 +138,7 @@ TEST_F(StringPairArrayTests, SetAndGetValues)
     EXPECT_EQ(spa.size(), 3);
 }
 
-TEST_F(StringPairArrayTests, ContainsKey)
+TEST_F (StringPairArrayTests, ContainsKey)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -146,7 +146,7 @@ TEST_F(StringPairArrayTests, ContainsKey)
     EXPECT_FALSE(spa.containsKey("nonexistentKey"));
 }
 
-TEST_F(StringPairArrayTests, CaseSensitivity)
+TEST_F (StringPairArrayTests, CaseSensitivity)
 {
     StringPairArray spa(true);
     spa.set("Key", "value");
@@ -157,7 +157,7 @@ TEST_F(StringPairArrayTests, CaseSensitivity)
     EXPECT_TRUE(spa["key"].isEmpty());
 }
 
-TEST_F(StringPairArrayTests, RemoveByKey)
+TEST_F (StringPairArrayTests, RemoveByKey)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -166,7 +166,7 @@ TEST_F(StringPairArrayTests, RemoveByKey)
     EXPECT_EQ(spa.size(), 2);
 }
 
-TEST_F(StringPairArrayTests, RemoveByIndex)
+TEST_F (StringPairArrayTests, RemoveByIndex)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -175,7 +175,7 @@ TEST_F(StringPairArrayTests, RemoveByIndex)
     EXPECT_EQ(spa.size(), 2);
 }
 
-TEST_F(StringPairArrayTests, ClearAll)
+TEST_F (StringPairArrayTests, ClearAll)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -183,7 +183,7 @@ TEST_F(StringPairArrayTests, ClearAll)
     EXPECT_EQ(spa.size(), 0);
 }
 
-TEST_F(StringPairArrayTests, AssignmentOperator)
+TEST_F (StringPairArrayTests, AssignmentOperator)
 {
     StringPairArray spa1;
     addDefaultPairs(spa1);
@@ -191,7 +191,7 @@ TEST_F(StringPairArrayTests, AssignmentOperator)
     EXPECT_EQ(spa2["key1"], "value1");
 }
 
-TEST_F(StringPairArrayTests, EqualityOperator)
+TEST_F (StringPairArrayTests, EqualityOperator)
 {
     StringPairArray spa1, spa2;
     addDefaultPairs(spa1);
@@ -201,7 +201,7 @@ TEST_F(StringPairArrayTests, EqualityOperator)
     EXPECT_FALSE(spa1 == spa2);
 }
 
-TEST_F(StringPairArrayTests, AddArray)
+TEST_F (StringPairArrayTests, AddArray)
 {
     StringPairArray spa1, spa2;
     addDefaultPairs(spa1);
@@ -211,14 +211,14 @@ TEST_F(StringPairArrayTests, AddArray)
     EXPECT_EQ(spa2["key1"], "value1");
 }
 
-TEST_F(StringPairArrayTests, DescriptionNotEmpty)
+TEST_F (StringPairArrayTests, DescriptionNotEmpty)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
     EXPECT_FALSE(spa.getDescription().isEmpty());
 }
 
-TEST_F(StringPairArrayTests, MinimiseStorageOverheads)
+TEST_F (StringPairArrayTests, MinimiseStorageOverheads)
 {
     StringPairArray spa;
     addDefaultPairs(spa);
@@ -226,7 +226,7 @@ TEST_F(StringPairArrayTests, MinimiseStorageOverheads)
     EXPECT_EQ(spa.size(), 3);
 }
 
-TEST_F(StringPairArrayTests, AddMapRespectsCaseSensitivity)
+TEST_F (StringPairArrayTests, AddMapRespectsCaseSensitivity)
 {
     StringPairArray insensitive{true};  // Case insensitive
     insensitive.addMap({{"duplicate", "a"}, {"Duplicate", "b"}});
@@ -241,7 +241,7 @@ TEST_F(StringPairArrayTests, AddMapRespectsCaseSensitivity)
     EXPECT_EQ(sensitive["DUPLICATE"], ""_S);
 }
 
-TEST_F(StringPairArrayTests, AddMapOverwritesExistingPairs)
+TEST_F (StringPairArrayTests, AddMapOverwritesExistingPairs)
 {
     StringPairArray insensitive{true};
     insensitive.set("key", "value");
@@ -258,7 +258,7 @@ TEST_F(StringPairArrayTests, AddMapOverwritesExistingPairs)
     EXPECT_EQ(sensitive.getAllValues(), (StringArray{"another value", "VALUE"}));
 }
 
-TEST_F(StringPairArrayTests, AddMapDoesNotChangeOrderOfExistingKeys)
+TEST_F (StringPairArrayTests, AddMapDoesNotChangeOrderOfExistingKeys)
 {
     StringPairArray array;
     array.set("a", "a");
@@ -272,7 +272,7 @@ TEST_F(StringPairArrayTests, AddMapDoesNotChangeOrderOfExistingKeys)
     EXPECT_EQ(array.getAllValues(), (StringArray{"a", "Z", "B", "y", "c", "0"}));
 }
 
-TEST_F(StringPairArrayTests, AddMapHasEquivalentBehaviourToAddArray)
+TEST_F (StringPairArrayTests, AddMapHasEquivalentBehaviourToAddArray)
 {
     StringPairArray initial;
     initial.set("aaa", "aaa");

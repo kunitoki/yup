@@ -30,7 +30,7 @@ static String operator"" _S(const char* chars, size_t)
     return String{ chars };
 }
 
-TEST(ResultTests, CreateSuccessResult)
+TEST (ResultTests, CreateSuccessResult)
 {
     Result success = Result::ok();
     EXPECT_TRUE(success.wasOk());
@@ -38,7 +38,7 @@ TEST(ResultTests, CreateSuccessResult)
     EXPECT_EQ(success.getErrorMessage(), ""_S);
 }
 
-TEST(ResultTests, CreateFailureResultWithMessage)
+TEST (ResultTests, CreateFailureResultWithMessage)
 {
     Result failure = Result::fail("An error occurred");
     EXPECT_FALSE(failure.wasOk());
@@ -46,7 +46,7 @@ TEST(ResultTests, CreateFailureResultWithMessage)
     EXPECT_EQ(failure.getErrorMessage(), "An error occurred"_S);
 }
 
-TEST(ResultTests, CreateFailureResultWithEmptyMessage)
+TEST (ResultTests, CreateFailureResultWithEmptyMessage)
 {
     Result failure = Result::fail(""_S);
     EXPECT_FALSE(failure.wasOk());
@@ -54,7 +54,7 @@ TEST(ResultTests, CreateFailureResultWithEmptyMessage)
     EXPECT_EQ(failure.getErrorMessage(), "Unknown Error"_S);
 }
 
-TEST(ResultTests, ConversionOperators)
+TEST (ResultTests, ConversionOperators)
 {
     Result success = Result::ok();
     Result failure = Result::fail("Error");
@@ -65,7 +65,7 @@ TEST(ResultTests, ConversionOperators)
     EXPECT_TRUE(!failure);
 }
 
-TEST(ResultTests, CopyConstructor)
+TEST (ResultTests, CopyConstructor)
 {
     Result original = Result::fail("Original error");
     Result copy = original;
@@ -74,7 +74,7 @@ TEST(ResultTests, CopyConstructor)
     EXPECT_EQ(copy.getErrorMessage(), original.getErrorMessage());
 }
 
-TEST(ResultTests, MoveConstructor)
+TEST (ResultTests, MoveConstructor)
 {
     Result original = Result::fail("Original error");
     Result moved = std::move(original);
@@ -88,7 +88,7 @@ TEST(ResultTests, MoveConstructor)
     EXPECT_EQ(original.getErrorMessage(), ""_S);
 }
 
-TEST(ResultTests, CopyAssignmentOperator)
+TEST (ResultTests, CopyAssignmentOperator)
 {
     Result original = Result::fail("Original error");
     Result copy = Result::ok();
@@ -98,7 +98,7 @@ TEST(ResultTests, CopyAssignmentOperator)
     EXPECT_EQ(copy.getErrorMessage(), original.getErrorMessage());
 }
 
-TEST(ResultTests, MoveAssignmentOperator)
+TEST (ResultTests, MoveAssignmentOperator)
 {
     Result original = Result::fail("Original error");
     Result moved = Result::ok();
@@ -113,7 +113,7 @@ TEST(ResultTests, MoveAssignmentOperator)
     EXPECT_EQ(original.getErrorMessage(), ""_S);
 }
 
-TEST(ResultTests, EqualityOperator)
+TEST (ResultTests, EqualityOperator)
 {
     Result success1 = Result::ok();
     Result success2 = Result::ok();
@@ -127,7 +127,7 @@ TEST(ResultTests, EqualityOperator)
     EXPECT_FALSE(failure1 == failure3);
 }
 
-TEST(ResultTests, InequalityOperator)
+TEST (ResultTests, InequalityOperator)
 {
     Result success1 = Result::ok();
     Result success2 = Result::ok();

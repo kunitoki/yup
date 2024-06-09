@@ -129,9 +129,9 @@ protected:
     {
         fillWithRandomValues (hashMap, groundTruth);
 
-        threeMap.set(1, "one");
-        threeMap.set(2, "two");
-        threeMap.set(3, "three");
+        threeMap.set (1, "one");
+        threeMap.set (2, "two");
+        threeMap.set (3, "three");
     }
 
     juce::HashMap<int, int> hashMap;
@@ -140,258 +140,258 @@ protected:
     juce::HashMap<int, std::string> threeMap;
 };
 
-TEST_F(HashMapTests, BasicOperations)
+TEST_F (HashMapTests, BasicOperations)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "one");
-    map.set(2, "two");
+    map.set (1, "one");
+    map.set (2, "two");
 
-    EXPECT_EQ(map[1], "one");
-    EXPECT_EQ(map[2], "two");
-    EXPECT_EQ(map.size(), 2);
+    EXPECT_EQ (map[1], "one");
+    EXPECT_EQ (map[2], "two");
+    EXPECT_EQ (map.size(), 2);
 }
 
-TEST_F(HashMapTests, NonExistingKey)
+TEST_F (HashMapTests, NonExistingKey)
 {
     juce::HashMap<int, std::string> map;
-    EXPECT_EQ(map[999], "");  // Default string is empty
+    EXPECT_EQ (map[999], "");  // Default string is empty
 }
 
-TEST_F(HashMapTests, ContainsKey)
+TEST_F (HashMapTests, ContainsKey)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "one");
+    map.set (1, "one");
 
-    EXPECT_TRUE(map.contains(1));
-    EXPECT_FALSE(map.contains(2));
+    EXPECT_TRUE (map.contains (1));
+    EXPECT_FALSE (map.contains (2));
 }
 
-TEST_F(HashMapTests, ContainsValue)
+TEST_F (HashMapTests, ContainsValue)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "unique");
-    map.set(2, "unique");
+    map.set (1, "unique");
+    map.set (2, "unique");
 
-    EXPECT_TRUE(map.containsValue("unique"));
-    EXPECT_FALSE(map.containsValue("missing"));
+    EXPECT_TRUE (map.containsValue ("unique"));
+    EXPECT_FALSE (map.containsValue ("missing"));
 }
 
-TEST_F(HashMapTests, RemoveKey)
+TEST_F (HashMapTests, RemoveKey)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "one");
-    map.set(2, "two");
-    map.remove(1);
+    map.set (1, "one");
+    map.set (2, "two");
+    map.remove (1);
 
-    EXPECT_FALSE(map.contains(1));
-    EXPECT_TRUE(map.contains(2));
-    EXPECT_EQ(map.size(), 1);
+    EXPECT_FALSE (map.contains (1));
+    EXPECT_TRUE (map.contains (2));
+    EXPECT_EQ (map.size(), 1);
 }
 
-TEST_F(HashMapTests, RemoveValue)
+TEST_F (HashMapTests, RemoveValue)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "value");
-    map.set(2, "value");
-    map.removeValue("value");
+    map.set (1, "value");
+    map.set (2, "value");
+    map.removeValue ("value");
 
-    EXPECT_FALSE(map.contains(1));
-    EXPECT_FALSE(map.contains(2));
-    EXPECT_EQ(map.size(), 0);
+    EXPECT_FALSE (map.contains (1));
+    EXPECT_FALSE (map.contains (2));
+    EXPECT_EQ (map.size(), 0);
 }
 
-TEST_F(HashMapTests, Clear)
+TEST_F (HashMapTests, Clear)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "one");
-    map.set(2, "two");
+    map.set (1, "one");
+    map.set (2, "two");
     map.clear();
 
-    EXPECT_EQ(map.size(), 0);
+    EXPECT_EQ (map.size(), 0);
 }
 
-TEST_F(HashMapTests, Iterator)
+TEST_F (HashMapTests, Iterator)
 {
     juce::HashMap<int, std::string> map;
-    map.set(1, "one");
-    map.set(2, "two");
-    map.set(3, "three");
+    map.set (1, "one");
+    map.set (2, "two");
+    map.set (3, "three");
 
     std::vector<int> keys;
-    for (juce::HashMap<int, std::string>::Iterator it(map); it.next();)
+    for (juce::HashMap<int, std::string>::Iterator it (map); it.next();)
     {
-        keys.push_back(it.getKey());
+        keys.push_back (it.getKey());
         std::string value = it.getValue();
-        EXPECT_TRUE(value == "one" || value == "two" || value == "three");
+        EXPECT_TRUE (value == "one" || value == "two" || value == "three");
     }
 
-    EXPECT_EQ(keys.size(), 3);
+    EXPECT_EQ (keys.size(), 3);
 }
 
-TEST_F(HashMapTests, GetReferenceAddsNonExistingKey)
+TEST_F (HashMapTests, GetReferenceAddsNonExistingKey)
 {
-    std::string& value = threeMap.getReference(4);
-    EXPECT_EQ(value, "");
+    std::string& value = threeMap.getReference (4);
+    EXPECT_EQ (value, "");
     value = "four";
-    EXPECT_EQ(threeMap[4], "four");
+    EXPECT_EQ (threeMap[4], "four");
 }
 
-TEST_F(HashMapTests, CopyConstruction)
+TEST_F (HashMapTests, CopyConstruction)
 {
-    juce::HashMap<int, std::string> copiedMap(threeMap);
-    EXPECT_EQ(copiedMap[1], "one");
-    EXPECT_EQ(copiedMap[2], "two");
-    EXPECT_EQ(copiedMap[3], "three");
+    juce::HashMap<int, std::string> copiedMap (threeMap);
+    EXPECT_EQ (copiedMap[1], "one");
+    EXPECT_EQ (copiedMap[2], "two");
+    EXPECT_EQ (copiedMap[3], "three");
 }
 
-TEST_F(HashMapTests, Assignment)
+TEST_F (HashMapTests, Assignment)
 {
     juce::HashMap<int, std::string> assignedMap;
     assignedMap = threeMap;
-    EXPECT_EQ(assignedMap[1], "one");
-    EXPECT_EQ(assignedMap[2], "two");
-    EXPECT_EQ(assignedMap[3], "three");
+    EXPECT_EQ (assignedMap[1], "one");
+    EXPECT_EQ (assignedMap[2], "two");
+    EXPECT_EQ (assignedMap[3], "three");
 }
 
-TEST_F(HashMapTests, RemapTable)
+TEST_F (HashMapTests, RemapTable)
 {
     // Initial number of slots
     int initialSlots = threeMap.getNumSlots();
     // Adding more elements to trigger remapping
-    threeMap.set(4, "four");
-    threeMap.set(5, "five");
-    threeMap.set(6, "six");
-    threeMap.set(7, "seven");
-    threeMap.set(8, "eight");
+    threeMap.set (4, "four");
+    threeMap.set (5, "five");
+    threeMap.set (6, "six");
+    threeMap.set (7, "seven");
+    threeMap.set (8, "eight");
     // Remap manually and check
-    threeMap.remapTable(2 * initialSlots);
-    EXPECT_GT(threeMap.getNumSlots(), initialSlots);
-    EXPECT_EQ(threeMap[4], "four");
+    threeMap.remapTable (2 * initialSlots);
+    EXPECT_GT (threeMap.getNumSlots(), initialSlots);
+    EXPECT_EQ (threeMap[4], "four");
 }
 
-TEST_F(HashMapTests, SwapMaps)
+TEST_F (HashMapTests, SwapMaps)
 {
     juce::HashMap<int, std::string> otherMap;
-    otherMap.set(10, "ten");
-    threeMap.swapWith(otherMap);
+    otherMap.set (10, "ten");
+    threeMap.swapWith (otherMap);
 
-    EXPECT_FALSE(threeMap.contains(1));
-    EXPECT_TRUE(threeMap.contains(10));
-    EXPECT_TRUE(otherMap.contains(1));
+    EXPECT_FALSE (threeMap.contains (1));
+    EXPECT_TRUE (threeMap.contains (10));
+    EXPECT_TRUE (otherMap.contains (1));
 }
 
-TEST_F(HashMapTests, IteratorValidityAcrossModifications)
+TEST_F (HashMapTests, IteratorValidityAcrossModifications)
 {
     juce::HashMap<int, std::string>::Iterator it(threeMap);
     it.next(); // move to first element
-    threeMap.set(4, "four"); // Modify map after iterator creation
+    threeMap.set (4, "four"); // Modify map after iterator creation
 
     // Test whether iterator continues safely
-    EXPECT_NO_THROW({ while (it.next()); });
+    EXPECT_NO_THROW ({ while (it.next()); });
 }
 
-TEST_F(HashMapTests, MultipleIdenticalValues)
+TEST_F (HashMapTests, MultipleIdenticalValues)
 {
-    threeMap.set(4, "three");
-    EXPECT_TRUE(threeMap.containsValue("three"));
-    EXPECT_EQ(threeMap.size(), 4);
-    threeMap.removeValue("three");
-    EXPECT_EQ(threeMap.size(), 2);
-    EXPECT_TRUE(threeMap.contains(2) || threeMap.contains(1));
+    threeMap.set (4, "three");
+    EXPECT_TRUE (threeMap.containsValue ("three"));
+    EXPECT_EQ (threeMap.size(), 4);
+    threeMap.removeValue ("three");
+    EXPECT_EQ (threeMap.size(), 2);
+    EXPECT_TRUE (threeMap.contains (2) || threeMap.contains (1));
 }
 
-TEST_F(HashMapTests, LoadFactorAndResizing)
+TEST_F (HashMapTests, LoadFactorAndResizing)
 {
     int n = 20; // Insert more elements than default size to force resize
     for (int i = 4; i <= n; ++i)
-        threeMap.set(i, "value" + std::to_string(i));
+        threeMap.set (i, "value" + std::to_string (i));
 
-    EXPECT_GT(threeMap.getNumSlots(), 10); // Default is likely less than the number of entries added
-    EXPECT_EQ(threeMap.size(), n);
+    EXPECT_GT (threeMap.getNumSlots(), 10); // Default is likely less than the number of entries added
+    EXPECT_EQ (threeMap.size(), n);
 }
 
-TEST_F(HashMapTests, NonDefaultHashFunction)
+TEST_F (HashMapTests, NonDefaultHashFunction)
 {
     // Define a custom hash function that collides more
     struct BadHashFunction
     {
-        int generateHash(int key, int upperLimit) const noexcept
+        int generateHash (int key, int upperLimit) const noexcept
         {
             return key % 5; // Intentionally bad hashing for testing
         }
     };
 
     juce::HashMap<int, std::string, BadHashFunction> badHashMap;
-    badHashMap.set(1, "one");
-    badHashMap.set(6, "six"); // This should collide with '1' in the hash table
+    badHashMap.set (1, "one");
+    badHashMap.set (6, "six"); // This should collide with '1' in the hash table
 
-    EXPECT_EQ(badHashMap[1], "one");
-    EXPECT_EQ(badHashMap[6], "six");
-    EXPECT_EQ(badHashMap.getNumSlots(), 101); // Default slots should be used
+    EXPECT_EQ (badHashMap[1], "one");
+    EXPECT_EQ (badHashMap[6], "six");
+    EXPECT_EQ (badHashMap.getNumSlots(), 101); // Default slots should be used
 }
 
-TEST_F(HashMapTests, AddElements)
+TEST_F (HashMapTests, AddElements)
 {
     for (const auto& pair : groundTruth.pairs)
-        EXPECT_EQ(hashMap[pair.key], pair.value);
+        EXPECT_EQ (hashMap[pair.key], pair.value);
 }
 
-TEST_F(HashMapTests, AccessTest)
+TEST_F (HashMapTests, AccessTest)
 {
     for (auto pair : groundTruth.pairs)
-        EXPECT_EQ(hashMap[pair.key], pair.value);
+        EXPECT_EQ (hashMap[pair.key], pair.value);
 }
 
-TEST_F(HashMapTests, RemoveTest)
+TEST_F (HashMapTests, RemoveTest)
 {
     auto n = groundTruth.size();
-    juce::Random r(3827387);
+    juce::Random r (3827387);
 
     for (int i = 0; i < 100; ++i)
     {
-        auto idx = r.nextInt(n-- - 1);
-        auto key = groundTruth.pairs.getReference(idx).key;
+        auto idx = r.nextInt (n-- - 1);
+        auto key = groundTruth.pairs.getReference (idx).key;
 
-        groundTruth.pairs.remove(idx);
-        hashMap.remove(key);
+        groundTruth.pairs.remove (idx);
+        hashMap.remove (key);
 
-        EXPECT_FALSE(hashMap.contains(key));
+        EXPECT_FALSE (hashMap.contains (key));
 
         for (auto pair : groundTruth.pairs)
-            EXPECT_EQ(hashMap[pair.key], pair.value);
+            EXPECT_EQ (hashMap[pair.key], pair.value);
     }
 }
 
-TEST_F(HashMapTests, PersistentMemoryLocationOfValues)
+TEST_F (HashMapTests, PersistentMemoryLocationOfValues)
 {
     struct AddressAndValue { int value; const int* valueAddress; };
 
     AssociativeMap<int, AddressAndValue> addresses;
-    RandomKeys<int> keyOracle(300, 3827829);
-    juce::Random valueOracle(48735);
+    RandomKeys<int> keyOracle (300, 3827829);
+    juce::Random valueOracle (48735);
 
     for (int i = 0; i < 1000; ++i)
     {
         auto key = keyOracle.next();
         auto value = valueOracle.nextInt();
 
-        hashMap.set(key, value);
+        hashMap.set (key, value);
 
-        if (auto* existing = addresses.find(key))
+        if (auto* existing = addresses.find (key))
         {
             existing->value = value;
         }
         else
         {
-            addresses.add(key, { value, &hashMap.getReference(key) });
+            addresses.add (key, { value, &hashMap.getReference (key) });
         }
 
         for (auto& pair : addresses.pairs)
         {
-            const auto& hashMapValue = hashMap.getReference(pair.key);
+            const auto& hashMapValue = hashMap.getReference (pair.key);
 
-            EXPECT_EQ(hashMapValue, pair.value.value);
-            EXPECT_EQ(&hashMapValue, pair.value.valueAddress);
+            EXPECT_EQ (hashMapValue, pair.value.value);
+            EXPECT_EQ (&hashMapValue, pair.value.valueAddress);
         }
     }
 }

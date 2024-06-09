@@ -25,7 +25,7 @@
 
 using namespace juce;
 
-TEST(ScopeGuardTests, ScopeGuardCallsFunctionAtScopeEnd)
+TEST (ScopeGuardTests, ScopeGuardCallsFunctionAtScopeEnd)
 {
     bool flag = false;
 
@@ -37,7 +37,7 @@ TEST(ScopeGuardTests, ScopeGuardCallsFunctionAtScopeEnd)
     EXPECT_TRUE(flag);
 }
 
-TEST(ScopeGuardTests, ScopeGuardHandlesExceptions)
+TEST (ScopeGuardTests, ScopeGuardHandlesExceptions)
 {
     bool flag = false;
 
@@ -51,7 +51,7 @@ TEST(ScopeGuardTests, ScopeGuardHandlesExceptions)
     EXPECT_TRUE(flag);
 }
 
-TEST(ScopeGuardTests, ScopeGuardExecutesOnMultipleReturns)
+TEST (ScopeGuardTests, ScopeGuardExecutesOnMultipleReturns)
 {
     bool flag = false;
 
@@ -70,7 +70,7 @@ TEST(ScopeGuardTests, ScopeGuardExecutesOnMultipleReturns)
     EXPECT_TRUE(flag);
 }
 
-TEST(ErasedScopeGuardTests, CallsCallbackOnDestruction)
+TEST (ErasedScopeGuardTests, CallsCallbackOnDestruction)
 {
     bool flag = false;
     {
@@ -80,7 +80,7 @@ TEST(ErasedScopeGuardTests, CallsCallbackOnDestruction)
     EXPECT_TRUE(flag);
 }
 
-TEST(ErasedScopeGuardTests, CallbackNotCalledAfterRelease)
+TEST (ErasedScopeGuardTests, CallbackNotCalledAfterRelease)
 {
     bool flag = false;
     {
@@ -91,7 +91,7 @@ TEST(ErasedScopeGuardTests, CallbackNotCalledAfterRelease)
     EXPECT_FALSE(flag);
 }
 
-TEST(ErasedScopeGuardTests, CallbackCalledAfterReset)
+TEST (ErasedScopeGuardTests, CallbackCalledAfterReset)
 {
     bool flag = false;
     {
@@ -101,7 +101,7 @@ TEST(ErasedScopeGuardTests, CallbackCalledAfterReset)
     }
 }
 
-TEST(ErasedScopeGuardTests, CallbackNotCalledAfterMove)
+TEST (ErasedScopeGuardTests, CallbackNotCalledAfterMove)
 {
     bool flag = false;
     {
@@ -112,7 +112,7 @@ TEST(ErasedScopeGuardTests, CallbackNotCalledAfterMove)
     EXPECT_TRUE(flag);
 }
 
-TEST(ErasedScopeGuardTests, CallbackCalledAfterMoveAssignment)
+TEST (ErasedScopeGuardTests, CallbackCalledAfterMoveAssignment)
 {
     bool flag1 = false;
     bool flag2 = false;
@@ -131,7 +131,7 @@ TEST(ErasedScopeGuardTests, CallbackCalledAfterMoveAssignment)
     EXPECT_TRUE(flag2);
 }
 
-TEST(ErasedScopeGuardTests, CallbackCalledOnDefaultConstructor)
+TEST (ErasedScopeGuardTests, CallbackCalledOnDefaultConstructor)
 {
     ErasedScopeGuard guard;
     guard.reset(); // Should not crash even if no callback is provided

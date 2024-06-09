@@ -25,27 +25,27 @@
 
 using namespace juce;
 
-TEST(UuidTests, DefaultConstructorCreatesNonNullUuid)
+TEST (UuidTests, DefaultConstructorCreatesNonNullUuid)
 {
     Uuid uuid;
     EXPECT_FALSE(uuid.isNull());
 }
 
-TEST(UuidTests, NullUuid)
+TEST (UuidTests, NullUuid)
 {
     Uuid nullUuid = Uuid::null();
     EXPECT_TRUE(nullUuid.isNull());
     EXPECT_EQ(nullUuid.toString(), "00000000000000000000000000000000");
 }
 
-TEST(UuidTests, CopyConstructor)
+TEST (UuidTests, CopyConstructor)
 {
     Uuid uuid1;
     Uuid uuid2 = uuid1;
     EXPECT_EQ(uuid1, uuid2);
 }
 
-TEST(UuidTests, CopyAssignment)
+TEST (UuidTests, CopyAssignment)
 {
     Uuid uuid1;
     Uuid uuid2;
@@ -53,14 +53,14 @@ TEST(UuidTests, CopyAssignment)
     EXPECT_EQ(uuid1, uuid2);
 }
 
-TEST(UuidTests, MoveConstructor)
+TEST (UuidTests, MoveConstructor)
 {
     Uuid uuid1;
     Uuid uuid2 = std::move(uuid1);
     EXPECT_FALSE(uuid2.isNull());
 }
 
-TEST(UuidTests, MoveAssignment)
+TEST (UuidTests, MoveAssignment)
 {
     Uuid uuid1;
     Uuid uuid2;
@@ -68,14 +68,14 @@ TEST(UuidTests, MoveAssignment)
     EXPECT_FALSE(uuid2.isNull());
 }
 
-TEST(UuidTests, StringConstructor)
+TEST (UuidTests, StringConstructor)
 {
     String uuidStr = "12345678123456781234567812345678";
     Uuid uuid(uuidStr);
     EXPECT_EQ(uuid.toString(), uuidStr);
 }
 
-TEST(UuidTests, StringAssignment)
+TEST (UuidTests, StringAssignment)
 {
     String uuidStr = "12345678123456781234567812345678";
     Uuid uuid;
@@ -83,14 +83,14 @@ TEST(UuidTests, StringAssignment)
     EXPECT_EQ(uuid.toString(), uuidStr);
 }
 
-TEST(UuidTests, ToString)
+TEST (UuidTests, ToString)
 {
     Uuid uuid;
     String uuidStr = uuid.toString();
     EXPECT_EQ(uuidStr.length(), 32);
 }
 
-TEST(UuidTests, ToDashedString)
+TEST (UuidTests, ToDashedString)
 {
     Uuid uuid;
     String dashedStr = uuid.toDashedString();
@@ -101,7 +101,7 @@ TEST(UuidTests, ToDashedString)
     EXPECT_EQ(dashedStr[23], '-');
 }
 
-TEST(UuidTests, ComparisonOperators)
+TEST (UuidTests, ComparisonOperators)
 {
     Uuid uuid1;
     Uuid uuid2;
@@ -113,56 +113,56 @@ TEST(UuidTests, ComparisonOperators)
     EXPECT_TRUE(uuid1 >= uuid2 || uuid2 >= uuid1);
 }
 
-TEST(UuidTests, GetTimeLow)
+TEST (UuidTests, GetTimeLow)
 {
     Uuid uuid;
     uint32 timeLow = uuid.getTimeLow();
     EXPECT_NE(timeLow, 0);
 }
 
-TEST(UuidTests, GetTimeMid)
+TEST (UuidTests, GetTimeMid)
 {
     Uuid uuid;
     uint16 timeMid = uuid.getTimeMid();
     EXPECT_NE(timeMid, 0);
 }
 
-TEST(UuidTests, GetTimeHighAndVersion)
+TEST (UuidTests, GetTimeHighAndVersion)
 {
     Uuid uuid;
     uint16 timeHighAndVersion = uuid.getTimeHighAndVersion();
     EXPECT_NE(timeHighAndVersion, 0);
 }
 
-TEST(UuidTests, GetClockSeqAndReserved)
+TEST (UuidTests, GetClockSeqAndReserved)
 {
     Uuid uuid;
     uint8 clockSeqAndReserved = uuid.getClockSeqAndReserved();
     EXPECT_NE(clockSeqAndReserved, 0);
 }
 
-TEST(UuidTests, GetClockSeqLow)
+TEST (UuidTests, GetClockSeqLow)
 {
     Uuid uuid;
     uint8 clockSeqLow = uuid.getClockSeqLow();
     EXPECT_NE(clockSeqLow, 0);
 }
 
-TEST(UuidTests, GetNode)
+TEST (UuidTests, GetNode)
 {
     Uuid uuid;
     uint64 node = uuid.getNode();
     EXPECT_NE(node, 0);
 }
 
-TEST(UuidTests, GetRawData)
+TEST (UuidTests, GetRawData)
 {
     Uuid uuid;
     const uint8* rawData = uuid.getRawData();
     EXPECT_NE(rawData, nullptr);
 }
 
-TEST(UuidTests, RawDataConstructor)
+TEST (UuidTests, RawDataConstructor)
 {
     uint8 rawData[16] = {0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0x0a, 0xbc, 0xde};
     Uuid uuid(rawData);
@@ -170,7 +170,7 @@ TEST(UuidTests, RawDataConstructor)
     EXPECT_EQ(uuid.getNode(), 0x00004567890abcde);
 }
 
-TEST(UuidTests, RawDataAssignment)
+TEST (UuidTests, RawDataAssignment)
 {
     uint8 rawData[16] = {0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x01, 0x23, 0x45, 0x67, 0x89, 0x0a, 0xbc, 0xde};
     Uuid uuid;
@@ -179,7 +179,7 @@ TEST(UuidTests, RawDataAssignment)
     EXPECT_EQ(uuid.getNode(), 0x00004567890abcde);
 }
 
-TEST(UuidTests, Hash)
+TEST (UuidTests, Hash)
 {
     Uuid uuid;
     uint64 hash = uuid.hash();

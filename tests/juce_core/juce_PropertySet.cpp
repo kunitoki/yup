@@ -41,7 +41,7 @@ protected:
     }
 };
 
-TEST_F(PropertySetTests, GetValue)
+TEST_F (PropertySetTests, GetValue)
 {
     EXPECT_EQ(propertySet.getValue("stringKey"), "stringValue");
     EXPECT_EQ(propertySet.getIntValue("intKey"), 123);
@@ -49,7 +49,7 @@ TEST_F(PropertySetTests, GetValue)
     EXPECT_TRUE(propertySet.getBoolValue("boolKey"));
 }
 
-TEST_F(PropertySetTests, GetFallbackValue)
+TEST_F (PropertySetTests, GetFallbackValue)
 {
     juce::PropertySet fallbackPropertySet;
     fallbackPropertySet.setValue("fallbackKey", "fallbackValue");
@@ -61,7 +61,7 @@ TEST_F(PropertySetTests, GetFallbackValue)
     EXPECT_EQ(propertySet.getValue("fallbackKey"), "");
 }
 
-TEST_F(PropertySetTests, GetXmlValue)
+TEST_F (PropertySetTests, GetXmlValue)
 {
     auto xml = propertySet.getXmlValue("xmlKey");
     ASSERT_TRUE(xml != nullptr);
@@ -72,13 +72,13 @@ TEST_F(PropertySetTests, GetXmlValue)
     ASSERT_TRUE(nonExistingXml == nullptr);
 }
 
-TEST_F(PropertySetTests, NonExistingKey)
+TEST_F (PropertySetTests, NonExistingKey)
 {
     EXPECT_EQ(propertySet.getValue("nonExistingKey", "default"), "default");
     EXPECT_EQ(propertySet.getIntValue("nonExistingKey", 0), 0);
 }
 
-TEST_F(PropertySetTests, RemoveAndClearValues)
+TEST_F (PropertySetTests, RemoveAndClearValues)
 {
     propertySet.removeValue("stringKey");
     EXPECT_FALSE(propertySet.containsKey("stringKey"));
@@ -92,7 +92,7 @@ TEST_F(PropertySetTests, RemoveAndClearValues)
     EXPECT_FALSE(propertySet.containsKey("boolKey"));
 }
 
-TEST_F(PropertySetTests, CopyAndAssignment)
+TEST_F (PropertySetTests, CopyAndAssignment)
 {
     juce::PropertySet anotherPropertySet(propertySet);
     EXPECT_EQ(anotherPropertySet.getValue("stringKey"), "stringValue");
@@ -102,7 +102,7 @@ TEST_F(PropertySetTests, CopyAndAssignment)
     EXPECT_EQ(yetAnotherPropertySet.getValue("stringKey"), "stringValue");
 }
 
-TEST_F(PropertySetTests, CreateAndRestoreXml)
+TEST_F (PropertySetTests, CreateAndRestoreXml)
 {
     auto xml = propertySet.createXml("Properties");
     ASSERT_TRUE(xml != nullptr);

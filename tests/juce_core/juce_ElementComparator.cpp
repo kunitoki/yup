@@ -30,60 +30,60 @@ using namespace juce;
 
 struct IntComparator
 {
-    int compareElements(int first, int second) const
+    int compareElements (int first, int second) const
     {
         return (first < second) ? -1 : ((second < first) ? 1 : 0);
     }
 };
 
-TEST(SortFunctionConverterTest, SortFunctionConverterWorks)
+TEST (SortFunctionConverterTest, SortFunctionConverterWorks)
 {
-    std::vector<int> vec{5, 2, 9, 1, 5, 6};
+    std::vector<int> vec { 5, 2, 9, 1, 5, 6 };
 
     IntComparator comparator;
-    SortFunctionConverter<IntComparator> converter(comparator);
+    SortFunctionConverter<IntComparator> converter (comparator);
 
-    std::sort(vec.begin(), vec.end(), converter);
+    std::sort (vec.begin(), vec.end(), converter);
 
-    std::vector<int> expected{1, 2, 5, 5, 6, 9};
-    EXPECT_EQ(vec, expected);
+    std::vector<int> expected { 1, 2, 5, 5, 6, 9 };
+    EXPECT_EQ (vec, expected);
 }
 
-TEST(SortArrayTest, SortsCorrectly)
+TEST (SortArrayTest, SortsCorrectly)
 {
-    int array[] = {5, 2, 9, 1, 5, 6};
+    int array[] = { 5, 2, 9, 1, 5, 6 };
     IntComparator comparator;
 
-    sortArray(comparator, array, 0, 5, false);
+    sortArray (comparator, array, 0, 5, false);
 
-    int expected[] = {1, 2, 5, 5, 6, 9};
-    EXPECT_TRUE(std::equal(std::begin(array), std::end(array), std::begin(expected)));
+    int expected[] = { 1, 2, 5, 5, 6, 9 };
+    EXPECT_TRUE (std::equal (std::begin (array), std::end (array), std::begin (expected)));
 }
 
-TEST(SortArrayTest, SortsCorrectlyWithOrderRetained)
+TEST (SortArrayTest, SortsCorrectlyWithOrderRetained)
 {
-    int array[] = {5, 2, 9, 1, 5, 6};
+    int array[] = { 5, 2, 9, 1, 5, 6 };
     IntComparator comparator;
 
-    sortArray(comparator, array, 0, 5, true);
+    sortArray (comparator, array, 0, 5, true);
 
-    int expected[] = {1, 2, 5, 5, 6, 9};
-    EXPECT_TRUE(std::equal(std::begin(array), std::end(array), std::begin(expected)));
+    int expected[] = { 1, 2, 5, 5, 6, 9 };
+    EXPECT_TRUE (std::equal (std::begin (array), std::end (array), std::begin (expected)));
 }
 
-TEST(FindInsertIndexInSortedArrayTest, FindsCorrectIndex)
+TEST (FindInsertIndexInSortedArrayTest, FindsCorrectIndex)
 {
-    int array[] = {1, 2, 4, 5, 6};
+    int array[] = { 1, 2, 4, 5, 6 };
     IntComparator comparator;
 
-    int index = findInsertIndexInSortedArray(comparator, array, 3, 0, 5);
-    EXPECT_EQ(index, 2);
+    int index = findInsertIndexInSortedArray (comparator, array, 3, 0, 5);
+    EXPECT_EQ (index, 2);
 }
 
-TEST(DefaultElementComparatorTest, ComparesCorrectly)
+TEST (DefaultElementComparatorTest, ComparesCorrectly)
 {
     DefaultElementComparator<int> comparator;
-    EXPECT_EQ(comparator.compareElements(1, 2), -1);
-    EXPECT_EQ(comparator.compareElements(2, 1), 1);
-    EXPECT_EQ(comparator.compareElements(1, 1), 0);
+    EXPECT_EQ (comparator.compareElements (1, 2), -1);
+    EXPECT_EQ (comparator.compareElements (2, 1), 1);
+    EXPECT_EQ (comparator.compareElements (1, 1), 0);
 }

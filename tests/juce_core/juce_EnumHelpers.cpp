@@ -52,103 +52,103 @@ namespace
         other  = 1 << 2
     };
 
-    JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(TestEnum)
+    JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (TestEnum)
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, BitwiseOrOperator)
+TEST (ScopedEnumBitwiseOperatorsTests, BitwiseOrOperator)
 {
     TestEnum e = TestEnum::one | TestEnum::four;
-    EXPECT_EQ(e, TestEnum::one | TestEnum::four);
+    EXPECT_EQ (e, TestEnum::one | TestEnum::four);
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, BitwiseAndOperator)
+TEST (ScopedEnumBitwiseOperatorsTests, BitwiseAndOperator)
 {
     TestEnum e = TestEnum::one | TestEnum::four;
-    EXPECT_EQ(e & TestEnum::one, TestEnum::one);
-    EXPECT_EQ(e & TestEnum::four, TestEnum::four);
-    EXPECT_EQ(e & TestEnum::other, TestEnum{});
+    EXPECT_EQ (e & TestEnum::one, TestEnum::one);
+    EXPECT_EQ (e & TestEnum::four, TestEnum::four);
+    EXPECT_EQ (e & TestEnum::other, TestEnum{});
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, BitwiseNotOperator)
+TEST (ScopedEnumBitwiseOperatorsTests, BitwiseNotOperator)
 {
     TestEnum e = ~TestEnum::one;
-    EXPECT_EQ(e, static_cast<TestEnum>(~static_cast<int>(TestEnum::one)));
+    EXPECT_EQ (e, static_cast<TestEnum> (~static_cast<int> (TestEnum::one)));
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, BitwiseOrAssignmentOperator)
+TEST (ScopedEnumBitwiseOperatorsTests, BitwiseOrAssignmentOperator)
 {
     TestEnum e = TestEnum::one;
     e |= TestEnum::four;
-    EXPECT_EQ(e, TestEnum::one | TestEnum::four);
+    EXPECT_EQ (e, TestEnum::one | TestEnum::four);
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, BitwiseAndAssignmentOperator)
+TEST (ScopedEnumBitwiseOperatorsTests, BitwiseAndAssignmentOperator)
 {
     TestEnum e = TestEnum::one | TestEnum::four;
     e &= TestEnum::one;
-    EXPECT_EQ(e, TestEnum::one);
+    EXPECT_EQ (e, TestEnum::one);
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, HasBitValueSet)
+TEST (ScopedEnumBitwiseOperatorsTests, HasBitValueSet)
 {
     TestEnum e = TestEnum::one | TestEnum::four;
-    EXPECT_TRUE(hasBitValueSet(e, TestEnum::one));
-    EXPECT_TRUE(hasBitValueSet(e, TestEnum::four));
-    EXPECT_FALSE(hasBitValueSet(e, TestEnum::other));
+    EXPECT_TRUE (hasBitValueSet(e, TestEnum::one));
+    EXPECT_TRUE (hasBitValueSet(e, TestEnum::four));
+    EXPECT_FALSE (hasBitValueSet(e, TestEnum::other));
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, WithBitValueSet)
+TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSet)
 {
     TestEnum e = TestEnum::one;
-    e = withBitValueSet(e, TestEnum::four);
-    EXPECT_EQ(e, TestEnum::one | TestEnum::four);
+    e = withBitValueSet (e, TestEnum::four);
+    EXPECT_EQ (e, TestEnum::one | TestEnum::four);
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, WithBitValueCleared)
+TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueCleared)
 {
     TestEnum e = TestEnum::one | TestEnum::four;
-    e = withBitValueCleared(e, TestEnum::four);
-    EXPECT_EQ(e, TestEnum::one);
+    e = withBitValueCleared (e, TestEnum::four);
+    EXPECT_EQ (e, TestEnum::one);
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, DefaultInitializedEnumIsNone)
+TEST (ScopedEnumBitwiseOperatorsTests, DefaultInitializedEnumIsNone)
 {
     TestEnum e = {};
-    EXPECT_EQ(e, TestEnum{});
-    EXPECT_FALSE(hasBitValueSet(e, TestEnum{}));
+    EXPECT_EQ (e, TestEnum{});
+    EXPECT_FALSE (hasBitValueSet (e, TestEnum{}));
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnEmptyEnum)
+TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnEmptyEnum)
 {
     TestEnum e = {};
-    e = withBitValueSet(e, TestEnum::other);
-    EXPECT_EQ(e, TestEnum::other);
-    EXPECT_TRUE(hasBitValueSet(e, TestEnum::other));
+    e = withBitValueSet (e, TestEnum::other);
+    EXPECT_EQ (e, TestEnum::other);
+    EXPECT_TRUE (hasBitValueSet (e, TestEnum::other));
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnNonEmptyEnum)
+TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnNonEmptyEnum)
 {
-    TestEnum e = withBitValueSet(TestEnum::other, TestEnum::one);
-    EXPECT_TRUE(hasBitValueSet(e, TestEnum::one));
-    EXPECT_TRUE(hasBitValueSet(e, TestEnum::other));
+    TestEnum e = withBitValueSet (TestEnum::other, TestEnum::one);
+    EXPECT_TRUE (hasBitValueSet(e, TestEnum::one));
+    EXPECT_TRUE (hasBitValueSet(e, TestEnum::other));
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, WithBitValueClearedCorrectBit)
+TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueClearedCorrectBit)
 {
-    TestEnum e = withBitValueSet(TestEnum::other, TestEnum::one);
-    e = withBitValueCleared(e, TestEnum::one);
-    EXPECT_FALSE(hasBitValueSet(e, TestEnum::one));
-    EXPECT_TRUE(hasBitValueSet(e, TestEnum::other));
+    TestEnum e = withBitValueSet (TestEnum::other, TestEnum::one);
+    e = withBitValueCleared (e, TestEnum::one);
+    EXPECT_FALSE (hasBitValueSet (e, TestEnum::one));
+    EXPECT_TRUE (hasBitValueSet (e, TestEnum::other));
 }
 
-TEST(ScopedEnumBitwiseOperatorsTests, OperatorsWorkAsExpected)
+TEST (ScopedEnumBitwiseOperatorsTests, OperatorsWorkAsExpected)
 {
     TestEnum e = TestEnum::one;
-    EXPECT_NE((e & TestEnum::one), TestEnum{});
+    EXPECT_NE ((e & TestEnum::one), TestEnum{});
     e |= TestEnum::other;
-    EXPECT_NE((e & TestEnum::other), TestEnum{});
+    EXPECT_NE ((e & TestEnum::other), TestEnum{});
 
     e &= ~TestEnum::one;
-    EXPECT_EQ((e & TestEnum::one), TestEnum{});
-    EXPECT_NE((e & TestEnum::other), TestEnum{});
+    EXPECT_EQ ((e & TestEnum::one), TestEnum{});
+    EXPECT_NE ((e & TestEnum::other), TestEnum{});
 }

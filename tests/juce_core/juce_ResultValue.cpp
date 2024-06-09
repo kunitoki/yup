@@ -25,7 +25,7 @@
 
 using namespace juce;
 
-TEST(ResultValueTests, CreateSuccessResult)
+TEST (ResultValueTests, CreateSuccessResult)
 {
     auto result = ResultValue<int>::ok(42);
     EXPECT_TRUE(result.wasOk());
@@ -35,7 +35,7 @@ TEST(ResultValueTests, CreateSuccessResult)
     EXPECT_EQ(std::as_const(result).getReference(), 42);
 }
 
-TEST(ResultValueTests, CreateFailureResultWithMessage)
+TEST (ResultValueTests, CreateFailureResultWithMessage)
 {
     auto result = ResultValue<int>::fail("An error occurred");
     EXPECT_FALSE(result.wasOk());
@@ -43,7 +43,7 @@ TEST(ResultValueTests, CreateFailureResultWithMessage)
     EXPECT_EQ(result.getErrorMessage(), "An error occurred");
 }
 
-TEST(ResultValueTests, CreateFailureResultWithEmptyMessage)
+TEST (ResultValueTests, CreateFailureResultWithEmptyMessage)
 {
     auto result = ResultValue<int>::fail("");
     EXPECT_FALSE(result.wasOk());
@@ -51,7 +51,7 @@ TEST(ResultValueTests, CreateFailureResultWithEmptyMessage)
     EXPECT_EQ(result.getErrorMessage(), "Unknown Error");
 }
 
-TEST(ResultValueTests, ConversionOperators)
+TEST (ResultValueTests, ConversionOperators)
 {
     auto success = ResultValue<int>::ok(42);
     auto failure = ResultValue<int>::fail("Error");
@@ -62,7 +62,7 @@ TEST(ResultValueTests, ConversionOperators)
     EXPECT_TRUE(!failure);
 }
 
-TEST(ResultValueTests, CopyConstructor)
+TEST (ResultValueTests, CopyConstructor)
 {
     auto original = ResultValue<int>::fail("Original error");
     auto copy = original;
@@ -71,7 +71,7 @@ TEST(ResultValueTests, CopyConstructor)
     EXPECT_EQ(copy.getErrorMessage(), original.getErrorMessage());
 }
 
-TEST(ResultValueTests, MoveConstructor)
+TEST (ResultValueTests, MoveConstructor)
 {
     auto original = ResultValue<int>::fail("Original error");
     auto moved = std::move(original);
@@ -85,7 +85,7 @@ TEST(ResultValueTests, MoveConstructor)
     //EXPECT_EQ(original.getErrorMessage(), "Unknown Error");
 }
 
-TEST(ResultValueTests, CopyAssignmentOperator)
+TEST (ResultValueTests, CopyAssignmentOperator)
 {
     auto original = ResultValue<int>::fail("Original error");
     ResultValue<int> copy = ResultValue<int>::ok(42);
@@ -95,7 +95,7 @@ TEST(ResultValueTests, CopyAssignmentOperator)
     EXPECT_EQ(copy.getErrorMessage(), original.getErrorMessage());
 }
 
-TEST(ResultValueTests, MoveAssignmentOperator)
+TEST (ResultValueTests, MoveAssignmentOperator)
 {
     auto original = ResultValue<int>::fail("Original error");
     ResultValue<int> moved = ResultValue<int>::ok(42);
@@ -110,7 +110,7 @@ TEST(ResultValueTests, MoveAssignmentOperator)
     //EXPECT_EQ(original.getErrorMessage(), "Unknown Error");
 }
 
-TEST(ResultValueTests, EqualityOperator)
+TEST (ResultValueTests, EqualityOperator)
 {
     auto success1 = ResultValue<int>::ok(42);
     auto success2 = ResultValue<int>::ok(42);
@@ -124,7 +124,7 @@ TEST(ResultValueTests, EqualityOperator)
     EXPECT_FALSE(failure1 == failure3);
 }
 
-TEST(ResultValueTests, InequalityOperator)
+TEST (ResultValueTests, InequalityOperator)
 {
     auto success1 = ResultValue<int>::ok(42);
     auto success2 = ResultValue<int>::ok(42);

@@ -77,7 +77,7 @@ protected:
     }
 };
 
-TEST_F(TextDiffTests, AppliesSingleInsertionCorrectly)
+TEST_F (TextDiffTests, AppliesSingleInsertionCorrectly)
 {
     String original = "hello";
     String target = "hello world";
@@ -86,7 +86,7 @@ TEST_F(TextDiffTests, AppliesSingleInsertionCorrectly)
     EXPECT_EQ(diff.appliedTo(original), target);
 }
 
-TEST_F(TextDiffTests, AppliesSingleDeletionCorrectly)
+TEST_F (TextDiffTests, AppliesSingleDeletionCorrectly)
 {
     String original = "hello world";
     String target = "hello";
@@ -95,7 +95,7 @@ TEST_F(TextDiffTests, AppliesSingleDeletionCorrectly)
     EXPECT_EQ(diff.appliedTo(original), target);
 }
 
-TEST_F(TextDiffTests, AppliesMultipleChangesCorrectly) {
+TEST_F (TextDiffTests, AppliesMultipleChangesCorrectly) {
     String original = "hello world";
     String target = "hi universe";
     TextDiff diff(original, target);
@@ -103,7 +103,7 @@ TEST_F(TextDiffTests, AppliesMultipleChangesCorrectly) {
     EXPECT_EQ(diff.appliedTo(original), target);
 }
 
-TEST_F(TextDiffTests, NoChangeWhenOriginalAndTargetAreSame)
+TEST_F (TextDiffTests, NoChangeWhenOriginalAndTargetAreSame)
 {
     String original = "hello";
     String target = "hello";
@@ -113,7 +113,7 @@ TEST_F(TextDiffTests, NoChangeWhenOriginalAndTargetAreSame)
     EXPECT_TRUE(diff.changes.isEmpty());
 }
 
-TEST_F(TextDiffTests, ChangeDetectionInsertAndDelete)
+TEST_F (TextDiffTests, ChangeDetectionInsertAndDelete)
 {
     String original = "hello world";
     String target = "hi world";
@@ -126,7 +126,7 @@ TEST_F(TextDiffTests, ChangeDetectionInsertAndDelete)
     EXPECT_EQ(diff.appliedTo(original), target);
 }
 
-TEST_F(TextDiffTests, HandlesEmptyStrings)
+TEST_F (TextDiffTests, HandlesEmptyStrings)
 {
     String original = "";
     String target = "hello";
@@ -135,13 +135,13 @@ TEST_F(TextDiffTests, HandlesEmptyStrings)
     EXPECT_EQ(diff.appliedTo(original), target);
 }
 
-TEST_F(TextDiffTests, HandlesMoreEmptyStrings)
+TEST_F (TextDiffTests, HandlesMoreEmptyStrings)
 {
     TextDiff diff{ String(), String() };
     EXPECT_EQ(diff.appliedTo(String()), String());
 }
 
-TEST_F(TextDiffTests, AppliesChangesToCorrectPosition)
+TEST_F (TextDiffTests, AppliesChangesToCorrectPosition)
 {
     String original = "12345";
     String target = "12abc345";
@@ -151,7 +151,7 @@ TEST_F(TextDiffTests, AppliesChangesToCorrectPosition)
     EXPECT_EQ(result, target);
 }
 
-TEST_F(TextDiffTests, HandlesComplexChanges)
+TEST_F (TextDiffTests, HandlesComplexChanges)
 {
     String original = "The quick brown fox";
     String target = "A quick red fox jumps";
@@ -160,7 +160,7 @@ TEST_F(TextDiffTests, HandlesComplexChanges)
     EXPECT_EQ(diff.appliedTo(original), target);
 }
 
-TEST_F(TextDiffTests, SingleCharacterChanges)
+TEST_F (TextDiffTests, SingleCharacterChanges)
 {
     TextDiff diff1("x", String());
     EXPECT_EQ(diff1.appliedTo("x"), String());
@@ -181,7 +181,7 @@ TEST_F(TextDiffTests, SingleCharacterChanges)
     EXPECT_EQ(diff6.appliedTo("x"), "xxx");
 }
 
-TEST_F(TextDiffTests, RandomStringDiffs)
+TEST_F (TextDiffTests, RandomStringDiffs)
 {
     auto& r = getRandom();
 
