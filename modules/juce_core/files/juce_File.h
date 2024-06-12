@@ -872,6 +872,12 @@ public:
     */
     bool startAsProcess (const String& parameters = String()) const;
 
+    /** Launches the file as a process, passing the environment to use. */
+    bool startAsProcess (const StringPairArray& environment) const;
+
+    /** Launches the file as a process, passing the parameters and environment to use. */
+    bool startAsProcess (const String& parameters, const StringPairArray& environment) const;
+
     /** Opens Finder, Explorer, or whatever the OS uses, to show the user this file's location.
         @see startAsProcess
     */

@@ -745,6 +745,16 @@ bool File::startAsProcess (const String& parameters) const
     return exists() && Process::openDocument (fullPath, parameters);
 }
 
+bool File::startAsProcess (const StringPairArray& environment) const
+{
+    return exists() && Process::openDocument (fullPath, {}, environment);
+}
+
+bool File::startAsProcess (const String& parameters, const StringPairArray& environment) const
+{
+    return exists() && Process::openDocument (fullPath, parameters, environment);
+}
+
 //==============================================================================
 std::unique_ptr<FileInputStream> File::createInputStream() const
 {

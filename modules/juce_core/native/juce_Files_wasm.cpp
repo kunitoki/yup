@@ -71,6 +71,16 @@ String File::getVersion() const
     return {}; // xxx not yet implemented
 }
 
+bool File::isSymbolicLink() const
+{
+    return false; // xxx not yet implemented
+}
+
+String File::getNativeLinkedTarget() const
+{
+    return {}; // xxx not yet implemented
+}
+
 //==============================================================================
 
 const char* const* juce_argv = nullptr;
@@ -160,6 +170,34 @@ bool File::moveToTrash() const
 }
 
 //==============================================================================
+void File::revealToUser() const
+{
+    if (isDirectory())
+        startAsProcess();
+
+    else if (getParentDirectory().exists())
+        getParentDirectory().startAsProcess();
+}
+
+//==============================================================================
+class DirectoryIterator::NativeIterator::Pimpl {};
+
+DirectoryIterator::NativeIterator::NativeIterator (const File& directory, const String& wildCardStr)
+{
+    ignoreUnused (directory, wildCardStr);
+}
+
+DirectoryIterator::NativeIterator::~NativeIterator() {}
+
+bool DirectoryIterator::NativeIterator::next (String& filenameFound,
+                                              bool* isDir, bool* isHidden, int64* fileSize,
+                                              Time* modTime, Time* creationTime, bool* isReadOnly)
+{
+    ignoreUnused (filenameFound, isDir, isHidden, fileSize, modTime, creationTime, isReadOnly);
+    return false;
+}
+
+//==============================================================================
 static bool isFileExecutable (const String& filename)
 {
     juce_statStruct info;
@@ -186,12 +224,9 @@ bool Process::openDocument (const String& fileName, const String& parameters)
     return true;
 }
 
-void File::revealToUser() const
+bool Process::openDocument (const String& fileName, const String& parameters, const StringPairArray&)
 {
-    if (isDirectory())
-        startAsProcess();
-    else if (getParentDirectory().exists())
-        getParentDirectory().startAsProcess();
+    return openDocument (fileName, parameters);
 }
 
 } // namespace juce
