@@ -154,6 +154,8 @@ inline float juce_hypot (float a, float b) noexcept
 template <typename FloatType>
 struct MathConstants
 {
+    static_assert(std::is_floating_point_v<FloatType>, "FloatType can only be a floating point type.");
+
     /** A predefined value for Pi */
     static constexpr FloatType pi = static_cast<FloatType> (3.141592653589793238L);
 
