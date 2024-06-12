@@ -116,6 +116,8 @@ public:
     */
     void add (ListenerClass* listenerToAdd)
     {
+        initialiser.ensureInitialised();
+
         if (listenerToAdd != nullptr)
             listeners->addIfNotAlreadyThere (listenerToAdd);
         else
@@ -131,6 +133,9 @@ public:
     void remove (ListenerClass* listenerToRemove)
     {
         jassert (listenerToRemove != nullptr); // Listeners can't be null pointers!
+
+        if (! initialiser.isInitialised())
+            return;
 
         const ScopedLockType lock (listeners->getLock());
 
@@ -159,10 +164,10 @@ public:
     }
 
     /** Returns the number of registered listeners. */
-    int size() const noexcept                                { return listeners->size(); }
+    int size() const noexcept                                { return initialiser.isInitialised() ? listeners->size() : 0; }
 
     /** Returns true if no listeners are registered, false otherwise. */
-    bool isEmpty() const noexcept                            { return listeners->isEmpty(); }
+    bool isEmpty() const noexcept                            { return initialiser.isInitialised() ? listeners->isEmpty() : true; }
 
     /** Clears the list.
 
@@ -171,6 +176,9 @@ public:
     */
     void clear()
     {
+        if (! initialiser.isInitialised())
+            return;
+
         const ScopedLockType lock (listeners->getLock());
 
         listeners->clear();
@@ -180,7 +188,10 @@ public:
     }
 
     /** Returns true if the specified listener has been added to the list. */
-    bool contains (ListenerClass* listener) const noexcept   { return listeners->contains (listener); }
+    bool contains (ListenerClass* listener) const noexcept
+    {
+        return initialiser.isInitialised() ? listeners->contains (listener) : false;
+    }
 
     /** Returns the raw array of listeners.
 
@@ -191,7 +202,14 @@ public:
 
         @see add, remove, clear, contains
     */
-    const ArrayType& getListeners() const noexcept           { return *listeners; }
+    const ArrayType& getListeners() const noexcept
+    {
+        if (initialiser.isInitialised())
+            return *listeners;
+
+        static const ArrayType emptyListeners = {};
+        return emptyListeners;
+    }
 
     //==============================================================================
     /** Calls an invokable object for each listener in the list. */
@@ -239,6 +257,9 @@ public:
                                const BailOutCheckerType& bailOutChecker,
                                Callback&& callback)
     {
+        if (! initialiser.isInitialised())
+            return;
+
         const auto localListeners = listeners;
         const ScopedLockType lock { localListeners->getLock() };
 
@@ -344,8 +365,9 @@ private:
 
     //==============================================================================
     using SharedListeners = std::shared_ptr<ArrayType>;
-    const SharedListeners listeners = std::make_shared<ArrayType>();
+    SharedListeners listeners;
 
+    //==============================================================================
     struct Iterator
     {
         int index{};
@@ -354,7 +376,13 @@ private:
 
     using SafeIterators = std::vector<Iterator*>;
     using SharedIterators = std::shared_ptr<SafeIterators>;
-    const SharedIterators iterators = std::make_shared<SafeIterators>();
+    SharedIterators iterators;
+
+    ThreadValueInitialiser initialiser = [this]
+    {
+        listeners = std::make_shared<ArrayType>();
+        iterators = std::make_shared<SafeIterators>();
+    };
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE (ListenerList)
