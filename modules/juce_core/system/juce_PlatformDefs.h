@@ -65,11 +65,25 @@ namespace juce
 #endif
 
 //==============================================================================
-// Debugging and assertion macros
+#ifndef DOXYGEN
+ #define JUCE_JOIN_MACRO_HELPER(a, b) a ## b
+ #define JUCE_STRINGIFY_MACRO_HELPER(a) #a
+#endif
 
+/** A good old-fashioned C macro concatenation helper.
+    This combines two items (which may themselves be macros) into a single string,
+    avoiding the pitfalls of the ## macro operator.
+*/
+#define JUCE_JOIN_MACRO(item1, item2)  JUCE_JOIN_MACRO_HELPER (item1, item2)
+
+/** A handy C macro for stringifying any symbol, rather than just a macro parameter. */
+#define JUCE_STRINGIFY(item)  JUCE_STRINGIFY_MACRO_HELPER (item)
+
+//==============================================================================
+// Debugging and assertion macros
 #ifndef JUCE_LOG_CURRENT_ASSERTION
  #if JUCE_LOG_ASSERTIONS || JUCE_DEBUG
-  #define JUCE_LOG_CURRENT_ASSERTION    juce::logAssertion (__FILE__, __LINE__);
+  #define JUCE_LOG_CURRENT_ASSERTION    juce::logAssertion (JUCE_JOIN_MACRO (L, __FILE__), __LINE__);
  #else
   #define JUCE_LOG_CURRENT_ASSERTION
  #endif
@@ -202,21 +216,6 @@ namespace juce
   #endif
 
 #endif
-
-//==============================================================================
-#ifndef DOXYGEN
- #define JUCE_JOIN_MACRO_HELPER(a, b) a ## b
- #define JUCE_STRINGIFY_MACRO_HELPER(a) #a
-#endif
-
-/** A good old-fashioned C macro concatenation helper.
-    This combines two items (which may themselves be macros) into a single string,
-    avoiding the pitfalls of the ## macro operator.
-*/
-#define JUCE_JOIN_MACRO(item1, item2)  JUCE_JOIN_MACRO_HELPER (item1, item2)
-
-/** A handy C macro for stringifying any symbol, rather than just a macro parameter. */
-#define JUCE_STRINGIFY(item)  JUCE_STRINGIFY_MACRO_HELPER (item)
 
 //==============================================================================
 /** This is a shorthand macro for deleting a class's copy constructor and
