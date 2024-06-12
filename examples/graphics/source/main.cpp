@@ -63,8 +63,8 @@ public:
         for (int i = 0; i < totalRows * totalColumns; ++i)
             addAndMakeVisible (sliders.add (std::make_unique<yup::Slider> (yup::String (i), font)));
 
-        button = std::make_unique<yup::TextButton> ("xyz", font);
-        addAndMakeVisible (*button);
+        //button = std::make_unique<yup::TextButton> ("xyz", font);
+        //addAndMakeVisible (*button);
 
         deviceManager.addAudioCallback (this);
         deviceManager.initialiseWithDefaultDevices (1, 0);

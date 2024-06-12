@@ -43,16 +43,24 @@ namespace juce
 class Timer::TimerThread final : private Thread,
                                  private DeletedAtShutdown
 {
+	static inline constexpr int maxTimeoutMilliseconds = 10;
+
 public:
     using LockType = CriticalSection; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
 
     JUCE_DECLARE_SINGLETON (TimerThread, true)
+
+    TimerThread()  : Thread ("JUCE Timer")
+	{
+		timers.reserve (32);
+	}
 
     ~TimerThread() override
     {
         signalThreadShouldExit();
         callbackArrived.signal();
         stopThread (-1);
+
         clearSingletonInstance();
     }
 
@@ -94,14 +102,14 @@ public:
 
             // don't wait for too long because running this loop also helps keep the
             // Time::getApproximateMillisecondTimer value stay up-to-date
-            wait (jlimit (1, 10, timeUntilFirstTimer));
+            wait (jlimit (1, maxTimeoutMilliseconds, timeUntilFirstTimer));
         }
     }
 
     void callTimers()
     {
         auto now = Time::getMillisecondCounter();
-        auto timeout = now + 100;
+        auto timeout = now + maxTimeoutMilliseconds;
 
        #if JUCE_WASM
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
@@ -308,9 +316,9 @@ private:
             t.countdownMs -= numMillisecsElapsed;
     }
 
-    TimerThread()  : Thread ("JUCE Timer") { timers.reserve (32); }
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimerThread)
 };
+
 JUCE_IMPLEMENT_SINGLETON (Timer::TimerThread)
 
 //==============================================================================
@@ -338,12 +346,12 @@ void Timer::startTimer (int interval) noexcept
 
     if (auto* instance = TimerThread::getInstance())
     {
-    bool wasStopped = (timerPeriodMs == 0);
-    timerPeriodMs = jmax (1, interval);
+    	bool wasStopped = (timerPeriodMs == 0);
+    	timerPeriodMs = jmax (1, interval);
 
-    if (wasStopped)
+    	if (wasStopped)
             instance->addTimer (this);
-    else
+    	else
             instance->resetTimerCounter (this);
     }
 }
@@ -362,6 +370,7 @@ void Timer::stopTimer() noexcept
     {
         if (auto* instance = TimerThread::getInstanceWithoutCreating())
             instance->removeTimer (this);
+
         timerPeriodMs = 0;
     }
 }

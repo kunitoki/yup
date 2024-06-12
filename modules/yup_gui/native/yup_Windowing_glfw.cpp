@@ -477,7 +477,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
 
    #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     glfwMakeContextCurrent (window);
-    glfwSwapInterval (0);
+    //glfwSwapInterval (0);
    #endif
 
     glfwSetWindowUserPointer (window, this);
