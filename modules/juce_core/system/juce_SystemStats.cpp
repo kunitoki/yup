@@ -266,7 +266,7 @@ String SystemStats::getStackBacktrace()
   #else
     void* stack[128];
 
-   #if JUCE_ANDROID
+   #if JUCE_ANDROID && __ANDROID_API__ < 33
     BacktraceState currentState (stack, stack + numElementsInArray (stack));
     _Unwind_Backtrace (unwindCallback, &state);
 
