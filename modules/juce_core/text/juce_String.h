@@ -159,11 +159,14 @@ public:
     String (CharPointer_ASCII text);
 
     /** Creates a string from a StringRef */
-    String (StringRef);
+    String (StringRef text);
 
     //==============================================================================
     /** Creates a string from a UTF-8 encoded std::string. */
-    explicit String (const std::string&);
+    explicit String (const std::string& text);
+
+    /** Creates a string from a UTF-8 encoded std::string_view. */
+    explicit String (std::string_view start);
 
     //==============================================================================
     /** Creates a string from a single character. */

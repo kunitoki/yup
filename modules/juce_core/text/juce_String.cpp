@@ -371,6 +371,7 @@ String::String (CharPointer_UTF16 start, CharPointer_UTF16 end)  : text (StringH
 String::String (CharPointer_UTF32 start, CharPointer_UTF32 end)  : text (StringHolderUtils::createFromCharPointer (start, end)) {}
 
 String::String (const std::string& s) : text (StringHolderUtils::createFromFixedLength (s.data(), s.size())) {}
+String::String (std::string_view s)   : text (StringHolderUtils::createFromFixedLength (s.data(), s.size())) {}
 String::String (StringRef s)          : text (StringHolderUtils::createFromCharPointer (s.text)) {}
 
 String String::charToString (juce_wchar character)

@@ -24,6 +24,7 @@
 #include <juce_core/juce_core.h>
 
 #include <string>
+#include <string_view>
 
 using namespace juce;
 
@@ -32,55 +33,56 @@ class StringPoolTest : public ::testing::Test
 protected:
     StringPool pool;
 
-    void addStringsToPool(const std::vector<String>& strings)
+    void addStringsToPool (const std::vector<String>& strings)
     {
         for (const auto& s : strings)
-            pool.getPooledString(s);
+            pool.getPooledString (s);
     }
 };
 
 TEST_F (StringPoolTest, ReturnsSameInstanceForDuplicateString)
 {
     String str = "testString";
-    auto pooled1 = pool.getPooledString(str);
-    auto pooled2 = pool.getPooledString(str);
+    auto pooled1 = pool.getPooledString (str);
+    auto pooled2 = pool.getPooledString (str);
 
     // Check if the pointers for the same text are equal
-    EXPECT_EQ(pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
+    EXPECT_EQ (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
 
 TEST_F (StringPoolTest, ReturnsSameInstanceForDifferentInputTypes)
 {
     const char* cstr = "anotherTest";
-    String str(cstr);
-    StringRef strRef(str);
+    String str (cstr);
+    StringRef strRef (str);
 
-    auto pooled1 = pool.getPooledString(cstr);
-    auto pooled2 = pool.getPooledString(str);
-    auto pooled3 = pool.getPooledString(strRef);
+    auto pooled1 = pool.getPooledString (cstr);
+    auto pooled2 = pool.getPooledString (str);
+    auto pooled3 = pool.getPooledString (strRef);
 
-    EXPECT_EQ(pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
-    EXPECT_EQ(pooled1.getCharPointer().getAddress(), pooled3.getCharPointer().getAddress());
+    EXPECT_EQ (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
+    EXPECT_EQ (pooled1.getCharPointer().getAddress(), pooled3.getCharPointer().getAddress());
 }
 
 TEST_F (StringPoolTest, DifferentStringsDifferentInstances)
 {
-    auto pooled1 = pool.getPooledString("stringOne");
-    auto pooled2 = pool.getPooledString("stringTwo");
+    auto pooled1 = pool.getPooledString ("stringOne");
+    auto pooled2 = pool.getPooledString ("stringTwo");
 
-    EXPECT_NE(pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
+    EXPECT_NE (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
 
 TEST_F (StringPoolTest, GarbageCollectFreesUnreferencedStrings)
 {
-    std::string a{ "temp1" }, b{ "temp2" }, c{ "temp3" };
+    std::string b{ "temp2" }, c{ "temp3" };
 
-    addStringsToPool({ String (a), String (b), String (c) });
+    addStringsToPool ({ String (b), String (c) });
 
     String::CharPointerType::CharType *address1, *address2;
 
     {
-        auto pooled1 = pool.getPooledString(String{ "temp1" });
+        auto str = std::string { "sufficiently_long_string_to_defeat_small_string_optimization" };
+        auto pooled1 = pool.getPooledString (str);
         address1 = pooled1.getCharPointer().getAddress();
     }
 
@@ -88,21 +90,21 @@ TEST_F (StringPoolTest, GarbageCollectFreesUnreferencedStrings)
     addStringsToPool({ String (b), String (c) });
 
     {
-        auto pooled2 = pool.getPooledString(std::string{ "temp1" });
+        auto pooled2 = pool.getPooledString ("sufficiently_long_string_to_defeat_small_string_optimization");
         address2 = pooled2.getCharPointer().getAddress();
     }
 
-    EXPECT_NE(address1, address2);
+    EXPECT_NE (address1, address2);
 }
 
 TEST_F (StringPoolTest, DifferentPoolDifferentStrings)
 {
     StringPool pool1, pool2;
 
-    auto pooled1 = pool1.getPooledString("stringOne");
-    auto pooled2 = pool2.getPooledString("stringOne");
+    auto pooled1 = pool1.getPooledString ("stringOne");
+    auto pooled2 = pool2.getPooledString ("stringOne");
 
-    EXPECT_NE(pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
+    EXPECT_NE (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
 
 TEST_F (StringPoolTest, GlobalPoolSingletonInstance)
@@ -110,10 +112,10 @@ TEST_F (StringPoolTest, GlobalPoolSingletonInstance)
     auto& globalPool1 = StringPool::getGlobalPool();
     auto& globalPool2 = StringPool::getGlobalPool();
 
-    EXPECT_EQ(&globalPool1, &globalPool2);
+    EXPECT_EQ (&globalPool1, &globalPool2);
 
-    auto pooled1 = globalPool1.getPooledString("stringOne");
-    auto pooled2 = globalPool2.getPooledString("stringOne");
+    auto pooled1 = globalPool1.getPooledString ("stringOne");
+    auto pooled2 = globalPool2.getPooledString ("stringOne");
 
-    EXPECT_EQ(pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
+    EXPECT_EQ (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
