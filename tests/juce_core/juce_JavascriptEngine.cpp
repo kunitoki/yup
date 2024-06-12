@@ -131,6 +131,7 @@ TEST (JavascriptEngineTests, MaximumExecutionTime)
     EXPECT_FALSE (result.wasOk());
 }
 
+#if ! JUCE_WASM
 TEST (JavascriptEngineTests, StopExecution)
 {
     JavascriptEngine engine;
@@ -152,3 +153,4 @@ TEST (JavascriptEngineTests, StopExecution)
 
     SUCCEED();
 }
+#endif
