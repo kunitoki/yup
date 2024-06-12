@@ -124,7 +124,7 @@
  #include <net/if.h>
  #include <sys/ioctl.h>
 
- #if ! (JUCE_ANDROID || JUCE_WASM)
+ #if ! (JUCE_WASM || (JUCE_ANDROID && __ANDROID_API__ < 33))
   #include <execinfo.h>
  #endif
 

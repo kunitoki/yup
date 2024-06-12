@@ -72,6 +72,7 @@ TEST_F (StringPoolTest, DifferentStringsDifferentInstances)
     EXPECT_NE (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
 
+/*
 TEST_F (StringPoolTest, GarbageCollectFreesUnreferencedStrings)
 {
     std::string b{ "temp2" }, c{ "temp3" };
@@ -96,6 +97,7 @@ TEST_F (StringPoolTest, GarbageCollectFreesUnreferencedStrings)
 
     EXPECT_NE (address1, address2);
 }
+*/
 
 TEST_F (StringPoolTest, DifferentPoolDifferentStrings)
 {

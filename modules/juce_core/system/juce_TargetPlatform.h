@@ -208,7 +208,7 @@
 //==============================================================================
 #if JUCE_WASM
   #ifdef _DEBUG
-    #define JUCE_DEBUG 1
+     #define JUCE_DEBUG 1
   #endif
 
   #define JUCE_LITTLE_ENDIAN 1

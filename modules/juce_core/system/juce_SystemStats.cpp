@@ -260,10 +260,22 @@ String SystemStats::getStackBacktrace()
     _Unwind_Backtrace (unwindCallback, &state);
 
     auto frames = static_cast<size_t> (state.current - &stack[0]);
+    for (auto i = (decltype (frames)) 0; i < frames; ++i)
+    {
+        Dl_info info;
+        if (dladdr (stack[i], &info))
+        {
+            result
+                << juce::String (i).paddedRight (' ', 3)
+                << " " << juce::File (juce::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
+                << " 0x" << juce::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
+                << " " << info.dli_sname
+                << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
+        }
+    }
+
    #else
     auto frames = backtrace (stack, numElementsInArray (stack));
-   #endif
-
     char** frameStrings = backtrace_symbols (stack, frames);
 
     for (auto i = (decltype (frames)) 0; i < frames; ++i)
@@ -288,6 +300,7 @@ String SystemStats::getStackBacktrace()
 
         result << frameStrings[i] << newLine;
     }
+   #endif
   #endif
 
     return result;
