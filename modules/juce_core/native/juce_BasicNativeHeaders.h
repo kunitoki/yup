@@ -133,6 +133,11 @@
  #include <mmsystem.h>
  #include <winioctl.h>
 
+ #ifndef SECURITY_WIN32
+  #define SECURITY_WIN32
+ #endif
+ #include <security.h>
+
  #if JUCE_MINGW
   #include <basetyps.h>
   #include <sys/time.h>
@@ -164,6 +169,7 @@
   #pragma comment (lib, "version.lib")
   #pragma comment (lib, "shlwapi.lib")
   #pragma comment (lib, "winmm.lib")
+  #pragma comment (lib, "secur32.lib")
 
   #ifdef _NATIVE_WCHAR_T_DEFINED
    #ifdef _DEBUG

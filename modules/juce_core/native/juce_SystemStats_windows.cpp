@@ -593,7 +593,10 @@ String SystemStats::getLogonName()
 
 String SystemStats::getFullUserName()
 {
-    return getLogonName();
+    TCHAR text [256] = { 0 };
+    auto len = (ULONG) numElementsInArray (text) - 1;
+    GetUserNameEx (NameDisplay, text, &len);
+    return String (text, (size_t) len);
 }
 
 String SystemStats::getComputerName()
