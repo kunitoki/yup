@@ -128,7 +128,7 @@
   #include <execinfo.h>
  #endif
 
- #if ! (JUCE_WASM || JUCE_MINGW)
+ #if ! (JUCE_WASM || JUCE_MINGW)
   #include <cxxabi.h>
  #endif
 
