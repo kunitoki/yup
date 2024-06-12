@@ -436,28 +436,39 @@ class ChildProcess::ActiveProcess
 {
 public:
     ActiveProcess (const String& command, int streamFlags)
-        : ok (false), readPipe (nullptr), writePipe (nullptr)
     {
-        SECURITY_ATTRIBUTES securityAtts = {};
-        securityAtts.nLength = sizeof (securityAtts);
-        securityAtts.bInheritHandle = TRUE;
+        startProcess (command, streamFlags);
+    }
 
-        if (CreatePipe (&readPipe, &writePipe, &securityAtts, 0)
-             && SetHandleInformation (readPipe, HANDLE_FLAG_INHERIT, 0))
+    ActiveProcess (const String& command, const StringPairArray& environment, int streamFlags)
+    {
+        StringArray envValues;
+
+        for (const auto& key : environment.getAllKeys())
+            envValues.add (key + "=" + environment.getValue (key, {}));
+
+        int totalStringSize = 1;
+        for (const auto& str : envValues)
+            totalStringSize += (int) str.length() + 1;
+
+        Array<TCHAR> envString;
+        envString.resize (totalStringSize);
+
+        int currentIndex = 0;
+        for (const auto& str : envValues)
         {
-            STARTUPINFOW startupInfo = {};
-            startupInfo.cb = sizeof (startupInfo);
+            const auto stringSize = (int) str.length();
 
-            startupInfo.hStdOutput = (streamFlags & wantStdOut) != 0 ? writePipe : nullptr;
-            startupInfo.hStdError  = (streamFlags & wantStdErr) != 0 ? writePipe : nullptr;
-            startupInfo.dwFlags = STARTF_USESTDHANDLES;
+            ::memcpy (envString.getRawDataPointer() + currentIndex, str.toWideCharPointer(), stringSize * sizeof (TCHAR));
 
-            JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6335)
-            ok = CreateProcess (nullptr, const_cast<LPWSTR> (command.toWideCharPointer()),
-                                nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-                                nullptr, nullptr, &startupInfo, &processInfo) != FALSE;
-            JUCE_END_IGNORE_WARNINGS_MSVC
+            currentIndex += stringSize;
+
+            envString.set (currentIndex++, (TCHAR) 0);
         }
+
+        envString.set (currentIndex++, (TCHAR) 0);
+
+        startProcess (command, streamFlags, envString.getRawDataPointer());
     }
 
     ~ActiveProcess()
@@ -473,6 +484,28 @@ public:
 
         if (writePipe != nullptr)
             CloseHandle (writePipe);
+    }
+
+    void startProcess (const String& command, int streamFlags, void* environment = nullptr)
+    {
+        SECURITY_ATTRIBUTES securityAtts = {};
+        securityAtts.nLength = sizeof (securityAtts);
+        securityAtts.bInheritHandle = TRUE;
+
+        if (CreatePipe (&readPipe, &writePipe, &securityAtts, 0)
+             && SetHandleInformation (readPipe, HANDLE_FLAG_INHERIT, 0))
+        {
+            STARTUPINFOW startupInfo = {};
+            startupInfo.cb = sizeof (startupInfo);
+
+            startupInfo.hStdOutput = (streamFlags & wantStdOut) != 0 ? writePipe : nullptr;
+            startupInfo.hStdError  = (streamFlags & wantStdErr) != 0 ? writePipe : nullptr;
+            startupInfo.dwFlags = STARTF_USESTDHANDLES;
+
+            ok = CreateProcess (nullptr, const_cast<LPWSTR> (command.toWideCharPointer()),
+                                nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
+                                environment, nullptr, &startupInfo, &processInfo) != FALSE;
+        }
     }
 
     bool isRunning() const noexcept
@@ -495,7 +528,7 @@ public:
 
             if (available == 0)
             {
-                if (! isRunning())
+                if (total != 0 || ! isRunning())
                     break;
 
                 Thread::sleep (1);
@@ -503,7 +536,7 @@ public:
             else
             {
                 DWORD numRead = 0;
-                if (! ReadFile ((HANDLE) readPipe, dest, (DWORD) numToDo, &numRead, nullptr))
+                if (! ReadFile ((HANDLE) readPipe, dest, (DWORD) numToDo, &numRead, nullptr) || numRead == 0)
                     break;
 
                 total += (int) numRead;
@@ -527,10 +560,10 @@ public:
         return (uint32) exitCode;
     }
 
-    bool ok;
+    bool ok = false;
 
 private:
-    HANDLE readPipe, writePipe;
+    HANDLE readPipe = nullptr, writePipe = nullptr;
     PROCESS_INFORMATION processInfo;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ActiveProcess)
@@ -539,6 +572,16 @@ private:
 bool ChildProcess::start (const String& command, int streamFlags)
 {
     activeProcess.reset (new ActiveProcess (command, streamFlags));
+
+    if (! activeProcess->ok)
+        activeProcess = nullptr;
+
+    return activeProcess != nullptr;
+}
+
+bool ChildProcess::start (const String& command, const StringPairArray& environment, int streamFlags)
+{
+    activeProcess.reset (new ActiveProcess (command, environment, streamFlags));
 
     if (! activeProcess->ok)
         activeProcess = nullptr;
@@ -563,6 +606,25 @@ bool ChildProcess::start (const StringArray& args, int streamFlags)
     }
 
     return start (escaped.trim(), streamFlags);
+}
+
+bool ChildProcess::start (const StringArray& args, const StringPairArray& environment, int streamFlags)
+{
+    String escaped;
+
+    for (int i = 0; i < args.size(); ++i)
+    {
+        String arg (args[i]);
+
+        // If there are spaces, surround it with quotes. If there are quotes,
+        // replace them with \" so that CommandLineToArgv will correctly parse them.
+        if (arg.containsAnyOf ("\" "))
+            arg = arg.replace ("\"", "\\\"").quoted();
+
+        escaped << arg << ' ';
+    }
+
+    return start (escaped.trim(), environment, streamFlags);
 }
 
 } // namespace juce

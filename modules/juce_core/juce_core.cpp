@@ -100,9 +100,9 @@
   #include <netinet/in.h>
  #endif
 
-#if JUCE_EMSCRIPTEN
- #include <emscripten.h>
-#endif
+ #if JUCE_EMSCRIPTEN
+  #include <emscripten.h>
+ #endif
 
  #if JUCE_LINUX || JUCE_BSD
   #include <stdio.h>
@@ -127,6 +127,8 @@
  #if ! (JUCE_ANDROID || JUCE_WASM)
   #include <execinfo.h>
  #endif
+
+ extern char** environ;
 #endif
 
 #if JUCE_MAC || JUCE_IOS

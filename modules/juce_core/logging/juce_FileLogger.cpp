@@ -120,6 +120,11 @@ File FileLogger::getSystemLogFileFolder()
 {
    #if JUCE_MAC
     return File ("~/Library/Logs");
+   #elif JUCE_LINUX
+    const char* state = ::getenv ("XDG_STATE_HOME");
+    if (state == nullptr)
+        state = ::getenv ("XDG_DATA_HOME");
+    return (state != nullptr) ? File (state) : File ("~/.local/state");
    #else
     return File::getSpecialLocation (File::userApplicationDataDirectory);
    #endif

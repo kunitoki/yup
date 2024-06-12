@@ -117,6 +117,11 @@ public:
     /** Tries to launch the OS's default reader application for a given file or URL. */
     static bool JUCE_CALLTYPE openDocument (const String& documentURL, const String& parameters);
 
+    /** Tries to launch the OS's default reader application for a given file or URL, using an explicit environment. */
+    static bool JUCE_CALLTYPE openDocument (const String& documentURL,
+                                            const String& parameters,
+                                            const StringPairArray& environment);
+
     /** Tries to launch the OS's default email application to let the user create a message. */
     static bool JUCE_CALLTYPE openEmailWithAttachments (const String& targetEmailAddress,
                                                         const String& emailSubject,
