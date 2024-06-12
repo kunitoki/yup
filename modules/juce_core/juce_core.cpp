@@ -128,6 +128,10 @@
   #include <execinfo.h>
  #endif
 
+ #if ! (JUCE_WASM || JUCE_MINGW)
+  #include <cxxabi.h>
+ #endif
+
  extern char** environ;
 #endif
 
@@ -138,6 +142,7 @@
 
 #if JUCE_ANDROID
  #include <ifaddrs.h>
+ #include <unwind.h>
  #include <android/log.h>
 #endif
 

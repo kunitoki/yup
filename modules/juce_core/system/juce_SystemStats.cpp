@@ -191,14 +191,37 @@ bool SystemStats::hasNeon() noexcept            { return getCPUInformation().has
 
 
 //==============================================================================
+#if JUCE_ANDROID
+struct BacktraceState
+{
+    void** current;
+    void** end;
+};
+
+static _Unwind_Reason_Code unwindCallback (struct _Unwind_Context* context, void* arg)
+{
+    BacktraceState* state = static_cast<BacktraceState*> (arg);
+
+    if (uintptr_t pc = _Unwind_GetIP (context))
+    {
+        if (state->current == state->end)
+            return _URC_END_OF_STACK;
+
+        *state->current++ = reinterpret_cast<void*> (pc);
+    }
+
+    return _URC_NO_REASON;
+}
+#endif
+
 String SystemStats::getStackBacktrace()
 {
     String result;
 
-   #if JUCE_ANDROID || JUCE_MINGW || JUCE_WASM
+  #if JUCE_MINGW || JUCE_WASM
     jassertfalse; // sorry, not implemented yet!
 
-   #elif JUCE_WINDOWS
+  #elif JUCE_WINDOWS
     HANDLE process = GetCurrentProcess();
     SymInitialize (process, nullptr, TRUE);
 
@@ -229,16 +252,54 @@ String SystemStats::getStackBacktrace()
         }
     }
 
-   #else
+    for (auto i = (decltype (frames)) 0; i < frames; ++i)
+    {
+        const char* symbol = "";
+
+        Dl_info info;
+        if (dladdr (stack[idx], &info) && info.dli_sname)
+            symbol = info.dli_sname;
+
+        os << "  #" << std::setw(2) << idx << ": " << stack[idx] << "  " << symbol << newLine;
+    }
+
+  #else
     void* stack[128];
+
+   #if JUCE_ANDROID
+    BacktraceState currentState (stack, stack + numElementsInArray (stack));
+    _Unwind_Backtrace (unwindCallback, &state);
+
+    auto frames = static_cast<size_t> (state.current - &stack[0]);
+   #else
     auto frames = backtrace (stack, numElementsInArray (stack));
+   #endif
+
     char** frameStrings = backtrace_symbols (stack, frames);
 
     for (auto i = (decltype (frames)) 0; i < frames; ++i)
-        result << frameStrings[i] << newLine;
+    {
+        Dl_info info;
+        if (dladdr (stack[i], &info))
+        {
+            int status = 0;
+            std::unique_ptr<char, decltype (::free)*> demangled (abi::__cxa_demangle (info.dli_sname, nullptr, 0, &status), ::free);
 
-    ::free (frameStrings);
-   #endif
+            if (status == 0)
+            {
+                result
+                    << juce::String (i).paddedRight (' ', 3)
+                    << " " << juce::File (juce::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
+                    << " 0x" << juce::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
+                    << " " << demangled.get()
+                    << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
+                continue;
+            }
+        }
+
+        result << frameStrings[i] << newLine;
+    }
+  #endif
 
     return result;
 }
