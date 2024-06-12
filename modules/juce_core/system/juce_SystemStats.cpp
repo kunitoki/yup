@@ -252,17 +252,6 @@ String SystemStats::getStackBacktrace()
         }
     }
 
-    for (auto i = (decltype (frames)) 0; i < frames; ++i)
-    {
-        const char* symbol = "";
-
-        Dl_info info;
-        if (dladdr (stack[idx], &info) && info.dli_sname)
-            symbol = info.dli_sname;
-
-        os << "  #" << std::setw(2) << idx << ": " << stack[idx] << "  " << symbol << newLine;
-    }
-
   #else
     void* stack[128];
 
