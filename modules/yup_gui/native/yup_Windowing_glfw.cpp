@@ -628,15 +628,17 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
         static_cast<int> (newBounds.getWidth() * devicePixelRatio),
         static_cast<int> (newBounds.getHeight() * devicePixelRatio));
 
-    emscripten_set_element_css_size("#canvas", newBounds.getWidth(), newBounds.getHeight());
+    emscripten_set_element_css_size("#canvas",
+        jmax (0, newBounds.getWidth()),
+        jmax (0, newBounds.getHeight()));
 
    #else
     if (! isFullScreen() && isDecorated())
         glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
     glfwSetWindowSize (window,
-        jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
-        jmax (1, newBounds.getHeight() - topMargin - bottomMargin));
+        jmax (0, newBounds.getWidth() - leftMargin - rightMargin),
+        jmax (0, newBounds.getHeight() - topMargin - bottomMargin));
 
    #endif
 
