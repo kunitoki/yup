@@ -1,4 +1,4 @@
-# YUP: Cross-Platform Application Development Library
+# YUP: Cross-Platform Application And Plugin Development Library
 
 UI courtesy from https://www.drywestdesign.com/:
 ![SeaSynth](./images/seasynth_prototype.png)
@@ -18,12 +18,13 @@ Example rive animations ([source code](./examples/render/source/main.cpp)):
 [![Build And Test Wasm](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml)
 
 ## Introduction
-YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application development, featuring state-of-the-art rendering and audio processing. Originating from a fork of JUCE7's ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license, ensuring that it remains a freely accessible and modifiable resource for developers worldwide.
+YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
 
 ## Features
 YUP brings a suite of powerful features, including:
 - **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source Rive Renderer, backed by Metal, Direct3D, OpenGL and WebGPU.
-- **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more.
+- **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more. Based on the JUCE7 module for audio/midi input and output.
+- **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://u-he.com/community/clap/) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
 - **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux (with Wasm, iOS and Android in the pipe).
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
