@@ -40,6 +40,9 @@ Component::~Component()
     if (options.onDesktop)
         removeFromDesktop();
 
+    if (parentComponent != nullptr)
+        parentComponent->removeChildComponent (this);
+
     for (auto component : children)
         component->parentComponent = nullptr;
 
@@ -465,19 +468,29 @@ void Component::toBack()
 
 //==============================================================================
 
+void Component::setWantsKeyboardFocus (bool wantsFocus)
+{
+    options.wantsKeyboardFocus = wantsFocus;
+}
+
 void Component::takeFocus()
 {
-    getNativeComponent()->setFocusedComponent (this);
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->setFocusedComponent (this);
 }
 
 void Component::leaveFocus()
 {
-    getNativeComponent()->setFocusedComponent (nullptr);
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->setFocusedComponent (nullptr);
 }
 
 bool Component::hasFocus() const
 {
-    return getNativeComponent()->getFocusedComponent() == this;
+    if (auto nativeComponent = getNativeComponent())
+        return nativeComponent->getFocusedComponent() == this;
+
+    return false;
 }
 
 //==============================================================================

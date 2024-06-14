@@ -35,24 +35,17 @@ class CustomWindow
 public:
     CustomWindow()
         // Fluid and continuous animations needs continuous repainting
-        : yup::DocumentWindow (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous, {}, 60.0f)
-        , artboard ("Artboard")
+        : yup::DocumentWindow (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous, {}, 120.0f)
     {
         // Set title
         setTitle ("main");
-
-        // Intantiate and load the artboard
-        //addAndMakeVisible (artboard);
 
 #if JUCE_WASM
         yup::File riveFilePath = yup::File ("/data");
 #else
         yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
 #endif
-        riveFilePath = riveFilePath.getChildFile("mixer_table.riv");
-
-        //artboard.loadFromFile (riveFilePath, 2);
-        //artboard.setNumberInput ("rotation", 90.0);
+        riveFilePath = riveFilePath.getChildFile("alien.riv");
 
         // Setup artboards
         for (int i = 0; i < totalRows * totalColumns; ++i)
@@ -63,14 +56,19 @@ public:
             art->loadFromFile (riveFilePath, 0);
         }
 
+        // Grab focus
+        takeFocus();
+
         // Update titlebar
         startTimerHz(1);
     }
 
     void resized() override
     {
-        // artboard.setBounds (getLocalBounds());
+        for (int i = 0; i < totalRows * totalColumns; ++i)
+            artboards.getUnchecked (i)->setBounds (getLocalBounds());
 
+        /*
         auto bounds = getLocalBounds().reduced (100);
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
@@ -84,6 +82,7 @@ public:
                 artboards.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
             }
         }
+        */
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -105,15 +104,18 @@ public:
             break;
 
         case yup::KeyPress::textPKey:
-            //artboard.setPaused (!artboard.isPaused());
+            for (int i = 0; i < totalRows * totalColumns; ++i)
+                artboards[i]->setPaused (! artboards[i]->isPaused());
             break;
 
         case yup::KeyPress::textHKey:
-            //artboard.addHorizontalRepeats (shift ? -1 : 1);
+            for (int i = 0; i < totalRows * totalColumns; ++i)
+                artboards[i]->addHorizontalRepeats (shift ? -1 : 1);
             break;
 
         case yup::KeyPress::textJKey:
-            //artboard.addVerticalRepeats (shift ? -1 : 1);
+            for (int i = 0; i < totalRows * totalColumns; ++i)
+                artboards[i]->addVerticalRepeats (shift ? -1 : 1);
             break;
 
         case yup::KeyPress::textZKey:
@@ -121,11 +123,13 @@ public:
             break;
 
         case yup::KeyPress::upKey:
-            //artboard.multiplyScale (1.25, position);
+            for (int i = 0; i < totalRows * totalColumns; ++i)
+                artboards[i]->multiplyScale (1.25);
             break;
 
         case yup::KeyPress::downKey:
-            //artboard.multiplyScale (1.0 / 1.25, position);
+            for (int i = 0; i < totalRows * totalColumns; ++i)
+                artboards[i]->multiplyScale (1.0 / 1.25);
             break;
         }
     }
@@ -148,9 +152,11 @@ private:
         auto currentFps = getNativeComponent()->getCurrentFrameRate();
         title << "[" << yup::String (currentFps, 1) << " FPS]";
 
-        auto instances = artboard.getNumInstances();
+        int instances = 0;
+        for (int i = 0; i < totalRows * totalColumns; ++i)
+            instances += artboards[i]->getNumInstances();
         title << " (x" << instances << " instances)";
-        title << " | " << "YUP On Rive Renderer";
+        title << " | " << "YUP Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
@@ -161,10 +167,9 @@ private:
         setTitle (title);
     }
 
-    yup::Artboard artboard;
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 4;
-    int totalColumns = 4;
+    int totalRows = 1;
+    int totalColumns = 1;
 };
 
 //==============================================================================

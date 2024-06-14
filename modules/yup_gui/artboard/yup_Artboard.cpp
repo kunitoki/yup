@@ -56,6 +56,7 @@ Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex)
     vertRepeat = 0;
 
     updateScenesFromFile (getNumInstances());
+    repaint();
 
     return Result::ok();
 }
@@ -91,9 +92,7 @@ void Artboard::setNumberInput (const String& name, double value)
 
 void Artboard::addHorizontalRepeats (int repeatsToAdd)
 {
-    if (repeatsToAdd > 0 || horzRepeat > 0)
-        horzRepeat += repeatsToAdd;
-
+    horzRepeat += repeatsToAdd;
     horzRepeat = jmax (0, horzRepeat);
 
     repaint();
@@ -101,9 +100,7 @@ void Artboard::addHorizontalRepeats (int repeatsToAdd)
 
 void Artboard::addVerticalRepeats (int repeatsToAdd)
 {
-    if (repeatsToAdd > 0 || vertRepeat > 0)
-        vertRepeat += repeatsToAdd;
-
+    vertRepeat += repeatsToAdd;
     vertRepeat = jmax (0, vertRepeat);
 
     repaint();
@@ -154,10 +151,13 @@ void Artboard::paint (Graphics& g)
 
     rive::Mat2D m = computeAlignment (rive::Fit::contain,
                                       rive::Alignment::center,
-                                      rive::AABB (0, 0, bounds.getWidth(), bounds.getHeight()),
+                                      rive::AABB (bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()),
                                       artboards.front()->bounds());
 
-    m = rive::Mat2D (1.0, 0, 0, 1.0, bounds.getX(), bounds.getY()) * m;
+    auto x = (bounds.getWidth() - bounds.getWidth() * scale) * 0.5f;
+    auto y = (bounds.getHeight() - bounds.getHeight() * scale) * 0.5f;
+
+    m = rive::Mat2D (scale, 0, 0, scale, bounds.getX() + x, bounds.getY() + y) * m;
     viewTransform = m;
 
     renderer->transform (m);
@@ -311,8 +311,6 @@ void Artboard::updateScenesFromFile (std::size_t count)
         if (stateMachine)
             stateMachines.push_back (stateMachine);
     }
-
-    repaint();
 }
 
 //==============================================================================

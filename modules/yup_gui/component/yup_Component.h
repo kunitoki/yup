@@ -143,6 +143,8 @@ public:
     void toBack();
 
     //==============================================================================
+    void setWantsKeyboardFocus (bool wantsFocus);
+
     void takeFocus();
     void leaveFocus();
     bool hasFocus() const;
@@ -204,6 +206,7 @@ private:
         bool onDesktop          : 1;
         bool isFullScreen       : 1;
         bool unclippedRendering : 1;
+        bool wantsKeyboardFocus : 1;
     };
 
     union
