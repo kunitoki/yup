@@ -36,6 +36,8 @@
 
 # Intermediates
 build/*
+cmake-build*
 
 # Ides
 .vscode/
+.idea
