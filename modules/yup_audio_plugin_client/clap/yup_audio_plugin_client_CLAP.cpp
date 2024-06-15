@@ -703,9 +703,14 @@ bool AudioPluginWrapperCLAP::initialise()
         if (wrapper->audioProcessorEditor == nullptr)
             return false;
 
-        wrapper->audioProcessorEditor->addToDesktop (
-            yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow,
-            window->cocoa);
+        yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags
+            & ~yup::ComponentNative::decoratedWindow;
+
+        if (wrapper->audioProcessorEditor->shouldRenderContinuous())
+            flags.set (yup::ComponentNative::renderContinuous);
+
+        wrapper->audioProcessorEditor->addToDesktop (flags, window->cocoa);
+        wrapper->audioProcessorEditor->attachedToWindow();
 
         return true;
     };

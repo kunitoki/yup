@@ -146,13 +146,13 @@ void Artboard::paint (Graphics& g)
             scene->advanceAndApply (1.0f / frameRate);
     }
 
-    if (scenes.empty())
+    if (scenes.empty() || artboards.empty())
         return;
 
-    rive::Mat2D m = computeAlignment (rive::Fit::contain,
-                                      rive::Alignment::center,
-                                      rive::AABB (bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()),
-                                      artboards.front()->bounds());
+    rive::Mat2D m = rive::computeAlignment (rive::Fit::contain,
+                                            rive::Alignment::center,
+                                            rive::AABB (bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()),
+                                            artboards.front()->bounds());
 
     auto x = (bounds.getWidth() - bounds.getWidth() * scale) * 0.5f;
     auto y = (bounds.getHeight() - bounds.getHeight() * scale) * 0.5f;

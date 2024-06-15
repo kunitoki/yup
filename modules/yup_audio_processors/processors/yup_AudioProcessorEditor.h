@@ -34,6 +34,10 @@ public:
 
     virtual bool shouldPreserveAspectRatio() const { return false; }
     virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
+
+    virtual bool shouldRenderContinuous() const { return false; }
+
+    virtual void attachedToWindow() {} // TODO
 };
 
 } // namespace yup

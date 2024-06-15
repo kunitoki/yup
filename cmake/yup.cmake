@@ -256,8 +256,7 @@ function (_yup_module_setup_target module_name
     endif()
 
     target_compile_definitions (${module_name} INTERFACE
-        $<$<CONFIG:DEBUG>:DEBUG=1>
-        $<$<CONFIG:RELEASE>:NDEBUG=1>
+        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
         JUCE_MODULE_AVAILABLE_${module_name}=1
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         ${module_defines})
@@ -476,20 +475,6 @@ function (yup_add_module module_path)
     endif()
 
     # ==== Setup module sources and properties
-    get_cmake_property (multi_config GENERATOR_IS_MULTI_CONFIG)
-    if (NOT multi_config)
-        if (CMAKE_BUILD_TYPE)
-            string (TOLOWER "${CMAKE_BUILD_TYPE}" build_type_string)
-        else()
-            set (build_type_string "Debug")
-        endif()
-        if (build_type_string STREQUAL "Debug")
-            list (APPEND module_defines "DEBUG=1")
-        else()
-            list (APPEND module_defines "NDEBUG=1")
-        endif()
-    endif()
-
     _yup_module_setup_target (${module_name}
                               "${module_cpp_standard}"
                               "${module_include_paths}"
@@ -613,8 +598,7 @@ function (yup_standalone_app)
         ${YUP_ARG_OPTIONS})
 
     target_compile_definitions (${target_name} PRIVATE
-        $<$<CONFIG:DEBUG>:DEBUG=1>
-        $<$<CONFIG:RELEASE>:NDEBUG=1>
+        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         JUCE_STANDALONE_APPLICATION=1
         ${additional_definitions}
@@ -715,8 +699,7 @@ function (yup_audio_plugin)
         ${YUP_ARG_OPTIONS})
 
     target_compile_definitions (${target_name} PRIVATE
-        $<$<CONFIG:DEBUG>:DEBUG=1>
-        $<$<CONFIG:RELEASE>:NDEBUG=1>
+        $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
         JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         JUCE_STANDALONE_APPLICATION=0
         JUCE_MODAL_LOOPS_PERMITTED=1

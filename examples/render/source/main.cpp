@@ -35,7 +35,7 @@ class CustomWindow
 public:
     CustomWindow()
         // Fluid and continuous animations needs continuous repainting
-        : yup::DocumentWindow (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous, {}, 120.0f)
+        : yup::DocumentWindow (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous, {}, 60.0f)
     {
         // Set title
         setTitle ("main");
@@ -132,6 +132,12 @@ public:
                 artboards[i]->multiplyScale (1.0 / 1.25);
             break;
         }
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        //g.setFillColor (0xffffffff);
+        //g.fillAll();
     }
 
     void userTriedToCloseWindow() override
