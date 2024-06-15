@@ -31,7 +31,7 @@ Artboard::Artboard (StringRef componentID)
 
 //==============================================================================
 
-Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex)
+Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex, bool shouldUseStateMachines)
 {
     jassert (getNativeComponent() != nullptr); // Must be added to a NativeComponent !
 
@@ -54,6 +54,7 @@ Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex)
 
     horzRepeat = 0;
     vertRepeat = 0;
+    useStateMachines = shouldUseStateMachines;
 
     updateScenesFromFile (getNumInstances());
     repaint();
@@ -280,25 +281,29 @@ void Artboard::updateScenesFromFile (std::size_t count)
         std::unique_ptr<rive::Scene> scene;
         rive::StateMachineInstance* stateMachine = nullptr;
 
-        if (yup::isPositiveAndBelow (stateMachineIndex, currentArtboard->stateMachineCount()))
+        if (useStateMachines)
         {
-            auto machine = currentArtboard->stateMachineAt (stateMachineIndex);
-            stateMachine = machine.get();
-            scene = std::move (machine);
+            if (yup::isPositiveAndBelow (stateMachineIndex, currentArtboard->stateMachineCount()))
+            {
+                auto machine = currentArtboard->stateMachineAt (stateMachineIndex);
+                stateMachine = machine.get();
+                scene = std::move (machine);
+            }
+            else if (currentArtboard->stateMachineCount() > 0)
+            {
+                auto machine = currentArtboard->defaultStateMachine();
+                stateMachine = machine.get();
+                scene = std::move (machine);
+            }
         }
-
-        else if (currentArtboard->stateMachineCount() > 0)
-        {
-            auto machine = currentArtboard->defaultStateMachine();
-            stateMachine = machine.get();
-            scene = std::move (machine);
-        }
-
         else if (yup::isPositiveAndBelow (animationIndex, currentArtboard->animationCount()))
+        {
             scene = currentArtboard->animationAt (animationIndex);
-
+        }
         else if (currentArtboard->animationCount() > 0)
+        {
             scene = currentArtboard->animationAt (0);
+        }
 
         if (scene == nullptr)
             scene = std::make_unique<rive::StaticScene> (currentArtboard.get());

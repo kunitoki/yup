@@ -30,7 +30,7 @@ public:
     Artboard (StringRef componentID);
 
     //==============================================================================
-    Result loadFromFile (const juce::File& file, int defaultArtboardIndex = -1);
+    Result loadFromFile (const juce::File& file, int defaultArtboardIndex = -1, bool shouldUseStateMachines = true);
 
     //==============================================================================
     bool isPaused() const;
@@ -73,14 +73,15 @@ private:
     rive::Mat2D viewTransform;
     float scale = 1.0f;
 
-    bool paused = false;
-
     int artboardIndex = -1;
     int animationIndex = -1;
     int stateMachineIndex = -1;
 
     int horzRepeat = 0;
     int vertRepeat = 0;
+
+    bool useStateMachines = true;
+    bool paused = false;
 };
 
 } // namespace yup
