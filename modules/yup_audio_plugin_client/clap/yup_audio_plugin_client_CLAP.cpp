@@ -710,7 +710,7 @@ bool AudioPluginWrapperCLAP::initialise()
             flags.set (yup::ComponentNative::renderContinuous);
 
         wrapper->audioProcessorEditor->addToDesktop (flags, window->cocoa);
-        wrapper->audioProcessorEditor->attachedToWindow();
+        wrapper->audioProcessorEditor->attachedToNative();
 
         return true;
     };

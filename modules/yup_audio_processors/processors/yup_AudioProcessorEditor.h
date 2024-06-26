@@ -37,7 +37,7 @@ public:
 
     virtual bool shouldRenderContinuous() const { return false; }
 
-    virtual void attachedToWindow() {} // TODO
+    virtual void attachedToNative() {}
 };
 
 } // namespace yup
