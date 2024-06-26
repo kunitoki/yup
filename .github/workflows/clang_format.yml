@@ -1,0 +1,22 @@
+name: Clang Format
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Clang Code Formatter
+        uses: kunitoki/clang-format-action
+        env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
