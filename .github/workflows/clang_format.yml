@@ -17,6 +17,6 @@ jobs:
 
     steps:
       - name: Clang Code Formatter
-        uses: joaomarcosth9/clang-format-action@v1.0
+        uses: joaomarcosth9/clang-format-action@v1.4
         env:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
