@@ -1,7 +1,9 @@
 name: Clang Format Apply
 
-# run on pull requests to develop
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -9,6 +11,10 @@ on:
 jobs:
   format:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
     steps:
       - uses: actions/checkout@v2
         with:
@@ -20,7 +26,7 @@ jobs:
           style: file
 
       - name: Commit changes
-        uses: stefanzweifel/git-auto-commit-action@v4.1.2
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: Apply clang-format changes
           branch: ${{ github.head_ref }}
