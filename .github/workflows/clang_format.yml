@@ -8,6 +8,9 @@ on:
     branches:
       - main
 
+env:
+  CLANG_FORMAT_VERSION: 17
+
 jobs:
   format:
     runs-on: ubuntu-latest
@@ -16,7 +19,27 @@ jobs:
       contents: write
 
     steps:
-      - name: Clang Code Formatter
-        uses: joaomarcosth9/clang-format-action@v1.4
-        env:
-            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install clang-format-${{ env.CLANG_FORMAT_VERSION }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure repository
+        run: |
+          REPO_FULLNAME=$(jq -r ".repository.full_name" "$GITHUB_EVENT_PATH")
+          BRANCH=${GITHUB_REF#*refs/heads/}
+          git init
+          git remote add origin https://x-access-token:$GITHUB_TOKEN@github.com/$REPO_FULLNAME.git
+          git fetch origin $BRANCH
+          git checkout $BRANCH
+          git config --global user.email "clang-format@1337z.ninja"
+          git config --global user.name "Clang Format"
+          git update-index --assume-unchanged .github/workflows/*
+
+      - name: Run clang-format
+        run: |
+          SRC=$(git ls-tree --full-tree -r HEAD | grep -e "\.\(c\|h\|hpp\|cpp\|mm\)\$" | cut -f 2 | grep -e "^examples\|^modules\|^tests")
+          clang-format -style=file -i $SRC
