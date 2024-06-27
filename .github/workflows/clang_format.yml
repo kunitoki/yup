@@ -35,8 +35,11 @@ jobs:
 
       - name: Run clang-format
         run: |
+          cd ${{ github.workspace }}
           SRC=$(git ls-tree --full-tree -r HEAD | grep -e "\.\(c\|h\|hpp\|cpp\|mm\)\$" | cut -f 2 | grep -e "^examples\|^modules\|^tests")
+          echo $SRC
           clang-format -style=file -i $SRC
+          git status
 
       #- name: Push changes
       #  run: |
