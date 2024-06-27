@@ -9,7 +9,7 @@ on:
       - main
 
 env:
-  CLANG_FORMAT_VERSION: 17
+  CLANG_FORMAT_VERSION: 16
 
 jobs:
   format:
@@ -30,11 +30,10 @@ jobs:
       - name: Configure repository
         run: |
           REPO_FULLNAME=$(jq -r ".repository.full_name" "$GITHUB_EVENT_PATH")
-          BRANCH=${GITHUB_REF#*refs/heads/}
           git init
           git remote add origin https://x-access-token:$GITHUB_TOKEN@github.com/$REPO_FULLNAME.git
-          git fetch origin $BRANCH
-          git checkout $BRANCH
+          git fetch origin ${GITHUB_REF#*refs/heads/}
+          git checkout ${GITHUB_REF#*refs/heads/}
           git config --global user.email "clang-format@1337z.ninja"
           git config --global user.name "Clang Format"
           git update-index --assume-unchanged .github/workflows/*
@@ -43,3 +42,8 @@ jobs:
         run: |
           SRC=$(git ls-tree --full-tree -r HEAD | grep -e "\.\(c\|h\|hpp\|cpp\|mm\)\$" | cut -f 2 | grep -e "^examples\|^modules\|^tests")
           clang-format -style=file -i $SRC
+
+      #- name: Push changes
+      #  run: |
+      #    git commit -a -m "Apply code formatting" || true
+      #    git push -u origin ${GITHUB_REF#*refs/heads/}
