@@ -26,9 +26,7 @@ jobs:
 
       - name: Configure repository
         run: |
-          REPO_FULLNAME=$(jq -r ".repository.full_name" "$GITHUB_EVENT_PATH")
           git init
-          git remote add origin https://x-access-token:$GITHUB_TOKEN@github.com/$REPO_FULLNAME.git
           git fetch origin ${GITHUB_REF#*refs/heads/}
           git checkout ${GITHUB_REF#*refs/heads/}
           git config --global user.email "clang-format@1337z.ninja"
