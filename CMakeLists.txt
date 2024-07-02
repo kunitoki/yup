@@ -17,9 +17,9 @@
 #
 # ==============================================================================
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required (VERSION 3.28)
 
-include(cmake/yup.cmake)
+include (cmake/yup.cmake)
 _yup_setup_platform()
 
 if ("${yup_platform}" MATCHES "^(osx)$")

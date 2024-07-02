@@ -21,9 +21,11 @@ cmake_minimum_required(VERSION 3.28)
 
 # ==== Prepare target
 set (target_name example_app)
+set (target_version "1.0.0")
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
+    TARGET_VERSION ${target_version}
     MODULES
         juce_core
         juce_events
