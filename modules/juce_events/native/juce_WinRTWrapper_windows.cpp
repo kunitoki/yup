@@ -47,12 +47,12 @@ WinRTWrapper::WinRTWrapper()
     if (winRTHandle == nullptr)
         return;
 
-    roInitialize           = (RoInitializeFuncPtr)              ::GetProcAddress (winRTHandle, "RoInitialize");
-    createHString          = (WindowsCreateStringFuncPtr)       ::GetProcAddress (winRTHandle, "WindowsCreateString");
-    deleteHString          = (WindowsDeleteStringFuncPtr)       ::GetProcAddress (winRTHandle, "WindowsDeleteString");
-    getHStringRawBuffer    = (WindowsGetStringRawBufferFuncPtr) ::GetProcAddress (winRTHandle, "WindowsGetStringRawBuffer");
-    roActivateInstance     = (RoActivateInstanceFuncPtr)        ::GetProcAddress (winRTHandle, "RoActivateInstance");
-    roGetActivationFactory = (RoGetActivationFactoryFuncPtr)    ::GetProcAddress (winRTHandle, "RoGetActivationFactory");
+    roInitialize = (RoInitializeFuncPtr)::GetProcAddress (winRTHandle, "RoInitialize");
+    createHString = (WindowsCreateStringFuncPtr)::GetProcAddress (winRTHandle, "WindowsCreateString");
+    deleteHString = (WindowsDeleteStringFuncPtr)::GetProcAddress (winRTHandle, "WindowsDeleteString");
+    getHStringRawBuffer = (WindowsGetStringRawBufferFuncPtr)::GetProcAddress (winRTHandle, "WindowsGetStringRawBuffer");
+    roActivateInstance = (RoActivateInstanceFuncPtr)::GetProcAddress (winRTHandle, "RoActivateInstance");
+    roGetActivationFactory = (RoGetActivationFactoryFuncPtr)::GetProcAddress (winRTHandle, "RoGetActivationFactory");
 
     if (roInitialize == nullptr || createHString == nullptr || deleteHString == nullptr
         || getHStringRawBuffer == nullptr || roActivateInstance == nullptr || roGetActivationFactory == nullptr)
@@ -93,7 +93,6 @@ String WinRTWrapper::hStringToString (HSTRING hstr)
     return {};
 }
 
-
 JUCE_IMPLEMENT_SINGLETON (WinRTWrapper)
 
-}
+} // namespace juce

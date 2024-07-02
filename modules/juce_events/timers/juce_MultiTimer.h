@@ -59,7 +59,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  MultiTimer
+class JUCE_API MultiTimer
 {
 protected:
     //==============================================================================
@@ -128,7 +128,6 @@ public:
                     timer was running for the ID number specified.
     */
     int getTimerInterval (int timerID) const noexcept;
-
 
     //==============================================================================
 private:

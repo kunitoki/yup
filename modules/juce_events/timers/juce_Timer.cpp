@@ -40,20 +40,21 @@
 namespace juce
 {
 
-class Timer::TimerThread final : private Thread,
-                                 private DeletedAtShutdown
+class Timer::TimerThread final : private Thread
+    , private DeletedAtShutdown
 {
-	static inline constexpr int maxTimeoutMilliseconds = 10;
+    static inline constexpr int maxTimeoutMilliseconds = 10;
 
 public:
     using LockType = CriticalSection; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
 
     JUCE_DECLARE_SINGLETON (TimerThread, true)
 
-    TimerThread()  : Thread ("JUCE Timer")
-	{
-		timers.reserve (32);
-	}
+    TimerThread()
+        : Thread ("JUCE Timer")
+    {
+        timers.reserve (32);
+    }
 
     ~TimerThread() override
     {
@@ -111,7 +112,7 @@ public:
         auto now = Time::getMillisecondCounter();
         auto timeout = now + maxTimeoutMilliseconds;
 
-       #if JUCE_WASM
+#if JUCE_WASM
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
                                                   : (std::numeric_limits<uint32>::max() - (lastCallTime - now)));
         lastCallTime = now;
@@ -120,10 +121,10 @@ public:
 
         countdownTimers (elapsed);
 
-       #else
+#else
         const LockType::ScopedLockType sl (lock);
 
-       #endif
+#endif
 
         while (! timers.empty())
         {
@@ -167,8 +168,10 @@ public:
 
         // Trying to add a timer that's already here - shouldn't get to this point,
         // so if you get this assertion, let me know!
-        jassert (std::none_of (timers.begin(), timers.end(),
-                               [t] (TimerCountdown i) { return i.timer == t; }));
+        jassert (std::none_of (timers.begin(), timers.end(), [t] (TimerCountdown i)
+                               {
+                                   return i.timer == t;
+                               }));
 
         auto pos = timers.size();
 
@@ -323,6 +326,7 @@ JUCE_IMPLEMENT_SINGLETON (Timer::TimerThread)
 
 //==============================================================================
 Timer::Timer() noexcept {}
+
 Timer::Timer (const Timer&) noexcept {}
 
 Timer::~Timer()
@@ -346,12 +350,12 @@ void Timer::startTimer (int interval) noexcept
 
     if (auto* instance = TimerThread::getInstance())
     {
-    	bool wasStopped = (timerPeriodMs == 0);
-    	timerPeriodMs = jmax (1, interval);
+        bool wasStopped = (timerPeriodMs == 0);
+        timerPeriodMs = jmax (1, interval);
 
-    	if (wasStopped)
+        if (wasStopped)
             instance->addTimer (this);
-    	else
+        else
             instance->resetTimerCounter (this);
     }
 }
@@ -381,8 +385,8 @@ void JUCE_CALLTYPE Timer::callPendingTimersSynchronously()
         instance->callTimersSynchronously();
 }
 
-struct LambdaInvoker final : private Timer,
-                             private DeletedAtShutdown
+struct LambdaInvoker final : private Timer
+    , private DeletedAtShutdown
 {
     LambdaInvoker (int milliseconds, std::function<void()> f)
         : function (std::move (f))

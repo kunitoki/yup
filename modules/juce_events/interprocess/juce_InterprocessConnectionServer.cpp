@@ -40,7 +40,8 @@
 namespace juce
 {
 
-InterprocessConnectionServer::InterprocessConnectionServer() : Thread ("JUCE IPC server")
+InterprocessConnectionServer::InterprocessConnectionServer()
+    : Thread ("JUCE IPC server")
 {
 }
 

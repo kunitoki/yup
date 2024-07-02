@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  ActionListener
+class JUCE_API ActionListener
 {
 public:
     /** Destructor. */

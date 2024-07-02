@@ -58,7 +58,7 @@ class ChangeBroadcaster;
 
     @tags{Events}
 */
-class JUCE_API  ChangeListener
+class JUCE_API ChangeListener
 {
 public:
     /** Destructor. */

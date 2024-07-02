@@ -4,8 +4,8 @@ AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
 AlignEscapedNewlines: Left
-AlignOperands: Align
-AlignTrailingComments: false
+AlignOperands: AlignAfterOperator
+AlignTrailingComments: true
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
@@ -25,7 +25,7 @@ BreakAfterJavaFieldAnnotations: false
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Allman
 BreakBeforeTernaryOperators: true
-BreakConstructorInitializersBeforeComma: false
+BreakConstructorInitializers: BeforeComma
 BreakStringLiterals: false
 BreakInheritanceList: BeforeComma
 ColumnLimit: 0
@@ -39,13 +39,23 @@ ExperimentalAutoDetectBinPacking: false
 IndentCaseLabels: true
 IndentWidth: 4
 IndentWrappedFunctionNames: true
+IndentPPDirectives: BeforeHash
 KeepEmptyLinesAtTheStartOfBlocks: false
+LambdaBodyIndentation: Signature
 Language: Cpp
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: Inner
+NamespaceMacros: [ TEST, TEST_F ]
+PackConstructorInitializers: Never
 PointerAlignment: Left
+PPIndentWidth: 0
+QualifierAlignment: Left
 ReflowComments: false
-SortIncludes: true
+ReferenceAlignment: Left
+SeparateDefinitionBlocks: Always
+ShortNamespaceLines: 0
+SortIncludes: Never
+SortUsingDeclarations: true
 SpaceAfterCStyleCast: true
 SpaceAfterLogicalNot: true
 SpaceBeforeAssignmentOperators: true

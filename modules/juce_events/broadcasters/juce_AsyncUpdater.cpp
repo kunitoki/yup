@@ -43,7 +43,10 @@ namespace juce
 class AsyncUpdater::AsyncUpdaterMessage final : public CallbackMessage
 {
 public:
-    AsyncUpdaterMessage (AsyncUpdater& au)  : owner (au) {}
+    AsyncUpdaterMessage (AsyncUpdater& au)
+        : owner (au)
+    {
+    }
 
     void messageCallback() override
     {
@@ -70,8 +73,8 @@ AsyncUpdater::~AsyncUpdater()
     // happen after this destructor has finished. You should either use a MessageManagerLock while
     // deleting this object, or find some other way to avoid such a race condition.
     jassert ((! isUpdatePending())
-              || MessageManager::getInstanceWithoutCreating() == nullptr
-              || MessageManager::getInstanceWithoutCreating()->currentThreadHasLockedMessageManager());
+             || MessageManager::getInstanceWithoutCreating() == nullptr
+             || MessageManager::getInstanceWithoutCreating()->currentThreadHasLockedMessageManager());
 
     activeMessage->shouldDeliver.set (0);
 }

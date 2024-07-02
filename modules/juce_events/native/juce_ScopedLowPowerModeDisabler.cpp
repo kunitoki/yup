@@ -48,14 +48,14 @@ public:
     Pimpl()
     {
         if (@available (macOS 10.9, *))
-            activity = [[NSProcessInfo processInfo] beginActivityWithOptions: NSActivityUserInitiatedAllowingIdleSystemSleep
-                                                                      reason: @"App must remain in high-power mode"];
+            activity = [[NSProcessInfo processInfo] beginActivityWithOptions:NSActivityUserInitiatedAllowingIdleSystemSleep
+                                                                      reason:@"App must remain in high-power mode"];
     }
 
     ~Pimpl()
     {
         if (@available (macOS 10.9, *))
-            [[NSProcessInfo processInfo] endActivity: activity];
+            [[NSProcessInfo processInfo] endActivity:activity];
     }
 
 private:
@@ -67,13 +67,17 @@ private:
 
 #else
 
-class ScopedLowPowerModeDisabler::Pimpl {};
+class ScopedLowPowerModeDisabler::Pimpl
+{
+};
 
 #endif
 
 //==============================================================================
 ScopedLowPowerModeDisabler::ScopedLowPowerModeDisabler()
-    : pimpl (std::make_unique<Pimpl>()) {}
+    : pimpl (std::make_unique<Pimpl>())
+{
+}
 
 ScopedLowPowerModeDisabler::~ScopedLowPowerModeDisabler() = default;
 

@@ -41,6 +41,7 @@ namespace juce
 {
 
 Message::Message() noexcept {}
+
 Message::~Message() {}
 
 void Message::messageCallback()
@@ -49,8 +50,7 @@ void Message::messageCallback()
         r->handleMessage (*this);
 }
 
-MessageListener::MessageListener() noexcept
-{
+MessageListener::MessageListener() noexcept {
     // Are you trying to create a messagelistener before or after juce has been initialised??
     JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
 }

@@ -67,7 +67,11 @@ namespace Android
 
     struct Handler
     {
-        Handler() : nativeHandler (LocalRef<jobject> (getEnv()->NewObject (AndroidHandler, AndroidHandler.constructor))) {}
+        Handler()
+            : nativeHandler (LocalRef<jobject> (getEnv()->NewObject (AndroidHandler, AndroidHandler.constructor)))
+        {
+        }
+
         ~Handler() { clearSingletonInstance(); }
 
         JUCE_DECLARE_SINGLETON (Handler, false)
@@ -81,7 +85,7 @@ namespace Android
     };
 
     JUCE_IMPLEMENT_SINGLETON (Handler)
-}
+} // namespace Android
 
 //==============================================================================
 struct AndroidMessageQueue final : private Android::Runnable
@@ -108,7 +112,6 @@ struct AndroidMessageQueue final : private Android::Runnable
     }
 
 private:
-
     void run() override
     {
         for (;;)
@@ -133,7 +136,8 @@ JUCE_IMPLEMENT_SINGLETON (AndroidMessageQueue)
 
 //==============================================================================
 void MessageManager::doPlatformSpecificInitialisation() { AndroidMessageQueue::getInstance(); }
-void MessageManager::doPlatformSpecificShutdown()       { AndroidMessageQueue::deleteInstance(); }
+
+void MessageManager::doPlatformSpecificShutdown() { AndroidMessageQueue::deleteInstance(); }
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
@@ -307,11 +311,12 @@ private:
 File juce_getExecutableFile();
 
 void juce_juceEventsAndroidStartApp();
+
 void juce_juceEventsAndroidStartApp()
 {
     auto dllPath = juce_getExecutableFile().getFullPathName();
-    auto addr = reinterpret_cast<juce::JUCEApplicationBase*(*)()> (DynamicLibrary (dllPath)
-                                                                    .getFunction ("juce_CreateApplication"));
+    auto addr = reinterpret_cast<juce::JUCEApplicationBase* (*) ()> (DynamicLibrary (dllPath)
+                                                                         .getFunction ("juce_CreateApplication"));
 
     if (addr != nullptr)
         JuceAppLifecycle::getInstance (addr);

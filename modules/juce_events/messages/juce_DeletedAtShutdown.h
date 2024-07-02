@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  DeletedAtShutdown
+class JUCE_API DeletedAtShutdown
 {
 protected:
     /** Creates a DeletedAtShutdown object. */
@@ -65,7 +65,6 @@ protected:
         dangling at the end that will be deleted automatically.
     */
     virtual ~DeletedAtShutdown();
-
 
 public:
     /** Deletes all extant objects.

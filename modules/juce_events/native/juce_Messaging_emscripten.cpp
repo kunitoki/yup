@@ -19,16 +19,18 @@
   ==============================================================================
 */
 
-
 namespace juce
 {
 
-class JUCE_API EmscriptenEventMessage : public Message {};
-
-static void createDirIfNotExists(File::SpecialLocationType type)
+class JUCE_API EmscriptenEventMessage : public Message
 {
-    File dir = File::getSpecialLocation(type);
-    if (! dir.exists()) dir.createDirectory();
+};
+
+static void createDirIfNotExists (File::SpecialLocationType type)
+{
+    File dir = File::getSpecialLocation (type);
+    if (! dir.exists())
+        dir.createDirectory();
 }
 
 Thread::ThreadID messageThreadID = nullptr; // JUCE message thread
@@ -68,13 +70,14 @@ public:
 
             window.juce_animationFrameCallback = function (timestamp)
             {
-                dynCall("ii", $0, [timestamp]);
+                dynCall ("ii", $0, [timestamp]);
 
                 window.requestAnimationFrame (window.juce_animationFrameCallback);
             };
 
             window.requestAnimationFrame (window.juce_animationFrameCallback);
-        }, juce_animationFrameCallback);
+        },
+                            juce_animationFrameCallback);
     }
 
     ~InternalMessageQueue()
@@ -114,9 +117,10 @@ public:
 
         dispatchEvents();
 
-        for (auto f : preDispatchLoopFuncs) f();
+        for (auto f : preDispatchLoopFuncs)
+            f();
 
-        ReferenceCountedArray <MessageManager::MessageBase> currentMessages;
+        ReferenceCountedArray<MessageManager::MessageBase> currentMessages;
 
         {
             const ScopedLock sl (lock);
@@ -141,7 +145,7 @@ public:
 
     void stopDispatchLoop()
     {
-        (new QuitCallback(*this))->post();
+        (new QuitCallback (*this))->post();
     }
 
     //==============================================================================
@@ -152,7 +156,7 @@ private:
     {
         InternalMessageQueue& parent;
 
-        QuitCallback(InternalMessageQueue& newParent)
+        QuitCallback (InternalMessageQueue& newParent)
             : parent (newParent)
         {
         }
@@ -165,7 +169,7 @@ private:
 
     void dispatchEvents()
     {
-        ReferenceCountedArray <MessageManager::MessageBase> currentEvents;
+        ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
         {
             const ScopedLock sl (lock);
@@ -182,8 +186,8 @@ private:
     }
 
     CriticalSection lock;
-    ReferenceCountedArray <MessageManager::MessageBase> messageQueue;
-    ReferenceCountedArray <MessageManager::MessageBase> eventQueue;
+    ReferenceCountedArray<MessageManager::MessageBase> messageQueue;
+    ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
     std::atomic<bool> quitReceived = false;
 };
 
@@ -223,7 +227,8 @@ int juce_animationFrameCallback (double timestamp)
     //    Logger::outputDebugString ("juce_animationFrameCallback " + std::to_string (timestamp - prevTimestamp));
     //prevTimestamp = timestamp;
 
-    for (auto f : mainThreadLoopFuncs) f();
+    for (auto f : mainThreadLoopFuncs)
+        f();
 
     return 0;
 }
@@ -240,13 +245,13 @@ void MessageManager::doPlatformSpecificShutdown()
 
 namespace detail
 {
-bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
-{
-    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
-    exit (1);
+    bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
+    {
+        Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
+        exit (1);
 
-    return true;
-}
+        return true;
+    }
 } // namespace detail
 
 double getTimeSpentInCurrentDispatchCycle()
@@ -282,4 +287,3 @@ void MessageManager::stopDispatchLoop()
 }
 
 } // namespace juce
-

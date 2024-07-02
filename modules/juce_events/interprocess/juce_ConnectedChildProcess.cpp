@@ -40,12 +40,20 @@
 namespace juce
 {
 
-enum { magicCoordWorkerConnectionHeader = 0x712baf04 };
+enum
+{
+    magicCoordWorkerConnectionHeader = 0x712baf04
+};
 
 static const char* startMessage = "__ipc_st";
-static const char* killMessage  = "__ipc_k_";
-static const char* pingMessage  = "__ipc_p_";
-enum { specialMessageSize = 8, defaultTimeoutMs = 8000 };
+static const char* killMessage = "__ipc_k_";
+static const char* pingMessage = "__ipc_p_";
+
+enum
+{
+    specialMessageSize = 8,
+    defaultTimeoutMs = 8000
+};
 
 static bool isMessageType (const MemoryBlock& mb, const char* messageType) noexcept
 {
@@ -60,18 +68,21 @@ static String getCommandLinePrefix (const String& commandLineUniqueID)
 //==============================================================================
 // This thread sends and receives ping messages every second, so that it
 // can find out if the other process has stopped running.
-struct ChildProcessPingThread : public Thread,
-                                private AsyncUpdater
+struct ChildProcessPingThread : public Thread
+    , private AsyncUpdater
 {
-    ChildProcessPingThread (int timeout)  : Thread ("IPC ping"), timeoutMs (timeout)
+    ChildProcessPingThread (int timeout)
+        : Thread ("IPC ping")
+        , timeoutMs (timeout)
     {
         pingReceived();
     }
 
-    void startPinging()                     { startThread (Priority::low); }
+    void startPinging() { startThread (Priority::low); }
 
-    void pingReceived() noexcept            { countdown = timeoutMs / 1000 + 1; }
-    void triggerConnectionLostMessage()     { triggerAsyncUpdate(); }
+    void pingReceived() noexcept { countdown = timeoutMs / 1000 + 1; }
+
+    void triggerConnectionLostMessage() { triggerAsyncUpdate(); }
 
     virtual bool sendPingMessage (const MemoryBlock&) = 0;
     virtual void pingFailed() = 0;
@@ -83,7 +94,7 @@ struct ChildProcessPingThread : public Thread,
 private:
     Atomic<int> countdown;
 
-    void handleAsyncUpdate() override   { pingFailed(); }
+    void handleAsyncUpdate() override { pingFailed(); }
 
     void run() override
     {
@@ -103,13 +114,13 @@ private:
 };
 
 //==============================================================================
-struct ChildProcessCoordinator::Connection final : public InterprocessConnection,
-                                                   private ChildProcessPingThread
+struct ChildProcessCoordinator::Connection final : public InterprocessConnection
+    , private ChildProcessPingThread
 {
     Connection (ChildProcessCoordinator& m, const String& pipeName, int timeout)
-        : InterprocessConnection (false, magicCoordWorkerConnectionHeader),
-          ChildProcessPingThread (timeout),
-          owner (m)
+        : InterprocessConnection (false, magicCoordWorkerConnectionHeader)
+        , ChildProcessPingThread (timeout)
+        , owner (m)
     {
         createPipe (pipeName, timeoutMs);
     }
@@ -123,11 +134,13 @@ struct ChildProcessCoordinator::Connection final : public InterprocessConnection
     using ChildProcessPingThread::startPinging;
 
 private:
-    void connectionMade() override  {}
-    void connectionLost() override  { owner.handleConnectionLost(); }
+    void connectionMade() override {}
 
-    bool sendPingMessage (const MemoryBlock& m) override    { return owner.sendMessageToWorker (m); }
-    void pingFailed() override                              { connectionLost(); }
+    void connectionLost() override { owner.handleConnectionLost(); }
+
+    bool sendPingMessage (const MemoryBlock& m) override { return owner.sendMessageToWorker (m); }
+
+    void pingFailed() override { connectionLost(); }
 
     void messageReceived (const MemoryBlock& m) override
     {
@@ -170,8 +183,7 @@ bool ChildProcessCoordinator::sendMessageToWorker (const MemoryBlock& mb)
     return false;
 }
 
-bool ChildProcessCoordinator::launchWorkerProcess (const File& executable, const String& commandLineUniqueID,
-                                                   int timeoutMs, int streamFlags)
+bool ChildProcessCoordinator::launchWorkerProcess (const File& executable, const String& commandLineUniqueID, int timeoutMs, int streamFlags)
 {
     killWorkerProcess();
 
@@ -224,13 +236,13 @@ void ChildProcessCoordinator::killWorkerProcess()
 }
 
 //==============================================================================
-struct ChildProcessWorker::Connection final : public InterprocessConnection,
-                                              private ChildProcessPingThread
+struct ChildProcessWorker::Connection final : public InterprocessConnection
+    , private ChildProcessPingThread
 {
     Connection (ChildProcessWorker& p, const String& pipeName, int timeout)
-        : InterprocessConnection (false, magicCoordWorkerConnectionHeader),
-          ChildProcessPingThread (timeout),
-          owner (p)
+        : InterprocessConnection (false, magicCoordWorkerConnectionHeader)
+        , ChildProcessPingThread (timeout)
+        , owner (p)
     {
         connectToPipe (pipeName, timeoutMs);
     }
@@ -247,11 +259,13 @@ struct ChildProcessWorker::Connection final : public InterprocessConnection,
 private:
     ChildProcessWorker& owner;
 
-    void connectionMade() override  {}
-    void connectionLost() override  { owner.handleConnectionLost(); }
+    void connectionMade() override {}
 
-    bool sendPingMessage (const MemoryBlock& m) override    { return owner.sendMessageToCoordinator (m); }
-    void pingFailed() override                              { connectionLost(); }
+    void connectionLost() override { owner.handleConnectionLost(); }
+
+    bool sendPingMessage (const MemoryBlock& m) override { return owner.sendMessageToCoordinator (m); }
+
+    void pingFailed() override { connectionLost(); }
 
     void messageReceived (const MemoryBlock& m) override
     {
@@ -277,6 +291,7 @@ ChildProcessWorker::ChildProcessWorker() = default;
 ChildProcessWorker::~ChildProcessWorker() = default;
 
 void ChildProcessWorker::handleConnectionMade() {}
+
 void ChildProcessWorker::handleConnectionLost() {}
 
 void ChildProcessWorker::handleMessageFromCoordinator (const MemoryBlock& mb)
@@ -306,7 +321,8 @@ bool ChildProcessWorker::initialiseFromCommandLine (const String& commandLine,
     if (commandLine.trim().startsWith (prefix))
     {
         auto pipeName = commandLine.fromFirstOccurrenceOf (prefix, false, false)
-                                   .upToFirstOccurrenceOf (" ", false, false).trim();
+                            .upToFirstOccurrenceOf (" ", false, false)
+                            .trim();
 
         if (pipeName.isNotEmpty())
         {

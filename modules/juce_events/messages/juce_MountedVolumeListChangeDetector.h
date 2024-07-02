@@ -54,7 +54,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  MountedVolumeListChangeDetector
+class JUCE_API MountedVolumeListChangeDetector
 {
 public:
     MountedVolumeListChangeDetector();

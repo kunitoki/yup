@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  LockingAsyncUpdater final
+class JUCE_API LockingAsyncUpdater final
 {
 public:
     //==============================================================================

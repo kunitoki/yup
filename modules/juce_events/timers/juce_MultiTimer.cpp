@@ -43,7 +43,8 @@ namespace juce
 struct MultiTimerCallback final : public Timer
 {
     MultiTimerCallback (const int tid, MultiTimer& mt) noexcept
-        : owner (mt), timerID (tid)
+        : owner (mt)
+        , timerID (tid)
     {
     }
 
@@ -60,6 +61,7 @@ struct MultiTimerCallback final : public Timer
 
 //==============================================================================
 MultiTimer::MultiTimer() noexcept {}
+
 MultiTimer::MultiTimer (const MultiTimer&) noexcept {}
 
 MultiTimer::~MultiTimer()

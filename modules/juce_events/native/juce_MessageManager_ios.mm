@@ -42,45 +42,44 @@ namespace juce
 
 void MessageManager::runDispatchLoop()
 {
-    jassert (isThisTheMessageThread()); // must only be called by the message thread
+    jassert(isThisTheMessageThread()); // must only be called by the message thread
 
     while (quitMessagePosted.get() == 0)
     {
         JUCE_AUTORELEASEPOOL
         {
-            [[NSRunLoop currentRunLoop] runMode: NSDefaultRunLoopMode
-                                     beforeDate: [NSDate dateWithTimeIntervalSinceNow: 0.001]];
+            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
         }
     }
 }
 
 void MessageManager::stopDispatchLoop()
 {
-    if (! SystemStats::isRunningInAppExtensionSandbox())
-       [[[UIApplication sharedApplication] delegate] applicationWillTerminate: [UIApplication sharedApplication]];
+    if (!SystemStats::isRunningInAppExtensionSandbox())
+        [[[UIApplication sharedApplication] delegate] applicationWillTerminate:[UIApplication sharedApplication]];
 
-    exit (0); // iOS apps get no mercy..
+    exit(0); // iOS apps get no mercy..
 }
 
 #if JUCE_MODAL_LOOPS_PERMITTED
-bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
+bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 {
     JUCE_AUTORELEASEPOOL
     {
-        jassert (isThisTheMessageThread()); // must only be called by the message thread
+        jassert(isThisTheMessageThread()); // must only be called by the message thread
 
         uint32 startTime = Time::getMillisecondCounter();
-        NSDate* endDate = [NSDate dateWithTimeIntervalSinceNow: millisecondsToRunFor * 0.001];
+        NSDate* endDate = [NSDate dateWithTimeIntervalSinceNow:millisecondsToRunFor * 0.001];
 
         while (quitMessagePosted.get() == 0)
         {
             JUCE_AUTORELEASEPOOL
             {
-                [[NSRunLoop currentRunLoop] runMode: NSDefaultRunLoopMode
-                                         beforeDate: endDate];
+                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                         beforeDate:endDate];
 
-                if (millisecondsToRunFor >= 0
-                     && Time::getMillisecondCounter() >= startTime + (uint32) millisecondsToRunFor)
+                if (millisecondsToRunFor >= 0 && Time::getMillisecondCounter() >= startTime + (uint32)millisecondsToRunFor)
                     break;
             }
         }
@@ -96,7 +95,7 @@ static std::unique_ptr<MessageQueue> messageQueue;
 void MessageManager::doPlatformSpecificInitialisation()
 {
     if (messageQueue == nullptr)
-        messageQueue.reset (new MessageQueue());
+        messageQueue.reset(new MessageQueue());
 }
 
 void MessageManager::doPlatformSpecificShutdown()
@@ -104,15 +103,15 @@ void MessageManager::doPlatformSpecificShutdown()
     messageQueue = nullptr;
 }
 
-bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
+bool MessageManager::postMessageToSystemQueue(MessageManager::MessageBase* const message)
 {
     if (messageQueue != nullptr)
-        messageQueue->post (message);
+        messageQueue->post(message);
 
     return true;
 }
 
-void MessageManager::broadcastMessage (const String&)
+void MessageManager::broadcastMessage(const String&)
 {
     // N/A on current iOS
 }

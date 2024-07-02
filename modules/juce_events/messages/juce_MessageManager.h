@@ -47,8 +47,7 @@ class ActionBroadcaster;
 
 //==============================================================================
 /** See MessageManager::callFunctionOnMessageThread() for use of this function type. */
-using MessageCallbackFunction = void* (void* userData);
-
+using MessageCallbackFunction = void*(void* userData);
 
 //==============================================================================
 /**
@@ -58,7 +57,7 @@ using MessageCallbackFunction = void* (void* userData);
 
     @tags{Events}
 */
-class JUCE_API  MessageManager  final
+class JUCE_API MessageManager final
 {
 public:
     //==============================================================================
@@ -94,16 +93,16 @@ public:
 
     /** Returns true if the stopDispatchLoop() method has been called.
     */
-    bool hasStopMessageBeenSent() const noexcept        { return quitMessagePosted.get() != 0; }
+    bool hasStopMessageBeenSent() const noexcept { return quitMessagePosted.get() != 0; }
 
-   #if JUCE_MODAL_LOOPS_PERMITTED
+#if JUCE_MODAL_LOOPS_PERMITTED
     /** Synchronously dispatches messages until a given time has elapsed.
 
         Returns false if a quit message has been posted by a call to stopDispatchLoop(),
         otherwise returns true.
     */
     bool runDispatchLoopUntil (int millisecondsToRunFor);
-   #endif
+#endif
 
     //==============================================================================
     /** Asynchronously invokes a function or C++11 lambda on the message thread.
@@ -148,7 +147,7 @@ public:
         (Best to ignore this method unless you really know what you're doing..)
         @see setCurrentThreadAsMessageThread
     */
-    Thread::ThreadID getCurrentMessageThread() const noexcept            { return messageThreadId; }
+    Thread::ThreadID getCurrentMessageThread() const noexcept { return messageThreadId; }
 
     /** Returns true if the caller thread has currently got the message manager locked.
 
@@ -195,7 +194,7 @@ public:
         You shouldn't need to use this directly - see the CallbackMessage or Message
         classes instead.
     */
-    class JUCE_API  MessageBase  : public ReferenceCountedObject
+    class JUCE_API MessageBase : public ReferenceCountedObject
     {
     public:
         MessageBase() = default;
@@ -213,7 +212,7 @@ public:
     /** A lock you can use to lock the message manager. You can use this class with
         the RAII-based ScopedLock classes.
     */
-    class JUCE_API  Lock
+    class JUCE_API Lock
     {
     public:
         /**
@@ -240,9 +239,9 @@ public:
 
             @see exit, abort
          */
-         void enter() const noexcept;
+        void enter() const noexcept;
 
-         /** Attempts to lock the message manager and exits if abort is called.
+        /** Attempts to lock the message manager and exits if abort is called.
 
             This method behaves identically to enter, except that it will abort waiting for
             the lock if the abort method is called.
@@ -334,11 +333,11 @@ public:
     };
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     // Internal methods - do not use!
     void deliverBroadcastMessage (const String&);
     ~MessageManager() noexcept;
-   #endif
+#endif
 
 private:
     //==============================================================================
@@ -364,7 +363,6 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MessageManager)
 };
-
 
 //==============================================================================
 /** Used to make sure that the calling thread has exclusive access to the message loop.
@@ -403,7 +401,7 @@ private:
 
     @tags{Events}
 */
-class JUCE_API MessageManagerLock      : private Thread::Listener
+class JUCE_API MessageManagerLock : private Thread::Listener
 {
 public:
     //==============================================================================
@@ -470,7 +468,7 @@ public:
     /** Returns true if the lock was successfully acquired.
         (See the constructor that takes a Thread for more info).
     */
-    bool lockWasGained() const noexcept                     { return locked; }
+    bool lockWasGained() const noexcept { return locked; }
 
 private:
     //==============================================================================
@@ -491,7 +489,7 @@ private:
     created, which could happen if you accidentally invoke it during a static constructor.
 */
 #define JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED \
-    jassert (juce::MessageManager::existsAndIsLockedByCurrentThread());
+jassert (juce::MessageManager::existsAndIsLockedByCurrentThread());
 
 /** This macro is used to catch unsafe use of functions which expect to only be called
     on the message thread.
@@ -499,13 +497,12 @@ private:
     created, which could happen if you accidentally invoke it during a static constructor.
 */
 #define JUCE_ASSERT_MESSAGE_THREAD \
-    jassert (juce::MessageManager::existsAndIsCurrentThread());
+jassert (juce::MessageManager::existsAndIsCurrentThread());
 
 /** This macro is used to catch unsafe use of functions which expect to not be called
     outside the lifetime of the MessageManager.
 */
 #define JUCE_ASSERT_MESSAGE_MANAGER_EXISTS \
-    jassert (juce::MessageManager::getInstanceWithoutCreating() != nullptr);
-
+jassert (juce::MessageManager::getInstanceWithoutCreating() != nullptr);
 
 } // namespace juce

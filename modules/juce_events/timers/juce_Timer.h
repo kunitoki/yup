@@ -65,7 +65,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  Timer
+class JUCE_API Timer
 {
 protected:
     //==============================================================================
@@ -125,12 +125,12 @@ public:
 
     //==============================================================================
     /** Returns true if the timer is currently running. */
-    bool isTimerRunning() const noexcept                    { return timerPeriodMs > 0; }
+    bool isTimerRunning() const noexcept { return timerPeriodMs > 0; }
 
     /** Returns the timer's interval.
         @returns the timer's interval in milliseconds if it's running, or 0 if it's not.
     */
-    int getTimerInterval() const noexcept                   { return timerPeriodMs; }
+    int getTimerInterval() const noexcept { return timerPeriodMs; }
 
     //==============================================================================
     /** Invokes a lambda after a given number of milliseconds. */

@@ -38,12 +38,12 @@
 */
 
 #ifdef JUCE_EVENTS_H_INCLUDED
- /* When you add this cpp file to your project, you mustn't include it in a file where you've
+    /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
  */
- #error "Incorrect use of JUCE cpp file"
+#error "Incorrect use of JUCE cpp file"
 #endif
 
 #define JUCE_CORE_INCLUDE_OBJC_HELPERS 1
@@ -53,27 +53,27 @@
 #define JUCE_EVENTS_INCLUDE_WIN32_MESSAGE_WINDOW 1
 
 #if JUCE_USE_WINRT_MIDI
- #define JUCE_EVENTS_INCLUDE_WINRT_WRAPPER 1
+#define JUCE_EVENTS_INCLUDE_WINRT_WRAPPER 1
 #endif
 
 #include "juce_events.h"
 
 //==============================================================================
 #if JUCE_MAC
- #import <IOKit/IOKitLib.h>
- #import <IOKit/IOCFPlugIn.h>
- #import <IOKit/hid/IOHIDLib.h>
- #import <IOKit/hid/IOHIDKeys.h>
- #import <IOKit/pwr_mgt/IOPMLib.h>
+#import <IOKit/IOKitLib.h>
+#import <IOKit/IOCFPlugIn.h>
+#import <IOKit/hid/IOHIDLib.h>
+#import <IOKit/hid/IOHIDKeys.h>
+#import <IOKit/pwr_mgt/IOPMLib.h>
 
 #elif JUCE_LINUX || JUCE_BSD
- #include <unistd.h>
+#include <unistd.h>
 
 #elif JUCE_EMSCRIPTEN
- #include <emscripten.h>
+#include <emscripten.h>
 
- #include <deque>
- #include <mutex>
+#include <deque>
+#include <mutex>
 
 #endif
 
@@ -97,28 +97,28 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
- #include "native/juce_MessageQueue_mac.h"
- #if JUCE_MAC
-  #include "native/juce_MessageManager_mac.mm"
- #else
-  #include "native/juce_MessageManager_ios.mm"
- #endif
+#include "native/juce_MessageQueue_mac.h"
+#if JUCE_MAC
+#include "native/juce_MessageManager_mac.mm"
+#else
+#include "native/juce_MessageManager_ios.mm"
+#endif
 
 #elif JUCE_WINDOWS
- #include "native/juce_RunningInUnity.h"
- #include "native/juce_Messaging_windows.cpp"
- #if JUCE_EVENTS_INCLUDE_WINRT_WRAPPER
-  #include "native/juce_WinRTWrapper_windows.cpp"
- #endif
+#include "native/juce_RunningInUnity.h"
+#include "native/juce_Messaging_windows.cpp"
+#if JUCE_EVENTS_INCLUDE_WINRT_WRAPPER
+#include "native/juce_WinRTWrapper_windows.cpp"
+#endif
 
 #elif JUCE_LINUX || JUCE_BSD
- #include "native/juce_EventLoopInternal_linux.h"
- #include "native/juce_Messaging_linux.cpp"
+#include "native/juce_EventLoopInternal_linux.h"
+#include "native/juce_Messaging_linux.cpp"
 
 #elif JUCE_WASM && JUCE_EMSCRIPTEN
- #include "native/juce_Messaging_emscripten.cpp"
+#include "native/juce_Messaging_emscripten.cpp"
 
 #elif JUCE_ANDROID
- #include "native/juce_Messaging_android.cpp"
+#include "native/juce_Messaging_android.cpp"
 
 #endif

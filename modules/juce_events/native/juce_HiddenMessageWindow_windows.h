@@ -52,18 +52,16 @@ public:
         HMODULE moduleHandle = (HMODULE) Process::getCurrentModuleInstanceHandle();
 
         WNDCLASSEX wc = {};
-        wc.cbSize         = sizeof (wc);
-        wc.lpfnWndProc    = wndProc;
-        wc.cbWndExtra     = 4;
-        wc.hInstance      = moduleHandle;
-        wc.lpszClassName  = className.toWideCharPointer();
+        wc.cbSize = sizeof (wc);
+        wc.lpfnWndProc = wndProc;
+        wc.cbWndExtra = 4;
+        wc.hInstance = moduleHandle;
+        wc.lpszClassName = className.toWideCharPointer();
 
         atom = RegisterClassEx (&wc);
         jassert (atom != 0);
 
-        hwnd = CreateWindow (getClassNameFromAtom(), messageWindowName,
-                             0, 0, 0, 0, 0,
-                             nullptr, nullptr, moduleHandle, nullptr);
+        hwnd = CreateWindow (getClassNameFromAtom(), messageWindowName, 0, 0, 0, 0, 0, nullptr, nullptr, moduleHandle, nullptr);
         jassert (hwnd != nullptr);
     }
 
@@ -73,13 +71,13 @@ public:
         UnregisterClass (getClassNameFromAtom(), nullptr);
     }
 
-    inline HWND getHWND() const noexcept     { return hwnd; }
+    inline HWND getHWND() const noexcept { return hwnd; }
 
 private:
     ATOM atom;
     HWND hwnd;
 
-    LPCTSTR getClassNameFromAtom() noexcept  { return (LPCTSTR) (pointer_sized_uint) atom; }
+    LPCTSTR getClassNameFromAtom() noexcept { return (LPCTSTR) (pointer_sized_uint) atom; }
 };
 
 //==============================================================================
@@ -105,12 +103,12 @@ private:
 };
 
 //==============================================================================
-class DeviceChangeDetector  : private Timer
+class DeviceChangeDetector : private Timer
 {
 public:
     DeviceChangeDetector (const wchar_t* const name, std::function<void()> onChangeIn)
-        : messageWindow (name, (WNDPROC) deviceChangeEventCallback),
-          onChange (std::move (onChangeIn))
+        : messageWindow (name, (WNDPROC) deviceChangeEventCallback)
+        , onChange (std::move (onChangeIn))
     {
         SetWindowLongPtr (messageWindow.getHWND(), GWLP_USERDATA, (LONG_PTR) this);
     }
@@ -126,13 +124,12 @@ private:
     HiddenMessageWindow messageWindow;
     std::function<void()> onChange;
 
-    static LRESULT CALLBACK deviceChangeEventCallback (HWND h, const UINT message,
-                                                       const WPARAM wParam, const LPARAM lParam)
+    static LRESULT CALLBACK deviceChangeEventCallback (HWND h, const UINT message, const WPARAM wParam, const LPARAM lParam)
     {
         if (message == WM_DEVICECHANGE
-             && (wParam == 0x8000 /*DBT_DEVICEARRIVAL*/
-                  || wParam == 0x8004 /*DBT_DEVICEREMOVECOMPLETE*/
-                  || wParam == 0x0007 /*DBT_DEVNODES_CHANGED*/))
+            && (wParam == 0x8000    /*DBT_DEVICEARRIVAL*/
+                || wParam == 0x8004 /*DBT_DEVICEREMOVECOMPLETE*/
+                || wParam == 0x0007 /*DBT_DEVNODES_CHANGED*/))
         {
             ((DeviceChangeDetector*) GetWindowLongPtr (h, GWLP_USERDATA))
                 ->triggerAsyncDeviceChangeCallback();

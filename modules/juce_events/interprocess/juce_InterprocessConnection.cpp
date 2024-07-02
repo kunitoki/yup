@@ -42,8 +42,13 @@ namespace juce
 
 struct InterprocessConnection::ConnectionThread final : public Thread
 {
-    ConnectionThread (InterprocessConnection& c)  : Thread ("JUCE IPC"), owner (c) {}
-    void run() override     { owner.runThread(); }
+    ConnectionThread (InterprocessConnection& c)
+        : Thread ("JUCE IPC")
+        , owner (c)
+    {
+    }
+
+    void run() override { owner.runThread(); }
 
     InterprocessConnection& owner;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionThread)
@@ -53,7 +58,9 @@ class SafeActionImpl
 {
 public:
     explicit SafeActionImpl (InterprocessConnection& p)
-        : ref (p) {}
+        : ref (p)
+    {
+    }
 
     template <typename Fn>
     void ifSafe (Fn&& fn)
@@ -89,9 +96,9 @@ class InterprocessConnection::SafeAction final : public SafeActionImpl
 
 //==============================================================================
 InterprocessConnection::InterprocessConnection (bool callbacksOnMessageThread, uint32 magicMessageHeaderNumber)
-    : useMessageThread (callbacksOnMessageThread),
-      magicMessageHeader (magicMessageHeaderNumber),
-      safeAction (std::make_shared<SafeAction> (*this))
+    : useMessageThread (callbacksOnMessageThread)
+    , magicMessageHeader (magicMessageHeaderNumber)
+    , safeAction (std::make_shared<SafeAction> (*this))
 {
     thread.reset (new ConnectionThread (*this));
 }
@@ -112,7 +119,8 @@ InterprocessConnection::~InterprocessConnection()
 
 //==============================================================================
 bool InterprocessConnection::connectToSocket (const String& hostName,
-                                              int portNumber, int timeOutMillisecs)
+                                              int portNumber,
+                                              int timeOutMillisecs)
 {
     disconnect();
 
@@ -168,8 +176,10 @@ void InterprocessConnection::disconnect (int timeoutMs, Notify notify)
 
     {
         const ScopedReadLock sl (pipeAndSocketLock);
-        if (socket != nullptr)  socket->close();
-        if (pipe != nullptr)    pipe->close();
+        if (socket != nullptr)
+            socket->close();
+        if (pipe != nullptr)
+            pipe->close();
     }
 
     thread->stopThread (timeoutMs);
@@ -194,8 +204,8 @@ bool InterprocessConnection::isConnected() const
     const ScopedReadLock sl (pipeAndSocketLock);
 
     return ((socket != nullptr && socket->isConnected())
-              || (pipe != nullptr && pipe->isOpen()))
-            && threadIsRunning;
+            || (pipe != nullptr && pipe->isOpen()))
+        && threadIsRunning;
 }
 
 String InterprocessConnection::getConnectedHostName() const
@@ -266,18 +276,20 @@ void InterprocessConnection::initialiseWithPipe (std::unique_ptr<NamedPipe> newP
 struct ConnectionStateMessage final : public MessageManager::MessageBase
 {
     ConnectionStateMessage (std::shared_ptr<SafeActionImpl> ipc, bool connected) noexcept
-        : safeAction (ipc), connectionMade (connected)
-    {}
+        : safeAction (ipc)
+        , connectionMade (connected)
+    {
+    }
 
     void messageCallback() override
     {
         safeAction->ifSafe ([this] (InterprocessConnection& owner)
-        {
-            if (connectionMade)
-                owner.connectionMade();
-            else
-                owner.connectionLost();
-        });
+                            {
+                                if (connectionMade)
+                                    owner.connectionMade();
+                                else
+                                    owner.connectionLost();
+                            });
     }
 
     std::shared_ptr<SafeActionImpl> safeAction;
@@ -315,15 +327,17 @@ void InterprocessConnection::connectionLostInt()
 struct DataDeliveryMessage final : public Message
 {
     DataDeliveryMessage (std::shared_ptr<SafeActionImpl> ipc, const MemoryBlock& d)
-        : safeAction (ipc), data (d)
-    {}
+        : safeAction (ipc)
+        , data (d)
+    {
+    }
 
     void messageCallback() override
     {
         safeAction->ifSafe ([this] (InterprocessConnection& owner)
-        {
-            owner.messageReceived (data);
-        });
+                            {
+                                owner.messageReceived (data);
+                            });
     }
 
     std::shared_ptr<SafeActionImpl> safeAction;
@@ -361,7 +375,7 @@ bool InterprocessConnection::readNextMessage()
     auto bytes = readData (messageHeader, sizeof (messageHeader));
 
     if (bytes == (int) sizeof (messageHeader)
-         && ByteOrder::swapIfBigEndian (messageHeader[0]) == magicMessageHeader)
+        && ByteOrder::swapIfBigEndian (messageHeader[0]) == magicMessageHeader)
     {
         auto bytesInMessage = (int) ByteOrder::swapIfBigEndian (messageHeader[1]);
 

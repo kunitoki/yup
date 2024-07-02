@@ -44,7 +44,9 @@ class LockingAsyncUpdater::Impl : public CallbackMessage
 {
 public:
     explicit Impl (std::function<void()> cb)
-        : callback (std::move (cb)) {}
+        : callback (std::move (cb))
+    {
+    }
 
     void clear()
     {
@@ -96,10 +98,14 @@ private:
 
 //==============================================================================
 LockingAsyncUpdater::LockingAsyncUpdater (std::function<void()> callbackToUse)
-    : impl (new Impl (std::move (callbackToUse))) {}
+    : impl (new Impl (std::move (callbackToUse)))
+{
+}
 
 LockingAsyncUpdater::LockingAsyncUpdater (LockingAsyncUpdater&& other) noexcept
-    : impl (std::exchange (other.impl, nullptr)) {}
+    : impl (std::exchange (other.impl, nullptr))
+{
+}
 
 LockingAsyncUpdater& LockingAsyncUpdater::operator= (LockingAsyncUpdater&& other) noexcept
 {

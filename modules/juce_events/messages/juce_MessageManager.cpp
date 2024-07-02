@@ -41,7 +41,7 @@ namespace juce
 {
 
 MessageManager::MessageManager() noexcept
-  : messageThreadId (Thread::getCurrentThreadId())
+    : messageThreadId (Thread::getCurrentThreadId())
 {
     JUCE_VERSION_ID
 
@@ -56,7 +56,7 @@ MessageManager::~MessageManager() noexcept
     doPlatformSpecificShutdown();
 
     jassert (instance == this);
-    instance = nullptr;  // do this last in case this instance is still needed by doPlatformSpecificShutdown()
+    instance = nullptr; // do this last in case this instance is still needed by doPlatformSpecificShutdown()
 }
 
 MessageManager* MessageManager::instance = nullptr;
@@ -101,7 +101,7 @@ bool MessageManager::MessageBase::post()
 // implemented in platform-specific code (juce_Messaging_linux.cpp and juce_Messaging_windows.cpp)
 namespace detail
 {
-bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
+    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 } // namespace detail
 
 class MessageManager::QuitMessage final : public MessageManager::MessageBase
@@ -170,8 +170,10 @@ class AsyncFunctionCallback final : public MessageManager::MessageBase
 {
 public:
     AsyncFunctionCallback (MessageCallbackFunction* const f, void* const param)
-        : func (f), parameter (param)
-    {}
+        : func (f)
+        , parameter (param)
+    {
+    }
 
     void messageCallback() override
     {
@@ -213,8 +215,13 @@ bool MessageManager::callAsync (std::function<void()> fn)
 {
     struct AsyncCallInvoker final : public MessageBase
     {
-        AsyncCallInvoker (std::function<void()> f) : callback (std::move (f)) {}
-        void messageCallback() override  { callback(); }
+        AsyncCallInvoker (std::function<void()> f)
+            : callback (std::move (f))
+        {
+        }
+
+        void messageCallback() override { callback(); }
+
         std::function<void()> callback;
     };
 
@@ -258,11 +265,11 @@ void MessageManager::setCurrentThreadAsMessageThread()
 
     if (std::exchange (messageThreadId, thisThread) != thisThread)
     {
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         // This is needed on windows to make sure the message window is created by this thread
         doPlatformSpecificShutdown();
         doPlatformSpecificInitialisation();
-       #endif
+#endif
     }
 }
 
@@ -302,7 +309,9 @@ bool MessageManager::existsAndIsCurrentThread() noexcept
 struct MessageManager::Lock::BlockingMessage final : public MessageManager::MessageBase
 {
     explicit BlockingMessage (const MessageManager::Lock* parent) noexcept
-        : owner (parent) {}
+        : owner (parent)
+    {
+    }
 
     void messageCallback() override
     {
@@ -311,12 +320,18 @@ struct MessageManager::Lock::BlockingMessage final : public MessageManager::Mess
         if (owner != nullptr)
             owner->setAcquired (true);
 
-        condvar.wait (lock, [&] { return owner == nullptr; });
+        condvar.wait (lock, [&]
+                      {
+                          return owner == nullptr;
+                      });
     }
 
     void stopWaiting()
     {
-        const ScopeGuard scope { [&] { condvar.notify_one(); } };
+        const ScopeGuard scope { [&]
+                                 {
+                                     condvar.notify_one();
+                                 } };
         const std::scoped_lock lock { mutex };
         owner = nullptr;
     }
@@ -331,10 +346,13 @@ private:
 };
 
 //==============================================================================
-MessageManager::Lock::Lock()                            {}
-MessageManager::Lock::~Lock()                           { exit(); }
-void MessageManager::Lock::enter()    const noexcept    {        exclusiveTryAcquire (true); }
-bool MessageManager::Lock::tryEnter() const noexcept    { return exclusiveTryAcquire (false); }
+MessageManager::Lock::Lock() {}
+
+MessageManager::Lock::~Lock() { exit(); }
+
+void MessageManager::Lock::enter() const noexcept { exclusiveTryAcquire (true); }
+
+bool MessageManager::Lock::tryEnter() const noexcept { return exclusiveTryAcquire (false); }
 
 bool MessageManager::Lock::exclusiveTryAcquire (bool lockIsMandatory) const noexcept
 {
@@ -362,10 +380,10 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
     }
 
     if (! lockIsMandatory && [&]
-                             {
-                                 const std::scoped_lock lock { mutex };
-                                 return std::exchange (abortWait, false);
-                             }())
+        {
+            const std::scoped_lock lock { mutex };
+            return std::exchange (abortWait, false);
+        }())
     {
         return false;
     }
@@ -395,7 +413,10 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
     {
         {
             std::unique_lock lock { mutex };
-            condvar.wait (lock, [&] { return std::exchange (abortWait, false); });
+            condvar.wait (lock, [&]
+                          {
+                              return std::exchange (abortWait, false);
+                          });
         }
 
         if (acquired)
@@ -426,7 +447,10 @@ void MessageManager::Lock::exit() const noexcept
     if (! wasAcquired)
         return;
 
-    const ScopeGuard unlocker { [&] { entryMutex.exit(); } };
+    const ScopeGuard unlocker { [&]
+                                {
+                                    entryMutex.exit();
+                                } };
 
     if (blockingMessage == nullptr)
         return;
@@ -449,7 +473,10 @@ void MessageManager::Lock::abort() const noexcept
 
 void MessageManager::Lock::setAcquired (bool x) const noexcept
 {
-    const ScopeGuard scope { [&] { condvar.notify_one(); } };
+    const ScopeGuard scope { [&]
+                             {
+                                 condvar.notify_one();
+                             } };
     const std::scoped_lock lock { mutex };
     abortWait = true;
     acquired = x;
@@ -458,11 +485,13 @@ void MessageManager::Lock::setAcquired (bool x) const noexcept
 //==============================================================================
 MessageManagerLock::MessageManagerLock (Thread* threadToCheck)
     : locked (attemptLock (threadToCheck, nullptr))
-{}
+{
+}
 
 MessageManagerLock::MessageManagerLock (ThreadPoolJob* jobToCheck)
     : locked (attemptLock (nullptr, jobToCheck))
-{}
+{
+}
 
 bool MessageManagerLock::attemptLock (Thread* threadToCheck, ThreadPoolJob* jobToCheck)
 {
@@ -476,7 +505,7 @@ bool MessageManagerLock::attemptLock (Thread* threadToCheck, ThreadPoolJob* jobT
 
     // tryEnter may have a spurious abort (return false) so keep checking the condition
     while ((threadToCheck == nullptr || ! threadToCheck->threadShouldExit())
-             && (jobToCheck == nullptr || ! jobToCheck->shouldExit()))
+           && (jobToCheck == nullptr || ! jobToCheck->shouldExit()))
     {
         if (mmLock.tryEnter())
             break;
@@ -501,7 +530,7 @@ bool MessageManagerLock::attemptLock (Thread* threadToCheck, ThreadPoolJob* jobT
     return true;
 }
 
-MessageManagerLock::~MessageManagerLock()  { mmLock.exit(); }
+MessageManagerLock::~MessageManagerLock() { mmLock.exit(); }
 
 void MessageManagerLock::exitSignalSent()
 {
@@ -528,7 +557,16 @@ JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI()
 
 static int numScopedInitInstances = 0;
 
-ScopedJuceInitialiser_GUI::ScopedJuceInitialiser_GUI()  { if (numScopedInitInstances++ == 0) initialiseJuce_GUI(); }
-ScopedJuceInitialiser_GUI::~ScopedJuceInitialiser_GUI() { if (--numScopedInitInstances == 0) shutdownJuce_GUI(); }
+ScopedJuceInitialiser_GUI::ScopedJuceInitialiser_GUI()
+{
+    if (numScopedInitInstances++ == 0)
+        initialiseJuce_GUI();
+}
+
+ScopedJuceInitialiser_GUI::~ScopedJuceInitialiser_GUI()
+{
+    if (--numScopedInitInstances == 0)
+        shutdownJuce_GUI();
+}
 
 } // namespace juce

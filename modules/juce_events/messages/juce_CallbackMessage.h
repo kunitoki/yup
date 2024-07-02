@@ -62,7 +62,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  CallbackMessage   : public MessageManager::MessageBase
+class JUCE_API CallbackMessage : public MessageManager::MessageBase
 {
 public:
     //==============================================================================

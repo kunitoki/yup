@@ -94,14 +94,15 @@ public:
 
 private:
     CriticalSection lock;
-    ReferenceCountedArray <MessageManager::MessageBase> queue;
+    ReferenceCountedArray<MessageManager::MessageBase> queue;
 
     int msgpipe[2];
     int bytesInSocket = 0;
     static constexpr int maxBytesInSocketQueue = 128;
 
-    int getWriteHandle() const noexcept  { return msgpipe[0]; }
-    int getReadHandle() const noexcept   { return msgpipe[1]; }
+    int getWriteHandle() const noexcept { return msgpipe[0]; }
+
+    int getReadHandle() const noexcept { return msgpipe[1]; }
 
     MessageManager::MessageBase::Ptr popNextMessage (int fd) noexcept
     {
@@ -164,7 +165,10 @@ public:
             jassert (pfdsAreSorted());
         }
 
-        listeners.call ([] (auto& l) { l.fdCallbacksChanged(); });
+        listeners.call ([] (auto& l)
+                        {
+                            l.fdCallbacksChanged();
+                        });
     }
 
     void unregisterFdCallback (int fd)
@@ -184,7 +188,10 @@ public:
             jassert (pfdsAreSorted());
         }
 
-        listeners.call ([] (auto& l) { l.fdCallbacksChanged(); });
+        listeners.call ([] (auto& l)
+                        {
+                            l.fdCallbacksChanged();
+                        });
     }
 
     bool dispatchPendingEvents()
@@ -227,12 +234,16 @@ public:
         std::transform (callbacks.begin(),
                         callbacks.end(),
                         std::back_inserter (result),
-                        [] (const auto& pair) { return pair.first; });
+                        [] (const auto& pair)
+                        {
+                            return pair.first;
+                        });
         return result;
     }
 
-    void addListener    (LinuxEventLoopInternal::Listener& listener)         { listeners.add    (&listener); }
-    void removeListener (LinuxEventLoopInternal::Listener& listener)         { listeners.remove (&listener); }
+    void addListener (LinuxEventLoopInternal::Listener& listener) { listeners.add (&listener); }
+
+    void removeListener (LinuxEventLoopInternal::Listener& listener) { listeners.remove (&listener); }
 
     //==============================================================================
     JUCE_DECLARE_SINGLETON (InternalRunLoop, false)
@@ -268,14 +279,17 @@ private:
     std::vector<pollfd>::iterator getPollfd (int fd)
     {
         return std::lower_bound (pfds.begin(), pfds.end(), fd, [] (auto descriptor, auto toFind)
-        {
-            return descriptor.fd < toFind;
-        });
+                                 {
+                                     return descriptor.fd < toFind;
+                                 });
     }
 
     bool pfdsAreSorted() const
     {
-        return std::is_sorted (pfds.begin(), pfds.end(), [] (auto a, auto b) { return a.fd < b.fd; });
+        return std::is_sorted (pfds.begin(), pfds.end(), [] (auto a, auto b)
+                               {
+                                   return a.fd < b.fd;
+                               });
     }
 
     CriticalSection lock;
@@ -310,7 +324,7 @@ namespace LinuxErrorHandling
         saction.sa_flags = 0;
         sigaction (SIGINT, &saction, nullptr);
     }
-}
+} // namespace LinuxErrorHandling
 
 //==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
@@ -346,35 +360,40 @@ void MessageManager::broadcastMessage (const String&)
 
 namespace detail
 {
-// this function expects that it will NEVER be called simultaneously for two concurrent threads
-bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-{
-    for (;;)
+    // this function expects that it will NEVER be called simultaneously for two concurrent threads
+    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
     {
-        if (LinuxErrorHandling::keyboardBreakOccurred)
-            JUCEApplicationBase::quit();
-
-        if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
+        for (;;)
         {
-            if (runLoop->dispatchPendingEvents())
-                break;
+            if (LinuxErrorHandling::keyboardBreakOccurred)
+                JUCEApplicationBase::quit();
 
-            if (returnIfNoPendingMessages)
-                return false;
+            if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
+            {
+                if (runLoop->dispatchPendingEvents())
+                    break;
 
-            runLoop->sleepUntilNextEvent (2000);
+                if (returnIfNoPendingMessages)
+                    return false;
+
+                runLoop->sleepUntilNextEvent (2000);
+            }
         }
-    }
 
-    return true;
-}
+        return true;
+    }
 } // namespace detail
 
 //==============================================================================
 void LinuxEventLoop::registerFdCallback (int fd, std::function<void (int)> readCallback, short eventMask)
 {
     if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
-        runLoop->registerFdCallback (fd, [cb = std::move (readCallback), fd] { cb (fd); }, eventMask);
+        runLoop->registerFdCallback (
+            fd, [cb = std::move (readCallback), fd]
+            {
+                cb (fd);
+            },
+            eventMask);
 }
 
 void LinuxEventLoop::unregisterFdCallback (int fd)

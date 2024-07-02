@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  InterprocessConnectionServer    : private Thread
+class JUCE_API InterprocessConnectionServer : private Thread
 {
 public:
     //==============================================================================

@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  AsyncUpdater
+class JUCE_API AsyncUpdater
 {
 public:
     //==============================================================================

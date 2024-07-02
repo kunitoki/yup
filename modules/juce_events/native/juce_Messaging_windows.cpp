@@ -43,13 +43,13 @@ namespace juce
 extern HWND juce_messageWindowHandle;
 
 #if JUCE_MODULE_AVAILABLE_juce_gui_extra
- LRESULT juce_offerEventToActiveXControl (::MSG&);
+LRESULT juce_offerEventToActiveXControl (::MSG&);
 #endif
 
-using CheckEventBlockedByModalComps = bool (*)(const MSG&);
+using CheckEventBlockedByModalComps = bool (*) (const MSG&);
 CheckEventBlockedByModalComps isEventBlockedByModalComps = nullptr;
 
-using SettingChangeCallbackFunc = void (*)(void);
+using SettingChangeCallbackFunc = void (*) (void);
 SettingChangeCallbackFunc settingChangeCallback = nullptr;
 
 //==============================================================================
@@ -86,10 +86,7 @@ public:
             data.lpData = (void*) localCopy.toUTF32().getAddress();
 
             DWORD_PTR result;
-            SendMessageTimeout (windows.getUnchecked (i), WM_COPYDATA,
-                                (WPARAM) juce_messageWindowHandle,
-                                (LPARAM) &data,
-                                SMTO_BLOCK | SMTO_ABORTIFHUNG, 8000, &result);
+            SendMessageTimeout (windows.getUnchecked (i), WM_COPYDATA, (WPARAM) juce_messageWindowHandle, (LPARAM) &data, SMTO_BLOCK | SMTO_ABORTIFHUNG, 8000, &result);
         }
     }
 
@@ -125,10 +122,10 @@ public:
 
         if (GetMessage (&m, nullptr, 0, 0) >= 0)
         {
-           #if JUCE_MODULE_AVAILABLE_juce_gui_extra
+#if JUCE_MODULE_AVAILABLE_juce_gui_extra
             if (juce_offerEventToActiveXControl (m) != S_FALSE)
                 return true;
-           #endif
+#endif
 
             if (m.message == customMessageID && m.hwnd == juce_messageWindowHandle)
             {
@@ -142,7 +139,7 @@ public:
             else if (isEventBlockedByModalComps == nullptr || ! isEventBlockedByModalComps (m))
             {
                 if ((m.message == WM_LBUTTONDOWN || m.message == WM_RBUTTONDOWN)
-                      && ! JuceWindowIdentifier::isJUCEWindow (m.hwnd))
+                    && ! JuceWindowIdentifier::isJUCEWindow (m.hwnd))
                 {
                     // if it's someone else's window being clicked on, and the focus is
                     // currently on a juce window, pass the kb focus over..
@@ -218,7 +215,11 @@ private:
         {
             struct BroadcastMessage final : public CallbackMessage
             {
-                BroadcastMessage (CharPointer_UTF32 text, size_t length) : message (text, length) {}
+                BroadcastMessage (CharPointer_UTF32 text, size_t length)
+                    : message (text, length)
+                {
+                }
+
                 void messageCallback() override { MessageManager::getInstance()->deliverBroadcastMessage (message); }
 
                 String message;
@@ -273,13 +274,13 @@ const TCHAR InternalMessageQueue::messageWindowName[] = _T("JUCEWindow");
 namespace detail
 {
 
-bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-{
-    if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
-        return queue->dispatchNextMessage (returnIfNoPendingMessages);
+    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+    {
+        if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
+            return queue->dispatchNextMessage (returnIfNoPendingMessages);
 
-    return false;
-}
+        return false;
+    }
 
 } // namespace detail
 
@@ -331,12 +332,16 @@ struct MountedVolumeListChangeDetector::Pimpl
             owner.mountedVolumeListChanged();
     }
 
-    DeviceChangeDetector detector { L"MountedVolumeList", [this] { systemDeviceChanged(); } };
+    DeviceChangeDetector detector { L"MountedVolumeList", [this]
+                                    {
+                                        systemDeviceChanged();
+                                    } };
     MountedVolumeListChangeDetector& owner;
     Array<File> lastVolumeList;
 };
 
-MountedVolumeListChangeDetector::MountedVolumeListChangeDetector()  { pimpl.reset (new Pimpl (*this)); }
+MountedVolumeListChangeDetector::MountedVolumeListChangeDetector() { pimpl.reset (new Pimpl (*this)); }
+
 MountedVolumeListChangeDetector::~MountedVolumeListChangeDetector() {}
 
 } // namespace juce

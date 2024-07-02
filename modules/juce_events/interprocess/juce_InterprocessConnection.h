@@ -43,7 +43,6 @@ namespace juce
 class InterprocessConnectionServer;
 class MemoryBlock;
 
-
 //==============================================================================
 /**
     Manages a simple two-way messaging connection to another process, using either
@@ -67,7 +66,7 @@ class MemoryBlock;
 
     @tags{Events}
 */
-class JUCE_API  InterprocessConnection
+class JUCE_API InterprocessConnection
 {
 public:
     //==============================================================================
@@ -138,7 +137,11 @@ public:
     bool createPipe (const String& pipeName, int pipeReceiveMessageTimeoutMs, bool mustNotExist = false);
 
     /** Whether the disconnect call should trigger callbacks. */
-    enum class Notify { no, yes };
+    enum class Notify
+    {
+        no,
+        yes
+    };
 
     /** Disconnects and closes any currently-open sockets or pipes.
 
@@ -154,10 +157,10 @@ public:
     bool isConnected() const;
 
     /** Returns the socket that this connection is using (or nullptr if it uses a pipe). */
-    StreamingSocket* getSocket() const noexcept                 { return socket.get(); }
+    StreamingSocket* getSocket() const noexcept { return socket.get(); }
 
     /** Returns the pipe that this connection is using (or nullptr if it uses a socket). */
-    NamedPipe* getPipe() const noexcept                         { return pipe.get(); }
+    NamedPipe* getPipe() const noexcept { return pipe.get(); }
 
     /** Returns the name of the machine at the other end of this connection.
         This may return an empty string if the name is unknown.
@@ -204,7 +207,6 @@ public:
         @see sendMessage
     */
     virtual void messageReceived (const MemoryBlock& message) = 0;
-
 
 private:
     //==============================================================================

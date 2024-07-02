@@ -42,7 +42,6 @@ namespace juce
 
 class MessageListener;
 
-
 //==============================================================================
 /** The base class for objects that can be sent to a MessageListener.
 
@@ -57,7 +56,7 @@ class MessageListener;
 
     @tags{Events}
 */
-class JUCE_API  Message  : public MessageManager::MessageBase
+class JUCE_API Message : public MessageManager::MessageBase
 {
 public:
     //==============================================================================

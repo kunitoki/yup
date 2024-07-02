@@ -40,12 +40,13 @@
 namespace juce
 {
 
-class WinRTWrapper :   public DeletedAtShutdown
+class WinRTWrapper : public DeletedAtShutdown
 {
 public:
     //==============================================================================
     ~WinRTWrapper();
-    bool isInitialised() const noexcept  { return initialised; }
+
+    bool isInitialised() const noexcept { return initialised; }
 
     JUCE_DECLARE_SINGLETON (WinRTWrapper, false)
 
@@ -78,7 +79,7 @@ public:
             ScopedHString classID (runtimeClassID);
 
             if (classID.get() != nullptr)
-                roGetActivationFactory (classID.get(), __uuidof (ComClass), (void**) comPtr.resetAndGetPointerAddress());
+                roGetActivationFactory (classID.get(), __uuidof(ComClass), (void**) comPtr.resetAndGetPointerAddress());
         }
 
         return comPtr;
@@ -91,7 +92,7 @@ public:
         ScopedHString (String);
         ~ScopedHString();
 
-        HSTRING get() const noexcept          { return hstr; }
+        HSTRING get() const noexcept { return hstr; }
 
     private:
         HSTRING hstr = nullptr;
@@ -111,7 +112,7 @@ private:
     typedef HRESULT (WINAPI* RoInitializeFuncPtr) (int);
     typedef HRESULT (WINAPI* WindowsCreateStringFuncPtr) (LPCWSTR, UINT32, HSTRING*);
     typedef HRESULT (WINAPI* WindowsDeleteStringFuncPtr) (HSTRING);
-    typedef PCWSTR  (WINAPI* WindowsGetStringRawBufferFuncPtr) (HSTRING, UINT32*);
+    typedef PCWSTR (WINAPI* WindowsGetStringRawBufferFuncPtr) (HSTRING, UINT32*);
     typedef HRESULT (WINAPI* RoActivateInstanceFuncPtr) (HSTRING, IInspectable**);
     typedef HRESULT (WINAPI* RoGetActivationFactoryFuncPtr) (HSTRING, REFIID, void**);
 

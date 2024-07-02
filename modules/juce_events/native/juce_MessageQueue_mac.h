@@ -47,11 +47,11 @@ class MessageQueue
 public:
     MessageQueue()
     {
-       #if JUCE_IOS
+#if JUCE_IOS
         runLoop = CFRunLoopGetCurrent();
-       #else
+#else
         runLoop = CFRunLoopGetMain();
-       #endif
+#endif
 
         CFRunLoopSourceContext sourceContext;
         zerostruct (sourceContext); // (can't use "= { 0 }" on this object because it's typedef'ed as a C struct)

@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  ActionBroadcaster
+class JUCE_API ActionBroadcaster
 {
 public:
     //==============================================================================
@@ -79,7 +79,6 @@ public:
         @see ActionListener::actionListenerCallback
     */
     void sendActionMessage (const String& message) const;
-
 
 private:
     //==============================================================================

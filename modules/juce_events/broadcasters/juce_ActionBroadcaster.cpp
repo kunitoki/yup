@@ -44,11 +44,13 @@ class ActionBroadcaster::ActionMessage final : public MessageManager::MessageBas
 {
 public:
     ActionMessage (const ActionBroadcaster* ab,
-                   const String& messageText, ActionListener* l) noexcept
-        : broadcaster (const_cast<ActionBroadcaster*> (ab)),
-          message (messageText),
-          listener (l)
-    {}
+                   const String& messageText,
+                   ActionListener* l) noexcept
+        : broadcaster (const_cast<ActionBroadcaster*> (ab))
+        , message (messageText)
+        , listener (l)
+    {
+    }
 
     void messageCallback() override
     {
@@ -66,8 +68,7 @@ private:
 };
 
 //==============================================================================
-ActionBroadcaster::ActionBroadcaster()
-{
+ActionBroadcaster::ActionBroadcaster() {
     // are you trying to create this object before or after juce has been initialised??
     JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
 }

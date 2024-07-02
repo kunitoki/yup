@@ -40,7 +40,7 @@
 namespace juce::LinuxEventLoop
 {
 
-    /** Registers a callback that will be called when a file descriptor is ready for I/O.
+/** Registers a callback that will be called when a file descriptor is ready for I/O.
 
         This will add the given file descriptor to the internal set of file descriptors
         that will be passed to the poll() call. When this file descriptor has data to read
@@ -53,12 +53,12 @@ namespace juce::LinuxEventLoop
                              file descriptor. The possible values for this are defined in
                              <poll.h>
     */
-    void registerFdCallback (int fd, std::function<void (int)> readCallback, short eventMask = 1 /*POLLIN*/);
+void registerFdCallback (int fd, std::function<void (int)> readCallback, short eventMask = 1 /*POLLIN*/);
 
-    /** Unregisters a previously registered file descriptor.
+/** Unregisters a previously registered file descriptor.
 
         @see registerFdCallback
     */
-    void unregisterFdCallback (int fd);
+void unregisterFdCallback (int fd);
 
 } // namespace juce::LinuxEventLoop

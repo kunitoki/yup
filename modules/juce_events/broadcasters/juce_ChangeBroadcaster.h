@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  ChangeBroadcaster
+class JUCE_API ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -99,11 +99,13 @@ public:
 
 private:
     //==============================================================================
-    class ChangeBroadcasterCallback  : public AsyncUpdater
+    class ChangeBroadcasterCallback : public AsyncUpdater
     {
     public:
         ChangeBroadcasterCallback();
+
         ~ChangeBroadcasterCallback() override { cancelPendingUpdate(); }
+
         void handleAsyncUpdate() override;
 
         ChangeBroadcaster* owner;
@@ -111,7 +113,7 @@ private:
 
     friend class ChangeBroadcasterCallback;
     ChangeBroadcasterCallback broadcastCallback;
-    ListenerList <ChangeListener> changeListeners;
+    ListenerList<ChangeListener> changeListeners;
 
     std::atomic<bool> anyListeners { false };
 

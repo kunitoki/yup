@@ -98,7 +98,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  JUCEApplicationBase
+class JUCE_API JUCEApplicationBase
 {
 protected:
     //==============================================================================
@@ -110,7 +110,7 @@ public:
 
     //==============================================================================
     /** Returns the global instance of the application object that's running. */
-    static JUCEApplicationBase* getInstance() noexcept          { return appInstance; }
+    static JUCEApplicationBase* getInstance() noexcept { return appInstance; }
 
     //==============================================================================
     /** Returns the application's name. */
@@ -220,7 +220,7 @@ public:
 
         At the moment this method is only called on iOS.
     */
-    virtual void memoryWarningReceived()     { jassertfalse; }
+    virtual void memoryWarningReceived() { jassertfalse; }
 
     //==============================================================================
     /** This will be called when the back button on a device is pressed. The return value
@@ -276,12 +276,12 @@ public:
     /** Returns the value that has been set as the application's exit code.
         @see setApplicationReturnValue
     */
-    int getApplicationReturnValue() const noexcept              { return appReturnValue; }
+    int getApplicationReturnValue() const noexcept { return appReturnValue; }
 
     //==============================================================================
     /** Returns true if this executable is running as an app (as opposed to being a plugin
         or other kind of shared library. */
-    static bool isStandaloneApp() noexcept                      { return createInstance != nullptr; }
+    static bool isStandaloneApp() noexcept { return createInstance != nullptr; }
 
     /** Returns true if the application hasn't yet completed its initialise() method
         and entered the main event loop.
@@ -289,28 +289,27 @@ public:
         This is handy for things like splash screens to know when the app's up-and-running
         properly.
     */
-    bool isInitialising() const noexcept                        { return stillInitialising; }
-
+    bool isInitialising() const noexcept { return stillInitialising; }
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     // The following methods are for internal use only...
     static int main();
     static int main (int argc, const char* argv[]);
 
     static void appWillTerminateByForce();
-    using CreateInstanceFunction = JUCEApplicationBase* (*)();
+    using CreateInstanceFunction = JUCEApplicationBase* (*) ();
     static CreateInstanceFunction createInstance;
 
-   #if JUCE_IOS
+#if JUCE_IOS
     static void* iOSCustomDelegate;
-   #endif
+#endif
 
     virtual bool initialiseApp();
     int shutdownApp();
     static void JUCE_CALLTYPE sendUnhandledException (const std::exception*, const char* sourceFile, int lineNumber);
     bool sendCommandLineToPreexistingInstance();
-   #endif
+#endif
 
 private:
     //==============================================================================
@@ -324,27 +323,26 @@ private:
     JUCE_DECLARE_NON_COPYABLE (JUCEApplicationBase)
 };
 
-
 //==============================================================================
 #if JUCE_CATCH_UNHANDLED_EXCEPTIONS || DOXYGEN
 
- /** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
+    /** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
      the JUCEApplicationBase::sendUnhandledException() method.
      This functionality can be enabled with the JUCE_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
- #define JUCE_TRY try
+#define JUCE_TRY try
 
- /** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
+    /** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
      the JUCEApplicationBase::sendUnhandledException() method.
      This functionality can be enabled with the JUCE_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
- #define JUCE_CATCH_EXCEPTION \
-    catch (const std::exception& e) { juce::JUCEApplicationBase::sendUnhandledException (&e,      __FILE__, __LINE__); } \
-    catch (...)                     { juce::JUCEApplicationBase::sendUnhandledException (nullptr, __FILE__, __LINE__); }
+#define JUCE_CATCH_EXCEPTION                                                                                    \
+catch (const std::exception& e) { juce::JUCEApplicationBase::sendUnhandledException (&e, __FILE__, __LINE__); } \
+catch (...) { juce::JUCEApplicationBase::sendUnhandledException (nullptr, __FILE__, __LINE__); }
 
 #else
- #define JUCE_TRY
- #define JUCE_CATCH_EXCEPTION
+#define JUCE_TRY
+#define JUCE_CATCH_EXCEPTION
 #endif
 
 } // namespace juce

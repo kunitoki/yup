@@ -39,7 +39,7 @@
 
 namespace juce
 {
-    /** Manages a set of ChildProcesses and periodically checks their return value. Upon completion
+/** Manages a set of ChildProcesses and periodically checks their return value. Upon completion
         it calls listeners added with addChildProcessExitedListener().
 
         This class is mostly aimed for usage on Linux, where terminated child processes are only
@@ -58,14 +58,14 @@ namespace juce
 
         @tags{Events}
     */
-    class JUCE_API  ChildProcessManager final : private DeletedAtShutdown
-    {
-    public:
-       #ifndef DOXYGEN
-        JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (ChildProcessManager)
-       #endif
+class JUCE_API ChildProcessManager final : private DeletedAtShutdown
+{
+public:
+#ifndef DOXYGEN
+    JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (ChildProcessManager)
+#endif
 
-        /** Creates a new ChildProcess and starts it with the provided arguments.
+    /** Creates a new ChildProcess and starts it with the provided arguments.
 
             The arguments are the same as the overloads to ChildProcess::start().
 
@@ -73,46 +73,50 @@ namespace juce
             return value has been queried. Calling ChildProcess::kill() on the returned object will
             eventually cause its removal from the ChildProcessManager after it terminates.
         */
-        template <typename... Args>
-        std::shared_ptr<ChildProcess> createAndStartManagedChildProcess (Args&&... args)
-        {
-            auto p = std::make_shared<ChildProcess>();
+    template <typename... Args>
+    std::shared_ptr<ChildProcess> createAndStartManagedChildProcess (Args&&... args)
+    {
+        auto p = std::make_shared<ChildProcess>();
 
-            if (! p->start (std::forward<Args> (args)...))
-                return nullptr;
+        if (! p->start (std::forward<Args> (args)...))
+            return nullptr;
 
-            processes.insert (p);
-            timer.startTimer (1000);
+        processes.insert (p);
+        timer.startTimer (1000);
 
-            return p;
-        }
+        return p;
+    }
 
-        /** Registers a callback function that is called for every ChildProcess that terminated.
+    /** Registers a callback function that is called for every ChildProcess that terminated.
 
             This registration is deleted when the returned ErasedScopedGuard is deleted.
         */
-        auto addChildProcessExitedListener (std::function<void (ChildProcess*)> listener)
-        {
-            return listeners.addListener (std::move (listener));
-        }
+    auto addChildProcessExitedListener (std::function<void (ChildProcess*)> listener)
+    {
+        return listeners.addListener (std::move (listener));
+    }
 
-        /** Returns true if the ChildProcessManager contains any running ChildProcesses that it's
+    /** Returns true if the ChildProcessManager contains any running ChildProcesses that it's
             monitoring.
         */
-        auto hasRunningProcess() const
-        {
-            return timer.isTimerRunning();
-        }
+    auto hasRunningProcess() const
+    {
+        return timer.isTimerRunning();
+    }
 
-    private:
-        ChildProcessManager() = default;
-        ~ChildProcessManager() override  { clearSingletonInstance(); }
+private:
+    ChildProcessManager() = default;
 
-        void checkProcesses();
+    ~ChildProcessManager() override { clearSingletonInstance(); }
 
-        std::set<std::shared_ptr<ChildProcess>> processes;
-        detail::CallbackListenerList<ChildProcess*> listeners;
-        TimedCallback timer { [this] { checkProcesses(); } };
-    };
+    void checkProcesses();
+
+    std::set<std::shared_ptr<ChildProcess>> processes;
+    detail::CallbackListenerList<ChildProcess*> listeners;
+    TimedCallback timer { [this]
+                          {
+                              checkProcesses();
+                          } };
+};
 
 } // namespace juce

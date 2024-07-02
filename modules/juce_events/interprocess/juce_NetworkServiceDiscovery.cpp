@@ -41,17 +41,19 @@ namespace juce
 {
 
 #if JUCE_ANDROID
- extern void acquireMulticastLock();
- extern void releaseMulticastLock();
+extern void acquireMulticastLock();
+extern void releaseMulticastLock();
 #endif
 
 NetworkServiceDiscovery::Advertiser::Advertiser (const String& serviceTypeUID,
                                                  const String& serviceDescription,
-                                                 int broadcastPortToUse, int connectionPort,
+                                                 int broadcastPortToUse,
+                                                 int connectionPort,
                                                  RelativeTime minTimeBetweenBroadcasts)
-    : Thread ("Discovery_broadcast"),
-      message (serviceTypeUID), broadcastPort (broadcastPortToUse),
-      minInterval (minTimeBetweenBroadcasts)
+    : Thread ("Discovery_broadcast")
+    , message (serviceTypeUID)
+    , broadcastPort (broadcastPortToUse)
+    , minInterval (minTimeBetweenBroadcasts)
 {
     message.setAttribute ("id", Uuid().toString());
     message.setAttribute ("name", serviceDescription);
@@ -102,11 +104,12 @@ void NetworkServiceDiscovery::Advertiser::sendBroadcast()
 
 //==============================================================================
 NetworkServiceDiscovery::AvailableServiceList::AvailableServiceList (const String& serviceType, int broadcastPort)
-    : Thread ("Discovery_listen"), serviceTypeUID (serviceType)
+    : Thread ("Discovery_listen")
+    , serviceTypeUID (serviceType)
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     acquireMulticastLock();
-   #endif
+#endif
 
     socket.bindToPort (broadcastPort);
     startThread (Priority::background);
@@ -117,9 +120,9 @@ NetworkServiceDiscovery::AvailableServiceList::~AvailableServiceList()
     socket.shutdown();
     stopThread (2000);
 
-    #if JUCE_ANDROID
-     releaseMulticastLock();
-    #endif
+#if JUCE_ANDROID
+    releaseMulticastLock();
+#endif
 }
 
 void NetworkServiceDiscovery::AvailableServiceList::run()
@@ -190,8 +193,8 @@ void NetworkServiceDiscovery::AvailableServiceList::handleMessage (const Service
         if (s.instanceID == service.instanceID)
         {
             if (s.description != service.description
-                 || s.address != service.address
-                 || s.port != service.port)
+                || s.address != service.address
+                || s.port != service.port)
             {
                 s = service;
                 triggerAsyncUpdate();
@@ -215,8 +218,10 @@ void NetworkServiceDiscovery::AvailableServiceList::removeTimedOutServices()
     const ScopedLock sl (listLock);
 
     auto oldEnd = std::end (services);
-    auto newEnd = std::remove_if (std::begin (services), oldEnd,
-                                  [=] (const Service& s) { return s.lastSeen < oldestAllowedTime; });
+    auto newEnd = std::remove_if (std::begin (services), oldEnd, [=] (const Service& s)
+                                  {
+                                      return s.lastSeen < oldestAllowedTime;
+                                  });
 
     if (newEnd != oldEnd)
     {

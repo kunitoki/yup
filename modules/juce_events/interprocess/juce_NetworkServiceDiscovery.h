@@ -58,7 +58,7 @@ struct NetworkServiceDiscovery
 
         @tags{Events}
     */
-    struct Advertiser  : private Thread
+    struct Advertiser : private Thread
     {
         /** Creates and starts an Advertiser thread, broadcasting with the given properties.
             @param serviceTypeUID       A user-supplied string to define the type of service this represents
@@ -96,11 +96,11 @@ struct NetworkServiceDiscovery
     */
     struct Service
     {
-        String instanceID;   /**< A UUID that identifies the particular instance of the Advertiser class.  */
-        String description;  /**< The service description as sent by the Advertiser */
-        IPAddress address;   /**< The IP address of the advertiser */
-        int port;            /**< The port number of the advertiser */
-        Time lastSeen;       /**< The time of the last ping received from the advertiser */
+        String instanceID;  /**< A UUID that identifies the particular instance of the Advertiser class.  */
+        String description; /**< The service description as sent by the Advertiser */
+        IPAddress address;  /**< The IP address of the advertiser */
+        int port;           /**< The port number of the advertiser */
+        Time lastSeen;      /**< The time of the last ping received from the advertiser */
     };
 
     //==============================================================================
@@ -116,8 +116,8 @@ struct NetworkServiceDiscovery
 
         @tags{Events}
     */
-    struct AvailableServiceList  : private Thread,
-                                   private AsyncUpdater
+    struct AvailableServiceList : private Thread
+        , private AsyncUpdater
     {
         /** Creates an AvailableServiceList that will bind to the given port number and watch
             the network for Advertisers broadcasting the given service type.

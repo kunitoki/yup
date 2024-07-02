@@ -52,7 +52,7 @@ namespace juce
 
     @see shutdownJuce_GUI()
 */
-JUCE_API void JUCE_CALLTYPE  initialiseJuce_GUI();
+JUCE_API void JUCE_CALLTYPE initialiseJuce_GUI();
 
 /** Clears up any static data being used by JUCE's GUI classes.
 
@@ -62,8 +62,7 @@ JUCE_API void JUCE_CALLTYPE  initialiseJuce_GUI();
 
     @see initialiseJuce_GUI()
 */
-JUCE_API void JUCE_CALLTYPE  shutdownJuce_GUI();
-
+JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI();
 
 //==============================================================================
 /** A utility object that helps you initialise and shutdown JUCE correctly
@@ -83,19 +82,18 @@ JUCE_API void JUCE_CALLTYPE  shutdownJuce_GUI();
 
     @tags{Events}
 */
-class JUCE_API  ScopedJuceInitialiser_GUI  final
+class JUCE_API ScopedJuceInitialiser_GUI final
 {
-public:
+   public:
     /** The constructor simply calls initialiseJuce_GUI(). */
     ScopedJuceInitialiser_GUI();
 
     /** The destructor simply calls shutdownJuce_GUI(). */
     ~ScopedJuceInitialiser_GUI();
 
-    JUCE_DECLARE_NON_COPYABLE (ScopedJuceInitialiser_GUI)
-    JUCE_DECLARE_NON_MOVEABLE (ScopedJuceInitialiser_GUI)
+    JUCE_DECLARE_NON_COPYABLE(ScopedJuceInitialiser_GUI)
+    JUCE_DECLARE_NON_MOVEABLE(ScopedJuceInitialiser_GUI)
 };
-
 
 //==============================================================================
 /**
@@ -105,129 +103,147 @@ public:
     See the JUCEApplication and JUCEApplicationBase class documentation for more details.
 */
 #if DOXYGEN
- #define START_JUCE_APPLICATION(AppClass)
+#define START_JUCE_APPLICATION(AppClass)
 #else
- #if JUCE_WINDOWS && ! defined (_CONSOLE)
-  #define JUCE_MAIN_FUNCTION                                                        \
-      JUCE_BEGIN_IGNORE_WARNINGS_MSVC (28251)                                       \
-      int __stdcall WinMain (struct HINSTANCE__*, struct HINSTANCE__*, char*, int)  \
-      JUCE_END_IGNORE_WARNINGS_MSVC
-  #define JUCE_MAIN_FUNCTION_ARGS
- #else
-  #define JUCE_MAIN_FUNCTION       int main (int argc, char* argv[])
-  #define JUCE_MAIN_FUNCTION_ARGS  argc, (const char**) argv
- #endif
+#if JUCE_WINDOWS && !defined(_CONSOLE)
+#define JUCE_MAIN_FUNCTION                                                      \
+    JUCE_BEGIN_IGNORE_WARNINGS_MSVC(28251)                                      \
+    int __stdcall WinMain(struct HINSTANCE__*, struct HINSTANCE__*, char*, int) \
+        JUCE_END_IGNORE_WARNINGS_MSVC
+#define JUCE_MAIN_FUNCTION_ARGS
+#else
+#define JUCE_MAIN_FUNCTION int main(int argc, char* argv[])
+#define JUCE_MAIN_FUNCTION_ARGS argc, (const char**)argv
+#endif
 
- #if JUCE_IOS
+#if JUCE_IOS
 
-  #define JUCE_CREATE_APPLICATION_DEFINE(AppClass) \
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wmissing-prototypes") \
-    juce::JUCEApplicationBase* juce_CreateApplication() { return new AppClass(); } \
-    void* juce_GetIOSCustomDelegateClass()              { return nullptr; } \
+#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)                \
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
+    juce::JUCEApplicationBase* juce_CreateApplication()         \
+    {                                                           \
+        return new AppClass();                                  \
+    }                                                           \
+    void* juce_GetIOSCustomDelegateClass()                      \
+    {                                                           \
+        return nullptr;                                         \
+    }                                                           \
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-  #define JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wmissing-prototypes") \
-    juce::JUCEApplicationBase* juce_CreateApplication() { return new AppClass(); } \
-    void* juce_GetIOSCustomDelegateClass()              { return [DelegateClass class]; } \
+#define JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")                 \
+    juce::JUCEApplicationBase* juce_CreateApplication()                         \
+    {                                                                           \
+        return new AppClass();                                                  \
+    }                                                                           \
+    void* juce_GetIOSCustomDelegateClass()                                      \
+    {                                                                           \
+        return [DelegateClass class];                                           \
+    }                                                                           \
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-  #define JUCE_MAIN_FUNCTION_DEFINITION \
-    extern "C" JUCE_MAIN_FUNCTION \
-    { \
-       juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
-       juce::JUCEApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
-       return juce::JUCEApplicationBase::main (JUCE_MAIN_FUNCTION_ARGS); \
+#define JUCE_MAIN_FUNCTION_DEFINITION                                                    \
+    extern "C" JUCE_MAIN_FUNCTION                                                        \
+    {                                                                                    \
+        juce::JUCEApplicationBase::createInstance = &juce_CreateApplication;             \
+        juce::JUCEApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
+        return juce::JUCEApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);                 \
     }
 
- #elif JUCE_ANDROID
+#elif JUCE_ANDROID
 
-  #define JUCE_CREATE_APPLICATION_DEFINE(AppClass) \
-    extern "C" juce::JUCEApplicationBase* juce_CreateApplication() { return new AppClass(); }
+#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)                   \
+    extern "C" juce::JUCEApplicationBase* juce_CreateApplication() \
+    {                                                              \
+        return new AppClass();                                     \
+    }
 
-  #define JUCE_MAIN_FUNCTION_DEFINITION
+#define JUCE_MAIN_FUNCTION_DEFINITION
 
- #else
+#else
 
-  #define JUCE_CREATE_APPLICATION_DEFINE(AppClass) \
+#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)         \
     juce::JUCEApplicationBase* juce_CreateApplication(); \
-    juce::JUCEApplicationBase* juce_CreateApplication() { return new AppClass(); }
-
-  #define JUCE_MAIN_FUNCTION_DEFINITION \
-    extern "C" JUCE_MAIN_FUNCTION \
-    { \
-       juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
-       return juce::JUCEApplicationBase::main (JUCE_MAIN_FUNCTION_ARGS); \
+    juce::JUCEApplicationBase* juce_CreateApplication()  \
+    {                                                    \
+        return new AppClass();                           \
     }
 
- #endif
+#define JUCE_MAIN_FUNCTION_DEFINITION                                        \
+    extern "C" JUCE_MAIN_FUNCTION                                            \
+    {                                                                        \
+        juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
+        return juce::JUCEApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);     \
+    }
 
- #if JucePlugin_Build_Standalone
-  #if JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP
-    #define START_JUCE_APPLICATION(AppClass) JUCE_CREATE_APPLICATION_DEFINE(AppClass)
-    #if JUCE_IOS
-     #define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)
-    #endif
-  #else
-   #define START_JUCE_APPLICATION(AppClass) static_assert(false, "You are trying to use START_JUCE_APPLICATION in an audio plug-in. Define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
-   #if JUCE_IOS
-    #define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) static_assert(false, "You are trying to use START_JUCE_APPLICATION in an audio plug-in. Define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
-   #endif
-  #endif
- #else
+#endif
 
-  #define START_JUCE_APPLICATION(AppClass) \
-     JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wmissing-prototypes") \
-     JUCE_CREATE_APPLICATION_DEFINE(AppClass) \
-     JUCE_MAIN_FUNCTION_DEFINITION \
-     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+#if JucePlugin_Build_Standalone
+#if JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP
+#define START_JUCE_APPLICATION(AppClass) JUCE_CREATE_APPLICATION_DEFINE(AppClass)
+#if JUCE_IOS
+#define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)
+#endif
+#else
+#define START_JUCE_APPLICATION(AppClass) static_assert(false, "You are trying to use START_JUCE_APPLICATION in an audio plug-in. Define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
+#if JUCE_IOS
+#define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) static_assert(false, "You are trying to use START_JUCE_APPLICATION in an audio plug-in. Define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
+#endif
+#endif
+#else
 
-  #if JUCE_IOS
-    /**
-       You can instruct JUCE to use a custom iOS app delegate class instead of JUCE's default
-       app delegate. For JUCE to work you must pass all messages to JUCE's internal app delegate.
-       Below is an example of minimal forwarding custom delegate. Note that you are at your own
-       risk if you decide to use your own delegate and subtle, hard to debug bugs may occur.
+#define START_JUCE_APPLICATION(AppClass)                        \
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
+    JUCE_CREATE_APPLICATION_DEFINE(AppClass)                    \
+    JUCE_MAIN_FUNCTION_DEFINITION                               \
+    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-       @interface MyCustomDelegate : NSObject <UIApplicationDelegate> { NSObject<UIApplicationDelegate>* juceDelegate; } @end
+#if JUCE_IOS
+/**
+   You can instruct JUCE to use a custom iOS app delegate class instead of JUCE's default
+   app delegate. For JUCE to work you must pass all messages to JUCE's internal app delegate.
+   Below is an example of minimal forwarding custom delegate. Note that you are at your own
+   risk if you decide to use your own delegate and subtle, hard to debug bugs may occur.
 
-       @implementation MyCustomDelegate
+   @interface MyCustomDelegate : NSObject <UIApplicationDelegate> { NSObject<UIApplicationDelegate>* juceDelegate; } @end
 
-       -(id) init
-       {
-           self = [super init];
-           juceDelegate = reinterpret_cast<NSObject<UIApplicationDelegate>*> ([[NSClassFromString (@"JuceAppStartupDelegate") alloc] init]);
-           return self;
-       }
+   @implementation MyCustomDelegate
 
-       -(void) dealloc
-       {
-           [juceDelegate release];
-           [super dealloc];
-       }
+   -(id) init
+   {
+       self = [super init];
+       juceDelegate = reinterpret_cast<NSObject<UIApplicationDelegate>*> ([[NSClassFromString (@"JuceAppStartupDelegate") alloc] init]);
+       return self;
+   }
 
-       - (void) forwardInvocation: (NSInvocation*) anInvocation
-       {
-           if (juceDelegate != nullptr && [juceDelegate respondsToSelector: [anInvocation selector]])
-               [anInvocation invokeWithTarget: juceDelegate];
-           else
-               [super forwardInvocation: anInvocation];
-       }
+   -(void) dealloc
+   {
+       [juceDelegate release];
+       [super dealloc];
+   }
 
-       -(BOOL) respondsToSelector: (SEL) aSelector
-       {
-           if (juceDelegate != nullptr && [juceDelegate respondsToSelector: aSelector])
-               return YES;
+   - (void) forwardInvocation: (NSInvocation*) anInvocation
+   {
+       if (juceDelegate != nullptr && [juceDelegate respondsToSelector: [anInvocation selector]])
+           [anInvocation invokeWithTarget: juceDelegate];
+       else
+           [super forwardInvocation: anInvocation];
+   }
 
-           return [super respondsToSelector: aSelector];
-       }
-       @end
-   */
-   #define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) \
-      JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
-      JUCE_MAIN_FUNCTION_DEFINITION
-  #endif
- #endif
+   -(BOOL) respondsToSelector: (SEL) aSelector
+   {
+       if (juceDelegate != nullptr && [juceDelegate respondsToSelector: aSelector])
+           return YES;
+
+       return [super respondsToSelector: aSelector];
+   }
+   @end
+*/
+#define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) \
+    JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)  \
+    JUCE_MAIN_FUNCTION_DEFINITION
+#endif
+#endif
 #endif
 
 } // namespace juce

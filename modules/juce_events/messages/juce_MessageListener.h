@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Events}
 */
-class JUCE_API  MessageListener
+class JUCE_API MessageListener
 {
 public:
     //==============================================================================

@@ -62,11 +62,11 @@ public:
     /** Destructor. */
     ~TimedCallback() noexcept override { stopTimer(); }
 
+    using Timer::getTimerInterval;
+    using Timer::isTimerRunning;
     using Timer::startTimer;
     using Timer::startTimerHz;
     using Timer::stopTimer;
-    using Timer::isTimerRunning;
-    using Timer::getTimerInterval;
 
 private:
     void timerCallback() override { callback(); }
