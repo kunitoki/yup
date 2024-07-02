@@ -57,7 +57,7 @@ jobs:
         run: |
           echo $ALL_CHANGED_FILES
           clang-format -style=file -i $ALL_CHANGED_FILES
-          git status
+          git diff
 
       #- name: Push changes
       #  run: |

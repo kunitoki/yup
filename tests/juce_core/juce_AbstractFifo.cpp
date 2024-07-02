@@ -172,22 +172,22 @@ TEST (AbstractFifoTests, ScopedWriteRead)
     AbstractFifo fifo (10);
 
     {
-        auto writeHandle = fifo.write(7);
-        EXPECT_EQ(writeHandle.blockSize1, 7);
-        EXPECT_EQ(writeHandle.blockSize2, 0);
+        auto writeHandle = fifo.write (7);
+        EXPECT_EQ (writeHandle.blockSize1, 7);
+        EXPECT_EQ (writeHandle.blockSize2, 0);
     } // writeHandle goes out of scope here
 
-    EXPECT_EQ(fifo.getNumReady(), 7);
-    EXPECT_EQ(fifo.getFreeSpace(), 2);
+    EXPECT_EQ (fifo.getNumReady(), 7);
+    EXPECT_EQ (fifo.getFreeSpace(), 2);
 
     {
-        auto readHandle = fifo.read(5);
-        EXPECT_EQ(readHandle.blockSize1, 5);
-        EXPECT_EQ(readHandle.blockSize2, 0);
+        auto readHandle = fifo.read (5);
+        EXPECT_EQ (readHandle.blockSize1, 5);
+        EXPECT_EQ (readHandle.blockSize2, 0);
     } // readHandle goes out of scope here
 
-    EXPECT_EQ(fifo.getNumReady(), 2);
-    EXPECT_EQ(fifo.getFreeSpace(), 7);
+    EXPECT_EQ (fifo.getNumReady(), 2);
+    EXPECT_EQ (fifo.getFreeSpace(), 7);
 }
 
 TEST (AbstractFifoTests, ScopedWriteReadWrapAround)
@@ -195,9 +195,9 @@ TEST (AbstractFifoTests, ScopedWriteReadWrapAround)
     AbstractFifo fifo (10);
 
     {
-        auto writeHandle = fifo.write(9);
-        EXPECT_EQ(writeHandle.blockSize1, 9);
-        EXPECT_EQ(writeHandle.blockSize2, 0);
+        auto writeHandle = fifo.write (9);
+        EXPECT_EQ (writeHandle.blockSize1, 9);
+        EXPECT_EQ (writeHandle.blockSize2, 0);
     } // writeHandle goes out of scope here
 
     {
@@ -208,18 +208,18 @@ TEST (AbstractFifoTests, ScopedWriteReadWrapAround)
 
     {
         auto writeHandle = fifo.write(5);
-        EXPECT_EQ(writeHandle.blockSize1, 1);
-        EXPECT_EQ(writeHandle.blockSize2, 4);
+        EXPECT_EQ (writeHandle.blockSize1, 1);
+        EXPECT_EQ (writeHandle.blockSize2, 4);
     } // writeHandle goes out of scope here
 
     {
-        auto readHandle = fifo.read(10);
-        EXPECT_EQ(readHandle.blockSize1, 5);
-        EXPECT_EQ(readHandle.blockSize2, 4);
+        auto readHandle = fifo.read (10);
+        EXPECT_EQ (readHandle.blockSize1, 5);
+        EXPECT_EQ (readHandle.blockSize2, 4);
     } // readHandle goes out of scope here
 
-    EXPECT_EQ(fifo.getNumReady(), 0);
-    EXPECT_EQ(fifo.getFreeSpace(), 9);
+    EXPECT_EQ (fifo.getNumReady(), 0);
+    EXPECT_EQ (fifo.getFreeSpace(), 9);
 }
 
 TEST (AbstractFifoTests, AbstractFifoThreaded)
@@ -234,7 +234,7 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
         ~WriteThread()
         {
             signalThreadShouldExit();
-            stopThread(-1);
+            stopThread (-1);
         }
 
         void run()
@@ -245,14 +245,14 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
                 int num = random.nextInt (2000) + 1;
                 auto writer = fifo.write (num);
 
-                ASSERT_GE(writer.blockSize1, 0);
-                ASSERT_GE(writer.blockSize2, 0);
+                ASSERT_GE (writer.blockSize1, 0);
+                ASSERT_GE (writer.blockSize2, 0);
 
-                ASSERT_TRUE(writer.blockSize1 == 0
-                            || (writer.startIndex1 >= 0 && writer.startIndex1 < fifo.getTotalSize()));
+                ASSERT_TRUE (writer.blockSize1 == 0
+                             || (writer.startIndex1 >= 0 && writer.startIndex1 < fifo.getTotalSize()));
 
-                ASSERT_TRUE(writer.blockSize2 == 0
-                            || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
+                ASSERT_TRUE (writer.blockSize2 == 0
+                             || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
 
                 writer.forEach ([this, &n] (int index)  { this->buffer[index] = n++; });
             }
@@ -264,7 +264,7 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
     };
 
     int buffer[5000];
-    AbstractFifo fifo (sizeof(buffer) / sizeof(buffer[0]));
+    AbstractFifo fifo (sizeof (buffer) / sizeof (buffer[0]));
 
     Random random;
     WriteThread writer (fifo, buffer, random);
