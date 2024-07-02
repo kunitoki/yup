@@ -6,13 +6,20 @@ update:
   mkdir -p build
   cmake -G Xcode -B build
 
+ios:
+  mkdir -p build
+  cmake -G Xcode -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64
+
+clear:
+  rm -Rf build/*
+
+generate:
+  @just clear
+  @just update
+
 open:
   @just update
   open build/yup.xcodeproj
-
-generate:
-  rm -Rf build
-  @just update
 
 make:
   @just update

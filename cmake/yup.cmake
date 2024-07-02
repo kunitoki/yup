@@ -19,7 +19,7 @@
 
 #==============================================================================
 
-#list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/tools")
+#list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tools")
 
 #==============================================================================
 
@@ -33,6 +33,15 @@ function (_yup_strip_list input_list output_variable)
         list (APPEND inner_list ${stripped_item})
     endforeach()
     set (${output_variable} "${inner_list}" PARENT_SCOPE)
+endfunction()
+
+function (_yup_make_short_version version output_variable)
+    string (REPLACE "." ";" version_list ${version})
+    list (LENGTH version_list version_list_length)
+    math (EXPR version_list_last_index "${version_list_length} - 1")
+    list (REMOVE_AT version_list ${version_list_last_index})
+    string (JOIN "." version_short ${version_list})
+    set (${output_variable} "${version_short}" PARENT_SCOPE)
 endfunction()
 
 function (_yup_comma_or_space_separated_list input_list output_variable)
@@ -72,7 +81,7 @@ endfunction()
 #==============================================================================
 
 macro(_yup_setup_platform)
-    if (IOS)
+    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
         set (yup_platform "ios")
     elseif (ANDROID)
         set (yup_platform "android")
@@ -513,19 +522,22 @@ endfunction()
 function (yup_standalone_app)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME)
+    set (one_value_args TARGET_NAME TARGET_VERSION)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_version "${YUP_ARG_TARGET_VERSION}")
     set (additional_definitions "")
     set (additional_options "")
     set (additional_libraries "")
     set (additional_link_options "")
 
+    _yup_make_short_version ("${target_version}" target_version_short)
+
     # ==== Find dependencies
-    if (NOT "${yup_platform}" STREQUAL "emscripten")
+    if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
         include (FetchContent)
 
         FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
@@ -545,14 +557,19 @@ function (yup_standalone_app)
     # ==== Per platform configuration
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
         if (NOT YUP_ARG_CONSOLE)
+            get_filename_component (plist_path "cmake/platforms/${yup_platform}/Info.plist" REALPATH BASE_DIR "${CMAKE_SOURCE_DIR}")
+
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
                 CXX_EXTENSIONS                                 OFF
+                MACOSX_BUNDLE_EXECUTABLE_NAME                  "${target_name}"
                 MACOSX_BUNDLE_GUI_IDENTIFIER                   "org.kunitoki.yup.${target_name}"
-                MACOSX_BUNDLE_NAME                             "${target_name}"
-                MACOSX_BUNDLE_VERSION                          "1.0.0"
-                #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-                MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/platforms/macos/Info.plist"
+                MACOSX_BUNDLE_BUNDLE_NAME                      "${target_name}"
+                MACOSX_BUNDLE_BUNDLE_VERSION                   "${target_version}"
+                MACOSX_BUNDLE_LONG_VERSION_STRING              "${target_version}"
+                MACOSX_BUNDLE_SHORT_VERSION_STRING             "${target_version_short}"
+                MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
+                MACOSX_BUNDLE_INFO_PLIST                       "${plist_path}"
                 #RESOURCE                                       "${RESOURCE_FILES}"
                 #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
                 XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
@@ -675,7 +692,7 @@ function (yup_audio_plugin)
         #        MACOSX_BUNDLE_NAME                             "${target_name}"
         #        MACOSX_BUNDLE_VERSION                          "1.0.0"
         #        #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-        #        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/platforms/macos/Info.plist"
+        #        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist"
         #        #RESOURCE                                       "${RESOURCE_FILES}"
         #        #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
         #        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
