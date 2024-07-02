@@ -21,6 +21,7 @@ cmake_minimum_required(VERSION 3.28)
 
 # ==== Prepare target
 set (target_name example_plugin)
+set (target_version "1.0.0")
 
 yup_add_embedded_binary_resources (
     BinaryData
@@ -38,7 +39,7 @@ yup_audio_plugin (
     PLUGIN_ID                   "kunitoki.YupCLAP"
     PLUGIN_NAME                 "YupCLAPPZ"
     PLUGIN_VENDOR               "kunitoki"
-    PLUGIN_VERSION              "1.0.0"
+    PLUGIN_VERSION              "${target_version}"
     PLUGIN_DESCRIPTION          "The best audio plugin ever."
     PLUGIN_URL                  "https://github.com/kunitoki/yup"
     PLUGING_IS_SYNTH            ON
