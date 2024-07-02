@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  SystemAudioVolume
+class JUCE_API SystemAudioVolume
 {
 public:
     //==============================================================================

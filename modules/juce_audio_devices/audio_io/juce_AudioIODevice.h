@@ -68,11 +68,11 @@ struct AudioIODeviceCallbackContext
 
     @tags{Audio}
 */
-class JUCE_API  AudioIODeviceCallback
+class JUCE_API AudioIODeviceCallback
 {
 public:
     /** Destructor. */
-    virtual ~AudioIODeviceCallback()  = default;
+    virtual ~AudioIODeviceCallback() = default;
 
     /** Processes a block of incoming and outgoing audio data.
 
@@ -164,7 +164,7 @@ public:
 
     @tags{Audio}
 */
-class JUCE_API  AudioIODevice
+class JUCE_API AudioIODevice
 {
 public:
     /** Destructor. */
@@ -172,13 +172,13 @@ public:
 
     //==============================================================================
     /** Returns the device's name, (as set in the constructor). */
-    const String& getName() const noexcept                          { return name; }
+    const String& getName() const noexcept { return name; }
 
     /** Returns the type of the device.
 
         E.g. "CoreAudio", "ASIO", etc. - this comes from the AudioIODeviceType that created it.
     */
-    const String& getTypeName() const noexcept                      { return typeName; }
+    const String& getTypeName() const noexcept { return typeName; }
 
     //==============================================================================
     /** Returns the names of all the available output channels on this device.
@@ -204,7 +204,7 @@ public:
 
         Returns nullopt if the device doesn't supply a default layout.
     */
-    virtual std::optional<BigInteger> getDefaultInputChannels()  const { return {}; }
+    virtual std::optional<BigInteger> getDefaultInputChannels() const { return {}; }
 
     //==============================================================================
     /** Returns the set of sample-rates this device supports.

@@ -22,35 +22,56 @@
 namespace juce
 {
 
-class MidiInput::Pimpl {};
+class MidiInput::Pimpl
+{
+};
 
 MidiInput::MidiInput (const String& deviceName, const String& deviceID)
     : deviceInfo (deviceName, deviceID)
 {
 }
 
-MidiInput::~MidiInput()                                                                   {}
-void MidiInput::start()                                                                   {}
-void MidiInput::stop()                                                                    {}
-Array<MidiDeviceInfo> MidiInput::getAvailableDevices()                                    { return {}; }
-MidiDeviceInfo MidiInput::getDefaultDevice()                                              { return {}; }
-std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallback*)      { return {}; }
+MidiInput::~MidiInput() {}
+
+void MidiInput::start() {}
+
+void MidiInput::stop() {}
+
+Array<MidiDeviceInfo> MidiInput::getAvailableDevices() { return {}; }
+
+MidiDeviceInfo MidiInput::getDefaultDevice() { return {}; }
+
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallback*) { return {}; }
+
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
-StringArray MidiInput::getDevices()                                                       { return {}; }
-int MidiInput::getDefaultDeviceIndex()                                                    { return 0;}
-std::unique_ptr<MidiInput> MidiInput::openDevice (int, MidiInputCallback*)                { return {}; }
 
-class MidiOutput::Pimpl {};
+StringArray MidiInput::getDevices() { return {}; }
 
-MidiOutput::~MidiOutput()                                                                 {}
-void MidiOutput::sendMessageNow (const MidiMessage&)                                      {}
-Array<MidiDeviceInfo> MidiOutput::getAvailableDevices()                                   { return {}; }
-MidiDeviceInfo MidiOutput::getDefaultDevice()                                             { return {}; }
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&)                        { return {}; }
-std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&)                   { return {}; }
-StringArray MidiOutput::getDevices()                                                      { return {}; }
-int MidiOutput::getDefaultDeviceIndex()                                                   { return 0;}
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int)                                  { return {}; }
+int MidiInput::getDefaultDeviceIndex() { return 0; }
+
+std::unique_ptr<MidiInput> MidiInput::openDevice (int, MidiInputCallback*) { return {}; }
+
+class MidiOutput::Pimpl
+{
+};
+
+MidiOutput::~MidiOutput() {}
+
+void MidiOutput::sendMessageNow (const MidiMessage&) {}
+
+Array<MidiDeviceInfo> MidiOutput::getAvailableDevices() { return {}; }
+
+MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+StringArray MidiOutput::getDevices() { return {}; }
+
+int MidiOutput::getDefaultDeviceIndex() { return 0; }
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (int) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {

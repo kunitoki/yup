@@ -65,7 +65,11 @@ struct U32InputHandler
 struct U32ToBytestreamHandler : public U32InputHandler
 {
     U32ToBytestreamHandler (MidiInput& i, MidiInputCallback& c)
-        : input (i), callback (c), dispatcher (2048) {}
+        : input (i)
+        , callback (c)
+        , dispatcher (2048)
+    {
+    }
 
     /**
         Provides an `operator()` which can create an input handler for a given
@@ -78,7 +82,9 @@ struct U32ToBytestreamHandler : public U32InputHandler
     {
     public:
         explicit Factory (MidiInputCallback* c)
-            : callback (c) {}
+            : callback (c)
+        {
+        }
 
         std::unique_ptr<U32ToBytestreamHandler> operator() (MidiInput& i) const
         {
@@ -98,9 +104,9 @@ struct U32ToBytestreamHandler : public U32InputHandler
     void pushMidiData (const uint32_t* begin, const uint32_t* end, double time) override
     {
         dispatcher.dispatch (begin, end, time, [this] (const BytestreamMidiView& m)
-        {
-            callback.handleIncomingMidiMessage (&input, m.getMessage());
-        });
+                             {
+                                 callback.handleIncomingMidiMessage (&input, m.getMessage());
+                             });
     }
 
     MidiInput& input;
@@ -117,7 +123,10 @@ struct U32ToBytestreamHandler : public U32InputHandler
 struct U32ToUMPHandler : public U32InputHandler
 {
     U32ToUMPHandler (PacketProtocol protocol, Receiver& c)
-        : recipient (c), converter (protocol) {}
+        : recipient (c)
+        , converter (protocol)
+    {
+    }
 
     /**
         Provides an `operator()` which can create an input handler for a given
@@ -130,7 +139,10 @@ struct U32ToUMPHandler : public U32InputHandler
     {
     public:
         Factory (PacketProtocol p, Receiver& c)
-            : protocol (p), callback (c) {}
+            : protocol (p)
+            , callback (c)
+        {
+        }
 
         std::unique_ptr<U32ToUMPHandler> operator() (MidiInput&) const
         {
@@ -151,12 +163,12 @@ struct U32ToUMPHandler : public U32InputHandler
     void pushMidiData (const uint32_t* begin, const uint32_t* end, double time) override
     {
         dispatcher.dispatch (begin, end, time, [this] (const View& view, double thisTime)
-        {
-            converter.convert (view, [&] (const View& converted)
-            {
-                recipient.packetReceived (converted, thisTime);
-            });
-        });
+                             {
+                                 converter.convert (view, [&] (const View& converted)
+                                                    {
+                                                        recipient.packetReceived (converted, thisTime);
+                                                    });
+                             });
     }
 
     Receiver& recipient;
@@ -165,6 +177,5 @@ struct U32ToUMPHandler : public U32InputHandler
 };
 
 } // namespace juce::universal_midi_packets
-
 
 #endif

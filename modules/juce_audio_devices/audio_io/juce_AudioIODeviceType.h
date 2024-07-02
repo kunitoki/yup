@@ -75,7 +75,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  AudioIODeviceType
+class JUCE_API AudioIODeviceType
 {
 public:
     //==============================================================================
@@ -83,7 +83,7 @@ public:
 
         This will be something like "DirectSound", "ASIO", "CoreAudio", "ALSA", etc.
     */
-    const String& getTypeName() const noexcept                      { return typeName; }
+    const String& getTypeName() const noexcept { return typeName; }
 
     //==============================================================================
     /** Refreshes the object's cached list of known devices.
@@ -184,10 +184,9 @@ public:
     /** Creates a Bela device type if it's available on this platform, or returns null. */
     static AudioIODeviceType* createAudioIODeviceType_Bela();
 
-   #ifndef DOXYGEN
-    [[deprecated ("You should call the method which takes a WASAPIDeviceMode instead.")]]
-    static AudioIODeviceType* createAudioIODeviceType_WASAPI (bool exclusiveMode);
-   #endif
+#ifndef DOXYGEN
+    [[deprecated ("You should call the method which takes a WASAPIDeviceMode instead.")]] static AudioIODeviceType* createAudioIODeviceType_WASAPI (bool exclusiveMode);
+#endif
 
 protected:
     explicit AudioIODeviceType (const String& typeName);

@@ -55,9 +55,9 @@ void MidiMessageCollector::reset (const double newSampleRate)
 
     jassert (newSampleRate > 0);
 
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     hasCalledReset = true;
-   #endif
+#endif
     sampleRate = newSampleRate;
     incomingMessages.clear();
     lastCallbackTime = Time::getMillisecondCounterHiRes();
@@ -67,9 +67,9 @@ void MidiMessageCollector::addMessageToQueue (const MidiMessage& message)
 {
     const ScopedLock sl (midiCallbackLock);
 
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     jassert (hasCalledReset); // you need to call reset() to set the correct sample rate before using this object
-   #endif
+#endif
 
     // the messages that come in here need to be time-stamped correctly - see MidiInput
     // for details of what the number should be.
@@ -90,9 +90,9 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
 {
     const ScopedLock sl (midiCallbackLock);
 
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     jassert (hasCalledReset); // you need to call reset() to set the correct sample rate before using this object
-   #endif
+#endif
 
     jassert (numSamples > 0);
 
@@ -125,10 +125,10 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
             scale = (numSamples << 10) / numSourceSamples;
 
             std::for_each (iter, incomingMessages.cend(), [&] (const MidiMessageMetadata& meta)
-            {
-                const auto pos = ((meta.samplePosition - startSample) * scale) >> 10;
-                destBuffer.addEvent (meta.data, meta.numBytes, jlimit (0, numSamples - 1, pos));
-            });
+                           {
+                               const auto pos = ((meta.samplePosition - startSample) * scale) >> 10;
+                               destBuffer.addEvent (meta.data, meta.numBytes, jlimit (0, numSamples - 1, pos));
+                           });
         }
         else
         {
@@ -137,8 +137,7 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
             startSample = numSamples - numSourceSamples;
 
             for (const auto metadata : incomingMessages)
-                destBuffer.addEvent (metadata.data, metadata.numBytes,
-                                     jlimit (0, numSamples - 1, metadata.samplePosition + startSample));
+                destBuffer.addEvent (metadata.data, metadata.numBytes, jlimit (0, numSamples - 1, metadata.samplePosition + startSample));
         }
 
         incomingMessages.clear();

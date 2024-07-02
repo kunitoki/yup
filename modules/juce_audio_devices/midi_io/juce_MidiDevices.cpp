@@ -90,10 +90,12 @@ private:
     class State
     {
         Array<MidiDeviceInfo> ins = MidiInput::getAvailableDevices(), outs = MidiOutput::getAvailableDevices();
+
         auto tie() const { return std::tie (ins, outs); }
 
     public:
         bool operator== (const State& other) const { return tie() == other.tie(); }
+
         bool operator!= (const State& other) const { return tie() != other.tie(); }
     };
 
@@ -122,7 +124,8 @@ void MidiInputCallback::handlePartialSysexMessage ([[maybe_unused]] MidiInput* s
 
 //==============================================================================
 MidiOutput::MidiOutput (const String& deviceName, const String& deviceIdentifier)
-    : Thread ("midi out"), deviceInfo (deviceName, deviceIdentifier)
+    : Thread ("midi out")
+    , deviceInfo (deviceName, deviceIdentifier)
 {
 }
 

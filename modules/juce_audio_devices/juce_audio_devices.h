@@ -37,7 +37,6 @@
   ==============================================================================
 */
 
-
 /*******************************************************************************
  The block below describes the properties of this module, and is read by
  the Projucer to automatically generate project code that uses it.
@@ -66,7 +65,6 @@
 
 *******************************************************************************/
 
-
 #pragma once
 #define JUCE_AUDIO_DEVICES_H_INCLUDED
 
@@ -90,7 +88,7 @@
     "C:\Program Files (x86)\Windows Kits\10\Include\10.0.14393.0\winrt".
 */
 #ifndef JUCE_USE_WINRT_MIDI
- #define JUCE_USE_WINRT_MIDI 0
+#define JUCE_USE_WINRT_MIDI 0
 #endif
 
 /** Config: JUCE_ASIO
@@ -102,49 +100,49 @@
     info about this.
 */
 #ifndef JUCE_ASIO
- #define JUCE_ASIO 0
+#define JUCE_ASIO 0
 #endif
 
 /** Config: JUCE_WASAPI
     Enables WASAPI audio devices (Windows Vista and above).
 */
 #ifndef JUCE_WASAPI
- #define JUCE_WASAPI 1
+#define JUCE_WASAPI 1
 #endif
 
 /** Config: JUCE_DIRECTSOUND
     Enables DirectSound audio (MS Windows only).
 */
 #ifndef JUCE_DIRECTSOUND
- #define JUCE_DIRECTSOUND 1
+#define JUCE_DIRECTSOUND 1
 #endif
 
 /** Config: JUCE_ALSA
     Enables ALSA audio devices (Linux only).
 */
 #ifndef JUCE_ALSA
- #define JUCE_ALSA 1
+#define JUCE_ALSA 1
 #endif
 
 /** Config: JUCE_JACK
     Enables JACK audio devices (Linux only).
 */
 #ifndef JUCE_JACK
- #define JUCE_JACK 0
+#define JUCE_JACK 0
 #endif
 
 /** Config: JUCE_BELA
     Enables Bela audio devices on Bela boards.
 */
 #ifndef JUCE_BELA
- #define JUCE_BELA 0
+#define JUCE_BELA 0
 #endif
 
 /** Config: JUCE_USE_ANDROID_OBOE
     Enables Oboe devices (Android only).
 */
 #ifndef JUCE_USE_ANDROID_OBOE
- #define JUCE_USE_ANDROID_OBOE 1
+#define JUCE_USE_ANDROID_OBOE 1
 #endif
 
 /** Config: JUCE_USE_OBOE_STABILIZED_CALLBACK
@@ -154,18 +152,18 @@
     (Android only).
 */
 #ifndef JUCE_USE_ANDROID_OBOE_STABILIZED_CALLBACK
- #define JUCE_USE_ANDROID_OBOE_STABILIZED_CALLBACK 0
+#define JUCE_USE_ANDROID_OBOE_STABILIZED_CALLBACK 0
 #endif
 
 /** Config: JUCE_USE_ANDROID_OPENSLES
     Enables OpenSLES devices (Android only).
 */
 #ifndef JUCE_USE_ANDROID_OPENSLES
- #if ! JUCE_USE_ANDROID_OBOE
-  #define JUCE_USE_ANDROID_OPENSLES 1
- #else
-  #define JUCE_USE_ANDROID_OPENSLES 0
- #endif
+#if ! JUCE_USE_ANDROID_OBOE
+#define JUCE_USE_ANDROID_OPENSLES 1
+#else
+#define JUCE_USE_ANDROID_OPENSLES 0
+#endif
 #endif
 
 /** Config: JUCE_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS
@@ -173,7 +171,7 @@
     on platforms which support it (currently iOS only).
 */
 #ifndef JUCE_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS
- #define JUCE_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS 0
+#define JUCE_DISABLE_AUDIO_MIXING_WITH_OTHER_APPS 0
 #endif
 
 //==============================================================================
@@ -182,18 +180,18 @@
 
 namespace juce
 {
-    /** Available modes for the WASAPI audio device.
+/** Available modes for the WASAPI audio device.
 
         Pass one of these to the AudioIODeviceType::createAudioIODeviceType_WASAPI()
         method to create a WASAPI AudioIODeviceType object in this mode.
     */
-    enum class WASAPIDeviceMode
-    {
-        shared,
-        exclusive,
-        sharedLowLatency
-    };
-}
+enum class WASAPIDeviceMode
+{
+    shared,
+    exclusive,
+    sharedLowLatency
+};
+} // namespace juce
 
 #include "audio_io/juce_AudioIODevice.h"
 #include "audio_io/juce_AudioIODeviceType.h"
@@ -203,5 +201,5 @@ namespace juce
 #include "audio_io/juce_AudioDeviceManager.h"
 
 #if JUCE_IOS
- #include "native/juce_Audio_ios.h"
+#include "native/juce_Audio_ios.h"
 #endif

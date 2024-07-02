@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  AudioSourcePlayer  : public AudioIODeviceCallback
+class JUCE_API AudioSourcePlayer : public AudioIODeviceCallback
 {
 public:
     //==============================================================================
@@ -83,7 +83,7 @@ public:
     /** Returns the source that's playing.
         May return nullptr if there's no source.
     */
-    AudioSource* getCurrentSource() const noexcept      { return source; }
+    AudioSource* getCurrentSource() const noexcept { return source; }
 
     /** Sets a gain to apply to the audio data.
         @see getGain
@@ -93,7 +93,7 @@ public:
     /** Returns the current gain.
         @see setGain
     */
-    float getGain() const noexcept                      { return gain; }
+    float getGain() const noexcept { return gain; }
 
     //==============================================================================
     /** Implementation of the AudioIODeviceCallbackWithContext method. */

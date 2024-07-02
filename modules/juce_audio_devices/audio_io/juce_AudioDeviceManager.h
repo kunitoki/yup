@@ -80,7 +80,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  AudioDeviceManager  : public ChangeBroadcaster
+class JUCE_API AudioDeviceManager : public ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -104,7 +104,7 @@ public:
 
         @see AudioDeviceManager::setAudioDeviceSetup(), AudioDeviceManager::initialise()
     */
-    struct JUCE_API  AudioDeviceSetup
+    struct JUCE_API AudioDeviceSetup
     {
         /** The name of the audio device used for output.
             The name has to be one of the ones listed by the AudioDeviceManager's currently
@@ -160,7 +160,6 @@ public:
         bool operator== (const AudioDeviceSetup&) const;
         bool operator!= (const AudioDeviceSetup&) const;
     };
-
 
     //==============================================================================
     /** Opens a set of audio devices ready for use.
@@ -255,14 +254,13 @@ public:
     */
     String setAudioDeviceSetup (const AudioDeviceSetup& newSetup, bool treatAsChosenDevice);
 
-
     /** Returns the currently-active audio device. */
-    AudioIODevice* getCurrentAudioDevice() const noexcept               { return currentAudioDevice.get(); }
+    AudioIODevice* getCurrentAudioDevice() const noexcept { return currentAudioDevice.get(); }
 
     /** Returns the type of audio device currently in use.
         @see setCurrentAudioDeviceType
     */
-    String getCurrentAudioDeviceType() const                            { return currentDeviceType; }
+    String getCurrentAudioDeviceType() const { return currentDeviceType; }
 
     /** Returns the currently active audio device type object.
         Don't keep a copy of this pointer - it's owned by the device manager and could
@@ -393,14 +391,14 @@ public:
 
         @see setDefaultMidiOutputDevice, getDefaultMidiOutput
     */
-    const String& getDefaultMidiOutputIdentifier() const noexcept   { return defaultMidiOutputDeviceInfo.identifier; }
+    const String& getDefaultMidiOutputIdentifier() const noexcept { return defaultMidiOutputDeviceInfo.identifier; }
 
     /** Returns the current default midi output device. If no device has been selected, or the
         device can't be opened, this will return nullptr.
 
         @see getDefaultMidiOutputIdentifier
     */
-    MidiOutput* getDefaultMidiOutput() const noexcept               { return defaultMidiOutput.get(); }
+    MidiOutput* getDefaultMidiOutput() const noexcept { return defaultMidiOutput.get(); }
 
     //==============================================================================
     /** Returns a list of the types of device supported. */
@@ -440,7 +438,7 @@ public:
 
         @see getInputLevelGetter, getOutputLevelGetter
     */
-    struct LevelMeter    : public ReferenceCountedObject
+    struct LevelMeter : public ReferenceCountedObject
     {
         LevelMeter() noexcept;
         double getCurrentLevel() const noexcept;
@@ -459,27 +457,27 @@ public:
         You need to store this object locally to ensure that the reference count is incremented
         and decremented properly. The current input level value can be read using getCurrentLevel().
     */
-    LevelMeter::Ptr getInputLevelGetter() noexcept          { return inputLevelGetter; }
+    LevelMeter::Ptr getInputLevelGetter() noexcept { return inputLevelGetter; }
 
     /** Returns a reference-counted object that can be used to get the current output level.
 
         You need to store this object locally to ensure that the reference count is incremented
         and decremented properly. The current output level value can be read using getCurrentLevel().
     */
-    LevelMeter::Ptr getOutputLevelGetter() noexcept         { return outputLevelGetter; }
+    LevelMeter::Ptr getOutputLevelGetter() noexcept { return outputLevelGetter; }
 
     //==============================================================================
     /** Returns the a lock that can be used to synchronise access to the audio callback.
         Obviously while this is locked, you're blocking the audio thread from running, so
         it must only be used for very brief periods when absolutely necessary.
     */
-    CriticalSection& getAudioCallbackLock() noexcept        { return audioCallbackLock; }
+    CriticalSection& getAudioCallbackLock() noexcept { return audioCallbackLock; }
 
     /** Returns the a lock that can be used to synchronise access to the midi callback.
         Obviously while this is locked, you're blocking the midi system from running, so
         it must only be used for very brief periods when absolutely necessary.
     */
-    CriticalSection& getMidiCallbackLock() noexcept         { return midiCallbackLock; }
+    CriticalSection& getMidiCallbackLock() noexcept { return midiCallbackLock; }
 
     //==============================================================================
     /** Returns the number of under- or over runs reported.
@@ -491,20 +489,15 @@ public:
     int getXRunCount() const noexcept;
 
     //==============================================================================
-   #ifndef DOXYGEN
-    [[deprecated ("Use setMidiInputDeviceEnabled instead.")]]
-    void setMidiInputEnabled (const String&, bool);
-    [[deprecated ("Use isMidiInputDeviceEnabled instead.")]]
-    bool isMidiInputEnabled (const String&) const;
-    [[deprecated ("Use addMidiInputDeviceCallback instead.")]]
-    void addMidiInputCallback (const String&, MidiInputCallback*);
-    [[deprecated ("Use removeMidiInputDeviceCallback instead.")]]
-    void removeMidiInputCallback (const String&, MidiInputCallback*);
-    [[deprecated ("Use setDefaultMidiOutputDevice instead.")]]
-    void setDefaultMidiOutput (const String&);
-    [[deprecated ("Use getDefaultMidiOutputIdentifier instead.")]]
-    const String& getDefaultMidiOutputName() const noexcept  { return defaultMidiOutputDeviceInfo.name; }
-   #endif
+#ifndef DOXYGEN
+    [[deprecated ("Use setMidiInputDeviceEnabled instead.")]] void setMidiInputEnabled (const String&, bool);
+    [[deprecated ("Use isMidiInputDeviceEnabled instead.")]] bool isMidiInputEnabled (const String&) const;
+    [[deprecated ("Use addMidiInputDeviceCallback instead.")]] void addMidiInputCallback (const String&, MidiInputCallback*);
+    [[deprecated ("Use removeMidiInputDeviceCallback instead.")]] void removeMidiInputCallback (const String&, MidiInputCallback*);
+    [[deprecated ("Use setDefaultMidiOutputDevice instead.")]] void setDefaultMidiOutput (const String&);
+
+    [[deprecated ("Use getDefaultMidiOutputIdentifier instead.")]] const String& getDefaultMidiOutputName() const noexcept { return defaultMidiOutputDeviceInfo.name; }
+#endif
 
 private:
     //==============================================================================
@@ -520,9 +513,9 @@ private:
     mutable bool listNeedsScanning = true;
     AudioBuffer<float> tempBuffer;
     MidiDeviceListConnection midiDeviceListConnection = MidiDeviceListConnection::make ([this]
-    {
-        midiDeviceListChanged();
-    });
+                                                                                        {
+                                                                                            midiDeviceListChanged();
+                                                                                        });
 
     struct MidiCallbackInfo
     {
@@ -543,8 +536,8 @@ private:
 
     AudioProcessLoadMeasurer loadMeasurer;
 
-    LevelMeter::Ptr inputLevelGetter   { new LevelMeter() },
-                    outputLevelGetter  { new LevelMeter() };
+    LevelMeter::Ptr inputLevelGetter { new LevelMeter() },
+        outputLevelGetter { new LevelMeter() };
 
     //==============================================================================
     class CallbackHandler;
@@ -563,8 +556,7 @@ private:
     void audioDeviceListChanged();
     void midiDeviceListChanged();
 
-    String restartDevice (int blockSizeToUse, double sampleRateToUse,
-                          const BigInteger& ins, const BigInteger& outs);
+    String restartDevice (int blockSizeToUse, double sampleRateToUse, const BigInteger& ins, const BigInteger& outs);
     void stopDevice();
 
     void updateXml();
@@ -577,8 +569,7 @@ private:
     int chooseBestBufferSize (int preferred) const;
     void insertDefaultDeviceNames (AudioDeviceSetup&) const;
     String initialiseDefault (const String& preferredDefaultDeviceName, const AudioDeviceSetup*);
-    String initialiseFromXML (const XmlElement&, bool selectDefaultDeviceOnFailure,
-                              const String& preferredDefaultDeviceName, const AudioDeviceSetup*);
+    String initialiseFromXML (const XmlElement&, bool selectDefaultDeviceOnFailure, const String& preferredDefaultDeviceName, const AudioDeviceSetup*);
     void openLastRequestedMidiDevices (const Array<MidiDeviceInfo>&, const MidiDeviceInfo&);
 
     AudioIODeviceType* findType (const String& inputName, const String& outputName);

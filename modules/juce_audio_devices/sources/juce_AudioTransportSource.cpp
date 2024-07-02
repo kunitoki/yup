@@ -51,8 +51,10 @@ AudioTransportSource::~AudioTransportSource()
 }
 
 void AudioTransportSource::setSource (PositionableAudioSource* const newSource,
-                                      int readAheadSize, TimeSliceThread* readAheadThread,
-                                      double sourceSampleRateToCorrectFor, int maxNumChannels)
+                                      int readAheadSize,
+                                      TimeSliceThread* readAheadThread,
+                                      double sourceSampleRateToCorrectFor,
+                                      int maxNumChannels)
 {
     if (source == newSource)
     {
@@ -81,16 +83,13 @@ void AudioTransportSource::setSource (PositionableAudioSource* const newSource,
             // for it to use!
             jassert (readAheadThread != nullptr);
 
-            newPositionableSource = newBufferingSource
-                = new BufferingAudioSource (newPositionableSource, *readAheadThread,
-                                            false, readAheadSize, maxNumChannels);
+            newPositionableSource = newBufferingSource = new BufferingAudioSource (newPositionableSource, *readAheadThread, false, readAheadSize, maxNumChannels);
         }
 
         newPositionableSource->setNextReadPosition (0);
 
         if (sourceSampleRateToCorrectFor > 0)
-            newMasterSource = newResamplerSource
-                = new ResamplingAudioSource (newPositionableSource, false, maxNumChannels);
+            newMasterSource = newResamplerSource = new ResamplingAudioSource (newPositionableSource, false, maxNumChannels);
         else
             newMasterSource = newPositionableSource;
 
@@ -174,7 +173,7 @@ double AudioTransportSource::getLengthInSeconds() const
 bool AudioTransportSource::hasStreamFinished() const noexcept
 {
     return positionableSource->getNextReadPosition() > positionableSource->getTotalLength() + 1
-              && ! positionableSource->isLooping();
+        && ! positionableSource->isLooping();
 }
 
 void AudioTransportSource::setNextReadPosition (int64 newPosition)

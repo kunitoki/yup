@@ -47,7 +47,9 @@ public:
     static Array<Pimpl*> midiInputs;
 
     Pimpl (const String& port, MidiInput* input, MidiInputCallback* callback)
-        : midiInput (input), midiPort (port), midiCallback (callback)
+        : midiInput (input)
+        , midiPort (port)
+        , midiCallback (callback)
     {
         jassert (midiCallback != nullptr);
         midiInputs.add (this);
@@ -159,8 +161,7 @@ private:
             snd_rawmidi_info_alloca (&info);
 
             snd_rawmidi_info_set_device (info, (unsigned int) device);
-            snd_rawmidi_info_set_stream (info, input ? SND_RAWMIDI_STREAM_INPUT
-                                                     : SND_RAWMIDI_STREAM_OUTPUT);
+            snd_rawmidi_info_set_stream (info, input ? SND_RAWMIDI_STREAM_INPUT : SND_RAWMIDI_STREAM_OUTPUT);
 
             snd_ctl_rawmidi_info (ctl, info);
 
@@ -195,13 +196,13 @@ private:
 
 Array<MidiInput::Pimpl*> MidiInput::Pimpl::midiInputs;
 
-
 //==============================================================================
 class BelaAudioIODevice final : public AudioIODevice
 {
 public:
-    BelaAudioIODevice()  : AudioIODevice (BelaAudioIODevice::belaTypeName,
-                                          BelaAudioIODevice::belaTypeName)
+    BelaAudioIODevice()
+        : AudioIODevice (BelaAudioIODevice::belaTypeName,
+                         BelaAudioIODevice::belaTypeName)
     {
         Bela_defaultSettings (&defaultSettings);
     }
@@ -232,9 +233,14 @@ public:
         return result;
     }
 
-    Array<double> getAvailableSampleRates() override       { return { 44100.0 }; }
-    Array<int> getAvailableBufferSizes() override          { /* TODO: */ return { getDefaultBufferSize() }; }
-    int getDefaultBufferSize() override                    { return defaultSettings.periodSize; }
+    Array<double> getAvailableSampleRates() override { return { 44100.0 }; }
+
+    Array<int> getAvailableBufferSizes() override
+    { /* TODO: */
+        return { getDefaultBufferSize() };
+    }
+
+    int getDefaultBufferSize() override { return defaultSettings.periodSize; }
 
     //==============================================================================
     String open (const BigInteger& inputChannels,
@@ -260,28 +266,28 @@ public:
 
         if (numIns > 2 || numOuts > 2)
         {
-            settings.useAnalog            = true;
-            settings.numAnalogInChannels  = std::max (numIns - 2, 8);
+            settings.useAnalog = true;
+            settings.numAnalogInChannels = std::max (numIns - 2, 8);
             settings.numAnalogOutChannels = std::max (numOuts - 2, 8);
-            settings.uniformSampleRate    = true;
+            settings.uniformSampleRate = true;
         }
 
-        settings.numAudioInChannels   = std::max (numIns, 2);
-        settings.numAudioOutChannels  = std::max (numOuts, 2);
+        settings.numAudioInChannels = std::max (numIns, 2);
+        settings.numAudioOutChannels = std::max (numOuts, 2);
 
-        settings.detectUnderruns      = 1;
-        settings.setup                = setupCallback;
-        settings.render               = renderCallback;
-        settings.cleanup              = cleanupCallback;
-        settings.interleave           = 0;
+        settings.detectUnderruns = 1;
+        settings.setup = setupCallback;
+        settings.render = renderCallback;
+        settings.cleanup = cleanupCallback;
+        settings.interleave = 0;
 
         if (bufferSizeSamples > 0)
             settings.periodSize = bufferSizeSamples;
 
         isBelaOpen = false;
-        isRunning  = false;
-        callback   = nullptr;
-        underruns  = 0;
+        isRunning = false;
+        callback = nullptr;
+        underruns = 0;
 
         if (Bela_initAudio (&settings, this) != 0 || ! isBelaOpen)
         {
@@ -289,7 +295,7 @@ public:
             return lastError;
         }
 
-        actualNumberOfInputs  = jmin (numIns, actualNumberOfInputs);
+        actualNumberOfInputs = jmin (numIns, actualNumberOfInputs);
         actualNumberOfOutputs = jmin (numOuts, actualNumberOfOutputs);
 
         channelInBuffer.calloc (actualNumberOfInputs);
@@ -319,7 +325,7 @@ public:
         }
     }
 
-    bool isOpen() override   { return isBelaOpen; }
+    bool isOpen() override { return isBelaOpen; }
 
     void start (AudioIODeviceCallback* newCallback) override
     {
@@ -379,29 +385,52 @@ public:
             oldCallback->audioDeviceStopped();
     }
 
-    bool isPlaying() override         { return isRunning; }
-    String getLastError() override    { return lastError; }
+    bool isPlaying() override { return isRunning; }
+
+    String getLastError() override { return lastError; }
 
     //==============================================================================
-    int getCurrentBufferSizeSamples() override            { return (int) actualBufferSize; }
-    double getCurrentSampleRate() override                { return 44100.0; }
-    int getCurrentBitDepth() override                     { return 16; }
-    BigInteger getActiveOutputChannels() const override   { BigInteger b; b.setRange (0, actualNumberOfOutputs, true); return b; }
-    BigInteger getActiveInputChannels() const override    { BigInteger b; b.setRange (0, actualNumberOfInputs, true);  return b; }
-    int getOutputLatencyInSamples() override              { /* TODO */ return 0; }
-    int getInputLatencyInSamples() override               { /* TODO */ return 0; }
-    int getXRunCount() const noexcept override            { return underruns; }
+    int getCurrentBufferSizeSamples() override { return (int) actualBufferSize; }
+
+    double getCurrentSampleRate() override { return 44100.0; }
+
+    int getCurrentBitDepth() override { return 16; }
+
+    BigInteger getActiveOutputChannels() const override
+    {
+        BigInteger b;
+        b.setRange (0, actualNumberOfOutputs, true);
+        return b;
+    }
+
+    BigInteger getActiveInputChannels() const override
+    {
+        BigInteger b;
+        b.setRange (0, actualNumberOfInputs, true);
+        return b;
+    }
+
+    int getOutputLatencyInSamples() override
+    { /* TODO */
+        return 0;
+    }
+
+    int getInputLatencyInSamples() override
+    { /* TODO */
+        return 0;
+    }
+
+    int getXRunCount() const noexcept override { return underruns; }
 
     //==============================================================================
     static const char* const belaTypeName;
 
 private:
-
     //==============================================================================
     bool setup (BelaContext& context)
     {
-        actualBufferSize      = context.audioFrames;
-        actualNumberOfInputs  = (int) (context.audioInChannels + context.analogInChannels);
+        actualBufferSize = context.audioFrames;
+        actualNumberOfInputs = (int) (context.audioInChannels + context.analogInChannels);
         actualNumberOfOutputs = (int) (context.audioOutChannels + context.analogOutChannels);
         isBelaOpen = true;
         firstCallback = true;
@@ -467,7 +496,7 @@ private:
             callback->audioDeviceStopped();
     }
 
-    const int analogChannelStart  = 2;
+    const int analogChannelStart = 2;
 
     //==============================================================================
     uint64_t expectedElapsedAudioSamples = 0;
@@ -495,9 +524,11 @@ private:
     }
 
     //==============================================================================
-    static bool setupCallback   (BelaContext* context, void* userData) noexcept    { return static_cast<BelaAudioIODevice*> (userData)->setup (*context); }
-    static void renderCallback  (BelaContext* context, void* userData) noexcept    { static_cast<BelaAudioIODevice*> (userData)->render (*context); }
-    static void cleanupCallback (BelaContext* context, void* userData) noexcept    { static_cast<BelaAudioIODevice*> (userData)->cleanup (*context); }
+    static bool setupCallback (BelaContext* context, void* userData) noexcept { return static_cast<BelaAudioIODevice*> (userData)->setup (*context); }
+
+    static void renderCallback (BelaContext* context, void* userData) noexcept { static_cast<BelaAudioIODevice*> (userData)->render (*context); }
+
+    static void cleanupCallback (BelaContext* context, void* userData) noexcept { static_cast<BelaAudioIODevice*> (userData)->cleanup (*context); }
 
     //==============================================================================
     BelaInitSettings defaultSettings, settings;
@@ -523,13 +554,20 @@ const char* const BelaAudioIODevice::belaTypeName = "Bela Analog";
 //==============================================================================
 struct BelaAudioIODeviceType final : public AudioIODeviceType
 {
-    BelaAudioIODeviceType() : AudioIODeviceType ("Bela") {}
+    BelaAudioIODeviceType()
+        : AudioIODeviceType ("Bela")
+    {
+    }
 
-    StringArray getDeviceNames (bool) const override                       { return StringArray (BelaAudioIODevice::belaTypeName); }
-    void scanForDevices() override                                         {}
-    int getDefaultDeviceIndex (bool) const override                        { return 0; }
-    int getIndexOfDevice (AudioIODevice* device, bool) const override      { return device != nullptr ? 0 : -1; }
-    bool hasSeparateInputsAndOutputs() const override                      { return false; }
+    StringArray getDeviceNames (bool) const override { return StringArray (BelaAudioIODevice::belaTypeName); }
+
+    void scanForDevices() override {}
+
+    int getDefaultDeviceIndex (bool) const override { return 0; }
+
+    int getIndexOfDevice (AudioIODevice* device, bool) const override { return device != nullptr ? 0 : -1; }
+
+    bool hasSeparateInputsAndOutputs() const override { return false; }
 
     AudioIODevice* createDevice (const String& outputName, const String& inputName) override
     {
@@ -550,8 +588,10 @@ MidiInput::MidiInput (const String& deviceName, const String& deviceID)
 }
 
 MidiInput::~MidiInput() = default;
-void MidiInput::start()   { internal->start(); }
-void MidiInput::stop()    { internal->stop(); }
+
+void MidiInput::start() { internal->start(); }
+
+void MidiInput::stop() { internal->stop(); }
 
 Array<MidiDeviceInfo> MidiInput::getAvailableDevices()
 {
@@ -603,15 +643,26 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* 
 
 //==============================================================================
 // TODO: Add Bela MidiOutput support
-class MidiOutput::Pimpl {};
+class MidiOutput::Pimpl
+{
+};
+
 MidiOutput::~MidiOutput() = default;
-void MidiOutput::sendMessageNow (const MidiMessage&)                     {}
-Array<MidiDeviceInfo> MidiOutput::getAvailableDevices()                  { return {}; }
-MidiDeviceInfo MidiOutput::getDefaultDevice()                            { return {}; }
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&)       { return {}; }
-std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&)  { return {}; }
-StringArray MidiOutput::getDevices()                                     { return {}; }
-int MidiOutput::getDefaultDeviceIndex()                                  { return 0;}
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int)                 { return {}; }
+
+void MidiOutput::sendMessageNow (const MidiMessage&) {}
+
+Array<MidiDeviceInfo> MidiOutput::getAvailableDevices() { return {}; }
+
+MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+StringArray MidiOutput::getDevices() { return {}; }
+
+int MidiOutput::getDefaultDeviceIndex() { return 0; }
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (int) { return {}; }
 
 } // namespace juce

@@ -95,7 +95,7 @@ void AudioSourcePlayer::audioDeviceIOCallbackWithContext (const float* const* in
         {
             if (inputChannelData[i] != nullptr)
             {
-                inputChans [numInputs++] = inputChannelData[i];
+                inputChans[numInputs++] = inputChannelData[i];
                 if (numInputs >= numElementsInArray (inputChans))
                     break;
             }
@@ -105,7 +105,7 @@ void AudioSourcePlayer::audioDeviceIOCallbackWithContext (const float* const* in
         {
             if (outputChannelData[i] != nullptr)
             {
-                outputChans [numOutputs++] = outputChannelData[i];
+                outputChans[numOutputs++] = outputChannelData[i];
                 if (numOutputs >= numElementsInArray (outputChans))
                     break;
             }
@@ -116,8 +116,7 @@ void AudioSourcePlayer::audioDeviceIOCallbackWithContext (const float* const* in
             // if there aren't enough output channels for the number of
             // inputs, we need to create some temporary extra ones (can't
             // use the input data in case it gets written to)
-            tempBuffer.setSize (numInputs - numOutputs, numSamples,
-                                false, false, true);
+            tempBuffer.setSize (numInputs - numOutputs, numSamples, false, false, true);
 
             for (int i = 0; i < numOutputs; ++i)
             {

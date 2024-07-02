@@ -52,9 +52,9 @@ namespace juce
 //==============================================================================
 namespace ASIODebugging
 {
-   #if JUCE_ASIO_DEBUGGING
-    #define JUCE_ASIO_LOG(msg)               ASIODebugging::logMessage (msg)
-    #define JUCE_ASIO_LOG_ERROR(msg, errNum) ASIODebugging::logError ((msg), (errNum))
+#if JUCE_ASIO_DEBUGGING
+#define JUCE_ASIO_LOG(msg) ASIODebugging::logMessage (msg)
+#define JUCE_ASIO_LOG_ERROR(msg, errNum) ASIODebugging::logError ((msg), (errNum))
 
     static void logMessage (String message)
     {
@@ -71,25 +71,46 @@ namespace ASIODebugging
 
         switch (error)
         {
-            case ASE_OK:               return;
-            case ASE_NotPresent:       err = "Not Present"; break;
-            case ASE_HWMalfunction:    err = "Hardware Malfunction"; break;
-            case ASE_InvalidParameter: err = "Invalid Parameter"; break;
-            case ASE_InvalidMode:      err = "Invalid Mode"; break;
-            case ASE_SPNotAdvancing:   err = "Sample position not advancing"; break;
-            case ASE_NoClock:          err = "No Clock"; break;
-            case ASE_NoMemory:         err = "Out of memory"; break;
-            default:                   break;
+            case ASE_OK:
+                return;
+            case ASE_NotPresent:
+                err = "Not Present";
+                break;
+            case ASE_HWMalfunction:
+                err = "Hardware Malfunction";
+                break;
+            case ASE_InvalidParameter:
+                err = "Invalid Parameter";
+                break;
+            case ASE_InvalidMode:
+                err = "Invalid Mode";
+                break;
+            case ASE_SPNotAdvancing:
+                err = "Sample position not advancing";
+                break;
+            case ASE_NoClock:
+                err = "No Clock";
+                break;
+            case ASE_NoMemory:
+                err = "Out of memory";
+                break;
+            default:
+                break;
         }
 
         logMessage ("error: " + context + " - " + err);
     }
-   #else
-    static void dummyLog() {}
-    #define JUCE_ASIO_LOG(msg)               ASIODebugging::dummyLog()
-    #define JUCE_ASIO_LOG_ERROR(msg, errNum) ignoreUnused (errNum); ASIODebugging::dummyLog()
-   #endif
-}
+#else
+    static void dummyLog()
+    {
+    }
+
+#define JUCE_ASIO_LOG(msg) ASIODebugging::dummyLog()
+#define JUCE_ASIO_LOG_ERROR(msg, errNum) \
+ignoreUnused (errNum);                   \
+ASIODebugging::dummyLog()
+#endif
+} // namespace ASIODebugging
 
 //==============================================================================
 struct ASIOSampleFormat
@@ -100,31 +121,79 @@ struct ASIOSampleFormat
     {
         switch (type)
         {
-            case ASIOSTInt16MSB:    byteStride = 2; littleEndian = false; bitDepth = 16; break;
-            case ASIOSTInt24MSB:    byteStride = 3; littleEndian = false; break;
-            case ASIOSTInt32MSB:    bitDepth = 32; littleEndian = false; break;
-            case ASIOSTFloat32MSB:  bitDepth = 32; littleEndian = false; formatIsFloat = true; break;
-            case ASIOSTFloat64MSB:  bitDepth = 64; byteStride = 8; littleEndian = false; break;
-            case ASIOSTInt32MSB16:  bitDepth = 16; littleEndian = false; break;
-            case ASIOSTInt32MSB18:  littleEndian = false; break;
-            case ASIOSTInt32MSB20:  littleEndian = false; break;
-            case ASIOSTInt32MSB24:  littleEndian = false; break;
-            case ASIOSTInt16LSB:    byteStride = 2; bitDepth = 16; break;
-            case ASIOSTInt24LSB:    byteStride = 3; break;
-            case ASIOSTInt32LSB:    bitDepth = 32; break;
-            case ASIOSTFloat32LSB:  bitDepth = 32; formatIsFloat = true; break;
-            case ASIOSTFloat64LSB:  bitDepth = 64; byteStride = 8; break;
-            case ASIOSTInt32LSB16:  bitDepth = 16; break;
-            case ASIOSTInt32LSB18:  break; // (unhandled)
-            case ASIOSTInt32LSB20:  break; // (unhandled)
-            case ASIOSTInt32LSB24:  break;
+            case ASIOSTInt16MSB:
+                byteStride = 2;
+                littleEndian = false;
+                bitDepth = 16;
+                break;
+            case ASIOSTInt24MSB:
+                byteStride = 3;
+                littleEndian = false;
+                break;
+            case ASIOSTInt32MSB:
+                bitDepth = 32;
+                littleEndian = false;
+                break;
+            case ASIOSTFloat32MSB:
+                bitDepth = 32;
+                littleEndian = false;
+                formatIsFloat = true;
+                break;
+            case ASIOSTFloat64MSB:
+                bitDepth = 64;
+                byteStride = 8;
+                littleEndian = false;
+                break;
+            case ASIOSTInt32MSB16:
+                bitDepth = 16;
+                littleEndian = false;
+                break;
+            case ASIOSTInt32MSB18:
+                littleEndian = false;
+                break;
+            case ASIOSTInt32MSB20:
+                littleEndian = false;
+                break;
+            case ASIOSTInt32MSB24:
+                littleEndian = false;
+                break;
+            case ASIOSTInt16LSB:
+                byteStride = 2;
+                bitDepth = 16;
+                break;
+            case ASIOSTInt24LSB:
+                byteStride = 3;
+                break;
+            case ASIOSTInt32LSB:
+                bitDepth = 32;
+                break;
+            case ASIOSTFloat32LSB:
+                bitDepth = 32;
+                formatIsFloat = true;
+                break;
+            case ASIOSTFloat64LSB:
+                bitDepth = 64;
+                byteStride = 8;
+                break;
+            case ASIOSTInt32LSB16:
+                bitDepth = 16;
+                break;
+            case ASIOSTInt32LSB18:
+                break; // (unhandled)
+            case ASIOSTInt32LSB20:
+                break; // (unhandled)
+            case ASIOSTInt32LSB24:
+                break;
 
-            case ASIOSTDSDInt8LSB1: break; // (unhandled)
-            case ASIOSTDSDInt8MSB1: break; // (unhandled)
-            case ASIOSTDSDInt8NER8: break; // (unhandled)
+            case ASIOSTDSDInt8LSB1:
+                break; // (unhandled)
+            case ASIOSTDSDInt8MSB1:
+                break; // (unhandled)
+            case ASIOSTDSDInt8NER8:
+                break; // (unhandled)
 
             default:
-                jassertfalse;  // (not a valid format code..)
+                jassertfalse; // (not a valid format code..)
                 break;
         }
     }
@@ -139,10 +208,18 @@ struct ASIOSampleFormat
         {
             switch (bitDepth)
             {
-                case 16: convertInt16ToFloat (static_cast<const char*> (src), dst, byteStride, samps, littleEndian); break;
-                case 24: convertInt24ToFloat (static_cast<const char*> (src), dst, byteStride, samps, littleEndian); break;
-                case 32: convertInt32ToFloat (static_cast<const char*> (src), dst, byteStride, samps, littleEndian); break;
-                default: jassertfalse; break;
+                case 16:
+                    convertInt16ToFloat (static_cast<const char*> (src), dst, byteStride, samps, littleEndian);
+                    break;
+                case 24:
+                    convertInt24ToFloat (static_cast<const char*> (src), dst, byteStride, samps, littleEndian);
+                    break;
+                case 32:
+                    convertInt32ToFloat (static_cast<const char*> (src), dst, byteStride, samps, littleEndian);
+                    break;
+                default:
+                    jassertfalse;
+                    break;
             }
         }
     }
@@ -157,10 +234,18 @@ struct ASIOSampleFormat
         {
             switch (bitDepth)
             {
-                case 16: convertFloatToInt16 (src, static_cast<char*> (dst), byteStride, samps, littleEndian); break;
-                case 24: convertFloatToInt24 (src, static_cast<char*> (dst), byteStride, samps, littleEndian); break;
-                case 32: convertFloatToInt32 (src, static_cast<char*> (dst), byteStride, samps, littleEndian); break;
-                default: jassertfalse; break;
+                case 16:
+                    convertFloatToInt16 (src, static_cast<char*> (dst), byteStride, samps, littleEndian);
+                    break;
+                case 24:
+                    convertFloatToInt24 (src, static_cast<char*> (dst), byteStride, samps, littleEndian);
+                    break;
+                case 32:
+                    convertFloatToInt32 (src, static_cast<char*> (dst), byteStride, samps, littleEndian);
+                    break;
+                default:
+                    jassertfalse;
+                    break;
             }
         }
     }
@@ -175,8 +260,7 @@ struct ASIOSampleFormat
     bool formatIsFloat = false, littleEndian = true;
 
 private:
-    static void convertInt16ToFloat (const char* src, float* dest, int srcStrideBytes,
-                                     int numSamples, bool littleEndian) noexcept
+    static void convertInt16ToFloat (const char* src, float* dest, int srcStrideBytes, int numSamples, bool littleEndian) noexcept
     {
         const double g = 1.0 / 32768.0;
 
@@ -198,8 +282,7 @@ private:
         }
     }
 
-    static void convertFloatToInt16 (const float* src, char* dest, int dstStrideBytes,
-                                     int numSamples, bool littleEndian) noexcept
+    static void convertFloatToInt16 (const float* src, char* dest, int dstStrideBytes, int numSamples, bool littleEndian) noexcept
     {
         const double maxVal = (double) 0x7fff;
 
@@ -221,8 +304,7 @@ private:
         }
     }
 
-    static void convertInt24ToFloat (const char* src, float* dest, int srcStrideBytes,
-                                     int numSamples, bool littleEndian) noexcept
+    static void convertInt24ToFloat (const char* src, float* dest, int srcStrideBytes, int numSamples, bool littleEndian) noexcept
     {
         const double g = 1.0 / 0x7fffff;
 
@@ -244,8 +326,7 @@ private:
         }
     }
 
-    static void convertFloatToInt24 (const float* src, char* dest, int dstStrideBytes,
-                                     int numSamples, bool littleEndian) noexcept
+    static void convertFloatToInt24 (const float* src, char* dest, int dstStrideBytes, int numSamples, bool littleEndian) noexcept
     {
         const double maxVal = (double) 0x7fffff;
 
@@ -267,8 +348,7 @@ private:
         }
     }
 
-    static void convertInt32ToFloat (const char* src, float* dest, int srcStrideBytes,
-                                     int numSamples, bool littleEndian) noexcept
+    static void convertInt32ToFloat (const char* src, float* dest, int srcStrideBytes, int numSamples, bool littleEndian) noexcept
     {
         const double g = 1.0 / 0x7fffffff;
 
@@ -290,8 +370,7 @@ private:
         }
     }
 
-    static void convertFloatToInt32 (const float* src, char* dest, int dstStrideBytes,
-                                     int numSamples, bool littleEndian) noexcept
+    static void convertFloatToInt32 (const float* src, char* dest, int dstStrideBytes, int numSamples, bool littleEndian) noexcept
     {
         const double maxVal = (double) 0x7fffffff;
 
@@ -325,15 +404,14 @@ class ASIOAudioIODeviceType;
 static void sendASIODeviceChangeToListeners (ASIOAudioIODeviceType*);
 
 //==============================================================================
-class ASIOAudioIODevice final : public AudioIODevice,
-                                private Timer
+class ASIOAudioIODevice final : public AudioIODevice
+    , private Timer
 {
 public:
-    ASIOAudioIODevice (ASIOAudioIODeviceType* ownerType, const String& devName,
-                       CLSID clsID, int slotNumber)
-       : AudioIODevice (devName, "ASIO"),
-         owner (ownerType),
-         classId (clsID)
+    ASIOAudioIODevice (ASIOAudioIODeviceType* ownerType, const String& devName, CLSID clsID, int slotNumber)
+        : AudioIODevice (devName, "ASIO")
+        , owner (ownerType)
+        , classId (clsID)
     {
         ::CoInitialize (nullptr);
 
@@ -383,29 +461,33 @@ public:
         {
             sampleRates.swapWith (newRates);
 
-           #if JUCE_ASIO_DEBUGGING
+#if JUCE_ASIO_DEBUGGING
             StringArray s;
 
             for (auto r : sampleRates)
                 s.add (String (r));
 
             JUCE_ASIO_LOG ("Rates: " + s.joinIntoString (" "));
-           #endif
+#endif
         }
     }
 
-    StringArray getOutputChannelNames() override        { return outputChannelNames; }
-    StringArray getInputChannelNames() override         { return inputChannelNames; }
+    StringArray getOutputChannelNames() override { return outputChannelNames; }
 
-    Array<double> getAvailableSampleRates() override    { return sampleRates; }
-    Array<int> getAvailableBufferSizes() override       { return bufferSizes; }
-    int getDefaultBufferSize() override                 { return preferredBufferSize; }
+    StringArray getInputChannelNames() override { return inputChannelNames; }
 
-    int getXRunCount() const noexcept override          { return xruns; }
+    Array<double> getAvailableSampleRates() override { return sampleRates; }
+
+    Array<int> getAvailableBufferSizes() override { return bufferSizes; }
+
+    int getDefaultBufferSize() override { return preferredBufferSize; }
+
+    int getXRunCount() const noexcept override { return xruns; }
 
     String open (const BigInteger& inputChannels,
                  const BigInteger& outputChannels,
-                 double sr, int bufferSizeSamples) override
+                 double sr,
+                 int bufferSizeSamples) override
     {
         if (isOpen())
             close();
@@ -647,18 +729,23 @@ public:
         }
     }
 
-    bool isOpen() override                       { return deviceIsOpen || insideControlPanelModalLoop; }
-    bool isPlaying() override                    { return asioObject != nullptr && currentCallback != nullptr; }
+    bool isOpen() override { return deviceIsOpen || insideControlPanelModalLoop; }
 
-    int getCurrentBufferSizeSamples() override   { return currentBlockSizeSamples; }
-    double getCurrentSampleRate() override       { return currentSampleRate; }
-    int getCurrentBitDepth() override            { return currentBitDepth; }
+    bool isPlaying() override { return asioObject != nullptr && currentCallback != nullptr; }
 
-    BigInteger getActiveOutputChannels() const override    { return currentChansOut; }
-    BigInteger getActiveInputChannels() const override     { return currentChansIn; }
+    int getCurrentBufferSizeSamples() override { return currentBlockSizeSamples; }
 
-    int getOutputLatencyInSamples() override     { return outputLatency; }
-    int getInputLatencyInSamples() override      { return inputLatency; }
+    double getCurrentSampleRate() override { return currentSampleRate; }
+
+    int getCurrentBitDepth() override { return currentBitDepth; }
+
+    BigInteger getActiveOutputChannels() const override { return currentChansOut; }
+
+    BigInteger getActiveInputChannels() const override { return currentChansIn; }
+
+    int getOutputLatencyInSamples() override { return outputLatency; }
+
+    int getInputLatencyInSamples() override { return inputLatency; }
 
     void start (AudioIODeviceCallback* callback) override
     {
@@ -684,8 +771,9 @@ public:
             lastCallback->audioDeviceStopped();
     }
 
-    String getLastError() override           { return error; }
-    bool hasControlPanel() const override    { return true; }
+    String getLastError() override { return error; }
+
+    bool hasControlPanel() const override { return true; }
 
     bool showControlPanel() override
     {
@@ -728,8 +816,7 @@ public:
             auto* oldCallback = currentCallback;
             close();
             needToReset = true;
-            open (BigInteger (currentChansIn), BigInteger (currentChansOut),
-                  currentSampleRate, currentBlockSizeSamples);
+            open (BigInteger (currentChansIn), BigInteger (currentChansOut), currentSampleRate, currentBlockSizeSamples);
 
             reloadChannelNames();
 
@@ -809,9 +896,9 @@ private:
         long totalInChannels = 0, totalOutChannels = 0;
 
         if (asioObject != nullptr
-             && asioObject->getChannels (&totalInChannels, &totalOutChannels) == ASE_OK)
+            && asioObject->getChannels (&totalInChannels, &totalOutChannels) == ASE_OK)
         {
-            totalNumInputChans  = totalInChannels;
+            totalNumInputChans = totalInChannels;
             totalNumOutputChans = totalOutChannels;
 
             inputChannelNames.clear();
@@ -926,7 +1013,7 @@ private:
     {
         // find a list of buffer sizes..
         JUCE_ASIO_LOG (String ((int) minSize) + "->" + String ((int) maxSize) + ", "
-                        + String ((int) preferredSize) + ", " + String ((int) granularity));
+                       + String ((int) preferredSize) + ", " + String ((int) granularity));
 
         if (granularity >= 0)
         {
@@ -1109,15 +1196,18 @@ private:
 
         if (asioObject != nullptr)
         {
-           #if ! JUCE_MINGW
+#if ! JUCE_MINGW
             __try
-           #endif
+#endif
             {
                 asioObject->Release();
             }
-           #if ! JUCE_MINGW
-            __except (EXCEPTION_EXECUTE_HANDLER) { releasedOK = false; }
-           #endif
+#if ! JUCE_MINGW
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                releasedOK = false;
+            }
+#endif
 
             asioObject = nullptr;
         }
@@ -1141,17 +1231,19 @@ private:
 
     bool tryCreatingDriver (bool& crashed)
     {
-       #if ! JUCE_MINGW
+#if ! JUCE_MINGW
         __try
-       #endif
+#endif
         {
-            return CoCreateInstance (classId, 0, CLSCTX_INPROC_SERVER,
-                                     classId, (void**) &asioObject) == S_OK;
+            return CoCreateInstance (classId, 0, CLSCTX_INPROC_SERVER, classId, (void**) &asioObject) == S_OK;
         }
-       #if ! JUCE_MINGW
-        __except (EXCEPTION_EXECUTE_HANDLER) { crashed = true; }
+#if ! JUCE_MINGW
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            crashed = true;
+        }
         return false;
-       #endif
+#endif
     }
 
     String getLastDriverError() const
@@ -1223,7 +1315,7 @@ private:
                 totalNumOutputChans = 0;
 
                 if (asioObject != nullptr
-                     && (err = asioObject->getChannels (&totalNumInputChans, &totalNumOutputChans)) == 0)
+                    && (err = asioObject->getChannels (&totalNumInputChans, &totalNumOutputChans)) == 0)
                 {
                     JUCE_ASIO_LOG (String ((int) totalNumInputChans) + " in, " + String ((int) totalNumOutputChans) + " out");
 
@@ -1359,7 +1451,7 @@ private:
             else
             {
                 for (int i = 0; i < numActiveOutputChans; ++i)
-                     outputFormat[i].clear (infos[numActiveInputChans + i].buffers[bufferIndex], samps);
+                    outputFormat[i].clear (infos[numActiveInputChans + i].buffers[bufferIndex], samps);
             }
         }
 
@@ -1373,19 +1465,34 @@ private:
         {
             case kAsioSelectorSupported:
                 if (value == kAsioResetRequest || value == kAsioEngineVersion || value == kAsioResyncRequest
-                     || value == kAsioLatenciesChanged || value == kAsioSupportsInputMonitor || value == kAsioOverload)
+                    || value == kAsioLatenciesChanged || value == kAsioSupportsInputMonitor || value == kAsioOverload)
                     return 1;
                 break;
 
-            case kAsioBufferSizeChange:  JUCE_ASIO_LOG ("kAsioBufferSizeChange"); resetRequest(); return 1;
-            case kAsioResetRequest:      JUCE_ASIO_LOG ("kAsioResetRequest");     resetRequest(); return 1;
-            case kAsioResyncRequest:     JUCE_ASIO_LOG ("kAsioResyncRequest");    resetRequest(); return 1;
-            case kAsioLatenciesChanged:  JUCE_ASIO_LOG ("kAsioLatenciesChanged"); return 1;
-            case kAsioEngineVersion:     return 2;
+            case kAsioBufferSizeChange:
+                JUCE_ASIO_LOG ("kAsioBufferSizeChange");
+                resetRequest();
+                return 1;
+            case kAsioResetRequest:
+                JUCE_ASIO_LOG ("kAsioResetRequest");
+                resetRequest();
+                return 1;
+            case kAsioResyncRequest:
+                JUCE_ASIO_LOG ("kAsioResyncRequest");
+                resetRequest();
+                return 1;
+            case kAsioLatenciesChanged:
+                JUCE_ASIO_LOG ("kAsioLatenciesChanged");
+                return 1;
+            case kAsioEngineVersion:
+                return 2;
 
             case kAsioSupportsTimeInfo:
-            case kAsioSupportsTimeCode:  return 0;
-            case kAsioOverload:          ++xruns; return 1;
+            case kAsioSupportsTimeCode:
+                return 0;
+            case kAsioOverload:
+                ++xruns;
+                return 1;
         }
 
         return 0;
@@ -1425,10 +1532,10 @@ private:
 
         static void setCallbacks (ASIOCallbacks& callbacks) noexcept
         {
-            callbacks.bufferSwitch          = &bufferSwitchCallback;
-            callbacks.asioMessage           = &asioMessagesCallback;
-            callbacks.bufferSwitchTimeInfo  = &bufferSwitchTimeInfoCallback;
-            callbacks.sampleRateDidChange   = &sampleRateChangedCallback;
+            callbacks.bufferSwitch = &bufferSwitchCallback;
+            callbacks.asioMessage = &asioMessagesCallback;
+            callbacks.bufferSwitchTimeInfo = &bufferSwitchTimeInfoCallback;
+            callbacks.sampleRateDidChange = &sampleRateChangedCallback;
         }
 
         static void setCallbacksForDevice (ASIOCallbacks& callbacks, ASIOAudioIODevice* device) noexcept
@@ -1458,7 +1565,10 @@ struct ASIOAudioIODevice::ASIOCallbackFunctions<maxNumASIODevices>
 class ASIOAudioIODeviceType final : public AudioIODeviceType
 {
 public:
-    ASIOAudioIODeviceType() : AudioIODeviceType ("ASIO") {}
+    ASIOAudioIODeviceType()
+        : AudioIODeviceType ("ASIO")
+    {
+    }
 
     //==============================================================================
     void scanForDevices() override
@@ -1500,11 +1610,11 @@ public:
             if (deviceNames[i].containsIgnoreCase ("asio4all"))
                 return i; // asio4all is a safe choice for a default..
 
-       #if JUCE_DEBUG
+#if JUCE_DEBUG
         if (deviceNames.size() > 1 && deviceNames[0].containsIgnoreCase ("digidesign"))
             return 1; // (the digi m-box driver crashes the app when you run
                       // it in the debugger, which can be a bit annoying)
-       #endif
+#endif
 
         return 0;
     }
@@ -1515,8 +1625,8 @@ public:
             if (currentASIODev[i] == nullptr)
                 return i;
 
-        jassertfalse;  // unfortunately you can only have a finite number
-                       // of ASIO devices open at the same time..
+        jassertfalse; // unfortunately you can only have a finite number
+                      // of ASIO devices open at the same time..
         return -1;
     }
 
@@ -1527,7 +1637,7 @@ public:
         return d == nullptr ? -1 : deviceNames.indexOf (d->getName());
     }
 
-    bool hasSeparateInputsAndOutputs() const override    { return false; }
+    bool hasSeparateInputsAndOutputs() const override { return false; }
 
     AudioIODevice* createDevice (const String& outputDeviceName,
                                  const String& inputDeviceName) override
@@ -1545,8 +1655,7 @@ public:
             auto freeSlot = findFreeSlot();
 
             if (freeSlot >= 0)
-                return new ASIOAudioIODevice (this, deviceName,
-                                              classIds.getReference (index), freeSlot);
+                return new ASIOAudioIODevice (this, deviceName, classIds.getReference (index), freeSlot);
         }
 
         return nullptr;

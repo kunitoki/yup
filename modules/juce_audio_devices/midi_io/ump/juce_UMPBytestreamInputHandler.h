@@ -64,7 +64,11 @@ struct BytestreamInputHandler
 struct BytestreamToBytestreamHandler : public BytestreamInputHandler
 {
     BytestreamToBytestreamHandler (MidiInput& i, MidiInputCallback& c)
-        : input (i), callback (c), concatenator (2048) {}
+        : input (i)
+        , callback (c)
+        , concatenator (2048)
+    {
+    }
 
     /**
         Provides an `operator()` which can create an input handler for a given
@@ -77,7 +81,9 @@ struct BytestreamToBytestreamHandler : public BytestreamInputHandler
     {
     public:
         explicit Factory (MidiInputCallback* c)
-            : callback (c) {}
+            : callback (c)
+        {
+        }
 
         std::unique_ptr<BytestreamToBytestreamHandler> operator() (MidiInput& i) const
         {
@@ -113,7 +119,10 @@ struct BytestreamToBytestreamHandler : public BytestreamInputHandler
 struct BytestreamToUMPHandler : public BytestreamInputHandler
 {
     BytestreamToUMPHandler (PacketProtocol protocol, Receiver& c)
-        : recipient (c), dispatcher (protocol, 2048) {}
+        : recipient (c)
+        , dispatcher (protocol, 2048)
+    {
+    }
 
     /**
         Provides an `operator()` which can create an input handler for a given
@@ -126,7 +135,10 @@ struct BytestreamToUMPHandler : public BytestreamInputHandler
     {
     public:
         Factory (PacketProtocol p, Receiver& c)
-            : protocol (p), callback (c) {}
+            : protocol (p)
+            , callback (c)
+        {
+        }
 
         std::unique_ptr<BytestreamToUMPHandler> operator() (MidiInput&) const
         {
@@ -144,15 +156,15 @@ struct BytestreamToUMPHandler : public BytestreamInputHandler
     {
         const auto* ptr = static_cast<const uint8_t*> (data);
         dispatcher.dispatch (ptr, ptr + bytes, time, [&] (const View& v)
-        {
-            recipient.packetReceived (v, time);
-        });
+                             {
+                                 recipient.packetReceived (v, time);
+                             });
     }
 
     Receiver& recipient;
     BytestreamToUMPDispatcher dispatcher;
 };
 
-} // juce::universal_midi_packets
+} // namespace juce::universal_midi_packets
 
 #endif

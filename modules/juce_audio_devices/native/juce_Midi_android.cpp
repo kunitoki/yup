@@ -43,6 +43,8 @@ namespace juce
 //==============================================================================
 // This byte-code is generated from native/java/com/rmsl/juce/JuceMidiSupport.java with min sdk version 23
 // See juce_core/native/java/README.txt on how to generate this byte-code.
+
+// clang-format off
 constexpr unsigned char javaMidiByteCode[]
 {
   0x1f, 0x8b, 0x08, 0x08, 0xa3, 0xf2, 0xc6, 0x63, 0x00, 0x03, 0x63, 0x6c,
@@ -796,6 +798,7 @@ constexpr unsigned char javaMidiByteCode[]
   0x96, 0xe1, 0xbf, 0x71, 0xf4, 0x7f, 0x27, 0xec, 0x58, 0xd2, 0x1c, 0x49,
   0x00, 0x00
 };
+// clang-format on
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
  METHOD (getJuceAndroidMidiInputDeviceNameAndIDs,  "getJuceAndroidMidiInputDeviceNameAndIDs",  "()[Ljava/lang/String;") \
@@ -807,11 +810,11 @@ DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/rmsl/juce/JuceMidiSuppor
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
- METHOD (start,    "start",    "()V") \
- METHOD (stop,     "stop",     "()V") \
- METHOD (close,    "close",    "()V") \
- METHOD (sendMidi, "sendMidi", "([BII)V") \
- METHOD (getName,  "getName",  "()Ljava/lang/String;")
+METHOD (start, "start", "()V")                                                \
+METHOD (stop, "stop", "()V")                                                  \
+METHOD (close, "close", "()V")                                                \
+METHOD (sendMidi, "sendMidi", "([BII)V")                                      \
+METHOD (getName, "getName", "()Ljava/lang/String;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiPort", 23)
 #undef JNI_CLASS_MEMBERS
@@ -821,10 +824,10 @@ class MidiInput::Pimpl
 {
 public:
     Pimpl (MidiInput* midiInput, int deviceID, juce::MidiInputCallback* midiInputCallback, jobject deviceManager)
-        : juceMidiInput (midiInput),
-          callback (midiInputCallback),
-          midiConcatenator (2048),
-          javaMidiDevice (LocalRef<jobject> (getEnv()->CallObjectMethod (deviceManager,
+        : juceMidiInput (midiInput)
+        , callback (midiInputCallback)
+        , midiConcatenator (2048)
+        , javaMidiDevice (LocalRef<jobject> (getEnv()->CallObjectMethod (deviceManager,
                                                                          MidiDeviceManager.openMidiInputPortWithID,
                                                                          (jint) deviceID,
                                                                          (jlong) this)))
@@ -914,7 +917,9 @@ public:
         if (jobject d = javaMidiDevice.get())
             getEnv()->CallVoidMethod (d,
                                       JuceMidiPort.sendMidi,
-                                      byteArray, offset, len);
+                                      byteArray,
+                                      offset,
+                                      len);
     }
 
     String getName() const noexcept
@@ -931,7 +936,7 @@ private:
 
 //==============================================================================
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
- CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V" )
+CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiInputPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiInputPort", 23)
 #undef JNI_CLASS_MEMBERS
@@ -946,9 +951,7 @@ public:
     {
         if (jobject dm = deviceManager.get())
         {
-            jobjectArray jDeviceNameAndIDs
-                = (jobjectArray) getEnv()->CallObjectMethod (dm, input ? MidiDeviceManager.getJuceAndroidMidiInputDeviceNameAndIDs
-                                                                       : MidiDeviceManager.getJuceAndroidMidiOutputDeviceNameAndIDs);
+            jobjectArray jDeviceNameAndIDs = (jobjectArray) getEnv()->CallObjectMethod (dm, input ? MidiDeviceManager.getJuceAndroidMidiInputDeviceNameAndIDs : MidiDeviceManager.getJuceAndroidMidiOutputDeviceNameAndIDs);
 
             // Create a local reference as converting this to a JUCE string will call into JNI
             LocalRef<jobjectArray> localDeviceNameAndIDs (jDeviceNameAndIDs);
@@ -1003,13 +1006,13 @@ private:
         MidiDeviceListConnectionBroadcaster::get().notify();
     }
 
-   #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-    CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V" ) \
-    STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$MidiDeviceManager;") \
-    STATICMETHOD (getAndroidBluetoothManager,  "getAndroidBluetoothManager",  "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$BluetoothMidiManager;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                             \
+CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                            \
+STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$MidiDeviceManager;") \
+STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$BluetoothMidiManager;")
 
     DECLARE_JNI_CLASS_WITH_BYTECODE (JuceMidiSupport, "com/rmsl/juce/JuceMidiSupport", 23, javaMidiByteCode)
-   #undef JNI_CLASS_MEMBERS
+#undef JNI_CLASS_MEMBERS
 
     GlobalRef deviceManager { LocalRef<jobject> (getEnv()->CallStaticObjectMethod (JuceMidiSupport,
                                                                                    JuceMidiSupport.getAndroidMidiDeviceManager,

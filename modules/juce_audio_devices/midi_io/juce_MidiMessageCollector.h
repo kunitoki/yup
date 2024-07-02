@@ -52,8 +52,8 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MidiMessageCollector    : public MidiKeyboardState::Listener,
-                                          public MidiInputCallback
+class JUCE_API MidiMessageCollector : public MidiKeyboardState::Listener
+    , public MidiInputCallback
 {
 public:
     //==============================================================================
@@ -105,7 +105,6 @@ public:
     */
     void ensureStorageAllocated (size_t bytes);
 
-
     //==============================================================================
     /** @internal */
     void handleNoteOn (MidiKeyboardState*, int midiChannel, int midiNoteNumber, float velocity) override;
@@ -120,9 +119,9 @@ private:
     CriticalSection midiCallbackLock;
     MidiBuffer incomingMessages;
     double sampleRate = 44100.0;
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     bool hasCalledReset = false;
-   #endif
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiMessageCollector)
 };

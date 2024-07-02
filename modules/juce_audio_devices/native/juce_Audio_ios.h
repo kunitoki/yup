@@ -89,9 +89,9 @@ public:
 
     //==============================================================================
     bool isInterAppAudioConnected() const;
-   #if JUCE_MODULE_AVAILABLE_juce_graphics
+#if JUCE_MODULE_AVAILABLE_juce_graphics
     Image getIcon (int size);
-   #endif
+#endif
     void switchApplication();
 
 private:

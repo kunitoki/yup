@@ -73,13 +73,15 @@ public:
     MidiDeviceListConnection() = default;
 
     MidiDeviceListConnection (const MidiDeviceListConnection&) = delete;
+
     MidiDeviceListConnection (MidiDeviceListConnection&& other) noexcept
-        : broadcaster (std::exchange (other.broadcaster, nullptr)),
-          key (std::exchange (other.key, Key{}))
+        : broadcaster (std::exchange (other.broadcaster, nullptr))
+        , key (std::exchange (other.key, Key {}))
     {
     }
 
     MidiDeviceListConnection& operator= (const MidiDeviceListConnection&) = delete;
+
     MidiDeviceListConnection& operator= (MidiDeviceListConnection&& other) noexcept
     {
         MidiDeviceListConnection (std::move (other)).swap (*this);
@@ -108,7 +110,10 @@ public:
 
 private:
     MidiDeviceListConnection (MidiDeviceListConnectionBroadcaster* b, const Key k)
-        : broadcaster (b), key (k) {}
+        : broadcaster (b)
+        , key (k)
+    {
+    }
 
     void swap (MidiDeviceListConnection& other) noexcept
     {
@@ -136,7 +141,8 @@ struct MidiDeviceInfo
     MidiDeviceInfo() = default;
 
     MidiDeviceInfo (const String& deviceName, const String& deviceIdentifier)
-        : name (deviceName), identifier (deviceIdentifier)
+        : name (deviceName)
+        , identifier (deviceIdentifier)
     {
     }
 
@@ -160,8 +166,10 @@ struct MidiDeviceInfo
 
     //==============================================================================
     auto tie() const { return std::tie (name, identifier); }
-    bool operator== (const MidiDeviceInfo& other) const noexcept   { return tie() == other.tie(); }
-    bool operator!= (const MidiDeviceInfo& other) const noexcept   { return tie() != other.tie(); }
+
+    bool operator== (const MidiDeviceInfo& other) const noexcept { return tie() == other.tie(); }
+
+    bool operator!= (const MidiDeviceInfo& other) const noexcept { return tie() != other.tie(); }
 };
 
 class MidiInputCallback;
@@ -177,7 +185,7 @@ class MidiInputCallback;
 
     @tags{Audio}
 */
-class JUCE_API  MidiInput  final
+class JUCE_API MidiInput final
 {
 public:
     //==============================================================================
@@ -207,7 +215,7 @@ public:
     */
     static std::unique_ptr<MidiInput> openDevice (const String& deviceIdentifier, MidiInputCallback* callback);
 
-   #if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS || JUCE_WASM || DOXYGEN
+#if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS || JUCE_WASM || DOXYGEN
     /** This will try to create a new midi input device (only available on Linux, macOS and iOS).
 
         This will attempt to create a new midi input device with the specified name for other
@@ -222,7 +230,7 @@ public:
         @param callback    the object that will receive the midi messages from this device
     */
     static std::unique_ptr<MidiInput> createNewDevice (const String& deviceName, MidiInputCallback* callback);
-   #endif
+#endif
 
     //==============================================================================
     /** Destructor. */
@@ -244,26 +252,23 @@ public:
     void stop();
 
     /** Returns the MidiDeviceInfo struct containing some information about this device. */
-    MidiDeviceInfo getDeviceInfo() const noexcept    { return deviceInfo; }
+    MidiDeviceInfo getDeviceInfo() const noexcept { return deviceInfo; }
 
     /** Returns the identifier of this device. */
-    String getIdentifier() const noexcept            { return deviceInfo.identifier; }
+    String getIdentifier() const noexcept { return deviceInfo.identifier; }
 
     /** Returns the name of this device. */
-    String getName() const noexcept                  { return deviceInfo.name; }
+    String getName() const noexcept { return deviceInfo.name; }
 
     /** Sets a custom name for the device. */
-    void setName (const String& newName) noexcept    { deviceInfo.name = newName; }
+    void setName (const String& newName) noexcept { deviceInfo.name = newName; }
 
     //==============================================================================
-   #ifndef DOXYGEN
-    [[deprecated ("Use getAvailableDevices instead.")]]
-    static StringArray getDevices();
-    [[deprecated ("Use getDefaultDevice instead.")]]
-    static int getDefaultDeviceIndex();
-    [[deprecated ("Use openDevice that takes a device identifier instead.")]]
-    static std::unique_ptr<MidiInput> openDevice (int, MidiInputCallback*);
-   #endif
+#ifndef DOXYGEN
+    [[deprecated ("Use getAvailableDevices instead.")]] static StringArray getDevices();
+    [[deprecated ("Use getDefaultDevice instead.")]] static int getDefaultDeviceIndex();
+    [[deprecated ("Use openDevice that takes a device identifier instead.")]] static std::unique_ptr<MidiInput> openDevice (int, MidiInputCallback*);
+#endif
 
     /** @internal */
     class Pimpl;
@@ -290,11 +295,11 @@ private:
 
     @tags{Audio}
 */
-class JUCE_API  MidiInputCallback
+class JUCE_API MidiInputCallback
 {
 public:
     /** Destructor. */
-    virtual ~MidiInputCallback()  = default;
+    virtual ~MidiInputCallback() = default;
 
     /** Receives an incoming message.
 
@@ -338,7 +343,7 @@ public:
 
     @tags{Audio}
 */
-class JUCE_API  MidiOutput  final  : private Thread
+class JUCE_API MidiOutput final : private Thread
 {
 public:
     //==============================================================================
@@ -366,7 +371,7 @@ public:
     */
     static std::unique_ptr<MidiOutput> openDevice (const String& deviceIdentifier);
 
-   #if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS || JUCE_WASM || DOXYGEN
+#if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS || JUCE_WASM || DOXYGEN
     /** This will try to create a new midi output device (only available on Linux, macOS and iOS).
 
         This will attempt to create a new midi output device with the specified name that other
@@ -380,23 +385,23 @@ public:
         @param deviceName  the name of the device to create
     */
     static std::unique_ptr<MidiOutput> createNewDevice (const String& deviceName);
-   #endif
+#endif
 
     //==============================================================================
     /** Destructor. */
     ~MidiOutput() override;
 
     /** Returns the MidiDeviceInfo struct containing some information about this device. */
-    MidiDeviceInfo getDeviceInfo() const noexcept    { return deviceInfo; }
+    MidiDeviceInfo getDeviceInfo() const noexcept { return deviceInfo; }
 
     /** Returns the identifier of this device. */
-    String getIdentifier() const noexcept            { return deviceInfo.identifier; }
+    String getIdentifier() const noexcept { return deviceInfo.identifier; }
 
     /** Returns the name of this device. */
-    String getName() const noexcept                  { return deviceInfo.name; }
+    String getName() const noexcept { return deviceInfo.name; }
 
     /** Sets a custom name for the device. */
-    void setName (const String& newName) noexcept    { deviceInfo.name = newName; }
+    void setName (const String& newName) noexcept { deviceInfo.name = newName; }
 
     //==============================================================================
     /** Sends out a MIDI message immediately. */
@@ -442,17 +447,14 @@ public:
     /** Returns true if the background thread used to send blocks of data is running.
         @see startBackgroundThread, stopBackgroundThread
     */
-    bool isBackgroundThreadRunning() const noexcept  { return isThreadRunning(); }
+    bool isBackgroundThreadRunning() const noexcept { return isThreadRunning(); }
 
     //==============================================================================
-   #ifndef DOXYGEN
-    [[deprecated ("Use getAvailableDevices instead.")]]
-    static StringArray getDevices();
-    [[deprecated ("Use getDefaultDevice instead.")]]
-    static int getDefaultDeviceIndex();
-    [[deprecated ("Use openDevice that takes a device identifier instead.")]]
-    static std::unique_ptr<MidiOutput> openDevice (int);
-   #endif
+#ifndef DOXYGEN
+    [[deprecated ("Use getAvailableDevices instead.")]] static StringArray getDevices();
+    [[deprecated ("Use getDefaultDevice instead.")]] static int getDefaultDeviceIndex();
+    [[deprecated ("Use openDevice that takes a device identifier instead.")]] static std::unique_ptr<MidiOutput> openDevice (int);
+#endif
 
     /** @internal */
     class Pimpl;

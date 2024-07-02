@@ -47,7 +47,10 @@ class AlsaClient
 {
     auto lowerBound (int portId) const
     {
-        const auto comparator = [] (const auto& port, const auto& id) { return port->getPortId() < id; };
+        const auto comparator = [] (const auto& port, const auto& id)
+        {
+            return port->getPortId() < id;
+        };
         return std::lower_bound (ports.begin(), ports.end(), portId, comparator);
     }
 
@@ -73,14 +76,14 @@ public:
 
     static String getAlsaMidiName()
     {
-        #ifdef JUCE_ALSA_MIDI_NAME
-         return JUCE_ALSA_MIDI_NAME;
-        #else
-         if (auto* app = JUCEApplicationBase::getInstance())
-             return app->getApplicationName();
+#ifdef JUCE_ALSA_MIDI_NAME
+        return JUCE_ALSA_MIDI_NAME;
+#else
+        if (auto* app = JUCEApplicationBase::getInstance())
+            return app->getApplicationName();
 
-         return "JUCE";
-        #endif
+        return "JUCE";
+#endif
     }
 
     //==============================================================================
@@ -88,7 +91,9 @@ public:
     struct Port
     {
         explicit Port (bool forInput) noexcept
-            : isInput (forInput) {}
+            : isInput (forInput)
+        {
+        }
 
         ~Port()
         {
@@ -180,7 +185,6 @@ public:
             return success;
         }
 
-
         bool operator== (const Port& lhs) const noexcept
         {
             return portId != -1 && portId == lhs.portId;
@@ -192,12 +196,10 @@ public:
             {
                 const unsigned int caps =
                     isInput ? (SND_SEQ_PORT_CAP_WRITE | (enableSubscription ? SND_SEQ_PORT_CAP_SUBS_WRITE : 0))
-                            : (SND_SEQ_PORT_CAP_READ  | (enableSubscription ? SND_SEQ_PORT_CAP_SUBS_READ : 0));
+                            : (SND_SEQ_PORT_CAP_READ | (enableSubscription ? SND_SEQ_PORT_CAP_SUBS_READ : 0));
 
                 portName = name;
-                portId = snd_seq_create_simple_port (seqHandle, portName.toUTF8(), caps,
-                                                     SND_SEQ_PORT_TYPE_MIDI_GENERIC |
-                                                     SND_SEQ_PORT_TYPE_APPLICATION);
+                portId = snd_seq_create_simple_port (seqHandle, portName.toUTF8(), caps, SND_SEQ_PORT_TYPE_MIDI_GENERIC | SND_SEQ_PORT_TYPE_APPLICATION);
             }
         }
 
@@ -213,8 +215,9 @@ public:
                 callback->handlePartialSysexMessage (midiInput, messageData, numBytesSoFar, timeStamp);
         }
 
-        int getPortId() const               { return portId; }
-        const String& getPortName() const   { return portName; }
+        int getPortId() const { return portId; }
+
+        const String& getPortName() const { return portName; }
 
     private:
         const std::shared_ptr<AlsaClient> client = AlsaClient::getInstance();
@@ -258,8 +261,9 @@ public:
             port->handlePartialSysexMessage (messageData, numBytesSoFar, timeStamp);
     }
 
-    snd_seq_t* get() const noexcept     { return handle; }
-    int getId() const noexcept          { return clientId; }
+    snd_seq_t* get() const noexcept { return handle; }
+
+    int getId() const noexcept { return clientId; }
 
     Port* createPort (const String& name, bool forInput, bool enableSubscription)
     {
@@ -355,6 +359,7 @@ private:
         {
         public:
             ~UpdateNotifier() override { cancelPendingUpdate(); }
+
             using AsyncUpdater::triggerAsyncUpdate;
 
         private:
@@ -366,80 +371,82 @@ private:
         std::atomic<bool> shouldStop { false };
         UpdateNotifier notifier;
         std::thread thread { [this]
-        {
-            Thread::setCurrentThreadName ("JUCE MIDI Input");
+                             {
+                                 Thread::setCurrentThreadName ("JUCE MIDI Input");
 
-            auto seqHandle = client.get();
+                                 auto seqHandle = client.get();
 
-            const int maxEventSize = 16 * 1024;
-            snd_midi_event_t* midiParser;
+                                 const int maxEventSize = 16 * 1024;
+                                 snd_midi_event_t* midiParser;
 
-            if (snd_midi_event_new (maxEventSize, &midiParser) >= 0)
-            {
-                const ScopeGuard freeMidiEvent { [&] { snd_midi_event_free (midiParser); } };
+                                 if (snd_midi_event_new (maxEventSize, &midiParser) >= 0)
+                                 {
+                                     const ScopeGuard freeMidiEvent { [&]
+                                                                      {
+                                                                          snd_midi_event_free (midiParser);
+                                                                      } };
 
-                const auto numPfds = snd_seq_poll_descriptors_count (seqHandle, POLLIN);
-                std::vector<pollfd> pfd (static_cast<size_t> (numPfds));
-                snd_seq_poll_descriptors (seqHandle, pfd.data(), (unsigned int) numPfds, POLLIN);
+                                     const auto numPfds = snd_seq_poll_descriptors_count (seqHandle, POLLIN);
+                                     std::vector<pollfd> pfd (static_cast<size_t> (numPfds));
+                                     snd_seq_poll_descriptors (seqHandle, pfd.data(), (unsigned int) numPfds, POLLIN);
 
-                std::vector<uint8> buffer (maxEventSize);
+                                     std::vector<uint8> buffer (maxEventSize);
 
-                while (! shouldStop)
-                {
-                    // This timeout shouldn't be too long, so that the program can exit in a timely manner
-                    if (poll (pfd.data(), (nfds_t) numPfds, 100) > 0)
-                    {
-                        if (shouldStop)
-                            break;
+                                     while (! shouldStop)
+                                     {
+                                         // This timeout shouldn't be too long, so that the program can exit in a timely manner
+                                         if (poll (pfd.data(), (nfds_t) numPfds, 100) > 0)
+                                         {
+                                             if (shouldStop)
+                                                 break;
 
-                        do
-                        {
-                            snd_seq_event_t* inputEvent = nullptr;
+                                             do
+                                             {
+                                                 snd_seq_event_t* inputEvent = nullptr;
 
-                            if (snd_seq_event_input (seqHandle, &inputEvent) >= 0)
-                            {
-                                const ScopeGuard freeInputEvent { [&] { snd_seq_free_event (inputEvent); } };
+                                                 if (snd_seq_event_input (seqHandle, &inputEvent) >= 0)
+                                                 {
+                                                     const ScopeGuard freeInputEvent { [&]
+                                                                                       {
+                                                                                           snd_seq_free_event (inputEvent);
+                                                                                       } };
 
-                                constexpr int systemEvents[]
-                                {
-                                    SND_SEQ_EVENT_CLIENT_CHANGE,
-                                    SND_SEQ_EVENT_CLIENT_START,
-                                    SND_SEQ_EVENT_CLIENT_EXIT,
-                                    SND_SEQ_EVENT_PORT_CHANGE,
-                                    SND_SEQ_EVENT_PORT_START,
-                                    SND_SEQ_EVENT_PORT_EXIT,
-                                    SND_SEQ_EVENT_PORT_SUBSCRIBED,
-                                    SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
-                                };
+                                                     constexpr int systemEvents[] {
+                                                         SND_SEQ_EVENT_CLIENT_CHANGE,
+                                                         SND_SEQ_EVENT_CLIENT_START,
+                                                         SND_SEQ_EVENT_CLIENT_EXIT,
+                                                         SND_SEQ_EVENT_PORT_CHANGE,
+                                                         SND_SEQ_EVENT_PORT_START,
+                                                         SND_SEQ_EVENT_PORT_EXIT,
+                                                         SND_SEQ_EVENT_PORT_SUBSCRIBED,
+                                                         SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
+                                                     };
 
-                                const auto foundEvent = std::find (std::begin (systemEvents),
-                                                                   std::end   (systemEvents),
-                                                                   inputEvent->type);
+                                                     const auto foundEvent = std::find (std::begin (systemEvents),
+                                                                                        std::end (systemEvents),
+                                                                                        inputEvent->type);
 
-                                if (foundEvent != std::end (systemEvents))
-                                {
-                                    notifier.triggerAsyncUpdate();
-                                    continue;
-                                }
+                                                     if (foundEvent != std::end (systemEvents))
+                                                     {
+                                                         notifier.triggerAsyncUpdate();
+                                                         continue;
+                                                     }
 
-                                // xxx what about SYSEXes that are too big for the buffer?
-                                const auto numBytes = snd_midi_event_decode (midiParser,
-                                                                             buffer.data(),
-                                                                             maxEventSize,
-                                                                             inputEvent);
+                                                     // xxx what about SYSEXes that are too big for the buffer?
+                                                     const auto numBytes = snd_midi_event_decode (midiParser,
+                                                                                                  buffer.data(),
+                                                                                                  maxEventSize,
+                                                                                                  inputEvent);
 
-                                snd_midi_event_reset_decode (midiParser);
+                                                     snd_midi_event_reset_decode (midiParser);
 
-                                concatenator.pushMidiData (buffer.data(), (int) numBytes,
-                                                           Time::getMillisecondCounter() * 0.001,
-                                                           inputEvent, client);
-                            }
-                        }
-                        while (snd_seq_event_input_pending (seqHandle, 0) > 0);
-                    }
-                }
-            }
-        } };
+                                                     concatenator.pushMidiData (buffer.data(), (int) numBytes, Time::getMillisecondCounter() * 0.001, inputEvent, client);
+                                                 }
+                                             } while (snd_seq_event_input_pending (seqHandle, 0) > 0);
+                                         }
+                                     }
+                                 }
+                             } };
     };
 
     std::optional<SequencerThread> inputThread;
@@ -474,7 +481,8 @@ static AlsaClient::Port* iterateMidiClient (AlsaClient& client,
     {
         if (snd_seq_query_next_port (seqHandle, portInfo) == 0
             && (snd_seq_port_info_get_capability (portInfo)
-                & (forInput ? SND_SEQ_PORT_CAP_SUBS_READ : SND_SEQ_PORT_CAP_SUBS_WRITE)) != 0)
+                & (forInput ? SND_SEQ_PORT_CAP_SUBS_READ : SND_SEQ_PORT_CAP_SUBS_WRITE))
+                   != 0)
         {
             String portName (snd_seq_port_info_get_name (portInfo));
             auto portID = snd_seq_port_info_get_port (portInfo);
@@ -543,7 +551,9 @@ static AlsaClient::Port* iterateMidiDevices (bool forInput,
 struct AlsaPortPtr
 {
     explicit AlsaPortPtr (AlsaClient::Port* p)
-        : ptr (p) {}
+        : ptr (p)
+    {
+    }
 
     virtual ~AlsaPortPtr() noexcept { AlsaClient::getInstance()->deletePort (ptr); }
 
@@ -751,7 +761,9 @@ MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> c
 //==============================================================================
 #else
 
-class MidiInput::Pimpl {};
+class MidiInput::Pimpl
+{
+};
 
 // (These are just stub functions if ALSA is unavailable...)
 MidiInput::MidiInput (const String& deviceName, const String& deviceID)
@@ -759,28 +771,47 @@ MidiInput::MidiInput (const String& deviceName, const String& deviceID)
 {
 }
 
-MidiInput::~MidiInput()                                                                   {}
-void MidiInput::start()                                                                   {}
-void MidiInput::stop()                                                                    {}
-Array<MidiDeviceInfo> MidiInput::getAvailableDevices()                                    { return {}; }
-MidiDeviceInfo MidiInput::getDefaultDevice()                                              { return {}; }
-std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallback*)      { return {}; }
+MidiInput::~MidiInput() {}
+
+void MidiInput::start() {}
+
+void MidiInput::stop() {}
+
+Array<MidiDeviceInfo> MidiInput::getAvailableDevices() { return {}; }
+
+MidiDeviceInfo MidiInput::getDefaultDevice() { return {}; }
+
+std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallback*) { return {}; }
+
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
-StringArray MidiInput::getDevices()                                                       { return {}; }
-int MidiInput::getDefaultDeviceIndex()                                                    { return 0;}
-std::unique_ptr<MidiInput> MidiInput::openDevice (int, MidiInputCallback*)                { return {}; }
 
-class MidiOutput::Pimpl {};
+StringArray MidiInput::getDevices() { return {}; }
 
-MidiOutput::~MidiOutput()                                                                 {}
-void MidiOutput::sendMessageNow (const MidiMessage&)                                      {}
-Array<MidiDeviceInfo> MidiOutput::getAvailableDevices()                                   { return {}; }
-MidiDeviceInfo MidiOutput::getDefaultDevice()                                             { return {}; }
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&)                        { return {}; }
-std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&)                   { return {}; }
-StringArray MidiOutput::getDevices()                                                      { return {}; }
-int MidiOutput::getDefaultDeviceIndex()                                                   { return 0;}
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int)                                  { return {}; }
+int MidiInput::getDefaultDeviceIndex() { return 0; }
+
+std::unique_ptr<MidiInput> MidiInput::openDevice (int, MidiInputCallback*) { return {}; }
+
+class MidiOutput::Pimpl
+{
+};
+
+MidiOutput::~MidiOutput() {}
+
+void MidiOutput::sendMessageNow (const MidiMessage&) {}
+
+Array<MidiDeviceInfo> MidiOutput::getAvailableDevices() { return {}; }
+
+MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
+
+std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
+
+StringArray MidiOutput::getDevices() { return {}; }
+
+int MidiOutput::getDefaultDeviceIndex() { return 0; }
+
+std::unique_ptr<MidiOutput> MidiOutput::openDevice (int) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {

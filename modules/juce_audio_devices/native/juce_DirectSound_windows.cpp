@@ -52,48 +52,82 @@ extern "C"
 
     struct IDirectSoundBuffer;
 
-    #undef INTERFACE
-    #define INTERFACE IDirectSound
+#undef INTERFACE
+#define INTERFACE IDirectSound
+
     DECLARE_INTERFACE_ (IDirectSound, IUnknown)
     {
-        STDMETHOD  (QueryInterface)       (THIS_ REFIID, LPVOID*) PURE;
-        STDMETHOD_ (ULONG,AddRef)         (THIS) PURE;
-        STDMETHOD_ (ULONG,Release)        (THIS) PURE;
-        STDMETHOD  (CreateSoundBuffer)    (THIS_ DSBUFFERDESC*, IDirectSoundBuffer**, LPUNKNOWN) PURE;
-        STDMETHOD  (GetCaps)              (THIS_ void*) PURE;
-        STDMETHOD  (DuplicateSoundBuffer) (THIS_ IDirectSoundBuffer*, IDirectSoundBuffer**) PURE;
-        STDMETHOD  (SetCooperativeLevel)  (THIS_ HWND, DWORD) PURE;
-        STDMETHOD  (Compact)              (THIS) PURE;
-        STDMETHOD  (GetSpeakerConfig)     (THIS_ LPDWORD) PURE;
-        STDMETHOD  (SetSpeakerConfig)     (THIS_ DWORD) PURE;
-        STDMETHOD  (Initialize)           (THIS_ const GUID*) PURE;
+        STDMETHOD (QueryInterface)
+        (THIS_ REFIID, LPVOID*) PURE;
+        STDMETHOD_ (ULONG, AddRef)
+        (THIS) PURE;
+        STDMETHOD_ (ULONG, Release)
+        (THIS) PURE;
+        STDMETHOD (CreateSoundBuffer)
+        (THIS_ DSBUFFERDESC*, IDirectSoundBuffer**, LPUNKNOWN) PURE;
+        STDMETHOD (GetCaps)
+        (THIS_ void*) PURE;
+        STDMETHOD (DuplicateSoundBuffer)
+        (THIS_ IDirectSoundBuffer*, IDirectSoundBuffer**) PURE;
+        STDMETHOD (SetCooperativeLevel)
+        (THIS_ HWND, DWORD) PURE;
+        STDMETHOD (Compact)
+        (THIS) PURE;
+        STDMETHOD (GetSpeakerConfig)
+        (THIS_ LPDWORD) PURE;
+        STDMETHOD (SetSpeakerConfig)
+        (THIS_ DWORD) PURE;
+        STDMETHOD (Initialize)
+        (THIS_ const GUID*) PURE;
     };
 
-    #undef INTERFACE
-    #define INTERFACE IDirectSoundBuffer
+#undef INTERFACE
+#define INTERFACE IDirectSoundBuffer
+
     DECLARE_INTERFACE_ (IDirectSoundBuffer, IUnknown)
     {
-        STDMETHOD  (QueryInterface)       (THIS_ REFIID, LPVOID*) PURE;
-        STDMETHOD_ (ULONG,AddRef)         (THIS) PURE;
-        STDMETHOD_ (ULONG,Release)        (THIS) PURE;
-        STDMETHOD  (GetCaps)              (THIS_ void*) PURE;
-        STDMETHOD  (GetCurrentPosition)   (THIS_ LPDWORD, LPDWORD) PURE;
-        STDMETHOD  (GetFormat)            (THIS_ LPWAVEFORMATEX, DWORD, LPDWORD) PURE;
-        STDMETHOD  (GetVolume)            (THIS_ LPLONG) PURE;
-        STDMETHOD  (GetPan)               (THIS_ LPLONG) PURE;
-        STDMETHOD  (GetFrequency)         (THIS_ LPDWORD) PURE;
-        STDMETHOD  (GetStatus)            (THIS_ LPDWORD) PURE;
-        STDMETHOD  (Initialize)           (THIS_ IDirectSound*, DSBUFFERDESC*) PURE;
-        STDMETHOD  (Lock)                 (THIS_ DWORD, DWORD, LPVOID*, LPDWORD, LPVOID*, LPDWORD, DWORD) PURE;
-        STDMETHOD  (Play)                 (THIS_ DWORD, DWORD, DWORD) PURE;
-        STDMETHOD  (SetCurrentPosition)   (THIS_ DWORD) PURE;
-        STDMETHOD  (SetFormat)            (THIS_ const WAVEFORMATEX*) PURE;
-        STDMETHOD  (SetVolume)            (THIS_ LONG) PURE;
-        STDMETHOD  (SetPan)               (THIS_ LONG) PURE;
-        STDMETHOD  (SetFrequency)         (THIS_ DWORD) PURE;
-        STDMETHOD  (Stop)                 (THIS) PURE;
-        STDMETHOD  (Unlock)               (THIS_ LPVOID, DWORD, LPVOID, DWORD) PURE;
-        STDMETHOD  (Restore)              (THIS) PURE;
+        STDMETHOD (QueryInterface)
+        (THIS_ REFIID, LPVOID*) PURE;
+        STDMETHOD_ (ULONG, AddRef)
+        (THIS) PURE;
+        STDMETHOD_ (ULONG, Release)
+        (THIS) PURE;
+        STDMETHOD (GetCaps)
+        (THIS_ void*) PURE;
+        STDMETHOD (GetCurrentPosition)
+        (THIS_ LPDWORD, LPDWORD) PURE;
+        STDMETHOD (GetFormat)
+        (THIS_ LPWAVEFORMATEX, DWORD, LPDWORD) PURE;
+        STDMETHOD (GetVolume)
+        (THIS_ LPLONG) PURE;
+        STDMETHOD (GetPan)
+        (THIS_ LPLONG) PURE;
+        STDMETHOD (GetFrequency)
+        (THIS_ LPDWORD) PURE;
+        STDMETHOD (GetStatus)
+        (THIS_ LPDWORD) PURE;
+        STDMETHOD (Initialize)
+        (THIS_ IDirectSound*, DSBUFFERDESC*) PURE;
+        STDMETHOD (Lock)
+        (THIS_ DWORD, DWORD, LPVOID*, LPDWORD, LPVOID*, LPDWORD, DWORD) PURE;
+        STDMETHOD (Play)
+        (THIS_ DWORD, DWORD, DWORD) PURE;
+        STDMETHOD (SetCurrentPosition)
+        (THIS_ DWORD) PURE;
+        STDMETHOD (SetFormat)
+        (THIS_ const WAVEFORMATEX*) PURE;
+        STDMETHOD (SetVolume)
+        (THIS_ LONG) PURE;
+        STDMETHOD (SetPan)
+        (THIS_ LONG) PURE;
+        STDMETHOD (SetFrequency)
+        (THIS_ DWORD) PURE;
+        STDMETHOD (Stop)
+        (THIS) PURE;
+        STDMETHOD (Unlock)
+        (THIS_ LPVOID, DWORD, LPVOID, DWORD) PURE;
+        STDMETHOD (Restore)
+        (THIS) PURE;
     };
 
     //==============================================================================
@@ -108,37 +142,57 @@ extern "C"
 
     struct IDirectSoundCaptureBuffer;
 
-    #undef INTERFACE
-    #define INTERFACE IDirectSoundCapture
+#undef INTERFACE
+#define INTERFACE IDirectSoundCapture
+
     DECLARE_INTERFACE_ (IDirectSoundCapture, IUnknown)
     {
-        STDMETHOD  (QueryInterface)       (THIS_ REFIID, LPVOID*) PURE;
-        STDMETHOD_ (ULONG,AddRef)         (THIS) PURE;
-        STDMETHOD_ (ULONG,Release)        (THIS) PURE;
-        STDMETHOD  (CreateCaptureBuffer)  (THIS_ DSCBUFFERDESC*, IDirectSoundCaptureBuffer**, LPUNKNOWN) PURE;
-        STDMETHOD  (GetCaps)              (THIS_ void*) PURE;
-        STDMETHOD  (Initialize)           (THIS_ const GUID*) PURE;
+        STDMETHOD (QueryInterface)
+        (THIS_ REFIID, LPVOID*) PURE;
+        STDMETHOD_ (ULONG, AddRef)
+        (THIS) PURE;
+        STDMETHOD_ (ULONG, Release)
+        (THIS) PURE;
+        STDMETHOD (CreateCaptureBuffer)
+        (THIS_ DSCBUFFERDESC*, IDirectSoundCaptureBuffer**, LPUNKNOWN) PURE;
+        STDMETHOD (GetCaps)
+        (THIS_ void*) PURE;
+        STDMETHOD (Initialize)
+        (THIS_ const GUID*) PURE;
     };
 
-    #undef INTERFACE
-    #define INTERFACE IDirectSoundCaptureBuffer
+#undef INTERFACE
+#define INTERFACE IDirectSoundCaptureBuffer
+
     DECLARE_INTERFACE_ (IDirectSoundCaptureBuffer, IUnknown)
     {
-        STDMETHOD  (QueryInterface)       (THIS_ REFIID, LPVOID*) PURE;
-        STDMETHOD_ (ULONG,AddRef)         (THIS) PURE;
-        STDMETHOD_ (ULONG,Release)        (THIS) PURE;
-        STDMETHOD  (GetCaps)              (THIS_ void*) PURE;
-        STDMETHOD  (GetCurrentPosition)   (THIS_ LPDWORD, LPDWORD) PURE;
-        STDMETHOD  (GetFormat)            (THIS_ LPWAVEFORMATEX, DWORD, LPDWORD) PURE;
-        STDMETHOD  (GetStatus)            (THIS_ LPDWORD) PURE;
-        STDMETHOD  (Initialize)           (THIS_ IDirectSoundCapture*, DSCBUFFERDESC*) PURE;
-        STDMETHOD  (Lock)                 (THIS_ DWORD, DWORD, LPVOID*, LPDWORD, LPVOID*, LPDWORD, DWORD) PURE;
-        STDMETHOD  (Start)                (THIS_ DWORD) PURE;
-        STDMETHOD  (Stop)                 (THIS) PURE;
-        STDMETHOD  (Unlock)               (THIS_ LPVOID, DWORD, LPVOID, DWORD) PURE;
+        STDMETHOD (QueryInterface)
+        (THIS_ REFIID, LPVOID*) PURE;
+        STDMETHOD_ (ULONG, AddRef)
+        (THIS) PURE;
+        STDMETHOD_ (ULONG, Release)
+        (THIS) PURE;
+        STDMETHOD (GetCaps)
+        (THIS_ void*) PURE;
+        STDMETHOD (GetCurrentPosition)
+        (THIS_ LPDWORD, LPDWORD) PURE;
+        STDMETHOD (GetFormat)
+        (THIS_ LPWAVEFORMATEX, DWORD, LPDWORD) PURE;
+        STDMETHOD (GetStatus)
+        (THIS_ LPDWORD) PURE;
+        STDMETHOD (Initialize)
+        (THIS_ IDirectSoundCapture*, DSCBUFFERDESC*) PURE;
+        STDMETHOD (Lock)
+        (THIS_ DWORD, DWORD, LPVOID*, LPDWORD, LPVOID*, LPDWORD, DWORD) PURE;
+        STDMETHOD (Start)
+        (THIS_ DWORD) PURE;
+        STDMETHOD (Stop)
+        (THIS) PURE;
+        STDMETHOD (Unlock)
+        (THIS_ LPVOID, DWORD, LPVOID, DWORD) PURE;
     };
 
-    #undef INTERFACE
+#undef INTERFACE
 }
 
 namespace juce
@@ -153,31 +207,66 @@ namespace DSoundLogging
 
         switch (hr)
         {
-            case MAKE_HRESULT (1, 0x878, 10):    result = "Device already allocated"; break;
-            case MAKE_HRESULT (1, 0x878, 30):    result = "Control unavailable"; break;
-            case E_INVALIDARG:                   result = "Invalid parameter"; break;
-            case MAKE_HRESULT (1, 0x878, 50):    result = "Invalid call"; break;
-            case E_FAIL:                         result = "Generic error"; break;
-            case MAKE_HRESULT (1, 0x878, 70):    result = "Priority level error"; break;
-            case E_OUTOFMEMORY:                  result = "Out of memory"; break;
-            case MAKE_HRESULT (1, 0x878, 100):   result = "Bad format"; break;
-            case E_NOTIMPL:                      result = "Unsupported function"; break;
-            case MAKE_HRESULT (1, 0x878, 120):   result = "No driver"; break;
-            case MAKE_HRESULT (1, 0x878, 130):   result = "Already initialised"; break;
-            case CLASS_E_NOAGGREGATION:          result = "No aggregation"; break;
-            case MAKE_HRESULT (1, 0x878, 150):   result = "Buffer lost"; break;
-            case MAKE_HRESULT (1, 0x878, 160):   result = "Another app has priority"; break;
-            case MAKE_HRESULT (1, 0x878, 170):   result = "Uninitialised"; break;
-            case E_NOINTERFACE:                  result = "No interface"; break;
-            case S_OK:                           result = "No error"; break;
-            default:                             return "Unknown error: " + String ((int) hr);
+            case MAKE_HRESULT (1, 0x878, 10):
+                result = "Device already allocated";
+                break;
+            case MAKE_HRESULT (1, 0x878, 30):
+                result = "Control unavailable";
+                break;
+            case E_INVALIDARG:
+                result = "Invalid parameter";
+                break;
+            case MAKE_HRESULT (1, 0x878, 50):
+                result = "Invalid call";
+                break;
+            case E_FAIL:
+                result = "Generic error";
+                break;
+            case MAKE_HRESULT (1, 0x878, 70):
+                result = "Priority level error";
+                break;
+            case E_OUTOFMEMORY:
+                result = "Out of memory";
+                break;
+            case MAKE_HRESULT (1, 0x878, 100):
+                result = "Bad format";
+                break;
+            case E_NOTIMPL:
+                result = "Unsupported function";
+                break;
+            case MAKE_HRESULT (1, 0x878, 120):
+                result = "No driver";
+                break;
+            case MAKE_HRESULT (1, 0x878, 130):
+                result = "Already initialised";
+                break;
+            case CLASS_E_NOAGGREGATION:
+                result = "No aggregation";
+                break;
+            case MAKE_HRESULT (1, 0x878, 150):
+                result = "Buffer lost";
+                break;
+            case MAKE_HRESULT (1, 0x878, 160):
+                result = "Another app has priority";
+                break;
+            case MAKE_HRESULT (1, 0x878, 170):
+                result = "Uninitialised";
+                break;
+            case E_NOINTERFACE:
+                result = "No interface";
+                break;
+            case S_OK:
+                result = "No error";
+                break;
+            default:
+                return "Unknown error: " + String ((int) hr);
         }
 
         return result;
     }
 
     //==============================================================================
-   #if JUCE_DIRECTSOUND_LOGGING
+#if JUCE_DIRECTSOUND_LOGGING
     static void logMessage (String message)
     {
         message = "DSOUND: " + message;
@@ -195,29 +284,29 @@ namespace DSoundLogging
         }
     }
 
-    #define JUCE_DS_LOG(a)        DSoundLogging::logMessage(a);
-    #define JUCE_DS_LOG_ERROR(a)  DSoundLogging::logError(a, __LINE__);
-   #else
-    #define JUCE_DS_LOG(a)
-    #define JUCE_DS_LOG_ERROR(a)
-   #endif
-}
+#define JUCE_DS_LOG(a) DSoundLogging::logMessage (a);
+#define JUCE_DS_LOG_ERROR(a) DSoundLogging::logError (a, __LINE__);
+#else
+#define JUCE_DS_LOG(a)
+#define JUCE_DS_LOG_ERROR(a)
+#endif
+} // namespace DSoundLogging
 
 //==============================================================================
 namespace
 {
-    #define DSOUND_FUNCTION(functionName, params) \
-        typedef HRESULT (WINAPI *type##functionName) params; \
-        static type##functionName ds##functionName = nullptr;
+#define DSOUND_FUNCTION(functionName, params)        \
+typedef HRESULT (WINAPI* type##functionName) params; \
+static type##functionName ds##functionName = nullptr;
 
-    #define DSOUND_FUNCTION_LOAD(functionName) \
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-function-type") \
-        ds##functionName = (type##functionName) GetProcAddress (h, #functionName); \
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE \
-        jassert (ds##functionName != nullptr);
+#define DSOUND_FUNCTION_LOAD(functionName)                                 \
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-function-type")               \
+ds##functionName = (type##functionName) GetProcAddress (h, #functionName); \
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE                                          \
+jassert (ds##functionName != nullptr);
 
-    typedef BOOL (CALLBACK *LPDSENUMCALLBACKW) (LPGUID, LPCWSTR, LPCWSTR, LPVOID);
-    typedef BOOL (CALLBACK *LPDSENUMCALLBACKA) (LPGUID, LPCSTR, LPCSTR, LPVOID);
+    typedef BOOL (CALLBACK* LPDSENUMCALLBACKW) (LPGUID, LPCWSTR, LPCWSTR, LPVOID);
+    typedef BOOL (CALLBACK* LPDSENUMCALLBACKA) (LPGUID, LPCSTR, LPCSTR, LPVOID);
 
     DSOUND_FUNCTION (DirectSoundCreate, (const GUID*, IDirectSound**, LPUNKNOWN))
     DSOUND_FUNCTION (DirectSoundCaptureCreate, (const GUID*, IDirectSoundCapture**, LPUNKNOWN))
@@ -243,18 +332,26 @@ namespace
     }
 
     // the overall size of buffer used is this value x the block size
-    enum { blocksPerOverallBuffer = 16 };
-}
+    enum
+    {
+        blocksPerOverallBuffer = 16
+    };
+} // namespace
 
 //==============================================================================
 class DSoundInternalOutChannel
 {
 public:
-    DSoundInternalOutChannel (const String& name_, const GUID& guid_, int rate,
-                              int bufferSize, float* left, float* right)
-        : bitDepth (16), name (name_), guid (guid_), sampleRate (rate),
-          bufferSizeSamples (bufferSize), leftBuffer (left), rightBuffer (right),
-          pDirectSound (nullptr), pOutputBuffer (nullptr)
+    DSoundInternalOutChannel (const String& name_, const GUID& guid_, int rate, int bufferSize, float* left, float* right)
+        : bitDepth (16)
+        , name (name_)
+        , guid (guid_)
+        , sampleRate (rate)
+        , bufferSizeSamples (bufferSize)
+        , leftBuffer (left)
+        , rightBuffer (right)
+        , pDirectSound (nullptr)
+        , pOutputBuffer (nullptr)
     {
     }
 
@@ -285,7 +382,7 @@ public:
     String open()
     {
         JUCE_DS_LOG ("opening output: " + name + "  rate=" + String (sampleRate)
-                       + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
+                     + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
 
         pDirectSound = nullptr;
         pOutputBuffer = nullptr;
@@ -328,12 +425,12 @@ public:
                 if (SUCCEEDED (hr))
                 {
                     WAVEFORMATEX wfFormat;
-                    wfFormat.wFormatTag       = WAVE_FORMAT_PCM;
-                    wfFormat.nChannels        = (unsigned short) numChannels;
-                    wfFormat.nSamplesPerSec   = (DWORD) sampleRate;
-                    wfFormat.wBitsPerSample   = (unsigned short) bitDepth;
-                    wfFormat.nBlockAlign      = (unsigned short) (wfFormat.nChannels * wfFormat.wBitsPerSample / 8);
-                    wfFormat.nAvgBytesPerSec  = wfFormat.nSamplesPerSec * wfFormat.nBlockAlign;
+                    wfFormat.wFormatTag = WAVE_FORMAT_PCM;
+                    wfFormat.nChannels = (unsigned short) numChannels;
+                    wfFormat.nSamplesPerSec = (DWORD) sampleRate;
+                    wfFormat.wBitsPerSample = (unsigned short) bitDepth;
+                    wfFormat.nBlockAlign = (unsigned short) (wfFormat.nChannels * wfFormat.wBitsPerSample / 8);
+                    wfFormat.nAvgBytesPerSec = wfFormat.nSamplesPerSec * wfFormat.nBlockAlign;
                     wfFormat.cbSize = 0;
 
                     hr = pPrimaryBuffer->SetFormat (&wfFormat);
@@ -343,8 +440,8 @@ public:
                     {
                         DSBUFFERDESC secondaryDesc = {};
                         secondaryDesc.dwSize = sizeof (DSBUFFERDESC);
-                        secondaryDesc.dwFlags =  0x8000 /* DSBCAPS_GLOBALFOCUS */
-                                                  | 0x10000 /* DSBCAPS_GETCURRENTPOSITION2 */;
+                        secondaryDesc.dwFlags = 0x8000 /* DSBCAPS_GLOBALFOCUS */
+                                              | 0x10000 /* DSBCAPS_GETCURRENTPOSITION2 */;
                         secondaryDesc.dwBufferBytes = (DWORD) totalBytesPerBuffer;
                         secondaryDesc.lpwfxFormat = &wfFormat;
 
@@ -358,8 +455,7 @@ public:
                             DWORD dwDataLen;
                             unsigned char* pDSBuffData;
 
-                            hr = pOutputBuffer->Lock (0, (DWORD) totalBytesPerBuffer,
-                                                      (LPVOID*) &pDSBuffData, &dwDataLen, nullptr, nullptr, 0);
+                            hr = pOutputBuffer->Lock (0, (DWORD) totalBytesPerBuffer, (LPVOID*) &pDSBuffData, &dwDataLen, nullptr, nullptr, 0);
                             JUCE_DS_LOG_ERROR (hr);
 
                             if (SUCCEEDED (hr))
@@ -462,17 +558,13 @@ public:
             DWORD dwSize1 = 0;
             DWORD dwSize2 = 0;
 
-            HRESULT hr = pOutputBuffer->Lock (writeOffset, (DWORD) bytesPerBuffer,
-                                              (void**) &buf1, &dwSize1,
-                                              (void**) &buf2, &dwSize2, 0);
+            HRESULT hr = pOutputBuffer->Lock (writeOffset, (DWORD) bytesPerBuffer, (void**) &buf1, &dwSize1, (void**) &buf2, &dwSize2, 0);
 
             if (hr == MAKE_HRESULT (1, 0x878, 150)) // DSERR_BUFFERLOST
             {
                 pOutputBuffer->Restore();
 
-                hr = pOutputBuffer->Lock (writeOffset, (DWORD) bytesPerBuffer,
-                                          (void**) &buf1, &dwSize1,
-                                          (void**) &buf2, &dwSize2, 0);
+                hr = pOutputBuffer->Lock (writeOffset, (DWORD) bytesPerBuffer, (void**) &buf1, &dwSize1, (void**) &buf2, &dwSize2, 0);
             }
 
             if (SUCCEEDED (hr))
@@ -486,18 +578,24 @@ public:
 
                     if (left == nullptr)
                     {
-                        for (int* dest = buf1; --samples1 >= 0;)  *dest++ = convertInputValues (0, *right++);
-                        for (int* dest = buf2; --samples2 >= 0;)  *dest++ = convertInputValues (0, *right++);
+                        for (int* dest = buf1; --samples1 >= 0;)
+                            *dest++ = convertInputValues (0, *right++);
+                        for (int* dest = buf2; --samples2 >= 0;)
+                            *dest++ = convertInputValues (0, *right++);
                     }
                     else if (right == nullptr)
                     {
-                        for (int* dest = buf1; --samples1 >= 0;)  *dest++ = convertInputValues (*left++, 0);
-                        for (int* dest = buf2; --samples2 >= 0;)  *dest++ = convertInputValues (*left++, 0);
+                        for (int* dest = buf1; --samples1 >= 0;)
+                            *dest++ = convertInputValues (*left++, 0);
+                        for (int* dest = buf2; --samples2 >= 0;)
+                            *dest++ = convertInputValues (*left++, 0);
                     }
                     else
                     {
-                        for (int* dest = buf1; --samples1 >= 0;)  *dest++ = convertInputValues (*left++, *right++);
-                        for (int* dest = buf2; --samples2 >= 0;)  *dest++ = convertInputValues (*left++, *right++);
+                        for (int* dest = buf1; --samples1 >= 0;)
+                            *dest++ = convertInputValues (*left++, *right++);
+                        for (int* dest = buf2; --samples2 >= 0;)
+                            *dest++ = convertInputValues (*left++, *right++);
                     }
                 }
                 else
@@ -545,7 +643,7 @@ private:
     static int convertInputValues (const float l, const float r) noexcept
     {
         return jlimit (-32768, 32767, roundToInt (32767.0f * r)) << 16
-                | (0xffff & jlimit (-32768, 32767, roundToInt (32767.0f * l)));
+             | (0xffff & jlimit (-32768, 32767, roundToInt (32767.0f * l)));
     }
 
     JUCE_DECLARE_NON_COPYABLE (DSoundInternalOutChannel)
@@ -555,10 +653,13 @@ private:
 struct DSoundInternalInChannel
 {
 public:
-    DSoundInternalInChannel (const String& name_, const GUID& guid_, int rate,
-                             int bufferSize, float* left, float* right)
-        : name (name_), guid (guid_), sampleRate (rate),
-          bufferSizeSamples (bufferSize), leftBuffer (left), rightBuffer (right)
+    DSoundInternalInChannel (const String& name_, const GUID& guid_, int rate, int bufferSize, float* left, float* right)
+        : name (name_)
+        , guid (guid_)
+        , sampleRate (rate)
+        , bufferSizeSamples (bufferSize)
+        , leftBuffer (left)
+        , rightBuffer (right)
     {
     }
 
@@ -595,7 +696,7 @@ public:
     String open()
     {
         JUCE_DS_LOG ("opening input: " + name
-                       + "  rate=" + String (sampleRate) + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
+                     + "  rate=" + String (sampleRate) + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
 
         pDirectSound = nullptr;
         pDirectSoundCapture = nullptr;
@@ -604,8 +705,8 @@ public:
         totalBytesPerBuffer = 0;
 
         HRESULT hr = dsDirectSoundCaptureCreate != nullptr
-                        ? dsDirectSoundCaptureCreate (&guid, &pDirectSoundCapture, nullptr)
-                        : E_NOINTERFACE;
+                       ? dsDirectSoundCaptureCreate (&guid, &pDirectSoundCapture, nullptr)
+                       : E_NOINTERFACE;
 
         if (SUCCEEDED (hr))
         {
@@ -614,12 +715,12 @@ public:
             totalBytesPerBuffer = (blocksPerOverallBuffer * bytesPerBuffer) & ~15;
 
             WAVEFORMATEX wfFormat;
-            wfFormat.wFormatTag       = WAVE_FORMAT_PCM;
-            wfFormat.nChannels        = (unsigned short)numChannels;
-            wfFormat.nSamplesPerSec   = (DWORD) sampleRate;
-            wfFormat.wBitsPerSample   = (unsigned short) bitDepth;
-            wfFormat.nBlockAlign      = (unsigned short) (wfFormat.nChannels * (wfFormat.wBitsPerSample / 8));
-            wfFormat.nAvgBytesPerSec  = wfFormat.nSamplesPerSec * wfFormat.nBlockAlign;
+            wfFormat.wFormatTag = WAVE_FORMAT_PCM;
+            wfFormat.nChannels = (unsigned short) numChannels;
+            wfFormat.nSamplesPerSec = (DWORD) sampleRate;
+            wfFormat.wBitsPerSample = (unsigned short) bitDepth;
+            wfFormat.nBlockAlign = (unsigned short) (wfFormat.nChannels * (wfFormat.wBitsPerSample / 8));
+            wfFormat.nAvgBytesPerSec = wfFormat.nSamplesPerSec * wfFormat.nBlockAlign;
             wfFormat.cbSize = 0;
 
             DSCBUFFERDESC captureDesc = {};
@@ -680,9 +781,7 @@ public:
             DWORD dwsize1 = 0;
             DWORD dwsize2 = 0;
 
-            hr = pInputBuffer->Lock ((DWORD) readOffset, (DWORD) bytesPerBuffer,
-                                             (void**) &buf1, &dwsize1,
-                                             (void**) &buf2, &dwsize2, 0);
+            hr = pInputBuffer->Lock ((DWORD) readOffset, (DWORD) bytesPerBuffer, (void**) &buf1, &dwsize1, (void**) &buf2, &dwsize2, 0);
 
             if (SUCCEEDED (hr))
             {
@@ -697,18 +796,42 @@ public:
 
                     if (destL == nullptr)
                     {
-                        for (const short* src = buf1; --samples1 >= 0;) { ++src; *destR++ = *src++ * g; }
-                        for (const short* src = buf2; --samples2 >= 0;) { ++src; *destR++ = *src++ * g; }
+                        for (const short* src = buf1; --samples1 >= 0;)
+                        {
+                            ++src;
+                            *destR++ = *src++ * g;
+                        }
+                        for (const short* src = buf2; --samples2 >= 0;)
+                        {
+                            ++src;
+                            *destR++ = *src++ * g;
+                        }
                     }
                     else if (destR == nullptr)
                     {
-                        for (const short* src = buf1; --samples1 >= 0;) { *destL++ = *src++ * g; ++src; }
-                        for (const short* src = buf2; --samples2 >= 0;) { *destL++ = *src++ * g; ++src; }
+                        for (const short* src = buf1; --samples1 >= 0;)
+                        {
+                            *destL++ = *src++ * g;
+                            ++src;
+                        }
+                        for (const short* src = buf2; --samples2 >= 0;)
+                        {
+                            *destL++ = *src++ * g;
+                            ++src;
+                        }
                     }
                     else
                     {
-                        for (const short* src = buf1; --samples1 >= 0;) { *destL++ = *src++ * g; *destR++ = *src++ * g; }
-                        for (const short* src = buf2; --samples2 >= 0;) { *destL++ = *src++ * g; *destR++ = *src++ * g; }
+                        for (const short* src = buf1; --samples1 >= 0;)
+                        {
+                            *destL++ = *src++ * g;
+                            *destR++ = *src++ * g;
+                        }
+                        for (const short* src = buf2; --samples2 >= 0;)
+                        {
+                            *destL++ = *src++ * g;
+                            *destR++ = *src++ * g;
+                        }
                     }
                 }
                 else
@@ -756,17 +879,17 @@ private:
 };
 
 //==============================================================================
-class DSoundAudioIODevice final : public AudioIODevice,
-                                  public Thread
+class DSoundAudioIODevice final : public AudioIODevice
+    , public Thread
 {
 public:
     DSoundAudioIODevice (const String& deviceName,
                          const int outputDeviceIndex_,
                          const int inputDeviceIndex_)
-        : AudioIODevice (deviceName, "DirectSound"),
-          Thread ("JUCE DSound"),
-          outputDeviceIndex (outputDeviceIndex_),
-          inputDeviceIndex (inputDeviceIndex_)
+        : AudioIODevice (deviceName, "DirectSound")
+        , Thread ("JUCE DSound")
+        , outputDeviceIndex (outputDeviceIndex_)
+        , inputDeviceIndex (inputDeviceIndex_)
     {
         if (outputDeviceIndex_ >= 0)
         {
@@ -788,7 +911,8 @@ public:
 
     String open (const BigInteger& inputChannels,
                  const BigInteger& outputChannels,
-                 double newSampleRate, int newBufferSize) override
+                 double newSampleRate,
+                 int newBufferSize) override
     {
         lastError = openDevice (inputChannels, outputChannels, newSampleRate, newBufferSize);
         isOpen_ = lastError.isEmpty();
@@ -807,15 +931,23 @@ public:
         }
     }
 
-    bool isOpen() override                              { return isOpen_ && isThreadRunning(); }
-    int getCurrentBufferSizeSamples() override          { return bufferSizeSamples; }
-    double getCurrentSampleRate() override              { return sampleRate; }
+    bool isOpen() override { return isOpen_ && isThreadRunning(); }
+
+    int getCurrentBufferSizeSamples() override { return bufferSizeSamples; }
+
+    double getCurrentSampleRate() override { return sampleRate; }
+
     BigInteger getActiveOutputChannels() const override { return enabledOutputs; }
-    BigInteger getActiveInputChannels() const override  { return enabledInputs; }
-    int getOutputLatencyInSamples() override            { return (int) (getCurrentBufferSizeSamples() * 1.5); }
-    int getInputLatencyInSamples() override             { return getOutputLatencyInSamples(); }
-    StringArray getOutputChannelNames() override        { return outChannels; }
-    StringArray getInputChannelNames() override         { return inChannels; }
+
+    BigInteger getActiveInputChannels() const override { return enabledInputs; }
+
+    int getOutputLatencyInSamples() override { return (int) (getCurrentBufferSizeSamples() * 1.5); }
+
+    int getInputLatencyInSamples() override { return getOutputLatencyInSamples(); }
+
+    StringArray getOutputChannelNames() override { return outChannels; }
+
+    StringArray getInputChannelNames() override { return inChannels; }
 
     Array<double> getAvailableSampleRates() override
     {
@@ -838,7 +970,7 @@ public:
         return r;
     }
 
-    int getDefaultBufferSize() override                 { return 2560; }
+    int getDefaultBufferSize() override { return 2560; }
 
     int getCurrentBitDepth() override
     {
@@ -891,8 +1023,9 @@ public:
         }
     }
 
-    bool isPlaying() override            { return isStarted && isOpen_ && isThreadRunning(); }
-    String getLastError() override       { return lastError; }
+    bool isPlaying() override { return isStarted && isOpen_ && isThreadRunning(); }
+
+    String getLastError() override { return lastError; }
 
     int getXRunCount() const noexcept override
     {
@@ -922,7 +1055,8 @@ private:
 
     String openDevice (const BigInteger& inputChannels,
                        const BigInteger& outputChannels,
-                       double sampleRate_, int bufferSizeSamples_);
+                       double sampleRate_,
+                       int bufferSizeSamples_);
 
     void closeDevice()
     {
@@ -1078,6 +1212,7 @@ public:
     }
 
     bool operator== (const DSoundDeviceList& other) const noexcept { return tie() == other.tie(); }
+
     bool operator!= (const DSoundDeviceList& other) const noexcept { return tie() != other.tie(); }
 
 private:
@@ -1100,8 +1235,9 @@ private:
         return TRUE;
     }
 
-    BOOL outputEnumProc (LPGUID guid, LPCWSTR desc)  { return enumProc (guid, desc, outputDeviceNames, outputGuids); }
-    BOOL inputEnumProc  (LPGUID guid, LPCWSTR desc)  { return enumProc (guid, desc, inputDeviceNames,  inputGuids); }
+    BOOL outputEnumProc (LPGUID guid, LPCWSTR desc) { return enumProc (guid, desc, outputDeviceNames, outputGuids); }
+
+    BOOL inputEnumProc (LPGUID guid, LPCWSTR desc) { return enumProc (guid, desc, inputDeviceNames, inputGuids); }
 
     static BOOL CALLBACK outputEnumProcW (LPGUID lpGUID, LPCWSTR description, LPCWSTR, LPVOID object)
     {
@@ -1117,7 +1253,8 @@ private:
 //==============================================================================
 String DSoundAudioIODevice::openDevice (const BigInteger& inputChannels,
                                         const BigInteger& outputChannels,
-                                        double sampleRate_, int bufferSizeSamples_)
+                                        double sampleRate_,
+                                        int bufferSizeSamples_)
 {
     closeDevice();
 
@@ -1142,14 +1279,16 @@ String DSoundAudioIODevice::openDevice (const BigInteger& inputChannels,
 
     for (int i = 0; i <= enabledInputs.getHighestBit(); i += 2)
     {
-        float* left  = enabledInputs[i]     ? inputBuffers.getWritePointer (numIns++) : nullptr;
+        float* left = enabledInputs[i] ? inputBuffers.getWritePointer (numIns++) : nullptr;
         float* right = enabledInputs[i + 1] ? inputBuffers.getWritePointer (numIns++) : nullptr;
 
         if (left != nullptr || right != nullptr)
-            inChans.add (new DSoundInternalInChannel (dlh.inputDeviceNames [inputDeviceIndex],
-                                                      dlh.inputGuids [inputDeviceIndex],
-                                                      (int) sampleRate, bufferSizeSamples,
-                                                      left, right));
+            inChans.add (new DSoundInternalInChannel (dlh.inputDeviceNames[inputDeviceIndex],
+                                                      dlh.inputGuids[inputDeviceIndex],
+                                                      (int) sampleRate,
+                                                      bufferSizeSamples,
+                                                      left,
+                                                      right));
     }
 
     enabledOutputs = outputChannels;
@@ -1163,14 +1302,16 @@ String DSoundAudioIODevice::openDevice (const BigInteger& inputChannels,
 
     for (int i = 0; i <= enabledOutputs.getHighestBit(); i += 2)
     {
-        float* left  = enabledOutputs[i]     ? outputBuffers.getWritePointer (numOuts++) : nullptr;
+        float* left = enabledOutputs[i] ? outputBuffers.getWritePointer (numOuts++) : nullptr;
         float* right = enabledOutputs[i + 1] ? outputBuffers.getWritePointer (numOuts++) : nullptr;
 
         if (left != nullptr || right != nullptr)
             outChans.add (new DSoundInternalOutChannel (dlh.outputDeviceNames[outputDeviceIndex],
-                                                        dlh.outputGuids [outputDeviceIndex],
-                                                        (int) sampleRate, bufferSizeSamples,
-                                                        left, right));
+                                                        dlh.outputGuids[outputDeviceIndex],
+                                                        (int) sampleRate,
+                                                        bufferSizeSamples,
+                                                        left,
+                                                        right));
     }
 
     String error;
@@ -1271,7 +1412,7 @@ public:
         return -1;
     }
 
-    bool hasSeparateInputsAndOutputs() const override   { return true; }
+    bool hasSeparateInputsAndOutputs() const override { return true; }
 
     AudioIODevice* createDevice (const String& outputDeviceName,
                                  const String& inputDeviceName) override
@@ -1284,13 +1425,17 @@ public:
         if (outputIndex >= 0 || inputIndex >= 0)
             return new DSoundAudioIODevice (outputDeviceName.isNotEmpty() ? outputDeviceName
                                                                           : inputDeviceName,
-                                            outputIndex, inputIndex);
+                                            outputIndex,
+                                            inputIndex);
 
         return nullptr;
     }
 
 private:
-    DeviceChangeDetector detector { L"DirectSound", [this] { systemDeviceChanged(); } };
+    DeviceChangeDetector detector { L"DirectSound", [this]
+                                    {
+                                        systemDeviceChanged();
+                                    } };
     DSoundDeviceList deviceList;
     bool hasScanned = false;
 
