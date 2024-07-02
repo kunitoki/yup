@@ -38,8 +38,6 @@ jobs:
             **/*.hpp
             **/*.mm
             !**/thirdparty/**
-            !**/zlib/**
-            !**/oboe/**
 
       - name: Run clang-format
         working-directory: ${{ github.workspace }}
