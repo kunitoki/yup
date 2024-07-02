@@ -257,77 +257,77 @@ bool URL::operator!= (const URL& other) const
 
 namespace URLHelpers
 {
-    static String getMangledParameters (const URL& url)
+static String getMangledParameters (const URL& url)
+{
+    jassert (url.getParameterNames().size() == url.getParameterValues().size());
+    String p;
+
+    for (int i = 0; i < url.getParameterNames().size(); ++i)
     {
-        jassert (url.getParameterNames().size() == url.getParameterValues().size());
-        String p;
+        if (i > 0)
+            p << '&';
 
-        for (int i = 0; i < url.getParameterNames().size(); ++i)
-        {
-            if (i > 0)
-                p << '&';
+        auto val = url.getParameterValues()[i];
 
-            auto val = url.getParameterValues()[i];
+        p << URL::addEscapeChars (url.getParameterNames()[i], true);
 
-            p << URL::addEscapeChars (url.getParameterNames()[i], true);
-
-            if (val.isNotEmpty())
-                p << '=' << URL::addEscapeChars (val, true);
-        }
-
-        return p;
+        if (val.isNotEmpty())
+            p << '=' << URL::addEscapeChars (val, true);
     }
 
-    static int findEndOfScheme (const String& url)
-    {
-        int i = 0;
+    return p;
+}
 
-        while (CharacterFunctions::isLetterOrDigit (url[i])
-               || url[i] == '+' || url[i] == '-' || url[i] == '.')
-            ++i;
+static int findEndOfScheme (const String& url)
+{
+    int i = 0;
 
-        return url.substring (i).startsWith ("://") ? i + 1 : 0;
-    }
+    while (CharacterFunctions::isLetterOrDigit (url[i])
+           || url[i] == '+' || url[i] == '-' || url[i] == '.')
+        ++i;
 
-    static int findStartOfNetLocation (const String& url)
-    {
-        int start = findEndOfScheme (url);
+    return url.substring (i).startsWith ("://") ? i + 1 : 0;
+}
 
-        while (url[start] == '/')
-            ++start;
+static int findStartOfNetLocation (const String& url)
+{
+    int start = findEndOfScheme (url);
 
-        return start;
-    }
+    while (url[start] == '/')
+        ++start;
 
-    static int findStartOfPath (const String& url)
-    {
-        return url.indexOfChar (findStartOfNetLocation (url), '/') + 1;
-    }
+    return start;
+}
 
-    static void concatenatePaths (String& path, const String& suffix)
-    {
-        if (! path.endsWithChar ('/'))
-            path << '/';
+static int findStartOfPath (const String& url)
+{
+    return url.indexOfChar (findStartOfNetLocation (url), '/') + 1;
+}
 
-        if (suffix.startsWithChar ('/'))
-            path += suffix.substring (1);
-        else
-            path += suffix;
-    }
+static void concatenatePaths (String& path, const String& suffix)
+{
+    if (! path.endsWithChar ('/'))
+        path << '/';
 
-    static String removeLastPathSection (const String& url)
-    {
-        auto startOfPath = findStartOfPath (url);
-        auto lastSlash = url.lastIndexOfChar ('/');
+    if (suffix.startsWithChar ('/'))
+        path += suffix.substring (1);
+    else
+        path += suffix;
+}
 
-        if (lastSlash > startOfPath && lastSlash == url.length() - 1)
-            return removeLastPathSection (url.dropLastCharacters (1));
+static String removeLastPathSection (const String& url)
+{
+    auto startOfPath = findStartOfPath (url);
+    auto lastSlash = url.lastIndexOfChar ('/');
 
-        if (lastSlash < 0)
-            return url;
+    if (lastSlash > startOfPath && lastSlash == url.length() - 1)
+        return removeLastPathSection (url.dropLastCharacters (1));
 
-        return url.substring (0, std::max (startOfPath, lastSlash));
-    }
+    if (lastSlash < 0)
+        return url;
+
+    return url.substring (0, std::max (startOfPath, lastSlash));
+}
 } // namespace URLHelpers
 
 void URL::addParameter (const String& name, const String& value)

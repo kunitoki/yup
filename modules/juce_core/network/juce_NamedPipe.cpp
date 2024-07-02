@@ -81,10 +81,10 @@ String NamedPipe::getName() const
     return currentPipeName;
 }
 
-    // other methods for this class are implemented in the platform-specific files
+// other methods for this class are implemented in the platform-specific files
 
-    //==============================================================================
-    //==============================================================================
+//==============================================================================
+//==============================================================================
 #if JUCE_UNIT_TESTS
 
 class NamedPipeTests final : public UnitTest

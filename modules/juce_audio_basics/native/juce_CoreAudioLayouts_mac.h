@@ -124,7 +124,7 @@ struct CoreAudioLayouts
                              List { kAudioChannelLayoutTag_MPEG_7_1_B, { centre, leftCentre, rightCentre, left, right, leftSurround, rightSurround, LFE } },
                              List { kAudioChannelLayoutTag_Emagic_Default_7_1, { left, right, leftSurround, rightSurround, centre, LFE, leftCentre, rightCentre } },
 
-    // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
+            // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
 #ifndef __clang_analyzer__
                              List { kAudioChannelLayoutTag_SMPTE_DTV, { left, right, centre, LFE, leftSurround, rightSurround, discreteChannel0 /* leftMatrixTotal */, (ChannelType) (discreteChannel0 + 1) /* rightMatrixTotal */ } },
 #endif
@@ -250,7 +250,7 @@ public:
                 for (UInt32 i = 0; i < layout.mNumberChannelDescriptions; ++i)
                     channels.addIfNotAlreadyThere (getChannelTypeFromAudioChannelLabel (layout.mChannelDescriptions[i].mChannelLabel));
 
-    // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
+                    // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
 #ifndef __clang_analyzer__
                 // different speaker mappings may point to the same JUCE speaker so fill up
                 // this array with discrete channels

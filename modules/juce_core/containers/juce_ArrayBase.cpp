@@ -44,69 +44,69 @@ namespace juce
 
 namespace ArrayBaseTestsHelpers
 {
-    class TriviallyCopyableType
+class TriviallyCopyableType
+{
+public:
+    TriviallyCopyableType() = default;
+
+    TriviallyCopyableType (int v)
+        : value (v)
     {
-    public:
-        TriviallyCopyableType() = default;
+    }
 
-        TriviallyCopyableType (int v)
-            : value (v)
-        {
-        }
-
-        TriviallyCopyableType (float v)
-            : value ((int) v)
-        {
-        }
-
-        bool operator== (const TriviallyCopyableType& other) const
-        {
-            return getValue() == other.getValue();
-        }
-
-        int getValue() const { return value; }
-
-    private:
-        int value { -1111 };
-    };
-
-    class NonTriviallyCopyableType
+    TriviallyCopyableType (float v)
+        : value ((int) v)
     {
-    public:
-        NonTriviallyCopyableType() = default;
+    }
 
-        NonTriviallyCopyableType (int v)
-            : value (v)
-        {
-        }
+    bool operator== (const TriviallyCopyableType& other) const
+    {
+        return getValue() == other.getValue();
+    }
 
-        NonTriviallyCopyableType (float v)
-            : value ((int) v)
-        {
-        }
+    int getValue() const { return value; }
 
-        NonTriviallyCopyableType (const NonTriviallyCopyableType& other)
-            : value (other.value)
-        {
-        }
+private:
+    int value { -1111 };
+};
 
-        NonTriviallyCopyableType& operator= (const NonTriviallyCopyableType& other)
-        {
-            value = other.value;
-            return *this;
-        }
+class NonTriviallyCopyableType
+{
+public:
+    NonTriviallyCopyableType() = default;
 
-        bool operator== (const NonTriviallyCopyableType& other) const
-        {
-            return getValue() == other.getValue();
-        }
+    NonTriviallyCopyableType (int v)
+        : value (v)
+    {
+    }
 
-        int getValue() const { return *ptr; }
+    NonTriviallyCopyableType (float v)
+        : value ((int) v)
+    {
+    }
 
-    private:
-        int value { -1111 };
-        int* ptr = &value;
-    };
+    NonTriviallyCopyableType (const NonTriviallyCopyableType& other)
+        : value (other.value)
+    {
+    }
+
+    NonTriviallyCopyableType& operator= (const NonTriviallyCopyableType& other)
+    {
+        value = other.value;
+        return *this;
+    }
+
+    bool operator== (const NonTriviallyCopyableType& other) const
+    {
+        return getValue() == other.getValue();
+    }
+
+    int getValue() const { return *ptr; }
+
+private:
+    int value { -1111 };
+    int* ptr = &value;
+};
 } // namespace ArrayBaseTestsHelpers
 
 static bool operator== (const ArrayBaseTestsHelpers::TriviallyCopyableType& tct,

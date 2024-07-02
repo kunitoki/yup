@@ -931,78 +931,78 @@ DECLARE_JNI_CLASS (AndroidSurfaceHolder, "android/view/SurfaceHolder")
 //==============================================================================
 namespace
 {
-    inline String juceString (JNIEnv* env, jstring s)
-    {
-        if (s == nullptr)
-            return {};
+inline String juceString (JNIEnv* env, jstring s)
+{
+    if (s == nullptr)
+        return {};
 
-        const char* const utf8 = env->GetStringUTFChars (s, nullptr);
-        CharPointer_UTF8 utf8CP (utf8);
-        const String result (utf8CP);
-        env->ReleaseStringUTFChars (s, utf8);
-        return result;
+    const char* const utf8 = env->GetStringUTFChars (s, nullptr);
+    CharPointer_UTF8 utf8CP (utf8);
+    const String result (utf8CP);
+    env->ReleaseStringUTFChars (s, utf8);
+    return result;
+}
+
+inline String juceString (jstring s)
+{
+    return juceString (getEnv(), s);
+}
+
+inline LocalRef<jstring> javaString (const String& s)
+{
+    return LocalRef<jstring> (getEnv()->NewStringUTF (s.toUTF8()));
+}
+
+inline LocalRef<jstring> javaStringFromChar (const juce_wchar c)
+{
+    char utf8[8] = { 0 };
+    CharPointer_UTF8 (utf8).write (c);
+    return LocalRef<jstring> (getEnv()->NewStringUTF (utf8));
+}
+
+inline LocalRef<jobjectArray> juceStringArrayToJava (const StringArray& juceArray)
+{
+    auto* env = getEnv();
+
+    LocalRef<jobjectArray> result (env->NewObjectArray ((jsize) juceArray.size(),
+                                                        JavaString,
+                                                        javaString ("").get()));
+
+    for (int i = 0; i < juceArray.size(); ++i)
+        env->SetObjectArrayElement (result.get(), i, javaString (juceArray[i]).get());
+
+    return result;
+}
+
+inline StringArray javaStringArrayToJuce (const LocalRef<jobjectArray>& javaArray)
+{
+    if (javaArray.get() == nullptr)
+        return {};
+
+    auto* env = getEnv();
+
+    StringArray result;
+
+    for (int i = 0; i < env->GetArrayLength (javaArray.get()); ++i)
+    {
+        LocalRef<jstring> javaString ((jstring) env->GetObjectArrayElement (javaArray.get(), i));
+        result.add (juceString (javaString.get()));
     }
 
-    inline String juceString (jstring s)
-    {
-        return juceString (getEnv(), s);
-    }
+    return result;
+}
 
-    inline LocalRef<jstring> javaString (const String& s)
-    {
-        return LocalRef<jstring> (getEnv()->NewStringUTF (s.toUTF8()));
-    }
+inline bool jniCheckHasExceptionOccurredAndClear()
+{
+    auto* env = getEnv();
 
-    inline LocalRef<jstring> javaStringFromChar (const juce_wchar c)
-    {
-        char utf8[8] = { 0 };
-        CharPointer_UTF8 (utf8).write (c);
-        return LocalRef<jstring> (getEnv()->NewStringUTF (utf8));
-    }
-
-    inline LocalRef<jobjectArray> juceStringArrayToJava (const StringArray& juceArray)
-    {
-        auto* env = getEnv();
-
-        LocalRef<jobjectArray> result (env->NewObjectArray ((jsize) juceArray.size(),
-                                                            JavaString,
-                                                            javaString ("").get()));
-
-        for (int i = 0; i < juceArray.size(); ++i)
-            env->SetObjectArrayElement (result.get(), i, javaString (juceArray[i]).get());
-
-        return result;
-    }
-
-    inline StringArray javaStringArrayToJuce (const LocalRef<jobjectArray>& javaArray)
-    {
-        if (javaArray.get() == nullptr)
-            return {};
-
-        auto* env = getEnv();
-
-        StringArray result;
-
-        for (int i = 0; i < env->GetArrayLength (javaArray.get()); ++i)
-        {
-            LocalRef<jstring> javaString ((jstring) env->GetObjectArrayElement (javaArray.get(), i));
-            result.add (juceString (javaString.get()));
-        }
-
-        return result;
-    }
-
-    inline bool jniCheckHasExceptionOccurredAndClear()
-    {
-        auto* env = getEnv();
-
-        const auto result = env->ExceptionCheck();
+    const auto result = env->ExceptionCheck();
 #if JUCE_DEBUG
-        env->ExceptionDescribe();
+    env->ExceptionDescribe();
 #endif
-        env->ExceptionClear();
-        return result;
-    }
+    env->ExceptionClear();
+    return result;
+}
 } // namespace
 
 //==============================================================================
@@ -1219,26 +1219,26 @@ String audioManagerGetProperty (const String& property);
 namespace detail
 {
 
-    template <auto Fn, typename Result, typename Class, typename... Args>
-    inline constexpr auto generatedCallbackImpl =
-        juce::toFnPtr (JNICALL[](JNIEnv* env, jobject, jlong host, Args... args)->Result {
-            if (auto* object = reinterpret_cast<Class*> (host))
-                return Fn (env, *object, args...);
+template <auto Fn, typename Result, typename Class, typename... Args>
+inline constexpr auto generatedCallbackImpl =
+    juce::toFnPtr (JNICALL[](JNIEnv* env, jobject, jlong host, Args... args)->Result {
+        if (auto* object = reinterpret_cast<Class*> (host))
+            return Fn (env, *object, args...);
 
-            return {};
-        });
+        return {};
+    });
 
-    template <auto Fn, typename Result, typename Class, typename... Args>
-    constexpr auto generateCallbackImpl (Result (*) (JNIEnv*, Class&, Args...))
-    {
-        return generatedCallbackImpl<Fn, Result, Class, Args...>;
-    }
+template <auto Fn, typename Result, typename Class, typename... Args>
+constexpr auto generateCallbackImpl (Result (*) (JNIEnv*, Class&, Args...))
+{
+    return generatedCallbackImpl<Fn, Result, Class, Args...>;
+}
 
-    template <auto Fn, typename Result, typename Class, typename... Args>
-    constexpr auto generateCallbackImpl (Result (*) (JNIEnv*, const Class&, Args...))
-    {
-        return generatedCallbackImpl<Fn, Result, Class, Args...>;
-    }
+template <auto Fn, typename Result, typename Class, typename... Args>
+constexpr auto generateCallbackImpl (Result (*) (JNIEnv*, const Class&, Args...))
+{
+    return generatedCallbackImpl<Fn, Result, Class, Args...>;
+}
 
 } // namespace detail
 

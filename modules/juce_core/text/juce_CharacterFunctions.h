@@ -46,11 +46,11 @@ namespace juce
 #define JUCE_NATIVE_WCHAR_IS_UTF16 1
 #define JUCE_NATIVE_WCHAR_IS_UTF32 0
 #else
-    /** This macro will be set to 1 if the compiler's native wchar_t is an 8-bit type. */
+/** This macro will be set to 1 if the compiler's native wchar_t is an 8-bit type. */
 #define JUCE_NATIVE_WCHAR_IS_UTF8 0
-    /** This macro will be set to 1 if the compiler's native wchar_t is a 16-bit type. */
+/** This macro will be set to 1 if the compiler's native wchar_t is a 16-bit type. */
 #define JUCE_NATIVE_WCHAR_IS_UTF16 0
-    /** This macro will be set to 1 if the compiler's native wchar_t is a 32-bit type. */
+/** This macro will be set to 1 if the compiler's native wchar_t is a 32-bit type. */
 #define JUCE_NATIVE_WCHAR_IS_UTF32 1
 #endif
 
@@ -62,12 +62,12 @@ using juce_wchar = uint32;
 #endif
 
 #ifndef DOXYGEN
-    /** This macro is deprecated, but preserved for compatibility with old code. */
+/** This macro is deprecated, but preserved for compatibility with old code. */
 #define JUCE_T(stringLiteral) (L##stringLiteral)
 #endif
 
 #if JUCE_DEFINE_T_MACRO
-    /** The 'T' macro is an alternative for using the "L" prefix in front of a string literal.
+/** The 'T' macro is an alternative for using the "L" prefix in front of a string literal.
 
      This macro is deprecated, but available for compatibility with old code if you set
      JUCE_DEFINE_T_MACRO = 1. The fastest, most portable and best way to write your string
@@ -83,47 +83,47 @@ using juce_wchar = uint32;
 // GNU libstdc++ does not have std::make_unsigned
 namespace internal
 {
-    template <typename Type>
-    struct make_unsigned
-    {
-        using type = Type;
-    };
+template <typename Type>
+struct make_unsigned
+{
+    using type = Type;
+};
 
-    template <>
-    struct make_unsigned<signed char>
-    {
-        using type = unsigned char;
-    };
+template <>
+struct make_unsigned<signed char>
+{
+    using type = unsigned char;
+};
 
-    template <>
-    struct make_unsigned<char>
-    {
-        using type = unsigned char;
-    };
+template <>
+struct make_unsigned<char>
+{
+    using type = unsigned char;
+};
 
-    template <>
-    struct make_unsigned<short>
-    {
-        using type = unsigned short;
-    };
+template <>
+struct make_unsigned<short>
+{
+    using type = unsigned short;
+};
 
-    template <>
-    struct make_unsigned<int>
-    {
-        using type = unsigned int;
-    };
+template <>
+struct make_unsigned<int>
+{
+    using type = unsigned int;
+};
 
-    template <>
-    struct make_unsigned<long>
-    {
-        using type = unsigned long;
-    };
+template <>
+struct make_unsigned<long>
+{
+    using type = unsigned long;
+};
 
-    template <>
-    struct make_unsigned<long long>
-    {
-        using type = unsigned long long;
-    };
+template <>
+struct make_unsigned<long long>
+{
+    using type = unsigned long long;
+};
 } // namespace internal
 
 #endif

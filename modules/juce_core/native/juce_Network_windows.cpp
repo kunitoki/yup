@@ -486,115 +486,115 @@ struct GetAdaptersAddressesHelper
 
 namespace MACAddressHelpers
 {
-    static void addAddress (Array<MACAddress>& result, const MACAddress& ma)
-    {
-        if (! ma.isNull())
-            result.addIfNotAlreadyThere (ma);
-    }
+static void addAddress (Array<MACAddress>& result, const MACAddress& ma)
+{
+    if (! ma.isNull())
+        result.addIfNotAlreadyThere (ma);
+}
 
-    static void getViaGetAdaptersAddresses (Array<MACAddress>& result)
-    {
-        GetAdaptersAddressesHelper addressesHelper;
+static void getViaGetAdaptersAddresses (Array<MACAddress>& result)
+{
+    GetAdaptersAddressesHelper addressesHelper;
 
-        if (addressesHelper.callGetAdaptersAddresses())
+    if (addressesHelper.callGetAdaptersAddresses())
+    {
+        for (PIP_ADAPTER_ADDRESSES adapter = addressesHelper.adaptersAddresses; adapter != nullptr; adapter = adapter->Next)
         {
-            for (PIP_ADAPTER_ADDRESSES adapter = addressesHelper.adaptersAddresses; adapter != nullptr; adapter = adapter->Next)
-            {
-                if (adapter->PhysicalAddressLength >= 6)
-                    addAddress (result, MACAddress (adapter->PhysicalAddress));
-            }
+            if (adapter->PhysicalAddressLength >= 6)
+                addAddress (result, MACAddress (adapter->PhysicalAddress));
         }
     }
+}
 
-    static void getViaNetBios (Array<MACAddress>& result)
+static void getViaNetBios (Array<MACAddress>& result)
+{
+    DynamicLibrary dll ("netapi32.dll");
+    JUCE_LOAD_WINAPI_FUNCTION (dll, Netbios, NetbiosCall, UCHAR, (PNCB))
+
+    if (NetbiosCall != nullptr)
     {
-        DynamicLibrary dll ("netapi32.dll");
-        JUCE_LOAD_WINAPI_FUNCTION (dll, Netbios, NetbiosCall, UCHAR, (PNCB))
+        LANA_ENUM enums = {};
 
-        if (NetbiosCall != nullptr)
         {
-            LANA_ENUM enums = {};
+            NCB ncb = {};
+            ncb.ncb_command = NCBENUM;
+            ncb.ncb_buffer = (unsigned char*) &enums;
+            ncb.ncb_length = sizeof (LANA_ENUM);
+            NetbiosCall (&ncb);
+        }
 
+        for (int i = 0; i < enums.length; ++i)
+        {
+            NCB ncb2 = {};
+            ncb2.ncb_command = NCBRESET;
+            ncb2.ncb_lana_num = enums.lana[i];
+
+            if (NetbiosCall (&ncb2) == 0)
             {
                 NCB ncb = {};
-                ncb.ncb_command = NCBENUM;
-                ncb.ncb_buffer = (unsigned char*) &enums;
-                ncb.ncb_length = sizeof (LANA_ENUM);
-                NetbiosCall (&ncb);
-            }
+                memcpy (ncb.ncb_callname, "*                   ", NCBNAMSZ);
+                ncb.ncb_command = NCBASTAT;
+                ncb.ncb_lana_num = enums.lana[i];
 
-            for (int i = 0; i < enums.length; ++i)
-            {
-                NCB ncb2 = {};
-                ncb2.ncb_command = NCBRESET;
-                ncb2.ncb_lana_num = enums.lana[i];
-
-                if (NetbiosCall (&ncb2) == 0)
+                struct ASTAT
                 {
-                    NCB ncb = {};
-                    memcpy (ncb.ncb_callname, "*                   ", NCBNAMSZ);
-                    ncb.ncb_command = NCBASTAT;
-                    ncb.ncb_lana_num = enums.lana[i];
+                    ADAPTER_STATUS adapt;
+                    NAME_BUFFER NameBuff[30];
+                };
 
-                    struct ASTAT
-                    {
-                        ADAPTER_STATUS adapt;
-                        NAME_BUFFER NameBuff[30];
-                    };
+                ASTAT astat;
+                zerostruct (astat);
+                ncb.ncb_buffer = (unsigned char*) &astat;
+                ncb.ncb_length = sizeof (ASTAT);
 
-                    ASTAT astat;
-                    zerostruct (astat);
-                    ncb.ncb_buffer = (unsigned char*) &astat;
-                    ncb.ncb_length = sizeof (ASTAT);
-
-                    if (NetbiosCall (&ncb) == 0 && astat.adapt.adapter_type == 0xfe)
-                        addAddress (result, MACAddress (astat.adapt.adapter_address));
-                }
+                if (NetbiosCall (&ncb) == 0 && astat.adapt.adapter_type == 0xfe)
+                    addAddress (result, MACAddress (astat.adapt.adapter_address));
             }
         }
     }
+}
 
-    static void split (const sockaddr_in6* sa_in6, int off, uint8* split)
-    {
+static void split (const sockaddr_in6* sa_in6, int off, uint8* split)
+{
 #if JUCE_MINGW
-        split[0] = sa_in6->sin6_addr._S6_un._S6_u8[off + 1];
-        split[1] = sa_in6->sin6_addr._S6_un._S6_u8[off];
+    split[0] = sa_in6->sin6_addr._S6_un._S6_u8[off + 1];
+    split[1] = sa_in6->sin6_addr._S6_un._S6_u8[off];
 #else
-        split[0] = sa_in6->sin6_addr.u.Byte[off + 1];
-        split[1] = sa_in6->sin6_addr.u.Byte[off];
+    split[0] = sa_in6->sin6_addr.u.Byte[off + 1];
+    split[1] = sa_in6->sin6_addr.u.Byte[off];
 #endif
-    }
+}
 
-    static IPAddress createAddress (const sockaddr_in6* sa_in6)
+static IPAddress createAddress (const sockaddr_in6* sa_in6)
+{
+    IPAddressByteUnion temp;
+    uint16 arr[8];
+
+    for (int i = 0; i < 8; ++i)
     {
-        IPAddressByteUnion temp;
-        uint16 arr[8];
-
-        for (int i = 0; i < 8; ++i)
-        {
-            split (sa_in6, i * 2, temp.split);
-            arr[i] = temp.combined;
-        }
-
-        return IPAddress (arr);
+        split (sa_in6, i * 2, temp.split);
+        arr[i] = temp.combined;
     }
 
-    static IPAddress createAddress (const sockaddr_in* sa_in)
+    return IPAddress (arr);
+}
+
+static IPAddress createAddress (const sockaddr_in* sa_in)
+{
+    return IPAddress ((uint8*) &sa_in->sin_addr.s_addr, false);
+}
+
+template <typename Type>
+static void findAddresses (Array<IPAddress>& result, bool includeIPv6, Type start)
+{
+    for (auto addr = start; addr != nullptr; addr = addr->Next)
     {
-        return IPAddress ((uint8*) &sa_in->sin_addr.s_addr, false);
+        if (addr->Address.lpSockaddr->sa_family == AF_INET)
+            result.addIfNotAlreadyThere (createAddress (unalignedPointerCast<sockaddr_in*> (addr->Address.lpSockaddr)));
+        else if (addr->Address.lpSockaddr->sa_family == AF_INET6 && includeIPv6)
+            result.addIfNotAlreadyThere (createAddress (unalignedPointerCast<sockaddr_in6*> (addr->Address.lpSockaddr)));
     }
-
-    template <typename Type>
-    static void findAddresses (Array<IPAddress>& result, bool includeIPv6, Type start)
-    {
-        for (auto addr = start; addr != nullptr; addr = addr->Next)
-        {
-            if (addr->Address.lpSockaddr->sa_family == AF_INET)
-                result.addIfNotAlreadyThere (createAddress (unalignedPointerCast<sockaddr_in*> (addr->Address.lpSockaddr)));
-            else if (addr->Address.lpSockaddr->sa_family == AF_INET6 && includeIPv6)
-                result.addIfNotAlreadyThere (createAddress (unalignedPointerCast<sockaddr_in6*> (addr->Address.lpSockaddr)));
-        }
-    }
+}
 } // namespace MACAddressHelpers
 
 void MACAddress::findAllAddresses (Array<MACAddress>& result)

@@ -103,28 +103,28 @@ JUCE_DECL_VOID_JACK_FUNCTION (jack_free, (void* ptr), (ptr))
 #if JACK_LOGGING_ENABLED
 namespace
 {
-    void jack_Log (const String& s)
-    {
-        std::cerr << s << std::endl;
-    }
+void jack_Log (const String& s)
+{
+    std::cerr << s << std::endl;
+}
 
-    const char* getJackErrorMessage (const jack_status_t status)
-    {
-        if (status & JackServerFailed
-            || status & JackServerError)
-            return "Unable to connect to JACK server";
-        if (status & JackVersionError)
-            return "Client's protocol version does not match";
-        if (status & JackInvalidOption)
-            return "The operation contained an invalid or unsupported option";
-        if (status & JackNameNotUnique)
-            return "The desired client name was not unique";
-        if (status & JackNoSuchClient)
-            return "Requested client does not exist";
-        if (status & JackInitFailure)
-            return "Unable to initialize client";
-        return nullptr;
-    }
+const char* getJackErrorMessage (const jack_status_t status)
+{
+    if (status & JackServerFailed
+        || status & JackServerError)
+        return "Unable to connect to JACK server";
+    if (status & JackVersionError)
+        return "Client's protocol version does not match";
+    if (status & JackInvalidOption)
+        return "The operation contained an invalid or unsupported option";
+    if (status & JackNameNotUnique)
+        return "The desired client name was not unique";
+    if (status & JackNoSuchClient)
+        return "Requested client does not exist";
+    if (status & JackInitFailure)
+        return "Unable to initialize client";
+    return nullptr;
+}
 } // namespace
 
 #define JUCE_JACK_LOG_STATUS(x)              \

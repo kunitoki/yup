@@ -56,54 +56,54 @@ namespace ASIODebugging
 #define JUCE_ASIO_LOG(msg) ASIODebugging::logMessage (msg)
 #define JUCE_ASIO_LOG_ERROR(msg, errNum) ASIODebugging::logError ((msg), (errNum))
 
-    static void logMessage (String message)
-    {
-        message = "ASIO: " + message;
-        DBG (message);
+static void logMessage (String message)
+{
+    message = "ASIO: " + message;
+    DBG (message);
 
-        if (Logger::getCurrentLogger() != nullptr)
-            Logger::writeToLog (message);
+    if (Logger::getCurrentLogger() != nullptr)
+        Logger::writeToLog (message);
+}
+
+static void logError (const String& context, long error)
+{
+    const char* err = "Unknown error";
+
+    switch (error)
+    {
+        case ASE_OK:
+            return;
+        case ASE_NotPresent:
+            err = "Not Present";
+            break;
+        case ASE_HWMalfunction:
+            err = "Hardware Malfunction";
+            break;
+        case ASE_InvalidParameter:
+            err = "Invalid Parameter";
+            break;
+        case ASE_InvalidMode:
+            err = "Invalid Mode";
+            break;
+        case ASE_SPNotAdvancing:
+            err = "Sample position not advancing";
+            break;
+        case ASE_NoClock:
+            err = "No Clock";
+            break;
+        case ASE_NoMemory:
+            err = "Out of memory";
+            break;
+        default:
+            break;
     }
 
-    static void logError (const String& context, long error)
-    {
-        const char* err = "Unknown error";
-
-        switch (error)
-        {
-            case ASE_OK:
-                return;
-            case ASE_NotPresent:
-                err = "Not Present";
-                break;
-            case ASE_HWMalfunction:
-                err = "Hardware Malfunction";
-                break;
-            case ASE_InvalidParameter:
-                err = "Invalid Parameter";
-                break;
-            case ASE_InvalidMode:
-                err = "Invalid Mode";
-                break;
-            case ASE_SPNotAdvancing:
-                err = "Sample position not advancing";
-                break;
-            case ASE_NoClock:
-                err = "No Clock";
-                break;
-            case ASE_NoMemory:
-                err = "Out of memory";
-                break;
-            default:
-                break;
-        }
-
-        logMessage ("error: " + context + " - " + err);
-    }
+    logMessage ("error: " + context + " - " + err);
+}
 #else
-    static void dummyLog()
-    {
-    }
+static void dummyLog()
+{
+}
 
 #define JUCE_ASIO_LOG(msg) ASIODebugging::dummyLog()
 #define JUCE_ASIO_LOG_ERROR(msg, errNum) \

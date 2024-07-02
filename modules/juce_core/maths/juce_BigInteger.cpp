@@ -42,11 +42,11 @@ namespace juce
 
 namespace
 {
-    inline uint32 bitToMask (const int bit) noexcept { return (uint32) 1 << (bit & 31); }
+inline uint32 bitToMask (const int bit) noexcept { return (uint32) 1 << (bit & 31); }
 
-    inline size_t bitToIndex (const int bit) noexcept { return (size_t) (bit >> 5); }
+inline size_t bitToIndex (const int bit) noexcept { return (size_t) (bit >> 5); }
 
-    inline size_t sizeNeededToHold (int highestBit) noexcept { return (size_t) (highestBit >> 5) + 1; }
+inline size_t sizeNeededToHold (int highestBit) noexcept { return (size_t) (highestBit >> 5) + 1; }
 } // namespace
 
 int findHighestSetBit (uint32 n) noexcept

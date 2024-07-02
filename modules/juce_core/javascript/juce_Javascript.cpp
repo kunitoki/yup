@@ -68,11 +68,11 @@ namespace juce
 namespace TokenTypes
 {
 #define JUCE_DECLARE_JS_TOKEN(name, str) static const char* const name = str;
-    JUCE_JS_KEYWORDS (JUCE_DECLARE_JS_TOKEN)
-    JUCE_JS_OPERATORS (JUCE_DECLARE_JS_TOKEN)
-    JUCE_DECLARE_JS_TOKEN (eof, "$eof")
-    JUCE_DECLARE_JS_TOKEN (literal, "$literal")
-    JUCE_DECLARE_JS_TOKEN (identifier, "$identifier")
+JUCE_JS_KEYWORDS (JUCE_DECLARE_JS_TOKEN)
+JUCE_JS_OPERATORS (JUCE_DECLARE_JS_TOKEN)
+JUCE_DECLARE_JS_TOKEN (eof, "$eof")
+JUCE_DECLARE_JS_TOKEN (literal, "$literal")
+JUCE_DECLARE_JS_TOKEN (identifier, "$identifier")
 } // namespace TokenTypes
 
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4702)

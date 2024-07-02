@@ -42,15 +42,15 @@ namespace juce
 
 namespace MidiHelpers
 {
-    inline uint8 initialByte (const int type, const int channel) noexcept
-    {
-        return (uint8) (type | jlimit (0, 15, channel - 1));
-    }
+inline uint8 initialByte (const int type, const int channel) noexcept
+{
+    return (uint8) (type | jlimit (0, 15, channel - 1));
+}
 
-    inline uint8 validVelocity (const int v) noexcept
-    {
-        return (uint8) jlimit (0, 127, v);
-    }
+inline uint8 validVelocity (const int v) noexcept
+{
+    return (uint8) jlimit (0, 127, v);
+}
 } // namespace MidiHelpers
 
 //==============================================================================

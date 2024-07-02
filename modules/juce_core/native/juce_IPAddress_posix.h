@@ -42,100 +42,100 @@ namespace juce
 
 namespace
 {
-    struct InterfaceInfo
-    {
-        IPAddress interfaceAddress, broadcastAddress;
-    };
+struct InterfaceInfo
+{
+    IPAddress interfaceAddress, broadcastAddress;
+};
 
-    inline bool operator== (const InterfaceInfo& lhs, const InterfaceInfo& rhs)
-    {
-        return lhs.interfaceAddress == rhs.interfaceAddress
-            && lhs.broadcastAddress == rhs.broadcastAddress;
-    }
+inline bool operator== (const InterfaceInfo& lhs, const InterfaceInfo& rhs)
+{
+    return lhs.interfaceAddress == rhs.interfaceAddress
+        && lhs.broadcastAddress == rhs.broadcastAddress;
+}
 
 #if ! JUCE_WASM
-    static IPAddress makeAddress (const sockaddr_in6* addr_in)
+static IPAddress makeAddress (const sockaddr_in6* addr_in)
+{
+    if (addr_in == nullptr)
+        return {};
+
+    auto addr = addr_in->sin6_addr;
+
+    IPAddressByteUnion temp;
+    uint16 arr[8];
+
+    for (int i = 0; i < 8; ++i) // Swap bytes from network to host order
     {
-        if (addr_in == nullptr)
-            return {};
+        temp.split[0] = addr.s6_addr[i * 2 + 1];
+        temp.split[1] = addr.s6_addr[i * 2];
 
-        auto addr = addr_in->sin6_addr;
-
-        IPAddressByteUnion temp;
-        uint16 arr[8];
-
-        for (int i = 0; i < 8; ++i) // Swap bytes from network to host order
-        {
-            temp.split[0] = addr.s6_addr[i * 2 + 1];
-            temp.split[1] = addr.s6_addr[i * 2];
-
-            arr[i] = temp.combined;
-        }
-
-        return IPAddress (arr);
+        arr[i] = temp.combined;
     }
 
-    static IPAddress makeAddress (const sockaddr_in* addr_in)
-    {
-        if (addr_in->sin_addr.s_addr == INADDR_NONE)
-            return {};
+    return IPAddress (arr);
+}
 
-        return IPAddress (ntohl (addr_in->sin_addr.s_addr));
-    }
+static IPAddress makeAddress (const sockaddr_in* addr_in)
+{
+    if (addr_in->sin_addr.s_addr == INADDR_NONE)
+        return {};
 
-    bool populateInterfaceInfo (struct ifaddrs* ifa, InterfaceInfo& interfaceInfo)
+    return IPAddress (ntohl (addr_in->sin_addr.s_addr));
+}
+
+bool populateInterfaceInfo (struct ifaddrs* ifa, InterfaceInfo& interfaceInfo)
+{
+    if (ifa->ifa_addr != nullptr)
     {
-        if (ifa->ifa_addr != nullptr)
+        if (ifa->ifa_addr->sa_family == AF_INET)
         {
-            if (ifa->ifa_addr->sa_family == AF_INET)
-            {
-                auto interfaceAddressInfo = unalignedPointerCast<sockaddr_in*> (ifa->ifa_addr);
-                auto broadcastAddressInfo = unalignedPointerCast<sockaddr_in*> (ifa->ifa_dstaddr);
+            auto interfaceAddressInfo = unalignedPointerCast<sockaddr_in*> (ifa->ifa_addr);
+            auto broadcastAddressInfo = unalignedPointerCast<sockaddr_in*> (ifa->ifa_dstaddr);
 
-                if (interfaceAddressInfo->sin_addr.s_addr != INADDR_NONE)
-                {
-                    interfaceInfo.interfaceAddress = makeAddress (interfaceAddressInfo);
-                    interfaceInfo.broadcastAddress = makeAddress (broadcastAddressInfo);
-                    return true;
-                }
-            }
-            else if (ifa->ifa_addr->sa_family == AF_INET6)
+            if (interfaceAddressInfo->sin_addr.s_addr != INADDR_NONE)
             {
-                interfaceInfo.interfaceAddress = makeAddress (unalignedPointerCast<sockaddr_in6*> (ifa->ifa_addr));
-                interfaceInfo.broadcastAddress = makeAddress (unalignedPointerCast<sockaddr_in6*> (ifa->ifa_dstaddr));
+                interfaceInfo.interfaceAddress = makeAddress (interfaceAddressInfo);
+                interfaceInfo.broadcastAddress = makeAddress (broadcastAddressInfo);
                 return true;
             }
         }
-
-        return false;
+        else if (ifa->ifa_addr->sa_family == AF_INET6)
+        {
+            interfaceInfo.interfaceAddress = makeAddress (unalignedPointerCast<sockaddr_in6*> (ifa->ifa_addr));
+            interfaceInfo.broadcastAddress = makeAddress (unalignedPointerCast<sockaddr_in6*> (ifa->ifa_dstaddr));
+            return true;
+        }
     }
+
+    return false;
+}
 #endif
 
-    Array<InterfaceInfo> getAllInterfaceInfo()
-    {
-        Array<InterfaceInfo> interfaces;
+Array<InterfaceInfo> getAllInterfaceInfo()
+{
+    Array<InterfaceInfo> interfaces;
 
 #if JUCE_WASM
-        // TODO
+    // TODO
 #else
-        struct ifaddrs* ifaddr = nullptr;
+    struct ifaddrs* ifaddr = nullptr;
 
-        if (getifaddrs (&ifaddr) != -1)
+    if (getifaddrs (&ifaddr) != -1)
+    {
+        for (auto* ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
         {
-            for (auto* ifa = ifaddr; ifa != nullptr; ifa = ifa->ifa_next)
-            {
-                InterfaceInfo i;
+            InterfaceInfo i;
 
-                if (populateInterfaceInfo (ifa, i))
-                    interfaces.addIfNotAlreadyThere (i);
-            }
-
-            freeifaddrs (ifaddr);
+            if (populateInterfaceInfo (ifa, i))
+                interfaces.addIfNotAlreadyThere (i);
         }
+
+        freeifaddrs (ifaddr);
+    }
 #endif
 
-        return interfaces;
-    }
+    return interfaces;
+}
 } // namespace
 
 void IPAddress::findAllAddresses (Array<IPAddress>& result, bool includeIPv6)

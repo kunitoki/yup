@@ -800,11 +800,11 @@ constexpr unsigned char javaMidiByteCode[]
 };
 // clang-format on
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
- METHOD (getJuceAndroidMidiInputDeviceNameAndIDs,  "getJuceAndroidMidiInputDeviceNameAndIDs",  "()[Ljava/lang/String;") \
- METHOD (getJuceAndroidMidiOutputDeviceNameAndIDs, "getJuceAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
- METHOD (openMidiInputPortWithID,                  "openMidiInputPortWithID",                  "(IJ)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;") \
- METHOD (openMidiOutputPortWithID,                 "openMidiOutputPortWithID",                 "(I)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                          \
+METHOD (getJuceAndroidMidiInputDeviceNameAndIDs, "getJuceAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
+METHOD (getJuceAndroidMidiOutputDeviceNameAndIDs, "getJuceAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
+METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")        \
+METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/rmsl/juce/JuceMidiSupport$MidiDeviceManager", 23)
 #undef JNI_CLASS_MEMBERS

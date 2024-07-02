@@ -828,7 +828,7 @@ private:
 //==============================================================================
 #ifndef DOXYGEN
 
-    /** DEPRECATED: A handy macro to make it easy to iterate all the child elements in an XmlElement.
+/** DEPRECATED: A handy macro to make it easy to iterate all the child elements in an XmlElement.
 
     New code should avoid this macro, and instead use getChildIterator directly.
 
@@ -851,7 +851,7 @@ private:
 #define forEachXmlChildElement(parentXmlElement, childElementVariableName) \
 for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
 
-    /** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
+/** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
     which have a specified tag.
 
     New code should avoid this macro, and instead use getChildWithTagNameIterator directly.

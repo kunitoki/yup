@@ -74,7 +74,7 @@ using uint64 = unsigned long long;
 #endif
 
 #ifndef DOXYGEN
-    /** A macro for creating 64-bit literals.
+/** A macro for creating 64-bit literals.
      Historically, this was needed to support portability with MSVC6, and is kept here
      so that old code will still compile, but nowadays every compiler will support the
      LL and ULL suffixes, so you should use those in preference to this macro.
@@ -788,7 +788,7 @@ uint32 readLittleEndianBitsInBuffer (const void* sourceBuffer, uint32 startBit, 
 
 //==============================================================================
 #if JUCE_INTEL || DOXYGEN
-    /** This macro can be applied to a float variable to check whether it contains a denormalised
+/** This macro can be applied to a float variable to check whether it contains a denormalised
      value, and to normalise it if necessary.
      On CPUs that aren't vulnerable to denormalisation problems, this will have no effect.
  */
@@ -806,7 +806,7 @@ uint32 readLittleEndianBitsInBuffer (const void* sourceBuffer, uint32 startBit, 
 */
 namespace TypeHelpers
 {
-    /** The ParameterType struct is used to find the best type to use when passing some kind
+/** The ParameterType struct is used to find the best type to use when passing some kind
         of object as a parameter.
 
         Of course, this is only likely to be useful in certain esoteric template situations.
@@ -817,146 +817,146 @@ namespace TypeHelpers
 
         @tags{Core}
     */
-    template <typename Type>
-    struct ParameterType
-    {
-        using type = const Type&;
-    };
+template <typename Type>
+struct ParameterType
+{
+    using type = const Type&;
+};
 
 #ifndef DOXYGEN
-    template <typename Type>
-    struct ParameterType<Type&>
-    {
-        using type = Type&;
-    };
+template <typename Type>
+struct ParameterType<Type&>
+{
+    using type = Type&;
+};
 
-    template <typename Type>
-    struct ParameterType<Type*>
-    {
-        using type = Type*;
-    };
+template <typename Type>
+struct ParameterType<Type*>
+{
+    using type = Type*;
+};
 
-    template <>
-    struct ParameterType<char>
-    {
-        using type = char;
-    };
+template <>
+struct ParameterType<char>
+{
+    using type = char;
+};
 
-    template <>
-    struct ParameterType<unsigned char>
-    {
-        using type = unsigned char;
-    };
+template <>
+struct ParameterType<unsigned char>
+{
+    using type = unsigned char;
+};
 
-    template <>
-    struct ParameterType<short>
-    {
-        using type = short;
-    };
+template <>
+struct ParameterType<short>
+{
+    using type = short;
+};
 
-    template <>
-    struct ParameterType<unsigned short>
-    {
-        using type = unsigned short;
-    };
+template <>
+struct ParameterType<unsigned short>
+{
+    using type = unsigned short;
+};
 
-    template <>
-    struct ParameterType<int>
-    {
-        using type = int;
-    };
+template <>
+struct ParameterType<int>
+{
+    using type = int;
+};
 
-    template <>
-    struct ParameterType<unsigned int>
-    {
-        using type = unsigned int;
-    };
+template <>
+struct ParameterType<unsigned int>
+{
+    using type = unsigned int;
+};
 
-    template <>
-    struct ParameterType<long>
-    {
-        using type = long;
-    };
+template <>
+struct ParameterType<long>
+{
+    using type = long;
+};
 
-    template <>
-    struct ParameterType<unsigned long>
-    {
-        using type = unsigned long;
-    };
+template <>
+struct ParameterType<unsigned long>
+{
+    using type = unsigned long;
+};
 
-    template <>
-    struct ParameterType<int64>
-    {
-        using type = int64;
-    };
+template <>
+struct ParameterType<int64>
+{
+    using type = int64;
+};
 
-    template <>
-    struct ParameterType<uint64>
-    {
-        using type = uint64;
-    };
+template <>
+struct ParameterType<uint64>
+{
+    using type = uint64;
+};
 
-    template <>
-    struct ParameterType<bool>
-    {
-        using type = bool;
-    };
+template <>
+struct ParameterType<bool>
+{
+    using type = bool;
+};
 
-    template <>
-    struct ParameterType<float>
-    {
-        using type = float;
-    };
+template <>
+struct ParameterType<float>
+{
+    using type = float;
+};
 
-    template <>
-    struct ParameterType<double>
-    {
-        using type = double;
-    };
+template <>
+struct ParameterType<double>
+{
+    using type = double;
+};
 #endif
 
-    /** These templates are designed to take a type, and if it's a double, they return a double
+/** These templates are designed to take a type, and if it's a double, they return a double
         type; for anything else, they return a float type.
 
         @tags{Core}
     */
-    template <typename Type>
-    using SmallestFloatType = std::conditional_t<std::is_same_v<Type, double>, double, float>;
+template <typename Type>
+using SmallestFloatType = std::conditional_t<std::is_same_v<Type, double>, double, float>;
 
-    /** These templates are designed to take an integer type, and return an unsigned int
+/** These templates are designed to take an integer type, and return an unsigned int
         version with the same size.
 
         @tags{Core}
     */
-    template <int bytes>
-    struct UnsignedTypeWithSize
-    {
-    };
+template <int bytes>
+struct UnsignedTypeWithSize
+{
+};
 
 #ifndef DOXYGEN
-    template <>
-    struct UnsignedTypeWithSize<1>
-    {
-        using type = uint8;
-    };
+template <>
+struct UnsignedTypeWithSize<1>
+{
+    using type = uint8;
+};
 
-    template <>
-    struct UnsignedTypeWithSize<2>
-    {
-        using type = uint16;
-    };
+template <>
+struct UnsignedTypeWithSize<2>
+{
+    using type = uint16;
+};
 
-    template <>
-    struct UnsignedTypeWithSize<4>
-    {
-        using type = uint32;
-    };
+template <>
+struct UnsignedTypeWithSize<4>
+{
+    using type = uint32;
+};
 
-    template <>
-    struct UnsignedTypeWithSize<8>
-    {
-        using type = uint64;
-    };
+template <>
+struct UnsignedTypeWithSize<8>
+{
+    using type = uint64;
+};
 #endif
 } // namespace TypeHelpers
 

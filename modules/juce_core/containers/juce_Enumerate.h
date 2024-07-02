@@ -43,70 +43,70 @@ namespace juce
 namespace detail
 {
 
-    template <typename T, typename = void>
-    constexpr auto canPreDecrement = false;
+template <typename T, typename = void>
+constexpr auto canPreDecrement = false;
 
-    template <typename T>
-    constexpr auto canPreDecrement<T, std::void_t<decltype (--std::declval<T>())>> = true;
+template <typename T>
+constexpr auto canPreDecrement<T, std::void_t<decltype (--std::declval<T>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canAddAssign = false;
+template <typename T, typename I, typename = void>
+constexpr auto canAddAssign = false;
 
-    template <typename T, typename I>
-    constexpr auto canAddAssign<T, I, std::void_t<decltype (std::declval<T>() += std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canAddAssign<T, I, std::void_t<decltype (std::declval<T>() += std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canSubAssign = false;
+template <typename T, typename I, typename = void>
+constexpr auto canSubAssign = false;
 
-    template <typename T, typename I>
-    constexpr auto canSubAssign<T, I, std::void_t<decltype (std::declval<T>() -= std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canSubAssign<T, I, std::void_t<decltype (std::declval<T>() -= std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canAdd = false;
+template <typename T, typename I, typename = void>
+constexpr auto canAdd = false;
 
-    template <typename T, typename I>
-    constexpr auto canAdd<T, I, std::void_t<decltype (std::declval<T>() + std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canAdd<T, I, std::void_t<decltype (std::declval<T>() + std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canSub = false;
+template <typename T, typename I, typename = void>
+constexpr auto canSub = false;
 
-    template <typename T, typename I>
-    constexpr auto canSub<T, I, std::void_t<decltype (std::declval<T>() - std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canSub<T, I, std::void_t<decltype (std::declval<T>() - std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canLessThan = false;
+template <typename T, typename I, typename = void>
+constexpr auto canLessThan = false;
 
-    template <typename T, typename I>
-    constexpr auto canLessThan<T, I, std::void_t<decltype (std::declval<T>() < std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canLessThan<T, I, std::void_t<decltype (std::declval<T>() < std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canLessThanEqual = false;
+template <typename T, typename I, typename = void>
+constexpr auto canLessThanEqual = false;
 
-    template <typename T, typename I>
-    constexpr auto canLessThanEqual<T, I, std::void_t<decltype (std::declval<T>() <= std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canLessThanEqual<T, I, std::void_t<decltype (std::declval<T>() <= std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canGreaterThan = false;
+template <typename T, typename I, typename = void>
+constexpr auto canGreaterThan = false;
 
-    template <typename T, typename I>
-    constexpr auto canGreaterThan<T, I, std::void_t<decltype (std::declval<T>() > std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canGreaterThan<T, I, std::void_t<decltype (std::declval<T>() > std::declval<I>())>> = true;
 
-    template <typename T, typename I, typename = void>
-    constexpr auto canGreaterThanEqual = false;
+template <typename T, typename I, typename = void>
+constexpr auto canGreaterThanEqual = false;
 
-    template <typename T, typename I>
-    constexpr auto canGreaterThanEqual<T, I, std::void_t<decltype (std::declval<T>() >= std::declval<I>())>> = true;
+template <typename T, typename I>
+constexpr auto canGreaterThanEqual<T, I, std::void_t<decltype (std::declval<T>() >= std::declval<I>())>> = true;
 
-    namespace withAdlSize
-    {
-        using std::size;
+namespace withAdlSize
+{
+using std::size;
 
-        template <typename Range>
-        using AdlSize = decltype (size (std::declval<Range>()));
+template <typename Range>
+using AdlSize = decltype (size (std::declval<Range>()));
 
-        template <typename Range>
-        using AdlSignedSize = std::common_type_t<std::ptrdiff_t, std::make_signed_t<AdlSize<Range>>>;
-    } // namespace withAdlSize
+template <typename Range>
+using AdlSignedSize = std::common_type_t<std::ptrdiff_t, std::make_signed_t<AdlSize<Range>>>;
+} // namespace withAdlSize
 
 } // namespace detail
 

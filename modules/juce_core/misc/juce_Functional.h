@@ -43,14 +43,14 @@ namespace juce
 #ifndef DOXYGEN
 namespace detail
 {
-    template <typename...>
-    using Void = void;
+template <typename...>
+using Void = void;
 
-    template <typename, typename = void>
-    constexpr auto equalityComparableToNullptr = false;
+template <typename, typename = void>
+constexpr auto equalityComparableToNullptr = false;
 
-    template <typename T>
-    constexpr auto equalityComparableToNullptr<T, Void<decltype (std::declval<T>() != nullptr)>> = true;
+template <typename T>
+constexpr auto equalityComparableToNullptr<T, Void<decltype (std::declval<T>() != nullptr)>> = true;
 } // namespace detail
 #endif
 
@@ -108,11 +108,11 @@ template <typename Object, typename OtherObject, typename Member, typename Other
 #ifndef DOXYGEN
 namespace detail
 {
-    template <typename Functor, typename Return, typename... Args>
-    static constexpr auto toFnPtr (Functor functor, Return (Functor::*) (Args...) const)
-    {
-        return static_cast<Return (*) (Args...)> (functor);
-    }
+template <typename Functor, typename Return, typename... Args>
+static constexpr auto toFnPtr (Functor functor, Return (Functor::*) (Args...) const)
+{
+    return static_cast<Return (*) (Args...)> (functor);
+}
 } // namespace detail
 #endif
 

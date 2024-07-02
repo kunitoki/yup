@@ -223,81 +223,81 @@ int juce_siginterrupt ([[maybe_unused]] int sig, [[maybe_unused]] int flag)
 namespace
 {
 #if JUCE_LINUX || (JUCE_IOS && (! TARGET_OS_MACCATALYST) && (! __DARWIN_ONLY_64_BIT_INO_T)) // (this iOS stuff is to avoid a simulator bug)
-    using juce_statStruct = struct stat64;
+using juce_statStruct = struct stat64;
 #define JUCE_STAT stat64
 #else
-    using juce_statStruct = struct stat;
+using juce_statStruct = struct stat;
 #define JUCE_STAT stat
 #endif
 
-    bool juce_stat (const String& fileName, juce_statStruct& info)
-    {
-        return fileName.isNotEmpty()
-            && JUCE_STAT (fileName.toUTF8(), &info) == 0;
-    }
+bool juce_stat (const String& fileName, juce_statStruct& info)
+{
+    return fileName.isNotEmpty()
+        && JUCE_STAT (fileName.toUTF8(), &info) == 0;
+}
 
 #if ! JUCE_WASM
-    // if this file doesn't exist, find a parent of it that does..
-    bool juce_doStatFS (File f, struct statfs& result)
+// if this file doesn't exist, find a parent of it that does..
+bool juce_doStatFS (File f, struct statfs& result)
+{
+    for (int i = 5; --i >= 0;)
     {
-        for (int i = 5; --i >= 0;)
-        {
-            if (f.exists())
-                break;
+        if (f.exists())
+            break;
 
-            f = f.getParentDirectory();
-        }
-
-        return statfs (f.getFullPathName().toUTF8(), &result) == 0;
+        f = f.getParentDirectory();
     }
+
+    return statfs (f.getFullPathName().toUTF8(), &result) == 0;
+}
 
 #if JUCE_MAC || JUCE_IOS
-    static int64 getCreationTime (const juce_statStruct& s) noexcept
-    {
-        return (int64) s.st_birthtime;
-    }
+static int64 getCreationTime (const juce_statStruct& s) noexcept
+{
+    return (int64) s.st_birthtime;
+}
 #else
-    static int64 getCreationTime (const juce_statStruct& s) noexcept
-    {
-        return (int64) s.st_ctime;
-    }
+static int64 getCreationTime (const juce_statStruct& s) noexcept
+{
+    return (int64) s.st_ctime;
+}
 #endif
 
-    void updateStatInfoForFile (const String& path, bool* isDir, int64* fileSize, Time* modTime, Time* creationTime, bool* isReadOnly)
+void updateStatInfoForFile (const String& path, bool* isDir, int64* fileSize, Time* modTime, Time* creationTime, bool* isReadOnly)
+{
+    if (isDir != nullptr || fileSize != nullptr || modTime != nullptr || creationTime != nullptr)
     {
-        if (isDir != nullptr || fileSize != nullptr || modTime != nullptr || creationTime != nullptr)
-        {
-            juce_statStruct info;
-            const bool statOk = juce_stat (path, info);
+        juce_statStruct info;
+        const bool statOk = juce_stat (path, info);
 
-            if (isDir != nullptr)
-                *isDir = statOk && ((info.st_mode & S_IFDIR) != 0);
-            if (fileSize != nullptr)
-                *fileSize = statOk ? (int64) info.st_size : 0;
-            if (modTime != nullptr)
-                *modTime = Time (statOk ? (int64) info.st_mtime * 1000 : 0);
-            if (creationTime != nullptr)
-                *creationTime = Time (statOk ? getCreationTime (info) * 1000 : 0);
-        }
-
-        if (isReadOnly != nullptr)
-            *isReadOnly = access (path.toUTF8(), W_OK) != 0;
+        if (isDir != nullptr)
+            *isDir = statOk && ((info.st_mode & S_IFDIR) != 0);
+        if (fileSize != nullptr)
+            *fileSize = statOk ? (int64) info.st_size : 0;
+        if (modTime != nullptr)
+            *modTime = Time (statOk ? (int64) info.st_mtime * 1000 : 0);
+        if (creationTime != nullptr)
+            *creationTime = Time (statOk ? getCreationTime (info) * 1000 : 0);
     }
+
+    if (isReadOnly != nullptr)
+        *isReadOnly = access (path.toUTF8(), W_OK) != 0;
+}
 #endif
 
-    Result getResultForErrno()
-    {
-        return Result::fail (String (strerror (errno)));
-    }
+Result getResultForErrno()
+{
+    return Result::fail (String (strerror (errno)));
+}
 
-    Result getResultForReturnValue (int value)
-    {
-        return value == -1 ? getResultForErrno() : Result::ok();
-    }
+Result getResultForReturnValue (int value)
+{
+    return value == -1 ? getResultForErrno() : Result::ok();
+}
 
-    int getFD (void* handle) noexcept { return (int) (pointer_sized_int) handle; }
+int getFD (void* handle) noexcept { return (int) (pointer_sized_int) handle; }
 
-    void* fdToVoidPointer (int fd) noexcept { return (void*) (pointer_sized_int) fd; }
+void* fdToVoidPointer (int fd) noexcept { return (void*) (pointer_sized_int) fd; }
 } // namespace
 
 bool File::isDirectory() const
@@ -1167,7 +1167,7 @@ void* DynamicLibrary::getFunction (const String& functionName) noexcept
     return handle != nullptr ? dlsym (handle, functionName.toUTF8()) : nullptr;
 }
 
-    //==============================================================================
+//==============================================================================
 #if JUCE_LINUX || JUCE_ANDROID
 static String readPosixConfigFileValue (const char* file, const char* key)
 {

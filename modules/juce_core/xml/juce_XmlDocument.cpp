@@ -94,21 +94,21 @@ void XmlDocument::setEmptyTextElementsIgnored (bool shouldBeIgnored) noexcept
 
 namespace XmlIdentifierChars
 {
-    static bool isIdentifierCharSlow (juce_wchar c) noexcept
-    {
-        return CharacterFunctions::isLetterOrDigit (c)
-            || c == '_' || c == '-' || c == ':' || c == '.';
-    }
+static bool isIdentifierCharSlow (juce_wchar c) noexcept
+{
+    return CharacterFunctions::isLetterOrDigit (c)
+        || c == '_' || c == '-' || c == ':' || c == '.';
+}
 
-    static bool isIdentifierChar (juce_wchar c) noexcept
-    {
-        static const uint32 legalChars[] = { 0, 0x7ff6000, 0x87fffffe, 0x7fffffe, 0 };
+static bool isIdentifierChar (juce_wchar c) noexcept
+{
+    static const uint32 legalChars[] = { 0, 0x7ff6000, 0x87fffffe, 0x7fffffe, 0 };
 
-        return ((int) c < (int) numElementsInArray (legalChars) * 32) ? ((legalChars[c >> 5] & (uint32) (1 << (c & 31))) != 0)
-                                                                      : isIdentifierCharSlow (c);
-    }
+    return ((int) c < (int) numElementsInArray (legalChars) * 32) ? ((legalChars[c >> 5] & (uint32) (1 << (c & 31))) != 0)
+                                                                  : isIdentifierCharSlow (c);
+}
 
-    /*static void generateIdentifierCharConstants()
+/*static void generateIdentifierCharConstants()
     {
         uint32 n[8] = { 0 };
         for (int i = 0; i < 256; ++i)
@@ -122,13 +122,13 @@ namespace XmlIdentifierChars
         DBG (s);
     }*/
 
-    static String::CharPointerType findEndOfToken (String::CharPointerType p) noexcept
-    {
-        while (isIdentifierChar (*p))
-            ++p;
+static String::CharPointerType findEndOfToken (String::CharPointerType p) noexcept
+{
+    while (isIdentifierChar (*p))
+        ++p;
 
-        return p;
-    }
+    return p;
+}
 } // namespace XmlIdentifierChars
 
 std::unique_ptr<XmlElement> XmlDocument::getDocumentElement (const bool onlyReadOuterDocumentElement)

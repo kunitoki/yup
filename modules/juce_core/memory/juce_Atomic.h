@@ -43,17 +43,17 @@ namespace juce
 #ifndef DOXYGEN
 namespace AtomicHelpers
 {
-    template <typename T>
-    struct DiffTypeHelper
-    {
-        using Type = T;
-    };
+template <typename T>
+struct DiffTypeHelper
+{
+    using Type = T;
+};
 
-    template <typename T>
-    struct DiffTypeHelper<T*>
-    {
-        using Type = std::ptrdiff_t;
-    };
+template <typename T>
+struct DiffTypeHelper<T*>
+{
+    using Type = std::ptrdiff_t;
+};
 } // namespace AtomicHelpers
 #endif
 

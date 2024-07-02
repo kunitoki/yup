@@ -42,173 +42,173 @@ namespace juce
 
 namespace TimeHelpers
 {
-    static std::tm millisToLocal (int64 millis) noexcept
-    {
+static std::tm millisToLocal (int64 millis) noexcept
+{
 #if JUCE_WINDOWS && JUCE_MINGW
-        auto now = (time_t) (millis / 1000);
-        return *localtime (&now);
+    auto now = (time_t) (millis / 1000);
+    return *localtime (&now);
 
 #elif JUCE_WINDOWS
-        std::tm result;
-        millis /= 1000;
+    std::tm result;
+    millis /= 1000;
 
-        if (_localtime64_s (&result, &millis) != 0)
-            zerostruct (result);
+    if (_localtime64_s (&result, &millis) != 0)
+        zerostruct (result);
 
-        return result;
+    return result;
 
 #else
-        std::tm result;
-        auto now = (time_t) (millis / 1000);
+    std::tm result;
+    auto now = (time_t) (millis / 1000);
 
-        if (localtime_r (&now, &result) == nullptr)
-            zerostruct (result);
+    if (localtime_r (&now, &result) == nullptr)
+        zerostruct (result);
 
-        return result;
+    return result;
 #endif
-    }
+}
 
-    static std::tm millisToUTC (int64 millis) noexcept
-    {
+static std::tm millisToUTC (int64 millis) noexcept
+{
 #if JUCE_WINDOWS && JUCE_MINGW
-        auto now = (time_t) (millis / 1000);
-        return *gmtime (&now);
+    auto now = (time_t) (millis / 1000);
+    return *gmtime (&now);
 
 #elif JUCE_WINDOWS
-        std::tm result;
-        millis /= 1000;
+    std::tm result;
+    millis /= 1000;
 
-        if (_gmtime64_s (&result, &millis) != 0)
-            zerostruct (result);
+    if (_gmtime64_s (&result, &millis) != 0)
+        zerostruct (result);
 
-        return result;
+    return result;
 
 #else
-        std::tm result;
-        auto now = (time_t) (millis / 1000);
+    std::tm result;
+    auto now = (time_t) (millis / 1000);
 
-        if (gmtime_r (&now, &result) == nullptr)
-            zerostruct (result);
+    if (gmtime_r (&now, &result) == nullptr)
+        zerostruct (result);
 
-        return result;
+    return result;
 #endif
-    }
+}
 
-    static int getUTCOffsetSeconds (const int64 millis) noexcept
-    {
-        auto utc = millisToUTC (millis);
-        utc.tm_isdst = -1; // Treat this UTC time as local to find the offset
+static int getUTCOffsetSeconds (const int64 millis) noexcept
+{
+    auto utc = millisToUTC (millis);
+    utc.tm_isdst = -1; // Treat this UTC time as local to find the offset
 
-        return (int) ((millis / 1000) - (int64) mktime (&utc));
-    }
+    return (int) ((millis / 1000) - (int64) mktime (&utc));
+}
 
-    static int extendedModulo (const int64 value, const int modulo) noexcept
-    {
-        return (int) (value >= 0 ? (value % modulo)
-                                 : (value - ((value / modulo) + 1) * modulo));
-    }
+static int extendedModulo (const int64 value, const int modulo) noexcept
+{
+    return (int) (value >= 0 ? (value % modulo)
+                             : (value - ((value / modulo) + 1) * modulo));
+}
 
-    static String formatString (const String& format, const std::tm* const tm)
-    {
+static String formatString (const String& format, const std::tm* const tm)
+{
 #if JUCE_ANDROID
-        using StringType = CharPointer_UTF8;
+    using StringType = CharPointer_UTF8;
 #elif JUCE_WINDOWS
-        using StringType = CharPointer_UTF16;
+    using StringType = CharPointer_UTF16;
 #else
-        using StringType = CharPointer_UTF32;
+    using StringType = CharPointer_UTF32;
 #endif
 
 #ifdef JUCE_MSVC
-        if (tm->tm_year < -1900 || tm->tm_year > 8099)
-            return {}; // Visual Studio's library can only handle 0 -> 9999 AD
+    if (tm->tm_year < -1900 || tm->tm_year > 8099)
+        return {}; // Visual Studio's library can only handle 0 -> 9999 AD
 #endif
 
-        for (size_t bufferSize = 256;; bufferSize += 256)
-        {
-            HeapBlock<StringType::CharType> buffer (bufferSize);
+    for (size_t bufferSize = 256;; bufferSize += 256)
+    {
+        HeapBlock<StringType::CharType> buffer (bufferSize);
 
-            auto numChars =
+        auto numChars =
 #if JUCE_ANDROID
-                strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
+            strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
 #elif JUCE_WINDOWS
-                wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
+            wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
 #else
-                wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
+            wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
 #endif
 
-            if (numChars > 0 || format.isEmpty())
-                return String (StringType (buffer),
-                               StringType (buffer) + (int) numChars);
-        }
+        if (numChars > 0 || format.isEmpty())
+            return String (StringType (buffer),
+                           StringType (buffer) + (int) numChars);
     }
+}
 
-    //==============================================================================
-    static bool isLeapYear (int year) noexcept
+//==============================================================================
+static bool isLeapYear (int year) noexcept
+{
+    return (year % 400 == 0) || ((year % 100 != 0) && (year % 4 == 0));
+}
+
+static int daysFromJan1 (int year, int month) noexcept
+{
+    const short dayOfYear[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 };
+
+    return dayOfYear[(isLeapYear (year) ? 12 : 0) + month];
+}
+
+static int64 daysFromYear0 (int year) noexcept
+{
+    --year;
+    return 365 * year + (year / 400) - (year / 100) + (year / 4);
+}
+
+static int64 daysFrom1970 (int year) noexcept
+{
+    return daysFromYear0 (year) - daysFromYear0 (1970);
+}
+
+static int64 daysFrom1970 (int year, int month) noexcept
+{
+    if (month > 11)
     {
-        return (year % 400 == 0) || ((year % 100 != 0) && (year % 4 == 0));
+        year += month / 12;
+        month %= 12;
     }
-
-    static int daysFromJan1 (int year, int month) noexcept
+    else if (month < 0)
     {
-        const short dayOfYear[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 };
-
-        return dayOfYear[(isLeapYear (year) ? 12 : 0) + month];
+        auto numYears = (11 - month) / 12;
+        year -= numYears;
+        month += 12 * numYears;
     }
 
-    static int64 daysFromYear0 (int year) noexcept
+    return daysFrom1970 (year) + daysFromJan1 (year, month);
+}
+
+// There's no posix function that does a UTC version of mktime,
+// so annoyingly we need to implement this manually..
+static int64 mktime_utc (const std::tm& t) noexcept
+{
+    return 24 * 3600 * (daysFrom1970 (t.tm_year + 1900, t.tm_mon) + (t.tm_mday - 1))
+         + 3600 * t.tm_hour
+         + 60 * t.tm_min
+         + t.tm_sec;
+}
+
+static Atomic<uint32> lastMSCounterValue { (uint32) 0 };
+
+static String getUTCOffsetString (int utcOffsetSeconds, bool includeSemiColon)
+{
+    if (const auto seconds = utcOffsetSeconds)
     {
-        --year;
-        return 365 * year + (year / 400) - (year / 100) + (year / 4);
+        auto minutes = seconds / 60;
+
+        return String::formatted (includeSemiColon ? "%+03d:%02d"
+                                                   : "%+03d%02d",
+                                  minutes / 60,
+                                  abs (minutes) % 60);
     }
 
-    static int64 daysFrom1970 (int year) noexcept
-    {
-        return daysFromYear0 (year) - daysFromYear0 (1970);
-    }
-
-    static int64 daysFrom1970 (int year, int month) noexcept
-    {
-        if (month > 11)
-        {
-            year += month / 12;
-            month %= 12;
-        }
-        else if (month < 0)
-        {
-            auto numYears = (11 - month) / 12;
-            year -= numYears;
-            month += 12 * numYears;
-        }
-
-        return daysFrom1970 (year) + daysFromJan1 (year, month);
-    }
-
-    // There's no posix function that does a UTC version of mktime,
-    // so annoyingly we need to implement this manually..
-    static int64 mktime_utc (const std::tm& t) noexcept
-    {
-        return 24 * 3600 * (daysFrom1970 (t.tm_year + 1900, t.tm_mon) + (t.tm_mday - 1))
-             + 3600 * t.tm_hour
-             + 60 * t.tm_min
-             + t.tm_sec;
-    }
-
-    static Atomic<uint32> lastMSCounterValue { (uint32) 0 };
-
-    static String getUTCOffsetString (int utcOffsetSeconds, bool includeSemiColon)
-    {
-        if (const auto seconds = utcOffsetSeconds)
-        {
-            auto minutes = seconds / 60;
-
-            return String::formatted (includeSemiColon ? "%+03d:%02d"
-                                                       : "%+03d%02d",
-                                      minutes / 60,
-                                      abs (minutes) % 60);
-        }
-
-        return "Z";
-    }
+    return "Z";
+}
 } // namespace TimeHelpers
 
 //==============================================================================

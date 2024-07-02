@@ -161,27 +161,27 @@ struct FloatVectorOperationsBase
 namespace detail
 {
 
-    template <typename... Bases>
-    struct NameForwarder : public Bases...
-    {
-        using Bases::clear...,
-            Bases::fill...,
-            Bases::copy...,
-            Bases::copyWithMultiply...,
-            Bases::add...,
-            Bases::subtract...,
-            Bases::addWithMultiply...,
-            Bases::subtractWithMultiply...,
-            Bases::multiply...,
-            Bases::negate...,
-            Bases::abs...,
-            Bases::min...,
-            Bases::max...,
-            Bases::clip...,
-            Bases::findMinAndMax...,
-            Bases::findMinimum...,
-            Bases::findMaximum...;
-    };
+template <typename... Bases>
+struct NameForwarder : public Bases...
+{
+    using Bases::clear...,
+        Bases::fill...,
+        Bases::copy...,
+        Bases::copyWithMultiply...,
+        Bases::add...,
+        Bases::subtract...,
+        Bases::addWithMultiply...,
+        Bases::subtractWithMultiply...,
+        Bases::multiply...,
+        Bases::negate...,
+        Bases::abs...,
+        Bases::min...,
+        Bases::max...,
+        Bases::clip...,
+        Bases::findMinAndMax...,
+        Bases::findMinimum...,
+        Bases::findMaximum...;
+};
 
 } // namespace detail
 #endif

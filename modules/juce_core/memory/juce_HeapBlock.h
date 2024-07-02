@@ -43,21 +43,21 @@ namespace juce
 #if ! (DOXYGEN || JUCE_EXCEPTIONS_DISABLED)
 namespace HeapBlockHelper
 {
-    template <bool shouldThrow>
-    struct ThrowOnFail
-    {
-        static void checkPointer (void*) {}
-    };
+template <bool shouldThrow>
+struct ThrowOnFail
+{
+    static void checkPointer (void*) {}
+};
 
-    template <>
-    struct ThrowOnFail<true>
+template <>
+struct ThrowOnFail<true>
+{
+    static void checkPointer (void* data)
     {
-        static void checkPointer (void* data)
-        {
-            if (data == nullptr)
-                throw std::bad_alloc();
-        }
-    };
+        if (data == nullptr)
+            throw std::bad_alloc();
+    }
+};
 } // namespace HeapBlockHelper
 #endif
 

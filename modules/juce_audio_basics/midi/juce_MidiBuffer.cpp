@@ -42,58 +42,58 @@ namespace juce
 
 namespace MidiBufferHelpers
 {
-    inline int getEventTime (const void* d) noexcept
+inline int getEventTime (const void* d) noexcept
+{
+    return readUnaligned<int32> (d);
+}
+
+inline uint16 getEventDataSize (const void* d) noexcept
+{
+    return readUnaligned<uint16> (static_cast<const char*> (d) + sizeof (int32));
+}
+
+inline uint16 getEventTotalSize (const void* d) noexcept
+{
+    return (uint16) (getEventDataSize (d) + sizeof (int32) + sizeof (uint16));
+}
+
+static int findActualEventLength (const uint8* data, int maxBytes) noexcept
+{
+    auto byte = (unsigned int) *data;
+
+    if (byte == 0xf0 || byte == 0xf7)
     {
-        return readUnaligned<int32> (d);
+        int i = 1;
+
+        while (i < maxBytes)
+            if (data[i++] == 0xf7)
+                break;
+
+        return i;
     }
 
-    inline uint16 getEventDataSize (const void* d) noexcept
+    if (byte == 0xff)
     {
-        return readUnaligned<uint16> (static_cast<const char*> (d) + sizeof (int32));
+        if (maxBytes == 1)
+            return 1;
+
+        const auto var = MidiMessage::readVariableLengthValue (data + 1, maxBytes - 1);
+        return jmin (maxBytes, var.value + 2 + var.bytesUsed);
     }
 
-    inline uint16 getEventTotalSize (const void* d) noexcept
-    {
-        return (uint16) (getEventDataSize (d) + sizeof (int32) + sizeof (uint16));
-    }
+    if (byte >= 0x80)
+        return jmin (maxBytes, MidiMessage::getMessageLengthFromFirstByte ((uint8) byte));
 
-    static int findActualEventLength (const uint8* data, int maxBytes) noexcept
-    {
-        auto byte = (unsigned int) *data;
+    return 0;
+}
 
-        if (byte == 0xf0 || byte == 0xf7)
-        {
-            int i = 1;
+static uint8* findEventAfter (uint8* d, uint8* endData, int samplePosition) noexcept
+{
+    while (d < endData && getEventTime (d) <= samplePosition)
+        d += getEventTotalSize (d);
 
-            while (i < maxBytes)
-                if (data[i++] == 0xf7)
-                    break;
-
-            return i;
-        }
-
-        if (byte == 0xff)
-        {
-            if (maxBytes == 1)
-                return 1;
-
-            const auto var = MidiMessage::readVariableLengthValue (data + 1, maxBytes - 1);
-            return jmin (maxBytes, var.value + 2 + var.bytesUsed);
-        }
-
-        if (byte >= 0x80)
-            return jmin (maxBytes, MidiMessage::getMessageLengthFromFirstByte ((uint8) byte));
-
-        return 0;
-    }
-
-    static uint8* findEventAfter (uint8* d, uint8* endData, int samplePosition) noexcept
-    {
-        while (d < endData && getEventTime (d) <= samplePosition)
-            d += getEventTotalSize (d);
-
-        return d;
-    }
+    return d;
+}
 } // namespace MidiBufferHelpers
 
 //==============================================================================

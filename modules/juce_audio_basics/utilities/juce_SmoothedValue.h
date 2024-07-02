@@ -195,23 +195,23 @@ protected:
 */
 namespace ValueSmoothingTypes
 {
-    /**
+/**
         Used to indicate a linear smoothing between values.
 
         @tags{Audio}
     */
-    struct Linear
-    {
-    };
+struct Linear
+{
+};
 
-    /**
+/**
         Used to indicate a smoothing between multiplicative values.
 
         @tags{Audio}
     */
-    struct Multiplicative
-    {
-    };
+struct Multiplicative
+{
+};
 } // namespace ValueSmoothingTypes
 
 //==============================================================================

@@ -216,7 +216,7 @@ private:
 
 //==============================================================================
 #ifndef TRANS
-    /** Uses the LocalisedStrings class to translate the given string literal.
+/** Uses the LocalisedStrings class to translate the given string literal.
      This macro is provided for backwards-compatibility, and just calls the translate()
      function. In new code, it's recommended that you just call translate() directly
      instead, and avoid using macros.

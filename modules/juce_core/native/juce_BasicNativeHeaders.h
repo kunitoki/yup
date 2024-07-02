@@ -186,7 +186,7 @@
 #endif
 #endif
 
-    /* Used with DynamicLibrary to simplify importing functions from a win32 DLL.
+/* Used with DynamicLibrary to simplify importing functions from a win32 DLL.
 
     dll: the DynamicLibrary object
     functionName: function to import
@@ -290,8 +290,8 @@ type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFun
 #include <android/api-level.h>
 #include <poll.h>
 
-    // If you are getting include errors here, then you need to re-build
-    // the Projucer and re-save your .jucer file.
+// If you are getting include errors here, then you need to re-build
+// the Projucer and re-save your .jucer file.
 #include <cpu-features.h>
 #endif
 

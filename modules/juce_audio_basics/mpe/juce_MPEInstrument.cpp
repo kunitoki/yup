@@ -42,14 +42,14 @@ namespace juce
 
 namespace
 {
-    const uint8 noLSBValueReceived = 0xff;
-    const Range<int> allChannels { 1, 17 };
+const uint8 noLSBValueReceived = 0xff;
+const Range<int> allChannels { 1, 17 };
 
-    template <typename Range, typename Value>
-    void mpeInstrumentFill (Range& range, const Value& value)
-    {
-        std::fill (std::begin (range), std::end (range), value);
-    }
+template <typename Range, typename Value>
+void mpeInstrumentFill (Range& range, const Value& value)
+{
+    std::fill (std::begin (range), std::end (range), value);
+}
 } // namespace
 
 //==============================================================================

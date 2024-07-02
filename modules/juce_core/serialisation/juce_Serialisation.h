@@ -431,197 +431,197 @@ struct SerialisationTraits<std::array<Element, N>>
 */
 namespace detail
 {
-    struct DummyArchive
-    {
-        template <typename... Ts>
-        bool operator() (Ts&&...);
+struct DummyArchive
+{
+    template <typename... Ts>
+    bool operator() (Ts&&...);
 
-        std::optional<int> getVersion() const { return {}; }
-    };
+    std::optional<int> getVersion() const { return {}; }
+};
 
-    template <typename T, typename = void>
-    constexpr auto hasInternalVersion = false;
+template <typename T, typename = void>
+constexpr auto hasInternalVersion = false;
 
-    template <typename T>
-    constexpr auto hasInternalVersion<T, std::void_t<decltype (T::marshallingVersion)>> = true;
+template <typename T>
+constexpr auto hasInternalVersion<T, std::void_t<decltype (T::marshallingVersion)>> = true;
 
-    template <typename Traits, typename T, typename = void>
-    constexpr auto hasInternalSerialise = false;
+template <typename Traits, typename T, typename = void>
+constexpr auto hasInternalSerialise = false;
 
-    template <typename Traits, typename T>
-    constexpr auto hasInternalSerialise<Traits, T, std::void_t<decltype (Traits::serialise (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
+template <typename Traits, typename T>
+constexpr auto hasInternalSerialise<Traits, T, std::void_t<decltype (Traits::serialise (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
 
-    template <typename Traits, typename T, typename = void>
-    constexpr auto hasInternalLoad = false;
+template <typename Traits, typename T, typename = void>
+constexpr auto hasInternalLoad = false;
 
-    template <typename Traits, typename T>
-    constexpr auto hasInternalLoad<Traits, T, std::void_t<decltype (Traits::load (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
+template <typename Traits, typename T>
+constexpr auto hasInternalLoad<Traits, T, std::void_t<decltype (Traits::load (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
 
-    template <typename Traits, typename T, typename = void>
-    constexpr auto hasInternalSave = false;
+template <typename Traits, typename T, typename = void>
+constexpr auto hasInternalSave = false;
 
-    template <typename Traits, typename T>
-    constexpr auto hasInternalSave<Traits, T, std::void_t<decltype (Traits::save (std::declval<DummyArchive&>(), std::declval<const T&>()))>> = true;
+template <typename Traits, typename T>
+constexpr auto hasInternalSave<Traits, T, std::void_t<decltype (Traits::save (std::declval<DummyArchive&>(), std::declval<const T&>()))>> = true;
 
-    template <typename T>
-    struct SerialisedTypeTrait
-    {
-        using type = T;
-    };
+template <typename T>
+struct SerialisedTypeTrait
+{
+    using type = T;
+};
 
-    template <typename T>
-    struct SerialisedTypeTrait<SerialisationTraits<T>>
-    {
-        using type = T;
-    };
+template <typename T>
+struct SerialisedTypeTrait<SerialisationTraits<T>>
+{
+    using type = T;
+};
 
-    template <typename T>
-    using SerialisedType = typename SerialisedTypeTrait<T>::type;
+template <typename T>
+using SerialisedType = typename SerialisedTypeTrait<T>::type;
 
-    template <typename T>
-    constexpr auto hasSerialisation = hasInternalVersion<SerialisedType<T>> || hasInternalSerialise<T, SerialisedType<T>> || hasInternalLoad<T, SerialisedType<T>> || hasInternalSave<T, SerialisedType<T>>;
+template <typename T>
+constexpr auto hasSerialisation = hasInternalVersion<SerialisedType<T>> || hasInternalSerialise<T, SerialisedType<T>> || hasInternalLoad<T, SerialisedType<T>> || hasInternalSave<T, SerialisedType<T>>;
 
-    /*  Different kinds of serialisation function. */
-    enum class SerialisationKind
-    {
-        none,      // The type doesn't have any serialisation
-        primitive, // The type has serialisation handling defined directly on the archiver. enums will be converted to equivalent integral values
-        internal,  // The type has internally-defined serialisation utilities
-        external,  // The type has an external specialisation of SerialisationTraits
-    };
+/*  Different kinds of serialisation function. */
+enum class SerialisationKind
+{
+    none,      // The type doesn't have any serialisation
+    primitive, // The type has serialisation handling defined directly on the archiver. enums will be converted to equivalent integral values
+    internal,  // The type has internally-defined serialisation utilities
+    external,  // The type has an external specialisation of SerialisationTraits
+};
 
-    /*  The SerialisationKind to use for the type T.
+/*  The SerialisationKind to use for the type T.
 
         Primitive serialisation is used for arithmetic types, enums, Strings, and vars.
         Internal serialisation is used for types that declare an internal marshallingVersion,
         serialise(), load(), or save().
         External serialisation is used in all other cases.
     */
-    template <typename T>
-    constexpr auto serialisationKind = []
+template <typename T>
+constexpr auto serialisationKind = []
+{
+    if constexpr (std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, String> || std::is_same_v<T, var>)
+        return SerialisationKind::primitive;
+    else if constexpr (hasSerialisation<T>)
+        return SerialisationKind::internal;
+    else if constexpr (hasSerialisation<SerialisationTraits<T>>)
+        return SerialisationKind::external;
+    else
+        return SerialisationKind::none;
+}();
+
+/*  This trait defines the serialisation utilities that are used for primitive types. */
+template <typename T, SerialisationKind kind = serialisationKind<T>>
+struct ForwardingSerialisationTraits
+{
+    static constexpr auto marshallingVersion = std::nullopt;
+
+    template <typename Archive, typename Primitive>
+    static auto load (Archive& archive, Primitive& t)
     {
-        if constexpr (std::is_arithmetic_v<T> || std::is_enum_v<T> || std::is_same_v<T, String> || std::is_same_v<T, var>)
-            return SerialisationKind::primitive;
-        else if constexpr (hasSerialisation<T>)
-            return SerialisationKind::internal;
-        else if constexpr (hasSerialisation<SerialisationTraits<T>>)
-            return SerialisationKind::external;
+        if constexpr (std::is_enum_v<Primitive>)
+            return archive (*reinterpret_cast<std::underlying_type_t<Primitive>*> (&t));
         else
-            return SerialisationKind::none;
-    }();
+            return archive (t);
+    }
 
-    /*  This trait defines the serialisation utilities that are used for primitive types. */
-    template <typename T, SerialisationKind kind = serialisationKind<T>>
-    struct ForwardingSerialisationTraits
+    template <typename Archive, typename Primitive>
+    static auto save (Archive& archive, const Primitive& t)
     {
-        static constexpr auto marshallingVersion = std::nullopt;
+        if constexpr (std::is_enum_v<Primitive>)
+            return archive (*reinterpret_cast<const std::underlying_type_t<Primitive>*> (&t));
+        else
+            return archive (t);
+    }
+};
 
-        template <typename Archive, typename Primitive>
-        static auto load (Archive& archive, Primitive& t)
-        {
-            if constexpr (std::is_enum_v<Primitive>)
-                return archive (*reinterpret_cast<std::underlying_type_t<Primitive>*> (&t));
-            else
-                return archive (t);
-        }
-
-        template <typename Archive, typename Primitive>
-        static auto save (Archive& archive, const Primitive& t)
-        {
-            if constexpr (std::is_enum_v<Primitive>)
-                return archive (*reinterpret_cast<const std::underlying_type_t<Primitive>*> (&t));
-            else
-                return archive (t);
-        }
-    };
-
-    /*  This specialisation will be used for types with internal serialisation.
+/*  This specialisation will be used for types with internal serialisation.
 
         All members of ForwardingSerialisationTraits forward to the corresponding member of T.
     */
-    template <typename T>
-    struct ForwardingSerialisationTraits<T, SerialisationKind::internal>
+template <typename T>
+struct ForwardingSerialisationTraits<T, SerialisationKind::internal>
+{
+    static constexpr std::optional<int> marshallingVersion { T::marshallingVersion };
+
+    template <typename Archive, typename Item>
+    static auto serialise (Archive& archive, Item& t) -> decltype (Item::serialise (archive, t))
     {
-        static constexpr std::optional<int> marshallingVersion { T::marshallingVersion };
+        return Item::serialise (archive, t);
+    }
 
-        template <typename Archive, typename Item>
-        static auto serialise (Archive& archive, Item& t) -> decltype (Item::serialise (archive, t))
-        {
-            return Item::serialise (archive, t);
-        }
+    template <typename Archive, typename Item>
+    static auto load (Archive& archive, Item& t) -> decltype (Item::load (archive, t))
+    {
+        return Item::load (archive, t);
+    }
 
-        template <typename Archive, typename Item>
-        static auto load (Archive& archive, Item& t) -> decltype (Item::load (archive, t))
-        {
-            return Item::load (archive, t);
-        }
+    template <typename Archive, typename Item>
+    static auto save (Archive& archive, const Item& t) -> decltype (Item::save (archive, t))
+    {
+        return Item::save (archive, t);
+    }
+};
 
-        template <typename Archive, typename Item>
-        static auto save (Archive& archive, const Item& t) -> decltype (Item::save (archive, t))
-        {
-            return Item::save (archive, t);
-        }
-    };
-
-    /*  This specialisation will be used for types with external serialisation.
+/*  This specialisation will be used for types with external serialisation.
 
         @see SerialisationTraits
     */
-    template <typename T>
-    struct ForwardingSerialisationTraits<T, SerialisationKind::external> : SerialisationTraits<T>
-    {
-    };
+template <typename T>
+struct ForwardingSerialisationTraits<T, SerialisationKind::external> : SerialisationTraits<T>
+{
+};
 
-    template <typename T, typename = void>
-    constexpr auto hasSerialise = false;
+template <typename T, typename = void>
+constexpr auto hasSerialise = false;
 
-    template <typename T>
-    constexpr auto hasSerialise<T, std::void_t<decltype (ForwardingSerialisationTraits<T>::serialise (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
+template <typename T>
+constexpr auto hasSerialise<T, std::void_t<decltype (ForwardingSerialisationTraits<T>::serialise (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
 
-    template <typename T, typename = void>
-    constexpr auto hasLoad = false;
+template <typename T, typename = void>
+constexpr auto hasLoad = false;
 
-    template <typename T>
-    constexpr auto hasLoad<T, std::void_t<decltype (ForwardingSerialisationTraits<T>::load (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
+template <typename T>
+constexpr auto hasLoad<T, std::void_t<decltype (ForwardingSerialisationTraits<T>::load (std::declval<DummyArchive&>(), std::declval<T&>()))>> = true;
 
-    template <typename T, typename = void>
-    constexpr auto hasSave = false;
+template <typename T, typename = void>
+constexpr auto hasSave = false;
 
-    template <typename T>
-    constexpr auto hasSave<T, std::void_t<decltype (ForwardingSerialisationTraits<T>::save (std::declval<DummyArchive&>(), std::declval<const T&>()))>> = true;
+template <typename T>
+constexpr auto hasSave<T, std::void_t<decltype (ForwardingSerialisationTraits<T>::save (std::declval<DummyArchive&>(), std::declval<const T&>()))>> = true;
 
-    template <typename T>
-    constexpr auto delayStaticAssert = false;
+template <typename T>
+constexpr auto delayStaticAssert = false;
 
-    /*  Calls the correct function (serialise or save) to save the argument t to the archive.
+/*  Calls the correct function (serialise or save) to save the argument t to the archive.
     */
-    template <typename Archive, typename T>
-    auto doSave (Archive& archive, const T& t)
-    {
-        if constexpr (serialisationKind<T> == SerialisationKind::none)
-            static_assert (delayStaticAssert<T>, "No serialisation function found or marshallingVersion unset");
-        else if constexpr (hasSerialise<T> && ! hasSave<T>)
-            return ForwardingSerialisationTraits<T>::serialise (archive, t);
-        else if constexpr (! hasSerialise<T> && hasSave<T>)
-            return ForwardingSerialisationTraits<T>::save (archive, t);
-        else
-            static_assert (delayStaticAssert<T>, "Multiple serialisation functions found");
-    }
+template <typename Archive, typename T>
+auto doSave (Archive& archive, const T& t)
+{
+    if constexpr (serialisationKind<T> == SerialisationKind::none)
+        static_assert (delayStaticAssert<T>, "No serialisation function found or marshallingVersion unset");
+    else if constexpr (hasSerialise<T> && ! hasSave<T>)
+        return ForwardingSerialisationTraits<T>::serialise (archive, t);
+    else if constexpr (! hasSerialise<T> && hasSave<T>)
+        return ForwardingSerialisationTraits<T>::save (archive, t);
+    else
+        static_assert (delayStaticAssert<T>, "Multiple serialisation functions found");
+}
 
-    /*  Calls the correct function (serialise or load) to load the argument t from the archive.
+/*  Calls the correct function (serialise or load) to load the argument t from the archive.
     */
-    template <typename Archive, typename T>
-    auto doLoad (Archive& archive, T& t)
-    {
-        if constexpr (serialisationKind<T> == SerialisationKind::none)
-            static_assert (delayStaticAssert<T>, "No serialisation function found or marshallingVersion unset");
-        else if constexpr (hasSerialise<T> && ! hasLoad<T>)
-            return ForwardingSerialisationTraits<T>::serialise (archive, t);
-        else if constexpr (! hasSerialise<T> && hasLoad<T>)
-            return ForwardingSerialisationTraits<T>::load (archive, t);
-        else
-            static_assert (delayStaticAssert<T>, "Multiple serialisation functions found");
-    }
+template <typename Archive, typename T>
+auto doLoad (Archive& archive, T& t)
+{
+    if constexpr (serialisationKind<T> == SerialisationKind::none)
+        static_assert (delayStaticAssert<T>, "No serialisation function found or marshallingVersion unset");
+    else if constexpr (hasSerialise<T> && ! hasLoad<T>)
+        return ForwardingSerialisationTraits<T>::serialise (archive, t);
+    else if constexpr (! hasSerialise<T> && hasLoad<T>)
+        return ForwardingSerialisationTraits<T>::load (archive, t);
+    else
+        static_assert (delayStaticAssert<T>, "Multiple serialisation functions found");
+}
 } // namespace detail
 
 #endif

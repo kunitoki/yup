@@ -47,235 +47,235 @@ namespace juce
 //==============================================================================
 namespace WindowsFileHelpers
 {
-    //==============================================================================
+//==============================================================================
 #if JUCE_WINDOWS
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnested-anon-types")
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnested-anon-types")
 
-    typedef struct _REPARSE_DATA_BUFFER
+typedef struct _REPARSE_DATA_BUFFER
+{
+    ULONG ReparseTag;
+    USHORT ReparseDataLength;
+    USHORT Reserved;
+
+    union
     {
-        ULONG ReparseTag;
-        USHORT ReparseDataLength;
-        USHORT Reserved;
-
-        union
+        struct
         {
-            struct
-            {
-                USHORT SubstituteNameOffset;
-                USHORT SubstituteNameLength;
-                USHORT PrintNameOffset;
-                USHORT PrintNameLength;
-                ULONG Flags;
-                WCHAR PathBuffer[1];
-            } SymbolicLinkReparseBuffer;
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            ULONG Flags;
+            WCHAR PathBuffer[1];
+        } SymbolicLinkReparseBuffer;
 
-            struct
-            {
-                USHORT SubstituteNameOffset;
-                USHORT SubstituteNameLength;
-                USHORT PrintNameOffset;
-                USHORT PrintNameLength;
-                WCHAR PathBuffer[1];
-            } MountPointReparseBuffer;
+        struct
+        {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            WCHAR PathBuffer[1];
+        } MountPointReparseBuffer;
 
-            struct
-            {
-                UCHAR DataBuffer[1];
-            } GenericReparseBuffer;
-        } DUMMYUNIONNAME;
-    } * PREPARSE_DATA_BUFFER, REPARSE_DATA_BUFFER;
+        struct
+        {
+            UCHAR DataBuffer[1];
+        } GenericReparseBuffer;
+    } DUMMYUNIONNAME;
+} * PREPARSE_DATA_BUFFER, REPARSE_DATA_BUFFER;
 
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
-    //==============================================================================
-    static DWORD getAtts (const String& path) noexcept
+//==============================================================================
+static DWORD getAtts (const String& path) noexcept
+{
+    return GetFileAttributes (path.toWideCharPointer());
+}
+
+static bool changeAtts (const String& path, DWORD bitsToSet, DWORD bitsToClear) noexcept
+{
+    auto oldAtts = getAtts (path);
+
+    if (oldAtts == INVALID_FILE_ATTRIBUTES)
+        return false;
+
+    auto newAtts = ((oldAtts | bitsToSet) & ~bitsToClear);
+
+    return newAtts == oldAtts
+        || SetFileAttributes (path.toWideCharPointer(), newAtts) != FALSE;
+}
+
+static int64 fileTimeToTime (const FILETIME* const ft) noexcept
+{
+    static_assert (sizeof (ULARGE_INTEGER) == sizeof (FILETIME),
+                   "ULARGE_INTEGER is too small to hold FILETIME: please report!");
+
+    return (int64) ((reinterpret_cast<const ULARGE_INTEGER*> (ft)->QuadPart - 116444736000000000LL) / 10000);
+}
+
+static FILETIME* timeToFileTime (const int64 time, FILETIME* const ft) noexcept
+{
+    if (time <= 0)
+        return nullptr;
+
+    reinterpret_cast<ULARGE_INTEGER*> (ft)->QuadPart = (ULONGLONG) (time * 10000 + 116444736000000000LL);
+    return ft;
+}
+
+static String getDriveFromPath (String path)
+{
+    if (path.isNotEmpty() && path[1] == ':' && path[2] == 0)
+        path << '\\';
+
+    const size_t numBytes = CharPointer_UTF16::getBytesRequiredFor (path.getCharPointer()) + 4;
+    HeapBlock<WCHAR> pathCopy;
+    pathCopy.calloc (numBytes, 1);
+    path.copyToUTF16 (pathCopy, numBytes);
+
+    if (PathStripToRoot (pathCopy))
+        path = static_cast<const WCHAR*> (pathCopy);
+
+    return path;
+}
+
+static int64 getDiskSpaceInfo (const String& path, const bool total)
+{
+    ULARGE_INTEGER spc, tot, totFree;
+
+    if (GetDiskFreeSpaceEx (getDriveFromPath (path).toWideCharPointer(), &spc, &tot, &totFree))
+        return total ? (int64) tot.QuadPart
+                     : (int64) spc.QuadPart;
+
+    return 0;
+}
+
+static unsigned int getWindowsDriveType (const String& path)
+{
+    return GetDriveType (getDriveFromPath (path).toWideCharPointer());
+}
+
+static File getSpecialFolderPath (int type)
+{
+    WCHAR path[MAX_PATH + 256];
+
+    if (SHGetSpecialFolderPath (nullptr, path, type, FALSE))
+        return File (String (path));
+
+    return {};
+}
+
+static File getModuleFileName (HINSTANCE moduleHandle)
+{
+    WCHAR dest[MAX_PATH + 256];
+    dest[0] = 0;
+    GetModuleFileName (moduleHandle, dest, (DWORD) numElementsInArray (dest));
+    return File (String (dest));
+}
+
+static Result getResultForLastError()
+{
+    TCHAR messageBuffer[256] = {};
+
+    FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                   nullptr,
+                   GetLastError(),
+                   MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
+                   messageBuffer,
+                   (DWORD) numElementsInArray (messageBuffer) - 1,
+                   nullptr);
+
+    return Result::fail (String (messageBuffer));
+}
+
+// The docs for the Windows security API aren't very clear. Some parts of the following
+// function (the flags passed to GetNamedSecurityInfo, duplicating the primary access token)
+// were guided by the example at https://blog.aaronballman.com/2011/08/how-to-check-access-rights/
+static bool hasFileAccess (const File& file, DWORD accessType)
+{
+    const auto& path = file.getFullPathName();
+
+    if (path.isEmpty())
+        return false;
+
+    struct PsecurityDescriptorGuard
     {
-        return GetFileAttributes (path.toWideCharPointer());
-    }
-
-    static bool changeAtts (const String& path, DWORD bitsToSet, DWORD bitsToClear) noexcept
-    {
-        auto oldAtts = getAtts (path);
-
-        if (oldAtts == INVALID_FILE_ATTRIBUTES)
-            return false;
-
-        auto newAtts = ((oldAtts | bitsToSet) & ~bitsToClear);
-
-        return newAtts == oldAtts
-            || SetFileAttributes (path.toWideCharPointer(), newAtts) != FALSE;
-    }
-
-    static int64 fileTimeToTime (const FILETIME* const ft) noexcept
-    {
-        static_assert (sizeof (ULARGE_INTEGER) == sizeof (FILETIME),
-                       "ULARGE_INTEGER is too small to hold FILETIME: please report!");
-
-        return (int64) ((reinterpret_cast<const ULARGE_INTEGER*> (ft)->QuadPart - 116444736000000000LL) / 10000);
-    }
-
-    static FILETIME* timeToFileTime (const int64 time, FILETIME* const ft) noexcept
-    {
-        if (time <= 0)
-            return nullptr;
-
-        reinterpret_cast<ULARGE_INTEGER*> (ft)->QuadPart = (ULONGLONG) (time * 10000 + 116444736000000000LL);
-        return ft;
-    }
-
-    static String getDriveFromPath (String path)
-    {
-        if (path.isNotEmpty() && path[1] == ':' && path[2] == 0)
-            path << '\\';
-
-        const size_t numBytes = CharPointer_UTF16::getBytesRequiredFor (path.getCharPointer()) + 4;
-        HeapBlock<WCHAR> pathCopy;
-        pathCopy.calloc (numBytes, 1);
-        path.copyToUTF16 (pathCopy, numBytes);
-
-        if (PathStripToRoot (pathCopy))
-            path = static_cast<const WCHAR*> (pathCopy);
-
-        return path;
-    }
-
-    static int64 getDiskSpaceInfo (const String& path, const bool total)
-    {
-        ULARGE_INTEGER spc, tot, totFree;
-
-        if (GetDiskFreeSpaceEx (getDriveFromPath (path).toWideCharPointer(), &spc, &tot, &totFree))
-            return total ? (int64) tot.QuadPart
-                         : (int64) spc.QuadPart;
-
-        return 0;
-    }
-
-    static unsigned int getWindowsDriveType (const String& path)
-    {
-        return GetDriveType (getDriveFromPath (path).toWideCharPointer());
-    }
-
-    static File getSpecialFolderPath (int type)
-    {
-        WCHAR path[MAX_PATH + 256];
-
-        if (SHGetSpecialFolderPath (nullptr, path, type, FALSE))
-            return File (String (path));
-
-        return {};
-    }
-
-    static File getModuleFileName (HINSTANCE moduleHandle)
-    {
-        WCHAR dest[MAX_PATH + 256];
-        dest[0] = 0;
-        GetModuleFileName (moduleHandle, dest, (DWORD) numElementsInArray (dest));
-        return File (String (dest));
-    }
-
-    static Result getResultForLastError()
-    {
-        TCHAR messageBuffer[256] = {};
-
-        FormatMessage (FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                       nullptr,
-                       GetLastError(),
-                       MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
-                       messageBuffer,
-                       (DWORD) numElementsInArray (messageBuffer) - 1,
-                       nullptr);
-
-        return Result::fail (String (messageBuffer));
-    }
-
-    // The docs for the Windows security API aren't very clear. Some parts of the following
-    // function (the flags passed to GetNamedSecurityInfo, duplicating the primary access token)
-    // were guided by the example at https://blog.aaronballman.com/2011/08/how-to-check-access-rights/
-    static bool hasFileAccess (const File& file, DWORD accessType)
-    {
-        const auto& path = file.getFullPathName();
-
-        if (path.isEmpty())
-            return false;
-
-        struct PsecurityDescriptorGuard
+        ~PsecurityDescriptorGuard()
         {
-            ~PsecurityDescriptorGuard()
-            {
-                if (psecurityDescriptor != nullptr)
-                    LocalFree (psecurityDescriptor);
-            }
-
-            PSECURITY_DESCRIPTOR psecurityDescriptor = nullptr;
-        };
-
-        PsecurityDescriptorGuard descriptorGuard;
-
-        if (GetNamedSecurityInfo (path.toWideCharPointer(),
-                                  SE_FILE_OBJECT,
-                                  OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
-                                  nullptr,
-                                  nullptr,
-                                  nullptr,
-                                  nullptr,
-                                  &descriptorGuard.psecurityDescriptor)
-            != ERROR_SUCCESS)
-        {
-            return false;
+            if (psecurityDescriptor != nullptr)
+                LocalFree (psecurityDescriptor);
         }
 
-        struct HandleGuard
-        {
-            ~HandleGuard()
-            {
-                if (handle != INVALID_HANDLE_VALUE)
-                    CloseHandle (handle);
-            }
+        PSECURITY_DESCRIPTOR psecurityDescriptor = nullptr;
+    };
 
-            HANDLE handle = nullptr;
-        };
+    PsecurityDescriptorGuard descriptorGuard;
 
-        HandleGuard primaryTokenGuard;
-
-        if (! OpenProcessToken (GetCurrentProcess(),
-                                TOKEN_IMPERSONATE | TOKEN_DUPLICATE | TOKEN_QUERY | STANDARD_RIGHTS_READ,
-                                &primaryTokenGuard.handle))
-        {
-            return false;
-        }
-
-        HandleGuard duplicatedTokenGuard;
-
-        if (! DuplicateToken (primaryTokenGuard.handle,
-                              SecurityImpersonation,
-                              &duplicatedTokenGuard.handle))
-        {
-            return false;
-        }
-
-        GENERIC_MAPPING mapping { FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS };
-
-        MapGenericMask (&accessType, &mapping);
-        DWORD allowed = 0;
-        BOOL granted = false;
-        PRIVILEGE_SET set;
-        DWORD setSize = sizeof (set);
-
-        if (! AccessCheck (descriptorGuard.psecurityDescriptor,
-                           duplicatedTokenGuard.handle,
-                           accessType,
-                           &mapping,
-                           &set,
-                           &setSize,
-                           &allowed,
-                           &granted))
-        {
-            return false;
-        }
-
-        return granted != FALSE;
+    if (GetNamedSecurityInfo (path.toWideCharPointer(),
+                              SE_FILE_OBJECT,
+                              OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              nullptr,
+                              &descriptorGuard.psecurityDescriptor)
+        != ERROR_SUCCESS)
+    {
+        return false;
     }
+
+    struct HandleGuard
+    {
+        ~HandleGuard()
+        {
+            if (handle != INVALID_HANDLE_VALUE)
+                CloseHandle (handle);
+        }
+
+        HANDLE handle = nullptr;
+    };
+
+    HandleGuard primaryTokenGuard;
+
+    if (! OpenProcessToken (GetCurrentProcess(),
+                            TOKEN_IMPERSONATE | TOKEN_DUPLICATE | TOKEN_QUERY | STANDARD_RIGHTS_READ,
+                            &primaryTokenGuard.handle))
+    {
+        return false;
+    }
+
+    HandleGuard duplicatedTokenGuard;
+
+    if (! DuplicateToken (primaryTokenGuard.handle,
+                          SecurityImpersonation,
+                          &duplicatedTokenGuard.handle))
+    {
+        return false;
+    }
+
+    GENERIC_MAPPING mapping { FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_GENERIC_EXECUTE, FILE_ALL_ACCESS };
+
+    MapGenericMask (&accessType, &mapping);
+    DWORD allowed = 0;
+    BOOL granted = false;
+    PRIVILEGE_SET set;
+    DWORD setSize = sizeof (set);
+
+    if (! AccessCheck (descriptorGuard.psecurityDescriptor,
+                       duplicatedTokenGuard.handle,
+                       accessType,
+                       &mapping,
+                       &set,
+                       &setSize,
+                       &allowed,
+                       &granted))
+    {
+        return false;
+    }
+
+    return granted != FALSE;
+}
 } // namespace WindowsFileHelpers
 
 //==============================================================================

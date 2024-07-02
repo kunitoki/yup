@@ -45,16 +45,16 @@ JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4309 4305 4365 6385 6326 6340)
 namespace zlibNamespace
 {
 #if JUCE_INCLUDE_ZLIB_CODE
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wconversion",
-                                         "-Wsign-conversion",
-                                         "-Wshadow",
-                                         "-Wdeprecated-register",
-                                         "-Wswitch-enum",
-                                         "-Wswitch-default",
-                                         "-Wredundant-decls",
-                                         "-Wimplicit-fallthrough",
-                                         "-Wzero-as-null-pointer-constant",
-                                         "-Wcomma")
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wconversion",
+                                     "-Wsign-conversion",
+                                     "-Wshadow",
+                                     "-Wdeprecated-register",
+                                     "-Wswitch-enum",
+                                     "-Wswitch-default",
+                                     "-Wredundant-decls",
+                                     "-Wimplicit-fallthrough",
+                                     "-Wzero-as-null-pointer-constant",
+                                     "-Wcomma")
 
 #undef OS_CODE
 #undef fdopen
@@ -87,7 +87,7 @@ namespace zlibNamespace
 #undef Dad
 #undef Len
 
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #else
 #include JUCE_ZLIB_INCLUDE_PATH
 

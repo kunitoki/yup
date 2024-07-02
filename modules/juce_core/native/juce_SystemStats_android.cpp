@@ -46,7 +46,7 @@ namespace AndroidStatsHelpers
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
 STATICMETHOD (getProperty, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;")
 
-    DECLARE_JNI_CLASS (SystemClass, "java/lang/System")
+DECLARE_JNI_CLASS (SystemClass, "java/lang/System")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
@@ -54,48 +54,48 @@ STATICMETHOD (getDefault, "getDefault", "()Ljava/util/Locale;")               \
 METHOD (getCountry, "getCountry", "()Ljava/lang/String;")                     \
 METHOD (getLanguage, "getLanguage", "()Ljava/lang/String;")
 
-    DECLARE_JNI_CLASS (JavaLocale, "java/util/Locale")
+DECLARE_JNI_CLASS (JavaLocale, "java/util/Locale")
 #undef JNI_CLASS_MEMBERS
 
-    static String getSystemProperty (const String& name)
-    {
-        return juceString (LocalRef<jstring> ((jstring) getEnv()->CallStaticObjectMethod (SystemClass,
-                                                                                          SystemClass.getProperty,
-                                                                                          javaString (name).get())));
-    }
+static String getSystemProperty (const String& name)
+{
+    return juceString (LocalRef<jstring> ((jstring) getEnv()->CallStaticObjectMethod (SystemClass,
+                                                                                      SystemClass.getProperty,
+                                                                                      javaString (name).get())));
+}
 
-    static String getAndroidID()
-    {
-        auto* env = getEnv();
+static String getAndroidID()
+{
+    auto* env = getEnv();
 
-        if (auto settings = (jclass) env->FindClass ("android/provider/Settings$Secure"))
+    if (auto settings = (jclass) env->FindClass ("android/provider/Settings$Secure"))
+    {
+        if (auto fId = env->GetStaticFieldID (settings, "ANDROID_ID", "Ljava/lang/String;"))
         {
-            if (auto fId = env->GetStaticFieldID (settings, "ANDROID_ID", "Ljava/lang/String;"))
-            {
-                auto androidID = (jstring) env->GetStaticObjectField (settings, fId);
-                return juceString (LocalRef<jstring> (androidID));
-            }
+            auto androidID = (jstring) env->GetStaticObjectField (settings, fId);
+            return juceString (LocalRef<jstring> (androidID));
         }
-
-        return "";
     }
 
-    static String getLocaleValue (bool isRegion)
-    {
-        auto* env = getEnv();
-        LocalRef<jobject> locale (env->CallStaticObjectMethod (JavaLocale, JavaLocale.getDefault));
+    return "";
+}
 
-        auto stringResult = isRegion ? env->CallObjectMethod (locale.get(), JavaLocale.getCountry)
-                                     : env->CallObjectMethod (locale.get(), JavaLocale.getLanguage);
+static String getLocaleValue (bool isRegion)
+{
+    auto* env = getEnv();
+    LocalRef<jobject> locale (env->CallStaticObjectMethod (JavaLocale, JavaLocale.getDefault));
 
-        return juceString (LocalRef<jstring> ((jstring) stringResult));
-    }
+    auto stringResult = isRegion ? env->CallObjectMethod (locale.get(), JavaLocale.getCountry)
+                                 : env->CallObjectMethod (locale.get(), JavaLocale.getLanguage);
 
-    static String getAndroidOsBuildValue (const char* fieldName)
-    {
-        return juceString (LocalRef<jstring> ((jstring) getEnv()->GetStaticObjectField (
-            AndroidBuild, getEnv()->GetStaticFieldID (AndroidBuild, fieldName, "Ljava/lang/String;"))));
-    }
+    return juceString (LocalRef<jstring> ((jstring) stringResult));
+}
+
+static String getAndroidOsBuildValue (const char* fieldName)
+{
+    return juceString (LocalRef<jstring> ((jstring) getEnv()->GetStaticObjectField (
+        AndroidBuild, getEnv()->GetStaticFieldID (AndroidBuild, fieldName, "Ljava/lang/String;"))));
+}
 } // namespace AndroidStatsHelpers
 
 //==============================================================================

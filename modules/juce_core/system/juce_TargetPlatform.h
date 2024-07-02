@@ -56,7 +56,7 @@
 #ifdef JUCE_APP_CONFIG_HEADER
 #include JUCE_APP_CONFIG_HEADER
 #elif ! defined(JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED)
-    /*
+/*
     Most projects will contain a global header file containing various settings that
     should be applied to all the code in your project. If you use the projucer, it'll
     set up a global header file for you automatically, but if you're doing things manually,
@@ -126,7 +126,7 @@
 #endif
 #endif
 
-    /** If defined, this indicates that the processor is little-endian. */
+/** If defined, this indicates that the processor is little-endian. */
 #define JUCE_LITTLE_ENDIAN 1
 
 #if defined(_M_ARM) || defined(_M_ARM64) || defined(__arm__) || defined(__aarch64__)
@@ -183,7 +183,7 @@
 #define JUCE_DEBUG 1
 #endif
 
-    // Allow override for big-endian Linux platforms
+// Allow override for big-endian Linux platforms
 #if defined(__LITTLE_ENDIAN__) || ! defined(JUCE_BIG_ENDIAN)
 #define JUCE_LITTLE_ENDIAN 1
 #undef JUCE_BIG_ENDIAN

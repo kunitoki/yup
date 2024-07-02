@@ -274,8 +274,8 @@ void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
 
 //==============================================================================
 #ifndef DOXYGEN
-    // These are ancient macros, and have now been updated with new names to match the JUCE style guide,
-    // so please update your code to use the newer versions!
+// These are ancient macros, and have now been updated with new names to match the JUCE style guide,
+// so please update your code to use the newer versions!
 #define juce_DeclareSingleton(Classname, doNotRecreate) JUCE_DECLARE_SINGLETON (Classname, doNotRecreate)
 #define juce_DeclareSingleton_SingleThreaded(Classname, doNotRecreate) JUCE_DECLARE_SINGLETON_SINGLETHREADED (Classname, doNotRecreate)
 #define juce_DeclareSingleton_SingleThreaded_Minimal(Classname) JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (Classname)

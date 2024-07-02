@@ -42,235 +42,235 @@ namespace juce
 
 namespace MidiFileHelpers
 {
-    static void writeVariableLengthInt (OutputStream& out, uint32 v)
+static void writeVariableLengthInt (OutputStream& out, uint32 v)
+{
+    auto buffer = v & 0x7f;
+
+    while ((v >>= 7) != 0)
     {
-        auto buffer = v & 0x7f;
-
-        while ((v >>= 7) != 0)
-        {
-            buffer <<= 8;
-            buffer |= ((v & 0x7f) | 0x80);
-        }
-
-        for (;;)
-        {
-            out.writeByte ((char) buffer);
-
-            if (buffer & 0x80)
-                buffer >>= 8;
-            else
-                break;
-        }
+        buffer <<= 8;
+        buffer |= ((v & 0x7f) | 0x80);
     }
 
-    template <typename Integral>
-    struct ReadTrait;
-
-    template <>
-    struct ReadTrait<uint32>
+    for (;;)
     {
-        static constexpr auto read = ByteOrder::bigEndianInt;
-    };
+        out.writeByte ((char) buffer);
 
-    template <>
-    struct ReadTrait<uint16>
-    {
-        static constexpr auto read = ByteOrder::bigEndianShort;
-    };
-
-    template <typename Integral>
-    Optional<Integral> tryRead (const uint8*& data, size_t& remaining)
-    {
-        using Trait = ReadTrait<Integral>;
-        constexpr auto size = sizeof (Integral);
-
-        if (remaining < size)
-            return {};
-
-        const Optional<Integral> result { Trait::read (data) };
-
-        data += size;
-        remaining -= size;
-
-        return result;
+        if (buffer & 0x80)
+            buffer >>= 8;
+        else
+            break;
     }
+}
 
-    struct HeaderDetails
+template <typename Integral>
+struct ReadTrait;
+
+template <>
+struct ReadTrait<uint32>
+{
+    static constexpr auto read = ByteOrder::bigEndianInt;
+};
+
+template <>
+struct ReadTrait<uint16>
+{
+    static constexpr auto read = ByteOrder::bigEndianShort;
+};
+
+template <typename Integral>
+Optional<Integral> tryRead (const uint8*& data, size_t& remaining)
+{
+    using Trait = ReadTrait<Integral>;
+    constexpr auto size = sizeof (Integral);
+
+    if (remaining < size)
+        return {};
+
+    const Optional<Integral> result { Trait::read (data) };
+
+    data += size;
+    remaining -= size;
+
+    return result;
+}
+
+struct HeaderDetails
+{
+    size_t bytesRead = 0;
+    short timeFormat = 0;
+    short fileType = 0;
+    short numberOfTracks = 0;
+};
+
+static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
+                                                const size_t maxSize)
+{
+    auto* data = initialData;
+    auto remaining = maxSize;
+
+    auto ch = tryRead<uint32> (data, remaining);
+
+    if (! ch.hasValue())
+        return {};
+
+    if (*ch != ByteOrder::bigEndianInt ("MThd"))
     {
-        size_t bytesRead = 0;
-        short timeFormat = 0;
-        short fileType = 0;
-        short numberOfTracks = 0;
-    };
+        auto ok = false;
 
-    static Optional<HeaderDetails> parseMidiHeader (const uint8* const initialData,
-                                                    const size_t maxSize)
-    {
-        auto* data = initialData;
-        auto remaining = maxSize;
-
-        auto ch = tryRead<uint32> (data, remaining);
-
-        if (! ch.hasValue())
-            return {};
-
-        if (*ch != ByteOrder::bigEndianInt ("MThd"))
+        if (*ch == ByteOrder::bigEndianInt ("RIFF"))
         {
-            auto ok = false;
-
-            if (*ch == ByteOrder::bigEndianInt ("RIFF"))
+            for (int i = 0; i < 8; ++i)
             {
-                for (int i = 0; i < 8; ++i)
+                ch = tryRead<uint32> (data, remaining);
+
+                if (! ch.hasValue())
+                    return {};
+
+                if (*ch == ByteOrder::bigEndianInt ("MThd"))
                 {
-                    ch = tryRead<uint32> (data, remaining);
-
-                    if (! ch.hasValue())
-                        return {};
-
-                    if (*ch == ByteOrder::bigEndianInt ("MThd"))
-                    {
-                        ok = true;
-                        break;
-                    }
+                    ok = true;
+                    break;
                 }
             }
-
-            if (! ok)
-                return {};
         }
 
-        const auto bytesRemaining = tryRead<uint32> (data, remaining);
-
-        if (! bytesRemaining.hasValue() || *bytesRemaining > remaining)
+        if (! ok)
             return {};
-
-        const auto optFileType = tryRead<uint16> (data, remaining);
-
-        if (! optFileType.hasValue() || 2 < *optFileType)
-            return {};
-
-        const auto optNumTracks = tryRead<uint16> (data, remaining);
-
-        if (! optNumTracks.hasValue() || (*optFileType == 0 && *optNumTracks != 1))
-            return {};
-
-        const auto optTimeFormat = tryRead<uint16> (data, remaining);
-
-        if (! optTimeFormat.hasValue())
-            return {};
-
-        HeaderDetails result;
-
-        result.fileType = (short) *optFileType;
-        result.timeFormat = (short) *optTimeFormat;
-        result.numberOfTracks = (short) *optNumTracks;
-        result.bytesRead = maxSize - remaining;
-
-        return { result };
     }
 
-    static double convertTicksToSeconds (double time,
-                                         const MidiMessageSequence& tempoEvents,
-                                         int timeFormat)
+    const auto bytesRemaining = tryRead<uint32> (data, remaining);
+
+    if (! bytesRemaining.hasValue() || *bytesRemaining > remaining)
+        return {};
+
+    const auto optFileType = tryRead<uint16> (data, remaining);
+
+    if (! optFileType.hasValue() || 2 < *optFileType)
+        return {};
+
+    const auto optNumTracks = tryRead<uint16> (data, remaining);
+
+    if (! optNumTracks.hasValue() || (*optFileType == 0 && *optNumTracks != 1))
+        return {};
+
+    const auto optTimeFormat = tryRead<uint16> (data, remaining);
+
+    if (! optTimeFormat.hasValue())
+        return {};
+
+    HeaderDetails result;
+
+    result.fileType = (short) *optFileType;
+    result.timeFormat = (short) *optTimeFormat;
+    result.numberOfTracks = (short) *optNumTracks;
+    result.bytesRead = maxSize - remaining;
+
+    return { result };
+}
+
+static double convertTicksToSeconds (double time,
+                                     const MidiMessageSequence& tempoEvents,
+                                     int timeFormat)
+{
+    if (timeFormat < 0)
+        return time / (-(timeFormat >> 8) * (timeFormat & 0xff));
+
+    double lastTime = 0, correctedTime = 0;
+    auto tickLen = 1.0 / (timeFormat & 0x7fff);
+    auto secsPerTick = 0.5 * tickLen;
+    auto numEvents = tempoEvents.getNumEvents();
+
+    for (int i = 0; i < numEvents; ++i)
     {
-        if (timeFormat < 0)
-            return time / (-(timeFormat >> 8) * (timeFormat & 0xff));
+        auto& m = tempoEvents.getEventPointer (i)->message;
+        auto eventTime = m.getTimeStamp();
 
-        double lastTime = 0, correctedTime = 0;
-        auto tickLen = 1.0 / (timeFormat & 0x7fff);
-        auto secsPerTick = 0.5 * tickLen;
-        auto numEvents = tempoEvents.getNumEvents();
+        if (eventTime >= time)
+            break;
 
-        for (int i = 0; i < numEvents; ++i)
+        correctedTime += (eventTime - lastTime) * secsPerTick;
+        lastTime = eventTime;
+
+        if (m.isTempoMetaEvent())
+            secsPerTick = tickLen * m.getTempoSecondsPerQuarterNote();
+
+        while (i + 1 < numEvents)
         {
-            auto& m = tempoEvents.getEventPointer (i)->message;
-            auto eventTime = m.getTimeStamp();
+            auto& m2 = tempoEvents.getEventPointer (i + 1)->message;
 
-            if (eventTime >= time)
+            if (! approximatelyEqual (m2.getTimeStamp(), eventTime))
                 break;
 
-            correctedTime += (eventTime - lastTime) * secsPerTick;
-            lastTime = eventTime;
+            if (m2.isTempoMetaEvent())
+                secsPerTick = tickLen * m2.getTempoSecondsPerQuarterNote();
 
-            if (m.isTempoMetaEvent())
-                secsPerTick = tickLen * m.getTempoSecondsPerQuarterNote();
-
-            while (i + 1 < numEvents)
-            {
-                auto& m2 = tempoEvents.getEventPointer (i + 1)->message;
-
-                if (! approximatelyEqual (m2.getTimeStamp(), eventTime))
-                    break;
-
-                if (m2.isTempoMetaEvent())
-                    secsPerTick = tickLen * m2.getTempoSecondsPerQuarterNote();
-
-                ++i;
-            }
+            ++i;
         }
-
-        return correctedTime + (time - lastTime) * secsPerTick;
     }
 
-    template <typename MethodType>
-    static void findAllMatchingEvents (const OwnedArray<MidiMessageSequence>& tracks,
-                                       MidiMessageSequence& results,
-                                       MethodType method)
+    return correctedTime + (time - lastTime) * secsPerTick;
+}
+
+template <typename MethodType>
+static void findAllMatchingEvents (const OwnedArray<MidiMessageSequence>& tracks,
+                                   MidiMessageSequence& results,
+                                   MethodType method)
+{
+    for (auto* track : tracks)
     {
-        for (auto* track : tracks)
+        auto numEvents = track->getNumEvents();
+
+        for (int j = 0; j < numEvents; ++j)
         {
-            auto numEvents = track->getNumEvents();
+            auto& m = track->getEventPointer (j)->message;
 
-            for (int j = 0; j < numEvents; ++j)
-            {
-                auto& m = track->getEventPointer (j)->message;
-
-                if ((m.*method)())
-                    results.addEvent (m);
-            }
+            if ((m.*method)())
+                results.addEvent (m);
         }
     }
+}
 
-    static MidiMessageSequence readTrack (const uint8* data, int size)
+static MidiMessageSequence readTrack (const uint8* data, int size)
+{
+    double time = 0;
+    uint8 lastStatusByte = 0;
+
+    MidiMessageSequence result;
+
+    while (size > 0)
     {
-        double time = 0;
-        uint8 lastStatusByte = 0;
+        const auto delay = MidiMessage::readVariableLengthValue (data, (int) size);
 
-        MidiMessageSequence result;
+        if (! delay.isValid())
+            break;
 
-        while (size > 0)
-        {
-            const auto delay = MidiMessage::readVariableLengthValue (data, (int) size);
+        data += delay.bytesUsed;
+        size -= delay.bytesUsed;
+        time += delay.value;
 
-            if (! delay.isValid())
-                break;
+        if (size <= 0)
+            break;
 
-            data += delay.bytesUsed;
-            size -= delay.bytesUsed;
-            time += delay.value;
+        int messSize = 0;
+        const MidiMessage mm (data, size, messSize, lastStatusByte, time);
 
-            if (size <= 0)
-                break;
+        if (messSize <= 0)
+            break;
 
-            int messSize = 0;
-            const MidiMessage mm (data, size, messSize, lastStatusByte, time);
+        size -= messSize;
+        data += messSize;
 
-            if (messSize <= 0)
-                break;
+        result.addEvent (mm);
 
-            size -= messSize;
-            data += messSize;
+        auto firstByte = *(mm.getRawData());
 
-            result.addEvent (mm);
-
-            auto firstByte = *(mm.getRawData());
-
-            if ((firstByte & 0xf0) != 0xf0)
-                lastStatusByte = firstByte;
-        }
-
-        return result;
+        if ((firstByte & 0xf0) != 0xf0)
+            lastStatusByte = firstByte;
     }
+
+    return result;
+}
 } // namespace MidiFileHelpers
 
 //==============================================================================

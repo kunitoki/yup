@@ -117,7 +117,7 @@ JUCE_NTH_ARG_ (, __VA_ARGS__, JUCE_EACH_49_, JUCE_EACH_48_, JUCE_EACH_47_, JUCE_
 #define JUCE_IGNORE_GCC_IMPL_1(compiler, warning) \
 _Pragma (JUCE_TO_STRING (compiler diagnostic ignored warning))
 
-    /** If 'warning' is recognised by this compiler, ignore it. */
+/** If 'warning' is recognised by this compiler, ignore it. */
 #if defined(__has_warning)
 #define JUCE_IGNORE_GCC_LIKE(compiler, warning)              \
 JUCE_CONCAT (JUCE_IGNORE_GCC_IMPL_, __has_warning (warning)) \
@@ -127,7 +127,7 @@ JUCE_CONCAT (JUCE_IGNORE_GCC_IMPL_, __has_warning (warning)) \
 JUCE_IGNORE_GCC_IMPL_1 (compiler, warning)
 #endif
 
-    /** Ignore GCC/clang-specific warnings. */
+/** Ignore GCC/clang-specific warnings. */
 #define JUCE_IGNORE_GCC(warning) JUCE_IGNORE_GCC_LIKE (GCC, warning)
 #define JUCE_IGNORE_clang(warning) JUCE_IGNORE_GCC_LIKE (clang, warning)
 
@@ -135,7 +135,7 @@ JUCE_IGNORE_GCC_IMPL_1 (compiler, warning)
 _Pragma (JUCE_TO_STRING (compiler diagnostic push))  \
     JUCE_EACH (JUCE_CONCAT (JUCE_IGNORE_, compiler), __VA_ARGS__)
 
-    /** Push a new warning scope, and then ignore each warning for either clang
+/** Push a new warning scope, and then ignore each warning for either clang
         or gcc. If the compiler doesn't support __has_warning, we add -Wpragmas
         as the first disabled warning because otherwise we might get complaints
         about unknown warning options.
@@ -148,11 +148,11 @@ JUCE_IGNORE_WARNINGS_GCC_LIKE (compiler, __VA_ARGS__)
 JUCE_IGNORE_WARNINGS_GCC_LIKE (compiler, "-Wpragmas", __VA_ARGS__)
 #endif
 
-    /** Pop the current warning scope. */
+/** Pop the current warning scope. */
 #define JUCE_POP_WARNINGS_GCC_LIKE(compiler) \
 _Pragma (JUCE_TO_STRING (compiler diagnostic pop))
 
-    /** Push/pop warnings on compilers with gcc-like warning flags.
+/** Push/pop warnings on compilers with gcc-like warning flags.
         These macros expand to nothing on other compilers (like MSVC).
     */
 #if JUCE_CLANG

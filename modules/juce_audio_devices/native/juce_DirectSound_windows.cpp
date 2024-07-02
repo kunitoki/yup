@@ -201,88 +201,88 @@ namespace juce
 //==============================================================================
 namespace DSoundLogging
 {
-    static String getErrorMessage (HRESULT hr)
+static String getErrorMessage (HRESULT hr)
+{
+    const char* result = nullptr;
+
+    switch (hr)
     {
-        const char* result = nullptr;
-
-        switch (hr)
-        {
-            case MAKE_HRESULT (1, 0x878, 10):
-                result = "Device already allocated";
-                break;
-            case MAKE_HRESULT (1, 0x878, 30):
-                result = "Control unavailable";
-                break;
-            case E_INVALIDARG:
-                result = "Invalid parameter";
-                break;
-            case MAKE_HRESULT (1, 0x878, 50):
-                result = "Invalid call";
-                break;
-            case E_FAIL:
-                result = "Generic error";
-                break;
-            case MAKE_HRESULT (1, 0x878, 70):
-                result = "Priority level error";
-                break;
-            case E_OUTOFMEMORY:
-                result = "Out of memory";
-                break;
-            case MAKE_HRESULT (1, 0x878, 100):
-                result = "Bad format";
-                break;
-            case E_NOTIMPL:
-                result = "Unsupported function";
-                break;
-            case MAKE_HRESULT (1, 0x878, 120):
-                result = "No driver";
-                break;
-            case MAKE_HRESULT (1, 0x878, 130):
-                result = "Already initialised";
-                break;
-            case CLASS_E_NOAGGREGATION:
-                result = "No aggregation";
-                break;
-            case MAKE_HRESULT (1, 0x878, 150):
-                result = "Buffer lost";
-                break;
-            case MAKE_HRESULT (1, 0x878, 160):
-                result = "Another app has priority";
-                break;
-            case MAKE_HRESULT (1, 0x878, 170):
-                result = "Uninitialised";
-                break;
-            case E_NOINTERFACE:
-                result = "No interface";
-                break;
-            case S_OK:
-                result = "No error";
-                break;
-            default:
-                return "Unknown error: " + String ((int) hr);
-        }
-
-        return result;
+        case MAKE_HRESULT (1, 0x878, 10):
+            result = "Device already allocated";
+            break;
+        case MAKE_HRESULT (1, 0x878, 30):
+            result = "Control unavailable";
+            break;
+        case E_INVALIDARG:
+            result = "Invalid parameter";
+            break;
+        case MAKE_HRESULT (1, 0x878, 50):
+            result = "Invalid call";
+            break;
+        case E_FAIL:
+            result = "Generic error";
+            break;
+        case MAKE_HRESULT (1, 0x878, 70):
+            result = "Priority level error";
+            break;
+        case E_OUTOFMEMORY:
+            result = "Out of memory";
+            break;
+        case MAKE_HRESULT (1, 0x878, 100):
+            result = "Bad format";
+            break;
+        case E_NOTIMPL:
+            result = "Unsupported function";
+            break;
+        case MAKE_HRESULT (1, 0x878, 120):
+            result = "No driver";
+            break;
+        case MAKE_HRESULT (1, 0x878, 130):
+            result = "Already initialised";
+            break;
+        case CLASS_E_NOAGGREGATION:
+            result = "No aggregation";
+            break;
+        case MAKE_HRESULT (1, 0x878, 150):
+            result = "Buffer lost";
+            break;
+        case MAKE_HRESULT (1, 0x878, 160):
+            result = "Another app has priority";
+            break;
+        case MAKE_HRESULT (1, 0x878, 170):
+            result = "Uninitialised";
+            break;
+        case E_NOINTERFACE:
+            result = "No interface";
+            break;
+        case S_OK:
+            result = "No error";
+            break;
+        default:
+            return "Unknown error: " + String ((int) hr);
     }
 
-    //==============================================================================
+    return result;
+}
+
+//==============================================================================
 #if JUCE_DIRECTSOUND_LOGGING
-    static void logMessage (String message)
-    {
-        message = "DSOUND: " + message;
-        DBG (message);
-        Logger::writeToLog (message);
-    }
+static void logMessage (String message)
+{
+    message = "DSOUND: " + message;
+    DBG (message);
+    Logger::writeToLog (message);
+}
 
-    static void logError (HRESULT hr, int lineNum)
+static void logError (HRESULT hr, int lineNum)
+{
+    if (FAILED (hr))
     {
-        if (FAILED (hr))
-        {
-            String error ("Error at line ");
-            error << lineNum << ": " << getErrorMessage (hr);
-            logMessage (error);
-        }
+        String error ("Error at line ");
+        error << lineNum << ": " << getErrorMessage (hr);
+        logMessage (error);
     }
+}
 
 #define JUCE_DS_LOG(a) DSoundLogging::logMessage (a);
 #define JUCE_DS_LOG_ERROR(a) DSoundLogging::logError (a, __LINE__);
@@ -305,37 +305,37 @@ ds##functionName = (type##functionName) GetProcAddress (h, #functionName); \
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE                                          \
 jassert (ds##functionName != nullptr);
 
-    typedef BOOL (CALLBACK* LPDSENUMCALLBACKW) (LPGUID, LPCWSTR, LPCWSTR, LPVOID);
-    typedef BOOL (CALLBACK* LPDSENUMCALLBACKA) (LPGUID, LPCSTR, LPCSTR, LPVOID);
+typedef BOOL (CALLBACK* LPDSENUMCALLBACKW) (LPGUID, LPCWSTR, LPCWSTR, LPVOID);
+typedef BOOL (CALLBACK* LPDSENUMCALLBACKA) (LPGUID, LPCSTR, LPCSTR, LPVOID);
 
-    DSOUND_FUNCTION (DirectSoundCreate, (const GUID*, IDirectSound**, LPUNKNOWN))
-    DSOUND_FUNCTION (DirectSoundCaptureCreate, (const GUID*, IDirectSoundCapture**, LPUNKNOWN))
-    DSOUND_FUNCTION (DirectSoundEnumerateW, (LPDSENUMCALLBACKW, LPVOID))
-    DSOUND_FUNCTION (DirectSoundCaptureEnumerateW, (LPDSENUMCALLBACKW, LPVOID))
+DSOUND_FUNCTION (DirectSoundCreate, (const GUID*, IDirectSound**, LPUNKNOWN))
+DSOUND_FUNCTION (DirectSoundCaptureCreate, (const GUID*, IDirectSoundCapture**, LPUNKNOWN))
+DSOUND_FUNCTION (DirectSoundEnumerateW, (LPDSENUMCALLBACKW, LPVOID))
+DSOUND_FUNCTION (DirectSoundCaptureEnumerateW, (LPDSENUMCALLBACKW, LPVOID))
 
-    void initialiseDSoundFunctions()
+void initialiseDSoundFunctions()
+{
+    if (dsDirectSoundCreate == nullptr)
     {
-        if (dsDirectSoundCreate == nullptr)
+        if (auto* h = LoadLibraryA ("dsound.dll"))
         {
-            if (auto* h = LoadLibraryA ("dsound.dll"))
-            {
-                DSOUND_FUNCTION_LOAD (DirectSoundCreate)
-                DSOUND_FUNCTION_LOAD (DirectSoundCaptureCreate)
-                DSOUND_FUNCTION_LOAD (DirectSoundEnumerateW)
-                DSOUND_FUNCTION_LOAD (DirectSoundCaptureEnumerateW)
+            DSOUND_FUNCTION_LOAD (DirectSoundCreate)
+            DSOUND_FUNCTION_LOAD (DirectSoundCaptureCreate)
+            DSOUND_FUNCTION_LOAD (DirectSoundEnumerateW)
+            DSOUND_FUNCTION_LOAD (DirectSoundCaptureEnumerateW)
 
-                return;
-            }
-
-            jassertfalse;
+            return;
         }
-    }
 
-    // the overall size of buffer used is this value x the block size
-    enum
-    {
-        blocksPerOverallBuffer = 16
-    };
+        jassertfalse;
+    }
+}
+
+// the overall size of buffer used is this value x the block size
+enum
+{
+    blocksPerOverallBuffer = 16
+};
 } // namespace
 
 //==============================================================================

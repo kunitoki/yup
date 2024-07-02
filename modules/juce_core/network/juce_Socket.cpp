@@ -68,429 +68,429 @@ static const SocketHandle invalidSocket = -1;
 //==============================================================================
 namespace SocketHelpers
 {
-    static void initSockets()
-    {
+static void initSockets()
+{
 #if JUCE_WINDOWS
-        static bool socketsStarted = false;
+    static bool socketsStarted = false;
 
-        if (! socketsStarted)
-        {
-            WSADATA wsaData;
-            const WORD wVersionRequested = MAKEWORD (1, 1);
-            socketsStarted = WSAStartup (wVersionRequested, &wsaData) == 0;
-        }
+    if (! socketsStarted)
+    {
+        WSADATA wsaData;
+        const WORD wVersionRequested = MAKEWORD (1, 1);
+        socketsStarted = WSAStartup (wVersionRequested, &wsaData) == 0;
+    }
 #endif
+}
+
+inline bool isValidPortNumber (int port) noexcept
+{
+    return isPositiveAndBelow (port, 65536);
+}
+
+template <typename Type>
+static bool setOption (SocketHandle handle, int mode, int property, Type value) noexcept
+{
+    return setsockopt (handle, mode, property, reinterpret_cast<const char*> (&value), sizeof (value)) == 0;
+}
+
+template <typename Type>
+static bool setOption (SocketHandle handle, int property, Type value) noexcept
+{
+    return setOption (handle, SOL_SOCKET, property, value);
+}
+
+static std::optional<int> getBufferSize (SocketHandle handle, int property)
+{
+    int result;
+    auto outParamSize = (socklen_t) sizeof (result);
+
+    if (getsockopt (handle, SOL_SOCKET, property, reinterpret_cast<char*> (&result), &outParamSize) != 0
+        || outParamSize != (socklen_t) sizeof (result))
+    {
+        return std::nullopt;
     }
 
-    inline bool isValidPortNumber (int port) noexcept
+    return result;
+}
+
+static bool resetSocketOptions (SocketHandle handle, bool isDatagram, bool allowBroadcast, const SocketOptions& options) noexcept
+{
+    auto getCurrentBufferSizeWithMinimum = [handle] (int property)
     {
-        return isPositiveAndBelow (port, 65536);
-    }
+        constexpr auto minBufferSize = 65536;
 
-    template <typename Type>
-    static bool setOption (SocketHandle handle, int mode, int property, Type value) noexcept
-    {
-        return setsockopt (handle, mode, property, reinterpret_cast<const char*> (&value), sizeof (value)) == 0;
-    }
+        if (auto currentBufferSize = getBufferSize (handle, property))
+            return std::max (*currentBufferSize, minBufferSize);
 
-    template <typename Type>
-    static bool setOption (SocketHandle handle, int property, Type value) noexcept
-    {
-        return setOption (handle, SOL_SOCKET, property, value);
-    }
+        return minBufferSize;
+    };
 
-    static std::optional<int> getBufferSize (SocketHandle handle, int property)
-    {
-        int result;
-        auto outParamSize = (socklen_t) sizeof (result);
+    const auto receiveBufferSize = options.getReceiveBufferSize().value_or (getCurrentBufferSizeWithMinimum (SO_RCVBUF));
+    const auto sendBufferSize = options.getSendBufferSize().value_or (getCurrentBufferSizeWithMinimum (SO_SNDBUF));
 
-        if (getsockopt (handle, SOL_SOCKET, property, reinterpret_cast<char*> (&result), &outParamSize) != 0
-            || outParamSize != (socklen_t) sizeof (result))
-        {
-            return std::nullopt;
-        }
+    return handle != invalidSocket
+        && setOption (handle, SO_RCVBUF, receiveBufferSize)
+        && setOption (handle, SO_SNDBUF, sendBufferSize)
+        && (isDatagram ? ((! allowBroadcast) || setOption (handle, SO_BROADCAST, (int) 1))
+                       : setOption (handle, IPPROTO_TCP, TCP_NODELAY, (int) 1));
+}
 
-        return result;
-    }
-
-    static bool resetSocketOptions (SocketHandle handle, bool isDatagram, bool allowBroadcast, const SocketOptions& options) noexcept
-    {
-        auto getCurrentBufferSizeWithMinimum = [handle] (int property)
-        {
-            constexpr auto minBufferSize = 65536;
-
-            if (auto currentBufferSize = getBufferSize (handle, property))
-                return std::max (*currentBufferSize, minBufferSize);
-
-            return minBufferSize;
-        };
-
-        const auto receiveBufferSize = options.getReceiveBufferSize().value_or (getCurrentBufferSizeWithMinimum (SO_RCVBUF));
-        const auto sendBufferSize = options.getSendBufferSize().value_or (getCurrentBufferSizeWithMinimum (SO_SNDBUF));
-
-        return handle != invalidSocket
-            && setOption (handle, SO_RCVBUF, receiveBufferSize)
-            && setOption (handle, SO_SNDBUF, sendBufferSize)
-            && (isDatagram ? ((! allowBroadcast) || setOption (handle, SO_BROADCAST, (int) 1))
-                           : setOption (handle, IPPROTO_TCP, TCP_NODELAY, (int) 1));
-    }
-
-    static void closeSocket (std::atomic<int>& handle,
-                             [[maybe_unused]] CriticalSection& readLock,
-                             [[maybe_unused]] bool isListener,
-                             [[maybe_unused]] int portNumber,
-                             std::atomic<bool>& connected) noexcept
-    {
-        const auto h = (SocketHandle) handle.load();
-        handle = -1;
+static void closeSocket (std::atomic<int>& handle,
+                         [[maybe_unused]] CriticalSection& readLock,
+                         [[maybe_unused]] bool isListener,
+                         [[maybe_unused]] int portNumber,
+                         std::atomic<bool>& connected) noexcept
+{
+    const auto h = (SocketHandle) handle.load();
+    handle = -1;
 
 #if JUCE_WINDOWS
-        if (h != invalidSocket || connected)
-            closesocket (h);
+    if (h != invalidSocket || connected)
+        closesocket (h);
 
-        // make sure any read process finishes before we delete the socket
-        CriticalSection::ScopedLockType lock (readLock);
+    // make sure any read process finishes before we delete the socket
+    CriticalSection::ScopedLockType lock (readLock);
+    connected = false;
+#else
+    if (connected)
+    {
         connected = false;
-#else
-        if (connected)
-        {
-            connected = false;
 
-            if (isListener)
-            {
-                // need to do this to interrupt the accept() function..
-                StreamingSocket temp;
-                temp.connect (IPAddress::local().toString(), portNumber, 1000);
-            }
+        if (isListener)
+        {
+            // need to do this to interrupt the accept() function..
+            StreamingSocket temp;
+            temp.connect (IPAddress::local().toString(), portNumber, 1000);
         }
+    }
 
-        if (h >= 0)
+    if (h >= 0)
+    {
+        // unblock any pending read requests
+        ::shutdown (h, SHUT_RDWR);
+
         {
-            // unblock any pending read requests
-            ::shutdown (h, SHUT_RDWR);
-
-            {
-                    // see man-page of recv on linux about a race condition where the
-                    // shutdown command is lost if the receiving thread does not have
-                    // a chance to process before close is called. On Mac OS X shutdown
-                    // does not unblock a select call, so using a lock here will dead-lock
-                    // both threads.
+                // see man-page of recv on linux about a race condition where the
+                // shutdown command is lost if the receiving thread does not have
+                // a chance to process before close is called. On Mac OS X shutdown
+                // does not unblock a select call, so using a lock here will dead-lock
+                // both threads.
 #if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
-                CriticalSection::ScopedLockType lock (readLock);
-                ::close (h);
+            CriticalSection::ScopedLockType lock (readLock);
+            ::close (h);
 #else
-                ::close (h);
-                CriticalSection::ScopedLockType lock (readLock);
+            ::close (h);
+            CriticalSection::ScopedLockType lock (readLock);
 #endif
-            }
         }
+    }
 #endif
-    }
+}
 
-    static bool bindSocket (SocketHandle handle, int port, const String& address) noexcept
-    {
-        if (handle == invalidSocket || ! isValidPortNumber (port))
-            return false;
+static bool bindSocket (SocketHandle handle, int port, const String& address) noexcept
+{
+    if (handle == invalidSocket || ! isValidPortNumber (port))
+        return false;
 
-        struct sockaddr_in addr;
-        zerostruct (addr); // (can't use "= { 0 }" on this object because it's typedef'ed as a C struct)
+    struct sockaddr_in addr;
+    zerostruct (addr); // (can't use "= { 0 }" on this object because it's typedef'ed as a C struct)
 
-        addr.sin_family = PF_INET;
-        addr.sin_port = htons ((uint16) port);
-        addr.sin_addr.s_addr = address.isNotEmpty() ? ::inet_addr (address.toRawUTF8())
-                                                    : htonl (INADDR_ANY);
+    addr.sin_family = PF_INET;
+    addr.sin_port = htons ((uint16) port);
+    addr.sin_addr.s_addr = address.isNotEmpty() ? ::inet_addr (address.toRawUTF8())
+                                                : htonl (INADDR_ANY);
 
-        return ::bind (handle, (struct sockaddr*) &addr, sizeof (addr)) >= 0;
-    }
+    return ::bind (handle, (struct sockaddr*) &addr, sizeof (addr)) >= 0;
+}
 
-    static int getBoundPort (SocketHandle handle) noexcept
-    {
-        if (handle != invalidSocket)
-        {
-            struct sockaddr_in addr;
-            socklen_t len = sizeof (addr);
-
-            if (getsockname (handle, (struct sockaddr*) &addr, &len) == 0)
-                return ntohs (addr.sin_port);
-        }
-
-        return -1;
-    }
-
-    static String getConnectedAddress (SocketHandle handle) noexcept
+static int getBoundPort (SocketHandle handle) noexcept
+{
+    if (handle != invalidSocket)
     {
         struct sockaddr_in addr;
         socklen_t len = sizeof (addr);
 
-        if (getpeername (handle, (struct sockaddr*) &addr, &len) >= 0)
-            return inet_ntoa (addr.sin_addr);
-
-        return "0.0.0.0";
+        if (getsockname (handle, (struct sockaddr*) &addr, &len) == 0)
+            return ntohs (addr.sin_port);
     }
 
-    static bool setSocketBlockingState (SocketHandle handle, bool shouldBlock) noexcept
-    {
+    return -1;
+}
+
+static String getConnectedAddress (SocketHandle handle) noexcept
+{
+    struct sockaddr_in addr;
+    socklen_t len = sizeof (addr);
+
+    if (getpeername (handle, (struct sockaddr*) &addr, &len) >= 0)
+        return inet_ntoa (addr.sin_addr);
+
+    return "0.0.0.0";
+}
+
+static bool setSocketBlockingState (SocketHandle handle, bool shouldBlock) noexcept
+{
 #if JUCE_WINDOWS
-        u_long nonBlocking = shouldBlock ? 0 : (u_long) 1;
-        return ioctlsocket (handle, (long) FIONBIO, &nonBlocking) == 0;
+    u_long nonBlocking = shouldBlock ? 0 : (u_long) 1;
+    return ioctlsocket (handle, (long) FIONBIO, &nonBlocking) == 0;
 #else
-        int socketFlags = fcntl (handle, F_GETFL, 0);
+    int socketFlags = fcntl (handle, F_GETFL, 0);
 
-        if (socketFlags == -1)
-            return false;
+    if (socketFlags == -1)
+        return false;
 
-        if (shouldBlock)
-            socketFlags &= ~O_NONBLOCK;
-        else
-            socketFlags |= O_NONBLOCK;
+    if (shouldBlock)
+        socketFlags &= ~O_NONBLOCK;
+    else
+        socketFlags |= O_NONBLOCK;
 
-        return fcntl (handle, F_SETFL, socketFlags) == 0;
+    return fcntl (handle, F_SETFL, socketFlags) == 0;
 #endif
-    }
+}
 
 #if ! JUCE_WINDOWS
-    static bool getSocketBlockingState (SocketHandle handle)
-    {
-        return (fcntl (handle, F_GETFL, 0) & O_NONBLOCK) == 0;
-    }
+static bool getSocketBlockingState (SocketHandle handle)
+{
+    return (fcntl (handle, F_GETFL, 0) & O_NONBLOCK) == 0;
+}
 #endif
 
-    static int readSocket (SocketHandle handle,
-                           void* destBuffer,
-                           int maxBytesToRead,
-                           std::atomic<bool>& connected,
-                           bool blockUntilSpecifiedAmountHasArrived,
-                           CriticalSection& readLock,
-                           String* senderIP = nullptr,
-                           int* senderPort = nullptr) noexcept
-    {
+static int readSocket (SocketHandle handle,
+                       void* destBuffer,
+                       int maxBytesToRead,
+                       std::atomic<bool>& connected,
+                       bool blockUntilSpecifiedAmountHasArrived,
+                       CriticalSection& readLock,
+                       String* senderIP = nullptr,
+                       int* senderPort = nullptr) noexcept
+{
 #if ! JUCE_WINDOWS
-        if (blockUntilSpecifiedAmountHasArrived != getSocketBlockingState (handle))
+    if (blockUntilSpecifiedAmountHasArrived != getSocketBlockingState (handle))
 #endif
-            setSocketBlockingState (handle, blockUntilSpecifiedAmountHasArrived);
+        setSocketBlockingState (handle, blockUntilSpecifiedAmountHasArrived);
 
-        int bytesRead = 0;
+    int bytesRead = 0;
 
-        while (bytesRead < maxBytesToRead)
+    while (bytesRead < maxBytesToRead)
+    {
+        long bytesThisTime = -1;
+        auto buffer = static_cast<char*> (destBuffer) + bytesRead;
+        auto numToRead = (juce_recvsend_size_t) (maxBytesToRead - bytesRead);
+
         {
-            long bytesThisTime = -1;
-            auto buffer = static_cast<char*> (destBuffer) + bytesRead;
-            auto numToRead = (juce_recvsend_size_t) (maxBytesToRead - bytesRead);
+            // avoid race-condition
+            CriticalSection::ScopedTryLockType lock (readLock);
 
+            if (lock.isLocked())
             {
-                // avoid race-condition
-                CriticalSection::ScopedTryLockType lock (readLock);
-
-                if (lock.isLocked())
+                if (senderIP == nullptr || senderPort == nullptr)
                 {
-                    if (senderIP == nullptr || senderPort == nullptr)
-                    {
-                        bytesThisTime = ::recv (handle, buffer, numToRead, 0);
-                    }
-                    else
-                    {
-                        sockaddr_in client;
-                        socklen_t clientLen = sizeof (sockaddr);
+                    bytesThisTime = ::recv (handle, buffer, numToRead, 0);
+                }
+                else
+                {
+                    sockaddr_in client;
+                    socklen_t clientLen = sizeof (sockaddr);
 
-                        bytesThisTime = ::recvfrom (handle, buffer, numToRead, 0, (sockaddr*) &client, &clientLen);
+                    bytesThisTime = ::recvfrom (handle, buffer, numToRead, 0, (sockaddr*) &client, &clientLen);
 
-                        *senderIP = String::fromUTF8 (inet_ntoa (client.sin_addr), 16);
-                        *senderPort = ntohs (client.sin_port);
-                    }
+                    *senderIP = String::fromUTF8 (inet_ntoa (client.sin_addr), 16);
+                    *senderPort = ntohs (client.sin_port);
                 }
             }
-
-            if (bytesThisTime <= 0 || ! connected)
-            {
-                if (bytesRead == 0 && blockUntilSpecifiedAmountHasArrived)
-                    bytesRead = -1;
-
-                break;
-            }
-
-            bytesRead = static_cast<int> (bytesRead + bytesThisTime);
-
-            if (! blockUntilSpecifiedAmountHasArrived)
-                break;
         }
 
-        return (int) bytesRead;
+        if (bytesThisTime <= 0 || ! connected)
+        {
+            if (bytesRead == 0 && blockUntilSpecifiedAmountHasArrived)
+                bytesRead = -1;
+
+            break;
+        }
+
+        bytesRead = static_cast<int> (bytesRead + bytesThisTime);
+
+        if (! blockUntilSpecifiedAmountHasArrived)
+            break;
     }
 
-    static int waitForReadiness (std::atomic<int>& handle, CriticalSection& readLock, bool forReading, int timeoutMsecs) noexcept
+    return (int) bytesRead;
+}
+
+static int waitForReadiness (std::atomic<int>& handle, CriticalSection& readLock, bool forReading, int timeoutMsecs) noexcept
+{
+    // avoid race-condition
+    CriticalSection::ScopedTryLockType lock (readLock);
+
+    if (! lock.isLocked())
+        return -1;
+
+    auto hasErrorOccurred = [&handle]() -> bool
     {
-        // avoid race-condition
-        CriticalSection::ScopedTryLockType lock (readLock);
+        auto h = (SocketHandle) handle.load();
 
-        if (! lock.isLocked())
-            return -1;
+        if (h == invalidSocket)
+            return true;
 
-        auto hasErrorOccurred = [&handle]() -> bool
-        {
-            auto h = (SocketHandle) handle.load();
+        int opt;
+        juce_socklen_t len = sizeof (opt);
 
-            if (h == invalidSocket)
-                return true;
+        if (getsockopt (h, SOL_SOCKET, SO_ERROR, (char*) &opt, &len) < 0 || opt != 0)
+            return true;
 
-            int opt;
-            juce_socklen_t len = sizeof (opt);
+        return false;
+    };
 
-            if (getsockopt (h, SOL_SOCKET, SO_ERROR, (char*) &opt, &len) < 0 || opt != 0)
-                return true;
-
-            return false;
-        };
-
-        auto h = handle.load();
+    auto h = handle.load();
 
 #if JUCE_WINDOWS || JUCE_MINGW
-        struct timeval timeout;
-        struct timeval* timeoutp;
+    struct timeval timeout;
+    struct timeval* timeoutp;
 
-        if (timeoutMsecs >= 0)
-        {
-            timeout.tv_sec = timeoutMsecs / 1000;
-            timeout.tv_usec = (timeoutMsecs % 1000) * 1000;
-            timeoutp = &timeout;
-        }
-        else
-        {
-            timeoutp = nullptr;
-        }
+    if (timeoutMsecs >= 0)
+    {
+        timeout.tv_sec = timeoutMsecs / 1000;
+        timeout.tv_usec = (timeoutMsecs % 1000) * 1000;
+        timeoutp = &timeout;
+    }
+    else
+    {
+        timeoutp = nullptr;
+    }
 
-        fd_set rset, wset;
-        FD_ZERO (&rset);
-        FD_SET ((SOCKET) h, &rset);
-        FD_ZERO (&wset);
-        FD_SET ((SOCKET) h, &wset);
+    fd_set rset, wset;
+    FD_ZERO (&rset);
+    FD_SET ((SOCKET) h, &rset);
+    FD_ZERO (&wset);
+    FD_SET ((SOCKET) h, &wset);
 
-        fd_set* prset = forReading ? &rset : nullptr;
-        fd_set* pwset = forReading ? nullptr : &wset;
+    fd_set* prset = forReading ? &rset : nullptr;
+    fd_set* pwset = forReading ? nullptr : &wset;
 
-        // NB - need to use select() here as WSAPoll is broken on Windows
-        if (select ((int) h + 1, prset, pwset, nullptr, timeoutp) < 0 || hasErrorOccurred())
-            return -1;
+    // NB - need to use select() here as WSAPoll is broken on Windows
+    if (select ((int) h + 1, prset, pwset, nullptr, timeoutp) < 0 || hasErrorOccurred())
+        return -1;
 
-        return FD_ISSET (h, forReading ? &rset : &wset) ? 1 : 0;
+    return FD_ISSET (h, forReading ? &rset : &wset) ? 1 : 0;
 #else
-        short eventsFlag = (forReading ? POLLIN : POLLOUT);
-        pollfd pfd { (SocketHandle) h, eventsFlag, 0 };
+    short eventsFlag = (forReading ? POLLIN : POLLOUT);
+    pollfd pfd { (SocketHandle) h, eventsFlag, 0 };
 
-        int result = 0;
+    int result = 0;
 
-        for (;;)
-        {
-            result = poll (&pfd, 1, timeoutMsecs);
+    for (;;)
+    {
+        result = poll (&pfd, 1, timeoutMsecs);
 
-            if (result >= 0 || errno != EINTR)
-                break;
-        }
+        if (result >= 0 || errno != EINTR)
+            break;
+    }
 
-        if (result < 0 || hasErrorOccurred())
-            return -1;
+    if (result < 0 || hasErrorOccurred())
+        return -1;
 
-        return (pfd.revents & eventsFlag) != 0;
+    return (pfd.revents & eventsFlag) != 0;
 #endif
-    }
+}
 
-    static addrinfo* getAddressInfo (bool isDatagram, const String& hostName, int portNumber)
+static addrinfo* getAddressInfo (bool isDatagram, const String& hostName, int portNumber)
+{
+    struct addrinfo hints;
+    zerostruct (hints);
+
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = isDatagram ? SOCK_DGRAM : SOCK_STREAM;
+    hints.ai_flags = AI_NUMERICSERV;
+
+    struct addrinfo* info = nullptr;
+
+    if (getaddrinfo (hostName.toRawUTF8(), String (portNumber).toRawUTF8(), &hints, &info) == 0)
+        return info;
+
+    return nullptr;
+}
+
+static bool connectSocket (std::atomic<int>& handle,
+                           CriticalSection& readLock,
+                           const String& hostName,
+                           int portNumber,
+                           int timeOutMillisecs,
+                           const SocketOptions& options) noexcept
+{
+    bool success = false;
+
+    if (auto* info = getAddressInfo (false, hostName, portNumber))
     {
-        struct addrinfo hints;
-        zerostruct (hints);
-
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = isDatagram ? SOCK_DGRAM : SOCK_STREAM;
-        hints.ai_flags = AI_NUMERICSERV;
-
-        struct addrinfo* info = nullptr;
-
-        if (getaddrinfo (hostName.toRawUTF8(), String (portNumber).toRawUTF8(), &hints, &info) == 0)
-            return info;
-
-        return nullptr;
-    }
-
-    static bool connectSocket (std::atomic<int>& handle,
-                               CriticalSection& readLock,
-                               const String& hostName,
-                               int portNumber,
-                               int timeOutMillisecs,
-                               const SocketOptions& options) noexcept
-    {
-        bool success = false;
-
-        if (auto* info = getAddressInfo (false, hostName, portNumber))
+        for (auto* i = info; i != nullptr; i = i->ai_next)
         {
-            for (auto* i = info; i != nullptr; i = i->ai_next)
-            {
-                auto newHandle = socket (i->ai_family, i->ai_socktype, 0);
+            auto newHandle = socket (i->ai_family, i->ai_socktype, 0);
 
-                if (newHandle != invalidSocket)
+            if (newHandle != invalidSocket)
+            {
+                setSocketBlockingState (newHandle, false);
+                auto result = ::connect (newHandle, i->ai_addr, (socklen_t) i->ai_addrlen);
+                success = (result >= 0);
+
+                if (! success)
                 {
-                    setSocketBlockingState (newHandle, false);
-                    auto result = ::connect (newHandle, i->ai_addr, (socklen_t) i->ai_addrlen);
-                    success = (result >= 0);
-
-                    if (! success)
-                    {
 #if JUCE_WINDOWS
-                        if (result == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK)
+                    if (result == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK)
 #else
-                        if (errno == EINPROGRESS)
+                    if (errno == EINPROGRESS)
 #endif
-                        {
-                            std::atomic<int> cvHandle { (int) newHandle };
-
-                            if (waitForReadiness (cvHandle, readLock, false, timeOutMillisecs) == 1)
-                                success = true;
-                        }
-                    }
-
-                    if (success)
                     {
-                        handle = (int) newHandle;
-                        break;
-                    }
+                        std::atomic<int> cvHandle { (int) newHandle };
 
-#if JUCE_WINDOWS
-                    closesocket (newHandle);
-#else
-                    ::close (newHandle);
-#endif
+                        if (waitForReadiness (cvHandle, readLock, false, timeOutMillisecs) == 1)
+                            success = true;
+                    }
                 }
-            }
 
-            freeaddrinfo (info);
+                if (success)
+                {
+                    handle = (int) newHandle;
+                    break;
+                }
 
-            if (success)
-            {
-                auto h = (SocketHandle) handle.load();
-                setSocketBlockingState (h, true);
-                resetSocketOptions (h, false, false, options);
+#if JUCE_WINDOWS
+                closesocket (newHandle);
+#else
+                ::close (newHandle);
+#endif
             }
         }
 
-        return success;
+        freeaddrinfo (info);
+
+        if (success)
+        {
+            auto h = (SocketHandle) handle.load();
+            setSocketBlockingState (h, true);
+            resetSocketOptions (h, false, false, options);
+        }
     }
 
-    static void makeReusable (int handle) noexcept
-    {
-        setOption ((SocketHandle) handle, SO_REUSEADDR, (int) 1);
-    }
+    return success;
+}
 
-    static bool multicast (int handle, const String& multicastIPAddress, const String& interfaceIPAddress, bool join) noexcept
-    {
-        struct ip_mreq mreq;
+static void makeReusable (int handle) noexcept
+{
+    setOption ((SocketHandle) handle, SO_REUSEADDR, (int) 1);
+}
 
-        zerostruct (mreq);
-        mreq.imr_multiaddr.s_addr = inet_addr (multicastIPAddress.toRawUTF8());
-        mreq.imr_interface.s_addr = INADDR_ANY;
+static bool multicast (int handle, const String& multicastIPAddress, const String& interfaceIPAddress, bool join) noexcept
+{
+    struct ip_mreq mreq;
 
-        if (interfaceIPAddress.isNotEmpty())
-            mreq.imr_interface.s_addr = inet_addr (interfaceIPAddress.toRawUTF8());
+    zerostruct (mreq);
+    mreq.imr_multiaddr.s_addr = inet_addr (multicastIPAddress.toRawUTF8());
+    mreq.imr_interface.s_addr = INADDR_ANY;
 
-        return setsockopt ((SocketHandle) handle, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, (const char*) &mreq, sizeof (mreq)) == 0;
-    }
+    if (interfaceIPAddress.isNotEmpty())
+        mreq.imr_interface.s_addr = inet_addr (interfaceIPAddress.toRawUTF8());
+
+    return setsockopt ((SocketHandle) handle, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, (const char*) &mreq, sizeof (mreq)) == 0;
+}
 } // namespace SocketHelpers
 
 //==============================================================================
@@ -827,8 +827,8 @@ bool DatagramSocket::setEnablePortReuse ([[maybe_unused]] bool enabled)
 
 JUCE_END_IGNORE_WARNINGS_MSVC
 
-    //==============================================================================
-    //==============================================================================
+//==============================================================================
+//==============================================================================
 #if JUCE_UNIT_TESTS
 
 struct SocketTests final : public UnitTest

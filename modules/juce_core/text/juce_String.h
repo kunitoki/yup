@@ -38,8 +38,8 @@
 */
 
 #if ! defined(DOXYGEN) && (JUCE_MAC || JUCE_IOS)
-    // Annoyingly we can only forward-declare a typedef by forward-declaring the
-    // aliased type
+// Annoyingly we can only forward-declare a typedef by forward-declaring the
+// aliased type
 #if __has_attribute(objc_bridge)
 #define JUCE_CF_BRIDGED_TYPE(T) __attribute__ ((objc_bridge (T)))
 #else

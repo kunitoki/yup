@@ -85,7 +85,7 @@
     && __apple_build_version__ >= 15000000          \
     && __apple_build_version__ < 15000100
 
-        // Due to known issues, the linker in Xcode 15.0 may produce broken binaries.
+    // Due to known issues, the linker in Xcode 15.0 may produce broken binaries.
 #error Please upgrade to Xcode 15.1 or higher
 #endif
 
@@ -119,7 +119,7 @@
 
 //==============================================================================
 #ifndef DOXYGEN
-    // These are old flags that are now supported on all compatible build targets
+// These are old flags that are now supported on all compatible build targets
 #define JUCE_COMPILER_SUPPORTS_OVERRIDE_AND_FINAL 1
 #define JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES 1
 #define JUCE_COMPILER_SUPPORTS_INITIALIZER_LISTS 1

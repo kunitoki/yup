@@ -185,101 +185,101 @@ XmlElement::~XmlElement() noexcept
 //==============================================================================
 namespace XmlOutputFunctions
 {
-    namespace LegalCharLookupTable
+namespace LegalCharLookupTable
+{
+template <int c>
+struct Bit
+{
+    enum
     {
-        template <int c>
-        struct Bit
-        {
-            enum
-            {
-                v = ((c >= 'a' && c <= 'z')
-                     || (c >= 'A' && c <= 'Z')
-                     || (c >= '0' && c <= '9')
-                     || c == ' ' || c == '.' || c == ',' || c == ';'
-                     || c == ':' || c == '-' || c == '(' || c == ')'
-                     || c == '_' || c == '+' || c == '=' || c == '?'
-                     || c == '!' || c == '$' || c == '#' || c == '@'
-                     || c == '[' || c == ']' || c == '/' || c == '|'
-                     || c == '*' || c == '%' || c == '~' || c == '{'
-                     || c == '}' || c == '\'' || c == '\\')
-                      ? (1 << (c & 7))
-                      : 0
-            };
-        };
+        v = ((c >= 'a' && c <= 'z')
+             || (c >= 'A' && c <= 'Z')
+             || (c >= '0' && c <= '9')
+             || c == ' ' || c == '.' || c == ',' || c == ';'
+             || c == ':' || c == '-' || c == '(' || c == ')'
+             || c == '_' || c == '+' || c == '=' || c == '?'
+             || c == '!' || c == '$' || c == '#' || c == '@'
+             || c == '[' || c == ']' || c == '/' || c == '|'
+             || c == '*' || c == '%' || c == '~' || c == '{'
+             || c == '}' || c == '\'' || c == '\\')
+              ? (1 << (c & 7))
+              : 0
+    };
+};
 
-        template <int tableIndex>
-        struct Byte
-        {
-            enum
-            {
-                v = (int) Bit<tableIndex * 8 + 0>::v | (int) Bit<tableIndex * 8 + 1>::v
-                  | (int) Bit<tableIndex * 8 + 2>::v | (int) Bit<tableIndex * 8 + 3>::v
-                  | (int) Bit<tableIndex * 8 + 4>::v | (int) Bit<tableIndex * 8 + 5>::v
-                  | (int) Bit<tableIndex * 8 + 6>::v | (int) Bit<tableIndex * 8 + 7>::v
-            };
-        };
+template <int tableIndex>
+struct Byte
+{
+    enum
+    {
+        v = (int) Bit<tableIndex * 8 + 0>::v | (int) Bit<tableIndex * 8 + 1>::v
+          | (int) Bit<tableIndex * 8 + 2>::v | (int) Bit<tableIndex * 8 + 3>::v
+          | (int) Bit<tableIndex * 8 + 4>::v | (int) Bit<tableIndex * 8 + 5>::v
+          | (int) Bit<tableIndex * 8 + 6>::v | (int) Bit<tableIndex * 8 + 7>::v
+    };
+};
 
-        static bool isLegal (uint32 c) noexcept
-        {
-            static const unsigned char legalChars[] = { Byte<0>::v, Byte<1>::v, Byte<2>::v, Byte<3>::v, Byte<4>::v, Byte<5>::v, Byte<6>::v, Byte<7>::v, Byte<8>::v, Byte<9>::v, Byte<10>::v, Byte<11>::v, Byte<12>::v, Byte<13>::v, Byte<14>::v, Byte<15>::v };
+static bool isLegal (uint32 c) noexcept
+{
+    static const unsigned char legalChars[] = { Byte<0>::v, Byte<1>::v, Byte<2>::v, Byte<3>::v, Byte<4>::v, Byte<5>::v, Byte<6>::v, Byte<7>::v, Byte<8>::v, Byte<9>::v, Byte<10>::v, Byte<11>::v, Byte<12>::v, Byte<13>::v, Byte<14>::v, Byte<15>::v };
 
-            return c < sizeof (legalChars) * 8
-                && (legalChars[c >> 3] & (1 << (c & 7))) != 0;
+    return c < sizeof (legalChars) * 8
+        && (legalChars[c >> 3] & (1 << (c & 7))) != 0;
+}
+} // namespace LegalCharLookupTable
+
+static void escapeIllegalXmlChars (OutputStream& outputStream, const String& text, bool changeNewLines)
+{
+    auto t = text.getCharPointer();
+
+    for (;;)
+    {
+        auto character = (uint32) t.getAndAdvance();
+
+        if (character == 0)
+            break;
+
+        if (LegalCharLookupTable::isLegal (character))
+        {
+            outputStream << (char) character;
         }
-    } // namespace LegalCharLookupTable
-
-    static void escapeIllegalXmlChars (OutputStream& outputStream, const String& text, bool changeNewLines)
-    {
-        auto t = text.getCharPointer();
-
-        for (;;)
+        else
         {
-            auto character = (uint32) t.getAndAdvance();
-
-            if (character == 0)
-                break;
-
-            if (LegalCharLookupTable::isLegal (character))
+            switch (character)
             {
-                outputStream << (char) character;
-            }
-            else
-            {
-                switch (character)
-                {
-                    case '&':
-                        outputStream << "&amp;";
-                        break;
-                    case '"':
-                        outputStream << "&quot;";
-                        break;
-                    case '>':
-                        outputStream << "&gt;";
-                        break;
-                    case '<':
-                        outputStream << "&lt;";
-                        break;
+                case '&':
+                    outputStream << "&amp;";
+                    break;
+                case '"':
+                    outputStream << "&quot;";
+                    break;
+                case '>':
+                    outputStream << "&gt;";
+                    break;
+                case '<':
+                    outputStream << "&lt;";
+                    break;
 
-                    case '\n':
-                    case '\r':
-                        if (! changeNewLines)
-                        {
-                            outputStream << (char) character;
-                            break;
-                        }
-                        JUCE_FALLTHROUGH
-                    default:
-                        outputStream << "&#" << ((int) character) << ';';
+                case '\n':
+                case '\r':
+                    if (! changeNewLines)
+                    {
+                        outputStream << (char) character;
                         break;
-                }
+                    }
+                    JUCE_FALLTHROUGH
+                default:
+                    outputStream << "&#" << ((int) character) << ';';
+                    break;
             }
         }
     }
+}
 
-    static void writeSpaces (OutputStream& out, const size_t numSpaces)
-    {
-        out.writeRepeatedByte (' ', numSpaces);
-    }
+static void writeSpaces (OutputStream& out, const size_t numSpaces)
+{
+    out.writeRepeatedByte (' ', numSpaces);
+}
 } // namespace XmlOutputFunctions
 
 void XmlElement::writeElementAsText (OutputStream& outputStream,

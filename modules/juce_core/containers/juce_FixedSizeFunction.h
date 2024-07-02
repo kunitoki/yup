@@ -44,58 +44,58 @@ namespace juce
 
 namespace detail
 {
-    template <typename Ret, typename... Args>
-    struct Vtable
+template <typename Ret, typename... Args>
+struct Vtable
+{
+    using Storage = void*;
+
+    using Move = void (*) (Storage, Storage);
+    using Call = Ret (*) (Storage, Args...);
+    using Clear = void (*) (Storage);
+
+    constexpr Vtable (Move moveIn, Call callIn, Clear clearIn) noexcept
+        : move (moveIn)
+        , call (callIn)
+        , clear (clearIn)
     {
-        using Storage = void*;
-
-        using Move = void (*) (Storage, Storage);
-        using Call = Ret (*) (Storage, Args...);
-        using Clear = void (*) (Storage);
-
-        constexpr Vtable (Move moveIn, Call callIn, Clear clearIn) noexcept
-            : move (moveIn)
-            , call (callIn)
-            , clear (clearIn)
-        {
-        }
-
-        Move move = nullptr;
-        Call call = nullptr;
-        Clear clear = nullptr;
-    };
-
-    template <typename Fn>
-    void move (void* from, void* to)
-    {
-        new (to) Fn (std::move (*reinterpret_cast<Fn*> (from)));
     }
 
-    template <typename Fn, typename Ret, typename... Args>
-    std::enable_if_t<std::is_same_v<Ret, void>, Ret> call (void* s, Args... args)
-    {
-        (*reinterpret_cast<Fn*> (s)) (std::forward<Args> (args)...);
-    }
+    Move move = nullptr;
+    Call call = nullptr;
+    Clear clear = nullptr;
+};
 
-    template <typename Fn, typename Ret, typename... Args>
-    std::enable_if_t<! std::is_same_v<Ret, void>, Ret> call (void* s, Args... args)
-    {
-        return (*reinterpret_cast<Fn*> (s)) (std::forward<Args> (args)...);
-    }
+template <typename Fn>
+void move (void* from, void* to)
+{
+    new (to) Fn (std::move (*reinterpret_cast<Fn*> (from)));
+}
 
-    template <typename Fn>
-    void clear (void* s)
-    {
-        // I know this looks insane, for some reason MSVC 14 sometimes thinks fn is unreferenced
-        [[maybe_unused]] auto& fn = *reinterpret_cast<Fn*> (s);
-        fn.~Fn();
-    }
+template <typename Fn, typename Ret, typename... Args>
+std::enable_if_t<std::is_same_v<Ret, void>, Ret> call (void* s, Args... args)
+{
+    (*reinterpret_cast<Fn*> (s)) (std::forward<Args> (args)...);
+}
 
-    template <typename Fn, typename Ret, typename... Args>
-    constexpr Vtable<Ret, Args...> makeVtable()
-    {
-        return { move<Fn>, call<Fn, Ret, Args...>, clear<Fn> };
-    }
+template <typename Fn, typename Ret, typename... Args>
+std::enable_if_t<! std::is_same_v<Ret, void>, Ret> call (void* s, Args... args)
+{
+    return (*reinterpret_cast<Fn*> (s)) (std::forward<Args> (args)...);
+}
+
+template <typename Fn>
+void clear (void* s)
+{
+    // I know this looks insane, for some reason MSVC 14 sometimes thinks fn is unreferenced
+    [[maybe_unused]] auto& fn = *reinterpret_cast<Fn*> (s);
+    fn.~Fn();
+}
+
+template <typename Fn, typename Ret, typename... Args>
+constexpr Vtable<Ret, Args...> makeVtable()
+{
+    return { move<Fn>, call<Fn, Ret, Args...>, clear<Fn> };
+}
 } // namespace detail
 
 template <size_t len, typename T>

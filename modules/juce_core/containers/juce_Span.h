@@ -45,60 +45,60 @@ inline constexpr auto dynamicExtent = std::numeric_limits<size_t>::max();
 
 namespace detail
 {
-    //==============================================================================
-    template <typename, typename = void>
-    constexpr auto hasToAddress = false;
+//==============================================================================
+template <typename, typename = void>
+constexpr auto hasToAddress = false;
 
-    template <typename T>
-    constexpr auto hasToAddress<T, Void<decltype (std::pointer_traits<T>::to_address (std::declval<T>()))>> = true;
+template <typename T>
+constexpr auto hasToAddress<T, Void<decltype (std::pointer_traits<T>::to_address (std::declval<T>()))>> = true;
 
-    template <typename, typename = void>
-    constexpr auto hasDataAndSize = false;
+template <typename, typename = void>
+constexpr auto hasDataAndSize = false;
 
-    template <typename T>
-    constexpr auto hasDataAndSize<T,
-                                  Void<decltype (std::data (std::declval<T>())),
-                                       decltype (std::size (std::declval<T>()))>> = true;
+template <typename T>
+constexpr auto hasDataAndSize<T,
+                              Void<decltype (std::data (std::declval<T>())),
+                                   decltype (std::size (std::declval<T>()))>> = true;
 
-    template <size_t Extent>
-    struct NumBase
+template <size_t Extent>
+struct NumBase
+{
+    constexpr NumBase() = default;
+
+    constexpr explicit NumBase (size_t) {}
+
+    constexpr size_t size() const { return Extent; }
+};
+
+template <>
+struct NumBase<dynamicExtent>
+{
+    constexpr NumBase() = default;
+
+    constexpr explicit NumBase (size_t arg)
+        : num (arg)
     {
-        constexpr NumBase() = default;
-
-        constexpr explicit NumBase (size_t) {}
-
-        constexpr size_t size() const { return Extent; }
-    };
-
-    template <>
-    struct NumBase<dynamicExtent>
-    {
-        constexpr NumBase() = default;
-
-        constexpr explicit NumBase (size_t arg)
-            : num (arg)
-        {
-        }
-
-        constexpr size_t size() const { return num; }
-
-        size_t num {};
-    };
-
-    template <typename T>
-    constexpr T* toAddress (T* p)
-    {
-        return p;
     }
 
-    template <typename It>
-    constexpr auto toAddress (const It& it)
-    {
-        if constexpr (detail::hasToAddress<It>)
-            return std::pointer_traits<It>::to_address (it);
-        else
-            return toAddress (it.operator->());
-    }
+    constexpr size_t size() const { return num; }
+
+    size_t num {};
+};
+
+template <typename T>
+constexpr T* toAddress (T* p)
+{
+    return p;
+}
+
+template <typename It>
+constexpr auto toAddress (const It& it)
+{
+    if constexpr (detail::hasToAddress<It>)
+        return std::pointer_traits<It>::to_address (it);
+    else
+        return toAddress (it.operator->());
+}
 } // namespace detail
 
 //==============================================================================

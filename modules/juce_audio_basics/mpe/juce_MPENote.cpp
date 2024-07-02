@@ -42,13 +42,13 @@ namespace juce
 
 namespace
 {
-    uint16 generateNoteID (int midiChannel, int midiNoteNumber) noexcept
-    {
-        jassert (midiChannel > 0 && midiChannel <= 16);
-        jassert (midiNoteNumber >= 0 && midiNoteNumber < 128);
+uint16 generateNoteID (int midiChannel, int midiNoteNumber) noexcept
+{
+    jassert (midiChannel > 0 && midiChannel <= 16);
+    jassert (midiNoteNumber >= 0 && midiNoteNumber < 128);
 
-        return uint16 ((midiChannel << 7) + midiNoteNumber);
-    }
+    return uint16 ((midiChannel << 7) + midiNoteNumber);
+}
 } // namespace
 
 //==============================================================================
