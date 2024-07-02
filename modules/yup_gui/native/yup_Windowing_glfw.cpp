@@ -198,6 +198,7 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
     return {};
 }
+
 // clang-format on
 
 //==============================================================================
