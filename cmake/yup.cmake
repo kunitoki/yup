@@ -72,7 +72,7 @@ endfunction()
 #==============================================================================
 
 macro(_yup_setup_platform)
-    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR PLATFORM STREQUAL "OS64")
+    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
         set (yup_platform "ios")
     elseif (ANDROID)
         set (yup_platform "android")
