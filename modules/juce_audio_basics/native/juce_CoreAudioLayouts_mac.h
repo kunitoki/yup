@@ -40,7 +40,7 @@
 namespace juce
 {
 
-#if ! defined (DOXYGEN) && (JUCE_MAC || JUCE_IOS)
+#if ! defined(DOXYGEN) && (JUCE_MAC || JUCE_IOS)
 
 struct CoreAudioLayouts
 {
@@ -67,7 +67,7 @@ struct CoreAudioLayouts
         template <typename... Items>
         static constexpr auto getArray (Items... items)
         {
-            return std::array<LayoutTagSpeakerList, sizeof... (items)> { { items... } };
+            return std::array<LayoutTagSpeakerList, sizeof...(items)> { { items... } };
         }
 
         static constexpr auto get()
@@ -95,16 +95,16 @@ struct CoreAudioLayouts
                              List { kAudioChannelLayoutTag_Hexagonal, { left, right, leftSurroundRear, rightSurroundRear, centre, centreSurround } },
                              List { kAudioChannelLayoutTag_Octagonal, { left, right, leftSurround, rightSurround, centre, centreSurround, wideLeft, wideRight } },
 
-                            #if defined (MAC_OS_VERSION_11_0)
+#if defined(MAC_OS_VERSION_11_0)
                              List { kAudioChannelLayoutTag_Atmos_5_1_4, { left, right, centre, LFE, leftSurround, rightSurround, topFrontLeft, topFrontRight, topRearLeft, topRearRight } },
                              List { kAudioChannelLayoutTag_Atmos_7_1_2, { left, right, centre, LFE, leftSurroundSide, rightSurroundSide, leftSurroundRear, rightSurroundRear, topSideLeft, topSideRight } },
-                            #endif
+#endif
 
-                            #if defined (MAC_OS_X_VERSION_10_15)
+#if defined(MAC_OS_X_VERSION_10_15)
                              List { kAudioChannelLayoutTag_Atmos_5_1_2, { left, right, centre, LFE, leftSurround, rightSurround, topSideLeft, topSideRight } },
                              List { kAudioChannelLayoutTag_Atmos_7_1_4, { left, right, centre, LFE, leftSurroundSide, rightSurroundSide, leftSurroundRear, rightSurroundRear, topFrontLeft, topFrontRight, topRearLeft, topRearRight } },
                              List { kAudioChannelLayoutTag_Atmos_9_1_6, { left, right, centre, LFE, leftSurroundSide, rightSurroundSide, leftSurroundRear, rightSurroundRear, wideLeft, wideRight, topFrontLeft, topFrontRight, topSideLeft, topSideRight, topRearLeft, topRearRight } },
-                            #endif
+#endif
 
                              // More uncommon layouts...
                              List { kAudioChannelLayoutTag_StereoHeadphones, { left, right } },
@@ -124,10 +124,10 @@ struct CoreAudioLayouts
                              List { kAudioChannelLayoutTag_MPEG_7_1_B, { centre, leftCentre, rightCentre, left, right, leftSurround, rightSurround, LFE } },
                              List { kAudioChannelLayoutTag_Emagic_Default_7_1, { left, right, leftSurround, rightSurround, centre, LFE, leftCentre, rightCentre } },
 
-                            // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
-                            #ifndef __clang_analyzer__
-                             List { kAudioChannelLayoutTag_SMPTE_DTV, { left, right, centre, LFE, leftSurround, rightSurround, discreteChannel0 /* leftMatrixTotal */, (ChannelType) (discreteChannel0 + 1) /* rightMatrixTotal */} },
-                            #endif
+    // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
+#ifndef __clang_analyzer__
+                             List { kAudioChannelLayoutTag_SMPTE_DTV, { left, right, centre, LFE, leftSurround, rightSurround, discreteChannel0 /* leftMatrixTotal */, (ChannelType) (discreteChannel0 + 1) /* rightMatrixTotal */ } },
+#endif
 
                              List { kAudioChannelLayoutTag_ITU_2_2, { left, right, leftSurround, rightSurround } },
                              List { kAudioChannelLayoutTag_DVD_4, { left, right, LFE } },
@@ -182,7 +182,7 @@ public:
     //==============================================================================
     enum
     {
-        coreAudioHOASN3DLayoutTag = (190U<<16) | 0 // kAudioChannelLayoutTag_HOA_ACN_SN3D
+        coreAudioHOASN3DLayoutTag = (190U << 16) | 0 // kAudioChannelLayoutTag_HOA_ACN_SN3D
     };
 
     //==============================================================================
@@ -218,7 +218,8 @@ public:
             AudioChannelSet caSet;
 
             for (int i = 0; i < numElementsInArray (item.channelTypes)
-                 && item.channelTypes[i] != AudioChannelSet::unknown; ++i)
+                            && item.channelTypes[i] != AudioChannelSet::unknown;
+                 ++i)
                 caSet.addChannel (item.channelTypes[i]);
 
             if (caSet == set)
@@ -249,13 +250,13 @@ public:
                 for (UInt32 i = 0; i < layout.mNumberChannelDescriptions; ++i)
                     channels.addIfNotAlreadyThere (getChannelTypeFromAudioChannelLabel (layout.mChannelDescriptions[i].mChannelLabel));
 
-               // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
-               #ifndef __clang_analyzer__
+    // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
+#ifndef __clang_analyzer__
                 // different speaker mappings may point to the same JUCE speaker so fill up
                 // this array with discrete channels
                 for (int j = 0; channels.size() < static_cast<int> (layout.mNumberChannelDescriptions); ++j)
                     channels.addIfNotAlreadyThere (static_cast<AudioChannelSet::ChannelType> (AudioChannelSet::discreteChannel0 + j));
-               #endif
+#endif
 
                 return channels;
             }
@@ -281,7 +282,8 @@ public:
             if (tag == item.tag)
             {
                 for (int i = 0; i < numElementsInArray (item.channelTypes)
-                                  && item.channelTypes[i] != AudioChannelSet::unknown; ++i)
+                                && item.channelTypes[i] != AudioChannelSet::unknown;
+                     ++i)
                     speakers.add (item.channelTypes[i]);
 
                 return speakers;
@@ -299,10 +301,10 @@ public:
         }
 
         // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
-       #ifndef __clang_analyzer__
+#ifndef __clang_analyzer__
         for (UInt32 i = 0; i < numChannels; ++i)
             speakers.add (static_cast<AudioChannelSet::ChannelType> (AudioChannelSet::discreteChannel0 + i));
-       #endif
+#endif
 
         return speakers;
     }
@@ -333,36 +335,64 @@ private:
         switch (label)
         {
             case kAudioChannelLabel_Center:
-            case kAudioChannelLabel_Mono:                   return AudioChannelSet::centre;
+            case kAudioChannelLabel_Mono:
+                return AudioChannelSet::centre;
             case kAudioChannelLabel_Left:
-            case kAudioChannelLabel_HeadphonesLeft:         return AudioChannelSet::left;
+            case kAudioChannelLabel_HeadphonesLeft:
+                return AudioChannelSet::left;
             case kAudioChannelLabel_Right:
-            case kAudioChannelLabel_HeadphonesRight:        return AudioChannelSet::right;
-            case kAudioChannelLabel_LFEScreen:              return AudioChannelSet::LFE;
-            case kAudioChannelLabel_LeftSurround:           return AudioChannelSet::leftSurround;
-            case kAudioChannelLabel_RightSurround:          return AudioChannelSet::rightSurround;
-            case kAudioChannelLabel_LeftCenter:             return AudioChannelSet::leftCentre;
-            case kAudioChannelLabel_RightCenter:            return AudioChannelSet::rightCentre;
-            case kAudioChannelLabel_CenterSurround:         return AudioChannelSet::surround;
-            case kAudioChannelLabel_LeftSurroundDirect:     return AudioChannelSet::leftSurroundSide;
-            case kAudioChannelLabel_RightSurroundDirect:    return AudioChannelSet::rightSurroundSide;
-            case kAudioChannelLabel_TopCenterSurround:      return AudioChannelSet::topMiddle;
-            case kAudioChannelLabel_VerticalHeightLeft:     return AudioChannelSet::topFrontLeft;
-            case kAudioChannelLabel_VerticalHeightRight:    return AudioChannelSet::topFrontRight;
-            case kAudioChannelLabel_VerticalHeightCenter:   return AudioChannelSet::topFrontCentre;
-            case kAudioChannelLabel_TopBackLeft:            return AudioChannelSet::topRearLeft;
-            case kAudioChannelLabel_RearSurroundLeft:       return AudioChannelSet::leftSurroundRear;
-            case kAudioChannelLabel_TopBackRight:           return AudioChannelSet::topRearRight;
-            case kAudioChannelLabel_RearSurroundRight:      return AudioChannelSet::rightSurroundRear;
-            case kAudioChannelLabel_TopBackCenter:          return AudioChannelSet::topRearCentre;
-            case kAudioChannelLabel_LFE2:                   return AudioChannelSet::LFE2;
-            case kAudioChannelLabel_LeftWide:               return AudioChannelSet::wideLeft;
-            case kAudioChannelLabel_RightWide:              return AudioChannelSet::wideRight;
-            case kAudioChannelLabel_Ambisonic_W:            return AudioChannelSet::ambisonicW;
-            case kAudioChannelLabel_Ambisonic_X:            return AudioChannelSet::ambisonicX;
-            case kAudioChannelLabel_Ambisonic_Y:            return AudioChannelSet::ambisonicY;
-            case kAudioChannelLabel_Ambisonic_Z:            return AudioChannelSet::ambisonicZ;
-            default:                                        return AudioChannelSet::unknown;
+            case kAudioChannelLabel_HeadphonesRight:
+                return AudioChannelSet::right;
+            case kAudioChannelLabel_LFEScreen:
+                return AudioChannelSet::LFE;
+            case kAudioChannelLabel_LeftSurround:
+                return AudioChannelSet::leftSurround;
+            case kAudioChannelLabel_RightSurround:
+                return AudioChannelSet::rightSurround;
+            case kAudioChannelLabel_LeftCenter:
+                return AudioChannelSet::leftCentre;
+            case kAudioChannelLabel_RightCenter:
+                return AudioChannelSet::rightCentre;
+            case kAudioChannelLabel_CenterSurround:
+                return AudioChannelSet::surround;
+            case kAudioChannelLabel_LeftSurroundDirect:
+                return AudioChannelSet::leftSurroundSide;
+            case kAudioChannelLabel_RightSurroundDirect:
+                return AudioChannelSet::rightSurroundSide;
+            case kAudioChannelLabel_TopCenterSurround:
+                return AudioChannelSet::topMiddle;
+            case kAudioChannelLabel_VerticalHeightLeft:
+                return AudioChannelSet::topFrontLeft;
+            case kAudioChannelLabel_VerticalHeightRight:
+                return AudioChannelSet::topFrontRight;
+            case kAudioChannelLabel_VerticalHeightCenter:
+                return AudioChannelSet::topFrontCentre;
+            case kAudioChannelLabel_TopBackLeft:
+                return AudioChannelSet::topRearLeft;
+            case kAudioChannelLabel_RearSurroundLeft:
+                return AudioChannelSet::leftSurroundRear;
+            case kAudioChannelLabel_TopBackRight:
+                return AudioChannelSet::topRearRight;
+            case kAudioChannelLabel_RearSurroundRight:
+                return AudioChannelSet::rightSurroundRear;
+            case kAudioChannelLabel_TopBackCenter:
+                return AudioChannelSet::topRearCentre;
+            case kAudioChannelLabel_LFE2:
+                return AudioChannelSet::LFE2;
+            case kAudioChannelLabel_LeftWide:
+                return AudioChannelSet::wideLeft;
+            case kAudioChannelLabel_RightWide:
+                return AudioChannelSet::wideRight;
+            case kAudioChannelLabel_Ambisonic_W:
+                return AudioChannelSet::ambisonicW;
+            case kAudioChannelLabel_Ambisonic_X:
+                return AudioChannelSet::ambisonicX;
+            case kAudioChannelLabel_Ambisonic_Y:
+                return AudioChannelSet::ambisonicY;
+            case kAudioChannelLabel_Ambisonic_Z:
+                return AudioChannelSet::ambisonicZ;
+            default:
+                return AudioChannelSet::unknown;
         }
     }
 };

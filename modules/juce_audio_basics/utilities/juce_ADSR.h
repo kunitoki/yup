@@ -54,7 +54,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  ADSR
+class JUCE_API ADSR
 {
 public:
     //==============================================================================
@@ -69,7 +69,7 @@ public:
 
         @tags{Audio}
     */
-    struct JUCE_API  Parameters
+    struct JUCE_API Parameters
     {
         Parameters() = default;
 
@@ -77,10 +77,10 @@ public:
                     float decayTimeSeconds,
                     float sustainLevel,
                     float releaseTimeSeconds)
-            : attack (attackTimeSeconds),
-              decay (decayTimeSeconds),
-              sustain (sustainLevel),
-              release (releaseTimeSeconds)
+            : attack (attackTimeSeconds)
+            , decay (decayTimeSeconds)
+            , sustain (sustainLevel)
+            , release (releaseTimeSeconds)
         {
         }
 
@@ -107,10 +107,10 @@ public:
 
         @see setParameters
     */
-    const Parameters& getParameters() const noexcept  { return parameters; }
+    const Parameters& getParameters() const noexcept { return parameters; }
 
     /** Returns true if the envelope is in its attack, decay, sustain or release stage. */
-    bool isActive() const noexcept                    { return state != State::idle; }
+    bool isActive() const noexcept { return state != State::idle; }
 
     //==============================================================================
     /** Sets the sample rate that will be used for the envelope.
@@ -271,8 +271,8 @@ private:
             return timeInSeconds > 0.0f ? (float) (distance / (timeInSeconds * sr)) : -1.0f;
         };
 
-        attackRate  = getRate (1.0f, parameters.attack, sampleRate);
-        decayRate   = getRate (1.0f - parameters.sustain, parameters.decay, sampleRate);
+        attackRate = getRate (1.0f, parameters.attack, sampleRate);
+        decayRate = getRate (1.0f - parameters.sustain, parameters.decay, sampleRate);
         releaseRate = getRate (parameters.sustain, parameters.release, sampleRate);
 
         if ((state == State::attack && attackRate <= 0.0f)
@@ -302,7 +302,14 @@ private:
     }
 
     //==============================================================================
-    enum class State { idle, attack, decay, sustain, release };
+    enum class State
+    {
+        idle,
+        attack,
+        decay,
+        sustain,
+        release
+    };
 
     State state = State::idle;
     Parameters parameters;

@@ -42,7 +42,10 @@ namespace juce
 
 struct ADSRTests final : public UnitTest
 {
-    ADSRTests()  : UnitTest ("ADSR", UnitTestCategories::audio)  {}
+    ADSRTests()
+        : UnitTest ("ADSR", UnitTestCategories::audio)
+    {
+    }
 
     void runTest() override
     {

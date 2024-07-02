@@ -62,7 +62,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MPEMessages
+class JUCE_API MPEMessages
 {
 public:
     /** Returns the sequence of MIDI messages that, if sent to an Expressive

@@ -60,7 +60,7 @@ namespace juce
 
     @tags{Audio}
 */
-struct JUCE_API  MPESynthesiserBase   : public MPEInstrument::Listener
+struct JUCE_API MPESynthesiserBase : public MPEInstrument::Listener
 {
 public:
     //==============================================================================
@@ -97,7 +97,7 @@ public:
     /** Returns the current target sample rate at which rendering is being done.
         Subclasses may need to know this so that they can pitch things correctly.
     */
-    double getSampleRate() const noexcept          { return sampleRate; }
+    double getSampleRate() const noexcept { return sampleRate; }
 
     //==============================================================================
     /** Creates the next block of audio output.

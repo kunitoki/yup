@@ -122,17 +122,21 @@ private:
 
         static forcedinline float valueAtOffset (const float* const inputs, const float offset, int index) noexcept
         {
-            auto y0 = inputs[index]; if (++index == 4) index = 0;
-            auto y1 = inputs[index]; if (++index == 4) index = 0;
-            auto y2 = inputs[index]; if (++index == 4) index = 0;
+            auto y0 = inputs[index];
+            if (++index == 4)
+                index = 0;
+            auto y1 = inputs[index];
+            if (++index == 4)
+                index = 0;
+            auto y2 = inputs[index];
+            if (++index == 4)
+                index = 0;
             auto y3 = inputs[index];
 
             auto halfY0 = 0.5f * y0;
             auto halfY3 = 0.5f * y3;
 
-            return y1 + offset * ((0.5f * y2 - halfY0)
-                      + (offset * (((y0 + 2.0f * y2) - (halfY3 + 2.5f * y1))
-                      + (offset * ((halfY3 + 1.5f * y1) - (halfY0 + 1.5f * y2))))));
+            return y1 + offset * ((0.5f * y2 - halfY0) + (offset * (((y0 + 2.0f * y2) - (halfY3 + 2.5f * y1)) + (offset * ((halfY3 + 1.5f * y1) - (halfY0 + 1.5f * y2))))));
         }
     };
 
@@ -160,10 +164,10 @@ private:
     };
 
 public:
-    using WindowedSinc  = GenericInterpolator<WindowedSincTraits,  200>;
-    using Lagrange      = GenericInterpolator<LagrangeTraits,      5>;
-    using CatmullRom    = GenericInterpolator<CatmullRomTraits,    4>;
-    using Linear        = GenericInterpolator<LinearTraits,        2>;
+    using WindowedSinc = GenericInterpolator<WindowedSincTraits, 200>;
+    using Lagrange = GenericInterpolator<LagrangeTraits, 5>;
+    using CatmullRom = GenericInterpolator<CatmullRomTraits, 4>;
+    using Linear = GenericInterpolator<LinearTraits, 2>;
     using ZeroOrderHold = GenericInterpolator<ZeroOrderHoldTraits, 1>;
 };
 

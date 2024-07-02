@@ -178,18 +178,21 @@ public:
     //==============================================================================
     using Contents = std::array<uint32_t, numWords>;
 
-    using const_iterator    = typename Contents::const_iterator;
+    using const_iterator = typename Contents::const_iterator;
 
-    const_iterator  begin()                   const noexcept { return contents.begin(); }
-    const_iterator cbegin()                   const noexcept { return contents.begin(); }
+    const_iterator begin() const noexcept { return contents.begin(); }
 
-    const_iterator  end()                     const noexcept { return contents.end(); }
-    const_iterator cend()                     const noexcept { return contents.end(); }
+    const_iterator cbegin() const noexcept { return contents.begin(); }
 
-    const uint32_t* data()                    const noexcept { return contents.data(); }
+    const_iterator end() const noexcept { return contents.end(); }
 
-    const uint32_t& front()                   const noexcept { return contents.front(); }
-    const uint32_t& back()                    const noexcept { return contents.back(); }
+    const_iterator cend() const noexcept { return contents.end(); }
+
+    const uint32_t* data() const noexcept { return contents.data(); }
+
+    const uint32_t& front() const noexcept { return contents.front(); }
+
+    const uint32_t& back() const noexcept { return contents.back(); }
 
     const uint32_t& operator[] (size_t index) const noexcept { return contents[index]; }
 

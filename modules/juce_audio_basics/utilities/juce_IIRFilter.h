@@ -50,7 +50,7 @@ class IIRFilter;
 
     @tags{Audio}
 */
-class JUCE_API  IIRCoefficients
+class JUCE_API IIRCoefficients
 {
 public:
     //==============================================================================
@@ -62,8 +62,7 @@ public:
         the constructor is public to allow tinkerers to create their own custom
         filters!
     */
-    IIRCoefficients (double c1, double c2, double c3,
-                     double c4, double c5, double c6) noexcept;
+    IIRCoefficients (double c1, double c2, double c3, double c4, double c5, double c6) noexcept;
 
     /** Creates a copy of another filter. */
     IIRCoefficients (const IIRCoefficients&) noexcept;
@@ -171,7 +170,7 @@ public:
     @tags{Audio}
 */
 template <typename Mutex>
-class JUCE_API  IIRFilterBase
+class JUCE_API IIRFilterBase
 {
 public:
     //==============================================================================
@@ -194,7 +193,7 @@ public:
     void setCoefficients (const IIRCoefficients& newCoefficients) noexcept;
 
     /** Returns the coefficients that this filter is using. */
-    IIRCoefficients getCoefficients() const noexcept    { return coefficients; }
+    IIRCoefficients getCoefficients() const noexcept { return coefficients; }
 
     //==============================================================================
     /** Resets the filter's processing pipeline, ready to start a new stream of data.

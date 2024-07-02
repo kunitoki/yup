@@ -49,7 +49,7 @@ namespace
 
         return uint16 ((midiChannel << 7) + midiNoteNumber);
     }
-}
+} // namespace
 
 //==============================================================================
 MPENote::MPENote (int midiChannel_,
@@ -59,15 +59,15 @@ MPENote::MPENote (int midiChannel_,
                   MPEValue pressure_,
                   MPEValue timbre_,
                   KeyState keyState_) noexcept
-    : noteID (generateNoteID (midiChannel_, initialNote_)),
-      midiChannel (uint8 (midiChannel_)),
-      initialNote (uint8 (initialNote_)),
-      noteOnVelocity (noteOnVelocity_),
-      pitchbend (pitchbend_),
-      pressure (pressure_),
-      initialTimbre (timbre_),
-      timbre (timbre_),
-      keyState (keyState_)
+    : noteID (generateNoteID (midiChannel_, initialNote_))
+    , midiChannel (uint8 (midiChannel_))
+    , initialNote (uint8 (initialNote_))
+    , noteOnVelocity (noteOnVelocity_)
+    , pitchbend (pitchbend_)
+    , pressure (pressure_)
+    , initialTimbre (timbre_)
+    , timbre (timbre_)
+    , keyState (keyState_)
 {
     jassert (keyState != MPENote::off);
     jassert (isValid());
@@ -101,7 +101,6 @@ bool MPENote::operator!= (const MPENote& other) const noexcept
     return noteID != other.noteID;
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -111,7 +110,8 @@ class MPENoteTests final : public UnitTest
 public:
     MPENoteTests()
         : UnitTest ("MPENote class", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     //==============================================================================
     void runTest() override

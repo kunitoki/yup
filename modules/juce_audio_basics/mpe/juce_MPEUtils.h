@@ -106,8 +106,10 @@ private:
     {
         Array<int> notes;
         int lastNotePlayed = -1;
-        bool isFree() const noexcept  { return notes.isEmpty(); }
+
+        bool isFree() const noexcept { return notes.isEmpty(); }
     };
+
     std::array<MidiChannel, 17> midiChannels;
 
     //==============================================================================
@@ -169,7 +171,7 @@ private:
     void zeroArrays();
 
     //==============================================================================
-    bool messageIsNoteData (const MidiMessage& m)    { return (*m.getRawData() & 0xf0) != 0xf0; }
+    bool messageIsNoteData (const MidiMessage& m) { return (*m.getRawData() & 0xf0) != 0xf0; }
 };
 
 } // namespace juce

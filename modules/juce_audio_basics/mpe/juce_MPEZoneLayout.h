@@ -57,26 +57,34 @@ namespace juce
 */
 struct MPEZone
 {
-    enum class Type { lower, upper };
+    enum class Type
+    {
+        lower,
+        upper
+    };
 
     MPEZone() = default;
 
     MPEZone (Type type, int memberChannels = 0, int perNotePitchbend = 48, int masterPitchbend = 2)
-        : zoneType (type),
-          numMemberChannels (memberChannels),
-          perNotePitchbendRange (perNotePitchbend),
-          masterPitchbendRange (masterPitchbend)
-    {}
+        : zoneType (type)
+        , numMemberChannels (memberChannels)
+        , perNotePitchbendRange (perNotePitchbend)
+        , masterPitchbendRange (masterPitchbend)
+    {
+    }
 
-    bool isLowerZone() const noexcept             { return zoneType == Type::lower; }
-    bool isUpperZone() const noexcept             { return zoneType == Type::upper; }
+    bool isLowerZone() const noexcept { return zoneType == Type::lower; }
 
-    bool isActive() const noexcept                { return numMemberChannels > 0; }
+    bool isUpperZone() const noexcept { return zoneType == Type::upper; }
 
-    int getMasterChannel() const noexcept         { return isLowerZone() ? lowerZoneMasterChannel : upperZoneMasterChannel; }
-    int getFirstMemberChannel() const noexcept    { return isLowerZone() ? lowerZoneMasterChannel + 1 : upperZoneMasterChannel - 1; }
-    int getLastMemberChannel() const noexcept     { return isLowerZone() ? (lowerZoneMasterChannel + numMemberChannels)
-                                                                         : (upperZoneMasterChannel - numMemberChannels); }
+    bool isActive() const noexcept { return numMemberChannels > 0; }
+
+    int getMasterChannel() const noexcept { return isLowerZone() ? lowerZoneMasterChannel : upperZoneMasterChannel; }
+
+    int getFirstMemberChannel() const noexcept { return isLowerZone() ? lowerZoneMasterChannel + 1 : upperZoneMasterChannel - 1; }
+
+    int getLastMemberChannel() const noexcept { return isLowerZone() ? (lowerZoneMasterChannel + numMemberChannels)
+                                                                     : (upperZoneMasterChannel - numMemberChannels); }
 
     bool isUsingChannelAsMemberChannel (int channel) const noexcept
     {
@@ -113,9 +121,9 @@ struct MPEZone
 
     Type zoneType = Type::lower;
 
-    int numMemberChannels     = 0;
+    int numMemberChannels = 0;
     int perNotePitchbendRange = 48;
-    int masterPitchbendRange  = 2;
+    int masterPitchbendRange = 2;
 };
 
 //==============================================================================
@@ -136,7 +144,7 @@ struct MPEZone
 
     @tags{Audio}
 */
-class JUCE_API  MPEZoneLayout
+class JUCE_API MPEZoneLayout
 {
 public:
     //==============================================================================
@@ -153,14 +161,15 @@ public:
     MPEZoneLayout& operator= (const MPEZoneLayout& other);
 
     bool operator== (const MPEZoneLayout& other) const { return lowerZone == other.lowerZone && upperZone == other.upperZone; }
+
     bool operator!= (const MPEZoneLayout& other) const { return ! operator== (other); }
 
     //==============================================================================
     /** Returns a struct representing the lower MPE zone. */
-    MPEZone getLowerZone() const noexcept    { return lowerZone; }
+    MPEZone getLowerZone() const noexcept { return lowerZone; }
 
     /** Returns a struct representing the upper MPE zone. */
-    MPEZone getUpperZone() const noexcept    { return upperZone; }
+    MPEZone getUpperZone() const noexcept { return upperZone; }
 
     /** Sets the lower zone of this layout. */
     void setLowerZone (int numMemberChannels = 0,
@@ -178,7 +187,7 @@ public:
     void clearAllZones();
 
     /** Returns true if either of the zones are active. */
-    bool isActive() const  { return lowerZone.isActive() || upperZone.isActive(); }
+    bool isActive() const { return lowerZone.isActive() || upperZone.isActive(); }
 
     //==============================================================================
     /** Pass incoming MIDI messages to an object of this class if you want the
@@ -231,9 +240,9 @@ public:
     /** Removes a listener. */
     void removeListener (Listener* const listenerToRemove) noexcept;
 
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     using Zone = MPEZone;
-   #endif
+#endif
 
 private:
     //==============================================================================

@@ -57,6 +57,6 @@
 namespace juce
 {
 namespace ump = universal_midi_packets;
-}
+} // namespace juce
 
 #endif

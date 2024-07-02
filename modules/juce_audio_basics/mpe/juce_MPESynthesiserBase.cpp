@@ -183,21 +183,30 @@ namespace
 {
     class MpeSynthesiserBaseTests final : public UnitTest
     {
-        enum class CallbackKind { process, midi };
+        enum class CallbackKind
+        {
+            process,
+            midi
+        };
 
         struct StartAndLength
         {
-            StartAndLength (int s, int l) : start (s), length (l) {}
+            StartAndLength (int s, int l)
+                : start (s)
+                , length (l)
+            {
+            }
 
-            int start  = 0;
+            int start = 0;
             int length = 0;
 
             std::tuple<const int&, const int&> tie() const noexcept { return std::tie (start, length); }
 
             bool operator== (const StartAndLength& other) const noexcept { return tie() == other.tie(); }
+
             bool operator!= (const StartAndLength& other) const noexcept { return tie() != other.tie(); }
 
-            bool operator< (const StartAndLength& other) const noexcept { return tie() < other.tie(); }
+            bool operator<(const StartAndLength& other) const noexcept { return tie() < other.tie(); }
         };
 
         struct Events
@@ -242,20 +251,30 @@ namespace
 
     public:
         MpeSynthesiserBaseTests()
-            : UnitTest ("MPE Synthesiser Base", UnitTestCategories::midi) {}
+            : UnitTest ("MPE Synthesiser Base", UnitTestCategories::midi)
+        {
+        }
 
         void runTest() override
         {
             const auto sumBlockLengths = [] (const std::vector<StartAndLength>& b)
             {
-                const auto addBlock = [] (int acc, const StartAndLength& info) { return acc + info.length; };
+                const auto addBlock = [] (int acc, const StartAndLength& info)
+                {
+                    return acc + info.length;
+                };
                 return std::accumulate (b.begin(), b.end(), 0, addBlock);
             };
 
             beginTest ("Rendering sparse subblocks works");
             {
                 const int blockSize = 512;
-                const auto midi = [&] { MidiBuffer b; b.addEvent ({}, blockSize / 2); return b; }();
+                const auto midi = [&]
+                {
+                    MidiBuffer b;
+                    b.addEvent ({}, blockSize / 2);
+                    return b;
+                }();
                 AudioBuffer<float> audio (1, blockSize);
 
                 const auto processEvents = [&] (int start, int length)
@@ -273,9 +292,7 @@ namespace
                     expect (e.messages.size() == 1);
                     expect (std::is_sorted (e.blocks.begin(), e.blocks.end()));
                     expect (sumBlockLengths (e.blocks) == blockSize);
-                    expect (e.order == std::vector<CallbackKind> { CallbackKind::process,
-                                                                   CallbackKind::midi,
-                                                                   CallbackKind::process });
+                    expect (e.order == std::vector<CallbackKind> { CallbackKind::process, CallbackKind::midi, CallbackKind::process });
                 }
             }
 
@@ -319,8 +336,7 @@ namespace
                     expect (e.messages.size() == 1);
                     expect (std::is_sorted (e.blocks.begin(), e.blocks.end()));
                     expect (sumBlockLengths (e.blocks) == subBlockLength);
-                    expect (e.order == std::vector<CallbackKind> { CallbackKind::midi,
-                                                                   CallbackKind::process });
+                    expect (e.order == std::vector<CallbackKind> { CallbackKind::midi, CallbackKind::process });
                 }
 
                 {
@@ -344,7 +360,10 @@ namespace
                     if (info.size() <= 1)
                         return true;
 
-                    const auto lengthIsValid = [&] (const StartAndLength& s) { return minLength <= s.length; };
+                    const auto lengthIsValid = [&] (const StartAndLength& s)
+                    {
+                        return minLength <= s.length;
+                    };
                     const auto begin = strict ? info.begin() : std::next (info.begin());
                     // The final block is allowed to be shorter than the minLength
                     return std::all_of (begin, std::prev (info.end()), lengthIsValid);
@@ -374,7 +393,7 @@ namespace
                     MockSynthesiser synth;
                     synth.setMinimumRenderingSubdivisionSize (32, true);
                     synth.setCurrentPlaybackSampleRate (44100);
-                    synth.renderNextBlock (audio, MidiBuffer{}, 0, 16);
+                    synth.renderNextBlock (audio, MidiBuffer {}, 0, 16);
 
                     expect (synth.events.blocks == std::vector<StartAndLength> { { 0, 16 } });
                     expect (synth.events.order == std::vector<CallbackKind> { CallbackKind::process });
@@ -385,7 +404,7 @@ namespace
     };
 
     MpeSynthesiserBaseTests mpeSynthesiserBaseTests;
-}
+} // namespace
 
 #endif
 

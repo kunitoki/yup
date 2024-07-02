@@ -38,41 +38,41 @@
 */
 
 #ifdef JUCE_AUDIO_BASICS_H_INCLUDED
- /* When you add this cpp file to your project, you mustn't include it in a file where you've
+    /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
  */
- #error "Incorrect use of JUCE cpp file"
+#error "Incorrect use of JUCE cpp file"
 #endif
 
 #include "juce_audio_basics.h"
 
-#if JUCE_MINGW && ! defined (alloca)
- #define alloca __builtin_alloca
+#if JUCE_MINGW && ! defined(alloca)
+#define alloca __builtin_alloca
 #endif
 
 #if JUCE_USE_SSE_INTRINSICS
- #include <emmintrin.h>
+#include <emmintrin.h>
 #endif
 
 #if JUCE_MAC || JUCE_IOS
- #ifndef JUCE_USE_VDSP_FRAMEWORK
-  #define JUCE_USE_VDSP_FRAMEWORK 1
- #endif
+#ifndef JUCE_USE_VDSP_FRAMEWORK
+#define JUCE_USE_VDSP_FRAMEWORK 1
+#endif
 
- #if JUCE_USE_VDSP_FRAMEWORK
-  #include <Accelerate/Accelerate.h>
- #endif
+#if JUCE_USE_VDSP_FRAMEWORK
+#include <Accelerate/Accelerate.h>
+#endif
 
- #include "native/juce_AudioWorkgroup_mac.h"
+#include "native/juce_AudioWorkgroup_mac.h"
 
 #elif JUCE_USE_VDSP_FRAMEWORK
- #undef JUCE_USE_VDSP_FRAMEWORK
+#undef JUCE_USE_VDSP_FRAMEWORK
 #endif
 
 #if JUCE_USE_ARM_NEON
- #include <arm_neon.h>
+#include <arm_neon.h>
 #endif
 
 #include "buffers/juce_AudioDataConverters.cpp"
@@ -120,6 +120,6 @@
 #include "utilities/juce_AudioWorkgroup.cpp"
 
 #if JUCE_UNIT_TESTS
- #include "utilities/juce_ADSR_test.cpp"
- #include "midi/ump/juce_UMP_test.cpp"
+#include "utilities/juce_ADSR_test.cpp"
+#include "midi/ump/juce_UMP_test.cpp"
 #endif

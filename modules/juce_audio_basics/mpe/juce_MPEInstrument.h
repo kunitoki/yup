@@ -67,7 +67,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MPEInstrument
+class JUCE_API MPEInstrument
 {
 public:
     /** Constructor.
@@ -273,7 +273,7 @@ public:
         Therefore you should never do heavy work such as graphics rendering etc.
         inside those callbacks.
     */
-    class JUCE_API  Listener
+    class JUCE_API Listener
     {
     public:
         /** Destructor. */
@@ -397,8 +397,9 @@ private:
     {
         TrackingMode trackingMode = lastNotePlayedOnChannel;
         MPEValue lastValueReceivedOnChannel[16];
-        MPEValue MPENote::* value;
-        MPEValue& getValue (MPENote& note) noexcept   { return note.*(value); }
+        MPEValue MPENote::*value;
+
+        MPEValue& getValue (MPENote& note) noexcept { return note.*(value); }
     };
 
     LegacyMode legacyMode;

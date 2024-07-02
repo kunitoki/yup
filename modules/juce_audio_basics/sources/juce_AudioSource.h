@@ -46,17 +46,18 @@ namespace juce
 
     @tags{Audio}
 */
-struct JUCE_API  AudioSourceChannelInfo
+struct JUCE_API AudioSourceChannelInfo
 {
     /** Creates an uninitialised AudioSourceChannelInfo. */
     AudioSourceChannelInfo() = default;
 
     /** Creates an AudioSourceChannelInfo. */
     AudioSourceChannelInfo (AudioBuffer<float>* bufferToUse,
-                            int startSampleOffset, int numSamplesToUse) noexcept
-        : buffer (bufferToUse),
-          startSample (startSampleOffset),
-          numSamples (numSamplesToUse)
+                            int startSampleOffset,
+                            int numSamplesToUse) noexcept
+        : buffer (bufferToUse)
+        , startSample (startSampleOffset)
+        , numSamples (numSamplesToUse)
     {
     }
 
@@ -65,9 +66,9 @@ struct JUCE_API  AudioSourceChannelInfo
         AudioSourceChannelInfo is still using it.
     */
     explicit AudioSourceChannelInfo (AudioBuffer<float>& bufferToUse) noexcept
-        : buffer (&bufferToUse),
-          startSample (0),
-          numSamples (bufferToUse.getNumSamples())
+        : buffer (&bufferToUse)
+        , startSample (0)
+        , numSamples (bufferToUse.getNumSamples())
     {
     }
 
@@ -105,7 +106,6 @@ struct JUCE_API  AudioSourceChannelInfo
     }
 };
 
-
 //==============================================================================
 /**
     Base class for objects that can produce a continuous stream of audio.
@@ -123,7 +123,7 @@ struct JUCE_API  AudioSourceChannelInfo
 
     @tags{Audio}
 */
-class JUCE_API  AudioSource
+class JUCE_API AudioSource
 {
 protected:
     //==============================================================================
@@ -132,7 +132,7 @@ protected:
 
 public:
     /** Destructor. */
-    virtual ~AudioSource()      = default;
+    virtual ~AudioSource() = default;
 
     //==============================================================================
     /** Tells the source to prepare for playing.

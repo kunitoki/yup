@@ -41,24 +41,24 @@ namespace juce
 {
 
 MPEChannelAssigner::MPEChannelAssigner (MPEZoneLayout::Zone zoneToUse)
-    : zone                    (new MPEZoneLayout::Zone (zoneToUse)),
-      channelIncrement        (zone->isLowerZone() ? 1 : -1),
-      numChannels             (zone->numMemberChannels),
-      firstChannel            (zone->getFirstMemberChannel()),
-      lastChannel             (zone->getLastMemberChannel()),
-      midiChannelLastAssigned (firstChannel - channelIncrement)
+    : zone (new MPEZoneLayout::Zone (zoneToUse))
+    , channelIncrement (zone->isLowerZone() ? 1 : -1)
+    , numChannels (zone->numMemberChannels)
+    , firstChannel (zone->getFirstMemberChannel())
+    , lastChannel (zone->getLastMemberChannel())
+    , midiChannelLastAssigned (firstChannel - channelIncrement)
 {
     // must be an active MPE zone!
     jassert (numChannels > 0);
 }
 
 MPEChannelAssigner::MPEChannelAssigner (Range<int> channelRange)
-    : isLegacy                (true),
-      channelIncrement        (1),
-      numChannels             (channelRange.getLength()),
-      firstChannel            (channelRange.getStart()),
-      lastChannel             (channelRange.getEnd() - 1),
-      midiChannelLastAssigned (firstChannel - channelIncrement)
+    : isLegacy (true)
+    , channelIncrement (1)
+    , numChannels (channelRange.getLength())
+    , firstChannel (channelRange.getStart())
+    , lastChannel (channelRange.getEnd() - 1)
+    , midiChannelLastAssigned (firstChannel - channelIncrement)
 {
     // must have at least one channel!
     jassert (! channelRange.isEmpty());
@@ -79,9 +79,9 @@ int MPEChannelAssigner::findMidiChannelForNewNote (int noteNumber) noexcept
         }
     }
 
-    for (int ch = midiChannelLastAssigned + channelIncrement; ; ch += channelIncrement)
+    for (int ch = midiChannelLastAssigned + channelIncrement;; ch += channelIncrement)
     {
-        if (ch == lastChannel + channelIncrement)  // loop wrap-around
+        if (ch == lastChannel + channelIncrement) // loop wrap-around
             ch = firstChannel;
 
         if (midiChannels[(size_t) ch].isFree())
@@ -104,9 +104,9 @@ int MPEChannelAssigner::findMidiChannelForNewNote (int noteNumber) noexcept
 int MPEChannelAssigner::findMidiChannelForExistingNote (int noteNumber) noexcept
 {
     const auto iter = std::find_if (midiChannels.cbegin(), midiChannels.cend(), [&] (auto& ch)
-    {
-        return std::find (ch.notes.begin(), ch.notes.end(), noteNumber) != ch.notes.end();
-    });
+                                    {
+                                        return std::find (ch.notes.begin(), ch.notes.end(), noteNumber) != ch.notes.end();
+                                    });
 
     return iter != midiChannels.cend() ? (int) std::distance (midiChannels.cbegin(), iter) : -1;
 }
@@ -172,10 +172,10 @@ int MPEChannelAssigner::findMidiChannelPlayingClosestNonequalNote (int noteNumbe
 
 //==============================================================================
 MPEChannelRemapper::MPEChannelRemapper (MPEZoneLayout::Zone zoneToRemap)
-    : zone             (zoneToRemap),
-      channelIncrement (zone.isLowerZone() ? 1 : -1),
-      firstChannel     (zone.getFirstMemberChannel()),
-      lastChannel      (zone.getLastMemberChannel())
+    : zone (zoneToRemap)
+    , channelIncrement (zone.isLowerZone() ? 1 : -1)
+    , firstChannel (zone.getFirstMemberChannel())
+    , lastChannel (zone.getLastMemberChannel())
 {
     // must be an active MPE zone!
     jassert (zone.numMemberChannels > 0);
@@ -296,7 +296,6 @@ void MPEChannelRemapper::zeroArrays()
     }
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -305,7 +304,8 @@ struct MPEUtilsUnitTests final : public UnitTest
 {
     MPEUtilsUnitTests()
         : UnitTest ("MPE Utilities", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {

@@ -54,16 +54,17 @@ class SmoothedValueBase
 {
 private:
     //==============================================================================
-    template <typename T> struct FloatTypeHelper;
+    template <typename T>
+    struct FloatTypeHelper;
 
     template <template <typename> class SmoothedValueClass, typename FloatType>
-    struct FloatTypeHelper <SmoothedValueClass <FloatType>>
+    struct FloatTypeHelper<SmoothedValueClass<FloatType>>
     {
         using Type = FloatType;
     };
 
     template <template <typename, typename> class SmoothedValueClass, typename FloatType, typename SmoothingType>
-    struct FloatTypeHelper <SmoothedValueClass <FloatType, SmoothingType>>
+    struct FloatTypeHelper<SmoothedValueClass<FloatType, SmoothingType>>
     {
         using Type = FloatType;
     };
@@ -77,14 +78,14 @@ public:
 
     //==============================================================================
     /** Returns true if the current value is currently being interpolated. */
-    bool isSmoothing() const noexcept                    { return countdown > 0; }
+    bool isSmoothing() const noexcept { return countdown > 0; }
 
     /** Returns the current value of the ramp. */
-    FloatType getCurrentValue() const noexcept           { return currentValue; }
+    FloatType getCurrentValue() const noexcept { return currentValue; }
 
     //==============================================================================
     /** Returns the target value towards which the smoothed value is currently moving. */
-    FloatType getTargetValue() const noexcept            { return target; }
+    FloatType getTargetValue() const noexcept { return target; }
 
     /** Sets the current value and the target value.
         @param newValue    the new value to take
@@ -172,7 +173,7 @@ private:
     //==============================================================================
     FloatType getNextSmoothedValue() noexcept
     {
-        return static_cast <SmoothedValueType*> (this)->getNextValue();
+        return static_cast<SmoothedValueType*> (this)->getNextValue();
     }
 
 protected:
@@ -199,15 +200,19 @@ namespace ValueSmoothingTypes
 
         @tags{Audio}
     */
-    struct Linear {};
+    struct Linear
+    {
+    };
 
     /**
         Used to indicate a smoothing between multiplicative values.
 
         @tags{Audio}
     */
-    struct Multiplicative {};
-}
+    struct Multiplicative
+    {
+    };
+} // namespace ValueSmoothingTypes
 
 //==============================================================================
 /**
@@ -240,7 +245,7 @@ namespace ValueSmoothingTypes
     @tags{Audio}
 */
 template <typename FloatType, typename SmoothingType = ValueSmoothingTypes::Linear>
-class SmoothedValue   : public SmoothedValueBase <SmoothedValue <FloatType, SmoothingType>>
+class SmoothedValue : public SmoothedValueBase<SmoothedValue<FloatType, SmoothingType>>
 {
 public:
     //==============================================================================
@@ -254,8 +259,7 @@ public:
     SmoothedValue (FloatType initialValue) noexcept
     {
         // Multiplicative smoothed values cannot ever reach 0!
-        jassert (! (std::is_same_v<SmoothingType, ValueSmoothingTypes::Multiplicative>
-                    && approximatelyEqual (initialValue, (FloatType) 0)));
+        jassert (! (std::is_same_v<SmoothingType, ValueSmoothingTypes::Multiplicative> && approximatelyEqual (initialValue, (FloatType) 0)));
 
         // Visual Studio can't handle base class initialisation with CRTP
         this->currentValue = initialValue;
@@ -298,8 +302,7 @@ public:
         }
 
         // Multiplicative smoothed values cannot ever reach 0!
-        jassert (! (std::is_same_v<SmoothingType, ValueSmoothingTypes::Multiplicative>
-                    && approximatelyEqual (newValue, (FloatType) 0)));
+        jassert (! (std::is_same_v<SmoothingType, ValueSmoothingTypes::Multiplicative> && approximatelyEqual (newValue, (FloatType) 0)));
 
         this->target = newValue;
         this->countdown = stepsToTarget;
@@ -347,7 +350,7 @@ public:
     }
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     /** Using the new methods:
 
         lsv.setValue (x, false); -> lsv.setTargetValue (x);
@@ -356,8 +359,7 @@ public:
         @param newValue     The new target value
         @param force        If true, the value will be set immediately, bypassing the ramp
     */
-    [[deprecated ("Use setTargetValue and setCurrentAndTargetValue instead.")]]
-    void setValue (FloatType newValue, bool force = false) noexcept
+    [[deprecated ("Use setTargetValue and setCurrentAndTargetValue instead.")]] void setValue (FloatType newValue, bool force = false) noexcept
     {
         if (force)
         {
@@ -367,7 +369,7 @@ public:
 
         setTargetValue (newValue);
     }
-   #endif
+#endif
 
 private:
     //==============================================================================
@@ -418,20 +420,20 @@ private:
 };
 
 template <typename FloatType>
-using LinearSmoothedValue = SmoothedValue <FloatType, ValueSmoothingTypes::Linear>;
-
+using LinearSmoothedValue = SmoothedValue<FloatType, ValueSmoothingTypes::Linear>;
 
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
 
 template <class SmoothedValueType>
-class CommonSmoothedValueTests  : public UnitTest
+class CommonSmoothedValueTests : public UnitTest
 {
 public:
     CommonSmoothedValueTests()
         : UnitTest ("CommonSmoothedValueTests", UnitTestCategories::smoothedValues)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -470,7 +472,7 @@ public:
             sv.reset (5);
 
             expectEquals (sv.getCurrentValue(), targetValue);
-            expectEquals (sv.getTargetValue(),  targetValue);
+            expectEquals (sv.getTargetValue(), targetValue);
             expect (! sv.isSmoothing());
 
             sv.getNextValue();
@@ -556,8 +558,8 @@ public:
             sv.setCurrentAndTargetValue (1.0f);
             sv.setTargetValue (2.0f);
             sv.applyGain (destData.getWritePointer (0),
-                           testData.getReadPointer (0),
-                           numSamples);
+                          testData.getReadPointer (0),
+                          numSamples);
             compareData (destData, referenceData);
             compareData (testData, getUnitData (numSamples));
 

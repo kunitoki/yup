@@ -50,7 +50,7 @@ IIRFilterAudioSource::IIRFilterAudioSource (AudioSource* const inputSource,
         iirFilters.add (new IIRFilter());
 }
 
-IIRFilterAudioSource::~IIRFilterAudioSource()  {}
+IIRFilterAudioSource::~IIRFilterAudioSource() {}
 
 //==============================================================================
 void IIRFilterAudioSource::setCoefficients (const IIRCoefficients& newCoefficients)

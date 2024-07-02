@@ -47,7 +47,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  ToneGeneratorAudioSource  : public AudioSource
+class JUCE_API ToneGeneratorAudioSource : public AudioSource
 {
 public:
     //==============================================================================
@@ -64,7 +64,6 @@ public:
     /** Sets the signal's frequency. */
     void setFrequency (double newFrequencyHz);
 
-
     //==============================================================================
     /** Implementation of the AudioSource method. */
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
@@ -74,7 +73,6 @@ public:
 
     /** Implementation of the AudioSource method. */
     void getNextAudioBlock (const AudioSourceChannelInfo&) override;
-
 
 private:
     //==============================================================================

@@ -166,8 +166,7 @@ private:
             std::vector<float> doubleLengthOutput (2 * outputBufferSize, std::numeric_limits<float>::min());
 
             interpolator.reset();
-            interpolator.process (speedRatio, input.data(), doubleLengthOutput.data(), (int) doubleLengthOutput.size(),
-                                  (int) input.size(), 0);
+            interpolator.process (speedRatio, input.data(), doubleLengthOutput.data(), (int) doubleLengthOutput.size(), (int) input.size(), 0);
 
             std::vector<float> expectedDoubleLengthOutput (doubleLengthOutput.size());
             createGaussian (expectedDoubleLengthOutput, 1.0f, expectedGaussianMidpoint, expectedGaussianWidth);
@@ -177,8 +176,7 @@ private:
             beginTest (interpolatorName + " process wrap double ratio " + String (speedRatio));
 
             interpolator.reset();
-            interpolator.process (speedRatio, input.data(), doubleLengthOutput.data(), (int) doubleLengthOutput.size(),
-                                  (int) input.size(), (int) input.size());
+            interpolator.process (speedRatio, input.data(), doubleLengthOutput.data(), (int) doubleLengthOutput.size(), (int) input.size(), (int) input.size());
 
             std::vector<float> secondGaussian (doubleLengthOutput.size());
             createGaussian (secondGaussian, 1.0f, expectedGaussianMidpoint + (float) outputBufferSize, expectedGaussianWidth);
@@ -192,9 +190,9 @@ public:
     void runTest() override
     {
         runInterplatorTests<WindowedSincInterpolator> ("WindowedSincInterpolator");
-        runInterplatorTests<LagrangeInterpolator>     ("LagrangeInterpolator");
-        runInterplatorTests<CatmullRomInterpolator>   ("CatmullRomInterpolator");
-        runInterplatorTests<LinearInterpolator>       ("LinearInterpolator");
+        runInterplatorTests<LagrangeInterpolator> ("LagrangeInterpolator");
+        runInterplatorTests<CatmullRomInterpolator> ("CatmullRomInterpolator");
+        runInterplatorTests<LinearInterpolator> ("LinearInterpolator");
     }
 };
 

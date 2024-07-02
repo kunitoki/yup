@@ -104,8 +104,8 @@ public:
                 break;
             }
 
-            case 3:  // no 3-word packets in the current spec
-            case 4:  // no 4-word packets translate to bytestream format
+            case 3: // no 3-word packets in the current spec
+            case 4: // no 4-word packets translate to bytestream format
             default:
                 break;
         }

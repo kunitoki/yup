@@ -55,7 +55,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MidiFile
+class JUCE_API MidiFile
 {
 public:
     //==============================================================================

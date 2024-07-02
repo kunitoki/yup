@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MidiMessageSequence
+class JUCE_API MidiMessageSequence
 {
 public:
     //==============================================================================
@@ -312,8 +312,7 @@ public:
                                 will be the minimum number of controller changes to recreate the
                                 state at the required time.
     */
-    void createControllerUpdatesForTime (int channelNumber, double time,
-                                         Array<MidiMessage>& resultMessages);
+    void createControllerUpdatesForTime (int channelNumber, double time, Array<MidiMessage>& resultMessages);
 
     //==============================================================================
     /** Swaps this sequence with another one. */

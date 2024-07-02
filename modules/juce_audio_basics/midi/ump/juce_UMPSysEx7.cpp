@@ -52,8 +52,7 @@ SysEx7::PacketBytes SysEx7::getDataBytes (const PacketX2& packet)
     constexpr uint8_t maxBytes = 6;
     jassert (numBytes <= maxBytes);
 
-    return
-    {
+    return {
         { { std::byte { packet.getU8<2>() },
             std::byte { packet.getU8<3>() },
             std::byte { packet.getU8<4>() },

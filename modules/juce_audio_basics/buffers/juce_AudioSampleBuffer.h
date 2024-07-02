@@ -53,7 +53,7 @@ public:
     //==============================================================================
     /** Creates an empty buffer with 0 channels and 0 length. */
     AudioBuffer() noexcept
-       : channels (static_cast<Type**> (preallocatedChannelSpace))
+        : channels (static_cast<Type**> (preallocatedChannelSpace))
     {
     }
 
@@ -69,8 +69,8 @@ public:
     */
     AudioBuffer (int numChannelsToAllocate,
                  int numSamplesToAllocate)
-       : numChannels (numChannelsToAllocate),
-         size (numSamplesToAllocate)
+        : numChannels (numChannelsToAllocate)
+        , size (numSamplesToAllocate)
     {
         jassert (size >= 0 && numChannels >= 0);
         allocateData();
@@ -94,8 +94,8 @@ public:
     AudioBuffer (Type* const* dataToReferTo,
                  int numChannelsToUse,
                  int numSamples)
-        : numChannels (numChannelsToUse),
-          size (numSamples)
+        : numChannels (numChannelsToUse)
+        , size (numSamples)
     {
         jassert (dataToReferTo != nullptr);
         jassert (numChannelsToUse >= 0 && numSamples >= 0);
@@ -122,8 +122,8 @@ public:
                  int numChannelsToUse,
                  int startSample,
                  int numSamples)
-        : numChannels (numChannelsToUse),
-          size (numSamples)
+        : numChannels (numChannelsToUse)
+        , size (numSamples)
     {
         jassert (dataToReferTo != nullptr);
         jassert (numChannelsToUse >= 0 && startSample >= 0 && numSamples >= 0);
@@ -137,9 +137,9 @@ public:
         shared block of data.
     */
     AudioBuffer (const AudioBuffer& other)
-       : numChannels (other.numChannels),
-         size (other.size),
-         allocatedBytes (other.allocatedBytes)
+        : numChannels (other.numChannels)
+        , size (other.size)
+        , allocatedBytes (other.allocatedBytes)
     {
         if (allocatedBytes == 0)
         {
@@ -195,11 +195,11 @@ public:
 
     /** Move constructor. */
     AudioBuffer (AudioBuffer&& other) noexcept
-        : numChannels (other.numChannels),
-          size (other.size),
-          allocatedBytes (other.allocatedBytes),
-          allocatedData (std::move (other.allocatedData)),
-          isClear (other.isClear)
+        : numChannels (other.numChannels)
+        , size (other.size)
+        , allocatedBytes (other.allocatedBytes)
+        , allocatedData (std::move (other.allocatedData))
+        , isClear (other.isClear)
     {
         if (numChannels < (int) numElementsInArray (preallocatedChannelSpace))
         {
@@ -250,13 +250,13 @@ public:
 
         @see getNumSamples, getReadPointer, getWritePointer
     */
-    int getNumChannels() const noexcept                             { return numChannels; }
+    int getNumChannels() const noexcept { return numChannels; }
 
     /** Returns the number of samples allocated in each of the buffer's channels.
 
         @see getNumChannels, getReadPointer, getWritePointer
     */
-    int getNumSamples() const noexcept                              { return size; }
+    int getNumSamples() const noexcept { return size; }
 
     /** Returns a pointer to an array of read-only samples in one of the buffer's channels.
 
@@ -341,7 +341,7 @@ public:
         Don't modify any of the pointers that are returned, and bear in mind that
         these will become invalid if the buffer is resized.
     */
-    const Type* const* getArrayOfReadPointers() const noexcept            { return channels; }
+    const Type* const* getArrayOfReadPointers() const noexcept { return channels; }
 
     /** Returns an array of pointers to the channels in the buffer.
 
@@ -356,7 +356,11 @@ public:
 
         @see setNotClear
     */
-    Type* const* getArrayOfWritePointers() noexcept                       { isClear = false; return channels; }
+    Type* const* getArrayOfWritePointers() noexcept
+    {
+        isClear = false;
+        return channels;
+    }
 
     //==============================================================================
     /** Changes the buffer's size or number of channels.
@@ -395,7 +399,7 @@ public:
             auto allocatedSamplesPerChannel = ((size_t) newNumSamples + 3) & ~3u;
             auto channelListSize = ((static_cast<size_t> (1 + newNumChannels) * sizeof (Type*)) + 15) & ~15u;
             auto newTotalBytes = ((size_t) newNumChannels * (size_t) allocatedSamplesPerChannel * sizeof (Type))
-                                    + channelListSize + 32;
+                               + channelListSize + 32;
 
             if (keepExistingContent)
             {
@@ -411,7 +415,7 @@ public:
                     auto numSamplesToCopy = (size_t) jmin (newNumSamples, size);
 
                     auto newChannels = unalignedPointerCast<Type**> (newData.get());
-                    auto newChan     = unalignedPointerCast<Type*> (newData + channelListSize);
+                    auto newChan = unalignedPointerCast<Type*> (newData + channelListSize);
 
                     for (int j = 0; j < newNumChannels; ++j)
                     {
@@ -636,7 +640,7 @@ public:
         functions like getWritePointer are invoked. That means the method is quick, but it
         may return false negatives when in fact the buffer is still empty.
     */
-    bool hasBeenCleared() const noexcept                            { return isClear; }
+    bool hasBeenCleared() const noexcept { return isClear; }
 
     /** Forces the internal cleared flag of the buffer to false.
 
@@ -645,7 +649,7 @@ public:
         buffer as containing data so that subsequent clear calls will succeed. However a
         better solution is to call getWritePointer each time you need to write data.
     */
-    void setNotClear() noexcept                                     { isClear = false; }
+    void setNotClear() noexcept { isClear = false; }
 
     //==============================================================================
     /** Returns a sample from the buffer.
@@ -740,8 +744,7 @@ public:
         For speed, this doesn't check whether the sample numbers
         are in-range, so be careful!
     */
-    void applyGainRamp (int channel, int startSample, int numSamples,
-                        Type startGain, Type endGain) noexcept
+    void applyGainRamp (int channel, int startSample, int numSamples, Type startGain, Type endGain) noexcept
     {
         if (! isClear)
         {
@@ -775,8 +778,7 @@ public:
         For speed, this doesn't check whether the sample numbers
         are in-range, so be careful!
     */
-    void applyGainRamp (int startSample, int numSamples,
-                        Type startGain, Type endGain) noexcept
+    void applyGainRamp (int startSample, int numSamples, Type startGain, Type endGain) noexcept
     {
         for (int i = 0; i < numChannels; ++i)
             applyGainRamp (i, startSample, numSamples, startGain, endGain);
@@ -889,7 +891,6 @@ public:
             }
         }
     }
-
 
     /** Adds samples from an array of floats, applying a gain ramp to them.
 
@@ -1203,10 +1204,10 @@ private:
     //==============================================================================
     void allocateData()
     {
-       #if (! JUCE_GCC || (__GNUC__ * 100 + __GNUC_MINOR__) >= 409)
+#if (! JUCE_GCC || (__GNUC__ * 100 + __GNUC_MINOR__) >= 409)
         static_assert (alignof (Type) <= maxAlignment,
                        "AudioBuffer cannot hold types with alignment requirements larger than that guaranteed by malloc");
-       #endif
+#endif
         jassert (size >= 0);
 
         auto channelListSize = (size_t) (numChannels + 1) * sizeof (Type*);
@@ -1306,8 +1307,14 @@ bool operator== (const AudioBuffer<Type>& a, const AudioBuffer<Type>& b)
 
     for (auto c = 0; c < a.getNumChannels(); ++c)
     {
-        const auto begin = [c] (auto& x) { return x.getReadPointer (c); };
-        const auto end = [c] (auto& x) { return x.getReadPointer (c) + x.getNumSamples(); };
+        const auto begin = [c] (auto& x)
+        {
+            return x.getReadPointer (c);
+        };
+        const auto end = [c] (auto& x)
+        {
+            return x.getReadPointer (c) + x.getNumSamples();
+        };
 
         if (! std::equal (begin (a), end (a), begin (b), end (b)))
             return false;

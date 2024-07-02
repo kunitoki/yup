@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API MemoryAudioSource   : public PositionableAudioSource
+class JUCE_API MemoryAudioSource : public PositionableAudioSource
 {
 public:
     //==============================================================================

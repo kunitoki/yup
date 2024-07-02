@@ -40,8 +40,15 @@
 namespace juce
 {
 
-MidiMessageSequence::MidiEventHolder::MidiEventHolder (const MidiMessage& mm) : message (mm) {}
-MidiMessageSequence::MidiEventHolder::MidiEventHolder (MidiMessage&& mm) : message (std::move (mm)) {}
+MidiMessageSequence::MidiEventHolder::MidiEventHolder (const MidiMessage& mm)
+    : message (mm)
+{
+}
+
+MidiMessageSequence::MidiEventHolder::MidiEventHolder (MidiMessage&& mm)
+    : message (std::move (mm))
+{
+}
 
 //==============================================================================
 MidiMessageSequence::MidiMessageSequence()
@@ -99,10 +106,13 @@ MidiMessageSequence::MidiEventHolder* MidiMessageSequence::getEventPointer (int 
     return list[index];
 }
 
-MidiMessageSequence::MidiEventHolder** MidiMessageSequence::begin() noexcept               { return list.begin(); }
-MidiMessageSequence::MidiEventHolder* const* MidiMessageSequence::begin() const noexcept   { return list.begin(); }
-MidiMessageSequence::MidiEventHolder** MidiMessageSequence::end() noexcept                 { return list.end(); }
-MidiMessageSequence::MidiEventHolder* const* MidiMessageSequence::end() const noexcept     { return list.end(); }
+MidiMessageSequence::MidiEventHolder** MidiMessageSequence::begin() noexcept { return list.begin(); }
+
+MidiMessageSequence::MidiEventHolder* const* MidiMessageSequence::begin() const noexcept { return list.begin(); }
+
+MidiMessageSequence::MidiEventHolder** MidiMessageSequence::end() noexcept { return list.end(); }
+
+MidiMessageSequence::MidiEventHolder* const* MidiMessageSequence::end() const noexcept { return list.end(); }
 
 double MidiMessageSequence::getTimeOfMatchingKeyUp (int index) const noexcept
 {
@@ -236,8 +246,10 @@ void MidiMessageSequence::addSequence (const MidiMessageSequence& other,
 
 void MidiMessageSequence::sort() noexcept
 {
-    std::stable_sort (list.begin(), list.end(),
-                      [] (const MidiEventHolder* a, const MidiEventHolder* b) { return a->message.getTimeStamp() < b->message.getTimeStamp(); });
+    std::stable_sort (list.begin(), list.end(), [] (const MidiEventHolder* a, const MidiEventHolder* b)
+                      {
+                          return a->message.getTimeStamp() < b->message.getTimeStamp();
+                      });
 }
 
 void MidiMessageSequence::updateMatchedPairs() noexcept
@@ -295,7 +307,7 @@ void MidiMessageSequence::extractMidiChannelMessages (const int channelNumberToE
 {
     for (auto* meh : list)
         if (meh->message.isForChannel (channelNumberToExtract)
-             || (alsoIncludeMetaEvents && meh->message.isMetaEvent()))
+            || (alsoIncludeMetaEvents && meh->message.isMetaEvent()))
             destSequence.addEvent (meh->message);
 }
 
@@ -380,8 +392,12 @@ public:
     {
         switch (controller)
         {
-            case 0x00: bankMSB = (char) v; return true;
-            case 0x20: bankLSB = (char) v; return true;
+            case 0x00:
+                bankMSB = (char) v;
+                return true;
+            case 0x20:
+                bankLSB = (char) v;
+                return true;
         }
 
         return false;
@@ -392,7 +408,11 @@ public:
 
 class ParameterNumberState
 {
-    enum class Kind { rpn, nrpn };
+    enum class Kind
+    {
+        rpn,
+        nrpn
+    };
 
     Optional<char> newestRpnLsb, newestRpnMsb, newestNrpnLsb, newestNrpnMsb, lastSentLsb, lastSentMsb;
     Kind lastSentKind = Kind::rpn, newestKind = Kind::rpn;
@@ -424,10 +444,22 @@ public:
     {
         switch (controller)
         {
-            case 0x65: newestRpnMsb  = (char) value; newestKind = Kind::rpn;  return true;
-            case 0x64: newestRpnLsb  = (char) value; newestKind = Kind::rpn;  return true;
-            case 0x63: newestNrpnMsb = (char) value; newestKind = Kind::nrpn; return true;
-            case 0x62: newestNrpnLsb = (char) value; newestKind = Kind::nrpn; return true;
+            case 0x65:
+                newestRpnMsb = (char) value;
+                newestKind = Kind::rpn;
+                return true;
+            case 0x64:
+                newestRpnLsb = (char) value;
+                newestKind = Kind::rpn;
+                return true;
+            case 0x63:
+                newestNrpnMsb = (char) value;
+                newestKind = Kind::nrpn;
+                return true;
+            case 0x62:
+                newestNrpnLsb = (char) value;
+                newestKind = Kind::nrpn;
+                return true;
         }
 
         return false;
@@ -498,15 +530,16 @@ struct MidiMessageSequenceTest final : public UnitTest
 {
     MidiMessageSequenceTest()
         : UnitTest ("MidiMessageSequence", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {
         MidiMessageSequence s;
 
-        s.addEvent (MidiMessage::noteOn  (1, 60, 0.5f).withTimeStamp (0.0));
+        s.addEvent (MidiMessage::noteOn (1, 60, 0.5f).withTimeStamp (0.0));
         s.addEvent (MidiMessage::noteOff (1, 60, 0.5f).withTimeStamp (4.0));
-        s.addEvent (MidiMessage::noteOn  (1, 30, 0.5f).withTimeStamp (2.0));
+        s.addEvent (MidiMessage::noteOn (1, 30, 0.5f).withTimeStamp (2.0));
         s.addEvent (MidiMessage::noteOff (1, 30, 0.5f).withTimeStamp (8.0));
 
         beginTest ("Start & end time");
@@ -532,10 +565,10 @@ struct MidiMessageSequenceTest final : public UnitTest
 
         beginTest ("Merging sequences");
         MidiMessageSequence s2;
-        s2.addEvent (MidiMessage::noteOn  (2, 25, 0.5f).withTimeStamp (0.0));
-        s2.addEvent (MidiMessage::noteOn  (2, 40, 0.5f).withTimeStamp (1.0));
+        s2.addEvent (MidiMessage::noteOn (2, 25, 0.5f).withTimeStamp (0.0));
+        s2.addEvent (MidiMessage::noteOn (2, 40, 0.5f).withTimeStamp (1.0));
         s2.addEvent (MidiMessage::noteOff (2, 40, 0.5f).withTimeStamp (5.0));
-        s2.addEvent (MidiMessage::noteOn  (2, 80, 0.5f).withTimeStamp (3.0));
+        s2.addEvent (MidiMessage::noteOn (2, 80, 0.5f).withTimeStamp (3.0));
         s2.addEvent (MidiMessage::noteOff (2, 80, 0.5f).withTimeStamp (7.0));
         s2.addEvent (MidiMessage::noteOff (2, 25, 0.5f).withTimeStamp (9.0));
 
@@ -546,7 +579,10 @@ struct MidiMessageSequenceTest final : public UnitTest
         expectEquals (s.getIndexOfMatchingKeyUp (0), -1); // Truncated note, should be no note off
         expectEquals (s.getTimeOfMatchingKeyUp (1), 5.0);
 
-        struct ControlValue { int control, value; };
+        struct ControlValue
+        {
+            int control, value;
+        };
 
         struct DataEntry
         {
@@ -557,8 +593,8 @@ struct MidiMessageSequenceTest final : public UnitTest
             {
                 return { { { controllerBase + 1, (parameter >> 7) & 0x7f },
                            { controllerBase + 0, (parameter >> 0) & 0x7f },
-                           { 0x06,               (value     >> 7) & 0x7f },
-                           { 0x26,               (value     >> 0) & 0x7f } } };
+                           { 0x06, (value >> 7) & 0x7f },
+                           { 0x26, (value >> 0) & 0x7f } } };
             }
 
             void addToSequence (MidiMessageSequence& s) const
@@ -575,7 +611,7 @@ struct MidiMessageSequenceTest final : public UnitTest
                         && msg.isController()
                         && msg.getChannel() == channel
                         && msg.getControllerNumber() == cv.control
-                        && msg.getControllerValue()  == cv.value;
+                        && msg.getControllerValue() == cv.value;
                 };
 
                 const auto pairs = getControlValues();
@@ -626,8 +662,8 @@ struct MidiMessageSequenceTest final : public UnitTest
 
             MidiMessageSequence sequence;
             addRpn (sequence, channel, number, value, 0.5);
-            addRpn (sequence, channel, 111,    222,   1.5);
-            addRpn (sequence, channel, 333,    444,   2.5);
+            addRpn (sequence, channel, 111, 222, 1.5);
+            addRpn (sequence, channel, 333, 444, 2.5);
 
             Array<MidiMessage> m;
             sequence.createControllerUpdatesForTime (channel, 1.0, m);
@@ -653,23 +689,26 @@ struct MidiMessageSequenceTest final : public UnitTest
             const auto time = 0.5;
 
             MidiMessageSequence sequence;
-            addRpn  (sequence, channel, numberA, valueA, time);
-            addRpn  (sequence, channel, numberB, valueB, time);
+            addRpn (sequence, channel, numberA, valueA, time);
+            addRpn (sequence, channel, numberB, valueB, time);
             addNrpn (sequence, channel, numberC, valueC, time);
             addNrpn (sequence, channel, numberD, valueD, time);
 
             Array<MidiMessage> m;
             sequence.createControllerUpdatesForTime (channel, time * 2, m);
 
-            checkRpn  (std::next (m.begin(), 0),  std::next (m.begin(), 4),  channel, numberA, valueA, time);
-            checkRpn  (std::next (m.begin(), 4),  std::next (m.begin(), 8),  channel, numberB, valueB, time);
-            checkNrpn (std::next (m.begin(), 8),  std::next (m.begin(), 12), channel, numberC, valueC, time);
+            checkRpn (std::next (m.begin(), 0), std::next (m.begin(), 4), channel, numberA, valueA, time);
+            checkRpn (std::next (m.begin(), 4), std::next (m.begin(), 8), channel, numberB, valueB, time);
+            checkNrpn (std::next (m.begin(), 8), std::next (m.begin(), 12), channel, numberC, valueC, time);
             checkNrpn (std::next (m.begin(), 12), std::next (m.begin(), 16), channel, numberD, valueD, time);
         }
 
         beginTest ("createControllerUpdatesForTime correctly emits (N)RPN messages on multiple channels");
         {
-            struct Info { int channel, number, value; };
+            struct Info
+            {
+                int channel, number, value;
+            };
 
             const Info infos[] { { 2, 1111, 9999 },
                                  { 8, 8888, 2222 },
@@ -687,14 +726,13 @@ struct MidiMessageSequenceTest final : public UnitTest
             {
                 Array<MidiMessage> m;
                 sequence.createControllerUpdatesForTime (info.channel, time * 2, m);
-                checkRpn  (std::next (m.begin(), 0),  std::next (m.begin(), 4),  info.channel, info.number, info.value, time);
+                checkRpn (std::next (m.begin(), 0), std::next (m.begin(), 4), info.channel, info.number, info.value, time);
             }
         }
 
         const auto messagesAreEqual = [] (const MidiMessage& a, const MidiMessage& b)
         {
-            return std::equal (a.getRawData(), a.getRawData() + a.getRawDataSize(),
-                               b.getRawData(), b.getRawData() + b.getRawDataSize());
+            return std::equal (a.getRawData(), a.getRawData() + a.getRawDataSize(), b.getRawData(), b.getRawData() + b.getRawDataSize());
         };
 
         beginTest ("createControllerUpdatesForTime sends bank select messages when the next program is in a new bank");
@@ -842,7 +880,7 @@ struct MidiMessageSequenceTest final : public UnitTest
                                                 MidiMessage::controllerEvent (channel, 0x60, 5),
                                                 // Set parameter number to final value
                                                 MidiMessage::controllerEvent (channel, 0x65, 10).withTimeStamp (finalTime),
-                                                MidiMessage::controllerEvent (channel, 0x64, 2) .withTimeStamp (finalTime) };
+                                                MidiMessage::controllerEvent (channel, 0x64, 2).withTimeStamp (finalTime) };
 
             expect (std::equal (m.begin(), m.end(), expected.begin(), expected.end(), messagesAreEqual));
         }
@@ -873,7 +911,6 @@ struct MidiMessageSequenceTest final : public UnitTest
                                                 MidiMessage::programChange (channel, 5),
                                                 MidiMessage::controllerEvent (channel, 0x65, 0).withTimeStamp (finalTime),
                                                 MidiMessage::controllerEvent (channel, 0x64, 0).withTimeStamp (finalTime) };
-
 
             expect (std::equal (m.begin(), m.end(), expected.begin(), expected.end(), messagesAreEqual));
         }

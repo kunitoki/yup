@@ -41,8 +41,8 @@ namespace juce
 {
 
 ReverbAudioSource::ReverbAudioSource (AudioSource* const inputSource, const bool deleteInputWhenDeleted)
-   : input (inputSource, deleteInputWhenDeleted),
-     bypass (false)
+    : input (inputSource, deleteInputWhenDeleted)
+    , bypass (false)
 {
     jassert (inputSource != nullptr);
 }

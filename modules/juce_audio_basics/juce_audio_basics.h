@@ -37,7 +37,6 @@
   ==============================================================================
 */
 
-
 /*******************************************************************************
  The block below describes the properties of this module, and is read by
  the Projucer to automatically generate project code that uses it.
@@ -64,38 +63,37 @@
 
 *******************************************************************************/
 
-
 #pragma once
 #define JUCE_AUDIO_BASICS_H_INCLUDED
 
 #include <juce_core/juce_core.h>
 
 //==============================================================================
-#undef Complex  // apparently some C libraries actually define these symbols (!)
+#undef Complex // apparently some C libraries actually define these symbols (!)
 #undef Factor
 
 //==============================================================================
-#if JUCE_MINGW && ! defined (__SSE2__)
- #define JUCE_USE_SSE_INTRINSICS 0
+#if JUCE_MINGW && ! defined(__SSE2__)
+#define JUCE_USE_SSE_INTRINSICS 0
 #endif
 
 #ifndef JUCE_USE_SSE_INTRINSICS
- #define JUCE_USE_SSE_INTRINSICS 1
+#define JUCE_USE_SSE_INTRINSICS 1
 #endif
 
 #if ! JUCE_INTEL
- #undef JUCE_USE_SSE_INTRINSICS
+#undef JUCE_USE_SSE_INTRINSICS
 #endif
 
-#if __ARM_NEON__ && ! (JUCE_USE_VDSP_FRAMEWORK || defined (JUCE_USE_ARM_NEON))
- #define JUCE_USE_ARM_NEON 1
+#if __ARM_NEON__ && ! (JUCE_USE_VDSP_FRAMEWORK || defined(JUCE_USE_ARM_NEON))
+#define JUCE_USE_ARM_NEON 1
 #endif
 
 #if TARGET_IPHONE_SIMULATOR
- #ifdef JUCE_USE_ARM_NEON
-  #undef JUCE_USE_ARM_NEON
- #endif
- #define JUCE_USE_ARM_NEON 0
+#ifdef JUCE_USE_ARM_NEON
+#undef JUCE_USE_ARM_NEON
+#endif
+#define JUCE_USE_ARM_NEON 0
 #endif
 
 //==============================================================================
@@ -146,5 +144,5 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 
 namespace juce
 {
-    namespace ump = universal_midi_packets;
-}
+namespace ump = universal_midi_packets;
+} // namespace juce

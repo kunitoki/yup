@@ -68,7 +68,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MPESynthesiser   : public MPESynthesiserBase
+class JUCE_API MPESynthesiser : public MPESynthesiserBase
 {
 public:
     //==============================================================================
@@ -95,7 +95,7 @@ public:
     void clearVoices();
 
     /** Returns the number of voices that have been added. */
-    int getNumVoices() const noexcept                               { return voices.size(); }
+    int getNumVoices() const noexcept { return voices.size(); }
 
     /** Returns one of the voices that have been added. */
     MPESynthesiserVoice* getVoice (int index) const;
@@ -138,10 +138,10 @@ public:
         The value of this boolean is passed into findFreeVoice(), so the result will
         depend on the implementation of this method.
     */
-    void setVoiceStealingEnabled (bool shouldSteal) noexcept    { shouldStealVoices = shouldSteal; }
+    void setVoiceStealingEnabled (bool shouldSteal) noexcept { shouldStealVoices = shouldSteal; }
 
     /** Returns true if note-stealing is enabled. */
-    bool isVoiceStealingEnabled() const noexcept                { return shouldStealVoices; }
+    bool isVoiceStealingEnabled() const noexcept { return shouldStealVoices; }
 
     //==============================================================================
     /** Tells the synthesiser what the sample rate is for the audio it's being used to render.

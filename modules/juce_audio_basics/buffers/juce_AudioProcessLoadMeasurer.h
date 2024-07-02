@@ -47,7 +47,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  AudioProcessLoadMeasurer
+class JUCE_API AudioProcessLoadMeasurer
 {
 public:
     /** */
@@ -86,7 +86,7 @@ public:
 
         @tags{Audio}
     */
-    struct JUCE_API  ScopedTimer
+    struct JUCE_API ScopedTimer
     {
         ScopedTimer (AudioProcessLoadMeasurer&);
         ScopedTimer (AudioProcessLoadMeasurer&, int numSamplesInBlock);
@@ -121,6 +121,5 @@ private:
     std::atomic<double> cpuUsageProportion { 0 };
     std::atomic<int> xruns { 0 };
 };
-
 
 } // namespace juce

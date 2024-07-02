@@ -124,9 +124,12 @@ struct Utils
     };
 
     static constexpr uint8_t getMessageType (uint32_t w) noexcept { return U4<0>::get (w); }
-    static constexpr uint8_t getGroup       (uint32_t w) noexcept { return U4<1>::get (w); }
-    static constexpr uint8_t getStatus      (uint32_t w) noexcept { return U4<2>::get (w); }
-    static constexpr uint8_t getChannel     (uint32_t w) noexcept { return U4<3>::get (w); }
+
+    static constexpr uint8_t getGroup (uint32_t w) noexcept { return U4<1>::get (w); }
+
+    static constexpr uint8_t getStatus (uint32_t w) noexcept { return U4<2>::get (w); }
+
+    static constexpr uint8_t getChannel (uint32_t w) noexcept { return U4<3>::get (w); }
 };
 
 } // namespace juce::universal_midi_packets

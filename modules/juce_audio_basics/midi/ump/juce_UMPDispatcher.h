@@ -67,15 +67,15 @@ public:
                    PacketCallbackFunction&& callback)
     {
         std::for_each (begin, end, [&] (uint32_t word)
-        {
-            nextPacket[currentPacketLen++] = word;
+                       {
+                           nextPacket[currentPacketLen++] = word;
 
-            if (currentPacketLen == Utils::getNumWordsForMessageType (nextPacket.front()))
-            {
-                callback (View (nextPacket.data()), timeStamp);
-                currentPacketLen = 0;
-            }
-        });
+                           if (currentPacketLen == Utils::getNumWordsForMessageType (nextPacket.front()))
+                           {
+                               callback (View (nextPacket.data()), timeStamp);
+                               currentPacketLen = 0;
+                           }
+                       });
     }
 
 private:
@@ -100,9 +100,10 @@ public:
         `storageSize` bytes will be allocated to store incomplete messages.
     */
     explicit BytestreamToUMPDispatcher (PacketProtocol pp, int storageSize)
-        : concatenator (storageSize),
-          converter (pp)
-    {}
+        : concatenator (storageSize)
+        , converter (pp)
+    {
+    }
 
     void reset()
     {
@@ -125,23 +126,26 @@ public:
     {
         using CallbackPtr = decltype (std::addressof (callback));
 
-       #if JUCE_MINGW
-        #define JUCE_MINGW_HIDDEN_VISIBILITY __attribute__ ((visibility ("hidden")))
-       #else
-        #define JUCE_MINGW_HIDDEN_VISIBILITY
-       #endif
+#if JUCE_MINGW
+#define JUCE_MINGW_HIDDEN_VISIBILITY __attribute__ ((visibility ("hidden")))
+#else
+#define JUCE_MINGW_HIDDEN_VISIBILITY
+#endif
 
         struct JUCE_MINGW_HIDDEN_VISIBILITY Callback
         {
             Callback (BytestreamToUMPDispatcher& d, CallbackPtr c)
-                : dispatch (d), callbackPtr (c) {}
+                : dispatch (d)
+                , callbackPtr (c)
+            {
+            }
 
             void handleIncomingMidiMessage (void*, const MidiMessage& msg) const
             {
                 Conversion::toMidi1 (BytestreamMidiView (&msg), [&] (const View& view)
-                {
-                    dispatch.converter.convert (view, *callbackPtr);
-                });
+                                     {
+                                         dispatch.converter.convert (view, *callbackPtr);
+                                     });
             }
 
             void handlePartialSysexMessage (void*, const uint8_t*, int, double) const {}
@@ -150,7 +154,7 @@ public:
             CallbackPtr callbackPtr = nullptr;
         };
 
-       #undef JUCE_MINGW_HIDDEN_VISIBILITY
+#undef JUCE_MINGW_HIDDEN_VISIBILITY
 
         Callback inputCallback { *this, &callback };
         concatenator.pushMidiData (begin, int (end - begin), timestamp, (void*) nullptr, inputCallback);
@@ -177,7 +181,9 @@ public:
         `storageSize` bytes will be allocated to store incomplete messages.
     */
     explicit ToBytestreamDispatcher (int storageSize)
-        : converter (storageSize) {}
+        : converter (storageSize)
+    {
+    }
 
     /** Clears the dispatcher. */
     void reset()
@@ -201,9 +207,9 @@ public:
                    BytestreamMessageCallback&& callback)
     {
         dispatcher.dispatch (begin, end, timestamp, [&] (const View& view, double time)
-        {
-            converter.convert (view, time, callback);
-        });
+                             {
+                                 converter.convert (view, time, callback);
+                             });
     }
 
 private:

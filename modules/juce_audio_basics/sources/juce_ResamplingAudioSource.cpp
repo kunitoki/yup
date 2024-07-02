@@ -43,8 +43,8 @@ namespace juce
 ResamplingAudioSource::ResamplingAudioSource (AudioSource* const inputSource,
                                               const bool deleteInputWhenDeleted,
                                               const int channels)
-    : input (inputSource, deleteInputWhenDeleted),
-      numChannels (channels)
+    : input (inputSource, deleteInputWhenDeleted)
+    , numChannels (channels)
 {
     jassert (input != nullptr);
     zeromem (coefficients, sizeof (coefficients));
@@ -165,7 +165,7 @@ void ResamplingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& inf
 
         for (int channel = 0; channel < channelsToProcess; ++channel)
             *destBuffers[channel]++ = srcBuffers[channel][bufferPos]
-                                        + alpha * (srcBuffers[channel][nextPos] - srcBuffers[channel][bufferPos]);
+                                    + alpha * (srcBuffers[channel][nextPos] - srcBuffers[channel][bufferPos]);
 
         subSampleOffset += localRatio;
 
@@ -260,15 +260,15 @@ void ResamplingAudioSource::applyFilter (float* samples, int num, FilterState& f
         const double in = *samples;
 
         double out = coefficients[0] * in
-                     + coefficients[1] * fs.x1
-                     + coefficients[2] * fs.x2
-                     - coefficients[4] * fs.y1
-                     - coefficients[5] * fs.y2;
+                   + coefficients[1] * fs.x1
+                   + coefficients[2] * fs.x2
+                   - coefficients[4] * fs.y1
+                   - coefficients[5] * fs.y2;
 
-       #if JUCE_INTEL
+#if JUCE_INTEL
         if (! (out < -1.0e-8 || out > 1.0e-8))
             out = 0;
-       #endif
+#endif
 
         fs.x2 = fs.x1;
         fs.x1 = in;

@@ -42,15 +42,16 @@ namespace juce
 
 #if JUCE_UNIT_TESTS
 
-static CommonSmoothedValueTests <SmoothedValue<float, ValueSmoothingTypes::Linear>> commonLinearSmoothedValueTests;
-static CommonSmoothedValueTests <SmoothedValue<float, ValueSmoothingTypes::Multiplicative>> commonMultiplicativeSmoothedValueTests;
+static CommonSmoothedValueTests<SmoothedValue<float, ValueSmoothingTypes::Linear>> commonLinearSmoothedValueTests;
+static CommonSmoothedValueTests<SmoothedValue<float, ValueSmoothingTypes::Multiplicative>> commonMultiplicativeSmoothedValueTests;
 
 class SmoothedValueTests final : public UnitTest
 {
 public:
     SmoothedValueTests()
         : UnitTest ("SmoothedValueTests", UnitTestCategories::smoothedValues)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -93,7 +94,7 @@ public:
             sv.setTargetValue (1.0f);
             values.setSample (1, values.getNumSamples() - 1, sv.getCurrentValue());
 
-            for (int i = values.getNumSamples() - 2; i >= 0 ; --i)
+            for (int i = values.getNumSamples() - 2; i >= 0; --i)
                 values.setSample (1, i, sv.getNextValue());
 
             for (int i = 0; i < values.getNumSamples(); ++i)

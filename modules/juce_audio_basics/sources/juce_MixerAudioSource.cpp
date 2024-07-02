@@ -41,7 +41,8 @@ namespace juce
 {
 
 MixerAudioSource::MixerAudioSource()
-   : currentSampleRate (0.0), bufferSizeExpected (0)
+    : currentSampleRate (0.0)
+    , bufferSizeExpected (0)
 {
 }
 
@@ -87,7 +88,7 @@ void MixerAudioSource::removeInputSource (AudioSource* const input)
             if (index < 0)
                 return;
 
-            if (inputsToDelete [index])
+            if (inputsToDelete[index])
                 toDelete.reset (input);
 
             inputsToDelete.shiftBits (-1, index);

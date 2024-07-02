@@ -62,29 +62,32 @@ public:
 
         Creates a WorkgroupToken from a function returning a TokenProvider.
     */
-    explicit WorkgroupToken (Erased e) : erased (std::move (e)) {}
+    explicit WorkgroupToken (Erased e)
+        : erased (std::move (e))
+    {
+    }
 
     /** @internal
 
         Creates a disengaged WorkgroupToken, i.e. create a token without joining the thread to a
         workgroup.
     */
-    WorkgroupToken()                                  = default;
+    WorkgroupToken() = default;
 
     /** If the token joined the calling thread to a workgroup during construction, the destructor
         will cause the calling thread to leave that workgroup.
     */
-    ~WorkgroupToken()                                 = default;
+    ~WorkgroupToken() = default;
 
     /** @internal */
-    WorkgroupToken (const WorkgroupToken&)            = delete;
+    WorkgroupToken (const WorkgroupToken&) = delete;
 
-    WorkgroupToken (WorkgroupToken&&) noexcept        = default;
+    WorkgroupToken (WorkgroupToken&&) noexcept = default;
 
     /** @internal */
     WorkgroupToken& operator= (const WorkgroupToken&) = delete;
 
-    WorkgroupToken& operator= (WorkgroupToken&&)      = default;
+    WorkgroupToken& operator= (WorkgroupToken&&) = default;
 
     /** Returns true if and only if getTokenProvider() returns non-null. */
     explicit operator bool() const { return getTokenProvider() != nullptr; }
@@ -168,7 +171,10 @@ public:
 
         Creates an AudioWorkgroup from a function returning a WorkgroupProvider.
     */
-    explicit AudioWorkgroup (Erased e) : erased (std::move (e)) {}
+    explicit AudioWorkgroup (Erased e)
+        : erased (std::move (e))
+    {
+    }
 
     /** Move constructor. */
     AudioWorkgroup (AudioWorkgroup&&) = default;

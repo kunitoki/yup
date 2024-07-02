@@ -46,7 +46,10 @@ class WorkgroupToken::TokenProvider
 {
 public:
     explicit TokenProvider (os_workgroup_t wg)
-        : workgroup (wg), attached (attach (wg, token)) {}
+        : workgroup (wg)
+        , attached (attach (wg, token))
+    {
+    }
 
     ~TokenProvider()
     {
@@ -55,20 +58,25 @@ public:
     }
 
     TokenProvider (const TokenProvider&) = delete;
+
     TokenProvider (TokenProvider&& other) noexcept
-        : workgroup (std::exchange (other.workgroup, os_workgroup_t{})),
-          token (std::exchange (other.token, os_workgroup_join_token_s{})),
-          attached (std::exchange (other.attached, false)) {}
+        : workgroup (std::exchange (other.workgroup, os_workgroup_t {}))
+        , token (std::exchange (other.token, os_workgroup_join_token_s {}))
+        , attached (std::exchange (other.attached, false))
+    {
+    }
 
     TokenProvider& operator= (const TokenProvider&) = delete;
+
     TokenProvider& operator= (TokenProvider&& other) noexcept
     {
         TokenProvider { std::move (other) }.swap (*this);
         return *this;
     }
 
-    bool isAttached()             const { return attached; }
-    os_workgroup_t getHandle()    const { return workgroup; }
+    bool isAttached() const { return attached; }
+
+    os_workgroup_t getHandle() const { return workgroup; }
 
 private:
     static void detach (os_workgroup_t wg, os_workgroup_join_token_s token)
@@ -103,7 +111,10 @@ private:
 class AudioWorkgroup::WorkgroupProvider
 {
 public:
-    explicit WorkgroupProvider (os_workgroup_t ptr) : handle { ptr } {}
+    explicit WorkgroupProvider (os_workgroup_t ptr)
+        : handle { ptr }
+    {
+    }
 
     void join (WorkgroupToken& token) const
     {
@@ -116,7 +127,10 @@ public:
         token.reset();
 
         if (handle.get() != nullptr)
-            token = WorkgroupToken { [provider = WorkgroupToken::TokenProvider { handle.get() }] { return &provider; } };
+            token = WorkgroupToken { [provider = WorkgroupToken::TokenProvider { handle.get() }]
+                                     {
+                                         return &provider;
+                                     } };
     }
 
     static os_workgroup_t getWorkgroup (const AudioWorkgroup& wg)
@@ -130,7 +144,8 @@ public:
 private:
     struct ScopedWorkgroupRetainer
     {
-        ScopedWorkgroupRetainer (os_workgroup_t wg) : handle { wg }
+        ScopedWorkgroupRetainer (os_workgroup_t wg)
+            : handle { wg }
         {
             if (handle != nullptr)
                 os_retain (handle);
@@ -143,7 +158,9 @@ private:
         }
 
         ScopedWorkgroupRetainer (const ScopedWorkgroupRetainer& other)
-            : ScopedWorkgroupRetainer { other.handle } {}
+            : ScopedWorkgroupRetainer { other.handle }
+        {
+        }
 
         ScopedWorkgroupRetainer& operator= (const ScopedWorkgroupRetainer& other)
         {
@@ -178,7 +195,9 @@ private:
 
 #else
 
-class WorkgroupToken::TokenProvider {};
+class WorkgroupToken::TokenProvider
+{
+};
 
 class AudioWorkgroup::WorkgroupProvider
 {
@@ -196,10 +215,15 @@ AudioWorkgroup::AudioWorkgroup (const AudioWorkgroup& other)
     : erased ([&]() -> Erased
               {
                   if (auto* p = other.getWorkgroupProvider())
-                      return [provider = *p] { return &provider; };
+                      return [provider = *p]
+                      {
+                          return &provider;
+                      };
 
                   return nullptr;
-              }()) {}
+              }())
+{
+}
 
 bool AudioWorkgroup::operator== (const AudioWorkgroup& other) const
 {
@@ -208,7 +232,7 @@ bool AudioWorkgroup::operator== (const AudioWorkgroup& other) const
 
 void AudioWorkgroup::join (WorkgroupToken& token) const
 {
-   #if JUCE_AUDIOWORKGROUP_TYPES_AVAILABLE
+#if JUCE_AUDIOWORKGROUP_TYPES_AVAILABLE
 
     if (const auto* p = getWorkgroupProvider())
     {
@@ -216,14 +240,14 @@ void AudioWorkgroup::join (WorkgroupToken& token) const
         return;
     }
 
-   #endif
+#endif
 
     token.reset();
 }
 
 size_t AudioWorkgroup::getMaxParallelThreadCount() const
 {
-   #if JUCE_AUDIOWORKGROUP_TYPES_AVAILABLE
+#if JUCE_AUDIOWORKGROUP_TYPES_AVAILABLE
 
     if (@available (macos 11.0, ios 14.0, *))
     {
@@ -231,9 +255,9 @@ size_t AudioWorkgroup::getMaxParallelThreadCount() const
             return (size_t) os_workgroup_max_parallel_threads (wg, nullptr);
     }
 
-   #endif
+#endif
 
-   return 0;
+    return 0;
 }
 
 AudioWorkgroup::operator bool() const { return WorkgroupProvider::getWorkgroup (*this) != nullptr; }
@@ -243,9 +267,12 @@ AudioWorkgroup::operator bool() const { return WorkgroupProvider::getWorkgroup (
 AudioWorkgroup makeRealAudioWorkgroup (os_workgroup_t handle)
 {
     if (handle == nullptr)
-        return AudioWorkgroup{};
+        return AudioWorkgroup {};
 
-    return AudioWorkgroup { [provider = AudioWorkgroup::WorkgroupProvider { handle }] { return &provider; } };
+    return AudioWorkgroup { [provider = AudioWorkgroup::WorkgroupProvider { handle }]
+                            {
+                                return &provider;
+                            } };
 }
 
 #endif

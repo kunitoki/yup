@@ -54,20 +54,26 @@ namespace juce
     @tags{Audio}
 */
 template <class InterpolatorTraits, int memorySize>
-class JUCE_API  GenericInterpolator
+class JUCE_API GenericInterpolator
 {
     static auto processReplacingCallback()
     {
-        return [] (auto, auto newValue) { return newValue; };
+        return [] (auto, auto newValue)
+        {
+            return newValue;
+        };
     }
 
     static auto processAddingCallback (float gain)
     {
-        return [gain] (auto oldValue, auto newValue) { return oldValue + gain * newValue; };
+        return [gain] (auto oldValue, auto newValue)
+        {
+            return oldValue + gain * newValue;
+        };
     }
 
 public:
-    GenericInterpolator() noexcept                        { reset(); }
+    GenericInterpolator() noexcept { reset(); }
 
     GenericInterpolator (GenericInterpolator&&) noexcept = default;
     GenericInterpolator& operator= (GenericInterpolator&&) noexcept = default;
@@ -362,7 +368,10 @@ private:
                          output,
                          numOutputSamplesToProduce,
                          process,
-                         [this, input, &numUsed] { pushInterpolationSample (input[numUsed++]); });
+                         [this, input, &numUsed]
+                         {
+                             pushInterpolationSample (input[numUsed++]);
+                         });
 
         return numUsed;
     }

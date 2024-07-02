@@ -83,14 +83,35 @@ std::optional<MidiRPNMessage> MidiRPNDetector::ChannelState::handleController (i
 {
     switch (controllerNumber)
     {
-        case 0x62:  parameterLSB = uint8 (value); resetValue(); isNRPN = true;  break;
-        case 0x63:  parameterMSB = uint8 (value); resetValue(); isNRPN = true;  break;
+        case 0x62:
+            parameterLSB = uint8 (value);
+            resetValue();
+            isNRPN = true;
+            break;
+        case 0x63:
+            parameterMSB = uint8 (value);
+            resetValue();
+            isNRPN = true;
+            break;
 
-        case 0x64:  parameterLSB = uint8 (value); resetValue(); isNRPN = false; break;
-        case 0x65:  parameterMSB = uint8 (value); resetValue(); isNRPN = false; break;
+        case 0x64:
+            parameterLSB = uint8 (value);
+            resetValue();
+            isNRPN = false;
+            break;
+        case 0x65:
+            parameterMSB = uint8 (value);
+            resetValue();
+            isNRPN = false;
+            break;
 
-        case 0x06:  valueMSB = uint8 (value); valueLSB = 0xff; return sendIfReady (channel);
-        case 0x26:  valueLSB = uint8 (value);                  return sendIfReady (channel);
+        case 0x06:
+            valueMSB = uint8 (value);
+            valueLSB = 0xff;
+            return sendIfReady (channel);
+        case 0x26:
+            valueLSB = uint8 (value);
+            return sendIfReady (channel);
     }
 
     return {};
@@ -108,7 +129,7 @@ std::optional<MidiRPNMessage> MidiRPNDetector::ChannelState::sendIfReady (int ch
     if (parameterMSB >= 0x80 || parameterLSB >= 0x80 || valueMSB >= 0x80)
         return {};
 
-    MidiRPNMessage result{};
+    MidiRPNMessage result {};
     result.channel = channel;
     result.parameterNumber = (parameterMSB << 7) + parameterLSB;
     result.isNRPN = isNRPN;
@@ -157,8 +178,8 @@ MidiBuffer MidiRPNGenerator::generate (int midiChannel,
 
     MidiBuffer buffer;
 
-    buffer.addEvent (MidiMessage (channelByte, isNRPN ? 0x62 : 0x64, parameterLSB),  0);
-    buffer.addEvent (MidiMessage (channelByte, isNRPN ? 0x63 : 0x65, parameterMSB),  0);
+    buffer.addEvent (MidiMessage (channelByte, isNRPN ? 0x62 : 0x64, parameterLSB), 0);
+    buffer.addEvent (MidiMessage (channelByte, isNRPN ? 0x63 : 0x65, parameterMSB), 0);
 
     buffer.addEvent (MidiMessage (channelByte, 0x06, valueMSB), 0);
 
@@ -170,7 +191,6 @@ MidiBuffer MidiRPNGenerator::generate (int midiChannel,
     return buffer;
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -180,7 +200,8 @@ class MidiRPNDetectorTests final : public UnitTest
 public:
     MidiRPNDetectorTests()
         : UnitTest ("MidiRPNDetector class", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -281,7 +302,7 @@ public:
             expect (! detector.tryParse (2, 101, 0));
             expect (! detector.tryParse (1, 101, 2));
             expect (! detector.tryParse (2, 100, 7));
-            expect (detector.tryParse   (1, 6,   1).has_value());
+            expect (detector.tryParse (1, 6, 1).has_value());
 
             auto channelTwo = detector.tryParse (2, 6, 42);
             expect (channelTwo.has_value());
@@ -292,7 +313,7 @@ public:
             expect (! channelTwo->isNRPN);
             expect (! channelTwo->is14BitValue);
 
-            auto channelOne = detector.tryParse (1, 38,  94);
+            auto channelOne = detector.tryParse (1, 38, 94);
             expect (channelOne.has_value());
 
             expectEquals (channelOne->channel, 1);
@@ -307,9 +328,9 @@ public:
             MidiRPNDetector detector;
             expect (! detector.tryParse (16, 100, 0));
             expect (! detector.tryParse (16, 101, 0));
-            expect (detector.tryParse   (16, 6,   0).has_value());
+            expect (detector.tryParse (16, 6, 0).has_value());
 
-            auto parsed = detector.tryParse (16, 38,  3);
+            auto parsed = detector.tryParse (16, 38, 3);
             expect (parsed.has_value());
 
             expectEquals (parsed->channel, 16);
@@ -322,7 +343,7 @@ public:
         beginTest ("invalid RPN (wrong order)");
         {
             MidiRPNDetector detector;
-            expect (! detector.tryParse (2, 6,   42));
+            expect (! detector.tryParse (2, 6, 42));
             expect (! detector.tryParse (2, 101, 0));
             expect (! detector.tryParse (2, 100, 7));
         }
@@ -330,17 +351,17 @@ public:
         beginTest ("14-bit RPN interspersed with unrelated CC messages");
         {
             MidiRPNDetector detector;
-            expect (! detector.tryParse (16, 3,   80));
+            expect (! detector.tryParse (16, 3, 80));
             expect (! detector.tryParse (16, 100, 0));
-            expect (! detector.tryParse (16, 4,   81));
+            expect (! detector.tryParse (16, 4, 81));
             expect (! detector.tryParse (16, 101, 0));
-            expect (! detector.tryParse (16, 5,   82));
-            expect (! detector.tryParse (16, 5,   83));
-            expect (detector.tryParse   (16, 6,   0).has_value());
-            expect (! detector.tryParse (16, 4,   84).has_value());
-            expect (! detector.tryParse (16, 3,   85).has_value());
+            expect (! detector.tryParse (16, 5, 82));
+            expect (! detector.tryParse (16, 5, 83));
+            expect (detector.tryParse (16, 6, 0).has_value());
+            expect (! detector.tryParse (16, 4, 84).has_value());
+            expect (! detector.tryParse (16, 3, 85).has_value());
 
-            auto parsed = detector.tryParse (16, 38,  3);
+            auto parsed = detector.tryParse (16, 38, 3);
             expect (parsed.has_value());
 
             expectEquals (parsed->channel, 16);
@@ -353,11 +374,11 @@ public:
         beginTest ("14-bit NRPN");
         {
             MidiRPNDetector detector;
-            expect (! detector.tryParse (1, 98,  44));
-            expect (! detector.tryParse (1, 99 , 2));
-            expect (detector.tryParse   (1, 6,   1).has_value());
+            expect (! detector.tryParse (1, 98, 44));
+            expect (! detector.tryParse (1, 99, 2));
+            expect (detector.tryParse (1, 6, 1).has_value());
 
-            auto parsed = detector.tryParse (1, 38,  94);
+            auto parsed = detector.tryParse (1, 38, 94);
             expect (parsed.has_value());
 
             expectEquals (parsed->channel, 1);
@@ -373,7 +394,7 @@ public:
             expect (! detector.tryParse (2, 101, 0));
             detector.reset();
             expect (! detector.tryParse (2, 100, 7));
-            expect (! detector.tryParse (2, 6,   42));
+            expect (! detector.tryParse (2, 6, 42));
         }
     }
 };
@@ -386,7 +407,8 @@ class MidiRPNGeneratorTests final : public UnitTest
 public:
     MidiRPNGeneratorTests()
         : UnitTest ("MidiRPNGenerator class", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {

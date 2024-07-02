@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  AudioPlayHead
+class JUCE_API AudioPlayHead
 {
 protected:
     //==============================================================================
@@ -65,27 +65,30 @@ public:
     /** Frame rate types. */
     enum FrameRateType
     {
-        fps23976        = 0,
-        fps24           = 1,
-        fps25           = 2,
-        fps2997         = 3,
-        fps30           = 4,
-        fps2997drop     = 5,
-        fps30drop       = 6,
-        fps60           = 7,
-        fps60drop       = 8,
-        fpsUnknown      = 99
+        fps23976 = 0,
+        fps24 = 1,
+        fps25 = 2,
+        fps2997 = 3,
+        fps30 = 4,
+        fps2997drop = 5,
+        fps30drop = 6,
+        fps60 = 7,
+        fps60drop = 8,
+        fpsUnknown = 99
     };
 
     /** More descriptive frame rate type. */
-    class JUCE_API  FrameRate
+    class JUCE_API FrameRate
     {
     public:
         /** Creates a frame rate with a base rate of 0. */
         FrameRate() = default;
 
         /** Creates a FrameRate instance from a FrameRateType. */
-        FrameRate (FrameRateType type) : FrameRate (fromType (type)) {}
+        FrameRate (FrameRateType type)
+            : FrameRate (fromType (type))
+        {
+        }
 
         /** Gets the FrameRateType that matches the state of this FrameRate.
 
@@ -96,41 +99,48 @@ public:
         {
             switch (base)
             {
-                case 24:    return pulldown ? fps23976 : fps24;
-                case 25:    return fps25;
-                case 30:    return pulldown ? (drop ? fps2997drop : fps2997)
-                                            : (drop ? fps30drop   : fps30);
-                case 60:    return drop ? fps60drop : fps60;
+                case 24:
+                    return pulldown ? fps23976 : fps24;
+                case 25:
+                    return fps25;
+                case 30:
+                    return pulldown ? (drop ? fps2997drop : fps2997)
+                                    : (drop ? fps30drop : fps30);
+                case 60:
+                    return drop ? fps60drop : fps60;
             }
 
             return fpsUnknown;
         }
 
         /** Returns the plain rate, without taking pulldown into account. */
-        int getBaseRate() const                         { return base; }
+        int getBaseRate() const { return base; }
 
         /** Returns true if drop-frame timecode is in use. */
-        bool isDrop() const                             { return drop; }
+        bool isDrop() const { return drop; }
 
         /** Returns true if the effective framerate is actually equal to the base rate divided by 1.001 */
-        bool isPullDown() const                         { return pulldown; }
+        bool isPullDown() const { return pulldown; }
 
         /** Returns the actual rate described by this object, taking pulldown into account. */
-        double getEffectiveRate() const                 { return pulldown ? (double) base / 1.001 : (double) base; }
+        double getEffectiveRate() const { return pulldown ? (double) base / 1.001 : (double) base; }
 
         /** Returns a copy of this object with the specified base rate. */
-        [[nodiscard]] FrameRate withBaseRate (int x) const            { return with (&FrameRate::base, x); }
+        [[nodiscard]] FrameRate withBaseRate (int x) const { return with (&FrameRate::base, x); }
 
         /** Returns a copy of this object with drop frames enabled or disabled, as specified. */
-        [[nodiscard]] FrameRate withDrop (bool x = true) const        { return with (&FrameRate::drop, x); }
+        [[nodiscard]] FrameRate withDrop (bool x = true) const { return with (&FrameRate::drop, x); }
 
         /** Returns a copy of this object with pulldown enabled or disabled, as specified. */
-        [[nodiscard]] FrameRate withPullDown (bool x = true) const    { return with (&FrameRate::pulldown, x); }
+        [[nodiscard]] FrameRate withPullDown (bool x = true) const { return with (&FrameRate::pulldown, x); }
 
         /** Returns true if this instance is equal to other. */
         bool operator== (const FrameRate& other) const
         {
-            const auto tie = [] (const FrameRate& x) { return std::tie (x.base, x.drop, x.pulldown); };
+            const auto tie = [] (const FrameRate& x)
+            {
+                return std::tie (x.base, x.drop, x.pulldown);
+            };
             return tie (*this) == tie (other);
         }
 
@@ -142,16 +152,26 @@ public:
         {
             switch (type)
             {
-                case fps23976:      return FrameRate().withBaseRate (24).withPullDown();
-                case fps24:         return FrameRate().withBaseRate (24);
-                case fps25:         return FrameRate().withBaseRate (25);
-                case fps2997:       return FrameRate().withBaseRate (30).withPullDown();
-                case fps30:         return FrameRate().withBaseRate (30);
-                case fps2997drop:   return FrameRate().withBaseRate (30).withDrop().withPullDown();
-                case fps30drop:     return FrameRate().withBaseRate (30).withDrop();
-                case fps60:         return FrameRate().withBaseRate (60);
-                case fps60drop:     return FrameRate().withBaseRate (60).withDrop();
-                case fpsUnknown:    break;
+                case fps23976:
+                    return FrameRate().withBaseRate (24).withPullDown();
+                case fps24:
+                    return FrameRate().withBaseRate (24);
+                case fps25:
+                    return FrameRate().withBaseRate (25);
+                case fps2997:
+                    return FrameRate().withBaseRate (30).withPullDown();
+                case fps30:
+                    return FrameRate().withBaseRate (30);
+                case fps2997drop:
+                    return FrameRate().withBaseRate (30).withDrop().withPullDown();
+                case fps30drop:
+                    return FrameRate().withBaseRate (30).withDrop();
+                case fps60:
+                    return FrameRate().withBaseRate (60);
+                case fps60drop:
+                    return FrameRate().withBaseRate (60).withDrop();
+                case fpsUnknown:
+                    break;
             }
 
             return {};
@@ -176,14 +196,17 @@ public:
     struct JUCE_API TimeSignature
     {
         /** Time signature numerator, e.g. the 3 of a 3/4 time sig */
-        int numerator   = 4;
+        int numerator = 4;
 
         /** Time signature denominator, e.g. the 4 of a 3/4 time sig */
         int denominator = 4;
 
         bool operator== (const TimeSignature& other) const
         {
-            const auto tie = [] (auto& x) { return std::tie (x.numerator, x.denominator); };
+            const auto tie = [] (auto& x)
+            {
+                return std::tie (x.numerator, x.denominator);
+            };
             return tie (*this) == tie (other);
         }
 
@@ -207,7 +230,10 @@ public:
 
         bool operator== (const LoopPoints& other) const
         {
-            const auto tie = [] (auto& x) { return std::tie (x.ppqStart, x.ppqEnd); };
+            const auto tie = [] (auto& x)
+            {
+                return std::tie (x.ppqStart, x.ppqEnd);
+            };
             return tie (*this) == tie (other);
         }
 
@@ -224,7 +250,7 @@ public:
         Unfortunately, CurrentPositionInfo doesn't have any way of differentiating between
         default values and values that have been set explicitly.
     */
-    struct JUCE_API  CurrentPositionInfo
+    struct JUCE_API CurrentPositionInfo
     {
         /** The tempo in BPM */
         double bpm = 120.0;
@@ -313,7 +339,7 @@ public:
 
         void resetToDefault()
         {
-            *this = CurrentPositionInfo{};
+            *this = CurrentPositionInfo {};
         }
     };
 
@@ -335,43 +361,43 @@ public:
     {
     public:
         /** Returns the number of samples that have elapsed. */
-        Optional<int64_t> getTimeInSamples() const                      { return getOptional (flagTimeSamples, timeInSamples); }
+        Optional<int64_t> getTimeInSamples() const { return getOptional (flagTimeSamples, timeInSamples); }
 
         /** @see getTimeInSamples() */
-        void setTimeInSamples (Optional<int64_t> timeInSamplesIn)       {        setOptional (flagTimeSamples, timeInSamples, timeInSamplesIn); }
+        void setTimeInSamples (Optional<int64_t> timeInSamplesIn) { setOptional (flagTimeSamples, timeInSamples, timeInSamplesIn); }
 
         /** Returns the number of seconds that have elapsed. */
-        Optional<double> getTimeInSeconds() const                       { return getOptional (flagTimeSeconds, timeInSeconds); }
+        Optional<double> getTimeInSeconds() const { return getOptional (flagTimeSeconds, timeInSeconds); }
 
         /** @see getTimeInSamples() */
-        void setTimeInSeconds (Optional<double> timeInSecondsIn)        {        setOptional (flagTimeSeconds, timeInSeconds, timeInSecondsIn); }
+        void setTimeInSeconds (Optional<double> timeInSecondsIn) { setOptional (flagTimeSeconds, timeInSeconds, timeInSecondsIn); }
 
         /** Returns the bpm, if available. */
-        Optional<double> getBpm() const                                 { return getOptional (flagTempo, tempoBpm); }
+        Optional<double> getBpm() const { return getOptional (flagTempo, tempoBpm); }
 
         /** @see getBpm() */
-        void setBpm (Optional<double> bpmIn)                            {        setOptional (flagTempo, tempoBpm, bpmIn); }
+        void setBpm (Optional<double> bpmIn) { setOptional (flagTempo, tempoBpm, bpmIn); }
 
         /** Returns the time signature, if available. */
-        Optional<TimeSignature> getTimeSignature() const                { return getOptional (flagTimeSignature, timeSignature); }
+        Optional<TimeSignature> getTimeSignature() const { return getOptional (flagTimeSignature, timeSignature); }
 
         /** @see getTimeSignature() */
-        void setTimeSignature (Optional<TimeSignature> timeSignatureIn) {        setOptional (flagTimeSignature, timeSignature, timeSignatureIn); }
+        void setTimeSignature (Optional<TimeSignature> timeSignatureIn) { setOptional (flagTimeSignature, timeSignature, timeSignatureIn); }
 
         /** Returns host loop points, if available. */
-        Optional<LoopPoints> getLoopPoints() const                      { return getOptional (flagLoopPoints, loopPoints); }
+        Optional<LoopPoints> getLoopPoints() const { return getOptional (flagLoopPoints, loopPoints); }
 
         /** @see getLoopPoints() */
-        void setLoopPoints (Optional<LoopPoints> loopPointsIn)          {        setOptional (flagLoopPoints, loopPoints, loopPointsIn); }
+        void setLoopPoints (Optional<LoopPoints> loopPointsIn) { setOptional (flagLoopPoints, loopPoints, loopPointsIn); }
 
         /** The number of bars since the beginning of the timeline.
 
             This value isn't available in all hosts or in all plugin formats.
         */
-        Optional<int64_t> getBarCount() const                           { return getOptional (flagBarCount, barCount); }
+        Optional<int64_t> getBarCount() const { return getOptional (flagBarCount, barCount); }
 
         /** @see getBarCount() */
-        void setBarCount (Optional<int64_t> barCountIn)                 {        setOptional (flagBarCount, barCount, barCountIn); }
+        void setBarCount (Optional<int64_t> barCountIn) { setOptional (flagBarCount, barCount, barCountIn); }
 
         /** The position of the start of the last bar, in units of quarter-notes.
 
@@ -380,55 +406,55 @@ public:
 
             Note - this value may be unavailable on some hosts, e.g. Pro-Tools.
         */
-        Optional<double> getPpqPositionOfLastBarStart() const           { return getOptional (flagLastBarStartPpq, lastBarStartPpq); }
+        Optional<double> getPpqPositionOfLastBarStart() const { return getOptional (flagLastBarStartPpq, lastBarStartPpq); }
 
         /** @see getPpqPositionOfLastBarStart() */
-        void setPpqPositionOfLastBarStart (Optional<double> positionIn) {        setOptional (flagLastBarStartPpq, lastBarStartPpq, positionIn); }
+        void setPpqPositionOfLastBarStart (Optional<double> positionIn) { setOptional (flagLastBarStartPpq, lastBarStartPpq, positionIn); }
 
         /** The video frame rate, if available. */
-        Optional<FrameRate> getFrameRate() const                        { return getOptional (flagFrameRate, frame); }
+        Optional<FrameRate> getFrameRate() const { return getOptional (flagFrameRate, frame); }
 
         /** @see getFrameRate() */
-        void setFrameRate (Optional<FrameRate> frameRateIn)             {        setOptional (flagFrameRate, frame, frameRateIn); }
+        void setFrameRate (Optional<FrameRate> frameRateIn) { setOptional (flagFrameRate, frame, frameRateIn); }
 
         /** The current play position, in units of quarter-notes. */
-        Optional<double> getPpqPosition() const                         { return getOptional (flagPpqPosition, positionPpq); }
+        Optional<double> getPpqPosition() const { return getOptional (flagPpqPosition, positionPpq); }
 
         /** @see getPpqPosition() */
-        void setPpqPosition (Optional<double> ppqPositionIn)            {        setOptional (flagPpqPosition, positionPpq, ppqPositionIn); }
+        void setPpqPosition (Optional<double> ppqPositionIn) { setOptional (flagPpqPosition, positionPpq, ppqPositionIn); }
 
         /** For timecode, the position of the start of the timeline, in seconds from 00:00:00:00. */
-        Optional<double> getEditOriginTime() const                      { return getOptional (flagOriginTime, originTime); }
+        Optional<double> getEditOriginTime() const { return getOptional (flagOriginTime, originTime); }
 
         /** @see getEditOriginTime() */
-        void setEditOriginTime (Optional<double> editOriginTimeIn)      {        setOptional (flagOriginTime, originTime, editOriginTimeIn); }
+        void setEditOriginTime (Optional<double> editOriginTimeIn) { setOptional (flagOriginTime, originTime, editOriginTimeIn); }
 
         /** Get the host's callback time in nanoseconds, if available. */
-        Optional<uint64_t> getHostTimeNs() const                        { return getOptional (flagHostTimeNs, hostTimeNs); }
+        Optional<uint64_t> getHostTimeNs() const { return getOptional (flagHostTimeNs, hostTimeNs); }
 
         /** @see getHostTimeNs() */
-        void setHostTimeNs (Optional<uint64_t> hostTimeNsIn)            {        setOptional (flagHostTimeNs, hostTimeNs, hostTimeNsIn); }
+        void setHostTimeNs (Optional<uint64_t> hostTimeNsIn) { setOptional (flagHostTimeNs, hostTimeNs, hostTimeNsIn); }
 
         /** True if the transport is currently playing. */
-        bool getIsPlaying() const                                       { return getFlag (flagIsPlaying); }
+        bool getIsPlaying() const { return getFlag (flagIsPlaying); }
 
         /** @see getIsPlaying() */
-        void setIsPlaying (bool isPlayingIn)                            {        setFlag (flagIsPlaying, isPlayingIn); }
+        void setIsPlaying (bool isPlayingIn) { setFlag (flagIsPlaying, isPlayingIn); }
 
         /** True if the transport is currently recording.
 
             (When isRecording is true, then isPlaying will also be true).
         */
-        bool getIsRecording() const                                     { return getFlag (flagIsRecording); }
+        bool getIsRecording() const { return getFlag (flagIsRecording); }
 
         /** @see getIsRecording() */
-        void setIsRecording (bool isRecordingIn)                        {        setFlag (flagIsRecording, isRecordingIn); }
+        void setIsRecording (bool isRecordingIn) { setFlag (flagIsRecording, isRecordingIn); }
 
         /** True if the transport is currently looping. */
-        bool getIsLooping() const                                       { return getFlag (flagIsLooping); }
+        bool getIsLooping() const { return getFlag (flagIsLooping); }
 
         /** @see getIsLooping() */
-        void setIsLooping (bool isLoopingIn)                            {        setFlag (flagIsLooping, isLoopingIn); }
+        void setIsLooping (bool isLoopingIn) { setFlag (flagIsLooping, isLoopingIn); }
 
         bool operator== (const PositionInfo& other) const noexcept
         {
@@ -486,34 +512,34 @@ public:
 
         enum
         {
-            flagTimeSignature   = 1 << 0,
-            flagLoopPoints      = 1 << 1,
-            flagFrameRate       = 1 << 2,
-            flagTimeSeconds     = 1 << 3,
+            flagTimeSignature = 1 << 0,
+            flagLoopPoints = 1 << 1,
+            flagFrameRate = 1 << 2,
+            flagTimeSeconds = 1 << 3,
             flagLastBarStartPpq = 1 << 4,
-            flagPpqPosition     = 1 << 5,
-            flagOriginTime      = 1 << 6,
-            flagTempo           = 1 << 7,
-            flagTimeSamples     = 1 << 8,
-            flagBarCount        = 1 << 9,
-            flagHostTimeNs      = 1 << 10,
-            flagIsPlaying       = 1 << 11,
-            flagIsRecording     = 1 << 12,
-            flagIsLooping       = 1 << 13
+            flagPpqPosition = 1 << 5,
+            flagOriginTime = 1 << 6,
+            flagTempo = 1 << 7,
+            flagTimeSamples = 1 << 8,
+            flagBarCount = 1 << 9,
+            flagHostTimeNs = 1 << 10,
+            flagIsPlaying = 1 << 11,
+            flagIsRecording = 1 << 12,
+            flagIsLooping = 1 << 13
         };
 
         TimeSignature timeSignature;
         LoopPoints loopPoints;
-        FrameRate frame        = FrameRateType::fps23976;
-        double timeInSeconds   = 0.0;
+        FrameRate frame = FrameRateType::fps23976;
+        double timeInSeconds = 0.0;
         double lastBarStartPpq = 0.0;
-        double positionPpq     = 0.0;
-        double originTime      = 0.0;
-        double tempoBpm        = 0.0;
-        int64_t timeInSamples  = 0;
-        int64_t barCount       = 0;
-        uint64_t hostTimeNs    = 0;
-        int64_t flags          = 0;
+        double positionPpq = 0.0;
+        double originTime = 0.0;
+        double tempoBpm = 0.0;
+        int64_t timeInSamples = 0;
+        int64_t barCount = 0;
+        uint64_t hostTimeNs = 0;
+        int64_t flags = 0;
     };
 
     //==============================================================================
@@ -529,8 +555,7 @@ public:
         in which a time would make sense, and some hosts will almost certainly have
         multithreading issues if it's not called on the audio thread.
     */
-    [[deprecated ("Use getPosition instead. Not all hosts are able to provide all time position information; getPosition differentiates clearly between set and unset fields.")]]
-    bool getCurrentPosition (CurrentPositionInfo& result)
+    [[deprecated ("Use getPosition instead. Not all hosts are able to provide all time position information; getPosition differentiates clearly between set and unset fields.")]] bool getCurrentPosition (CurrentPositionInfo& result)
     {
         if (const auto pos = getPosition())
         {
@@ -538,14 +563,14 @@ public:
 
             if (const auto sig = pos->getTimeSignature())
             {
-                result.timeSigNumerator   = sig->numerator;
+                result.timeSigNumerator = sig->numerator;
                 result.timeSigDenominator = sig->denominator;
             }
 
             if (const auto loop = pos->getLoopPoints())
             {
-                result.ppqLoopStart     = loop->ppqStart;
-                result.ppqLoopEnd       = loop->ppqEnd;
+                result.ppqLoopStart = loop->ppqStart;
+                result.ppqLoopEnd = loop->ppqEnd;
             }
 
             if (const auto frame = pos->getFrameRate())
@@ -569,9 +594,9 @@ public:
             if (const auto timeInSamples = pos->getTimeInSamples())
                 result.timeInSamples = *timeInSamples;
 
-            result.isPlaying    = pos->getIsPlaying();
-            result.isRecording  = pos->getIsRecording();
-            result.isLooping    = pos->getIsLooping();
+            result.isPlaying = pos->getIsPlaying();
+            result.isRecording = pos->getIsRecording();
+            result.isLooping = pos->getIsLooping();
 
             return true;
         }

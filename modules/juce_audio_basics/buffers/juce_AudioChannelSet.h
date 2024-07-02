@@ -60,7 +60,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  AudioChannelSet
+class JUCE_API AudioChannelSet
 {
 public:
     /** Creates an empty channel set.
@@ -79,13 +79,11 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE mono();
 
-
     /** Creates a set containing a stereo set (left, right).
 
         Is equivalent to: kStereo (VST), AAX_eStemFormat_Stereo (AAX), kAudioChannelLayoutTag_Stereo (CoreAudio)
     */
     static AudioChannelSet JUCE_CALLTYPE stereo();
-
 
     //==============================================================================
     /** Creates a set containing an LCR set (left, right, centre).
@@ -97,7 +95,6 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE createLCR();
 
-
     /** Creates a set containing an LRS set (left, right, surround).
 
         Is equivalent to: k30Music (VST), n/a (AAX), kAudioChannelLayoutTag_ITU_2_1 (CoreAudio)
@@ -105,7 +102,6 @@ public:
         This format is referred to as "LRS" in Cubase.
     */
     static AudioChannelSet JUCE_CALLTYPE createLRS();
-
 
     /** Creates a set containing an LCRS set (left, right, centre, surround).
 
@@ -117,7 +113,6 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE createLCRS();
 
-
     //==============================================================================
     /** Creates a set for a 5.0 surround setup (left, right, centre, leftSurround, rightSurround).
 
@@ -127,7 +122,6 @@ public:
         This format is referred to as "5.0" in Pro Tools.
     */
     static AudioChannelSet JUCE_CALLTYPE create5point0();
-
 
     /** Creates a set for a 5.1 surround setup (left, right, centre, leftSurround, rightSurround, LFE).
 
@@ -139,7 +133,6 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE create5point1();
 
-
     /** Creates a set for a 6.0 Cine surround setup (left, right, centre, leftSurround, rightSurround, centreSurround).
 
         Is equivalent to: k60Cine (VST), AAX_eStemFormat_6_0 (AAX), kAudioChannelLayoutTag_AudioUnit_6_0 (CoreAudio)
@@ -150,7 +143,6 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE create6point0();
 
-
     /** Creates a set for a 6.1 Cine surround setup (left, right, centre, leftSurround, rightSurround, centreSurround, LFE).
 
          Is equivalent to: k61Cine (VST), AAX_eStemFormat_6_1 (AAX), kAudioChannelLayoutTag_MPEG_6_1_A (CoreAudio)
@@ -158,7 +150,6 @@ public:
          This format is referred to as "6.1" in Pro Tools.
      */
     static AudioChannelSet JUCE_CALLTYPE create6point1();
-
 
     /** Creates a set for a 6.0 Music surround setup (left, right, leftSurround, rightSurround, leftSurroundSide, rightSurroundSide).
 
@@ -168,13 +159,11 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE create6point0Music();
 
-
     /** Creates a set for a 6.0 Music surround setup (left, right, leftSurround, rightSurround, leftSurroundSide, rightSurroundSide, LFE).
 
         Is equivalent to: k61Music (VST), n/a (AAX), kAudioChannelLayoutTag_DTS_6_1_A (CoreAudio)
     */
     static AudioChannelSet JUCE_CALLTYPE create6point1Music();
-
 
     /** Creates a set for a DTS 7.0 surround setup (left, right, centre, leftSurroundSide, rightSurroundSide, leftSurroundRear, rightSurroundRear).
 
@@ -184,7 +173,6 @@ public:
     */
     static AudioChannelSet JUCE_CALLTYPE create7point0();
 
-
     /** Creates a set for a SDDS 7.0 surround setup (left, right, centre, leftSurround, rightSurround, leftCentre, rightCentre).
 
         Is equivalent to: k70Cine (VST), AAX_eStemFormat_7_0_SDDS (AAX), kAudioChannelLayoutTag_AudioUnit_7_0_Front (CoreAudio)
@@ -192,7 +180,6 @@ public:
         This format is referred to as "7.0 SDDS" in Pro Tools.
      */
     static AudioChannelSet JUCE_CALLTYPE create7point0SDDS();
-
 
     /** Creates a set for a DTS 7.1 surround setup (left, right, centre, leftSurroundSide, rightSurroundSide, leftSurroundRear, rightSurroundRear, LFE).
 
@@ -202,7 +189,6 @@ public:
         This format is referred to as "7.1" in Pro Tools.
     */
     static AudioChannelSet JUCE_CALLTYPE create7point1();
-
 
     /** Creates a set for a 7.1 surround setup (left, right, centre, leftSurround, rightSurround, leftCentre, rightCentre, LFE).
 
@@ -314,20 +300,17 @@ public:
      */
     static AudioChannelSet JUCE_CALLTYPE quadraphonic();
 
-
     /** Creates a set for pentagonal surround setup (left, right, centre, leftSurroundRear, rightSurroundRear).
 
         Is equivalent to: n/a (VST), n/a (AAX), kAudioChannelLayoutTag_Pentagonal (CoreAudio)
     */
     static AudioChannelSet JUCE_CALLTYPE pentagonal();
 
-
     /** Creates a set for hexagonal surround setup (left, right, leftSurroundRear, rightSurroundRear, centre, surroundCentre).
 
         Is equivalent to: n/a (VST), n/a (AAX), kAudioChannelLayoutTag_Hexagonal (CoreAudio)
     */
     static AudioChannelSet JUCE_CALLTYPE hexagonal();
-
 
     /** Creates a set for octagonal surround setup (left, right, leftSurround, rightSurround, centre, centreSurround, wideLeft, wideRight).
 
@@ -368,146 +351,146 @@ public:
     /** Represents different audio channel types. */
     enum ChannelType
     {
-        unknown             = 0, /**< Unknown channel type. */
+        unknown = 0, /**< Unknown channel type. */
 
         //==============================================================================
-        left                = 1, /**< L channel. */
-        right               = 2, /**< R channel. */
-        centre              = 3, /**< C channel. (Sometimes M for mono) */
+        left = 1,   /**< L channel. */
+        right = 2,  /**< R channel. */
+        centre = 3, /**< C channel. (Sometimes M for mono) */
 
         //==============================================================================
-        LFE                 = 4,              /**< LFE channel. */
-        leftSurround        = 5,              /**< Ls channel.  */
-        rightSurround       = 6,              /**< Rs channel.  */
-        leftCentre          = 7,              /**< Lc (AAX/VST), Lc used as Lss in AU for most layouts. */
-        rightCentre         = 8,              /**< Rc (AAX/VST), Rc used as Rss in AU for most layouts. */
-        centreSurround      = 9,              /**< Cs/S channel. */
-        surround            = centreSurround, /**< Same as Centre Surround channel. */
-        leftSurroundSide    = 10,             /**< Lss (AXX), Side Left  "Sl" (VST), Left Centre  "LC" (AU) channel. */
-        rightSurroundSide   = 11,             /**< Rss (AXX), Side right "Sr" (VST), Right Centre "Rc" (AU) channel. */
-        topMiddle           = 12,             /**< Top Middle channel.       */
-        topFrontLeft        = 13,             /**< Top Front Left channel.   */
-        topFrontCentre      = 14,             /**< Top Front Centre channel. */
-        topFrontRight       = 15,             /**< Top Front Right channel.  */
-        topRearLeft         = 16,             /**< Top Rear Left channel.    */
-        topRearCentre       = 17,             /**< Top Rear Centre channel.  */
-        topRearRight        = 18,             /**< Top Rear Right channel.   */
-        LFE2                = 19,             /**< Second LFE channel.       */
-        leftSurroundRear    = 20,             /**< Lsr (AAX), Lcs (VST), Rls (AU) channel. */
-        rightSurroundRear   = 21,             /**< Rsr (AAX), Rcs (VST), Rrs (AU) channel. */
-        wideLeft            = 22,             /**< Wide Left channel.  */
-        wideRight           = 23,             /**< Wide Right channel. */
+        LFE = 4,                   /**< LFE channel. */
+        leftSurround = 5,          /**< Ls channel.  */
+        rightSurround = 6,         /**< Rs channel.  */
+        leftCentre = 7,            /**< Lc (AAX/VST), Lc used as Lss in AU for most layouts. */
+        rightCentre = 8,           /**< Rc (AAX/VST), Rc used as Rss in AU for most layouts. */
+        centreSurround = 9,        /**< Cs/S channel. */
+        surround = centreSurround, /**< Same as Centre Surround channel. */
+        leftSurroundSide = 10,     /**< Lss (AXX), Side Left  "Sl" (VST), Left Centre  "LC" (AU) channel. */
+        rightSurroundSide = 11,    /**< Rss (AXX), Side right "Sr" (VST), Right Centre "Rc" (AU) channel. */
+        topMiddle = 12,            /**< Top Middle channel.       */
+        topFrontLeft = 13,         /**< Top Front Left channel.   */
+        topFrontCentre = 14,       /**< Top Front Centre channel. */
+        topFrontRight = 15,        /**< Top Front Right channel.  */
+        topRearLeft = 16,          /**< Top Rear Left channel.    */
+        topRearCentre = 17,        /**< Top Rear Centre channel.  */
+        topRearRight = 18,         /**< Top Rear Right channel.   */
+        LFE2 = 19,                 /**< Second LFE channel.       */
+        leftSurroundRear = 20,     /**< Lsr (AAX), Lcs (VST), Rls (AU) channel. */
+        rightSurroundRear = 21,    /**< Rsr (AAX), Rcs (VST), Rrs (AU) channel. */
+        wideLeft = 22,             /**< Wide Left channel.  */
+        wideRight = 23,            /**< Wide Right channel. */
 
         //==============================================================================
         // Used by Dolby Atmos 7.0.2 and 7.1.2
-        topSideLeft         = 28, /**< Lts (AAX), Tsl (VST), Ltm (AU) channel for Dolby Atmos. */
-        topSideRight        = 29, /**< Rts (AAX), Tsr (VST), Rtm (AU) channel for Dolby Atmos. */
+        topSideLeft = 28,  /**< Lts (AAX), Tsl (VST), Ltm (AU) channel for Dolby Atmos. */
+        topSideRight = 29, /**< Rts (AAX), Tsr (VST), Rtm (AU) channel for Dolby Atmos. */
 
         //==============================================================================
         // Ambisonic ACN formats - all channels are SN3D normalised
 
         // zero-th and first-order ambisonic ACN
-        ambisonicACN0       = 24, /**< Zero-th ambisonic channel number 0.     */
-        ambisonicACN1       = 25, /**< First-order ambisonic channel number 1. */
-        ambisonicACN2       = 26, /**< First-order ambisonic channel number 2. */
-        ambisonicACN3       = 27, /**< First-order ambisonic channel number 3. */
+        ambisonicACN0 = 24, /**< Zero-th ambisonic channel number 0.     */
+        ambisonicACN1 = 25, /**< First-order ambisonic channel number 1. */
+        ambisonicACN2 = 26, /**< First-order ambisonic channel number 2. */
+        ambisonicACN3 = 27, /**< First-order ambisonic channel number 3. */
 
         // second-order ambisonic
-        ambisonicACN4       = 30, /**< Second-order ambisonic channel number 4. */
-        ambisonicACN5       = 31, /**< Second-order ambisonic channel number 5. */
-        ambisonicACN6       = 32, /**< Second-order ambisonic channel number 6. */
-        ambisonicACN7       = 33, /**< Second-order ambisonic channel number 7. */
-        ambisonicACN8       = 34, /**< Second-order ambisonic channel number 8. */
+        ambisonicACN4 = 30, /**< Second-order ambisonic channel number 4. */
+        ambisonicACN5 = 31, /**< Second-order ambisonic channel number 5. */
+        ambisonicACN6 = 32, /**< Second-order ambisonic channel number 6. */
+        ambisonicACN7 = 33, /**< Second-order ambisonic channel number 7. */
+        ambisonicACN8 = 34, /**< Second-order ambisonic channel number 8. */
 
         // third-order ambisonic
-        ambisonicACN9       = 35, /**< Third-order ambisonic channel number 9.  */
-        ambisonicACN10      = 36, /**< Third-order ambisonic channel number 10. */
-        ambisonicACN11      = 37, /**< Third-order ambisonic channel number 11. */
-        ambisonicACN12      = 38, /**< Third-order ambisonic channel number 12. */
-        ambisonicACN13      = 39, /**< Third-order ambisonic channel number 13. */
-        ambisonicACN14      = 40, /**< Third-order ambisonic channel number 14. */
-        ambisonicACN15      = 41, /**< Third-order ambisonic channel number 15. */
+        ambisonicACN9 = 35,  /**< Third-order ambisonic channel number 9.  */
+        ambisonicACN10 = 36, /**< Third-order ambisonic channel number 10. */
+        ambisonicACN11 = 37, /**< Third-order ambisonic channel number 11. */
+        ambisonicACN12 = 38, /**< Third-order ambisonic channel number 12. */
+        ambisonicACN13 = 39, /**< Third-order ambisonic channel number 13. */
+        ambisonicACN14 = 40, /**< Third-order ambisonic channel number 14. */
+        ambisonicACN15 = 41, /**< Third-order ambisonic channel number 15. */
 
         // fourth-order ambisonic
-        ambisonicACN16      = 42, /**< Fourth-order ambisonic channel number 16. */
-        ambisonicACN17      = 43, /**< Fourth-order ambisonic channel number 17. */
-        ambisonicACN18      = 44, /**< Fourth-order ambisonic channel number 18. */
-        ambisonicACN19      = 45, /**< Fourth-order ambisonic channel number 19. */
-        ambisonicACN20      = 46, /**< Fourth-order ambisonic channel number 20. */
-        ambisonicACN21      = 47, /**< Fourth-order ambisonic channel number 21. */
-        ambisonicACN22      = 48, /**< Fourth-order ambisonic channel number 22. */
-        ambisonicACN23      = 49, /**< Fourth-order ambisonic channel number 23. */
-        ambisonicACN24      = 50, /**< Fourth-order ambisonic channel number 24. */
+        ambisonicACN16 = 42, /**< Fourth-order ambisonic channel number 16. */
+        ambisonicACN17 = 43, /**< Fourth-order ambisonic channel number 17. */
+        ambisonicACN18 = 44, /**< Fourth-order ambisonic channel number 18. */
+        ambisonicACN19 = 45, /**< Fourth-order ambisonic channel number 19. */
+        ambisonicACN20 = 46, /**< Fourth-order ambisonic channel number 20. */
+        ambisonicACN21 = 47, /**< Fourth-order ambisonic channel number 21. */
+        ambisonicACN22 = 48, /**< Fourth-order ambisonic channel number 22. */
+        ambisonicACN23 = 49, /**< Fourth-order ambisonic channel number 23. */
+        ambisonicACN24 = 50, /**< Fourth-order ambisonic channel number 24. */
 
         // fifth-order ambisonic
-        ambisonicACN25      = 51, /**< Fifth-order ambisonic channel number 25. */
-        ambisonicACN26      = 52, /**< Fifth-order ambisonic channel number 26. */
-        ambisonicACN27      = 53, /**< Fifth-order ambisonic channel number 27. */
-        ambisonicACN28      = 54, /**< Fifth-order ambisonic channel number 28. */
-        ambisonicACN29      = 55, /**< Fifth-order ambisonic channel number 29. */
-        ambisonicACN30      = 56, /**< Fifth-order ambisonic channel number 30. */
-        ambisonicACN31      = 57, /**< Fifth-order ambisonic channel number 31. */
-        ambisonicACN32      = 58, /**< Fifth-order ambisonic channel number 32. */
-        ambisonicACN33      = 59, /**< Fifth-order ambisonic channel number 33. */
-        ambisonicACN34      = 60, /**< Fifth-order ambisonic channel number 34. */
-        ambisonicACN35      = 61, /**< Fifth-order ambisonic channel number 35. */
+        ambisonicACN25 = 51, /**< Fifth-order ambisonic channel number 25. */
+        ambisonicACN26 = 52, /**< Fifth-order ambisonic channel number 26. */
+        ambisonicACN27 = 53, /**< Fifth-order ambisonic channel number 27. */
+        ambisonicACN28 = 54, /**< Fifth-order ambisonic channel number 28. */
+        ambisonicACN29 = 55, /**< Fifth-order ambisonic channel number 29. */
+        ambisonicACN30 = 56, /**< Fifth-order ambisonic channel number 30. */
+        ambisonicACN31 = 57, /**< Fifth-order ambisonic channel number 31. */
+        ambisonicACN32 = 58, /**< Fifth-order ambisonic channel number 32. */
+        ambisonicACN33 = 59, /**< Fifth-order ambisonic channel number 33. */
+        ambisonicACN34 = 60, /**< Fifth-order ambisonic channel number 34. */
+        ambisonicACN35 = 61, /**< Fifth-order ambisonic channel number 35. */
 
         //==============================================================================
-        ambisonicW          = ambisonicACN0, /**< Same as zero-th ambisonic channel number 0.     */
-        ambisonicX          = ambisonicACN3, /**< Same as first-order ambisonic channel number 3. */
-        ambisonicY          = ambisonicACN1, /**< Same as first-order ambisonic channel number 1. */
-        ambisonicZ          = ambisonicACN2, /**< Same as first-order ambisonic channel number 2. */
+        ambisonicW = ambisonicACN0, /**< Same as zero-th ambisonic channel number 0.     */
+        ambisonicX = ambisonicACN3, /**< Same as first-order ambisonic channel number 3. */
+        ambisonicY = ambisonicACN1, /**< Same as first-order ambisonic channel number 1. */
+        ambisonicZ = ambisonicACN2, /**< Same as first-order ambisonic channel number 2. */
 
         //==============================================================================
-        bottomFrontLeft     = 62, /**< Bottom Front Left (Bfl)   */
-        bottomFrontCentre   = 63, /**< Bottom Front Centre (Bfc) */
-        bottomFrontRight    = 64, /**< Bottom Front Right (Bfr)  */
+        bottomFrontLeft = 62,   /**< Bottom Front Left (Bfl)   */
+        bottomFrontCentre = 63, /**< Bottom Front Centre (Bfc) */
+        bottomFrontRight = 64,  /**< Bottom Front Right (Bfr)  */
 
-        proximityLeft       = 65, /**< Proximity Left (Pl)  */
-        proximityRight      = 66, /**< Proximity Right (Pr) */
+        proximityLeft = 65,  /**< Proximity Left (Pl)  */
+        proximityRight = 66, /**< Proximity Right (Pr) */
 
-        bottomSideLeft      = 67, /**< Bottom Side Left (Bsl)   */
-        bottomSideRight     = 68, /**< Bottom Side Right (Bsr)  */
-        bottomRearLeft      = 69, /**< Bottom Rear Left (Brl)  */
-        bottomRearCentre    = 70, /**< Bottom Rear Center (Brc)  */
-        bottomRearRight     = 71, /**< Bottom Rear Right (Brr)  */
+        bottomSideLeft = 67,   /**< Bottom Side Left (Bsl)   */
+        bottomSideRight = 68,  /**< Bottom Side Right (Bsr)  */
+        bottomRearLeft = 69,   /**< Bottom Rear Left (Brl)  */
+        bottomRearCentre = 70, /**< Bottom Rear Center (Brc)  */
+        bottomRearRight = 71,  /**< Bottom Rear Right (Brr)  */
 
         //==============================================================================
 
         // sixth-order ambisonic
-        ambisonicACN36      = 72, /**< Sixth-order ambisonic channel number 36. */
-        ambisonicACN37      = 73, /**< Sixth-order ambisonic channel number 37. */
-        ambisonicACN38      = 74, /**< Sixth-order ambisonic channel number 38. */
-        ambisonicACN39      = 75, /**< Sixth-order ambisonic channel number 39. */
-        ambisonicACN40      = 76, /**< Sixth-order ambisonic channel number 40. */
-        ambisonicACN41      = 77, /**< Sixth-order ambisonic channel number 41. */
-        ambisonicACN42      = 78, /**< Sixth-order ambisonic channel number 42. */
-        ambisonicACN43      = 79, /**< Sixth-order ambisonic channel number 43. */
-        ambisonicACN44      = 80, /**< Sixth-order ambisonic channel number 44. */
-        ambisonicACN45      = 81, /**< Sixth-order ambisonic channel number 45. */
-        ambisonicACN46      = 82, /**< Sixth-order ambisonic channel number 46. */
-        ambisonicACN47      = 83, /**< Sixth-order ambisonic channel number 47. */
-        ambisonicACN48      = 84, /**< Sixth-order ambisonic channel number 48. */
+        ambisonicACN36 = 72, /**< Sixth-order ambisonic channel number 36. */
+        ambisonicACN37 = 73, /**< Sixth-order ambisonic channel number 37. */
+        ambisonicACN38 = 74, /**< Sixth-order ambisonic channel number 38. */
+        ambisonicACN39 = 75, /**< Sixth-order ambisonic channel number 39. */
+        ambisonicACN40 = 76, /**< Sixth-order ambisonic channel number 40. */
+        ambisonicACN41 = 77, /**< Sixth-order ambisonic channel number 41. */
+        ambisonicACN42 = 78, /**< Sixth-order ambisonic channel number 42. */
+        ambisonicACN43 = 79, /**< Sixth-order ambisonic channel number 43. */
+        ambisonicACN44 = 80, /**< Sixth-order ambisonic channel number 44. */
+        ambisonicACN45 = 81, /**< Sixth-order ambisonic channel number 45. */
+        ambisonicACN46 = 82, /**< Sixth-order ambisonic channel number 46. */
+        ambisonicACN47 = 83, /**< Sixth-order ambisonic channel number 47. */
+        ambisonicACN48 = 84, /**< Sixth-order ambisonic channel number 48. */
 
         // seventh-order ambisonic
-        ambisonicACN49      = 85, /**< Seventh-order ambisonic channel number 49. */
-        ambisonicACN50      = 86, /**< Seventh-order ambisonic channel number 50. */
-        ambisonicACN51      = 87, /**< Seventh-order ambisonic channel number 51. */
-        ambisonicACN52      = 88, /**< Seventh-order ambisonic channel number 52. */
-        ambisonicACN53      = 89, /**< Seventh-order ambisonic channel number 53. */
-        ambisonicACN54      = 90, /**< Seventh-order ambisonic channel number 54. */
-        ambisonicACN55      = 91, /**< Seventh-order ambisonic channel number 55. */
-        ambisonicACN56      = 92, /**< Seventh-order ambisonic channel number 56. */
-        ambisonicACN57      = 93, /**< Seventh-order ambisonic channel number 57. */
-        ambisonicACN58      = 94, /**< Seventh-order ambisonic channel number 58. */
-        ambisonicACN59      = 95, /**< Seventh-order ambisonic channel number 59. */
-        ambisonicACN60      = 96, /**< Seventh-order ambisonic channel number 60. */
-        ambisonicACN61      = 97, /**< Seventh-order ambisonic channel number 61. */
-        ambisonicACN62      = 98, /**< Seventh-order ambisonic channel number 62. */
-        ambisonicACN63      = 99, /**< Seventh-order ambisonic channel number 63. */
+        ambisonicACN49 = 85, /**< Seventh-order ambisonic channel number 49. */
+        ambisonicACN50 = 86, /**< Seventh-order ambisonic channel number 50. */
+        ambisonicACN51 = 87, /**< Seventh-order ambisonic channel number 51. */
+        ambisonicACN52 = 88, /**< Seventh-order ambisonic channel number 52. */
+        ambisonicACN53 = 89, /**< Seventh-order ambisonic channel number 53. */
+        ambisonicACN54 = 90, /**< Seventh-order ambisonic channel number 54. */
+        ambisonicACN55 = 91, /**< Seventh-order ambisonic channel number 55. */
+        ambisonicACN56 = 92, /**< Seventh-order ambisonic channel number 56. */
+        ambisonicACN57 = 93, /**< Seventh-order ambisonic channel number 57. */
+        ambisonicACN58 = 94, /**< Seventh-order ambisonic channel number 58. */
+        ambisonicACN59 = 95, /**< Seventh-order ambisonic channel number 59. */
+        ambisonicACN60 = 96, /**< Seventh-order ambisonic channel number 60. */
+        ambisonicACN61 = 97, /**< Seventh-order ambisonic channel number 61. */
+        ambisonicACN62 = 98, /**< Seventh-order ambisonic channel number 62. */
+        ambisonicACN63 = 99, /**< Seventh-order ambisonic channel number 63. */
 
         //==============================================================================
-        discreteChannel0    = 128  /**< Non-typed individual channels are indexed upwards from this value. */
+        discreteChannel0 = 128 /**< Non-typed individual channels are indexed upwards from this value. */
     };
 
     /** Returns the name of a given channel type. For example, this method may return "Surround Left". */
@@ -535,7 +518,7 @@ public:
     int size() const noexcept;
 
     /** Returns true if there are no channels in the set. */
-    bool isDisabled() const noexcept                    { return size() == 0; }
+    bool isDisabled() const noexcept { return size() == 0; }
 
     /** Returns an array of all the types in this channel set. */
     Array<ChannelType> getChannelTypes() const;
@@ -566,7 +549,7 @@ public:
     bool isDiscreteLayout() const noexcept;
 
     /** Intersect two channel layouts. */
-    void intersect (const AudioChannelSet& other)      { channels &= other.channels; }
+    void intersect (const AudioChannelSet& other) { channels &= other.channels; }
 
     /** Creates a channel set for a list of channel types. This function will assert
         if you supply a duplicate channel.
@@ -601,7 +584,7 @@ public:
     //==============================================================================
     bool operator== (const AudioChannelSet&) const noexcept;
     bool operator!= (const AudioChannelSet&) const noexcept;
-    bool operator<  (const AudioChannelSet&) const noexcept;
+    bool operator<(const AudioChannelSet&) const noexcept;
 
 private:
     //==============================================================================
@@ -610,7 +593,6 @@ private:
     //==============================================================================
     explicit AudioChannelSet (uint32);
     explicit AudioChannelSet (const std::initializer_list<ChannelType>&);
-
 };
 
 } // namespace juce

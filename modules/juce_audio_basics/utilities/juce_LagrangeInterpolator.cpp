@@ -43,7 +43,7 @@ namespace juce
 template <int k>
 struct LagrangeResampleHelper
 {
-    static forcedinline void calc (float& a, float b) noexcept   { a *= b * (1.0f / k); }
+    static forcedinline void calc (float& a, float b) noexcept { a *= b * (1.0f / k); }
 };
 
 template <>
@@ -57,9 +57,9 @@ static float calcCoefficient (float input, float offset) noexcept
 {
     LagrangeResampleHelper<0 - k>::calc (input, -2.0f - offset);
     LagrangeResampleHelper<1 - k>::calc (input, -1.0f - offset);
-    LagrangeResampleHelper<2 - k>::calc (input,  0.0f - offset);
-    LagrangeResampleHelper<3 - k>::calc (input,  1.0f - offset);
-    LagrangeResampleHelper<4 - k>::calc (input,  2.0f - offset);
+    LagrangeResampleHelper<2 - k>::calc (input, 0.0f - offset);
+    LagrangeResampleHelper<3 - k>::calc (input, 1.0f - offset);
+    LagrangeResampleHelper<4 - k>::calc (input, 2.0f - offset);
     return input;
 }
 
@@ -67,10 +67,18 @@ float Interpolators::LagrangeTraits::valueAtOffset (const float* inputs, float o
 {
     float result = 0.0f;
 
-    result += calcCoefficient<0> (inputs[index], offset); if (++index == 5) index = 0;
-    result += calcCoefficient<1> (inputs[index], offset); if (++index == 5) index = 0;
-    result += calcCoefficient<2> (inputs[index], offset); if (++index == 5) index = 0;
-    result += calcCoefficient<3> (inputs[index], offset); if (++index == 5) index = 0;
+    result += calcCoefficient<0> (inputs[index], offset);
+    if (++index == 5)
+        index = 0;
+    result += calcCoefficient<1> (inputs[index], offset);
+    if (++index == 5)
+        index = 0;
+    result += calcCoefficient<2> (inputs[index], offset);
+    if (++index == 5)
+        index = 0;
+    result += calcCoefficient<3> (inputs[index], offset);
+    if (++index == 5)
+        index = 0;
     result += calcCoefficient<4> (inputs[index], offset);
 
     return result;

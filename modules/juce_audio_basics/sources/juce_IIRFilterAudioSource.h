@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  IIRFilterAudioSource  : public AudioSource
+class JUCE_API IIRFilterAudioSource : public AudioSource
 {
 public:
     //==============================================================================

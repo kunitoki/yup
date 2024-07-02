@@ -40,9 +40,12 @@
 namespace juce
 {
 
-bool AudioPlayHead::canControlTransport()                                          { return false; }
-void AudioPlayHead::transportPlay ([[maybe_unused]] bool shouldStartPlaying)       {}
-void AudioPlayHead::transportRecord ([[maybe_unused]] bool shouldStartRecording)   {}
-void AudioPlayHead::transportRewind()                                              {}
+bool AudioPlayHead::canControlTransport() { return false; }
+
+void AudioPlayHead::transportPlay ([[maybe_unused]] bool shouldStartPlaying) {}
+
+void AudioPlayHead::transportRecord ([[maybe_unused]] bool shouldStartRecording) {}
+
+void AudioPlayHead::transportRewind() {}
 
 } // namespace juce

@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MidiMessage
+class JUCE_API MidiMessage
 {
 public:
     //==============================================================================
@@ -81,7 +81,8 @@ public:
 
     /** Creates a midi message from a list of bytes. */
     template <typename... Data>
-    MidiMessage (int byte1, int byte2, int byte3, Data... otherBytes)  : size (3 + sizeof... (otherBytes))
+    MidiMessage (int byte1, int byte2, int byte3, Data... otherBytes)
+        : size (3 + sizeof...(otherBytes))
     {
         // this checks that the length matches the data..
         jassert (size > 3 || byte1 >= 0xf0 || getMessageLengthFromFirstByte ((uint8) byte1) == size);
@@ -89,7 +90,6 @@ public:
         const uint8 data[] = { (uint8) byte1, (uint8) byte2, (uint8) byte3, static_cast<uint8> (otherBytes)... };
         memcpy (allocateSpace (size), data, (size_t) size);
     }
-
 
     /** Creates a midi message from a block of data. */
     MidiMessage (const void* data, int numBytes, double timeStamp = 0);
@@ -114,10 +114,7 @@ public:
                                         to expect the data to begin with a variable-length
                                         field indicating its size
     */
-    MidiMessage (const void* data, int maxBytesToUse,
-                 int& numBytesUsed, uint8 lastStatusByte,
-                 double timeStamp = 0,
-                 bool sysexHasEmbeddedLength = true);
+    MidiMessage (const void* data, int maxBytesToUse, int& numBytesUsed, uint8 lastStatusByte, double timeStamp = 0, bool sysexHasEmbeddedLength = true);
 
     /** Creates an empty sysex message.
 
@@ -148,12 +145,12 @@ public:
     /** Returns a pointer to the raw midi data.
         @see getRawDataSize
     */
-    const uint8* getRawData() const noexcept            { return getData(); }
+    const uint8* getRawData() const noexcept { return getData(); }
 
     /** Returns the number of bytes of data in the message.
         @see getRawData
     */
-    int getRawDataSize() const noexcept                 { return size; }
+    int getRawDataSize() const noexcept { return size; }
 
     //==============================================================================
     /** Returns a human-readable description of the midi message as a string,
@@ -178,18 +175,18 @@ public:
 
         @see setTimeStamp, addToTimeStamp
     */
-    double getTimeStamp() const noexcept                { return timeStamp; }
+    double getTimeStamp() const noexcept { return timeStamp; }
 
     /** Changes the message's associated timestamp.
         The units for the timestamp will be application-specific - see the notes for getTimeStamp().
         @see addToTimeStamp, getTimeStamp
     */
-    void setTimeStamp (double newTimestamp) noexcept    { timeStamp = newTimestamp; }
+    void setTimeStamp (double newTimestamp) noexcept { timeStamp = newTimestamp; }
 
     /** Adds a value to the message's timestamp.
         The units for the timestamp will be application-specific.
     */
-    void addToTimeStamp (double delta) noexcept         { timeStamp += delta; }
+    void addToTimeStamp (double delta) noexcept { timeStamp += delta; }
 
     /** Return a copy of this message with a new timestamp.
         The units for the timestamp will be application-specific - see the notes for getTimeStamp().
@@ -789,10 +786,10 @@ public:
     */
     enum SmpteTimecodeType
     {
-        fps24       = 0,
-        fps25       = 1,
-        fps30drop   = 2,
-        fps30       = 3
+        fps24 = 0,
+        fps25 = 1,
+        fps30drop = 2,
+        fps30 = 3
     };
 
     /** Returns true if this is a full-frame midi timecode message. */
@@ -823,14 +820,14 @@ public:
     */
     enum MidiMachineControlCommand
     {
-        mmc_stop            = 1,
-        mmc_play            = 2,
-        mmc_deferredplay    = 3,
-        mmc_fastforward     = 4,
-        mmc_rewind          = 5,
-        mmc_recordStart     = 6,
-        mmc_recordStop      = 7,
-        mmc_pause           = 9
+        mmc_stop = 1,
+        mmc_play = 2,
+        mmc_deferredplay = 3,
+        mmc_fastforward = 4,
+        mmc_rewind = 5,
+        mmc_recordStart = 6,
+        mmc_recordStop = 7,
+        mmc_pause = 9
     };
 
     /** Checks whether this is an MMC message.
@@ -885,16 +882,15 @@ public:
     static MidiMessage createSysExMessage (Span<const std::byte> data);
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     /** Reads a midi variable-length integer.
 
         The `data` argument indicates the data to read the number from,
         and `numBytesUsed` is used as an out-parameter to indicate the number
         of bytes that were read.
     */
-    [[deprecated ("This signature has been deprecated in favour of the safer readVariableLengthValue.")]]
-    static int readVariableLengthVal (const uint8* data, int& numBytesUsed) noexcept;
-   #endif
+    [[deprecated ("This signature has been deprecated in favour of the safer readVariableLengthValue.")]] static int readVariableLengthVal (const uint8* data, int& numBytesUsed) noexcept;
+#endif
 
     /** Holds information about a variable-length value which was parsed
         from a stream of bytes.
@@ -906,9 +902,12 @@ public:
         VariableLengthValue() = default;
 
         VariableLengthValue (int valueIn, int bytesUsedIn)
-            : value (valueIn), bytesUsed (bytesUsedIn) {}
+            : value (valueIn)
+            , bytesUsed (bytesUsedIn)
+        {
+        }
 
-        bool isValid() const noexcept  { return bytesUsed > 0; }
+        bool isValid() const noexcept { return bytesUsed > 0; }
 
         int value = 0;
         int bytesUsed = 0;
@@ -994,7 +993,7 @@ public:
 
 private:
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     union PackedData
     {
         uint8* allocatedData;
@@ -1004,10 +1003,15 @@ private:
     PackedData packedData;
     double timeStamp = 0;
     int size;
-   #endif
+#endif
 
-    inline bool isHeapAllocated() const noexcept  { return size > (int) sizeof (packedData); }
-    inline uint8* getData() const noexcept        { return isHeapAllocated() ? packedData.allocatedData : (uint8*) packedData.asBytes; }
+    inline bool isHeapAllocated() const noexcept
+    {
+        return size > (int) sizeof (packedData);
+    }
+
+    inline uint8* getData() const noexcept { return isHeapAllocated() ? packedData.allocatedData : (uint8*) packedData.asBytes; }
+
     uint8* allocateSpace (int);
 };
 

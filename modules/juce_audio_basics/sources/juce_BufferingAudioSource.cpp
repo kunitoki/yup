@@ -46,11 +46,11 @@ BufferingAudioSource::BufferingAudioSource (PositionableAudioSource* s,
                                             int bufferSizeSamples,
                                             int numChannels,
                                             bool prefillBufferOnPrepareToPlay)
-    : source (s, deleteSourceWhenDeleted),
-      backgroundThread (thread),
-      numberOfSamplesToBuffer (jmax (1024, bufferSizeSamples)),
-      numberOfChannels (numChannels),
-      prefillBuffer (prefillBufferOnPrepareToPlay)
+    : source (s, deleteSourceWhenDeleted)
+    , backgroundThread (thread)
+    , numberOfSamplesToBuffer (jmax (1024, bufferSizeSamples))
+    , numberOfChannels (numChannels)
+    , prefillBuffer (prefillBufferOnPrepareToPlay)
 {
     jassert (source != nullptr);
 
@@ -69,8 +69,8 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
     auto bufferSizeNeeded = jmax (samplesPerBlockExpected * 2, numberOfSamplesToBuffer);
 
     if (! approximatelyEqual (newSampleRate, sampleRate)
-         || bufferSizeNeeded != buffer.getNumSamples()
-         || ! isPrepared)
+        || bufferSizeNeeded != buffer.getNumSamples()
+        || ! isPrepared)
     {
         backgroundThread.removeTimeSliceClient (this);
 
@@ -95,9 +95,8 @@ void BufferingAudioSource::prepareToPlay (int samplesPerBlockExpected, double ne
 
             backgroundThread.moveToFrontOfQueue (this);
             Thread::sleep (5);
-        }
-        while (prefillBuffer
-         && (bufferValidEnd - bufferValidStart < jmin (((int) newSampleRate) / 4, buffer.getNumSamples() / 2)));
+        } while (prefillBuffer
+                 && (bufferValidEnd - bufferValidStart < jmin (((int) newSampleRate) / 4, buffer.getNumSamples() / 2)));
     }
 }
 
@@ -132,11 +131,11 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
     const ScopedLock sl (callbackLock);
 
     if (validStart > 0)
-        info.buffer->clear (info.startSample, validStart);  // partial cache miss at start
+        info.buffer->clear (info.startSample, validStart); // partial cache miss at start
 
     if (validEnd < info.numSamples)
         info.buffer->clear (info.startSample + validEnd,
-                            info.numSamples - validEnd);    // partial cache miss at end
+                            info.numSamples - validEnd); // partial cache miss at end
 
     if (validStart < validEnd)
     {
@@ -145,28 +144,19 @@ void BufferingAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& info
             jassert (buffer.getNumSamples() > 0);
 
             const auto startBufferIndex = (int) ((validStart + nextPlayPos) % buffer.getNumSamples());
-            const auto endBufferIndex   = (int) ((validEnd + nextPlayPos)   % buffer.getNumSamples());
+            const auto endBufferIndex = (int) ((validEnd + nextPlayPos) % buffer.getNumSamples());
 
             if (startBufferIndex < endBufferIndex)
             {
-                info.buffer->copyFrom (chan, info.startSample + validStart,
-                                       buffer,
-                                       chan, startBufferIndex,
-                                       validEnd - validStart);
+                info.buffer->copyFrom (chan, info.startSample + validStart, buffer, chan, startBufferIndex, validEnd - validStart);
             }
             else
             {
                 const auto initialSize = buffer.getNumSamples() - startBufferIndex;
 
-                info.buffer->copyFrom (chan, info.startSample + validStart,
-                                       buffer,
-                                       chan, startBufferIndex,
-                                       initialSize);
+                info.buffer->copyFrom (chan, info.startSample + validStart, buffer, chan, startBufferIndex, initialSize);
 
-                info.buffer->copyFrom (chan, info.startSample + validStart + initialSize,
-                                       buffer,
-                                       chan, 0,
-                                       (validEnd - validStart) - initialSize);
+                info.buffer->copyFrom (chan, info.startSample + validStart + initialSize, buffer, chan, 0, (validEnd - validStart) - initialSize);
             }
         }
     }
@@ -223,8 +213,8 @@ int64 BufferingAudioSource::getNextReadPosition() const
     const auto pos = nextPlayPos.load();
 
     return (source->isLooping() && nextPlayPos > 0)
-                    ? pos % source->getTotalLength()
-                    : pos;
+             ? pos % source->getTotalLength()
+             : pos;
 }
 
 void BufferingAudioSource::setNextReadPosition (int64 newPosition)
@@ -277,7 +267,7 @@ bool BufferingAudioSource::readNextBufferChunk()
             bufferValidEnd = 0;
         }
         else if (std::abs ((int) (newBVS - bufferValidStart)) > 512
-                  || std::abs ((int) (newBVE - bufferValidEnd)) > 512)
+                 || std::abs ((int) (newBVE - bufferValidEnd)) > 512)
         {
             newBVE = jmin (newBVE, bufferValidEnd + maxChunkSize);
 
@@ -295,7 +285,7 @@ bool BufferingAudioSource::readNextBufferChunk()
     jassert (buffer.getNumSamples() > 0);
 
     const auto bufferIndexStart = (int) (sectionToReadStart % buffer.getNumSamples());
-    const auto bufferIndexEnd   = (int) (sectionToReadEnd   % buffer.getNumSamples());
+    const auto bufferIndexEnd = (int) (sectionToReadEnd % buffer.getNumSamples());
 
     if (bufferIndexStart < bufferIndexEnd)
     {

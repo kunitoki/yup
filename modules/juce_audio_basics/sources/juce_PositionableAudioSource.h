@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  PositionableAudioSource  : public AudioSource
+class JUCE_API PositionableAudioSource : public AudioSource
 {
 protected:
     //==============================================================================

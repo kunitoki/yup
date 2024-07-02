@@ -41,20 +41,20 @@ namespace juce
 {
 
 MPEZoneLayout::MPEZoneLayout (MPEZone lower, MPEZone upper)
-    : lowerZone (lower), upperZone (upper)
+    : lowerZone (lower)
+    , upperZone (upper)
 {
 }
 
 MPEZoneLayout::MPEZoneLayout (MPEZone zone)
-    : lowerZone (zone.isLowerZone() ? zone : MPEZone()),
-      upperZone (! zone.isLowerZone() ? zone : MPEZone())
+    : lowerZone (zone.isLowerZone() ? zone : MPEZone())
+    , upperZone (! zone.isLowerZone() ? zone : MPEZone())
 {
 }
 
-
 MPEZoneLayout::MPEZoneLayout (const MPEZoneLayout& other)
-    : lowerZone (other.lowerZone),
-      upperZone (other.upperZone)
+    : lowerZone (other.lowerZone)
+    , upperZone (other.upperZone)
 {
 }
 
@@ -70,15 +70,18 @@ MPEZoneLayout& MPEZoneLayout::operator= (const MPEZoneLayout& other)
 
 void MPEZoneLayout::sendLayoutChangeMessage()
 {
-    listeners.call ([this] (Listener& l) { l.zoneLayoutChanged (*this); });
+    listeners.call ([this] (Listener& l)
+                    {
+                        l.zoneLayoutChanged (*this);
+                    });
 }
 
 //==============================================================================
 void MPEZoneLayout::setZone (bool isLower, int numMemberChannels, int perNotePitchbendRange, int masterPitchbendRange) noexcept
 {
-    checkAndLimitZoneParameters (0, 15,  numMemberChannels);
-    checkAndLimitZoneParameters (0, 96,  perNotePitchbendRange);
-    checkAndLimitZoneParameters (0, 96,  masterPitchbendRange);
+    checkAndLimitZoneParameters (0, 15, numMemberChannels);
+    checkAndLimitZoneParameters (0, 96, perNotePitchbendRange);
+    checkAndLimitZoneParameters (0, 96, masterPitchbendRange);
 
     if (isLower)
         lowerZone = { MPEZone::Type::lower, numMemberChannels, perNotePitchbendRange, masterPitchbendRange };
@@ -209,8 +212,7 @@ void MPEZoneLayout::removeListener (Listener* const listenerToRemove) noexcept
 }
 
 //==============================================================================
-void MPEZoneLayout::checkAndLimitZoneParameters (int minValue, int maxValue,
-                                                 int& valueToCheckAndLimit) noexcept
+void MPEZoneLayout::checkAndLimitZoneParameters (int minValue, int maxValue, int& valueToCheckAndLimit) noexcept
 {
     if (valueToCheckAndLimit < minValue || valueToCheckAndLimit > maxValue)
     {
@@ -225,7 +227,6 @@ void MPEZoneLayout::checkAndLimitZoneParameters (int minValue, int maxValue,
     }
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -235,7 +236,8 @@ class MPEZoneLayoutTests final : public UnitTest
 public:
     MPEZoneLayoutTests()
         : UnitTest ("MPEZoneLayout class", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -345,7 +347,6 @@ public:
                 expectEquals (layout.getUpperZone().getMasterChannel(), 16);
                 expectEquals (layout.getUpperZone().numMemberChannels, 4);
 
-
                 buffer = MPEMessages::setLowerZone (10, 33, 44);
                 layout.processNextMidiBuffer (buffer);
 
@@ -385,12 +386,12 @@ public:
         {
             MPEZoneLayout layout;
 
-            layout.processNextMidiEvent ({ 0x80, 0x59, 0xd0 });  // unrelated note-off msg
-            layout.processNextMidiEvent ({ 0xb0, 0x64, 0x06 });  // RPN part 1
-            layout.processNextMidiEvent ({ 0xb0, 0x65, 0x00 });  // RPN part 2
-            layout.processNextMidiEvent ({ 0xb8, 0x0b, 0x66 });  // unrelated CC msg
-            layout.processNextMidiEvent ({ 0xb0, 0x06, 0x03 });  // RPN part 3
-            layout.processNextMidiEvent ({ 0x90, 0x60, 0x00 });  // unrelated note-on msg
+            layout.processNextMidiEvent ({ 0x80, 0x59, 0xd0 }); // unrelated note-off msg
+            layout.processNextMidiEvent ({ 0xb0, 0x64, 0x06 }); // RPN part 1
+            layout.processNextMidiEvent ({ 0xb0, 0x65, 0x00 }); // RPN part 2
+            layout.processNextMidiEvent ({ 0xb8, 0x0b, 0x66 }); // unrelated CC msg
+            layout.processNextMidiEvent ({ 0xb0, 0x06, 0x03 }); // RPN part 3
+            layout.processNextMidiEvent ({ 0x90, 0x60, 0x00 }); // unrelated note-on msg
 
             expect (layout.getLowerZone().isActive());
             expect (! layout.getUpperZone().isActive());
@@ -414,7 +415,6 @@ public:
 };
 
 static MPEZoneLayoutTests MPEZoneLayoutUnitTests;
-
 
 #endif
 

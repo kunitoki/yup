@@ -66,18 +66,18 @@ public:
     /** Holds the parameters being used by a Reverb object. */
     struct Parameters
     {
-        float roomSize   = 0.5f;     /**< Room size, 0 to 1.0, where 1.0 is big, 0 is small. */
-        float damping    = 0.5f;     /**< Damping, 0 to 1.0, where 0 is not damped, 1.0 is fully damped. */
-        float wetLevel   = 0.33f;    /**< Wet level, 0 to 1.0 */
-        float dryLevel   = 0.4f;     /**< Dry level, 0 to 1.0 */
-        float width      = 1.0f;     /**< Reverb width, 0 to 1.0, where 1.0 is very wide. */
-        float freezeMode = 0.0f;     /**< Freeze mode - values < 0.5 are "normal" mode, values > 0.5
+        float roomSize = 0.5f;   /**< Room size, 0 to 1.0, where 1.0 is big, 0 is small. */
+        float damping = 0.5f;    /**< Damping, 0 to 1.0, where 0 is not damped, 1.0 is fully damped. */
+        float wetLevel = 0.33f;  /**< Wet level, 0 to 1.0 */
+        float dryLevel = 0.4f;   /**< Dry level, 0 to 1.0 */
+        float width = 1.0f;      /**< Reverb width, 0 to 1.0, where 1.0 is very wide. */
+        float freezeMode = 0.0f; /**< Freeze mode - values < 0.5 are "normal" mode, values > 0.5
                                           put the reverb into a continuous feedback loop. */
     };
 
     //==============================================================================
     /** Returns the reverb's current parameters. */
-    const Parameters& getParameters() const noexcept    { return parameters; }
+    const Parameters& getParameters() const noexcept { return parameters; }
 
     /** Applies a new set of parameters to the reverb.
         Note that this doesn't attempt to lock the reverb, so if you call this in parallel with
@@ -124,9 +124,9 @@ public:
         }
 
         const double smoothTime = 0.01;
-        damping .reset (sampleRate, smoothTime);
+        damping.reset (sampleRate, smoothTime);
         feedback.reset (sampleRate, smoothTime);
-        dryGain .reset (sampleRate, smoothTime);
+        dryGain.reset (sampleRate, smoothTime);
         wetGain1.reset (sampleRate, smoothTime);
         wetGain2.reset (sampleRate, smoothTime);
     }
@@ -157,26 +157,26 @@ public:
             const float input = (left[i] + right[i]) * gain;
             float outL = 0, outR = 0;
 
-            const float damp    = damping.getNextValue();
+            const float damp = damping.getNextValue();
             const float feedbck = feedback.getNextValue();
 
-            for (int j = 0; j < numCombs; ++j)  // accumulate the comb filters in parallel
+            for (int j = 0; j < numCombs; ++j) // accumulate the comb filters in parallel
             {
                 outL += comb[0][j].process (input, damp, feedbck);
                 outR += comb[1][j].process (input, damp, feedbck);
             }
 
-            for (int j = 0; j < numAllPasses; ++j)  // run the allpass filters in series
+            for (int j = 0; j < numAllPasses; ++j) // run the allpass filters in series
             {
                 outL = allPass[0][j].process (outL);
                 outR = allPass[1][j].process (outR);
             }
 
-            const float dry  = dryGain.getNextValue();
+            const float dry = dryGain.getNextValue();
             const float wet1 = wetGain1.getNextValue();
             const float wet2 = wetGain2.getNextValue();
 
-            left[i]  = outL * wet1 + outR * wet2 + left[i]  * dry;
+            left[i] = outL * wet1 + outR * wet2 + left[i] * dry;
             right[i] = outR * wet1 + outL * wet2 + right[i] * dry;
         }
         JUCE_END_IGNORE_WARNINGS_MSVC
@@ -193,16 +193,16 @@ public:
             const float input = samples[i] * gain;
             float output = 0;
 
-            const float damp    = damping.getNextValue();
+            const float damp = damping.getNextValue();
             const float feedbck = feedback.getNextValue();
 
-            for (int j = 0; j < numCombs; ++j)  // accumulate the comb filters in parallel
+            for (int j = 0; j < numCombs; ++j) // accumulate the comb filters in parallel
                 output += comb[0][j].process (input, damp, feedbck);
 
-            for (int j = 0; j < numAllPasses; ++j)  // run the allpass filters in series
+            for (int j = 0; j < numAllPasses; ++j) // run the allpass filters in series
                 output = allPass[0][j].process (output);
 
-            const float dry  = dryGain.getNextValue();
+            const float dry = dryGain.getNextValue();
             const float wet1 = wetGain1.getNextValue();
 
             samples[i] = output * wet1 + samples[i] * dry;
@@ -212,7 +212,7 @@ public:
 
 private:
     //==============================================================================
-    static bool isFrozen (const float freezeMode) noexcept  { return freezeMode >= 0.5f; }
+    static bool isFrozen (const float freezeMode) noexcept { return freezeMode >= 0.5f; }
 
     void updateDamping() noexcept
     {
@@ -303,10 +303,10 @@ private:
 
         float process (const float input) noexcept
         {
-            const float bufferedValue = buffer [bufferIndex];
+            const float bufferedValue = buffer[bufferIndex];
             float temp = input + (bufferedValue * 0.5f);
             JUCE_UNDENORMALISE (temp);
-            buffer [bufferIndex] = temp;
+            buffer[bufferIndex] = temp;
             bufferIndex = (bufferIndex + 1) % bufferSize;
             return bufferedValue - input;
         }
@@ -319,13 +319,18 @@ private:
     };
 
     //==============================================================================
-    enum { numCombs = 8, numAllPasses = 4, numChannels = 2 };
+    enum
+    {
+        numCombs = 8,
+        numAllPasses = 4,
+        numChannels = 2
+    };
 
     Parameters parameters;
     float gain;
 
-    CombFilter comb [numChannels][numCombs];
-    AllPassFilter allPass [numChannels][numAllPasses];
+    CombFilter comb[numChannels][numCombs];
+    AllPassFilter allPass[numChannels][numAllPasses];
 
     SmoothedValue<float> damping, feedback, dryGain, wetGain1, wetGain2;
 

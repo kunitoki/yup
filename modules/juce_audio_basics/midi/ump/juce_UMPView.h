@@ -64,7 +64,10 @@ public:
     View() noexcept = default;
 
     /** Create a view of the packet starting at address `d`. */
-    explicit View (const uint32_t* data) noexcept : ptr (data) {}
+    explicit View (const uint32_t* data) noexcept
+        : ptr (data)
+    {
+    }
 
     /** Get a pointer to the first word in the Universal MIDI Packet currently
         pointed-to by this view.
@@ -85,10 +88,12 @@ public:
 
     /** Get an iterator pointing to the first word in the packet. */
     const uint32_t* begin() const noexcept { return ptr; }
+
     const uint32_t* cbegin() const noexcept { return ptr; }
 
     /** Get an iterator pointing one-past the last word in the packet. */
     const uint32_t* end() const noexcept { return ptr + size(); }
+
     const uint32_t* cend() const noexcept { return ptr + size(); }
 
     /** Return true if this view is pointing to the same address as another view. */

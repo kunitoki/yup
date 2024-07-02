@@ -55,7 +55,9 @@ struct MidiMessageMetadata
     MidiMessageMetadata() noexcept = default;
 
     MidiMessageMetadata (const uint8* dataIn, int numBytesIn, int positionIn) noexcept
-        : data (dataIn), numBytes (numBytesIn), samplePosition (positionIn)
+        : data (dataIn)
+        , numBytes (numBytesIn)
+        , samplePosition (positionIn)
     {
     }
 
@@ -63,7 +65,7 @@ struct MidiMessageMetadata
 
         Note that MidiMessage owns its data storage, whereas MidiMessageMetadata does not.
     */
-    MidiMessage getMessage() const          { return MidiMessage (data, numBytes, samplePosition); }
+    MidiMessage getMessage() const { return MidiMessage (data, numBytes, samplePosition); }
 
     /** Pointer to the first byte of a MIDI message. */
     const uint8* data = nullptr;
@@ -109,10 +111,10 @@ public:
     {
     }
 
-    using difference_type   = std::iterator_traits<Ptr>::difference_type;
-    using value_type        = MidiMessageMetadata;
-    using reference         = MidiMessageMetadata;
-    using pointer           = void;
+    using difference_type = std::iterator_traits<Ptr>::difference_type;
+    using value_type = MidiMessageMetadata;
+    using reference = MidiMessageMetadata;
+    using pointer = void;
     using iterator_category = std::input_iterator_tag;
 
     /** Make this iterator point to the next message in the buffer. */
@@ -158,7 +160,7 @@ private:
 
     @tags{Audio}
 */
-class JUCE_API  MidiBuffer
+class JUCE_API MidiBuffer
 {
 public:
     //==============================================================================
@@ -273,16 +275,16 @@ public:
     void ensureSize (size_t minimumNumBytes);
 
     /** Get a read-only iterator pointing to the beginning of this buffer. */
-    MidiBufferIterator begin()  const noexcept { return cbegin(); }
+    MidiBufferIterator begin() const noexcept { return cbegin(); }
 
     /** Get a read-only iterator pointing one past the end of this buffer. */
-    MidiBufferIterator end()    const noexcept { return cend(); }
+    MidiBufferIterator end() const noexcept { return cend(); }
 
     /** Get a read-only iterator pointing to the beginning of this buffer. */
     MidiBufferIterator cbegin() const noexcept { return MidiBufferIterator (data.begin()); }
 
     /** Get a read-only iterator pointing one past the end of this buffer. */
-    MidiBufferIterator cend()   const noexcept { return MidiBufferIterator (data.end()); }
+    MidiBufferIterator cend() const noexcept { return MidiBufferIterator (data.end()); }
 
     /** Get an iterator pointing to the first event with a timestamp greater-than or
         equal-to `samplePosition`.
@@ -290,7 +292,7 @@ public:
     MidiBufferIterator findNextSamplePosition (int samplePosition) const noexcept;
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     /** This class is now deprecated in favour of MidiBufferIterator.
 
         Used to iterate through the events in a MidiBuffer.
@@ -300,7 +302,7 @@ public:
 
         @see MidiBuffer
     */
-    class [[deprecated]] JUCE_API  Iterator
+    class [[deprecated]] JUCE_API Iterator
     {
     public:
         //==============================================================================
@@ -338,7 +340,7 @@ public:
             @returns        true if an event was found, or false if the iterator has reached
                             the end of the buffer
         */
-        bool getNextEvent (const uint8* &midiData,
+        bool getNextEvent (const uint8*& midiData,
                            int& numBytesOfMidiData,
                            int& samplePosition) noexcept;
 
@@ -347,7 +349,7 @@ public:
         const MidiBuffer& buffer;
         MidiBufferIterator iterator;
     };
-   #endif
+#endif
 
     /** The raw data holding this buffer.
         Obviously access to this data is provided at your own risk. Its internal format could

@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MixerAudioSource  : public AudioSource
+class JUCE_API MixerAudioSource : public AudioSource
 {
 public:
     //==============================================================================
@@ -99,7 +99,6 @@ public:
 
     /** Implementation of the AudioSource method. */
     void getNextAudioBlock (const AudioSourceChannelInfo&) override;
-
 
 private:
     //==============================================================================

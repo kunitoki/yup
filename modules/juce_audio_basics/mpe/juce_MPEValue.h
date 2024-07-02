@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MPEValue
+class JUCE_API MPEValue
 {
 public:
     //==============================================================================

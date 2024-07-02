@@ -42,8 +42,8 @@ namespace juce
 
 ChannelRemappingAudioSource::ChannelRemappingAudioSource (AudioSource* const source_,
                                                           const bool deleteSourceWhenDeleted)
-   : source (source_, deleteSourceWhenDeleted),
-     requiredNumberOfChannels (2)
+    : source (source_, deleteSourceWhenDeleted)
+    , requiredNumberOfChannels (2)
 {
     remappedInfo.buffer = &buffer;
     remappedInfo.startSample = 0;
@@ -101,7 +101,7 @@ int ChannelRemappingAudioSource::getRemappedOutputChannel (const int outputChann
     const ScopedLock sl (lock);
 
     if (outputChannelIndex >= 0 && outputChannelIndex < remappedOutputs.size())
-        return remappedOutputs .getUnchecked (outputChannelIndex);
+        return remappedOutputs.getUnchecked (outputChannelIndex);
 
     return -1;
 }
@@ -131,10 +131,7 @@ void ChannelRemappingAudioSource::getNextAudioBlock (const AudioSourceChannelInf
 
         if (remappedChan >= 0 && remappedChan < numChans)
         {
-            buffer.copyFrom (i, 0, *bufferToFill.buffer,
-                             remappedChan,
-                             bufferToFill.startSample,
-                             bufferToFill.numSamples);
+            buffer.copyFrom (i, 0, *bufferToFill.buffer, remappedChan, bufferToFill.startSample, bufferToFill.numSamples);
         }
         else
         {
@@ -154,9 +151,7 @@ void ChannelRemappingAudioSource::getNextAudioBlock (const AudioSourceChannelInf
 
         if (remappedChan >= 0 && remappedChan < numChans)
         {
-            bufferToFill.buffer->addFrom (remappedChan, bufferToFill.startSample,
-                                          buffer, i, 0, bufferToFill.numSamples);
-
+            bufferToFill.buffer->addFrom (remappedChan, bufferToFill.startSample, buffer, i, 0, bufferToFill.numSamples);
         }
     }
 }

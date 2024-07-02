@@ -74,8 +74,7 @@ public:
             return;
         }
 
-        const HelperValues helperValues
-        {
+        const HelperValues helperValues {
             std::byte ((0x4 << 0x4) | Utils::getGroup (firstWord)),
             std::byte ((firstWord >> 0x10) & 0xff),
             std::byte ((firstWord >> 0x08) & 0x7f),
@@ -139,7 +138,11 @@ public:
     }
 
 private:
-    enum class PnKind { nrpn, rpn };
+    enum class PnKind
+    {
+        nrpn,
+        rpn
+    };
 
     struct HelperValues
     {
@@ -165,6 +168,7 @@ private:
         bool addByte (uint8_t cc, std::byte byte);
 
         const std::array<std::byte, 4>& getBytes() const noexcept { return bytes; }
+
         PnKind getKind() const noexcept { return kind; }
 
     private:
@@ -179,10 +183,16 @@ private:
         bool isValid() const noexcept { return ! (msb & 0x80); }
 
         uint8_t getMsb() const noexcept { return msb & 0x7f; }
+
         uint8_t getLsb() const noexcept { return lsb & 0x7f; }
 
         void setMsb (uint8_t i) noexcept { msb = i & 0x7f; }
-        void setLsb (uint8_t i) noexcept { msb &= 0x7f; lsb = i & 0x7f; }
+
+        void setLsb (uint8_t i) noexcept
+        {
+            msb &= 0x7f;
+            lsb = i & 0x7f;
+        }
 
     private:
         // We use the top bit to indicate whether this bank is valid.

@@ -50,7 +50,7 @@ namespace
     {
         std::fill (std::begin (range), std::end (range), value);
     }
-}
+} // namespace
 
 //==============================================================================
 MPEInstrument::MPEInstrument() noexcept
@@ -60,8 +60,8 @@ MPEInstrument::MPEInstrument() noexcept
     mpeInstrumentFill (isMemberChannelSustained, false);
 
     pitchbendDimension.value = &MPENote::pitchbend;
-    pressureDimension.value  = &MPENote::pressure;
-    timbreDimension.value    = &MPENote::timbre;
+    pressureDimension.value = &MPENote::pressure;
+    timbreDimension.value = &MPENote::timbre;
 
     resetLastReceivedValues();
 
@@ -91,9 +91,9 @@ void MPEInstrument::resetLastReceivedValues()
     };
 
     // The default value for pressure is 0, for all other dimensions it is centre
-    for (const auto& pair : { Defaults { pressureDimension,  MPEValue::minValue() },
+    for (const auto& pair : { Defaults { pressureDimension, MPEValue::minValue() },
                               Defaults { pitchbendDimension, MPEValue::centreValue() },
-                              Defaults { timbreDimension,    MPEValue::centreValue() } })
+                              Defaults { timbreDimension, MPEValue::centreValue() } })
     {
         mpeInstrumentFill (pair.dimension.lastValueReceivedOnChannel, pair.defaultValue);
     }
@@ -109,7 +109,10 @@ void MPEInstrument::setZoneLayout (MPEZoneLayout newLayout)
     if (zoneLayout != newLayout)
     {
         zoneLayout = newLayout;
-        listeners.call ([=] (Listener& l) { l.zoneLayoutChanged(); });
+        listeners.call ([=] (Listener& l)
+                        {
+                            l.zoneLayoutChanged();
+                        });
     }
 }
 
@@ -128,7 +131,10 @@ void MPEInstrument::enableLegacyMode (int pitchbendRange, Range<int> channelRang
     legacyMode.channelRange = channelRange;
 
     zoneLayout.clearAllZones();
-    listeners.call ([=] (Listener& l) { l.zoneLayoutChanged(); });
+    listeners.call ([=] (Listener& l)
+                    {
+                        l.zoneLayoutChanged();
+                    });
 }
 
 bool MPEInstrument::isLegacyModeEnabled() const noexcept
@@ -151,7 +157,10 @@ void MPEInstrument::setLegacyModeChannelRange (Range<int> channelRange)
     if (legacyMode.channelRange != channelRange)
     {
         legacyMode.channelRange = channelRange;
-        listeners.call ([=] (Listener& l) { l.zoneLayoutChanged(); });
+        listeners.call ([=] (Listener& l)
+                        {
+                            l.zoneLayoutChanged();
+                        });
     }
 }
 
@@ -170,7 +179,10 @@ void MPEInstrument::setLegacyModePitchbendRange (int pitchbendRange)
     if (legacyMode.pitchbendRange != pitchbendRange)
     {
         legacyMode.pitchbendRange = pitchbendRange;
-        listeners.call ([=] (Listener& l) { l.zoneLayoutChanged(); });
+        listeners.call ([=] (Listener& l)
+                        {
+                            l.zoneLayoutChanged();
+                        });
     }
 }
 
@@ -206,14 +218,21 @@ void MPEInstrument::processNextMidiEvent (const MidiMessage& message)
 {
     zoneLayout.processNextMidiEvent (message);
 
-    if (message.isNoteOn (true))              processMidiNoteOnMessage (message);
-    else if (message.isNoteOff (false))       processMidiNoteOffMessage (message);
+    if (message.isNoteOn (true))
+        processMidiNoteOnMessage (message);
+    else if (message.isNoteOff (false))
+        processMidiNoteOffMessage (message);
     else if (message.isResetAllControllers()
-             || message.isAllNotesOff())      processMidiResetAllControllersMessage (message);
-    else if (message.isPitchWheel())          processMidiPitchWheelMessage (message);
-    else if (message.isChannelPressure())     processMidiChannelPressureMessage (message);
-    else if (message.isController())          processMidiControllerMessage (message);
-    else if (message.isAftertouch())          processMidiAfterTouchMessage (message);
+             || message.isAllNotesOff())
+        processMidiResetAllControllersMessage (message);
+    else if (message.isPitchWheel())
+        processMidiPitchWheelMessage (message);
+    else if (message.isChannelPressure())
+        processMidiChannelPressureMessage (message);
+    else if (message.isController())
+        processMidiControllerMessage (message);
+    else if (message.isAftertouch())
+        processMidiAfterTouchMessage (message);
 }
 
 //==============================================================================
@@ -264,13 +283,26 @@ void MPEInstrument::processMidiControllerMessage (const MidiMessage& message)
 {
     switch (message.getControllerNumber())
     {
-        case 64:    sustainPedal      (message.getChannel(), message.isSustainPedalOn());   break;
-        case 66:    sostenutoPedal    (message.getChannel(), message.isSostenutoPedalOn()); break;
-        case 70:    handlePressureMSB (message.getChannel(), message.getControllerValue()); break;
-        case 74:    handleTimbreMSB   (message.getChannel(), message.getControllerValue()); break;
-        case 102:   handlePressureLSB (message.getChannel(), message.getControllerValue()); break;
-        case 106:   handleTimbreLSB   (message.getChannel(), message.getControllerValue()); break;
-        default:    break;
+        case 64:
+            sustainPedal (message.getChannel(), message.isSustainPedalOn());
+            break;
+        case 66:
+            sostenutoPedal (message.getChannel(), message.isSostenutoPedalOn());
+            break;
+        case 70:
+            handlePressureMSB (message.getChannel(), message.getControllerValue());
+            break;
+        case 74:
+            handleTimbreMSB (message.getChannel(), message.getControllerValue());
+            break;
+        case 102:
+            handlePressureLSB (message.getChannel(), message.getControllerValue());
+            break;
+        case 106:
+            handleTimbreLSB (message.getChannel(), message.getControllerValue());
+            break;
+        default:
+            break;
     }
 }
 
@@ -290,7 +322,10 @@ void MPEInstrument::processMidiResetAllControllersMessage (const MidiMessage& me
             {
                 note.keyState = MPENote::off;
                 note.noteOffVelocity = MPEValue::from7BitInt (64); // some reasonable number
-                listeners.call ([&] (Listener& l) { l.noteReleased (note); });
+                listeners.call ([&] (Listener& l)
+                                {
+                                    l.noteReleased (note);
+                                });
                 notes.remove (i);
             }
         }
@@ -308,7 +343,10 @@ void MPEInstrument::processMidiResetAllControllersMessage (const MidiMessage& me
             {
                 note.keyState = MPENote::off;
                 note.noteOffVelocity = MPEValue::from7BitInt (64); // some reasonable number
-                listeners.call ([&] (Listener& l) { l.noteReleased (note); });
+                listeners.call ([&] (Listener& l)
+                                {
+                                    l.noteReleased (note);
+                                });
                 notes.remove (i);
             }
         }
@@ -320,8 +358,7 @@ void MPEInstrument::processMidiAfterTouchMessage (const MidiMessage& message)
     if (! isMasterChannel (message.getChannel()))
         return;
 
-    polyAftertouch (message.getChannel(), message.getNoteNumber(),
-                    MPEValue::from7BitInt (message.getAfterTouchValue()));
+    polyAftertouch (message.getChannel(), message.getNoteNumber(), MPEValue::from7BitInt (message.getAfterTouchValue()));
 }
 
 //==============================================================================
@@ -329,8 +366,7 @@ void MPEInstrument::handlePressureMSB (int midiChannel, int value) noexcept
 {
     auto lsb = lastPressureLowerBitReceivedOnChannel[midiChannel - 1];
 
-    pressure (midiChannel, lsb == noLSBValueReceived ? MPEValue::from7BitInt (value)
-                                                     : MPEValue::from14BitInt (lsb + (value << 7)));
+    pressure (midiChannel, lsb == noLSBValueReceived ? MPEValue::from7BitInt (value) : MPEValue::from14BitInt (lsb + (value << 7)));
 }
 
 void MPEInstrument::handlePressureLSB (int midiChannel, int value) noexcept
@@ -342,8 +378,7 @@ void MPEInstrument::handleTimbreMSB (int midiChannel, int value) noexcept
 {
     auto lsb = lastTimbreLowerBitReceivedOnChannel[midiChannel - 1];
 
-    timbre (midiChannel, lsb == noLSBValueReceived ? MPEValue::from7BitInt (value)
-                                                   : MPEValue::from14BitInt (lsb + (value << 7)));
+    timbre (midiChannel, lsb == noLSBValueReceived ? MPEValue::from7BitInt (value) : MPEValue::from14BitInt (lsb + (value << 7)));
 }
 
 void MPEInstrument::handleTimbreLSB (int midiChannel, int value) noexcept
@@ -375,12 +410,18 @@ void MPEInstrument::noteOn (int midiChannel,
         // pathological case: second note-on received for same note -> retrigger it
         alreadyPlayingNote->keyState = MPENote::off;
         alreadyPlayingNote->noteOffVelocity = MPEValue::from7BitInt (64); // some reasonable number
-        listeners.call ([=] (Listener& l) { l.noteReleased (*alreadyPlayingNote); });
+        listeners.call ([=] (Listener& l)
+                        {
+                            l.noteReleased (*alreadyPlayingNote);
+                        });
         notes.remove (alreadyPlayingNote);
     }
 
     notes.add (newNote);
-    listeners.call ([&] (Listener& l) { l.noteAdded (newNote); });
+    listeners.call ([&] (Listener& l)
+                    {
+                        l.noteAdded (newNote);
+                    });
 }
 
 //==============================================================================
@@ -408,12 +449,18 @@ void MPEInstrument::noteOff (int midiChannel,
 
         if (note->keyState == MPENote::off)
         {
-            listeners.call ([=] (Listener& l) { l.noteReleased (*note); });
+            listeners.call ([=] (Listener& l)
+                            {
+                                l.noteReleased (*note);
+                            });
             notes.remove (note);
         }
         else
         {
-            listeners.call ([=] (Listener& l) { l.noteKeyStateChanged (*note); });
+            listeners.call ([=] (Listener& l)
+                            {
+                                l.noteKeyStateChanged (*note);
+                            });
         }
     }
 }
@@ -516,7 +563,10 @@ void MPEInstrument::updateDimensionMaster (bool isLowerZone, MPEDimension& dimen
             // master pitchbend is a special case: we don't change the note's own pitchbend,
             // instead we have to update its total (master + note) pitchbend.
             updateNoteTotalPitchbend (note);
-            listeners.call ([&] (Listener& l) { l.notePitchbendChanged (note); });
+            listeners.call ([&] (Listener& l)
+                            {
+                                l.notePitchbendChanged (note);
+                            });
         }
         else if (dimension.getValue (note) != value)
         {
@@ -543,9 +593,30 @@ void MPEInstrument::updateDimensionForNote (MPENote& note, MPEDimension& dimensi
 //==============================================================================
 void MPEInstrument::callListenersDimensionChanged (const MPENote& note, const MPEDimension& dimension)
 {
-    if (&dimension == &pressureDimension)  { listeners.call ([&] (Listener& l) { l.notePressureChanged  (note); }); return; }
-    if (&dimension == &timbreDimension)    { listeners.call ([&] (Listener& l) { l.noteTimbreChanged    (note); }); return; }
-    if (&dimension == &pitchbendDimension) { listeners.call ([&] (Listener& l) { l.notePitchbendChanged (note); }); return; }
+    if (&dimension == &pressureDimension)
+    {
+        listeners.call ([&] (Listener& l)
+                        {
+                            l.notePressureChanged (note);
+                        });
+        return;
+    }
+    if (&dimension == &timbreDimension)
+    {
+        listeners.call ([&] (Listener& l)
+                        {
+                            l.noteTimbreChanged (note);
+                        });
+        return;
+    }
+    if (&dimension == &pitchbendDimension)
+    {
+        listeners.call ([&] (Listener& l)
+                        {
+                            l.notePitchbendChanged (note);
+                        });
+        return;
+    }
 }
 
 //==============================================================================
@@ -581,8 +652,8 @@ void MPEInstrument::updateNoteTotalPitchbend (MPENote& note)
             notePitchbendInSemitones = note.pitchbend.asSignedFloat() * (float) zone.perNotePitchbendRange;
 
         auto masterPitchbendInSemitones = pitchbendDimension.lastValueReceivedOnChannel[zone.getMasterChannel() - 1]
-                                                            .asSignedFloat()
-                                          * (float) zone.masterPitchbendRange;
+                                              .asSignedFloat()
+                                        * (float) zone.masterPitchbendRange;
 
         note.totalPitchbendInSemitones = notePitchbendInSemitones + masterPitchbendInSemitones;
     }
@@ -628,12 +699,18 @@ void MPEInstrument::handleSustainOrSostenuto (int midiChannel, bool isDown, bool
 
             if (note.keyState == MPENote::off)
             {
-                listeners.call ([&] (Listener& l) { l.noteReleased (note); });
+                listeners.call ([&] (Listener& l)
+                                {
+                                    l.noteReleased (note);
+                                });
                 notes.remove (i);
             }
             else
             {
-                listeners.call ([&] (Listener& l) { l.noteKeyStateChanged (note); });
+                listeners.call ([&] (Listener& l)
+                                {
+                                    l.noteKeyStateChanged (note);
+                                });
             }
         }
     }
@@ -665,7 +742,7 @@ bool MPEInstrument::isMemberChannel (int midiChannel) const noexcept
         return legacyMode.channelRange.contains (midiChannel);
 
     return zoneLayout.getLowerZone().isUsingChannelAsMemberChannel (midiChannel)
-            || zoneLayout.getUpperZone().isUsingChannelAsMemberChannel (midiChannel);
+        || zoneLayout.getUpperZone().isUsingChannelAsMemberChannel (midiChannel);
 }
 
 bool MPEInstrument::isMasterChannel (int midiChannel) const noexcept
@@ -677,7 +754,7 @@ bool MPEInstrument::isMasterChannel (int midiChannel) const noexcept
     const auto upperZone = zoneLayout.getUpperZone();
 
     return (lowerZone.isActive() && midiChannel == lowerZone.getMasterChannel())
-            || (upperZone.isActive() && midiChannel == upperZone.getMasterChannel());
+        || (upperZone.isActive() && midiChannel == upperZone.getMasterChannel());
 }
 
 bool MPEInstrument::isUsingChannel (int midiChannel) const noexcept
@@ -686,7 +763,7 @@ bool MPEInstrument::isUsingChannel (int midiChannel) const noexcept
         return legacyMode.channelRange.contains (midiChannel);
 
     return zoneLayout.getLowerZone().isUsing (midiChannel)
-            || zoneLayout.getUpperZone().isUsing (midiChannel);
+        || zoneLayout.getUpperZone().isUsing (midiChannel);
 }
 
 //==============================================================================
@@ -767,9 +844,12 @@ const MPENote* MPEInstrument::getNotePtr (int midiChannel, TrackingMode mode) co
     // work because it returns 0 or 1 note but there might be more than one!
     jassert (mode != allNotesOnChannel);
 
-    if (mode == lastNotePlayedOnChannel)  return getLastNotePlayedPtr (midiChannel);
-    if (mode == lowestNoteOnChannel)      return getLowestNotePtr (midiChannel);
-    if (mode == highestNoteOnChannel)     return getHighestNotePtr (midiChannel);
+    if (mode == lastNotePlayedOnChannel)
+        return getLastNotePlayedPtr (midiChannel);
+    if (mode == lowestNoteOnChannel)
+        return getLowestNotePtr (midiChannel);
+    if (mode == highestNoteOnChannel)
+        return getHighestNotePtr (midiChannel);
 
     return nullptr;
 }
@@ -789,7 +869,7 @@ const MPENote* MPEInstrument::getLastNotePlayedPtr (int midiChannel) const noexc
         auto& note = notes.getReference (i);
 
         if (note.midiChannel == midiChannel
-             && (note.keyState == MPENote::keyDown || note.keyState == MPENote::keyDownAndSustained))
+            && (note.keyState == MPENote::keyDown || note.keyState == MPENote::keyDownAndSustained))
             return &note;
     }
 
@@ -812,8 +892,8 @@ const MPENote* MPEInstrument::getHighestNotePtr (int midiChannel) const noexcept
         auto& note = notes.getReference (i);
 
         if (note.midiChannel == midiChannel
-             && (note.keyState == MPENote::keyDown || note.keyState == MPENote::keyDownAndSustained)
-             && note.initialNote > initialNoteMax)
+            && (note.keyState == MPENote::keyDown || note.keyState == MPENote::keyDownAndSustained)
+            && note.initialNote > initialNoteMax)
         {
             result = &note;
             initialNoteMax = note.initialNote;
@@ -838,8 +918,8 @@ const MPENote* MPEInstrument::getLowestNotePtr (int midiChannel) const noexcept
         auto& note = notes.getReference (i);
 
         if (note.midiChannel == midiChannel
-             && (note.keyState == MPENote::keyDown || note.keyState == MPENote::keyDownAndSustained)
-             && note.initialNote < initialNoteMin)
+            && (note.keyState == MPENote::keyDown || note.keyState == MPENote::keyDownAndSustained)
+            && note.initialNote < initialNoteMin)
         {
             result = &note;
             initialNoteMin = note.initialNote;
@@ -864,20 +944,29 @@ void MPEInstrument::releaseAllNotes()
         auto& note = notes.getReference (i);
         note.keyState = MPENote::off;
         note.noteOffVelocity = MPEValue::from7BitInt (64); // some reasonable number
-        listeners.call ([&] (Listener& l) { l.noteReleased (note); });
+        listeners.call ([&] (Listener& l)
+                        {
+                            l.noteReleased (note);
+                        });
     }
 
     notes.clear();
 }
 
 //==============================================================================
-void MPEInstrument::Listener::noteAdded ([[maybe_unused]] MPENote newNote)                 {}
-void MPEInstrument::Listener::notePressureChanged  ([[maybe_unused]] MPENote changedNote)  {}
-void MPEInstrument::Listener::notePitchbendChanged ([[maybe_unused]] MPENote changedNote)  {}
-void MPEInstrument::Listener::noteTimbreChanged    ([[maybe_unused]] MPENote changedNote)  {}
-void MPEInstrument::Listener::noteKeyStateChanged  ([[maybe_unused]] MPENote changedNote)  {}
-void MPEInstrument::Listener::noteReleased ([[maybe_unused]] MPENote finishedNote)         {}
-void MPEInstrument::Listener::zoneLayoutChanged()                                          {}
+void MPEInstrument::Listener::noteAdded ([[maybe_unused]] MPENote newNote) {}
+
+void MPEInstrument::Listener::notePressureChanged ([[maybe_unused]] MPENote changedNote) {}
+
+void MPEInstrument::Listener::notePitchbendChanged ([[maybe_unused]] MPENote changedNote) {}
+
+void MPEInstrument::Listener::noteTimbreChanged ([[maybe_unused]] MPENote changedNote) {}
+
+void MPEInstrument::Listener::noteKeyStateChanged ([[maybe_unused]] MPENote changedNote) {}
+
+void MPEInstrument::Listener::noteReleased ([[maybe_unused]] MPENote finishedNote) {}
+
+void MPEInstrument::Listener::zoneLayoutChanged() {}
 
 //==============================================================================
 //==============================================================================
@@ -899,6 +988,7 @@ public:
     }
 
     JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6262)
+
     void runTest() override
     {
         beginTest ("initial zone layout");
@@ -950,7 +1040,6 @@ public:
                 expectEquals (test.getNumPlayingNotes(), 0);
                 expectEquals (test.noteReleasedCallCounter, 1);
                 expectHasFinishedNote (test, 3, 60, 33);
-
 
                 // note-on on master channel - create new note
                 test.noteOn (1, 62, MPEValue::from7BitInt (100));
@@ -1040,7 +1129,7 @@ public:
             UnitTestInstrument test;
             test.setZoneLayout (testLayout);
             test.noteOn (3, 60, MPEValue::from7BitInt (100));  // note in lower zone
-            test.noteOn (10, 60, MPEValue::from7BitInt (100));  // note in upper zone
+            test.noteOn (10, 60, MPEValue::from7BitInt (100)); // note in upper zone
 
             // sustain pedal on per-note channel shouldn't do anything.
             test.sustainPedal (3, true);
@@ -1103,7 +1192,7 @@ public:
             UnitTestInstrument test;
             test.setZoneLayout (testLayout);
             test.noteOn (3, 60, MPEValue::from7BitInt (100));  // note in lower zone
-            test.noteOn (10, 60, MPEValue::from7BitInt (100));  // note in upper zone
+            test.noteOn (10, 60, MPEValue::from7BitInt (100)); // note in upper zone
 
             // sostenuto pedal on per-note channel shouldn't do anything.
             test.sostenutoPedal (3, true);
@@ -1195,9 +1284,7 @@ public:
 
         beginTest ("getMostRecentNoteOtherThan");
         {
-            MPENote testNote (3, 60,
-                              MPEValue::centreValue(), MPEValue::centreValue(),
-                              MPEValue::centreValue(), MPEValue::centreValue());
+            MPENote testNote (3, 60, MPEValue::centreValue(), MPEValue::centreValue(), MPEValue::centreValue(), MPEValue::centreValue());
 
             {
                 // case 1: the note to exclude is not the most recent one.
@@ -1463,7 +1550,7 @@ public:
                 UnitTestInstrument test;
 
                 MPEZoneLayout layout = testLayout;
-                test.setZoneLayout (layout);  // default should be +/- 48 semitones
+                test.setZoneLayout (layout); // default should be +/- 48 semitones
                 test.noteOn (3, 60, MPEValue::from7BitInt (100));
                 test.pitchbend (3, MPEValue::from14BitInt (4096));
                 expectDoubleWithinRelativeError (test.getMostRecentNote (3).totalPitchbendInSemitones, -24.0, 0.01);
@@ -1492,7 +1579,7 @@ public:
                 UnitTestInstrument test;
 
                 MPEZoneLayout layout = testLayout;
-                test.setZoneLayout (layout);  // default should be +/- 2 semitones
+                test.setZoneLayout (layout); // default should be +/- 2 semitones
                 test.noteOn (3, 60, MPEValue::from7BitInt (100));
                 test.pitchbend (1, MPEValue::from14BitInt (4096)); //halfway between -max and centre
                 expectDoubleWithinRelativeError (test.getMostRecentNote (3).totalPitchbendInSemitones, -1.0, 0.01);
@@ -1526,7 +1613,7 @@ public:
                 test.setZoneLayout (layout);
 
                 test.pitchbend (1, MPEValue::from14BitInt (4096)); // master pitchbend 0.5 semitones down
-                test.pitchbend (3, MPEValue::from14BitInt (0)); // per-note pitchbend 12 semitones down
+                test.pitchbend (3, MPEValue::from14BitInt (0));    // per-note pitchbend 12 semitones down
                 // additionally, note should react to both pitchbend messages
                 // correctly even if they arrived before the note-on.
                 test.noteOn (3, 60, MPEValue::from7BitInt (100));
@@ -1620,7 +1707,7 @@ public:
                 test.pressure (3, MPEValue::from7BitInt (99));
                 expectNote (test.getNote (3, 60), 100, 0, 8192, 64, MPENote::keyDown);
                 expectNote (test.getNote (3, 62), 100, 0, 8192, 64, MPENote::keyDown);
-                expectNote (test.getNote (3, 61), 100, 99,  8192, 64, MPENote::keyDown);
+                expectNote (test.getNote (3, 61), 100, 99, 8192, 64, MPENote::keyDown);
                 expectEquals (test.notePressureChangedCallCounter, 1);
             }
             {
@@ -1633,7 +1720,7 @@ public:
                 test.noteOn (3, 62, MPEValue::from7BitInt (100));
                 test.noteOn (3, 61, MPEValue::from7BitInt (100));
                 test.pressure (3, MPEValue::from7BitInt (99));
-                expectNote (test.getNote (3, 60), 100, 99,  8192, 64, MPENote::keyDown);
+                expectNote (test.getNote (3, 60), 100, 99, 8192, 64, MPENote::keyDown);
                 expectNote (test.getNote (3, 62), 100, 0, 8192, 64, MPENote::keyDown);
                 expectNote (test.getNote (3, 61), 100, 0, 8192, 64, MPENote::keyDown);
                 expectEquals (test.notePressureChangedCallCounter, 1);
@@ -1649,7 +1736,7 @@ public:
                 test.noteOn (3, 61, MPEValue::from7BitInt (100));
                 test.pressure (3, MPEValue::from7BitInt (99));
                 expectNote (test.getNote (3, 60), 100, 0, 8192, 64, MPENote::keyDown);
-                expectNote (test.getNote (3, 62), 100, 99,  8192, 64, MPENote::keyDown);
+                expectNote (test.getNote (3, 62), 100, 99, 8192, 64, MPENote::keyDown);
                 expectNote (test.getNote (3, 61), 100, 0, 8192, 64, MPENote::keyDown);
                 expectEquals (test.notePressureChangedCallCounter, 1);
             }
@@ -1983,13 +2070,13 @@ public:
             MPEInstrument test;
             test.setZoneLayout (testLayout);
 
-            test.pitchbend (3, MPEValue::from14BitInt (3333));  // use for next note-on on ch. 3
-            test.pitchbend (2, MPEValue::from14BitInt (4444));  // ignore
-            test.pitchbend (2, MPEValue::from14BitInt (5555));  // ignore
+            test.pitchbend (3, MPEValue::from14BitInt (3333)); // use for next note-on on ch. 3
+            test.pitchbend (2, MPEValue::from14BitInt (4444)); // ignore
+            test.pitchbend (2, MPEValue::from14BitInt (5555)); // ignore
 
-            test.timbre (3, MPEValue::from7BitInt (66));  // use for next note-on on ch. 3
-            test.timbre (2, MPEValue::from7BitInt (77));  // ignore
-            test.timbre (2, MPEValue::from7BitInt (88));  // ignore
+            test.timbre (3, MPEValue::from7BitInt (66)); // use for next note-on on ch. 3
+            test.timbre (2, MPEValue::from7BitInt (77)); // ignore
+            test.timbre (2, MPEValue::from7BitInt (88)); // ignore
 
             test.noteOn (3, 60, MPEValue::from7BitInt (100));
 
@@ -2014,7 +2101,7 @@ public:
             }
             {
                 // constructor w/o default arguments
-                 MPEInstrument test;
+                MPEInstrument test;
                 test.enableLegacyMode (0, Range<int> (1, 11));
                 expectEquals (test.getLegacyModePitchbendRange(), 0);
                 expect (test.getLegacyModeChannelRange() == Range<int> (1, 11));
@@ -2039,8 +2126,8 @@ public:
                 UnitTestInstrument test;
                 test.enableLegacyMode();
 
-                test.noteOn (1,  60, MPEValue::from7BitInt (100));
-                test.noteOn (2,  60, MPEValue::from7BitInt (100));
+                test.noteOn (1, 60, MPEValue::from7BitInt (100));
+                test.noteOn (2, 60, MPEValue::from7BitInt (100));
                 test.noteOn (15, 60, MPEValue::from7BitInt (100));
                 test.noteOn (16, 60, MPEValue::from7BitInt (100));
                 expectEquals (test.getNumPlayingNotes(), 4);
@@ -2051,16 +2138,16 @@ public:
                 test.pressure (2, MPEValue::from7BitInt (88));
                 test.timbre (15, MPEValue::from7BitInt (77));
 
-                expectNote (test.getNote (1, 60),  100, 0, 9999, 64, MPENote::keyDown);
-                expectNote (test.getNote (2, 60),  100, 88,  8192, 64, MPENote::keyDown);
+                expectNote (test.getNote (1, 60), 100, 0, 9999, 64, MPENote::keyDown);
+                expectNote (test.getNote (2, 60), 100, 88, 8192, 64, MPENote::keyDown);
                 expectNote (test.getNote (15, 60), 100, 0, 8192, 77, MPENote::keyDown);
                 expectNote (test.getNote (16, 60), 100, 0, 8192, 64, MPENote::keyDown);
 
                 // note off should work in legacy mode
 
                 test.noteOff (15, 60, MPEValue::from7BitInt (0));
-                test.noteOff (1,  60, MPEValue::from7BitInt (0));
-                test.noteOff (2,  60, MPEValue::from7BitInt (0));
+                test.noteOff (1, 60, MPEValue::from7BitInt (0));
+                test.noteOff (2, 60, MPEValue::from7BitInt (0));
                 test.noteOff (16, 60, MPEValue::from7BitInt (0));
                 expectEquals (test.getNumPlayingNotes(), 0);
             }
@@ -2068,14 +2155,14 @@ public:
                 // legacy mode w/ custom channel range: note on should trigger notes only within range
 
                 UnitTestInstrument test;
-                test.enableLegacyMode (2, Range<int> (3, 8));  // channels 3-7
+                test.enableLegacyMode (2, Range<int> (3, 8)); // channels 3-7
 
-                test.noteOn (1,  60, MPEValue::from7BitInt (100));
-                test.noteOn (2,  60, MPEValue::from7BitInt (100));
-                test.noteOn (3, 60, MPEValue::from7BitInt (100));   // should trigger
-                test.noteOn (4, 60, MPEValue::from7BitInt (100));   // should trigger
-                test.noteOn (6, 60, MPEValue::from7BitInt (100));   // should trigger
-                test.noteOn (7, 60, MPEValue::from7BitInt (100));   // should trigger
+                test.noteOn (1, 60, MPEValue::from7BitInt (100));
+                test.noteOn (2, 60, MPEValue::from7BitInt (100));
+                test.noteOn (3, 60, MPEValue::from7BitInt (100)); // should trigger
+                test.noteOn (4, 60, MPEValue::from7BitInt (100)); // should trigger
+                test.noteOn (6, 60, MPEValue::from7BitInt (100)); // should trigger
+                test.noteOn (7, 60, MPEValue::from7BitInt (100)); // should trigger
                 test.noteOn (8, 60, MPEValue::from7BitInt (100));
                 test.noteOn (16, 60, MPEValue::from7BitInt (100));
 
@@ -2089,286 +2176,302 @@ public:
                 // tracking mode in legacy mode
                 {
                     UnitTestInstrument test;
-                    test.enableLegacyMode();
+            test.enableLegacyMode();
 
-                    test.setPitchbendTrackingMode (MPEInstrument::lastNotePlayedOnChannel);
-                    test.noteOn (1,  60, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  62, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  61, MPEValue::from7BitInt (100));
-                    test.pitchbend (1, MPEValue::from14BitInt (9999));
-                    expectNote (test.getNote (1, 60),  100, 0, 8192, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 61),  100, 0, 9999, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 62),  100, 0, 8192, 64, MPENote::keyDown);
-                }
-                {
-                    UnitTestInstrument test;
-                    test.enableLegacyMode();
+            test.setPitchbendTrackingMode (MPEInstrument::lastNotePlayedOnChannel);
+            test.noteOn (1, 60, MPEValue::from7BitInt (100));
+            test.noteOn (1, 62, MPEValue::from7BitInt (100));
+            test.noteOn (1, 61, MPEValue::from7BitInt (100));
+            test.pitchbend (1, MPEValue::from14BitInt (9999));
+            expectNote (test.getNote (1, 60), 100, 0, 8192, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 61), 100, 0, 9999, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 62), 100, 0, 8192, 64, MPENote::keyDown);
+        }
+        {
+            UnitTestInstrument test;
+            test.enableLegacyMode();
 
-                    test.setPitchbendTrackingMode (MPEInstrument::lowestNoteOnChannel);
-                    test.noteOn (1,  60, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  62, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  61, MPEValue::from7BitInt (100));
-                    test.pitchbend (1, MPEValue::from14BitInt (9999));
-                    expectNote (test.getNote (1, 60),  100, 0, 9999, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 61),  100, 0,  8192, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 62),  100, 0,  8192, 64, MPENote::keyDown);
-                }
-                {
-                    UnitTestInstrument test;
-                    test.enableLegacyMode();
+            test.setPitchbendTrackingMode (MPEInstrument::lowestNoteOnChannel);
+            test.noteOn (1, 60, MPEValue::from7BitInt (100));
+            test.noteOn (1, 62, MPEValue::from7BitInt (100));
+            test.noteOn (1, 61, MPEValue::from7BitInt (100));
+            test.pitchbend (1, MPEValue::from14BitInt (9999));
+            expectNote (test.getNote (1, 60), 100, 0, 9999, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 61), 100, 0, 8192, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 62), 100, 0, 8192, 64, MPENote::keyDown);
+        }
+        {
+            UnitTestInstrument test;
+            test.enableLegacyMode();
 
-                    test.setPitchbendTrackingMode (MPEInstrument::highestNoteOnChannel);
-                    test.noteOn (1,  60, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  62, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  61, MPEValue::from7BitInt (100));
-                    test.pitchbend (1, MPEValue::from14BitInt (9999));
-                    expectNote (test.getNote (1, 60),  100, 0, 8192, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 61),  100, 0,  8192, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 62),  100, 0,  9999, 64, MPENote::keyDown);
-                }
-                {
-                    UnitTestInstrument test;
-                    test.enableLegacyMode();
+            test.setPitchbendTrackingMode (MPEInstrument::highestNoteOnChannel);
+            test.noteOn (1, 60, MPEValue::from7BitInt (100));
+            test.noteOn (1, 62, MPEValue::from7BitInt (100));
+            test.noteOn (1, 61, MPEValue::from7BitInt (100));
+            test.pitchbend (1, MPEValue::from14BitInt (9999));
+            expectNote (test.getNote (1, 60), 100, 0, 8192, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 61), 100, 0, 8192, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 62), 100, 0, 9999, 64, MPENote::keyDown);
+        }
+        {
+            UnitTestInstrument test;
+            test.enableLegacyMode();
 
-                    test.setPitchbendTrackingMode (MPEInstrument::allNotesOnChannel);
-                    test.noteOn (1,  60, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  62, MPEValue::from7BitInt (100));
-                    test.noteOn (1,  61, MPEValue::from7BitInt (100));
-                    test.pitchbend (1, MPEValue::from14BitInt (9999));
-                    expectNote (test.getNote (1, 60),  100, 0, 9999, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 61),  100, 0,  9999, 64, MPENote::keyDown);
-                    expectNote (test.getNote (1, 62),  100, 0,  9999, 64, MPENote::keyDown);
-                }
-            }
-            {
-                // custom pitchbend range in legacy mode.
-                UnitTestInstrument test;
-                test.enableLegacyMode (11);
-
-                test.pitchbend (1, MPEValue::from14BitInt (4096));
-                test.noteOn (1, 60, MPEValue::from7BitInt (100));
-                expectDoubleWithinRelativeError (test.getMostRecentNote (1).totalPitchbendInSemitones, -5.5, 0.01);
-            }
-            {
-                // sustain pedal should be per channel in legacy mode.
-                UnitTestInstrument test;
-                test.enableLegacyMode();
-
-                test.sustainPedal (1, true);
-                test.noteOn (2,  61, MPEValue::from7BitInt (100));
-                test.noteOff (2,  61, MPEValue::from7BitInt (100));
-                test.noteOn (1, 60, MPEValue::from7BitInt (100));
-                test.noteOff (1, 60, MPEValue::from7BitInt (100));
-
-                expectEquals (test.getNumPlayingNotes(), 1);
-                expectNote (test.getNote (1, 60), 100, 0, 8192, 64, MPENote::sustained);
-
-                test.sustainPedal (1, false);
-                expectEquals (test.getNumPlayingNotes(), 0);
-
-                test.noteOn (2,  61, MPEValue::from7BitInt (100));
-                test.sustainPedal (1, true);
-                test.noteOff (2,  61, MPEValue::from7BitInt (100));
-                expectEquals (test.getNumPlayingNotes(), 0);
-
-            }
-            {
-                // sostenuto pedal should be per channel in legacy mode.
-                UnitTestInstrument test;
-                test.enableLegacyMode();
-
-                test.noteOn (1, 60, MPEValue::from7BitInt (100));
-                test.sostenutoPedal (1, true);
-                test.noteOff (1, 60, MPEValue::from7BitInt (100));
-                test.noteOn (2,  61, MPEValue::from7BitInt (100));
-                test.noteOff (2,  61, MPEValue::from7BitInt (100));
-
-                expectEquals (test.getNumPlayingNotes(), 1);
-                expectNote (test.getNote (1, 60), 100, 0, 8192, 64, MPENote::sustained);
-
-                test.sostenutoPedal (1, false);
-                expectEquals (test.getNumPlayingNotes(), 0);
-
-                test.noteOn (2,  61, MPEValue::from7BitInt (100));
-                test.sostenutoPedal (1, true);
-                test.noteOff (2,  61, MPEValue::from7BitInt (100));
-                expectEquals (test.getNumPlayingNotes(), 0);
-            }
-            {
-                // all notes released when switching layout
-                UnitTestInstrument test;
-                test.setZoneLayout (testLayout);
-                test.noteOn (3,  60, MPEValue::from7BitInt (100));
-                expectEquals (test.getNumPlayingNotes(), 1);
-
-                test.enableLegacyMode();
-                expectEquals (test.getNumPlayingNotes(), 0);
-                test.noteOn (3,  60, MPEValue::from7BitInt (100));
-                expectEquals (test.getNumPlayingNotes(), 1);
-
-                test.setZoneLayout (testLayout);
-                expectEquals (test.getNumPlayingNotes(), 0);
-            }
+            test.setPitchbendTrackingMode (MPEInstrument::allNotesOnChannel);
+            test.noteOn (1, 60, MPEValue::from7BitInt (100));
+            test.noteOn (1, 62, MPEValue::from7BitInt (100));
+            test.noteOn (1, 61, MPEValue::from7BitInt (100));
+            test.pitchbend (1, MPEValue::from14BitInt (9999));
+            expectNote (test.getNote (1, 60), 100, 0, 9999, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 61), 100, 0, 9999, 64, MPENote::keyDown);
+            expectNote (test.getNote (1, 62), 100, 0, 9999, 64, MPENote::keyDown);
         }
     }
-    JUCE_END_IGNORE_WARNINGS_MSVC
+
+    {
+        // custom pitchbend range in legacy mode.
+        UnitTestInstrument test;
+        test.enableLegacyMode (11);
+
+        test.pitchbend (1, MPEValue::from14BitInt (4096));
+        test.noteOn (1, 60, MPEValue::from7BitInt (100));
+        expectDoubleWithinRelativeError (test.getMostRecentNote (1).totalPitchbendInSemitones, -5.5, 0.01);
+    }
+    {
+        // sustain pedal should be per channel in legacy mode.
+        UnitTestInstrument test;
+        test.enableLegacyMode();
+
+        test.sustainPedal (1, true);
+        test.noteOn (2, 61, MPEValue::from7BitInt (100));
+        test.noteOff (2, 61, MPEValue::from7BitInt (100));
+        test.noteOn (1, 60, MPEValue::from7BitInt (100));
+        test.noteOff (1, 60, MPEValue::from7BitInt (100));
+
+        expectEquals (test.getNumPlayingNotes(), 1);
+        expectNote (test.getNote (1, 60), 100, 0, 8192, 64, MPENote::sustained);
+
+        test.sustainPedal (1, false);
+        expectEquals (test.getNumPlayingNotes(), 0);
+
+        test.noteOn (2, 61, MPEValue::from7BitInt (100));
+        test.sustainPedal (1, true);
+        test.noteOff (2, 61, MPEValue::from7BitInt (100));
+        expectEquals (test.getNumPlayingNotes(), 0);
+    }
+    {
+        // sostenuto pedal should be per channel in legacy mode.
+        UnitTestInstrument test;
+        test.enableLegacyMode();
+
+        test.noteOn (1, 60, MPEValue::from7BitInt (100));
+        test.sostenutoPedal (1, true);
+        test.noteOff (1, 60, MPEValue::from7BitInt (100));
+        test.noteOn (2, 61, MPEValue::from7BitInt (100));
+        test.noteOff (2, 61, MPEValue::from7BitInt (100));
+
+        expectEquals (test.getNumPlayingNotes(), 1);
+        expectNote (test.getNote (1, 60), 100, 0, 8192, 64, MPENote::sustained);
+
+        test.sostenutoPedal (1, false);
+        expectEquals (test.getNumPlayingNotes(), 0);
+
+        test.noteOn (2, 61, MPEValue::from7BitInt (100));
+        test.sostenutoPedal (1, true);
+        test.noteOff (2, 61, MPEValue::from7BitInt (100));
+        expectEquals (test.getNumPlayingNotes(), 0);
+    }
+    {
+        // all notes released when switching layout
+        UnitTestInstrument test;
+        test.setZoneLayout (testLayout);
+        test.noteOn (3, 60, MPEValue::from7BitInt (100));
+        expectEquals (test.getNumPlayingNotes(), 1);
+
+        test.enableLegacyMode();
+        expectEquals (test.getNumPlayingNotes(), 0);
+        test.noteOn (3, 60, MPEValue::from7BitInt (100));
+        expectEquals (test.getNumPlayingNotes(), 1);
+
+        test.setZoneLayout (testLayout);
+        expectEquals (test.getNumPlayingNotes(), 0);
+    }
+}
+}
+JUCE_END_IGNORE_WARNINGS_MSVC
+
+private:
+//==============================================================================
+/* This mock class is used for unit testing whether the methods of
+       MPEInstrument are called correctly.
+    */
+class UnitTestInstrument final : public MPEInstrument
+    , private MPEInstrument::Listener
+{
+    using Base = MPEInstrument;
+
+public:
+    UnitTestInstrument()
+        : noteOnCallCounter (0)
+        , noteOffCallCounter (0)
+        , pitchbendCallCounter (0)
+        , pressureCallCounter (0)
+        , timbreCallCounter (0)
+        , sustainPedalCallCounter (0)
+        , sostenutoPedalCallCounter (0)
+        , noteAddedCallCounter (0)
+        , notePressureChangedCallCounter (0)
+        , notePitchbendChangedCallCounter (0)
+        , noteTimbreChangedCallCounter (0)
+        , noteKeyStateChangedCallCounter (0)
+        , noteReleasedCallCounter (0)
+        , lastMidiChannelReceived (-1)
+        , lastMidiNoteNumberReceived (-1)
+        , lastSustainPedalValueReceived (false)
+        , lastSostenutoPedalValueReceived (false)
+    {
+        addListener (this);
+    }
+
+    void noteOn (int midiChannel, int midiNoteNumber, MPEValue midiNoteOnVelocity) override
+    {
+        Base::noteOn (midiChannel, midiNoteNumber, midiNoteOnVelocity);
+
+        noteOnCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastMidiNoteNumberReceived = midiNoteNumber;
+        lastMPEValueReceived = midiNoteOnVelocity;
+    }
+
+    void noteOff (int midiChannel, int midiNoteNumber, MPEValue midiNoteOffVelocity) override
+    {
+        Base::noteOff (midiChannel, midiNoteNumber, midiNoteOffVelocity);
+
+        noteOffCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastMidiNoteNumberReceived = midiNoteNumber;
+        lastMPEValueReceived = midiNoteOffVelocity;
+    }
+
+    void pitchbend (int midiChannel, MPEValue value) override
+    {
+        Base::pitchbend (midiChannel, value);
+
+        pitchbendCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastMPEValueReceived = value;
+    }
+
+    void pressure (int midiChannel, MPEValue value) override
+    {
+        Base::pressure (midiChannel, value);
+
+        pressureCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastMPEValueReceived = value;
+    }
+
+    void timbre (int midiChannel, MPEValue value) override
+    {
+        Base::timbre (midiChannel, value);
+
+        timbreCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastMPEValueReceived = value;
+    }
+
+    void sustainPedal (int midiChannel, bool value) override
+    {
+        Base::sustainPedal (midiChannel, value);
+
+        sustainPedalCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastSustainPedalValueReceived = value;
+    }
+
+    void sostenutoPedal (int midiChannel, bool value) override
+    {
+        Base::sostenutoPedal (midiChannel, value);
+
+        sostenutoPedalCallCounter++;
+        lastMidiChannelReceived = midiChannel;
+        lastSostenutoPedalValueReceived = value;
+    }
+
+    void aftertouch (int midiChannel, int midiNoteNumber, MPEValue value)
+    {
+        const auto message = juce::MidiMessage::aftertouchChange (midiChannel, midiNoteNumber, value.as7BitInt());
+        processNextMidiEvent (message);
+    }
+
+    int noteOnCallCounter, noteOffCallCounter, pitchbendCallCounter,
+        pressureCallCounter, timbreCallCounter, sustainPedalCallCounter,
+        sostenutoPedalCallCounter, noteAddedCallCounter,
+        notePressureChangedCallCounter, notePitchbendChangedCallCounter,
+        noteTimbreChangedCallCounter, noteKeyStateChangedCallCounter,
+        noteReleasedCallCounter, lastMidiChannelReceived, lastMidiNoteNumberReceived;
+
+    bool lastSustainPedalValueReceived, lastSostenutoPedalValueReceived;
+    MPEValue lastMPEValueReceived;
+    std::unique_ptr<MPENote> lastNoteFinished;
 
 private:
     //==============================================================================
-    /* This mock class is used for unit testing whether the methods of
-       MPEInstrument are called correctly.
-    */
-    class UnitTestInstrument final : public MPEInstrument,
-                                     private MPEInstrument::Listener
+    void noteAdded (MPENote) override { noteAddedCallCounter++; }
+
+    void notePressureChanged (MPENote) override { notePressureChangedCallCounter++; }
+
+    void notePitchbendChanged (MPENote) override { notePitchbendChangedCallCounter++; }
+
+    void noteTimbreChanged (MPENote) override { noteTimbreChangedCallCounter++; }
+
+    void noteKeyStateChanged (MPENote) override { noteKeyStateChangedCallCounter++; }
+
+    void noteReleased (MPENote finishedNote) override
     {
-        using Base = MPEInstrument;
-
-    public:
-        UnitTestInstrument()
-            : noteOnCallCounter (0),  noteOffCallCounter (0), pitchbendCallCounter (0),
-              pressureCallCounter (0), timbreCallCounter (0), sustainPedalCallCounter (0),
-              sostenutoPedalCallCounter (0), noteAddedCallCounter (0), notePressureChangedCallCounter (0),
-              notePitchbendChangedCallCounter (0), noteTimbreChangedCallCounter (0),
-              noteKeyStateChangedCallCounter (0), noteReleasedCallCounter (0),
-              lastMidiChannelReceived (-1), lastMidiNoteNumberReceived (-1),
-              lastSustainPedalValueReceived (false), lastSostenutoPedalValueReceived (false)
-        {
-            addListener (this);
-        }
-
-        void noteOn (int midiChannel, int midiNoteNumber, MPEValue midiNoteOnVelocity) override
-        {
-            Base::noteOn (midiChannel, midiNoteNumber, midiNoteOnVelocity);
-
-            noteOnCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastMidiNoteNumberReceived = midiNoteNumber;
-            lastMPEValueReceived = midiNoteOnVelocity;
-        }
-
-        void noteOff (int midiChannel, int midiNoteNumber, MPEValue midiNoteOffVelocity) override
-        {
-            Base::noteOff (midiChannel, midiNoteNumber, midiNoteOffVelocity);
-
-            noteOffCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastMidiNoteNumberReceived = midiNoteNumber;
-            lastMPEValueReceived = midiNoteOffVelocity;
-        }
-
-        void pitchbend (int midiChannel, MPEValue value) override
-        {
-            Base::pitchbend (midiChannel, value);
-
-            pitchbendCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastMPEValueReceived = value;
-        }
-
-        void pressure (int midiChannel, MPEValue value) override
-        {
-            Base::pressure (midiChannel, value);
-
-            pressureCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastMPEValueReceived = value;
-        }
-
-        void timbre (int midiChannel, MPEValue value) override
-        {
-            Base::timbre (midiChannel, value);
-
-            timbreCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastMPEValueReceived = value;
-        }
-
-        void sustainPedal (int midiChannel, bool value) override
-        {
-            Base::sustainPedal (midiChannel, value);
-
-            sustainPedalCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastSustainPedalValueReceived = value;
-        }
-
-        void sostenutoPedal (int midiChannel, bool value) override
-        {
-            Base::sostenutoPedal (midiChannel, value);
-
-            sostenutoPedalCallCounter++;
-            lastMidiChannelReceived = midiChannel;
-            lastSostenutoPedalValueReceived = value;
-        }
-
-        void aftertouch (int midiChannel, int midiNoteNumber, MPEValue value)
-        {
-            const auto message = juce::MidiMessage::aftertouchChange (midiChannel, midiNoteNumber, value.as7BitInt());
-            processNextMidiEvent (message);
-        }
-
-        int noteOnCallCounter,  noteOffCallCounter, pitchbendCallCounter,
-            pressureCallCounter, timbreCallCounter, sustainPedalCallCounter,
-            sostenutoPedalCallCounter, noteAddedCallCounter,
-            notePressureChangedCallCounter, notePitchbendChangedCallCounter,
-            noteTimbreChangedCallCounter, noteKeyStateChangedCallCounter,
-            noteReleasedCallCounter, lastMidiChannelReceived, lastMidiNoteNumberReceived;
-
-        bool lastSustainPedalValueReceived, lastSostenutoPedalValueReceived;
-        MPEValue lastMPEValueReceived;
-        std::unique_ptr<MPENote> lastNoteFinished;
-
-    private:
-        //==============================================================================
-        void noteAdded (MPENote) override              { noteAddedCallCounter++; }
-
-        void notePressureChanged (MPENote) override    { notePressureChangedCallCounter++; }
-        void notePitchbendChanged (MPENote) override   { notePitchbendChangedCallCounter++; }
-        void noteTimbreChanged (MPENote) override      { noteTimbreChangedCallCounter++; }
-        void noteKeyStateChanged (MPENote) override    { noteKeyStateChangedCallCounter++; }
-
-        void noteReleased (MPENote finishedNote) override
-        {
-            noteReleasedCallCounter++;
-            lastNoteFinished.reset (new MPENote (finishedNote));
-        }
-    };
-
-    //==============================================================================
-    void expectNote (MPENote noteToTest,
-                     int noteOnVelocity7Bit,
-                     int pressure7Bit,
-                     int pitchbend14Bit,
-                     int timbre7Bit,
-                     MPENote::KeyState keyState)
-    {
-        expect (noteToTest.isValid());
-        expectEquals (noteToTest.noteOnVelocity.as7BitInt(), noteOnVelocity7Bit);
-        expectEquals (noteToTest.pressure.as7BitInt(), pressure7Bit);
-        expectEquals (noteToTest.pitchbend.as14BitInt(), pitchbend14Bit);
-        expectEquals (noteToTest.timbre.as7BitInt(),timbre7Bit);
-        expect (noteToTest.keyState == keyState);
+        noteReleasedCallCounter++;
+        lastNoteFinished.reset (new MPENote (finishedNote));
     }
-
-    void expectHasFinishedNote (const UnitTestInstrument& test,
-                                int channel, int noteNumber, int noteOffVelocity7Bit)
-    {
-        expect (test.lastNoteFinished != nullptr);
-        expectEquals (int (test.lastNoteFinished->midiChannel), channel);
-        expectEquals (int (test.lastNoteFinished->initialNote), noteNumber);
-        expectEquals (test.lastNoteFinished->noteOffVelocity.as7BitInt(), noteOffVelocity7Bit);
-        expect (test.lastNoteFinished->keyState == MPENote::off);
-    }
-
-    void expectDoubleWithinRelativeError (double actual, double expected, double maxRelativeError)
-    {
-        const double maxAbsoluteError = jmax (1.0, std::abs (expected)) * maxRelativeError;
-        expect (std::abs (expected - actual) < maxAbsoluteError);
-    }
-
-    //==============================================================================
-    MPEZoneLayout testLayout;
 };
+
+//==============================================================================
+void expectNote (MPENote noteToTest,
+                 int noteOnVelocity7Bit,
+                 int pressure7Bit,
+                 int pitchbend14Bit,
+                 int timbre7Bit,
+                 MPENote::KeyState keyState)
+{
+    expect (noteToTest.isValid());
+    expectEquals (noteToTest.noteOnVelocity.as7BitInt(), noteOnVelocity7Bit);
+    expectEquals (noteToTest.pressure.as7BitInt(), pressure7Bit);
+    expectEquals (noteToTest.pitchbend.as14BitInt(), pitchbend14Bit);
+    expectEquals (noteToTest.timbre.as7BitInt(), timbre7Bit);
+    expect (noteToTest.keyState == keyState);
+}
+
+void expectHasFinishedNote (const UnitTestInstrument& test,
+                            int channel,
+                            int noteNumber,
+                            int noteOffVelocity7Bit)
+{
+    expect (test.lastNoteFinished != nullptr);
+    expectEquals (int (test.lastNoteFinished->midiChannel), channel);
+    expectEquals (int (test.lastNoteFinished->initialNote), noteNumber);
+    expectEquals (test.lastNoteFinished->noteOffVelocity.as7BitInt(), noteOffVelocity7Bit);
+    expect (test.lastNoteFinished->keyState == MPENote::off);
+}
+
+void expectDoubleWithinRelativeError (double actual, double expected, double maxRelativeError)
+{
+    const double maxAbsoluteError = jmax (1.0, std::abs (expected)) * maxRelativeError;
+    expect (std::abs (expected - actual) < maxAbsoluteError);
+}
+
+//==============================================================================
+MPEZoneLayout testLayout;
+}
+;
 
 static MPEInstrumentTests MPEInstrumentUnitTests;
 

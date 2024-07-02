@@ -40,8 +40,12 @@
 namespace juce
 {
 
-MPEValue::MPEValue() noexcept                             {}
-MPEValue::MPEValue (int value)  : normalisedValue (value) {}
+MPEValue::MPEValue() noexcept {}
+
+MPEValue::MPEValue (int value)
+    : normalisedValue (value)
+{
+}
 
 //==============================================================================
 MPEValue MPEValue::from7BitInt (int value) noexcept
@@ -73,9 +77,11 @@ MPEValue MPEValue::fromSignedFloat (float value) noexcept
 }
 
 //==============================================================================
-MPEValue MPEValue::minValue() noexcept      { return MPEValue::from7BitInt (0); }
-MPEValue MPEValue::centreValue() noexcept   { return MPEValue::from7BitInt (64); }
-MPEValue MPEValue::maxValue() noexcept      { return MPEValue::from7BitInt (127); }
+MPEValue MPEValue::minValue() noexcept { return MPEValue::from7BitInt (0); }
+
+MPEValue MPEValue::centreValue() noexcept { return MPEValue::from7BitInt (64); }
+
+MPEValue MPEValue::maxValue() noexcept { return MPEValue::from7BitInt (127); }
 
 int MPEValue::as7BitInt() const noexcept
 {
@@ -91,8 +97,8 @@ int MPEValue::as14BitInt() const noexcept
 float MPEValue::asSignedFloat() const noexcept
 {
     return (normalisedValue < 8192)
-           ? jmap<float> (float (normalisedValue), 0.0f, 8192.0f, -1.0f, 0.0f)
-           : jmap<float> (float (normalisedValue), 8192.0f, 16383.0f, 0.0f, 1.0f);
+             ? jmap<float> (float (normalisedValue), 0.0f, 8192.0f, -1.0f, 0.0f)
+             : jmap<float> (float (normalisedValue), 8192.0f, 16383.0f, 0.0f, 1.0f);
 }
 
 float MPEValue::asUnsignedFloat() const noexcept
@@ -111,7 +117,6 @@ bool MPEValue::operator!= (const MPEValue& other) const noexcept
     return ! operator== (other);
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -121,7 +126,8 @@ class MPEValueTests final : public UnitTest
 public:
     MPEValueTests()
         : UnitTest ("MPEValue class", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -150,34 +156,34 @@ public:
 
         beginTest ("zero/minimum value");
         {
-            expectValuesConsistent (MPEValue::from7BitInt       (0),     0, 0, -1.0f, 0.0f);
-            expectValuesConsistent (MPEValue::from14BitInt      (0),     0, 0, -1.0f, 0.0f);
-            expectValuesConsistent (MPEValue::fromUnsignedFloat (0.0f),  0, 0, -1.0f, 0.0f);
-            expectValuesConsistent (MPEValue::fromSignedFloat   (-1.0f), 0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::from7BitInt (0), 0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::from14BitInt (0), 0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::fromUnsignedFloat (0.0f), 0, 0, -1.0f, 0.0f);
+            expectValuesConsistent (MPEValue::fromSignedFloat (-1.0f), 0, 0, -1.0f, 0.0f);
         }
 
         beginTest ("maximum value");
         {
-            expectValuesConsistent (MPEValue::from7BitInt       (127),   127, 16383, 1.0f, 1.0f);
-            expectValuesConsistent (MPEValue::from14BitInt      (16383), 127, 16383, 1.0f, 1.0f);
-            expectValuesConsistent (MPEValue::fromUnsignedFloat (1.0f),  127, 16383, 1.0f, 1.0f);
-            expectValuesConsistent (MPEValue::fromSignedFloat   (1.0f),  127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::from7BitInt (127), 127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::from14BitInt (16383), 127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::fromUnsignedFloat (1.0f), 127, 16383, 1.0f, 1.0f);
+            expectValuesConsistent (MPEValue::fromSignedFloat (1.0f), 127, 16383, 1.0f, 1.0f);
         }
 
         beginTest ("centre value");
         {
-            expectValuesConsistent (MPEValue::from7BitInt       (64),   64, 8192, 0.0f, 0.5f);
-            expectValuesConsistent (MPEValue::from14BitInt      (8192), 64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::from7BitInt (64), 64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::from14BitInt (8192), 64, 8192, 0.0f, 0.5f);
             expectValuesConsistent (MPEValue::fromUnsignedFloat (0.5f), 64, 8192, 0.0f, 0.5f);
-            expectValuesConsistent (MPEValue::fromSignedFloat   (0.0f), 64, 8192, 0.0f, 0.5f);
+            expectValuesConsistent (MPEValue::fromSignedFloat (0.0f), 64, 8192, 0.0f, 0.5f);
         }
 
         beginTest ("value halfway between min and centre");
         {
-            expectValuesConsistent (MPEValue::from7BitInt       (32),    32, 4096, -0.5f, 0.25f);
-            expectValuesConsistent (MPEValue::from14BitInt      (4096),  32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::from7BitInt (32), 32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::from14BitInt (4096), 32, 4096, -0.5f, 0.25f);
             expectValuesConsistent (MPEValue::fromUnsignedFloat (0.25f), 32, 4096, -0.5f, 0.25f);
-            expectValuesConsistent (MPEValue::fromSignedFloat   (-0.5f), 32, 4096, -0.5f, 0.25f);
+            expectValuesConsistent (MPEValue::fromSignedFloat (-0.5f), 32, 4096, -0.5f, 0.25f);
         }
     }
 

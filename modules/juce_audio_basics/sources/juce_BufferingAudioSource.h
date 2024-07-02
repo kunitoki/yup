@@ -52,8 +52,8 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  BufferingAudioSource  : public PositionableAudioSource,
-                                        private TimeSliceClient
+class JUCE_API BufferingAudioSource : public PositionableAudioSource
+    , private TimeSliceClient
 {
 public:
     //==============================================================================
@@ -103,10 +103,10 @@ public:
     int64 getNextReadPosition() const override;
 
     /** Implements the PositionableAudioSource method. */
-    int64 getTotalLength() const override       { return source->getTotalLength(); }
+    int64 getTotalLength() const override { return source->getTotalLength(); }
 
     /** Implements the PositionableAudioSource method. */
-    bool isLooping() const override             { return source->isLooping(); }
+    bool isLooping() const override { return source->isLooping(); }
 
     /** A useful function to block until the next the buffer info can be filled.
 

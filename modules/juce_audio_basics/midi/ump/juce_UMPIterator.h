@@ -60,24 +60,24 @@ public:
     /** Creates an iterator pointing at `ptr`. */
     explicit Iterator (const uint32_t* ptr, size_t bytes) noexcept;
 
-    using difference_type    = std::iterator_traits<const uint32_t*>::difference_type;
-    using value_type         = View;
-    using reference          = const View&;
-    using pointer            = const View*;
-    using iterator_category  = std::forward_iterator_tag;
+    using difference_type = std::iterator_traits<const uint32_t*>::difference_type;
+    using value_type = View;
+    using reference = const View&;
+    using pointer = const View*;
+    using iterator_category = std::forward_iterator_tag;
 
     /** Moves this iterator to the next packet in the range. */
     Iterator& operator++() noexcept
     {
         const auto increment = view.size();
 
-       #if JUCE_DEBUG
+#if JUCE_DEBUG
         // If you hit this, the memory region contained a truncated or otherwise
         // malformed Universal MIDI Packet.
         // The Iterator can only be used on regions containing complete packets!
         jassert (increment <= bytesRemaining);
         bytesRemaining -= increment;
-       #endif
+#endif
 
         view = View (view.data() + increment);
         return *this;
@@ -127,9 +127,9 @@ public:
 private:
     View view;
 
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     size_t bytesRemaining = 0;
-   #endif
+#endif
 };
 
 } // namespace juce::universal_midi_packets

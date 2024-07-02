@@ -66,33 +66,38 @@ public:
     void add (const View& v) { storage.insert (storage.end(), v.cbegin(), v.cend()); }
 
     void add (const PacketX1& p) { addImpl (p); }
+
     void add (const PacketX2& p) { addImpl (p); }
+
     void add (const PacketX3& p) { addImpl (p); }
+
     void add (const PacketX4& p) { addImpl (p); }
 
     /** Pre-allocates space for at least `numWords` 32-bit words in this collection. */
-    void reserve (size_t numWords)          { storage.reserve (numWords); }
+    void reserve (size_t numWords) { storage.reserve (numWords); }
 
     /** Removes all previously-added packets from this collection. */
-    void clear()                            { storage.clear(); }
+    void clear() { storage.clear(); }
 
     /** Gets an iterator pointing to the first packet in this collection. */
-    Iterator cbegin() const noexcept     { return Iterator (data(), size()); }
-    Iterator begin() const noexcept      { return cbegin(); }
+    Iterator cbegin() const noexcept { return Iterator (data(), size()); }
+
+    Iterator begin() const noexcept { return cbegin(); }
 
     /** Gets an iterator pointing one-past the last packet in this collection. */
-    Iterator cend() const noexcept       { return Iterator (data() + size(), 0); }
-    Iterator end() const noexcept        { return cend(); }
+    Iterator cend() const noexcept { return Iterator (data() + size(), 0); }
+
+    Iterator end() const noexcept { return cend(); }
 
     /** Gets a pointer to the contents of the collection as a range of raw 32-bit words. */
-    const uint32_t* data() const noexcept   { return storage.data(); }
+    const uint32_t* data() const noexcept { return storage.data(); }
 
     /** Returns the number of uint32_t words in storage.
 
         Note that this is likely to be larger than the number of packets
         currently being stored, as some packets span multiple words.
     */
-    size_t size() const noexcept            { return storage.size(); }
+    size_t size() const noexcept { return storage.size(); }
 
 private:
     template <size_t numWords>

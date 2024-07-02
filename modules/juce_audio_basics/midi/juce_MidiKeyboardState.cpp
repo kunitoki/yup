@@ -58,13 +58,13 @@ bool MidiKeyboardState::isNoteOn (const int midiChannel, const int n) const noex
     jassert (midiChannel > 0 && midiChannel <= 16);
 
     return isPositiveAndBelow (n, 128)
-            && (noteStates[n] & (1 << (midiChannel - 1))) != 0;
+        && (noteStates[n] & (1 << (midiChannel - 1))) != 0;
 }
 
 bool MidiKeyboardState::isNoteOnForChannels (const int midiChannelMask, const int n) const noexcept
 {
     return isPositiveAndBelow (n, 128)
-            && (noteStates[n] & midiChannelMask) != 0;
+        && (noteStates[n] & midiChannelMask) != 0;
 }
 
 void MidiKeyboardState::noteOn (const int midiChannel, const int midiNoteNumber, const float velocity)
@@ -84,12 +84,15 @@ void MidiKeyboardState::noteOn (const int midiChannel, const int midiNoteNumber,
     }
 }
 
-void MidiKeyboardState::noteOnInternal  (const int midiChannel, const int midiNoteNumber, const float velocity)
+void MidiKeyboardState::noteOnInternal (const int midiChannel, const int midiNoteNumber, const float velocity)
 {
     if (isPositiveAndBelow (midiNoteNumber, 128))
     {
         noteStates[midiNoteNumber] = static_cast<uint16> (noteStates[midiNoteNumber] | (1 << (midiChannel - 1)));
-        listeners.call ([&] (Listener& l) { l.handleNoteOn (this, midiChannel, midiNoteNumber, velocity); });
+        listeners.call ([&] (Listener& l)
+                        {
+                            l.handleNoteOn (this, midiChannel, midiNoteNumber, velocity);
+                        });
     }
 }
 
@@ -107,12 +110,15 @@ void MidiKeyboardState::noteOff (const int midiChannel, const int midiNoteNumber
     }
 }
 
-void MidiKeyboardState::noteOffInternal  (const int midiChannel, const int midiNoteNumber, const float velocity)
+void MidiKeyboardState::noteOffInternal (const int midiChannel, const int midiNoteNumber, const float velocity)
 {
     if (isNoteOn (midiChannel, midiNoteNumber))
     {
         noteStates[midiNoteNumber] = static_cast<uint16> (noteStates[midiNoteNumber] & ~(1 << (midiChannel - 1)));
-        listeners.call ([&] (Listener& l) { l.handleNoteOff (this, midiChannel, midiNoteNumber, velocity); });
+        listeners.call ([&] (Listener& l)
+                        {
+                            l.handleNoteOff (this, midiChannel, midiNoteNumber, velocity);
+                        });
     }
 }
 

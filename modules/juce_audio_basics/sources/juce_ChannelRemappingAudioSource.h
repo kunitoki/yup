@@ -57,7 +57,7 @@ namespace juce
 
     @tags{Audio}
 */
-class ChannelRemappingAudioSource  : public AudioSource
+class ChannelRemappingAudioSource : public AudioSource
 {
 public:
     //==============================================================================
@@ -124,7 +124,6 @@ public:
     */
     int getRemappedOutputChannel (int outputChannelIndex) const;
 
-
     //==============================================================================
     /** Returns an XML object to encapsulate the state of the mappings.
         @see restoreFromXml
@@ -140,7 +139,6 @@ public:
     void prepareToPlay (int samplesPerBlockExpected, double sampleRate) override;
     void releaseResources() override;
     void getNextAudioBlock (const AudioSourceChannelInfo&) override;
-
 
 private:
     //==============================================================================

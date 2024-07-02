@@ -40,7 +40,7 @@
 namespace juce
 {
 
-AudioProcessLoadMeasurer::AudioProcessLoadMeasurer()  = default;
+AudioProcessLoadMeasurer::AudioProcessLoadMeasurer() = default;
 AudioProcessLoadMeasurer::~AudioProcessLoadMeasurer() = default;
 
 void AudioProcessLoadMeasurer::reset()
@@ -90,10 +90,11 @@ void AudioProcessLoadMeasurer::registerRenderTimeLocked (double milliseconds, in
         ++xruns;
 }
 
-double AudioProcessLoadMeasurer::getLoadAsProportion() const   { return jlimit (0.0, 1.0, cpuUsageProportion.load()); }
-double AudioProcessLoadMeasurer::getLoadAsPercentage() const   { return 100.0 * getLoadAsProportion(); }
+double AudioProcessLoadMeasurer::getLoadAsProportion() const { return jlimit (0.0, 1.0, cpuUsageProportion.load()); }
 
-int AudioProcessLoadMeasurer::getXRunCount() const             { return xruns; }
+double AudioProcessLoadMeasurer::getLoadAsPercentage() const { return 100.0 * getLoadAsProportion(); }
+
+int AudioProcessLoadMeasurer::getXRunCount() const { return xruns; }
 
 AudioProcessLoadMeasurer::ScopedTimer::ScopedTimer (AudioProcessLoadMeasurer& p)
     : ScopedTimer (p, p.samplesPerBlock)
@@ -101,7 +102,9 @@ AudioProcessLoadMeasurer::ScopedTimer::ScopedTimer (AudioProcessLoadMeasurer& p)
 }
 
 AudioProcessLoadMeasurer::ScopedTimer::ScopedTimer (AudioProcessLoadMeasurer& p, int numSamplesInBlock)
-    : owner (p), startTime (Time::getMillisecondCounterHiRes()), samplesInBlock (numSamplesInBlock)
+    : owner (p)
+    , startTime (Time::getMillisecondCounterHiRes())
+    , samplesInBlock (numSamplesInBlock)
 {
     // numSamplesInBlock should never be zero. Did you remember to call AudioProcessLoadMeasurer::reset(),
     // passing the expected samples per block?

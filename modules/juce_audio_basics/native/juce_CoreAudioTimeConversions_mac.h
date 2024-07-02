@@ -37,7 +37,6 @@
   ==============================================================================
 */
 
-
 // This file will be included directly by macOS/iOS-specific .cpps
 #pragma once
 
@@ -53,9 +52,9 @@ struct CoreAudioTimeConversions
 public:
     CoreAudioTimeConversions()
     {
-        mach_timebase_info_data_t info{};
+        mach_timebase_info_data_t info {};
         mach_timebase_info (&info);
-        numerator   = info.numer;
+        numerator = info.numer;
         denominator = info.denom;
     }
 
@@ -73,11 +72,11 @@ private:
     // Adapted from CAHostTimeBase.h in the Core Audio Utility Classes
     static uint64_t multiplyByRatio (uint64_t toMultiply, uint64_t numerator, uint64_t denominator)
     {
-       #if defined (__SIZEOF_INT128__)
+#if defined(__SIZEOF_INT128__)
         unsigned __int128
-       #else
+#else
         long double
-       #endif
+#endif
             result = toMultiply;
 
         if (numerator != denominator)

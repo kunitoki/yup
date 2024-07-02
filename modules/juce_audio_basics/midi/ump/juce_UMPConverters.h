@@ -41,59 +41,59 @@
 
 namespace juce::universal_midi_packets
 {
-    /**
+/**
         Allows conversion from bytestream- or Universal MIDI Packet-formatted
         messages to MIDI 1.0 messages in UMP format.
 
         @tags{Audio}
     */
-    struct ToUMP1Converter
+struct ToUMP1Converter
+{
+    template <typename Fn>
+    void convert (const BytestreamMidiView& m, Fn&& fn)
     {
-        template <typename Fn>
-        void convert (const BytestreamMidiView& m, Fn&& fn)
-        {
-            Conversion::toMidi1 (m, std::forward<Fn> (fn));
-        }
+        Conversion::toMidi1 (m, std::forward<Fn> (fn));
+    }
 
-        template <typename Fn>
-        void convert (const View& v, Fn&& fn)
-        {
-            Conversion::midi2ToMidi1DefaultTranslation (v, std::forward<Fn> (fn));
-        }
-    };
+    template <typename Fn>
+    void convert (const View& v, Fn&& fn)
+    {
+        Conversion::midi2ToMidi1DefaultTranslation (v, std::forward<Fn> (fn));
+    }
+};
 
-    /**
+/**
         Allows conversion from bytestream- or Universal MIDI Packet-formatted
         messages to MIDI 2.0 messages in UMP format.
 
         @tags{Audio}
     */
-    struct ToUMP2Converter
+struct ToUMP2Converter
+{
+    template <typename Fn>
+    void convert (const BytestreamMidiView& m, Fn&& fn)
     {
-        template <typename Fn>
-        void convert (const BytestreamMidiView& m, Fn&& fn)
-        {
-            Conversion::toMidi1 (m, [&] (const View& v)
-            {
-                translator.dispatch (v, fn);
-            });
-        }
+        Conversion::toMidi1 (m, [&] (const View& v)
+                             {
+                                 translator.dispatch (v, fn);
+                             });
+    }
 
-        template <typename Fn>
-        void convert (const View& v, Fn&& fn)
-        {
-            translator.dispatch (v, std::forward<Fn> (fn));
-        }
+    template <typename Fn>
+    void convert (const View& v, Fn&& fn)
+    {
+        translator.dispatch (v, std::forward<Fn> (fn));
+    }
 
-        void reset()
-        {
-            translator.reset();
-        }
+    void reset()
+    {
+        translator.reset();
+    }
 
-        Midi1ToMidi2DefaultTranslator translator;
-    };
+    Midi1ToMidi2DefaultTranslator translator;
+};
 
-    /**
+/**
         Allows conversion from bytestream- or Universal MIDI Packet-formatted
         messages to UMP format.
 
@@ -101,102 +101,106 @@ namespace juce::universal_midi_packets
 
         @tags{Audio}
     */
-    class GenericUMPConverter
+class GenericUMPConverter
+{
+    template <typename This, typename... Args>
+    static void visit (This& t, Args&&... args)
     {
-        template <typename This, typename... Args>
-        static void visit (This& t, Args&&... args)
-        {
-            if (t.mode == PacketProtocol::MIDI_1_0)
-                convertImpl (std::get<0> (t.converters), std::forward<Args> (args)...);
-            else
-                convertImpl (std::get<1> (t.converters), std::forward<Args> (args)...);
-        }
+        if (t.mode == PacketProtocol::MIDI_1_0)
+            convertImpl (std::get<0> (t.converters), std::forward<Args> (args)...);
+        else
+            convertImpl (std::get<1> (t.converters), std::forward<Args> (args)...);
+    }
 
-    public:
-        explicit GenericUMPConverter (PacketProtocol m)
-            : mode (m) {}
+public:
+    explicit GenericUMPConverter (PacketProtocol m)
+        : mode (m)
+    {
+    }
 
-        void reset()
-        {
-            std::get<1> (converters).reset();
-        }
+    void reset()
+    {
+        std::get<1> (converters).reset();
+    }
 
-        template <typename Converter, typename Fn>
-        static void convertImpl (Converter& converter, const BytestreamMidiView& m, Fn&& fn)
-        {
-            converter.convert (m, std::forward<Fn> (fn));
-        }
+    template <typename Converter, typename Fn>
+    static void convertImpl (Converter& converter, const BytestreamMidiView& m, Fn&& fn)
+    {
+        converter.convert (m, std::forward<Fn> (fn));
+    }
 
-        template <typename Converter, typename Fn>
-        static void convertImpl (Converter& converter, const View& m, Fn&& fn)
-        {
-            converter.convert (m, std::forward<Fn> (fn));
-        }
+    template <typename Converter, typename Fn>
+    static void convertImpl (Converter& converter, const View& m, Fn&& fn)
+    {
+        converter.convert (m, std::forward<Fn> (fn));
+    }
 
-        template <typename Converter, typename Fn>
-        static void convertImpl (Converter& converter, Iterator b, Iterator e, Fn&& fn)
-        {
-            std::for_each (b, e, [&] (const auto& v)
-            {
-                convertImpl (converter, v, fn);
-            });
-        }
+    template <typename Converter, typename Fn>
+    static void convertImpl (Converter& converter, Iterator b, Iterator e, Fn&& fn)
+    {
+        std::for_each (b, e, [&] (const auto& v)
+                       {
+                           convertImpl (converter, v, fn);
+                       });
+    }
 
-        template <typename Fn>
-        void convert (const BytestreamMidiView& m, Fn&& fn)
-        {
-            visit (*this, m, std::forward<Fn> (fn));
-        }
+    template <typename Fn>
+    void convert (const BytestreamMidiView& m, Fn&& fn)
+    {
+        visit (*this, m, std::forward<Fn> (fn));
+    }
 
-        template <typename Fn>
-        void convert (const View& v, Fn&& fn)
-        {
-            visit (*this, v, std::forward<Fn> (fn));
-        }
+    template <typename Fn>
+    void convert (const View& v, Fn&& fn)
+    {
+        visit (*this, v, std::forward<Fn> (fn));
+    }
 
-        template <typename Fn>
-        void convert (Iterator begin, Iterator end, Fn&& fn)
-        {
-            visit (*this, begin, end, std::forward<Fn> (fn));
-        }
+    template <typename Fn>
+    void convert (Iterator begin, Iterator end, Fn&& fn)
+    {
+        visit (*this, begin, end, std::forward<Fn> (fn));
+    }
 
-        PacketProtocol getProtocol() const noexcept { return mode; }
+    PacketProtocol getProtocol() const noexcept { return mode; }
 
-    private:
-        std::tuple<ToUMP1Converter, ToUMP2Converter> converters;
-        const PacketProtocol mode{};
-    };
+private:
+    std::tuple<ToUMP1Converter, ToUMP2Converter> converters;
+    const PacketProtocol mode {};
+};
 
-    /**
+/**
         Allows conversion from bytestream- or Universal MIDI Packet-formatted
         messages to bytestream format.
 
         @tags{Audio}
     */
-    struct ToBytestreamConverter
+struct ToBytestreamConverter
+{
+    explicit ToBytestreamConverter (int storageSize)
+        : translator (storageSize)
     {
-        explicit ToBytestreamConverter (int storageSize)
-            : translator (storageSize) {}
+    }
 
-        template <typename Fn>
-        void convert (const MidiMessage& m, Fn&& fn)
-        {
-            fn (m);
-        }
+    template <typename Fn>
+    void convert (const MidiMessage& m, Fn&& fn)
+    {
+        fn (m);
+    }
 
-        template <typename Fn>
-        void convert (const View& v, double time, Fn&& fn)
-        {
-            Conversion::midi2ToMidi1DefaultTranslation (v, [&] (const View& midi1)
-            {
-                translator.dispatch (midi1, time, fn);
-            });
-        }
+    template <typename Fn>
+    void convert (const View& v, double time, Fn&& fn)
+    {
+        Conversion::midi2ToMidi1DefaultTranslation (v, [&] (const View& midi1)
+                                                    {
+                                                        translator.dispatch (midi1, time, fn);
+                                                    });
+    }
 
-        void reset() { translator.reset(); }
+    void reset() { translator.reset(); }
 
-        Midi1ToBytestreamTranslator translator;
-    };
+    Midi1ToBytestreamTranslator translator;
+};
 } // namespace juce::universal_midi_packets
 
 #endif

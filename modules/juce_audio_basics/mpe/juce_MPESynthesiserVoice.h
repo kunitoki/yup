@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MPESynthesiserVoice
+class JUCE_API MPESynthesiserVoice
 {
 public:
     //==============================================================================
@@ -65,7 +65,7 @@ public:
         Returns an invalid MPENote if no note is playing
         (you can check this using MPENote::isValid() or MPEVoice::isActive()).
     */
-    MPENote getCurrentlyPlayingNote() const noexcept     { return currentlyPlayingNote;  }
+    MPENote getCurrentlyPlayingNote() const noexcept { return currentlyPlayingNote; }
 
     /** Returns true if the voice is currently playing the given MPENote
         (as identified by the note's initial note number and MIDI channel).
@@ -76,7 +76,7 @@ public:
         By default this just checks whether getCurrentlyPlayingNote()
         returns a valid MPE note, but can be overridden for more advanced checking.
     */
-    virtual bool isActive() const                       { return currentlyPlayingNote.isValid(); }
+    virtual bool isActive() const { return currentlyPlayingNote.isValid(); }
 
     /** Returns true if a voice is sounding in its release phase. **/
     bool isPlayingButReleased() const noexcept;
@@ -166,12 +166,12 @@ public:
         This method is called by the synth, and subclasses can access the current rate with
         the currentSampleRate member.
     */
-    virtual void setCurrentSampleRate (double newRate)    { currentSampleRate = newRate; }
+    virtual void setCurrentSampleRate (double newRate) { currentSampleRate = newRate; }
 
     /** Returns the current target sample rate at which rendering is being done.
         Subclasses may need to know this so that they can pitch things correctly.
     */
-    double getSampleRate() const noexcept                 { return currentSampleRate; }
+    double getSampleRate() const noexcept { return currentSampleRate; }
 
     /** This will be set to an incrementing counter value in MPESynthesiser::startVoice()
         and can be used to determine the order in which voices started.

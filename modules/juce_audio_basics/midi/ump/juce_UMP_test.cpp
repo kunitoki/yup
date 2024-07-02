@@ -40,9 +40,12 @@
 namespace juce::universal_midi_packets
 {
 
-constexpr uint8_t  operator""_u8  (unsigned long long int i) { return static_cast<uint8_t>  (i); }
+constexpr uint8_t operator""_u8 (unsigned long long int i) { return static_cast<uint8_t> (i); }
+
 constexpr uint16_t operator""_u16 (unsigned long long int i) { return static_cast<uint16_t> (i); }
+
 constexpr uint32_t operator""_u32 (unsigned long long int i) { return static_cast<uint32_t> (i); }
+
 constexpr uint64_t operator""_u64 (unsigned long long int i) { return static_cast<uint64_t> (i); }
 
 class UniversalMidiPacketTests final : public UnitTest
@@ -62,21 +65,21 @@ public:
             Midi1ToBytestreamTranslator translator (0);
 
             forEachNonSysExTestMessage (random, [&] (const MidiMessage& m)
-            {
-                const auto packets = toMidi1 (m);
-                expect (packets.size() == 1);
+                                        {
+                                            const auto packets = toMidi1 (m);
+                                            expect (packets.size() == 1);
 
-                // Make sure that the message type is correct
-                const auto msgType = Utils::getMessageType (packets.data()[0]);
-                expect (msgType == ((m.getRawData()[0] >> 0x4) == 0xf ? 0x1 : 0x2));
+                                            // Make sure that the message type is correct
+                                            const auto msgType = Utils::getMessageType (packets.data()[0]);
+                                            expect (msgType == ((m.getRawData()[0] >> 0x4) == 0xf ? 0x1 : 0x2));
 
-                translator.dispatch (View {packets.data() },
-                                     0,
-                                     [&] (const BytestreamMidiView& roundTripped)
-                                     {
-                                         expect (equal (m, roundTripped.getMessage()));
-                                     });
-            });
+                                            translator.dispatch (View { packets.data() },
+                                                                 0,
+                                                                 [&] (const BytestreamMidiView& roundTripped)
+                                                                 {
+                                                                     expect (equal (m, roundTripped.getMessage()));
+                                                                 });
+                                        });
         }
 
         beginTest ("Bytestream SysEx converts to universal packets");
@@ -96,10 +99,7 @@ public:
                 expect (packets.size() == 2);
 
                 const auto* sysEx = message.getSysExData();
-                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 },
-                                                                 std::byte { 0x01 },
-                                                                 std::byte { sysEx[0] },
-                                                                 std::byte { 0 }));
+                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x01 }, std::byte { sysEx[0] }, std::byte { 0 }));
                 expect (packets.data()[1] == 0x00000000);
             }
 
@@ -109,7 +109,7 @@ public:
                 expect (packets.size() == 2);
 
                 const auto* sysEx = message.getSysExData();
-                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 },     std::byte { 0x06 },     std::byte { sysEx[0] }, std::byte { sysEx[1] }));
+                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x06 }, std::byte { sysEx[0] }, std::byte { sysEx[1] }));
                 expect (packets.data()[1] == Utils::bytesToWord (std::byte { sysEx[2] }, std::byte { sysEx[3] }, std::byte { sysEx[4] }, std::byte { sysEx[5] }));
             }
 
@@ -119,9 +119,9 @@ public:
                 expect (packets.size() == 4);
 
                 const auto* sysEx = message.getSysExData();
-                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 },     std::byte { 0x16 },     std::byte { sysEx[0] },  std::byte { sysEx[1] }));
-                expect (packets.data()[1] == Utils::bytesToWord (std::byte { sysEx[2] }, std::byte { sysEx[3] }, std::byte { sysEx[4] },  std::byte { sysEx[5] }));
-                expect (packets.data()[2] == Utils::bytesToWord (std::byte { 0x30 },     std::byte { 0x36 },     std::byte { sysEx[6] },  std::byte { sysEx[7] }));
+                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x16 }, std::byte { sysEx[0] }, std::byte { sysEx[1] }));
+                expect (packets.data()[1] == Utils::bytesToWord (std::byte { sysEx[2] }, std::byte { sysEx[3] }, std::byte { sysEx[4] }, std::byte { sysEx[5] }));
+                expect (packets.data()[2] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x36 }, std::byte { sysEx[6] }, std::byte { sysEx[7] }));
                 expect (packets.data()[3] == Utils::bytesToWord (std::byte { sysEx[8] }, std::byte { sysEx[9] }, std::byte { sysEx[10] }, std::byte { sysEx[11] }));
             }
 
@@ -131,11 +131,11 @@ public:
                 expect (packets.size() == 6);
 
                 const auto* sysEx = message.getSysExData();
-                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 },     std::byte { 0x16 },     std::byte { sysEx[0] },  std::byte { sysEx[1] }));
-                expect (packets.data()[1] == Utils::bytesToWord (std::byte { sysEx[2] }, std::byte { sysEx[3] }, std::byte { sysEx[4] },  std::byte { sysEx[5] }));
-                expect (packets.data()[2] == Utils::bytesToWord (std::byte { 0x30 },     std::byte { 0x26 },     std::byte { sysEx[6] },  std::byte { sysEx[7] }));
+                expect (packets.data()[0] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x16 }, std::byte { sysEx[0] }, std::byte { sysEx[1] }));
+                expect (packets.data()[1] == Utils::bytesToWord (std::byte { sysEx[2] }, std::byte { sysEx[3] }, std::byte { sysEx[4] }, std::byte { sysEx[5] }));
+                expect (packets.data()[2] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x26 }, std::byte { sysEx[6] }, std::byte { sysEx[7] }));
                 expect (packets.data()[3] == Utils::bytesToWord (std::byte { sysEx[8] }, std::byte { sysEx[9] }, std::byte { sysEx[10] }, std::byte { sysEx[11] }));
-                expect (packets.data()[4] == Utils::bytesToWord (std::byte { 0x30 },     std::byte { 0x31 },     std::byte { sysEx[12] }, std::byte { 0 }));
+                expect (packets.data()[4] == Utils::bytesToWord (std::byte { 0x30 }, std::byte { 0x31 }, std::byte { sysEx[12] }, std::byte { 0 }));
                 expect (packets.data()[5] == 0x00000000);
             }
         }
@@ -146,7 +146,10 @@ public:
         const auto checkRoundTrip = [&] (const MidiBuffer& expected)
         {
             for (const auto meta : expected)
-                Conversion::toMidi1 (ump::BytestreamMidiView (meta), [&] (const auto p) { packets.add (p); });
+                Conversion::toMidi1 (ump::BytestreamMidiView (meta), [&] (const auto p)
+                                     {
+                                         packets.add (p);
+                                     });
 
             MidiBuffer output;
             converter.dispatch (packets.data(),
@@ -346,7 +349,10 @@ public:
                 Packets p;
 
                 for (const auto meta : noteOn)
-                    Conversion::toMidi1 (ump::BytestreamMidiView (meta), [&] (const auto packet) { p.add (packet); });
+                    Conversion::toMidi1 (ump::BytestreamMidiView (meta), [&] (const auto packet)
+                                         {
+                                             p.add (packet);
+                                         });
 
                 return p;
             }();
@@ -362,14 +368,20 @@ public:
                 const auto insertionPoint = std::next (originalPackets.begin(), 10);
                 std::for_each (originalPackets.begin(),
                                insertionPoint,
-                               [&] (const View& view) { p.add (view); });
+                               [&] (const View& view)
+                               {
+                                   p.add (view);
+                               });
 
                 for (const auto& view : noteOnPackets)
                     p.add (view);
 
                 std::for_each (insertionPoint,
                                originalPackets.end(),
-                               [&] (const View& view) { p.add (view); });
+                               [&] (const View& view)
+                               {
+                                   p.add (view);
+                               });
 
                 return p;
             }();
@@ -886,7 +898,10 @@ private:
     static Packets toMidi1 (const MidiMessage& msg)
     {
         Packets packets;
-        Conversion::toMidi1 (ump::BytestreamMidiView (&msg), [&] (const auto p) { packets.add (p); });
+        Conversion::toMidi1 (ump::BytestreamMidiView (&msg), [&] (const auto p)
+                             {
+                                 packets.add (p);
+                             });
         return packets;
     }
 
@@ -895,7 +910,10 @@ private:
         Packets r;
 
         for (const auto& packet : midi2)
-            Conversion::midi2ToMidi1DefaultTranslation (packet, [&r] (const View& v) { r.add (v); });
+            Conversion::midi2ToMidi1DefaultTranslation (packet, [&r] (const View& v)
+                                                        {
+                                                            r.add (v);
+                                                        });
 
         return r;
     }
@@ -906,7 +924,10 @@ private:
         Midi1ToMidi2DefaultTranslator translator;
 
         for (const auto& packet : midi1)
-            translator.dispatch (packet, [&r] (const View& v) { r.add (v); });
+            translator.dispatch (packet, [&r] (const View& v)
+                                 {
+                                     r.add (v);
+                                 });
 
         return r;
     }
@@ -922,7 +943,10 @@ private:
 
         std::for_each (expected.data(),
                        expected.data() + expected.size(),
-                       [&] (const uint32_t word) { expectEquals ((uint64_t) *actualPtr++, (uint64_t) word); });
+                       [&] (const uint32_t word)
+                       {
+                           expectEquals ((uint64_t) *actualPtr++, (uint64_t) word);
+                       });
     }
 
     void checkMidi2ToMidi1Conversion (const Packets& midi2, const Packets& expected)
@@ -962,12 +986,18 @@ private:
         {
             switch (random.nextInt (6))
             {
-                case 0: return std::byte { 0xf8 };
-                case 1: return std::byte { 0xfa };
-                case 2: return std::byte { 0xfb };
-                case 3: return std::byte { 0xfc };
-                case 4: return std::byte { 0xfe };
-                case 5: return std::byte { 0xff };
+                case 0:
+                    return std::byte { 0xf8 };
+                case 1:
+                    return std::byte { 0xfa };
+                case 2:
+                    return std::byte { 0xfb };
+                case 3:
+                    return std::byte { 0xfc };
+                case 4:
+                    return std::byte { 0xfe };
+                case 5:
+                    return std::byte { 0xff };
             }
 
             jassertfalse;
@@ -988,15 +1018,21 @@ private:
                 continue; // sysEx is tested separately
 
             const auto length = MidiMessage::getMessageLengthFromFirstByte (firstByte);
-            const auto getDataByte = [&] { return uint8_t (random.nextInt (256) & 0x7f); };
+            const auto getDataByte = [&]
+            {
+                return uint8_t (random.nextInt (256) & 0x7f);
+            };
 
             const auto message = [&]
             {
                 switch (length)
                 {
-                    case 1: return MidiMessage (firstByte);
-                    case 2: return MidiMessage (firstByte, getDataByte());
-                    case 3: return MidiMessage (firstByte, getDataByte(), getDataByte());
+                    case 1:
+                        return MidiMessage (firstByte);
+                    case 2:
+                        return MidiMessage (firstByte, getDataByte());
+                    case 3:
+                        return MidiMessage (firstByte, getDataByte(), getDataByte());
                 }
 
                 return MidiMessage();
@@ -1009,7 +1045,7 @@ private:
     static bool equal (const MidiMessage& a, const MidiMessage& b) noexcept
     {
         return a.getRawDataSize() == b.getRawDataSize()
-               && std::equal (a.getRawData(), a.getRawData() + a.getRawDataSize(), b.getRawData());
+            && std::equal (a.getRawData(), a.getRawData() + a.getRawDataSize(), b.getRawData());
     }
 
     static bool equal (const MidiBuffer& a, const MidiBuffer& b) noexcept

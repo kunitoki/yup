@@ -48,9 +48,9 @@ namespace juce::universal_midi_packets
 */
 struct DeviceInfo
 {
-    std::array<std::byte, 3> manufacturer;  ///< LSB first
-    std::array<std::byte, 2> family;        ///< LSB first
-    std::array<std::byte, 2> modelNumber;   ///< LSB first
+    std::array<std::byte, 3> manufacturer; ///< LSB first
+    std::array<std::byte, 2> family;       ///< LSB first
+    std::array<std::byte, 2> modelNumber;  ///< LSB first
     std::array<std::byte, 4> revision;
 
 private:
@@ -58,6 +58,7 @@ private:
 
 public:
     bool operator== (const DeviceInfo& other) const { return tie() == other.tie(); }
+
     bool operator!= (const DeviceInfo& other) const { return tie() != other.tie(); }
 
     static constexpr auto marshallingVersion = std::nullopt;

@@ -94,7 +94,7 @@ namespace MidiBufferHelpers
 
         return d;
     }
-}
+} // namespace MidiBufferHelpers
 
 //==============================================================================
 MidiBufferIterator& MidiBufferIterator::operator++() noexcept
@@ -123,15 +123,18 @@ MidiBuffer::MidiBuffer (const MidiMessage& message) noexcept
     addEvent (message, 0);
 }
 
-void MidiBuffer::swapWith (MidiBuffer& other) noexcept      { data.swapWith (other.data); }
-void MidiBuffer::clear() noexcept                           { data.clearQuick(); }
-void MidiBuffer::ensureSize (size_t minimumNumBytes)        { data.ensureStorageAllocated ((int) minimumNumBytes); }
-bool MidiBuffer::isEmpty() const noexcept                   { return data.size() == 0; }
+void MidiBuffer::swapWith (MidiBuffer& other) noexcept { data.swapWith (other.data); }
+
+void MidiBuffer::clear() noexcept { data.clearQuick(); }
+
+void MidiBuffer::ensureSize (size_t minimumNumBytes) { data.ensureStorageAllocated ((int) minimumNumBytes); }
+
+bool MidiBuffer::isEmpty() const noexcept { return data.size() == 0; }
 
 void MidiBuffer::clear (int startSample, int numSamples)
 {
     auto start = MidiBufferHelpers::findEventAfter (data.begin(), data.end(), startSample - 1);
-    auto end   = MidiBufferHelpers::findEventAfter (start,        data.end(), startSample + numSamples - 1);
+    auto end = MidiBufferHelpers::findEventAfter (start, data.end(), startSample + numSamples - 1);
 
     data.removeRange ((int) (start - data.begin()), (int) (end - start));
 }
@@ -160,7 +163,7 @@ bool MidiBuffer::addEvent (const void* newData, int maxBytes, int sampleNumber)
     data.insertMultiple (offset, 0, (int) newItemSize);
 
     auto* d = data.begin() + offset;
-    writeUnaligned<int32>  (d, sampleNumber);
+    writeUnaligned<int32> (d, sampleNumber);
     d += sizeof (int32);
     writeUnaligned<uint16> (d, static_cast<uint16> (numBytes));
     d += sizeof (uint16);
@@ -170,7 +173,9 @@ bool MidiBuffer::addEvent (const void* newData, int maxBytes, int sampleNumber)
 }
 
 void MidiBuffer::addEvents (const MidiBuffer& otherBuffer,
-                            int startSample, int numSamples, int sampleDeltaToAdd)
+                            int startSample,
+                            int numSamples,
+                            int sampleDeltaToAdd)
 {
     for (auto i = otherBuffer.findNextSamplePosition (startSample); i != otherBuffer.cend(); ++i)
     {
@@ -220,9 +225,9 @@ int MidiBuffer::getLastEventTime() const noexcept
 MidiBufferIterator MidiBuffer::findNextSamplePosition (int samplePosition) const noexcept
 {
     return std::find_if (cbegin(), cend(), [&] (const MidiMessageMetadata& metadata) noexcept
-    {
-        return metadata.samplePosition >= samplePosition;
-    });
+                         {
+                             return metadata.samplePosition >= samplePosition;
+                         });
 }
 
 //==============================================================================
@@ -230,7 +235,8 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
 MidiBuffer::Iterator::Iterator (const MidiBuffer& b) noexcept
-    : buffer (b), iterator (b.data.begin())
+    : buffer (b)
+    , iterator (b.data.begin())
 {
 }
 
@@ -273,7 +279,8 @@ struct MidiBufferTest final : public UnitTest
 {
     MidiBufferTest()
         : UnitTest ("MidiBuffer", UnitTestCategories::midi)
-    {}
+    {
+    }
 
     void runTest() override
     {

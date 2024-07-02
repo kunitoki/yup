@@ -41,11 +41,13 @@ namespace juce
 {
 
 #ifndef JUCE_SNAP_TO_ZERO
- #if JUCE_INTEL
-  #define JUCE_SNAP_TO_ZERO(n)    if (! (n < -1.0e-8f || n > 1.0e-8f)) n = 0;
- #else
-  #define JUCE_SNAP_TO_ZERO(n)    ignoreUnused (n)
- #endif
+#if JUCE_INTEL
+#define JUCE_SNAP_TO_ZERO(n)         \
+if (! (n < -1.0e-8f || n > 1.0e-8f)) \
+n = 0;
+#else
+#define JUCE_SNAP_TO_ZERO(n) ignoreUnused (n)
+#endif
 #endif
 class ScopedNoDenormals;
 
@@ -159,27 +161,27 @@ struct FloatVectorOperationsBase
 namespace detail
 {
 
-template <typename... Bases>
-struct NameForwarder : public Bases...
-{
-    using Bases::clear...,
-          Bases::fill...,
-          Bases::copy...,
-          Bases::copyWithMultiply...,
-          Bases::add...,
-          Bases::subtract...,
-          Bases::addWithMultiply...,
-          Bases::subtractWithMultiply...,
-          Bases::multiply...,
-          Bases::negate...,
-          Bases::abs...,
-          Bases::min...,
-          Bases::max...,
-          Bases::clip...,
-          Bases::findMinAndMax...,
-          Bases::findMinimum...,
-          Bases::findMaximum...;
-};
+    template <typename... Bases>
+    struct NameForwarder : public Bases...
+    {
+        using Bases::clear...,
+            Bases::fill...,
+            Bases::copy...,
+            Bases::copyWithMultiply...,
+            Bases::add...,
+            Bases::subtract...,
+            Bases::addWithMultiply...,
+            Bases::subtractWithMultiply...,
+            Bases::multiply...,
+            Bases::negate...,
+            Bases::abs...,
+            Bases::min...,
+            Bases::max...,
+            Bases::clip...,
+            Bases::findMinAndMax...,
+            Bases::findMinimum...,
+            Bases::findMaximum...;
+    };
 
 } // namespace detail
 #endif
@@ -194,10 +196,7 @@ struct NameForwarder : public Bases...
 
     @tags{Audio}
 */
-class JUCE_API  FloatVectorOperations : public detail::NameForwarder<FloatVectorOperationsBase<float, int>,
-                                                                     FloatVectorOperationsBase<float, size_t>,
-                                                                     FloatVectorOperationsBase<double, int>,
-                                                                     FloatVectorOperationsBase<double, size_t>>
+class JUCE_API FloatVectorOperations : public detail::NameForwarder<FloatVectorOperationsBase<float, int>, FloatVectorOperationsBase<float, size_t>, FloatVectorOperationsBase<double, int>, FloatVectorOperationsBase<double, size_t>>
 {
 public:
     static void JUCE_CALLTYPE convertFixedToFloat (float* dest, const int* src, float multiplier, int num) noexcept;
@@ -239,9 +238,9 @@ public:
     ~ScopedNoDenormals() noexcept;
 
 private:
-  #if JUCE_USE_SSE_INTRINSICS || (JUCE_USE_ARM_NEON || (JUCE_64BIT && JUCE_ARM))
+#if JUCE_USE_SSE_INTRINSICS || (JUCE_USE_ARM_NEON || (JUCE_64BIT && JUCE_ARM))
     intptr_t fpsr;
-  #endif
+#endif
 };
 
 } // namespace juce

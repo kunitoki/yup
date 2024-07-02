@@ -81,7 +81,7 @@ struct MidiRPNMessage
 
     @tags{Audio}
 */
-class JUCE_API  MidiRPNDetector
+class JUCE_API MidiRPNDetector
 {
 public:
     /** Constructor. */
@@ -97,11 +97,10 @@ public:
 
     //==============================================================================
     /** @see tryParse() */
-    [[deprecated ("Use tryParse() instead")]]
-    bool parseControllerMessage (int midiChannel,
-                                 int controllerNumber,
-                                 int controllerValue,
-                                 MidiRPNMessage& result) noexcept;
+    [[deprecated ("Use tryParse() instead")]] bool parseControllerMessage (int midiChannel,
+                                                                           int controllerNumber,
+                                                                           int controllerValue,
+                                                                           MidiRPNMessage& result) noexcept;
 
     /** Takes the next in a stream of incoming MIDI CC messages and returns
         a MidiRPNMessage if the current message produces a well-formed RPN or NRPN.
@@ -125,8 +124,7 @@ private:
     //==============================================================================
     struct ChannelState
     {
-        std::optional<MidiRPNMessage> handleController (int channel, int controllerNumber,
-                                                        int value) noexcept;
+        std::optional<MidiRPNMessage> handleController (int channel, int controllerNumber, int value) noexcept;
         void resetValue() noexcept;
         std::optional<MidiRPNMessage> sendIfReady (int channel) noexcept;
 
@@ -149,7 +147,7 @@ private:
 
     @tags{Audio}
 */
-class JUCE_API  MidiRPNGenerator
+class JUCE_API MidiRPNGenerator
 {
 public:
     //==============================================================================

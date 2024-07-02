@@ -203,9 +203,9 @@ void AudioDataConverters::convertFloatToFloat32LE (const float* source, void* de
     {
         *unalignedPointerCast<float*> (d) = source[i];
 
-       #if JUCE_BIG_ENDIAN
+#if JUCE_BIG_ENDIAN
         *unalignedPointerCast<uint32*> (d) = ByteOrder::swap (*unalignedPointerCast<uint32*> (d));
-       #endif
+#endif
 
         d += destBytesPerSample;
     }
@@ -221,9 +221,9 @@ void AudioDataConverters::convertFloatToFloat32BE (const float* source, void* de
     {
         *unalignedPointerCast<float*> (d) = source[i];
 
-       #if JUCE_LITTLE_ENDIAN
+#if JUCE_LITTLE_ENDIAN
         *unalignedPointerCast<uint32*> (d) = ByteOrder::swap (*unalignedPointerCast<uint32*> (d));
-       #endif
+#endif
 
         d += destBytesPerSample;
     }
@@ -388,10 +388,10 @@ void AudioDataConverters::convertFloat32LEToFloat (const void* source, float* de
     {
         dest[i] = *unalignedPointerCast<const float*> (s);
 
-       #if JUCE_BIG_ENDIAN
+#if JUCE_BIG_ENDIAN
         auto d = unalignedPointerCast<uint32*> (dest + i);
         *d = ByteOrder::swap (*d);
-       #endif
+#endif
 
         s += srcBytesPerSample;
     }
@@ -405,30 +405,47 @@ void AudioDataConverters::convertFloat32BEToFloat (const void* source, float* de
     {
         dest[i] = *unalignedPointerCast<const float*> (s);
 
-       #if JUCE_LITTLE_ENDIAN
+#if JUCE_LITTLE_ENDIAN
         auto d = unalignedPointerCast<uint32*> (dest + i);
         *d = ByteOrder::swap (*d);
-       #endif
+#endif
 
         s += srcBytesPerSample;
     }
 }
-
 
 //==============================================================================
 void AudioDataConverters::convertFloatToFormat (DataFormat destFormat, const float* source, void* dest, int numSamples)
 {
     switch (destFormat)
     {
-        case int16LE:       convertFloatToInt16LE   (source, dest, numSamples); break;
-        case int16BE:       convertFloatToInt16BE   (source, dest, numSamples); break;
-        case int24LE:       convertFloatToInt24LE   (source, dest, numSamples); break;
-        case int24BE:       convertFloatToInt24BE   (source, dest, numSamples); break;
-        case int32LE:       convertFloatToInt32LE   (source, dest, numSamples); break;
-        case int32BE:       convertFloatToInt32BE   (source, dest, numSamples); break;
-        case float32LE:     convertFloatToFloat32LE (source, dest, numSamples); break;
-        case float32BE:     convertFloatToFloat32BE (source, dest, numSamples); break;
-        default:            jassertfalse; break;
+        case int16LE:
+            convertFloatToInt16LE (source, dest, numSamples);
+            break;
+        case int16BE:
+            convertFloatToInt16BE (source, dest, numSamples);
+            break;
+        case int24LE:
+            convertFloatToInt24LE (source, dest, numSamples);
+            break;
+        case int24BE:
+            convertFloatToInt24BE (source, dest, numSamples);
+            break;
+        case int32LE:
+            convertFloatToInt32LE (source, dest, numSamples);
+            break;
+        case int32BE:
+            convertFloatToInt32BE (source, dest, numSamples);
+            break;
+        case float32LE:
+            convertFloatToFloat32LE (source, dest, numSamples);
+            break;
+        case float32BE:
+            convertFloatToFloat32BE (source, dest, numSamples);
+            break;
+        default:
+            jassertfalse;
+            break;
     }
 }
 
@@ -436,15 +453,33 @@ void AudioDataConverters::convertFormatToFloat (DataFormat sourceFormat, const v
 {
     switch (sourceFormat)
     {
-        case int16LE:       convertInt16LEToFloat   (source, dest, numSamples); break;
-        case int16BE:       convertInt16BEToFloat   (source, dest, numSamples); break;
-        case int24LE:       convertInt24LEToFloat   (source, dest, numSamples); break;
-        case int24BE:       convertInt24BEToFloat   (source, dest, numSamples); break;
-        case int32LE:       convertInt32LEToFloat   (source, dest, numSamples); break;
-        case int32BE:       convertInt32BEToFloat   (source, dest, numSamples); break;
-        case float32LE:     convertFloat32LEToFloat (source, dest, numSamples); break;
-        case float32BE:     convertFloat32BEToFloat (source, dest, numSamples); break;
-        default:            jassertfalse; break;
+        case int16LE:
+            convertInt16LEToFloat (source, dest, numSamples);
+            break;
+        case int16BE:
+            convertInt16BEToFloat (source, dest, numSamples);
+            break;
+        case int24LE:
+            convertInt24LEToFloat (source, dest, numSamples);
+            break;
+        case int24BE:
+            convertInt24BEToFloat (source, dest, numSamples);
+            break;
+        case int32LE:
+            convertInt32LEToFloat (source, dest, numSamples);
+            break;
+        case int32BE:
+            convertInt32BEToFloat (source, dest, numSamples);
+            break;
+        case float32LE:
+            convertFloat32LEToFloat (source, dest, numSamples);
+            break;
+        case float32BE:
+            convertFloat32BEToFloat (source, dest, numSamples);
+            break;
+        default:
+            jassertfalse;
+            break;
     }
 }
 
@@ -454,7 +489,7 @@ void AudioDataConverters::interleaveSamples (const float** source, float* dest, 
     using Format = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
 
     AudioData::interleaveSamples (AudioData::NonInterleavedSource<Format> { source, numChannels },
-                                  AudioData::InterleavedDest<Format>      { dest,   numChannels },
+                                  AudioData::InterleavedDest<Format> { dest, numChannels },
                                   numSamples);
 }
 
@@ -462,8 +497,8 @@ void AudioDataConverters::deinterleaveSamples (const float* source, float** dest
 {
     using Format = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
 
-    AudioData::deinterleaveSamples (AudioData::InterleavedSource<Format>  { source, numChannels },
-                                    AudioData::NonInterleavedDest<Format> { dest,   numChannels },
+    AudioData::deinterleaveSamples (AudioData::InterleavedSource<Format> { source, numChannels },
+                                    AudioData::NonInterleavedDest<Format> { dest, numChannels },
                                     numSamples);
 }
 
@@ -476,7 +511,8 @@ class AudioConversionTests final : public UnitTest
 public:
     AudioConversionTests()
         : UnitTest ("Audio data conversion", UnitTestCategories::audio)
-    {}
+    {
+    }
 
     template <class F1, class E1, class F2, class E2>
     struct Test5
@@ -488,12 +524,13 @@ public:
         }
 
         JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6262)
+
         static void test (UnitTest& unitTest, bool inPlace, Random& r)
         {
             const int numSamples = 2048;
-            int32 original [(size_t) numSamples],
-                  converted[(size_t) numSamples],
-                  reversed [(size_t) numSamples];
+            int32 original[(size_t) numSamples],
+                converted[(size_t) numSamples],
+                reversed[(size_t) numSamples];
 
             {
                 AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::NonConst> d (original);
@@ -533,7 +570,7 @@ public:
                 AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const> d2 (reversed);
 
                 const int errorMargin = 2 * AudioData::Pointer<F1, E1, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution()
-                                          + AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution();
+                                      + AudioData::Pointer<F2, E2, AudioData::NonInterleaved, AudioData::Const>::get32BitResolution();
 
                 for (int i = 0; i < numSamples; ++i)
                 {
@@ -545,6 +582,7 @@ public:
                 unitTest.expect (biggestDiff <= errorMargin);
             }
         }
+
         JUCE_END_IGNORE_WARNINGS_MSVC
     };
 
@@ -553,8 +591,8 @@ public:
     {
         static void test (UnitTest& unitTest, Random& r)
         {
-            Test5 <F1, E1, FormatType, AudioData::BigEndian>::test (unitTest, r);
-            Test5 <F1, E1, FormatType, AudioData::LittleEndian>::test (unitTest, r);
+            Test5<F1, E1, FormatType, AudioData::BigEndian>::test (unitTest, r);
+            Test5<F1, E1, FormatType, AudioData::LittleEndian>::test (unitTest, r);
         }
     };
 
@@ -563,12 +601,12 @@ public:
     {
         static void test (UnitTest& unitTest, Random& r)
         {
-            Test3 <FormatType, Endianness, AudioData::Int8>::test (unitTest, r);
-            Test3 <FormatType, Endianness, AudioData::UInt8>::test (unitTest, r);
-            Test3 <FormatType, Endianness, AudioData::Int16>::test (unitTest, r);
-            Test3 <FormatType, Endianness, AudioData::Int24>::test (unitTest, r);
-            Test3 <FormatType, Endianness, AudioData::Int32>::test (unitTest, r);
-            Test3 <FormatType, Endianness, AudioData::Float32>::test (unitTest, r);
+            Test3<FormatType, Endianness, AudioData::Int8>::test (unitTest, r);
+            Test3<FormatType, Endianness, AudioData::UInt8>::test (unitTest, r);
+            Test3<FormatType, Endianness, AudioData::Int16>::test (unitTest, r);
+            Test3<FormatType, Endianness, AudioData::Int24>::test (unitTest, r);
+            Test3<FormatType, Endianness, AudioData::Int32>::test (unitTest, r);
+            Test3<FormatType, Endianness, AudioData::Float32>::test (unitTest, r);
         }
     };
 
@@ -577,8 +615,8 @@ public:
     {
         static void test (UnitTest& unitTest, Random& r)
         {
-            Test2 <FormatType, AudioData::BigEndian>::test (unitTest, r);
-            Test2 <FormatType, AudioData::LittleEndian>::test (unitTest, r);
+            Test2<FormatType, AudioData::BigEndian>::test (unitTest, r);
+            Test2<FormatType, AudioData::LittleEndian>::test (unitTest, r);
         }
     };
 
@@ -586,15 +624,15 @@ public:
     {
         auto r = getRandom();
         beginTest ("Round-trip conversion: Int8");
-        Test1 <AudioData::Int8>::test (*this, r);
+        Test1<AudioData::Int8>::test (*this, r);
         beginTest ("Round-trip conversion: Int16");
-        Test1 <AudioData::Int16>::test (*this, r);
+        Test1<AudioData::Int16>::test (*this, r);
         beginTest ("Round-trip conversion: Int24");
-        Test1 <AudioData::Int24>::test (*this, r);
+        Test1<AudioData::Int24>::test (*this, r);
         beginTest ("Round-trip conversion: Int32");
-        Test1 <AudioData::Int32>::test (*this, r);
+        Test1<AudioData::Int32>::test (*this, r);
         beginTest ("Round-trip conversion: Float32");
-        Test1 <AudioData::Float32>::test (*this, r);
+        Test1<AudioData::Float32>::test (*this, r);
 
         using Format = AudioData::Format<AudioData::Float32, AudioData::NativeEndian>;
 
@@ -604,14 +642,14 @@ public:
             constexpr auto numSamples = 512;
 
             AudioBuffer<float> sourceBuffer { numChannels, numSamples },
-                               destBuffer   { 1, numChannels * numSamples };
+                destBuffer { 1, numChannels * numSamples };
 
             for (int ch = 0; ch < numChannels; ++ch)
                 for (int i = 0; i < numSamples; ++i)
                     sourceBuffer.setSample (ch, i, r.nextFloat());
 
             AudioData::interleaveSamples (AudioData::NonInterleavedSource<Format> { sourceBuffer.getArrayOfReadPointers(), numChannels },
-                                          AudioData::InterleavedDest<Format>      { destBuffer.getWritePointer (0),        numChannels },
+                                          AudioData::InterleavedDest<Format> { destBuffer.getWritePointer (0), numChannels },
                                           numSamples);
 
             for (int ch = 0; ch < numChannels; ++ch)
@@ -625,13 +663,13 @@ public:
             constexpr auto numSamples = 512;
 
             AudioBuffer<float> sourceBuffer { 1, numChannels * numSamples },
-                               destBuffer   { numChannels, numSamples };
+                destBuffer { numChannels, numSamples };
 
             for (int ch = 0; ch < numChannels; ++ch)
                 for (int i = 0; i < numSamples; ++i)
                     sourceBuffer.setSample (0, ch + (i * numChannels), r.nextFloat());
 
-            AudioData::deinterleaveSamples (AudioData::InterleavedSource<Format>  { sourceBuffer.getReadPointer (0),      numChannels },
+            AudioData::deinterleaveSamples (AudioData::InterleavedSource<Format> { sourceBuffer.getReadPointer (0), numChannels },
                                             AudioData::NonInterleavedDest<Format> { destBuffer.getArrayOfWritePointers(), numChannels },
                                             numSamples);
 

@@ -48,7 +48,7 @@ namespace juce::universal_midi_packets
 */
 struct BytesOnGroup
 {
-    uint8_t group{};
+    uint8_t group {};
     Span<const std::byte> bytes;
 };
 

@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  ResamplingAudioSource  : public AudioSource
+class JUCE_API ResamplingAudioSource : public AudioSource
 {
 public:
     //==============================================================================
@@ -80,7 +80,7 @@ public:
 
         This is the value that was set by setResamplingRatio().
     */
-    double getResamplingRatio() const noexcept                  { return ratio; }
+    double getResamplingRatio() const noexcept { return ratio; }
 
     /** Clears any buffers and filters that the resampler is using. */
     void flushBuffers();

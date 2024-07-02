@@ -63,8 +63,7 @@ public:
     }
 
     template <typename UserDataType, typename CallbackType>
-    void pushMidiData (const void* inputData, int numBytes, double time,
-                       UserDataType* input, CallbackType& callback)
+    void pushMidiData (const void* inputData, int numBytes, double time, UserDataType* input, CallbackType& callback)
     {
         auto d = static_cast<const uint8*> (inputData);
 
@@ -118,8 +117,7 @@ public:
 
 private:
     template <typename UserDataType, typename CallbackType>
-    void processSysex (const uint8*& d, int& numBytes, double time,
-                       UserDataType* input, CallbackType& callback)
+    void processSysex (const uint8*& d, int& numBytes, double time, UserDataType* input, CallbackType& callback)
     {
         if (*d == 0xf0)
         {
@@ -171,12 +169,11 @@ private:
                 ++pendingSysexSize;
                 --numBytes;
             }
-        }
-        while (numBytes > 0);
+        } while (numBytes > 0);
 
         if (pendingSysexSize > 0)
         {
-            if (totalMessage [pendingSysexSize - 1] == 0xf7)
+            if (totalMessage[pendingSysexSize - 1] == 0xf7)
             {
                 callback.handleIncomingMidiMessage (input, MidiMessage (totalMessage, pendingSysexSize, pendingSysexTime));
                 pendingSysexSize = 0;
@@ -188,9 +185,11 @@ private:
         }
     }
 
-    static bool isRealtimeMessage (uint8 byte)  { return byte >= 0xf8 && byte <= 0xfe; }
-    static bool isStatusByte (uint8 byte)       { return byte >= 0x80; }
-    static bool isInitialByte (uint8 byte)      { return isStatusByte (byte) && byte != 0xf7; }
+    static bool isRealtimeMessage (uint8 byte) { return byte >= 0xf8 && byte <= 0xfe; }
+
+    static bool isStatusByte (uint8 byte) { return byte >= 0x80; }
+
+    static bool isInitialByte (uint8 byte) { return isStatusByte (byte) && byte != 0xf7; }
 
     uint8 currentMessage[3];
     int currentMessageLen = 0;

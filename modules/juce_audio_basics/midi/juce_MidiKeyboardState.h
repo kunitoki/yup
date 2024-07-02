@@ -55,7 +55,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  MidiKeyboardState
+class JUCE_API MidiKeyboardState
 {
 public:
     //==============================================================================
@@ -169,7 +169,9 @@ public:
             careful not to block, and avoid any UI activity in the callback.
         */
         virtual void handleNoteOn (MidiKeyboardState* source,
-                                   int midiChannel, int midiNoteNumber, float velocity) = 0;
+                                   int midiChannel,
+                                   int midiNoteNumber,
+                                   float velocity) = 0;
 
         /** Called when one of the MidiKeyboardState's keys is released.
 
@@ -181,7 +183,9 @@ public:
             careful not to block, and avoid any UI activity in the callback.
         */
         virtual void handleNoteOff (MidiKeyboardState* source,
-                                    int midiChannel, int midiNoteNumber, float velocity) = 0;
+                                    int midiChannel,
+                                    int midiNoteNumber,
+                                    float velocity) = 0;
     };
 
     /** Registers a listener for callbacks when keys go up or down.
@@ -201,7 +205,7 @@ private:
     MidiBuffer eventsToAdd;
     ListenerList<Listener> listeners;
 
-    void noteOnInternal  (int midiChannel, int midiNoteNumber, float velocity);
+    void noteOnInternal (int midiChannel, int midiNoteNumber, float velocity);
     void noteOffInternal (int midiChannel, int midiNoteNumber, float velocity);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiKeyboardState)

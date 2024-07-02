@@ -57,7 +57,7 @@ void MemoryAudioSource::prepareToPlay (int /*samplesPerBlockExpected*/, double /
     position = 0;
 }
 
-void MemoryAudioSource::releaseResources()   {}
+void MemoryAudioSource::releaseResources() {}
 
 void MemoryAudioSource::getNextAudioBlock (const AudioSourceChannelInfo& bufferToFill)
 {
@@ -127,7 +127,10 @@ void MemoryAudioSource::setLooping (bool shouldLoop)
 
 struct MemoryAudioSourceTests final : public UnitTest
 {
-    MemoryAudioSourceTests()  : UnitTest ("MemoryAudioSource", UnitTestCategories::audio)  {}
+    MemoryAudioSourceTests()
+        : UnitTest ("MemoryAudioSource", UnitTestCategories::audio)
+    {
+    }
 
     void runTest() override
     {
@@ -232,8 +235,9 @@ struct MemoryAudioSourceTests final : public UnitTest
         return buffer;
     }
 
-    static AudioBuffer<float> getShortBuffer()  { return getTestBuffer (5); }
-    static AudioBuffer<float> getLongBuffer()   { return getTestBuffer (1000); }
+    static AudioBuffer<float> getShortBuffer() { return getTestBuffer (5); }
+
+    static AudioBuffer<float> getLongBuffer() { return getTestBuffer (1000); }
 
     static void play (MemoryAudioSource& source, AudioSourceChannelInfo& info)
     {
@@ -244,7 +248,7 @@ struct MemoryAudioSourceTests final : public UnitTest
     static bool isSilent (const AudioBuffer<float>& b)
     {
         for (int channel = 0; channel < b.getNumChannels(); ++channel)
-            if (b.findMinMax (channel, 0, b.getNumSamples()) != Range<float>{})
+            if (b.findMinMax (channel, 0, b.getNumSamples()) != Range<float> {})
                 return false;
 
         return true;

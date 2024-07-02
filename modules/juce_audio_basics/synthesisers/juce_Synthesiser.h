@@ -55,7 +55,7 @@ namespace juce
 
     @tags{Audio}
 */
-class JUCE_API  SynthesiserSound    : public ReferenceCountedObject
+class JUCE_API SynthesiserSound : public ReferenceCountedObject
 {
 protected:
     //==============================================================================
@@ -83,12 +83,10 @@ public:
     /** The class is reference-counted, so this is a handy pointer class for it. */
     using Ptr = ReferenceCountedObjectPtr<SynthesiserSound>;
 
-
 private:
     //==============================================================================
     JUCE_LEAK_DETECTOR (SynthesiserSound)
 };
-
 
 //==============================================================================
 /**
@@ -101,7 +99,7 @@ private:
 
     @tags{Audio}
 */
-class JUCE_API  SynthesiserVoice
+class JUCE_API SynthesiserVoice
 {
 public:
     //==============================================================================
@@ -115,12 +113,12 @@ public:
     /** Returns the midi note that this voice is currently playing.
         Returns a value less than 0 if no note is playing.
     */
-    int getCurrentlyPlayingNote() const noexcept                        { return currentlyPlayingNote; }
+    int getCurrentlyPlayingNote() const noexcept { return currentlyPlayingNote; }
 
     /** Returns the sound that this voice is currently playing.
         Returns nullptr if it's not playing.
     */
-    SynthesiserSound::Ptr getCurrentlyPlayingSound() const noexcept     { return currentlyPlayingSound; }
+    SynthesiserSound::Ptr getCurrentlyPlayingSound() const noexcept { return currentlyPlayingSound; }
 
     /** Must return true if this voice object is capable of playing the given sound.
 
@@ -229,30 +227,30 @@ public:
     /** Returns the current target sample rate at which rendering is being done.
         Subclasses may need to know this so that they can pitch things correctly.
     */
-    double getSampleRate() const noexcept                       { return currentSampleRate; }
+    double getSampleRate() const noexcept { return currentSampleRate; }
 
     /** Returns true if the key that triggered this voice is still held down.
         Note that the voice may still be playing after the key was released (e.g because the
         sostenuto pedal is down).
     */
-    bool isKeyDown() const noexcept                             { return keyIsDown; }
+    bool isKeyDown() const noexcept { return keyIsDown; }
 
     /** Allows you to modify the flag indicating that the key that triggered this voice is still held down.
         @see isKeyDown
     */
-    void setKeyDown (bool isNowDown) noexcept                   { keyIsDown = isNowDown; }
+    void setKeyDown (bool isNowDown) noexcept { keyIsDown = isNowDown; }
 
     /** Returns true if the sustain pedal is currently active for this voice. */
-    bool isSustainPedalDown() const noexcept                    { return sustainPedalDown; }
+    bool isSustainPedalDown() const noexcept { return sustainPedalDown; }
 
     /** Modifies the sustain pedal flag. */
-    void setSustainPedalDown (bool isNowDown) noexcept          { sustainPedalDown = isNowDown; }
+    void setSustainPedalDown (bool isNowDown) noexcept { sustainPedalDown = isNowDown; }
 
     /** Returns true if the sostenuto pedal is currently active for this voice. */
-    bool isSostenutoPedalDown() const noexcept                  { return sostenutoPedalDown; }
+    bool isSostenutoPedalDown() const noexcept { return sostenutoPedalDown; }
 
     /** Modifies the sostenuto pedal flag. */
-    void setSostenutoPedalDown (bool isNowDown) noexcept        { sostenutoPedalDown = isNowDown; }
+    void setSostenutoPedalDown (bool isNowDown) noexcept { sostenutoPedalDown = isNowDown; }
 
     /** Returns true if a voice is sounding in its release phase **/
     bool isPlayingButReleased() const noexcept
@@ -278,7 +276,6 @@ protected:
     */
     void clearCurrentNote();
 
-
 private:
     //==============================================================================
     friend class Synthesiser;
@@ -293,7 +290,6 @@ private:
 
     JUCE_LEAK_DETECTOR (SynthesiserVoice)
 };
-
 
 //==============================================================================
 /**
@@ -321,7 +317,7 @@ private:
 
     @tags{Audio}
 */
-class JUCE_API  Synthesiser
+class JUCE_API Synthesiser
 {
 public:
     //==============================================================================
@@ -338,7 +334,7 @@ public:
     void clearVoices();
 
     /** Returns the number of voices that have been added. */
-    int getNumVoices() const noexcept                               { return voices.size(); }
+    int getNumVoices() const noexcept { return voices.size(); }
 
     /** Returns one of the voices that have been added. */
     SynthesiserVoice* getVoice (int index) const;
@@ -361,10 +357,10 @@ public:
     void clearSounds();
 
     /** Returns the number of sounds that have been added to the synth. */
-    int getNumSounds() const noexcept                               { return sounds.size(); }
+    int getNumSounds() const noexcept { return sounds.size(); }
 
     /** Returns one of the sounds. */
-    SynthesiserSound::Ptr getSound (int index) const noexcept       { return sounds[index]; }
+    SynthesiserSound::Ptr getSound (int index) const noexcept { return sounds[index]; }
 
     /** Adds a new sound to the synthesiser.
 
@@ -388,7 +384,7 @@ public:
     /** Returns true if note-stealing is enabled.
         @see setNoteStealingEnabled
     */
-    bool isNoteStealingEnabled() const noexcept                     { return shouldStealNotes; }
+    bool isNoteStealingEnabled() const noexcept { return shouldStealNotes; }
 
     //==============================================================================
     /** Triggers a note-on event.
@@ -550,7 +546,7 @@ public:
     /** Returns the current target sample rate at which rendering is being done.
         Subclasses may need to know this so that they can pitch things correctly.
     */
-    double getSampleRate() const noexcept                       { return sampleRate; }
+    double getSampleRate() const noexcept { return sampleRate; }
 
     /** Sets a minimum limit on the size to which audio sub-blocks will be divided when rendering.
 
@@ -583,16 +579,18 @@ protected:
     ReferenceCountedArray<SynthesiserSound> sounds;
 
     /** The last pitch-wheel values for each midi channel. */
-    int lastPitchWheelValues [16];
+    int lastPitchWheelValues[16];
 
     /** Renders the voices for the given range.
         By default this just calls renderNextBlock() on each voice, but you may need
         to override it to handle custom cases.
     */
     virtual void renderVoices (AudioBuffer<float>& outputAudio,
-                               int startSample, int numSamples);
+                               int startSample,
+                               int numSamples);
     virtual void renderVoices (AudioBuffer<double>& outputAudio,
-                               int startSample, int numSamples);
+                               int startSample,
+                               int numSamples);
 
     /** Searches through the voices to find one that's not currently playing, and
         which can play the given sound.

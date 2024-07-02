@@ -49,7 +49,10 @@ namespace juce::universal_midi_packets
 struct BytestreamMidiView
 {
     constexpr BytestreamMidiView (Span<const std::byte> bytesIn, double timestampIn)
-        : bytes (bytesIn), timestamp (timestampIn) {}
+        : bytes (bytesIn)
+        , timestamp (timestampIn)
+    {
+    }
 
     /** Creates a view over the provided message.
 
@@ -58,13 +61,17 @@ struct BytestreamMidiView
     */
     explicit BytestreamMidiView (const MidiMessage* msg)
         : bytes (unalignedPointerCast<const std::byte*> (msg->getRawData()),
-                 static_cast<size_t> (msg->getRawDataSize())),
-          timestamp (msg->getTimeStamp()) {}
+                 static_cast<size_t> (msg->getRawDataSize()))
+        , timestamp (msg->getTimeStamp())
+    {
+    }
 
     explicit BytestreamMidiView (const MidiMessageMetadata msg)
         : bytes (unalignedPointerCast<const std::byte*> (msg.data),
-                 static_cast<size_t> (msg.numBytes)),
-          timestamp (msg.samplePosition) {}
+                 static_cast<size_t> (msg.numBytes))
+        , timestamp (msg.samplePosition)
+    {
+    }
 
     MidiMessage getMessage() const
     {
@@ -109,10 +116,14 @@ struct Conversion
             {
                 switch (size)
                 {
-                    case 0: return 0xff000000;
-                    case 1: return 0xffff0000;
-                    case 2: return 0xffffff00;
-                    case 3: return 0xffffffff;
+                    case 0:
+                        return 0xff000000;
+                    case 1:
+                        return 0xffff0000;
+                    case 2:
+                        return 0xffffff00;
+                    case 3:
+                        return 0xffffffff;
                 }
 
                 return 0x00000000;
@@ -189,11 +200,7 @@ struct Conversion
         const auto shifted = (uint32_t) (word7Bit << 0x19);
         const auto repeat = (uint32_t) (word7Bit & 0x3f);
         const auto mask = (uint32_t) (word7Bit <= 0x40 ? 0x0 : 0xffffffff);
-        return (uint32_t) (shifted | (((repeat << 19)
-                                     | (repeat << 13)
-                                     | (repeat << 7)
-                                     | (repeat << 1)
-                                     | (repeat >> 5)) & mask));
+        return (uint32_t) (shifted | (((repeat << 19) | (repeat << 13) | (repeat << 7) | (repeat << 1) | (repeat >> 5)) & mask));
     }
 
     /** Widens a 14-bit MIDI 1.0 value to a 32-bit MIDI 2.0 value. */
@@ -245,10 +252,10 @@ struct Conversion
 
         switch (status)
         {
-            case 0x8:   // note off
-            case 0x9:   // note on
-            case 0xa:   // poly pressure
-            case 0xb:   // control change
+            case 0x8: // note off
+            case 0x9: // note on
+            case 0xa: // poly pressure
+            case 0xb: // control change
             {
                 const auto statusAndChannel = std::byte ((firstWord >> 0x10) & 0xff);
                 const auto byte2 = std::byte ((firstWord >> 0x08) & 0xff);
@@ -301,19 +308,18 @@ struct Conversion
                 return;
             }
 
-            case 0x2:   // rpn
-            case 0x3:   // nrpn
+            case 0x2: // rpn
+            case 0x3: // nrpn
             {
                 const auto ccX = status == 0x2 ? std::byte { 101 } : std::byte { 99 };
                 const auto ccY = status == 0x2 ? std::byte { 100 } : std::byte { 98 };
                 const auto statusAndChannel = std::byte ((0xb << 0x4) | Utils::getChannel (firstWord));
                 const auto data = scaleTo14 (v[1]);
 
-                const PacketX1 packets[]
-                {
-                    PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, ccX,              std::byte ((firstWord >> 0x8) & 0x7f)) },
-                    PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, ccY,              std::byte ((firstWord >> 0x0) & 0x7f)) },
-                    PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, std::byte { 6 },  std::byte ((data >> 0x7) & 0x7f)) },
+                const PacketX1 packets[] {
+                    PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, ccX, std::byte ((firstWord >> 0x8) & 0x7f)) },
+                    PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, ccY, std::byte ((firstWord >> 0x0) & 0x7f)) },
+                    PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, std::byte { 6 }, std::byte ((data >> 0x7) & 0x7f)) },
                     PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, std::byte { 38 }, std::byte ((data >> 0x0) & 0x7f)) },
                 };
 
@@ -330,9 +336,8 @@ struct Conversion
                     const auto statusAndChannel = std::byte ((0xb << 0x4) | Utils::getChannel (firstWord));
                     const auto secondWord = v[1];
 
-                    const PacketX1 packets[]
-                    {
-                        PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, std::byte { 0 },  std::byte ((secondWord >> 0x8) & 0x7f)) },
+                    const PacketX1 packets[] {
+                        PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, std::byte { 0 }, std::byte ((secondWord >> 0x8) & 0x7f)) },
                         PacketX1 { Utils::bytesToWord (typeAndGroup, statusAndChannel, std::byte { 32 }, std::byte ((secondWord >> 0x0) & 0x7f)) },
                     };
 

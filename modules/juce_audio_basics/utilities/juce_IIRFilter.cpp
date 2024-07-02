@@ -60,8 +60,7 @@ IIRCoefficients& IIRCoefficients::operator= (const IIRCoefficients& other) noexc
     return *this;
 }
 
-IIRCoefficients::IIRCoefficients (double c1, double c2, double c3,
-                                  double c4, double c5, double c6) noexcept
+IIRCoefficients::IIRCoefficients (double c1, double c2, double c3, double c4, double c5, double c6) noexcept
 {
     const auto a = 1.0 / c4;
 
@@ -281,7 +280,8 @@ template <typename Mutex>
 IIRFilterBase<Mutex>::IIRFilterBase() noexcept = default;
 
 template <typename Mutex>
-IIRFilterBase<Mutex>::IIRFilterBase (const IIRFilterBase& other) noexcept  : active (other.active)
+IIRFilterBase<Mutex>::IIRFilterBase (const IIRFilterBase& other) noexcept
+    : active (other.active)
 {
     const typename Mutex::ScopedLockType sl (other.processLock);
     coefficients = other.coefficients;
@@ -348,8 +348,10 @@ void IIRFilterBase<Mutex>::processSamples (float* const samples, const int numSa
             lv2 = c2 * in - c4 * out;
         }
 
-        JUCE_SNAP_TO_ZERO (lv1);  v1 = lv1;
-        JUCE_SNAP_TO_ZERO (lv2);  v2 = lv2;
+        JUCE_SNAP_TO_ZERO (lv1);
+        v1 = lv1;
+        JUCE_SNAP_TO_ZERO (lv2);
+        v2 = lv2;
     }
 }
 
