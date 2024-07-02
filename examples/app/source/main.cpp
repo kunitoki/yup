@@ -21,7 +21,8 @@
 
 #include <yup_gui/yup_gui.h>
 
-class Application : public yup::YUPApplication, public juce::Timer
+class Application : public yup::YUPApplication
+    , public juce::Timer
 {
 public:
     Application() = default;
@@ -52,8 +53,11 @@ public:
     {
         stopTimer();
 
-        yup::MessageManager::callAsync([this] { systemRequestedQuit(); });
+        yup::MessageManager::callAsync ([this]
+                                        {
+                                            systemRequestedQuit();
+                                        });
     }
 };
 
-START_JUCE_APPLICATION(Application)
+START_JUCE_APPLICATION (Application)

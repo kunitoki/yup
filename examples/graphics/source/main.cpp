@@ -97,7 +97,7 @@ public:
         }
 
         if (button != nullptr)
-            button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth(0.4f), 0.0f));
+            button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth (0.4f), 0.0f));
     }
 
     void paint (yup::Graphics& g) override
@@ -135,25 +135,25 @@ public:
     {
         switch (keys.getKey())
         {
-        case yup::KeyPress::textQKey:
-            std::cout << 'a';
-            break;
+            case yup::KeyPress::textQKey:
+                std::cout << 'a';
+                break;
 
-        case yup::KeyPress::escapeKey:
-            userTriedToCloseWindow();
-            break;
+            case yup::KeyPress::escapeKey:
+                userTriedToCloseWindow();
+                break;
 
-        case yup::KeyPress::textAKey:
-            getNativeComponent()->enableAtomicMode (!getNativeComponent()->isAtomicModeEnabled());
-            break;
+            case yup::KeyPress::textAKey:
+                getNativeComponent()->enableAtomicMode (! getNativeComponent()->isAtomicModeEnabled());
+                break;
 
-        case yup::KeyPress::textWKey:
-            getNativeComponent()->enableWireframe (!getNativeComponent()->isWireframeEnabled());
-            break;
+            case yup::KeyPress::textWKey:
+                getNativeComponent()->enableWireframe (! getNativeComponent()->isWireframeEnabled());
+                break;
 
-        case yup::KeyPress::textZKey:
-            setFullScreen (!isFullScreen());
-            break;
+            case yup::KeyPress::textZKey:
+                setFullScreen (! isFullScreen());
+                break;
         }
     }
 
@@ -209,7 +209,8 @@ private:
         yup::String title;
 
         title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
-        title << " | " << "YUP On Rive Renderer";
+        title << " | "
+              << "YUP On Rive Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
@@ -271,4 +272,4 @@ private:
     std::unique_ptr<CustomWindow> window;
 };
 
-START_JUCE_APPLICATION(Application)
+START_JUCE_APPLICATION (Application)

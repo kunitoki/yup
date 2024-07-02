@@ -43,9 +43,9 @@ public:
 #if JUCE_WASM
         yup::File riveFilePath = yup::File ("/data");
 #else
-        yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile("data");
+        yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-        riveFilePath = riveFilePath.getChildFile("alien.riv");
+        riveFilePath = riveFilePath.getChildFile ("alien.riv");
 
         // Setup artboards
         for (int i = 0; i < totalRows * totalColumns; ++i)
@@ -60,7 +60,7 @@ public:
         takeFocus();
 
         // Update titlebar
-        startTimerHz(1);
+        startTimerHz (1);
     }
 
     void resized() override
@@ -91,46 +91,46 @@ public:
 
         switch (keys.getKey())
         {
-        case yup::KeyPress::escapeKey:
-            userTriedToCloseWindow();
-            break;
+            case yup::KeyPress::escapeKey:
+                userTriedToCloseWindow();
+                break;
 
-        case yup::KeyPress::textAKey:
-            getNativeComponent()->enableAtomicMode (!getNativeComponent()->isAtomicModeEnabled());
-            break;
+            case yup::KeyPress::textAKey:
+                getNativeComponent()->enableAtomicMode (! getNativeComponent()->isAtomicModeEnabled());
+                break;
 
-        case yup::KeyPress::textWKey:
-            getNativeComponent()->enableWireframe (!getNativeComponent()->isWireframeEnabled());
-            break;
+            case yup::KeyPress::textWKey:
+                getNativeComponent()->enableWireframe (! getNativeComponent()->isWireframeEnabled());
+                break;
 
-        case yup::KeyPress::textPKey:
-            for (int i = 0; i < totalRows * totalColumns; ++i)
-                artboards[i]->setPaused (! artboards[i]->isPaused());
-            break;
+            case yup::KeyPress::textPKey:
+                for (int i = 0; i < totalRows * totalColumns; ++i)
+                    artboards[i]->setPaused (! artboards[i]->isPaused());
+                break;
 
-        case yup::KeyPress::textHKey:
-            for (int i = 0; i < totalRows * totalColumns; ++i)
-                artboards[i]->addHorizontalRepeats (shift ? -1 : 1);
-            break;
+            case yup::KeyPress::textHKey:
+                for (int i = 0; i < totalRows * totalColumns; ++i)
+                    artboards[i]->addHorizontalRepeats (shift ? -1 : 1);
+                break;
 
-        case yup::KeyPress::textJKey:
-            for (int i = 0; i < totalRows * totalColumns; ++i)
-                artboards[i]->addVerticalRepeats (shift ? -1 : 1);
-            break;
+            case yup::KeyPress::textJKey:
+                for (int i = 0; i < totalRows * totalColumns; ++i)
+                    artboards[i]->addVerticalRepeats (shift ? -1 : 1);
+                break;
 
-        case yup::KeyPress::textZKey:
-            setFullScreen (!isFullScreen());
-            break;
+            case yup::KeyPress::textZKey:
+                setFullScreen (! isFullScreen());
+                break;
 
-        case yup::KeyPress::upKey:
-            for (int i = 0; i < totalRows * totalColumns; ++i)
-                artboards[i]->multiplyScale (1.25);
-            break;
+            case yup::KeyPress::upKey:
+                for (int i = 0; i < totalRows * totalColumns; ++i)
+                    artboards[i]->multiplyScale (1.25);
+                break;
 
-        case yup::KeyPress::downKey:
-            for (int i = 0; i < totalRows * totalColumns; ++i)
-                artboards[i]->multiplyScale (1.0 / 1.25);
-            break;
+            case yup::KeyPress::downKey:
+                for (int i = 0; i < totalRows * totalColumns; ++i)
+                    artboards[i]->multiplyScale (1.0 / 1.25);
+                break;
         }
     }
 
@@ -151,7 +151,7 @@ public:
     }
 
 private:
-    void updateWindowTitle ()
+    void updateWindowTitle()
     {
         yup::String title;
 
@@ -162,7 +162,8 @@ private:
         for (int i = 0; i < totalRows * totalColumns; ++i)
             instances += artboards[i]->getNumInstances();
         title << " (x" << instances << " instances)";
-        title << " | " << "YUP Renderer";
+        title << " | "
+              << "YUP Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
@@ -214,4 +215,4 @@ private:
     std::unique_ptr<CustomWindow> window;
 };
 
-START_JUCE_APPLICATION(Application)
+START_JUCE_APPLICATION (Application)

@@ -21,12 +21,12 @@
 
 #include <juce_core/juce_core.h>
 
-int main(int argc, char* argv[])
+int main (int argc, char* argv[])
 {
     juce::String s;
     s << "Testing is fine !";
 
-    juce::Logger::getCurrentLogger()->writeToLog(s);
+    juce::Logger::getCurrentLogger()->writeToLog (s);
 
     return 0;
 }

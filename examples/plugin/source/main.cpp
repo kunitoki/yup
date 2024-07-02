@@ -34,34 +34,35 @@ template <class T>
 struct Array
 {
     Array() = default;
+
     ~Array()
     {
         Free();
     }
 
-	void Insert (T newItem, uintptr_t index)
+    void Insert (T newItem, uintptr_t index)
     {
-		if (length + 1 > allocated)
+        if (length + 1 > allocated)
         {
-			allocated *= 2;
-			if (length + 1 > allocated)
+            allocated *= 2;
+            if (length + 1 > allocated)
                 allocated = length + 1;
 
             array = (T*) std::realloc (array, allocated * sizeof (T));
-		}
+        }
 
-		length++;
-		std::memmove (array + index + 1, array + index, (length - index - 1) * sizeof (T));
-		array[index] = std::move (newItem);
-	}
+        length++;
+        std::memmove (array + index + 1, array + index, (length - index - 1) * sizeof (T));
+        array[index] = std::move (newItem);
+    }
 
-	void Delete (uintptr_t index)
+    void Delete (uintptr_t index)
     {
-		std::memmove (array + index, array + index + 1, (length - index - 1) * sizeof (T));
-		length--;
-	}
+        std::memmove (array + index, array + index + 1, (length - index - 1) * sizeof (T));
+        length--;
+    }
 
-	void Add (T item)
+    void Add (T item)
     {
         Insert (std::move (item), length);
     }
@@ -86,8 +87,8 @@ struct Array
     }
 
 private:
-	T* array = nullptr;
-	size_t length = 0;
+    T* array = nullptr;
+    size_t length = 0;
     size_t allocated = 0;
 };
 
@@ -97,10 +98,10 @@ private:
 
 struct Voice
 {
-	bool held;
-	int16_t channel;
+    bool held;
+    int16_t channel;
     int16_t key;
-	float phase;
+    float phase;
     float parameterOffsets[P_COUNT];
 };
 
@@ -111,7 +112,10 @@ struct MyEditor : public yup::AudioProcessorEditor
     {
         x = std::make_unique<yup::Slider> ("Slider", yup::Font());
         x->setValue (audioProcessor.getParameter (0).getValue());
-        x->onValueChanged = [this](float value) { audioProcessor.getParameter (0).setValue (value); };
+        x->onValueChanged = [this] (float value)
+        {
+            audioProcessor.getParameter (0).setValue (value);
+        };
         addAndMakeVisible (*x);
 
         setSize (getPreferredSize().to<float>());
@@ -149,8 +153,8 @@ struct MyEditor : public yup::AudioProcessorEditor
 
 struct MyPlugin : public yup::AudioProcessor
 {
-	float sampleRate;
-	Array<Voice> voices;
+    float sampleRate;
+    Array<Voice> voices;
     yup::AudioProcessorParameter currentParameters[P_COUNT];
 
     MyPlugin()
@@ -201,20 +205,20 @@ struct MyPlugin : public yup::AudioProcessor
         float* outputL = audioBuffer.getWritePointer (0);
         float* outputR = audioBuffer.getWritePointer (1);
 
-		int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
+        int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
         auto midiIterator = midiBuffer.begin();
 
-		for (int currentSample = 0; currentSample < numSamples;)
+        for (int currentSample = 0; currentSample < numSamples;)
         {
-			while (midiIterator != midiBuffer.end() && nextEventSample == currentSample)
+            while (midiIterator != midiBuffer.end() && nextEventSample == currentSample)
             {
                 const auto& event = *midiIterator;
 
-				if (event.samplePosition != currentSample)
+                if (event.samplePosition != currentSample)
                 {
-					nextEventSample = event.samplePosition;
-					break;
-				}
+                    nextEventSample = event.samplePosition;
+                    break;
+                }
 
                 ++midiIterator;
 
@@ -240,8 +244,7 @@ struct MyPlugin : public yup::AudioProcessor
                 // If this is a note on event, create a new voice and add it to our array.
                 if (message.isNoteOn())
                 {
-                    Voice voice =
-                    {
+                    Voice voice = {
                         .held = true,
                         .channel = static_cast<int16_t> (message.getChannel()),
                         .key = static_cast<int16_t> (message.getNoteNumber()),
@@ -262,7 +265,7 @@ struct MyPlugin : public yup::AudioProcessor
                 }
 
                 // TODO - clap supports per voice modulations: clap_event_param_mod_t
-			}
+            }
 
             if (midiIterator == midiBuffer.end())
                 nextEventSample = numSamples;
@@ -290,21 +293,21 @@ struct MyPlugin : public yup::AudioProcessor
                 *outputL++ = sum;
                 *outputR++ = sum;
             }
-		}
+        }
 
         midiBuffer.clear();
 
-		for (int i = 0; i < voices.Length(); i++)
+        for (int i = 0; i < voices.Length(); i++)
         {
-			Voice* voice = &voices[i];
+            Voice* voice = &voices[i];
 
-			if (voice->held)
+            if (voice->held)
                 continue;
 
             midiBuffer.addEvent (yup::MidiMessage::noteOff (voice->channel, voice->key), 0);
 
             voices.Delete (i--);
-		}
+        }
     }
 
     void flush() override
