@@ -722,7 +722,7 @@ TEST_F (ListenerListTests, ClearListenersDuringCallback)
     EXPECT_FALSE (called);
 }
 
-#if !JUCE_WASM
+#if ! JUCE_WASM
 class MyListenerType
 {
 public:
