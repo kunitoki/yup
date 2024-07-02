@@ -35,6 +35,7 @@ FetchContent_MakeAvailable (googletest)
 
 # ==== Create executable
 set (target_name yup_tests)
+set (target_modules juce_core juce_events juce_audio_basics juce_audio_devices)
 
 enable_testing()
 
@@ -43,10 +44,7 @@ yup_standalone_app (
     DEFINITIONS
         JUCE_USE_CURL=0
     MODULES
-        juce_core
-        juce_events
-        juce_audio_basics
-        juce_audio_devices
+        ${target_modules}
         GTest::gtest_main
         GTest::gmock_main
 )

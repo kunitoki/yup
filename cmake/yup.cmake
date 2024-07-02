@@ -19,7 +19,7 @@
 
 #==============================================================================
 
-#list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/tools")
+#list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tools")
 
 #==============================================================================
 
@@ -72,7 +72,7 @@ endfunction()
 #==============================================================================
 
 macro(_yup_setup_platform)
-    if (IOS)
+    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR PLATFORM STREQUAL "OS64")
         set (yup_platform "ios")
     elseif (ANDROID)
         set (yup_platform "android")
@@ -525,7 +525,7 @@ function (yup_standalone_app)
     set (additional_link_options "")
 
     # ==== Find dependencies
-    if (NOT "${yup_platform}" STREQUAL "emscripten")
+    if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
         include (FetchContent)
 
         FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
@@ -545,6 +545,8 @@ function (yup_standalone_app)
     # ==== Per platform configuration
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
         if (NOT YUP_ARG_CONSOLE)
+            get_filename_component (plist_path "../cmake/platforms/${yup_platform}/Info.plist" REALPATH BASE_DIR "${CMAKE_BINARY_DIR}")
+
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
                 CXX_EXTENSIONS                                 OFF
@@ -552,7 +554,7 @@ function (yup_standalone_app)
                 MACOSX_BUNDLE_NAME                             "${target_name}"
                 MACOSX_BUNDLE_VERSION                          "1.0.0"
                 #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-                MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/platforms/macos/Info.plist"
+                MACOSX_BUNDLE_INFO_PLIST                       "${plist_path}"
                 #RESOURCE                                       "${RESOURCE_FILES}"
                 #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
                 XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
@@ -675,7 +677,7 @@ function (yup_audio_plugin)
         #        MACOSX_BUNDLE_NAME                             "${target_name}"
         #        MACOSX_BUNDLE_VERSION                          "1.0.0"
         #        #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-        #        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_LIST_DIR}/platforms/macos/Info.plist"
+        #        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist"
         #        #RESOURCE                                       "${RESOURCE_FILES}"
         #        #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
         #        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
