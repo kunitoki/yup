@@ -19,7 +19,9 @@
   ==============================================================================
 */
 
+#define YUP_ZLIB_INTERNAL_NOUNDEF
 #include "zlib.h"
+#undef YUP_ZLIB_INTERNAL_NOUNDEF
 
 #include <cstdlib>
 #include <cstdio>
@@ -70,13 +72,6 @@ namespace zlibNamespace {
 #include "src/inftrees.c"
 #include "src/trees.c"
 #include "src/zutil.c"
-#undef Byte
-#undef fdopen
-#undef local
-#undef Freq
-#undef Code
-#undef Dad
-#undef Len
 
 } // namespace zlibNamespace
 
