@@ -34,6 +34,7 @@ option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
 # Dependencies modules
+yup_add_module (thirdparty/zlib)
 yup_add_module (thirdparty/glad)
 yup_add_module (thirdparty/harfbuzz)
 yup_add_module (thirdparty/sheenbidi)
