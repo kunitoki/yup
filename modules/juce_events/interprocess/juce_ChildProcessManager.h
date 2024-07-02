@@ -91,7 +91,7 @@ public:
 
         This registration is deleted when the returned ErasedScopedGuard is deleted.
     */
-    auto   addChildProcessExitedListener (std::function<void (ChildProcess*)> listener)
+    auto addChildProcessExitedListener (std::function<void (ChildProcess*)> listener)
     {
         return listeners.addListener (std::move (listener));
     }
