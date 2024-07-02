@@ -41,15 +41,6 @@ jobs:
             !**/zlib/**
             !**/oboe/**
 
-      - name: Configure repository
-        run: |
-          git init
-          git fetch origin ${GITHUB_REF#*refs/heads/}
-          git checkout ${GITHUB_REF#*refs/heads/}
-          git config --global user.email "clang-format@1337z.ninja"
-          git config --global user.name "Clang Format"
-          git update-index --assume-unchanged .github/workflows/*
-
       - name: Run clang-format
         working-directory: ${{ github.workspace }}
         env:
@@ -59,7 +50,10 @@ jobs:
           clang-format -style=file -i $ALL_CHANGED_FILES
           git diff
 
-      #- name: Push changes
-      #  run: |
-      #    git commit -a -m "Apply code formatting" || true
-      #    git push -u origin ${GITHUB_REF#*refs/heads/}
+      - name: Push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Code formatting
+          commit_user_name: Yup Bot
+          commit_user_email: yup-bot@users.noreply.github.com
+          commit_author: Yup Bot <yup-bot@users.noreply.github.com>

@@ -40,24 +40,24 @@
 namespace juce
 {
 /** Manages a set of ChildProcesses and periodically checks their return value. Upon completion
-        it calls listeners added with addChildProcessExitedListener().
+    it calls listeners added with addChildProcessExitedListener().
 
-        This class is mostly aimed for usage on Linux, where terminated child processes are only
-        cleaned up if their return code is read after termination. In order to ensure this one needs
-        to call ChildProcess::isFinished() until it returns false or
-        ChildProcess::waitForProcessToFinish() until it returns true.
+    This class is mostly aimed for usage on Linux, where terminated child processes are only
+    cleaned up if their return code is read after termination. In order to ensure this one needs
+    to call ChildProcess::isFinished() until it returns false or
+    ChildProcess::waitForProcessToFinish() until it returns true.
 
-        This class will keep querying the return code on a Timer thread until the process
-        terminates. This can be handy if one wants to start and stop multiple ChildProcesses on
-        Linux that could take a long time to complete.
+    This class will keep querying the return code on a Timer thread until the process
+    terminates. This can be handy if one wants to start and stop multiple ChildProcesses on
+    Linux that could take a long time to complete.
 
-        Since this class uses a Timer to check subprocess status, it's generally only safe to
-        access the returned ChildProcesses from the message thread.
+    Since this class uses a Timer to check subprocess status, it's generally only safe to
+    access the returned ChildProcesses from the message thread.
 
-        @see ChildProcessManagerSingleton
+    @see ChildProcessManagerSingleton
 
-        @tags{Events}
-    */
+    @tags{Events}
+*/
 class JUCE_API ChildProcessManager final : private DeletedAtShutdown
 {
 public:
@@ -67,12 +67,12 @@ public:
 
     /** Creates a new ChildProcess and starts it with the provided arguments.
 
-            The arguments are the same as the overloads to ChildProcess::start().
+        The arguments are the same as the overloads to ChildProcess::start().
 
-            The manager will keep the returned ChildProcess object alive until it terminates and its
-            return value has been queried. Calling ChildProcess::kill() on the returned object will
-            eventually cause its removal from the ChildProcessManager after it terminates.
-        */
+        The manager will keep the returned ChildProcess object alive until it terminates and its
+        return value has been queried. Calling ChildProcess::kill() on the returned object will
+        eventually cause its removal from the ChildProcessManager after it terminates.
+    */
     template <typename... Args>
     std::shared_ptr<ChildProcess> createAndStartManagedChildProcess (Args&&... args)
     {
@@ -89,16 +89,16 @@ public:
 
     /** Registers a callback function that is called for every ChildProcess that terminated.
 
-            This registration is deleted when the returned ErasedScopedGuard is deleted.
-        */
+        This registration is deleted when the returned ErasedScopedGuard is deleted.
+    */
     auto addChildProcessExitedListener (std::function<void (ChildProcess*)> listener)
     {
         return listeners.addListener (std::move (listener));
     }
 
     /** Returns true if the ChildProcessManager contains any running ChildProcesses that it's
-            monitoring.
-        */
+        monitoring.
+    */
     auto hasRunningProcess() const
     {
         return timer.isTimerRunning();
