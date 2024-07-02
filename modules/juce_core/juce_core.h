@@ -55,7 +55,7 @@
   license:            ISC
   minimumCppStandard: 17
 
-  dependencies:
+  dependencies:       zlib
   OSXFrameworks:      Cocoa Foundation IOKit Security
   iOSFrameworks:      Foundation
   linuxLibs:          rt dl pthread
