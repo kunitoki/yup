@@ -38,8 +38,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     Font (const Font& other) noexcept = default;
     Font (Font&& other) noexcept = default;
-    Font& operator=(const Font& other) noexcept = default;
-    Font& operator=(Font&& other) noexcept = default;
+    Font& operator= (const Font& other) noexcept = default;
+    Font& operator= (Font&& other) noexcept = default;
 
     //==============================================================================
     Result loadFromData (const MemoryBlock& fontBytes, rive::Factory* factory);

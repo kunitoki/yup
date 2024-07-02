@@ -52,7 +52,7 @@ namespace yup
 
 float GetDawnWindowBackingScaleFactor (void* window, bool retina)
 {
-    NSWindow* nsWindow = (__bridge NSWindow*)window;
+    NSWindow* nsWindow = (__bridge NSWindow*) window;
     return retina ? nsWindow.backingScaleFactor : 1;
 }
 
@@ -60,19 +60,19 @@ std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor (voi
 {
     @autoreleasepool
     {
-        NSWindow* nsWindow = (__bridge NSWindow*)window;
+        NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
 
         // Create a CAMetalLayer that covers the whole window that will be passed to CreateSurface.
-        [view setWantsLayer: YES];
-        [view setLayer: [CAMetalLayer layer]];
+        [view setWantsLayer:YES];
+        [view setLayer:[CAMetalLayer layer]];
 
         // Use retina if the window was created with retina support.
         [[view layer] setContentsScale:GetDawnWindowBackingScaleFactor (window, retina)];
 
         auto desc = std::make_unique<wgpu::SurfaceDescriptorFromMetalLayer>();
-        desc->layer = (__bridge void*)[view layer];
-        return std::move(desc);
+        desc->layer = (__bridge void*) [view layer];
+        return std::move (desc);
     }
 }
 

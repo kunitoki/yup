@@ -43,8 +43,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr RectangleList (const RectangleList& other) noexcept = default;
     constexpr RectangleList (RectangleList&& other) noexcept = default;
-    constexpr RectangleList& operator=(const RectangleList& other) noexcept = default;
-    constexpr RectangleList& operator=(RectangleList&& other) noexcept = default;
+    constexpr RectangleList& operator= (const RectangleList& other) noexcept = default;
+    constexpr RectangleList& operator= (RectangleList&& other) noexcept = default;
 
     //==============================================================================
     /** Adds a rectangle to the list.
@@ -214,10 +214,14 @@ public:
 
         for (const auto& rect : rectangles)
         {
-            if (minX > rect.getX())                     minX = rect.getX();
-            if (minY > rect.getY())                     minY = rect.getY();
-            if (maxX > rect.getX() + rect.getWidth())   maxX = rect.getX() + rect.getWidth();
-            if (maxY > rect.getY() + rect.getHeight())  maxY = rect.getY() + rect.getHeight();
+            if (minX > rect.getX())
+                minX = rect.getX();
+            if (minY > rect.getY())
+                minY = rect.getY();
+            if (maxX > rect.getX() + rect.getWidth())
+                maxX = rect.getX() + rect.getWidth();
+            if (maxY > rect.getY() + rect.getHeight())
+                maxY = rect.getY() + rect.getHeight();
         }
 
         return { minX, minY, maxX - minX, maxY - minY };
@@ -279,7 +283,7 @@ private:
                 {
                     existingRect = existingRect.smallestContainingRectangle (*it);
 
-                    it = rectangles.erase(it);
+                    it = rectangles.erase (it);
 
                     furtherMerged = true;
                     break;

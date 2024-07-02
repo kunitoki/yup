@@ -343,9 +343,7 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addArc (float x, float y, float width, float height,
-                 float fromRadians, float toRadians,
-                 bool startAsNewSubPath);
+    void addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     /** Adds an arc described by a Rectangle object to the path.
 
@@ -359,7 +357,8 @@ public:
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
     void addArc (const Rectangle<float>& rect,
-                 float fromRadians, float toRadians,
+                 float fromRadians,
+                 float toRadians,
                  bool startAsNewSubPath);
 
     /** Adds a centered arc to the path.
@@ -376,9 +375,7 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addCenteredArc (float centerX, float centerY, float radiusX, float radiusY,
-                         float rotationOfEllipse, float fromRadians, float toRadians,
-                         bool startAsNewSubPath);
+    void addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     /** Adds a centered arc described by a Point object to the path.
 
@@ -394,13 +391,9 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addCenteredArc (const Point<float>& center, float radiusX, float radiusY,
-                         float rotationOfEllipse, float fromRadians, float toRadians,
-                         bool startAsNewSubPath);
+    void addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
-    void addCenteredArc (const Point<float>& center, const Size<float>& diameter,
-                         float rotationOfEllipse, float fromRadians, float toRadians,
-                         bool startAsNewSubPath);
+    void addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     //==============================================================================
     /** Appends another path to this one.

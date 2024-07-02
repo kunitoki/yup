@@ -29,8 +29,7 @@ namespace Colors
 
 std::optional<Color> getNamedColor (StringRef colorName)
 {
-    static const std::unordered_map<String, Color> namedColors =
-    {
+    static const std::unordered_map<String, Color> namedColors = {
         { "aliceblue", aliceblue },
         { "antiquewhite", antiquewhite },
         { "aqua", aqua },

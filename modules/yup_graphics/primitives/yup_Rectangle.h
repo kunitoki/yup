@@ -98,7 +98,7 @@ public:
 
         @param other The source rectangle from which to convert.
     */
-    template <class T, class = std::enable_if_t<!std::is_same_v<T, ValueType>>>
+    template <class T, class = std::enable_if_t<! std::is_same_v<T, ValueType>>>
     constexpr Rectangle (const Rectangle<T>& other) noexcept
         : xy (other.getPosition().template to<ValueType>())
         , size (other.getSize().template to<ValueType>())
@@ -110,8 +110,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr Rectangle (const Rectangle& other) noexcept = default;
     constexpr Rectangle (Rectangle&& other) noexcept = default;
-    constexpr Rectangle& operator=(const Rectangle& other) noexcept = default;
-    constexpr Rectangle& operator=(Rectangle&& other) noexcept = default;
+    constexpr Rectangle& operator= (const Rectangle& other) noexcept = default;
+    constexpr Rectangle& operator= (Rectangle&& other) noexcept = default;
 
     //==============================================================================
     /** Returns the x-coordinate of the rectangle's top-left corner.
@@ -812,8 +812,8 @@ public:
     constexpr Rectangle& reduce (ValueType delta) noexcept
     {
         xy = { xy.getX() + delta, xy.getY() + delta };
-        size = { jmax (ValueType (0), size.getWidth () - ValueType (2) * delta),
-                 jmax (ValueType (0), size.getHeight () - ValueType (2) * delta) };
+        size = { jmax (ValueType (0), size.getWidth() - ValueType (2) * delta),
+                 jmax (ValueType (0), size.getHeight() - ValueType (2) * delta) };
 
         return *this;
     }
@@ -830,8 +830,8 @@ public:
     constexpr Rectangle& reduce (ValueType deltaX, ValueType deltaY) noexcept
     {
         xy = { xy.getX() + deltaX, xy.getY() + deltaY };
-        size = { jmax (ValueType (0), size.getWidth () - ValueType (2) * deltaX),
-                 jmax (ValueType (0), size.getHeight () - ValueType (2) * deltaY) };
+        size = { jmax (ValueType (0), size.getWidth() - ValueType (2) * deltaX),
+                 jmax (ValueType (0), size.getHeight() - ValueType (2) * deltaY) };
 
         return *this;
     }
@@ -840,8 +840,8 @@ public:
     constexpr Rectangle& reduce (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
     {
         xy = { xy.getX() + left, xy.getY() + top };
-        size = { jmax (ValueType (0), size.getWidth () - (left + right)),
-                 jmax (ValueType (0), size.getHeight () - (top + bottom)) };
+        size = { jmax (ValueType (0), size.getWidth() - (left + right)),
+                 jmax (ValueType (0), size.getHeight() - (top + bottom)) };
 
         return *this;
     }
@@ -929,8 +929,8 @@ public:
     constexpr Rectangle& enlarge (ValueType delta) noexcept
     {
         xy = { xy.getX() - delta, xy.getY() - delta };
-        size = { jmax (ValueType (0), size.getWidth () + ValueType (2) * delta),
-                 jmax (ValueType (0), size.getHeight () + ValueType (2) * delta) };
+        size = { jmax (ValueType (0), size.getWidth() + ValueType (2) * delta),
+                 jmax (ValueType (0), size.getHeight() + ValueType (2) * delta) };
 
         return *this;
     }
@@ -947,8 +947,8 @@ public:
     constexpr Rectangle& enlarge (ValueType deltaX, ValueType deltaY) noexcept
     {
         xy = { xy.getX() - deltaX, xy.getY() - deltaY };
-        size = { jmax (ValueType (0), size.getWidth () + ValueType (2) * deltaX),
-                 jmax (ValueType (0), size.getHeight () + ValueType (2) * deltaY) };
+        size = { jmax (ValueType (0), size.getWidth() + ValueType (2) * deltaX),
+                 jmax (ValueType (0), size.getHeight() + ValueType (2) * deltaY) };
 
         return *this;
     }
@@ -957,8 +957,8 @@ public:
     constexpr Rectangle& enlarge (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
     {
         xy = { xy.getX() - left, xy.getY() - top };
-        size = { jmax (ValueType (0), size.getWidth () + (left + right)),
-                 jmax (ValueType (0), size.getHeight () + (top + bottom)) };
+        size = { jmax (ValueType (0), size.getWidth() + (left + right)),
+                 jmax (ValueType (0), size.getHeight() + (top + bottom)) };
 
         return *this;
     }
@@ -1036,8 +1036,7 @@ public:
     */
     [[nodiscard]] constexpr bool contains (ValueType x, ValueType y) const noexcept
     {
-        return
-            x >= xy.getX()
+        return x >= xy.getX()
             && y >= xy.getY()
             && x <= (xy.getX() + size.getWidth())
             && y <= (xy.getY() + size.getHeight());
@@ -1078,8 +1077,7 @@ public:
         const auto bottomRight = getBottomRight();
         const auto otherBottomRight = other.getBottomRight();
 
-        return !(getX() > otherBottomRight.getX() || bottomRight.getX() < other.getX() ||
-                 getY() > otherBottomRight.getY() || bottomRight.getY() < other.getY());
+        return ! (getX() > otherBottomRight.getX() || bottomRight.getX() < other.getX() || getY() > otherBottomRight.getY() || bottomRight.getY() < other.getY());
     }
 
     // TODO - doxygen
@@ -1163,12 +1161,12 @@ public:
         auto ry2 = jmax (y1, y2);
 
         xy = xy
-            .withX (static_cast<ValueType> (rx1))
-            .withY (static_cast<ValueType> (ry1));
+                 .withX (static_cast<ValueType> (rx1))
+                 .withY (static_cast<ValueType> (ry1));
 
         size = size
-            .withWidth (static_cast<ValueType> (rx2 - rx1))
-            .withHeight (static_cast<ValueType> (ry2 - ry1));
+                   .withWidth (static_cast<ValueType> (rx2 - rx1))
+                   .withHeight (static_cast<ValueType> (ry2 - ry1));
 
         return *this;
     }
@@ -1297,7 +1295,7 @@ public:
     */
     constexpr bool operator!= (const Rectangle& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:

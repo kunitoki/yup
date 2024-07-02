@@ -52,7 +52,7 @@ void StyledText::clear()
     textRuns.clear();
     glyphPaths.clear();
 
-    paragraphs = rive::SimpleArray<rive::Paragraph>{};
+    paragraphs = rive::SimpleArray<rive::Paragraph> {};
 }
 
 //==============================================================================
@@ -74,7 +74,7 @@ rive::TextRun StyledText::append (const Font& font,
                                   float lineHeight,
                                   const char text[])
 {
-    const uint8_t* ptr = (const uint8_t*)text;
+    const uint8_t* ptr = (const uint8_t*) text;
     uint32_t n = 0;
 
     while (*ptr != '\0')
@@ -172,7 +172,7 @@ float StyledText::layoutText (const rive::GlyphRun& run,
         auto rawpath = font->getPath (run.glyphs[i]);
         rawpath.transformInPlace (trans * scale);
 
-        glyphPaths.push_back (std::move(rawpath));
+        glyphPaths.push_back (std::move (rawpath));
 
         i += inc;
     }
@@ -220,6 +220,5 @@ float StyledText::layoutParagraph (const rive::Paragraph& paragraph,
 
     return origin.y + lines.back().bottom;
 }
-
 
 } // namespace yup

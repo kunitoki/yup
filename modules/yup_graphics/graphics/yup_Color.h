@@ -85,8 +85,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr Color (const Color& other) noexcept = default;
     constexpr Color (Color&& other) noexcept = default;
-    constexpr Color& operator=(const Color& other) noexcept = default;
-    constexpr Color& operator=(Color&& other) noexcept = default;
+    constexpr Color& operator= (const Color& other) noexcept = default;
+    constexpr Color& operator= (Color&& other) noexcept = default;
 
     //==============================================================================
     /** Returns the color as a 32-bit integer in ARGB format.
@@ -499,13 +499,18 @@ public:
     */
     constexpr static Color fromHSL (float h, float s, float l) noexcept
     {
-        auto hue2rgb = [](float p, float q, float t)
+        auto hue2rgb = [] (float p, float q, float t)
         {
-            if (t < 0.0f) t += 1.0f;
-            if (t > 1.0f) t -= 1.0f;
-            if (t < 1.0f / 6.0f) return p + (q - p) * 6.0f * t;
-            if (t < 1.0f / 2.0f) return q;
-            if (t < 2.0f / 3.0f) return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
+            if (t < 0.0f)
+                t += 1.0f;
+            if (t > 1.0f)
+                t -= 1.0f;
+            if (t < 1.0f / 6.0f)
+                return p + (q - p) * 6.0f * t;
+            if (t < 1.0f / 2.0f)
+                return q;
+            if (t < 2.0f / 3.0f)
+                return p + (q - p) * (2.0f / 3.0f - t) * 6.0f;
             return p;
         };
 
@@ -516,9 +521,9 @@ public:
             const float q = l < 0.5f ? l * (1.0f + s) : l + s - l * s;
             const float p = 2.0f * l - q;
 
-            r = hue2rgb(p, q, h + 1.0f / 3.0f);
-            g = hue2rgb(p, q, h);
-            b = hue2rgb(p, q, h - 1.0f / 3.0f);
+            r = hue2rgb (p, q, h + 1.0f / 3.0f);
+            g = hue2rgb (p, q, h);
+            b = hue2rgb (p, q, h - 1.0f / 3.0f);
         }
 
         return { static_cast<uint8> (r * 255), static_cast<uint8> (g * 255), static_cast<uint8> (b * 255) };
@@ -536,8 +541,7 @@ public:
     */
     constexpr Color brighter (float amount) noexcept
     {
-        return
-        {
+        return {
             a,
             normalizedToComponent (getRedFloat() + amount),
             normalizedToComponent (getGreenFloat() + amount),
@@ -649,8 +653,7 @@ public:
         auto random = Random();
         random.setSeedRandomly();
 
-        return
-        {
+        return {
             255,
             static_cast<uint8> (random.nextInt (255)),
             static_cast<uint8> (random.nextInt (255)),

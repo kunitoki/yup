@@ -58,8 +58,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr Size (const Size& other) noexcept = default;
     constexpr Size (Size&& other) noexcept = default;
-    constexpr Size& operator=(const Size& other) noexcept = default;
-    constexpr Size& operator=(Size&& other) noexcept = default;
+    constexpr Size& operator= (const Size& other) noexcept = default;
+    constexpr Size& operator= (Size&& other) noexcept = default;
 
     //==============================================================================
     /** Gets the width of the size.
@@ -547,7 +547,7 @@ public:
     */
     constexpr bool operator!= (const Size& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:

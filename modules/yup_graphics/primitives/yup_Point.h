@@ -79,8 +79,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr Point (const Point& other) noexcept = default;
     constexpr Point (Point&& other) noexcept = default;
-    constexpr Point& operator=(const Point& other) noexcept = default;
-    constexpr Point& operator=(Point&& other) noexcept = default;
+    constexpr Point& operator= (const Point& other) noexcept = default;
+    constexpr Point& operator= (Point&& other) noexcept = default;
 
     //==============================================================================
     /** Gets the x coordinate of this point.
@@ -813,7 +813,7 @@ public:
     */
     [[nodiscard]] constexpr Point abs() const noexcept
     {
-        return { std::abs (x), std::abs(y) };
+        return { std::abs (x), std::abs (y) };
     }
 
     /** Floors the coordinates of this point.
@@ -864,8 +864,7 @@ public:
     */
     [[nodiscard]] constexpr Point lerp (const Point& other, float delta) const noexcept
     {
-        return
-        {
+        return {
             static_cast<ValueType> ((1.0f - delta) * x + delta * other.x),
             static_cast<ValueType> ((1.0f - delta) * y + delta * other.y)
         };
@@ -1175,7 +1174,7 @@ public:
 
         @return A new Point object with negated coordinates.
     */
-    constexpr Point operator- () const noexcept
+    constexpr Point operator-() const noexcept
     {
         return reflectedOverOrigin();
     }
@@ -1206,7 +1205,7 @@ public:
     */
     constexpr bool operator!= (const Point& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:

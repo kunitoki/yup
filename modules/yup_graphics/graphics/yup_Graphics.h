@@ -36,7 +36,6 @@ class GraphicsContext;
 class JUCE_API Graphics
 {
 public:
-
     //==============================================================================
     /** Represents a saved state of the Graphics object.
 
@@ -210,7 +209,7 @@ public:
         @param y2 The y-coordinate of the second point.
         @param thickness The thickness of the line.
     */
-     void strokeLine (float x1, float y1, float x2, float y2);
+    void strokeLine (float x1, float y1, float x2, float y2);
 
     /** Draws a line between two points with a specified thickness.
 
@@ -218,7 +217,7 @@ public:
         @param p2 The second point.
         @param thickness The thickness of the line.
     */
-     void strokeLine (const Point<float>& p1, const Point<float>& p2);
+    void strokeLine (const Point<float>& p1, const Point<float>& p2);
 
     //==============================================================================
     /** Fills the entire drawing area with the current color or gradient.
@@ -249,14 +248,14 @@ public:
         @param height The height of the rectangle.
         @param thickness The thickness of the line used to draw the rectangle.
     */
-     void strokeRect (float x, float y, float width, float height);
+    void strokeRect (float x, float y, float width, float height);
 
     /** Draws a rectangle with a specified thickness.
 
         @param r The rectangle to draw.
         @param thickness The thickness of the line used to draw the rectangle.
     */
-     void strokeRect (const Rectangle<float>& r);
+    void strokeRect (const Rectangle<float>& r);
 
     //==============================================================================
     /** Fills a rounded rectangle with specific corner radii.
@@ -311,7 +310,7 @@ public:
         @param radiusBottomRight The radius of the bottom-right corner.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-     void strokeRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    void strokeRoundedRect (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     /** Draws a rounded rectangle with specific corner radii and a specified thickness.
 
@@ -322,7 +321,7 @@ public:
         @param radiusBottomRight The radius of the bottom-right corner.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-     void strokeRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    void strokeRoundedRect (const Rectangle<float>& r, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     /** Draws a rounded rectangle with a uniform corner radius and a specified thickness.
 
@@ -333,7 +332,7 @@ public:
         @param radius The radius of all corners.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-     void strokeRoundedRect (float x, float y, float width, float height, float radius);
+    void strokeRoundedRect (float x, float y, float width, float height, float radius);
 
     /** Draws a rounded rectangle with a uniform corner radius and a specified thickness.
 
@@ -341,7 +340,7 @@ public:
         @param radius The radius of all corners.
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
-     void strokeRoundedRect (const Rectangle<float>& r, float radius);
+    void strokeRoundedRect (const Rectangle<float>& r, float radius);
 
     //==============================================================================
     /** Draws a path with a specified thickness.
@@ -349,7 +348,7 @@ public:
         @param path The path to draw.
         @param thickness The thickness of the line used to draw the path.
     */
-     void strokePath (const Path& path);
+    void strokePath (const Path& path);
 
     /** Fills a path with the current color or gradient.
 
@@ -360,7 +359,7 @@ public:
     //==============================================================================
     /** Draws an attributed text.
     */
-     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
+    void strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
 
     //==============================================================================
     /** Clips the drawing area to the specified rectangle.

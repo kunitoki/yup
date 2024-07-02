@@ -46,14 +46,16 @@ public:
     float dpiScale (void*) const override { return 1.0f; }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
         m_swapchain.Reset();
 
-        DXGI_SWAP_CHAIN_DESC1 scd{};
+        DXGI_SWAP_CHAIN_DESC1 scd {};
         scd.Width = width;
         scd.Height = height;
         scd.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -90,7 +92,7 @@ public:
         {
             ComPtr<ID3D11Texture2D> backbuffer;
             VERIFY_OK (m_swapchain->GetBuffer (0,
-                                               __uuidof (ID3D11Texture2D),
+                                               __uuidof(ID3D11Texture2D),
                                                reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf())));
 
             m_renderTarget->setTargetTexture (backbuffer);
@@ -117,10 +119,10 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options 
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;
-    VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
+    VERIFY_OK (CreateDXGIFactory (__uuidof(IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
 
     ComPtr<IDXGIAdapter> adapter;
-    DXGI_ADAPTER_DESC adapterDesc{};
+    DXGI_ADAPTER_DESC adapterDesc {};
     PLSRenderContextD3DImpl::ContextOptions contextOptions;
 
     if (fiddleOptions.disableRasterOrdering)
@@ -157,7 +159,7 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options 
                                   gpu.ReleaseAndGetAddressOf(),
                                   nullptr,
                                   gpuContext.ReleaseAndGetAddressOf()));
-    if (!gpu || !gpuContext)
+    if (! gpu || ! gpuContext)
         return nullptr;
 
     printf ("D3D device: %S\n", adapterDesc.Description);

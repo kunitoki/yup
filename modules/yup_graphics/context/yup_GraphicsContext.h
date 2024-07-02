@@ -41,20 +41,20 @@ public:
         /** Default constructor, initializes the options with default values. */
         constexpr Options() noexcept = default;
 
-        bool retinaDisplay                 = true; ///< Whether the context supports Retina or high-DPI displays.
-        bool readableFramebuffer           = true; ///< Allows the framebuffer to be readable.
+        bool retinaDisplay = true;                  ///< Whether the context supports Retina or high-DPI displays.
+        bool readableFramebuffer = true;            ///< Allows the framebuffer to be readable.
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
-        bool enableReadPixels              = false; ///< Enables reading pixels directly from the framebuffer.
-        bool disableRasterOrdering         = false; ///< Disables specific raster ordering features for performance.
+        bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
+        bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
     };
 
     /** Enumerates supported graphics APIs. */
     enum Api
     {
-        OpenGL,  ///< Specifies the use of OpenGL for rendering.
-        Direct3D,///< Specifies the use of Direct3D for rendering.
-        Metal,   ///< Specifies the use of Metal for rendering.
-        Dawn     ///< Specifies the use of Dawn, a Vulkan-like API.
+        OpenGL,   ///< Specifies the use of OpenGL for rendering.
+        Direct3D, ///< Specifies the use of Direct3D for rendering.
+        Metal,    ///< Specifies the use of Metal for rendering.
+        Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
     };
 
     //==============================================================================
@@ -68,8 +68,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     GraphicsContext (const GraphicsContext& other) noexcept = delete;
     GraphicsContext (GraphicsContext&& other) noexcept = default;
-    GraphicsContext& operator=(const GraphicsContext& other) noexcept = delete;
-    GraphicsContext& operator=(GraphicsContext&& other) noexcept = default;
+    GraphicsContext& operator= (const GraphicsContext& other) noexcept = delete;
+    GraphicsContext& operator= (GraphicsContext&& other) noexcept = default;
 
     //==============================================================================
     /** Returns the DPI scale associated with a native handle.

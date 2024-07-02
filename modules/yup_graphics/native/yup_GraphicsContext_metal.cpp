@@ -44,24 +44,26 @@ public:
 
     float dpiScale (void* window) const override
     {
-        NSWindow* nsWindow = (__bridge NSWindow*)window;
+        NSWindow* nsWindow = (__bridge NSWindow*) window;
         return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1.0f;
     }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-        NSWindow* nsWindow = (__bridge NSWindow*)window;
+        NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
 
         m_swapchain = [CAMetalLayer layer];
         m_swapchain.device = m_gpu;
         m_swapchain.opaque = YES;
-        m_swapchain.framebufferOnly = !m_fiddleOptions.readableFramebuffer;
+        m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
         m_swapchain.displaySyncEnabled = NO;
@@ -77,7 +79,7 @@ public:
         return std::make_unique<rive::pls::PLSRenderer> (m_plsContext.get());
     }
 
-    void begin(const rive::pls::PLSRenderContext::FrameDescriptor& frameDescriptor) override
+    void begin (const rive::pls::PLSRenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_plsContext->beginFrame (frameDescriptor);
     }
@@ -93,7 +95,7 @@ public:
         }
 
         id<MTLCommandBuffer> flushCommandBuffer = [m_queue commandBuffer];
-        m_plsContext->flush({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*)flushCommandBuffer });
+        m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) flushCommandBuffer });
         [flushCommandBuffer commit];
 
         id<MTLCommandBuffer> presentCommandBuffer = [m_queue commandBuffer];

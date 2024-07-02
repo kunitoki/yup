@@ -19,37 +19,42 @@
   ==============================================================================
 */
 
-namespace yup {
+namespace yup
+{
 
 std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Options options)
 {
-   #if JUCE_MAC || JUCE_IOS
+#if JUCE_MAC || JUCE_IOS
     return createContext (Api::Metal, options);
-   #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
     return createContext (Api::Direct3D, options);
-   #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
+#elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
     return createContext (Api::OpenGL, options);
-   #else
+#else
     return nullptr;
-   #endif
+#endif
 }
 
 std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi, Options options)
 {
     switch (graphicsApi)
     {
-   #if JUCE_MAC || JUCE_IOS
-    case Api::Metal:        return juce_constructMetalGraphicsContext (options);
-   #elif JUCE_WINDOWS
-    case Api::Direct3D:     return juce_constructDirect3DGraphicsContext (options);
-   #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
-    case Api::OpenGL:       return juce_constructOpenGLGraphicsContext (options);
-   #endif
-    case Api::Dawn:         return juce_constructDawnGraphicsContext (options);
+#if JUCE_MAC || JUCE_IOS
+        case Api::Metal:
+            return juce_constructMetalGraphicsContext (options);
+#elif JUCE_WINDOWS
+        case Api::Direct3D:
+            return juce_constructDirect3DGraphicsContext (options);
+#elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
+        case Api::OpenGL:
+            return juce_constructOpenGLGraphicsContext (options);
+#endif
+        case Api::Dawn:
+            return juce_constructDawnGraphicsContext (options);
 
-    default:
-        Logger::outputDebugString ("Invalid API requested for current platform");
-        return nullptr;
+        default:
+            Logger::outputDebugString ("Invalid API requested for current platform");
+            return nullptr;
     }
 
     Logger::outputDebugString ("Failed to create the graphics context");

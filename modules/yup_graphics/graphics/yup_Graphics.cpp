@@ -23,7 +23,8 @@ namespace yup
 {
 
 //==============================================================================
-namespace {
+namespace
+{
 
 rive::StrokeJoin toStrokeJoin (StrokeJoin join) noexcept
 {
@@ -37,8 +38,7 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
 
 rive::Mat2D toMat2d (const yup::AffineTransform& t) noexcept
 {
-    return
-    {
+    return {
         t.getScaleX(),     // xx
         t.getShearX(),     // xy
         t.getShearY(),     // yx
@@ -118,11 +118,11 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 
 void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output, const AffineTransform& transform)
 {
-    auto newInput = input.morph ([&transform](auto point)
-    {
-        transform.transformPoints (point.x, point.y);
-        return point;
-    });
+    auto newInput = input.morph ([&transform] (auto point)
+                                 {
+                                     transform.transformPoints (point.x, point.y);
+                                     return point;
+                                 });
 
     newInput.addTo (output);
 }
@@ -443,8 +443,7 @@ void Graphics::fillRoundedRect (float x, float y, float width, float height, flo
 
     Path path;
     path.addRoundedRectangle (
-        x, y, width, height,
-        radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+        x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
     auto rawPath = toRawPath (path, options.getTransform());
     renderFillPath (rawPath, options);
@@ -472,8 +471,7 @@ void Graphics::strokeRoundedRect (float x, float y, float width, float height, f
 
     Path path;
     path.addRoundedRectangle (
-        x, y, width, height,
-        radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+        x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
     auto rawPath = toRawPath (path, options.getTransform());
     renderStrokePath (rawPath, options);

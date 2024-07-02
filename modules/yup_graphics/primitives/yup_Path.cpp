@@ -62,7 +62,7 @@ void Path::clear()
 
 void Path::moveTo (float x, float y)
 {
-    if (!data.empty())
+    if (! data.empty())
     {
         auto& segment = data.back();
         if (segment.type == SegmentType::MoveTo)
@@ -176,11 +176,7 @@ void Path::addRectangle (const Rectangle<float>& rect)
 
 //==============================================================================
 
-void Path::addRoundedRectangle (float x, float y, float width, float height,
-                                float radiusTopLeft,
-                                float radiusTopRight,
-                                float radiusBottomLeft,
-                                float radiusBottomRight)
+void Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
     reserveSpace (size() + 10);
 
@@ -275,28 +271,23 @@ void Path::addCenteredEllipse (const Point<float>& center, const Size<float>& di
 
 //==============================================================================
 
-void Path::addArc (float x, float y, float width, float height,
-                   float fromRadians, float toRadians,
-                   bool startAsNewSubPath)
+void Path::addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const float radiusX = width * 0.5f;
     const float radiusY = height * 0.5f;
 
-    addCenteredArc (x + radiusX, y + radiusY, radiusX, radiusY,
-                    0.0f, fromRadians, toRadians,
-                    startAsNewSubPath);
+    addCenteredArc (x + radiusX, y + radiusY, radiusX, radiusY, 0.0f, fromRadians, toRadians, startAsNewSubPath);
 }
 
 void Path::addArc (const Rectangle<float>& rect,
-                   float fromRadians, float toRadians,
+                   float fromRadians,
+                   float toRadians,
                    bool startAsNewSubPath)
 {
     addArc (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), fromRadians, toRadians, startAsNewSubPath);
 }
 
-void Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY,
-                           float rotationOfEllipse, float fromRadians, float toRadians,
-                           bool startAsNewSubPath)
+void Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const int segments = jlimit (2, 54, static_cast<int> ((toRadians - fromRadians) / 0.1f));
 
@@ -332,22 +323,14 @@ void Path::addCenteredArc (float centerX, float centerY, float radiusX, float ra
     }
 }
 
-void Path::addCenteredArc (const Point<float>& center, float radiusX, float radiusY,
-                           float rotationOfEllipse, float fromRadians, float toRadians,
-                           bool startAsNewSubPath)
+void Path::addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
-    addCenteredArc (center.getX(), center.getY(), radiusX, radiusY,
-                    rotationOfEllipse, fromRadians, toRadians,
-                    startAsNewSubPath);
+    addCenteredArc (center.getX(), center.getY(), radiusX, radiusY, rotationOfEllipse, fromRadians, toRadians, startAsNewSubPath);
 }
 
-void Path::addCenteredArc (const Point<float>& center, const Size<float>& diameter,
-                           float rotationOfEllipse, float fromRadians, float toRadians,
-                           bool startAsNewSubPath)
+void Path::addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
-    addCenteredArc (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f,
-                    rotationOfEllipse, fromRadians, toRadians,
-                    startAsNewSubPath);
+    addCenteredArc (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f, rotationOfEllipse, fromRadians, toRadians, startAsNewSubPath);
 }
 
 //==============================================================================
@@ -444,10 +427,11 @@ void Path::resetBoundingBox()
 }
 
 //==============================================================================
-namespace {
+namespace
+{
 bool isControlMarker (String::CharPointerType data)
 {
-    return !data.isEmpty() && String("MmLlHhVvQqCcSsZz").containsChar (*data);
+    return ! data.isEmpty() && String ("MmLlHhVvQqCcSsZz").containsChar (*data);
 }
 
 void skipWhitespace (String::CharPointerType& data)
@@ -468,7 +452,7 @@ bool parseFlag (String::CharPointerType& data, int& flag)
 
     String number;
 
-    while (!data.isEmpty())
+    while (! data.isEmpty())
     {
         if (data.isWhitespace() || *data == '.' || *data == ',' || *data == '-' || isControlMarker (data))
             break;
@@ -505,14 +489,15 @@ bool parseCoordinate (String::CharPointerType& data, float& coord)
         ++data;
     }
 
-    while (!data.isEmpty())
+    while (! data.isEmpty())
     {
         if (data.isWhitespace() || *data == ',' || *data == '-' || isControlMarker (data))
             break;
 
         if (*data == '.')
         {
-            if (pointFound) break;
+            if (pointFound)
+                break;
             pointFound = true;
         }
         else if (! (*data >= '0' && *data <= '9'))
@@ -557,8 +542,8 @@ void handleMoveTo (String::CharPointerType& data, Path& path, float& currentX, f
     float x, y;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinates (data, x, y))
+           && ! isControlMarker (data)
+           && parseCoordinates (data, x, y))
     {
         if (relative)
         {
@@ -580,8 +565,8 @@ void handleLineTo (String::CharPointerType& data, Path& path, float& currentX, f
     float x, y;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinates (data, x, y))
+           && ! isControlMarker (data)
+           && parseCoordinates (data, x, y))
     {
         if (relative)
         {
@@ -603,8 +588,8 @@ void handleHorizontalLineTo (String::CharPointerType& data, Path& path, float& c
     float x;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinate (data, x))
+           && ! isControlMarker (data)
+           && parseCoordinate (data, x))
     {
         if (relative)
             x += currentX;
@@ -622,8 +607,8 @@ void handleVerticalLineTo (String::CharPointerType& data, Path& path, float curr
     float y;
 
     while (! data.isEmpty()
-        && ! isControlMarker(data)
-        && parseCoordinate (data, y))
+           && ! isControlMarker (data)
+           && parseCoordinate (data, y))
     {
         if (relative)
             y += currentY;
@@ -641,9 +626,9 @@ void handleQuadTo (String::CharPointerType& data, Path& path, float& currentX, f
     float x1, y1, x, y;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinates (data, x1, y1)
-        && parseCoordinates (data, x, y))
+           && ! isControlMarker (data)
+           && parseCoordinates (data, x1, y1)
+           && parseCoordinates (data, x, y))
     {
         if (relative)
         {
@@ -667,8 +652,8 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
     float x, y;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinates (data, x, y))
+           && ! isControlMarker (data)
+           && parseCoordinates (data, x, y))
     {
         float cx, cy;
 
@@ -691,7 +676,7 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
             y += currentY;
         }
 
-        path.quadTo(cx, cy, x, y);
+        path.quadTo (cx, cy, x, y);
 
         // Update the current position
         currentX = x;
@@ -701,7 +686,7 @@ void handleSmoothQuadTo (String::CharPointerType& data, Path& path, float& curre
         lastQuadX = cx;
         lastQuadY = cy;
 
-        skipWhitespace(data);
+        skipWhitespace (data);
     }
 }
 
@@ -710,10 +695,10 @@ void handleCubicTo (String::CharPointerType& data, Path& path, float& currentX, 
     float x1, y1, x2, y2, x, y;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinates (data, x1, y1)
-        && parseCoordinates (data, x2, y2)
-        && parseCoordinates (data, x, y))
+           && ! isControlMarker (data)
+           && parseCoordinates (data, x1, y1)
+           && parseCoordinates (data, x2, y2)
+           && parseCoordinates (data, x, y))
     {
         if (relative)
         {
@@ -739,9 +724,9 @@ void handleSmoothCubicTo (String::CharPointerType& data, Path& path, float& curr
     float x2, y2, x, y;
 
     while (! data.isEmpty()
-        && ! isControlMarker (data)
-        && parseCoordinates (data, x2, y2)
-        && parseCoordinates (data, x, y))
+           && ! isControlMarker (data)
+           && parseCoordinates (data, x2, y2)
+           && parseCoordinates (data, x, y))
     {
         float cx1, cy1;
 
@@ -785,7 +770,7 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
     float rx, ry, xAxisRotation, x, y;
     int largeArc, sweep;
 
-    while (! data.isEmpty() && ! isControlMarker(data))
+    while (! data.isEmpty() && ! isControlMarker (data))
     {
         if (parseCoordinates (data, rx, ry)
             && parseCoordinate (data, xAxisRotation)
@@ -801,12 +786,12 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
 
             if (rx == 0 || ry == 0)
             {
-                path.lineTo(x, y);
+                path.lineTo (x, y);
 
                 currentX = x;
                 currentY = y;
 
-                skipWhitespace(data);
+                skipWhitespace (data);
                 continue;
             }
 
@@ -859,9 +844,12 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             float startAngle = std::atan2f (uy, ux);
             float deltaAngle = std::atan2f (ux * vy - uy * vx, ux * vx + uy * vy);
 
-            if (!sweep && deltaAngle > 0) {
+            if (! sweep && deltaAngle > 0)
+            {
                 deltaAngle -= MathConstants<float>::twoPi;
-            } else if (sweep && deltaAngle < 0) {
+            }
+            else if (sweep && deltaAngle < 0)
+            {
                 deltaAngle += MathConstants<float>::twoPi;
             }
 

@@ -24,7 +24,8 @@ namespace yup
 
 //==============================================================================
 
-namespace {
+namespace
+{
 int hexCharToInt (juce_wchar c) noexcept
 {
     return CharacterFunctions::getHexDigitValue (c);
@@ -63,7 +64,7 @@ Color parseHexColor (const String& hexString)
 
     if (length == 4) // #RGB
     {
-        uint8 red = static_cast<uint8>(hexCharToInt (data[1]) * 16 + hexCharToInt (data[1]));
+        uint8 red = static_cast<uint8> (hexCharToInt (data[1]) * 16 + hexCharToInt (data[1]));
         uint8 green = static_cast<uint8> (hexCharToInt (data[2]) * 16 + hexCharToInt (data[2]));
         uint8 blue = static_cast<uint8> (hexCharToInt (data[3]) * 16 + hexCharToInt (data[3]));
 
@@ -154,10 +155,10 @@ String Color::toStringRGB (bool withAlpha) const
 
 Color Color::fromString (const String& colorString)
 {
-    if (colorString.startsWith("#"))
+    if (colorString.startsWith ("#"))
         return parseHexColor (colorString);
 
-    else if (colorString.startsWithIgnoreCase("rgb"))
+    else if (colorString.startsWithIgnoreCase ("rgb"))
         return parseRGBColor (colorString);
 
     else

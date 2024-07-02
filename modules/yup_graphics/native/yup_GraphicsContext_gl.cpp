@@ -55,7 +55,8 @@ static void GLAPIENTRY err_msg_callback (GLenum source,
     {
         if (strcmp (message,
                     "API_ID_REDUNDANT_FBO performance warning has been generated. Redundant state "
-                    "change in glBindFramebuffer API call, FBO 0, \"\", already bound.") == 0)
+                    "change in glBindFramebuffer API call, FBO 0, \"\", already bound.")
+            == 0)
         {
             return;
         }
@@ -84,7 +85,7 @@ public:
 
 #if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
-        if (!gladLoadCustomLoader ((GLADloadproc) glfwGetProcAddress))
+        if (! gladLoadCustomLoader ((GLADloadproc) glfwGetProcAddress))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
             exit (-1);
@@ -126,7 +127,9 @@ public:
     }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override

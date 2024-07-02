@@ -93,8 +93,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr Line (const Line& other) noexcept = default;
     constexpr Line (Line&& other) noexcept = default;
-    constexpr Line& operator=(const Line& other) noexcept = default;
-    constexpr Line& operator=(Line&& other) noexcept = default;
+    constexpr Line& operator= (const Line& other) noexcept = default;
+    constexpr Line& operator= (Line&& other) noexcept = default;
 
     //==============================================================================
     /** Retrieves the start point of the line.
@@ -433,10 +433,7 @@ public:
     {
         proportionOfLength = jlimit (0.0f, 1.0f, proportionOfLength);
 
-        return { p1, {
-            static_cast<ValueType> (p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength),
-            static_cast<ValueType> (p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength)
-        } };
+        return { p1, { static_cast<ValueType> (p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength), static_cast<ValueType> (p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength) } };
     }
 
     /** Creates a new line segment from a specified proportion along the line to the original end point.
@@ -453,9 +450,9 @@ public:
     {
         proportionOfLength = jlimit (0.0f, 1.0f, proportionOfLength);
 
-        return { {
-            static_cast<ValueType> (p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength),
-            static_cast<ValueType> (p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength) }, p2 };
+        return { { static_cast<ValueType> (p1.getX() + (p2.getX() - p1.getX()) * proportionOfLength),
+                   static_cast<ValueType> (p1.getY() + (p2.getY() - p1.getY()) * proportionOfLength) },
+                 p2 };
     }
 
     //==============================================================================
@@ -527,7 +524,7 @@ public:
     template <class T>
     constexpr Line<T> to() const noexcept
     {
-        return { p1.template to<T> (), p2.template to<T> () };
+        return { p1.template to<T>(), p2.template to<T>() };
     }
 
     //==============================================================================
@@ -538,7 +535,7 @@ public:
 
         @return A new `Line` object with both points negated.
     */
-    constexpr Line operator- () const noexcept
+    constexpr Line operator-() const noexcept
     {
         return { -p1, -p2 };
     }
@@ -567,7 +564,7 @@ public:
     */
     constexpr bool operator!= (const Line& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:

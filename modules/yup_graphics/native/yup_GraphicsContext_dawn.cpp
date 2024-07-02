@@ -84,7 +84,10 @@ extern std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescript
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
-static float GetDawnWindowBackingScaleFactor (GLFWwindow*, bool retina) { return 1; }
+static float GetDawnWindowBackingScaleFactor (GLFWwindow*, bool retina)
+{
+    return 1;
+}
 
 static std::unique_ptr<wgpu::ChainedStruct> SetupDawnWindowAndGetSurfaceDescriptor (GLFWwindow* window, bool retina)
 {
@@ -101,26 +104,25 @@ public:
     LowLevelRenderContextDawnPLS (Options options)
         : m_options (options)
     {
-        WGPUInstanceDescriptor instanceDescriptor{};
+        WGPUInstanceDescriptor instanceDescriptor {};
         instanceDescriptor.features.timedWaitAnyEnable = true;
         m_instance = std::make_unique<dawn::native::Instance> (&instanceDescriptor);
 
-        wgpu::RequestAdapterOptions adapterOptions =
-        {
+        wgpu::RequestAdapterOptions adapterOptions = {
             .powerPreference = wgpu::PowerPreference::HighPerformance,
         };
 
         // Get an adapter for the backend to use, and create the device.
         auto adapters = m_instance->EnumerateAdapters (&adapterOptions);
 
-        wgpu::DawnAdapterPropertiesPowerPreference power_props{};
-        wgpu::AdapterProperties adapterProperties{};
+        wgpu::DawnAdapterPropertiesPowerPreference power_props {};
+        wgpu::AdapterProperties adapterProperties {};
         adapterProperties.nextInChain = &power_props;
 
         // Find the first adapter which satisfies the adapterType requirement.
-        auto isAdapterType = [&adapterProperties](const auto& adapter) -> bool
+        auto isAdapterType = [&adapterProperties] (const auto& adapter) -> bool
         {
-            adapter.GetProperties(&adapterProperties);
+            adapter.GetProperties (&adapterProperties);
             return adapterProperties.adapterType == wgpu::AdapterType::DiscreteGPU;
         };
 
@@ -131,8 +133,7 @@ public:
             return;
         }
 
-        std::vector<const char*> enableToggleNames =
-        {
+        std::vector<const char*> enableToggleNames = {
             "allow_unsafe_apis",
             "turn_off_vsync",
             // "skip_validation",
@@ -140,10 +141,8 @@ public:
 
         std::vector<const char*> disabledToggleNames;
 
-        WGPUDawnTogglesDescriptor toggles =
-        {
-            .chain =
-            {
+        WGPUDawnTogglesDescriptor toggles = {
+            .chain = {
                 .next = nullptr,
                 .sType = WGPUSType_DawnTogglesDescriptor,
             },
@@ -153,8 +152,7 @@ public:
             .disabledToggles = disabledToggleNames.data(),
         };
 
-        std::vector<WGPUFeatureName> requiredFeatures =
-        {
+        std::vector<WGPUFeatureName> requiredFeatures = {
             // WGPUFeatureName_IndirectFirstInstance,
             // WGPUFeatureName_ShaderF16,
             // WGPUFeatureName_BGRA8UnormStorage,
@@ -171,8 +169,7 @@ public:
             // WGPUFeatureName_ChromiumExperimentalReadWriteStorageTexture,
         };
 
-        WGPUDeviceDescriptor deviceDesc =
-        {
+        WGPUDeviceDescriptor deviceDesc = {
             .nextInChain = reinterpret_cast<WGPUChainedStruct*> (&toggles),
             .requiredFeatureCount = requiredFeatures.size(),
             .requiredFeatures = requiredFeatures.data(),
@@ -200,7 +197,9 @@ public:
     }
 
     Factory* factory() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+
     rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
@@ -209,14 +208,12 @@ public:
 
         // Create the swapchain
         auto surfaceChainedDesc = SetupDawnWindowAndGetSurfaceDescriptor (window, m_options.retinaDisplay);
-        WGPUSurfaceDescriptor surfaceDesc =
-        {
-            .nextInChain = reinterpret_cast<WGPUChainedStruct*>(surfaceChainedDesc.get()),
+        WGPUSurfaceDescriptor surfaceDesc = {
+            .nextInChain = reinterpret_cast<WGPUChainedStruct*> (surfaceChainedDesc.get()),
         };
         WGPUSurface surface = backendProcs.instanceCreateSurface (m_instance->Get(), &surfaceDesc);
 
-        WGPUSwapChainDescriptor swapChainDesc =
-        {
+        WGPUSwapChainDescriptor swapChainDesc = {
             .usage = WGPUTextureUsage_RenderAttachment,
             .format = WGPUTextureFormat_BGRA8Unorm,
             .width = static_cast<uint32_t> (width),
@@ -231,14 +228,14 @@ public:
         m_swapchain = wgpu::SwapChain::Acquire (backendSwapChain);
 
         m_renderTarget = m_plsContext->static_impl_cast<PLSRenderContextWebGPUImpl>()
-            ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, width, height);
+                             ->makeRenderTarget (wgpu::TextureFormat::BGRA8Unorm, width, height);
 
         m_pixelReadBuff = {};
     }
 
     std::unique_ptr<Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer>(m_plsContext.get());
+        return std::make_unique<PLSRenderer> (m_plsContext.get());
     }
 
     void begin (PLSRenderContext::FrameDescriptor&& frameDescriptor) override
@@ -286,7 +283,8 @@ std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsCont
 
 #else
 
-namespace yup {
+namespace yup
+{
 
 std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsContext::Options options)
 {

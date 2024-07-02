@@ -20,12 +20,12 @@
 */
 
 #ifdef YUP_GRAPHICS_H_INCLUDED
- /* When you add this cpp file to your project, you mustn't include it in a file where you've
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
  */
- #error "Incorrect use of YUP cpp file"
+#error "Incorrect use of YUP cpp file"
 #endif
 
 #include "yup_graphics.h"
@@ -33,26 +33,26 @@
 //==============================================================================
 
 #if JUCE_WINDOWS
- #include <array>
- #include <dxgi1_2.h>
+#include <array>
+#include <dxgi1_2.h>
 
- #include "native/yup_GraphicsContext_d3d.cpp"
+#include "native/yup_GraphicsContext_d3d.cpp"
 
 #elif JUCE_MAC || JUCE_IOS
- #import <Metal/Metal.h>
- #import <Cocoa/Cocoa.h>
- #import <QuartzCore/CAMetalLayer.h>
+#import <Metal/Metal.h>
+#import <Cocoa/Cocoa.h>
+#import <QuartzCore/CAMetalLayer.h>
 
- #include "native/yup_GraphicsContext_metal.cpp"
+#include "native/yup_GraphicsContext_metal.cpp"
 
 #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
 
- #if JUCE_EMSCRIPTEN && RIVE_WEBGL
-   #include <emscripten/emscripten.h>
-   #include <emscripten/html5.h>
- #endif
+#if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+#endif
 
- #include "native/yup_GraphicsContext_gl.cpp"
+#include "native/yup_GraphicsContext_gl.cpp"
 
 #endif
 

@@ -58,8 +58,12 @@ public:
         @param translateY Component that translates the y-coordinate.
     */
     constexpr AffineTransform (
-            float scaleX, float shearX, float translateX,
-            float shearY, float scaleY, float translateY) noexcept
+        float scaleX,
+        float shearX,
+        float translateX,
+        float shearY,
+        float scaleY,
+        float translateY) noexcept
         : scaleX (scaleX)
         , shearX (shearX)
         , translateX (translateX)
@@ -73,8 +77,8 @@ public:
     /** Copy and move constructors and assignment operators. */
     constexpr AffineTransform (const AffineTransform& other) noexcept = default;
     constexpr AffineTransform (AffineTransform&& other) noexcept = default;
-    constexpr AffineTransform& operator=(const AffineTransform& other) noexcept = default;
-    constexpr AffineTransform& operator=(AffineTransform&& other) noexcept = default;
+    constexpr AffineTransform& operator= (const AffineTransform& other) noexcept = default;
+    constexpr AffineTransform& operator= (AffineTransform&& other) noexcept = default;
 
     //==============================================================================
     /** Get scaleX component
@@ -236,8 +240,7 @@ public:
         const float cosTheta = std::cosf (angleInRadians);
         const float sinTheta = std::sinf (angleInRadians);
 
-        return
-        {
+        return {
             cosTheta * scaleX - sinTheta * shearY,
             cosTheta * shearX - sinTheta * scaleY,
             cosTheta * translateX - sinTheta * translateY,
@@ -319,8 +322,7 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform scaled (float factor) const noexcept
     {
-        return
-        {
+        return {
             factor * scaleX,
             factor * shearX,
             factor * translateX,
@@ -341,8 +343,7 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform scaled (float factorX, float factorY) const noexcept
     {
-        return
-        {
+        return {
             factorX * scaleX,
             factorX * shearX,
             factorX * translateX,
@@ -365,8 +366,7 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform scaled (float factorX, float factorY, float centerX, float centerY) const noexcept
     {
-        return
-        {
+        return {
             factorX * scaleX,
             factorX * shearX,
             factorX * translateX + centerX * (1.0f - factorX),
@@ -431,8 +431,7 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform sheared (float factorX, float factorY) const noexcept
     {
-        return
-        {
+        return {
             scaleX + factorX * shearY,
             shearX + factorX * scaleY,
             translateX,
@@ -467,8 +466,7 @@ public:
     */
     [[nodiscard]] constexpr AffineTransform followedBy (const AffineTransform& other) const noexcept
     {
-        return
-        {
+        return {
             scaleX * other.scaleX + shearY * other.shearX,
             shearX * other.scaleX + scaleY * other.shearX,
             translateX * other.scaleX + translateY * other.shearX + other.translateX,
@@ -522,7 +520,7 @@ public:
     {
         transformPoint (x, y);
 
-        if constexpr (sizeof... (Args) > 0)
+        if constexpr (sizeof...(Args) > 0)
             transformPoints (std::forward<Args> (args)...);
     }
 
@@ -555,7 +553,7 @@ public:
     */
     constexpr bool operator!= (const AffineTransform& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:
