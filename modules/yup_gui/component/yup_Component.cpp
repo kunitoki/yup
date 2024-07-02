@@ -62,14 +62,14 @@ String Component::getComponentID() const
 
 bool Component::isEnabled() const
 {
-    return !options.isDisabled;
+    return ! options.isDisabled;
 }
 
 void Component::setEnabled (bool shouldBeEnabled)
 {
-    if (options.isDisabled != !shouldBeEnabled)
+    if (options.isDisabled != ! shouldBeEnabled)
     {
-        options.isDisabled = !shouldBeEnabled;
+        options.isDisabled = ! shouldBeEnabled;
 
         //if (native != nullptr)
         //    native->setEnabled (shouldBeEnabled);
@@ -508,18 +508,27 @@ const NamedValueSet& Component::getProperties() const
 //==============================================================================
 
 void Component::paint (Graphics& g) {}
+
 void Component::paintOverChildren (Graphics& g) {}
 
 //==============================================================================
 
 void Component::mouseEnter (const MouseEvent& event) {}
+
 void Component::mouseExit (const MouseEvent& event) {}
+
 void Component::mouseDown (const MouseEvent& event) {}
+
 void Component::mouseMove (const MouseEvent& event) {}
+
 void Component::mouseDrag (const MouseEvent& event) {}
+
 void Component::mouseUp (const MouseEvent& event) {}
+
 void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
+
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
+
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
 
 //==============================================================================

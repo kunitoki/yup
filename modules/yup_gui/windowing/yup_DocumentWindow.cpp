@@ -42,8 +42,7 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
     if (auto display = desktop->getPrimaryDisplay())
     {
-        auto bounds = Rectangle<float>
-        {
+        auto bounds = Rectangle<float> {
             jmax (0.0f, static_cast<float> (display->workArea.getWidth() - size.getWidth()) / 2),
             jmax (0.0f, static_cast<float> (display->workArea.getHeight() - size.getHeight()) / 2),
             static_cast<float> (size.getWidth()),
@@ -56,7 +55,7 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
     }
     else
     {
-        setSize (size.to<float> ());
+        setSize (size.to<float>());
     }
 }
 

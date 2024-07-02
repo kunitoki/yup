@@ -200,11 +200,11 @@ private:
 
     struct Options
     {
-        bool isVisible          : 1;
-        bool isDisabled         : 1;
-        bool hasFrame           : 1;
-        bool onDesktop          : 1;
-        bool isFullScreen       : 1;
+        bool isVisible : 1;
+        bool isDisabled : 1;
+        bool hasFrame : 1;
+        bool onDesktop : 1;
+        bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
     };

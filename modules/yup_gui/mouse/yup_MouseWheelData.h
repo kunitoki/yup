@@ -83,7 +83,7 @@ public:
 
     constexpr bool operator!= (const MouseWheelData& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:

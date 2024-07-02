@@ -33,7 +33,7 @@ class JUCE_API KeyPress
 public:
     //==============================================================================
     /** Default constructor, initializes a key press with no key or modifiers. */
-    constexpr KeyPress () noexcept = default;
+    constexpr KeyPress() noexcept = default;
 
     /** Constructs a KeyPress with a specified key code.
 
@@ -128,7 +128,7 @@ public:
     */
     constexpr bool operator!= (const KeyPress& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
     //==============================================================================

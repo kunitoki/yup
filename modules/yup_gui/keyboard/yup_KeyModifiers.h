@@ -170,7 +170,7 @@ public:
     */
     constexpr bool operator!= (const KeyModifiers& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
 private:

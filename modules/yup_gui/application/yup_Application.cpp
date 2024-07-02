@@ -58,8 +58,8 @@ void YUPApplication::resumed()
 }
 
 void YUPApplication::unhandledException (const std::exception* ex,
-                                          const String& sourceFilename,
-                                          int lineNumber)
+                                         const String& sourceFilename,
+                                         int lineNumber)
 {
     ignoreUnused (ex, sourceFilename, lineNumber);
 }

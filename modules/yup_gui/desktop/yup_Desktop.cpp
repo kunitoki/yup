@@ -46,7 +46,7 @@ Display* Desktop::getDisplay (int displayIndex) const
 
 Display* Desktop::getPrimaryDisplay() const
 {
-    return !displays.isEmpty() ? getDisplay(0) : nullptr;
+    return ! displays.isEmpty() ? getDisplay (0) : nullptr;
 }
 
 JUCE_IMPLEMENT_SINGLETON (Desktop)

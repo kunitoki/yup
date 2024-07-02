@@ -160,8 +160,8 @@ void Slider::updateRenderItems (bool forceAll)
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
     const auto center = bounds.getCenter();
 
-    constexpr auto fromRadians = degreesToRadians(135.0f);
-    constexpr auto toRadians = fromRadians + degreesToRadians(270.0f);
+    constexpr auto fromRadians = degreesToRadians (135.0f);
+    constexpr auto toRadians = fromRadians + degreesToRadians (270.0f);
 
     if (forceAll)
     {
@@ -170,16 +170,24 @@ void Slider::updateRenderItems (bool forceAll)
 
         backgroundArc.clear();
         backgroundArc.addCenteredArc (center,
-                                        bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
-                                        fromRadians, toRadians, true);
+                                      bounds.getWidth() / 2.0f,
+                                      bounds.getHeight() / 2.0f,
+                                      0.0f,
+                                      fromRadians,
+                                      toRadians,
+                                      true);
     }
 
-    const auto toCurrentRadians = fromRadians + degreesToRadians(270.0f) * value;
+    const auto toCurrentRadians = fromRadians + degreesToRadians (270.0f) * value;
 
     foregroundArc.clear();
     foregroundArc.addCenteredArc (center,
-                                    bounds.getWidth() / 2.0f, bounds.getHeight() / 2.0f, 0.0f,
-                                    fromRadians, toCurrentRadians, true);
+                                  bounds.getWidth() / 2.0f,
+                                  bounds.getHeight() / 2.0f,
+                                  0.0f,
+                                  fromRadians,
+                                  toCurrentRadians,
+                                  true);
 
     const auto reducedBounds = bounds.reduced (proportionOfWidth (0.175f));
     const auto pos = center.getPointOnCircumference (

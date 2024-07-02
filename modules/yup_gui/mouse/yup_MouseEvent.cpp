@@ -118,9 +118,9 @@ MouseEvent MouseEvent::withSourceComponent (Component* newComponent) const noexc
 
 bool MouseEvent::operator== (const MouseEvent& other) const noexcept
 {
-    auto tie = [](const MouseEvent& x)
+    auto tie = [] (const MouseEvent& x)
     {
-        return std::make_tuple(
+        return std::make_tuple (
             x.buttons,
             x.modifiers,
             x.position,
@@ -132,7 +132,7 @@ bool MouseEvent::operator== (const MouseEvent& other) const noexcept
 
 bool MouseEvent::operator!= (const MouseEvent& other) const noexcept
 {
-    return !(*this == other);
+    return ! (*this == other);
 }
 
 } // namespace yup

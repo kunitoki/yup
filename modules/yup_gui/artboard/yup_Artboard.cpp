@@ -49,7 +49,7 @@ Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex,
     yup::MemoryBlock mb;
     is->readIntoMemoryBlock (mb);
 
-    rivFile = rive::File::import( { static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
+    rivFile = rive::File::import ({ static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
     artboardIndex = jlimit (-1, static_cast<int> (rivFile->artboardCount()) - 1, defaultArtboardIndex);
 
     horzRepeat = 0;
@@ -275,8 +275,8 @@ void Artboard::updateScenesFromFile (std::size_t count)
     for (size_t i = 0; i < count; ++i)
     {
         auto currentArtboard = (artboardIndex == -1)
-            ? rivFile->artboardDefault()
-            : rivFile->artboard (artboardIndex)->instance();
+                                 ? rivFile->artboardDefault()
+                                 : rivFile->artboard (artboardIndex)->instance();
 
         std::unique_ptr<rive::Scene> scene;
         rive::StateMachineInstance* stateMachine = nullptr;

@@ -64,6 +64,7 @@ KeyModifiers toKeyModifiers (int modifiers) noexcept
     return { modifiers };
 }
 
+// clang-format off
 KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 {
     const char32_t sc = static_cast<char32_t> (scancode);
@@ -120,7 +121,6 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
     case GLFW_KEY_GRAVE_ACCENT:     return { KeyPress::graveAccentKey, modifiers, sc };
     case GLFW_KEY_WORLD_1:          return { KeyPress::world1Key, modifiers, sc };
     case GLFW_KEY_WORLD_2:          return { KeyPress::world2Key, modifiers, sc };
-
     case GLFW_KEY_ESCAPE:           return { KeyPress::escapeKey, modifiers, sc };
     case GLFW_KEY_ENTER:            return { KeyPress::enterKey, modifiers, sc };
     case GLFW_KEY_TAB:              return { KeyPress::tabKey, modifiers, sc };
@@ -182,17 +182,14 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
     case GLFW_KEY_KP_ADD:           return { KeyPress::kpAddKey, modifiers, sc };
     case GLFW_KEY_KP_ENTER:         return { KeyPress::kpEnterKey, modifiers, sc };
     case GLFW_KEY_KP_EQUAL:         return { KeyPress::kpEqualKey, modifiers, sc };
-
     case GLFW_KEY_LEFT_SHIFT:       return { KeyPress::leftShiftKey, modifiers, sc };
     case GLFW_KEY_LEFT_CONTROL:     return { KeyPress::leftControlKey, modifiers, sc };
     case GLFW_KEY_LEFT_ALT:         return { KeyPress::leftAltKey, modifiers, sc };
     case GLFW_KEY_LEFT_SUPER:       return { KeyPress::leftSuperKey, modifiers, sc };
-
     case GLFW_KEY_RIGHT_SHIFT:      return { KeyPress::rightShiftKey, modifiers, sc };
     case GLFW_KEY_RIGHT_CONTROL:    return { KeyPress::rightControlKey, modifiers, sc };
     case GLFW_KEY_RIGHT_ALT:        return { KeyPress::rightAltKey, modifiers, sc };
     case GLFW_KEY_RIGHT_SUPER:      return { KeyPress::rightSuperKey, modifiers, sc };
-
     case GLFW_KEY_MENU:             return { KeyPress::menuKey, modifiers, sc };
 
     default:
@@ -201,6 +198,7 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
     return {};
 }
+// clang-format on
 
 //==============================================================================
 
@@ -211,8 +209,7 @@ Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
 
     GetWindowRect (reinterpret_cast<HWND> (nativeWindow), &windowRect);
 
-    return
-    {
+    return {
         windowRect.left,
         windowRect.top,
         windowRect.right - windowRect.left,
@@ -226,8 +223,7 @@ Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
     NSRect windowRect = [[view window] convertRectToScreen:viewRect];
     windowRect.origin.y = CGDisplayBounds (CGMainDisplayID()).size.height - (windowRect.origin.y + windowRect.size.height);
 
-    return
-    {
+    return {
         static_cast<int> (windowRect.origin.x),
         static_cast<int> (windowRect.origin.y),
         static_cast<int> (windowRect.size.width),
@@ -424,11 +420,11 @@ private:
 
     Rectangle<float> currentRepaintArea;
 
-   #if JUCE_MAC
+#if JUCE_MAC
     id<MTLDevice> gpu = nil;
     id<MTLCommandQueue> queue = nil;
     CAMetalLayer* swapchain = nullptr;
-   #endif
+#endif
 };
 
 //==============================================================================
@@ -445,13 +441,13 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     , desiredFrameRate (framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (flags.test (renderContinuous))
 {
-   #if JUCE_MAC
+#if JUCE_MAC
     gpu = MTLCreateSystemDefaultDevice();
     queue = [gpu newCommandQueue];
     swapchain = [CAMetalLayer layer];
     swapchain.device = gpu;
     swapchain.opaque = YES;
-   #endif
+#endif
 
     glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
     glfwWindowHint (GLFW_DECORATED, flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
@@ -465,20 +461,20 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     if (parent != nullptr)
         setNativeParent (nullptr, parent, window);
 
-   #if JUCE_MAC
+#if JUCE_MAC
     NSWindow* nswindow = glfwGetCocoaWindow (window);
     nswindow.contentView.layer = swapchain;
     nswindow.contentView.wantsLayer = YES;
-   #endif
+#endif
 
-    context = GraphicsContext::createContext (GraphicsContext::Options{});
+    context = GraphicsContext::createContext (GraphicsContext::Options {});
     if (context == nullptr)
         return;
 
-   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if JUCE_EMSCRIPTEN && RIVE_WEBGL
     glfwMakeContextCurrent (window);
     //glfwSwapInterval (0);
-   #endif
+#endif
 
     glfwSetWindowUserPointer (window, this);
 
@@ -492,32 +488,30 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     glfwSetKeyCallback (window, glfwKeyPress);
 
     setBounds (
-    {
-        screenBounds.getX(),
-        screenBounds.getY(),
-        jmax (1, screenBounds.getWidth()),
-        jmax (1, screenBounds.getHeight())
-    });
+        { screenBounds.getX(),
+          screenBounds.getY(),
+          jmax (1, screenBounds.getWidth()),
+          jmax (1, screenBounds.getHeight()) });
 
-   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if JUCE_EMSCRIPTEN && RIVE_WEBGL
     startTimerHz (desiredFrameRate);
-   #else
+#else
     startThread (Priority::high);
-   #endif
+#endif
 }
 
 GLFWComponentNative::~GLFWComponentNative()
 {
     jassert (window != nullptr);
 
-   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if JUCE_EMSCRIPTEN && RIVE_WEBGL
     stopTimer();
-   #else
+#else
     signalThreadShouldExit();
     renderEvent.signal();
     commandEvent.signal();
-    stopThread(-1);
-   #endif
+    stopThread (-1);
+#endif
 
     glfwSetWindowUserPointer (window, nullptr);
     glfwDestroyWindow (window);
@@ -540,12 +534,12 @@ void GLFWComponentNative::setTitle (const String& title)
 
 String GLFWComponentNative::getTitle() const
 {
-   #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
+#if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
     jassert (window != nullptr);
 
     if (auto title = glfwGetWindowTitle (window))
         return String::fromUTF8 (title);
-   #endif
+#endif
 
     return windowTitle;
 }
@@ -622,25 +616,25 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
-   #if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if JUCE_EMSCRIPTEN && RIVE_WEBGL
     const double devicePixelRatio = emscripten_get_device_pixel_ratio();
     glfwSetWindowSize (window,
-        static_cast<int> (newBounds.getWidth() * devicePixelRatio),
-        static_cast<int> (newBounds.getHeight() * devicePixelRatio));
+                       static_cast<int> (newBounds.getWidth() * devicePixelRatio),
+                       static_cast<int> (newBounds.getHeight() * devicePixelRatio));
 
-    emscripten_set_element_css_size("#canvas",
-        jmax (0, newBounds.getWidth()),
-        jmax (0, newBounds.getHeight()));
+    emscripten_set_element_css_size ("#canvas",
+                                     jmax (0, newBounds.getWidth()),
+                                     jmax (0, newBounds.getHeight()));
 
-   #else
+#else
     if (! isFullScreen() && isDecorated())
         glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
     glfwSetWindowSize (window,
-        jmax (0, newBounds.getWidth() - leftMargin - rightMargin),
-        jmax (0, newBounds.getHeight() - topMargin - bottomMargin));
+                       jmax (0, newBounds.getWidth() - leftMargin - rightMargin),
+                       jmax (0, newBounds.getHeight() - topMargin - bottomMargin));
 
-   #endif
+#endif
 
     //setPosition (newBounds.getPosition().translated (leftMargin, topMargin));
     glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
@@ -803,8 +797,7 @@ Point<float> GLFWComponentNative::getScaledCursorPosition() const
 
     const float dpiScale = getScaleDpi();
 
-    return
-    {
+    return {
         static_cast<float> (x * dpiScale),
         static_cast<float> (y * dpiScale)
     };
@@ -823,19 +816,19 @@ void* GLFWComponentNative::getNativeHandle() const
 {
     jassert (window != nullptr);
 
-   #if JUCE_MAC
+#if JUCE_MAC
     return (__bridge void*) glfwGetCocoaWindow (window);
 
-   #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
     return glfwGetWin32Window (window);
 
-   #elif JUCE_LINUX
+#elif JUCE_LINUX
     return glfwGetX11Window (window);
 
-   #else
+#else
     return nullptr;
 
-   #endif
+#endif
 }
 
 //==============================================================================
@@ -942,22 +935,22 @@ void GLFWComponentNative::renderContext()
         return;
 
     const auto loadAction = renderContinuous
-        ? rive::pls::LoadAction::clear
-        : rive::pls::LoadAction::preserveRenderTarget;
+                              ? rive::pls::LoadAction::clear
+                              : rive::pls::LoadAction::preserveRenderTarget;
 
     // Begin context drawing
     context->begin (
-    {
-        .renderTargetWidth = static_cast<uint32_t> (contentWidth),
-        .renderTargetHeight = static_cast<uint32_t> (contentHeight),
-        .loadAction = loadAction,
-        .clearColor = 0xff000000,
-        .msaaSampleCount = 0,
-        .disableRasterOrdering = renderAtomicMode,
-        .wireframe = renderWireframe,
-        .fillsDisabled = false,
-        .strokesDisabled = false,
-    });
+        {
+            .renderTargetWidth = static_cast<uint32_t> (contentWidth),
+            .renderTargetHeight = static_cast<uint32_t> (contentHeight),
+            .loadAction = loadAction,
+            .clearColor = 0xff000000,
+            .msaaSampleCount = 0,
+            .disableRasterOrdering = renderAtomicMode,
+            .wireframe = renderWireframe,
+            .fillsDisabled = false,
+            .strokesDisabled = false,
+        });
 
     // Repaint components hierarchy
     Graphics g (*context, *renderer);
@@ -992,15 +985,15 @@ void GLFWComponentNative::triggerRenderingUpdate()
 void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
 {
     const auto event = MouseEvent()
-        .withButtons (currentMouseButtons)
-        .withModifiers (currentKeyModifiers)
-        .withPosition (localPosition);
+                           .withButtons (currentMouseButtons)
+                           .withModifiers (currentKeyModifiers)
+                           .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
     {
         lastComponentClicked->internalMouseDrag (event
-            .withSourceComponent (lastComponentClicked)
-            //.withSourcePosition (lastMouseDownPosition)
+                                                     .withSourceComponent (lastComponentClicked)
+                                                 //.withSourcePosition (lastMouseDownPosition)
         );
     }
     else
@@ -1020,9 +1013,9 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     currentKeyModifiers = modifiers;
 
     const auto event = MouseEvent()
-        .withButtons (currentMouseButtons)
-        .withModifiers (currentKeyModifiers)
-        .withPosition (localPosition);
+                           .withButtons (currentMouseButtons)
+                           .withModifiers (currentKeyModifiers)
+                           .withPosition (localPosition);
 
     if (lastComponentClicked == nullptr)
     {
@@ -1035,8 +1028,8 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
         lastMouseDownPosition = localPosition;
 
         lastComponentClicked->internalMouseDown (event
-            .withSourceComponent (lastComponentClicked)
-            //.withSourcePosition (lastMouseDownPosition)
+                                                     .withSourceComponent (lastComponentClicked)
+                                                 //.withSourcePosition (lastMouseDownPosition)
         );
     }
 
@@ -1049,15 +1042,15 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     currentKeyModifiers = modifiers;
 
     const auto event = MouseEvent()
-        .withButtons (currentMouseButtons)
-        .withModifiers (currentKeyModifiers)
-        .withPosition (localPosition);
+                           .withButtons (currentMouseButtons)
+                           .withModifiers (currentKeyModifiers)
+                           .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
     {
         lastComponentClicked->internalMouseUp (event
-            .withSourceComponent (lastComponentClicked)
-            //.withSourcePosition (lastMouseDownPosition)
+                                                   .withSourceComponent (lastComponentClicked)
+                                               //.withSourcePosition (lastMouseDownPosition)
         );
     }
 
@@ -1076,9 +1069,9 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
 void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
 {
     const auto event = MouseEvent()
-        .withButtons (currentMouseButtons)
-        .withModifiers (currentKeyModifiers)
-        .withPosition (localPosition);
+                           .withButtons (currentMouseButtons)
+                           .withModifiers (currentKeyModifiers)
+                           .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
     {
@@ -1275,9 +1268,9 @@ void Desktop::updateDisplays()
             continue;
 
         auto display = std::make_unique<Display>();
-       #if !(JUCE_EMSCRIPTEN && RIVE_WEBGL)
+#if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
         glfwSetMonitorUserPointer (monitor, display.get());
-       #endif
+#endif
 
         int physicalWidth = 0, physicalHeight = 0;
         glfwGetMonitorPhysicalSize (monitor, &physicalWidth, &physicalHeight);
@@ -1316,39 +1309,43 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    glfwSetErrorCallback (+[](int code, const char* message)
-    {
-        DBG ("GLFW Error: " << code << " - " << message);
-    });
+    glfwSetErrorCallback (+[] (int code, const char* message)
+                          {
+                              DBG ("GLFW Error: " << code << " - " << message);
+                          });
 
     glfwInit();
 
-   #if JUCE_MAC || JUCE_WINDOWS
+#if JUCE_MAC || JUCE_WINDOWS
     glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
-   #elif defined (ANGLE)
+#elif defined(ANGLE)
     glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
     glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
     glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-   #else
+#else
     glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
     glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 6);
-   #endif
+#endif
 
     Desktop::getInstance()->updateDisplays();
 
-    glfwSetMonitorCallback (+[](GLFWmonitor* monitor, int event)
-    {
-        auto desktop = Desktop::getInstance();
+    glfwSetMonitorCallback (+[] (GLFWmonitor* monitor, int event)
+                            {
+                                auto desktop = Desktop::getInstance();
 
-        if (event == GLFW_CONNECTED) {}
-        else if (event == GLFW_DISCONNECTED) {}
+                                if (event == GLFW_CONNECTED)
+                                {
+                                }
+                                else if (event == GLFW_DISCONNECTED)
+                                {
+                                }
 
-        desktop->updateDisplays();
-    });
+                                desktop->updateDisplays();
+                            });
 
     GLFWComponentNative::isInitialised.test_and_set();
 }
