@@ -45,7 +45,6 @@ LambdaBodyIndentation: Signature
 Language: Cpp
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
-NamespaceMacros: [ TEST, TEST_F ]
 PackConstructorInitializers: Never
 PointerAlignment: Left
 PPIndentWidth: 0

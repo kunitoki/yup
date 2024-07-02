@@ -45,7 +45,7 @@
 class MockListener
 {
 public:
-    MOCK_METHOD (void, myCallbackMethod, (int, bool));
+    MOCK_METHOD (void, myCallbackMethod, (int, bool) );
 };
 
 TEST (ListenerList, Add_Remove_Contains)
@@ -64,7 +64,7 @@ TEST (ListenerList, Add_Remove_Contains)
     EXPECT_TRUE (listeners.contains (&listener2));
 
     listeners.clear();
-    EXPECT_FALSE(listeners.contains (&listener2));
+    EXPECT_FALSE (listeners.contains (&listener2));
 }
 
 TEST (ListenerList, Call)
@@ -100,6 +100,7 @@ TEST (ListenerList, Call_Checked)
     struct BailOutChecker
     {
         int callCount = 0;
+
         bool shouldBailOut() const { return callCount > 0; }
     };
 
@@ -123,6 +124,7 @@ TEST (ListenerList, Call_Checked_Excluding)
     struct BailOutChecker
     {
         int callCount = 0;
+
         bool shouldBailOut() const { return callCount > 0; }
     };
 
@@ -130,8 +132,8 @@ TEST (ListenerList, Call_Checked_Excluding)
     MockListener listener1, listener2;
     BailOutChecker checker;
 
-    listeners.add(&listener1);
-    listeners.add(&listener2);
+    listeners.add (&listener1);
+    listeners.add (&listener2);
 
     EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
     EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
@@ -213,7 +215,10 @@ TEST (ListenerList, Call_During_Callback)
     listeners.add (&listener2);
 
     EXPECT_CALL (listener1, myCallbackMethod (1234, true))
-        .WillOnce (testing::Invoke ([&](int, bool) { listeners.add (&listener1); }));
+        .WillOnce (testing::Invoke ([&] (int, bool)
+                                    {
+                                        listeners.add (&listener1);
+                                    }));
     EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
 
     listeners.call (&MockListener::myCallbackMethod, 1234, true);
@@ -229,7 +234,10 @@ TEST (ListenerList, Remove_During_Callback)
     listeners.add (&listener2);
 
     EXPECT_CALL (listener1, myCallbackMethod (1234, true))
-        .WillOnce (testing::Invoke ([&](int, bool) { listeners.remove (&listener2); }));
+        .WillOnce (testing::Invoke ([&] (int, bool)
+                                    {
+                                        listeners.remove (&listener2);
+                                    }));
 
     EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
 
@@ -246,8 +254,10 @@ TEST (ListenerList, Clear_During_Callback)
     listeners.add (&listener1);
     listeners.add (&listener2);
 
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1)
-        .WillOnce (testing::Invoke ([&](int, bool) { listeners.clear(); }));
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1).WillOnce (testing::Invoke ([&] (int, bool)
+                                                                                                {
+                                                                                                    listeners.clear();
+                                                                                                }));
     EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
 
     listeners.call (&MockListener::myCallbackMethod, 1234, true);
@@ -262,8 +272,10 @@ TEST (ListenerList, Nested_Call)
     listeners.add (&listener1);
     listeners.add (&listener2);
 
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1)
-        .WillOnce (testing::Invoke ([&](int, bool) { listeners.call (&MockListener::myCallbackMethod, 5678, false); }));
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1).WillOnce (testing::Invoke ([&] (int, bool)
+                                                                                                {
+                                                                                                    listeners.call (&MockListener::myCallbackMethod, 5678, false);
+                                                                                                }));
     EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
     EXPECT_CALL (listener1, myCallbackMethod (5678, false)).Times (1);
     EXPECT_CALL (listener2, myCallbackMethod (5678, false)).Times (1);
@@ -277,7 +289,10 @@ protected:
     class TestListener
     {
     public:
-        explicit TestListener (std::function<void()> cb) : callback (std::move (cb)) {}
+        explicit TestListener (std::function<void()> cb)
+            : callback (std::move (cb))
+        {
+        }
 
         void doCallback()
         {
@@ -306,22 +321,25 @@ protected:
         void callListeners()
         {
             ++callLevel;
-            listenerList.call([] (auto& l) { l.doCallback(); });
+            listenerList.call ([] (auto& l)
+                               {
+                                   l.doCallback();
+                               });
             --callLevel;
         }
 
-        int getNumListeners() const { return (int)listeners.size(); }
+        int getNumListeners() const { return (int) listeners.size(); }
 
-        auto& getListener (int i) { return *listeners[(size_t)i]; }
+        auto& getListener (int i) { return *listeners[(size_t) i]; }
 
         int getCallLevel() const { return callLevel; }
 
         bool wereAllNonRemovedListenersCalled (int numCalls) const
         {
             return std::all_of (std::begin (listeners), std::end (listeners), [&] (auto& listener)
-            {
-                return (!listenerList.contains(listener.get())) || listener->getNumCalls() == numCalls;
-            });
+                                {
+                                    return (! listenerList.contains (listener.get())) || listener->getNumCalls() == numCalls;
+                                });
         }
 
     private:
@@ -333,7 +351,7 @@ protected:
     static std::set<int> chooseUnique (juce::Random& random, int max, int numChosen)
     {
         std::set<int> result;
-        while ((int)result.size() < numChosen)
+        while ((int) result.size() < numChosen)
             result.insert (random.nextInt ({ 0, max }));
         return result;
     }
@@ -345,14 +363,14 @@ TEST_F (ListenerListTests, RemovingAlreadyCalledListener)
     for (int i = 0; i < 20; ++i)
     {
         test.addListener ([i, &test]
-        {
-            if (i == 5)
-                test.removeListener(6);
-        });
+                          {
+                              if (i == 5)
+                                  test.removeListener (6);
+                          });
     }
 
     test.callListeners();
-    EXPECT_TRUE (test.wereAllNonRemovedListenersCalled(1));
+    EXPECT_TRUE (test.wereAllNonRemovedListenersCalled (1));
 }
 
 TEST_F (ListenerListTests, RemovingYetUncalledListener)
@@ -361,10 +379,10 @@ TEST_F (ListenerListTests, RemovingYetUncalledListener)
     for (int i = 0; i < 20; ++i)
     {
         test.addListener ([i, &test]
-        {
-            if (i == 5)
-                test.removeListener(4);
-        });
+                          {
+                              if (i == 5)
+                                  test.removeListener (4);
+                          });
     }
 
     test.callListeners();
@@ -377,13 +395,13 @@ TEST_F (ListenerListTests, RemoveMultipleListenersInCallback)
     for (int i = 0; i < 20; ++i)
     {
         test.addListener ([i, &test]
-        {
-            if (i == 19)
-            {
-                test.removeListener (19);
-                test.removeListener (0);
-            }
-        });
+                          {
+                              if (i == 19)
+                              {
+                                  test.removeListener (19);
+                                  test.removeListener (0);
+                              }
+                          });
     }
 
     test.callListeners();
@@ -406,14 +424,14 @@ TEST_F (ListenerListTests, RemovingListenersRandomly)
         for (int i = 0; i < numListeners; ++i)
         {
             test.addListener ([i, &removals, &test]
-            {
-                const auto iter = removals.find(i);
-                if (iter == removals.end())
-                    return;
+                              {
+                                  const auto iter = removals.find (i);
+                                  if (iter == removals.end())
+                                      return;
 
-                for (auto j : iter->second)
-                    test.removeListener (j);
-            });
+                                  for (auto j : iter->second)
+                                      test.removeListener (j);
+                              });
         }
 
         test.callListeners();
@@ -428,10 +446,10 @@ TEST_F (ListenerListTests, AddListenerDuringIteration)
     for (int i = 0; i < numStartingListeners; ++i)
     {
         test.addListener ([i, &test]
-        {
-            if (i == 5 || i == 6)
-                test.addListener ([] {});
-        });
+                          {
+                              if (i == 5 || i == 6)
+                                  test.addListener ([] {});
+                          });
     }
 
     test.callListeners();
@@ -452,19 +470,19 @@ TEST_F (ListenerListTests, NestedCall)
     for (int i = 0; i < 20; ++i)
     {
         test.addListener ([i, &test]
-        {
-            const auto callLevel = test.getCallLevel();
-            if (i == 6 && callLevel == 1)
-                test.callListeners();
+                          {
+                              const auto callLevel = test.getCallLevel();
+                              if (i == 6 && callLevel == 1)
+                                  test.callListeners();
 
-            if (i == 5)
-            {
-                if (callLevel == 1)
-                    test.removeListener (4);
-                else if (callLevel == 2)
-                    test.removeListener (6);
-            }
-        });
+                              if (i == 5)
+                              {
+                                  if (callLevel == 1)
+                                      test.removeListener (4);
+                                  else if (callLevel == 2)
+                                      test.removeListener (6);
+                              }
+                          });
     }
 
     test.callListeners();
@@ -485,21 +503,21 @@ TEST_F (ListenerListTests, RandomCall)
         for (int i = 0; i < numListeners; ++i)
         {
             test.addListener ([&]
-            {
-                const auto callLevel = test.getCallLevel();
-                if (callLevel < 4 && random.nextFloat() < 0.05f)
-                {
-                    ++numCalls;
-                    test.callListeners();
-                }
+                              {
+                                  const auto callLevel = test.getCallLevel();
+                                  if (callLevel < 4 && random.nextFloat() < 0.05f)
+                                  {
+                                      ++numCalls;
+                                      test.callListeners();
+                                  }
 
-                if (random.nextFloat() < 0.5f)
-                {
-                    const auto listenerToRemove = random.nextInt ({ 0, numListeners });
-                    if (listenersToRemove.erase (listenerToRemove) > 0)
-                        test.removeListener (listenerToRemove);
-                }
-            });
+                                  if (random.nextFloat() < 0.5f)
+                                  {
+                                      const auto listenerToRemove = random.nextInt ({ 0, numListeners });
+                                      if (listenersToRemove.erase (listenerToRemove) > 0)
+                                          test.removeListener (listenerToRemove);
+                                  }
+                              });
         }
 
         while (listenersToRemove.size() > 0)
@@ -517,6 +535,7 @@ TEST_F (ListenerListTests, DeletingListenerListFromCallback)
     struct Listener
     {
         std::function<void()> onCallback;
+
         void notify() { onCallback(); }
     };
 
@@ -543,6 +562,7 @@ TEST_F (ListenerListTests, BailOutChecker)
     struct Listener
     {
         std::function<void()> onCallback;
+
         void notify() { onCallback(); }
     };
 
@@ -551,9 +571,18 @@ TEST_F (ListenerListTests, BailOutChecker)
     bool listener2Called = false;
     bool listener3Called = false;
 
-    Listener listener1 { [&] { listener1Called = true; } };
-    Listener listener2 { [&] { listener2Called = true; } };
-    Listener listener3 { [&] { listener3Called = true; } };
+    Listener listener1 { [&]
+                         {
+                             listener1Called = true;
+                         } };
+    Listener listener2 { [&]
+                         {
+                             listener2Called = true;
+                         } };
+    Listener listener3 { [&]
+                         {
+                             listener3Called = true;
+                         } };
 
     listeners.add (&listener1);
     listeners.add (&listener2);
@@ -562,6 +591,7 @@ TEST_F (ListenerListTests, BailOutChecker)
     struct BailOutChecker
     {
         bool& bailOutBool;
+
         bool shouldBailOut() const { return bailOutBool; }
     };
 
@@ -578,16 +608,19 @@ TEST_F (ListenerListTests, CriticalSection)
     struct Listener
     {
         std::function<void()> onCallback;
+
         void notify() { onCallback(); }
     };
 
     struct TestCriticalSection
     {
-        TestCriticalSection()  { isAlive() = true; }
+        TestCriticalSection() { isAlive() = true; }
+
         ~TestCriticalSection() { isAlive() = false; }
 
         static void enter() noexcept { numOutOfScopeCalls() += isAlive() ? 0 : 1; }
-        static void exit() noexcept  { numOutOfScopeCalls() += isAlive() ? 0 : 1; }
+
+        static void exit() noexcept { numOutOfScopeCalls() += isAlive() ? 0 : 1; }
 
         static bool tryEnter() noexcept
         {
@@ -612,7 +645,10 @@ TEST_F (ListenerListTests, CriticalSection)
 
     auto listeners = std::make_unique<juce::ListenerList<Listener, juce::Array<Listener*, TestCriticalSection>>>();
 
-    const auto callback = [&] { listeners.reset(); };
+    const auto callback = [&]
+    {
+        listeners.reset();
+    };
 
     Listener listener { callback };
 
@@ -625,7 +661,9 @@ TEST_F (ListenerListTests, CriticalSection)
 
 TEST_F (ListenerListTests, AddListenerDuringCallback)
 {
-    struct Listener {};
+    struct Listener
+    {
+    };
 
     juce::ListenerList<Listener> listeners;
     EXPECT_EQ (listeners.size(), 0);
@@ -636,27 +674,29 @@ TEST_F (ListenerListTests, AddListenerDuringCallback)
 
     bool listenerCalled = false;
 
-    listeners.call ([&](auto& l)
-    {
-        listeners.remove (&l);
-        EXPECT_EQ (listeners.size(), 0);
+    listeners.call ([&] (auto& l)
+                    {
+                        listeners.remove (&l);
+                        EXPECT_EQ (listeners.size(), 0);
 
-        listeners.add (&l);
-        EXPECT_EQ (listeners.size(), 1);
+                        listeners.add (&l);
+                        EXPECT_EQ (listeners.size(), 1);
 
-        listenerCalled = true;
-    });
+                        listenerCalled = true;
+                    });
 
     EXPECT_TRUE (listenerCalled);
     EXPECT_EQ (listeners.size(), 1);
 }
 
-
 TEST_F (ListenerListTests, ClearListenersDuringCallback)
 {
     struct Listener
     {
-        Listener (std::function<void()> callbackIn) : callback (std::move (callbackIn)) {}
+        Listener (std::function<void()> callbackIn)
+            : callback (std::move (callbackIn))
+        {
+        }
 
         std::function<void()> callback;
 
@@ -666,8 +706,14 @@ TEST_F (ListenerListTests, ClearListenersDuringCallback)
     yup::ListenerList<Listener> listeners;
 
     bool called = false;
-    Listener listener1 { [&]{ listeners.clear(); } };
-    Listener listener2 { [&]{ called = true; } };
+    Listener listener1 { [&]
+                         {
+                             listeners.clear();
+                         } };
+    Listener listener2 { [&]
+                         {
+                             called = true;
+                         } };
 
     listeners.add (&listener1);
     listeners.add (&listener2);
@@ -679,7 +725,7 @@ TEST_F (ListenerListTests, ClearListenersDuringCallback)
 class MyListenerType
 {
 public:
-    void myCallbackMethod(int foo, bool bar)
+    void myCallbackMethod (int foo, bool bar)
     {
         std::lock_guard lock (mutex);
 
@@ -741,7 +787,10 @@ TEST_F (ListenerListTests, ThreadSafeAddRemoveListeners)
     auto callListeners = [&]
     {
         for (int i = 0; i < 1000; ++i)
-            listeners.call ([](MyListenerType& l) { l.myCallbackMethod (1234, true); });
+            listeners.call ([] (MyListenerType& l)
+                            {
+                                l.myCallbackMethod (1234, true);
+                            });
     };
 
     std::thread thread1 (addListeners);
@@ -767,7 +816,10 @@ TEST_F (ListenerListTests, ThreadSafeCallListeners)
     auto callListeners = [&]
     {
         for (int i = 0; i < 1000; ++i)
-            listeners.call ([](MyListenerType& l) { l.myCallbackMethod (1234, true); });
+            listeners.call ([] (MyListenerType& l)
+                            {
+                                l.myCallbackMethod (1234, true);
+                            });
     };
 
     std::thread thread1 (callListeners);
@@ -794,7 +846,10 @@ TEST_F (ListenerListTests, ThreadSafeAddRemoveWhileCalling)
     auto callListeners = [&]
     {
         for (int i = 0; i < 1000; ++i)
-            listeners.call ([](MyListenerType& l) { l.myCallbackMethod (1234, true); });
+            listeners.call ([] (MyListenerType& l)
+                            {
+                                l.myCallbackMethod (1234, true);
+                            });
     };
 
     auto addRemoveListeners = [&]

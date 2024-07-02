@@ -201,13 +201,13 @@ TEST (AbstractFifoTests, ScopedWriteReadWrapAround)
     } // writeHandle goes out of scope here
 
     {
-        auto readHandle = fifo.read(5);
-        EXPECT_EQ(readHandle.blockSize1, 5);
-        EXPECT_EQ(readHandle.blockSize2, 0);
+        auto readHandle = fifo.read (5);
+        EXPECT_EQ (readHandle.blockSize1, 5);
+        EXPECT_EQ (readHandle.blockSize2, 0);
     } // readHandle goes out of scope here
 
     {
-        auto writeHandle = fifo.write(5);
+        auto writeHandle = fifo.write (5);
         EXPECT_EQ (writeHandle.blockSize1, 1);
         EXPECT_EQ (writeHandle.blockSize2, 4);
     } // writeHandle goes out of scope here
@@ -227,7 +227,10 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
     struct WriteThread : public Thread
     {
         WriteThread (AbstractFifo& f, int* b, Random rng)
-            : Thread ("WriterThread"), fifo (f), buffer (b), random (rng)
+            : Thread ("WriterThread")
+            , fifo (f)
+            , buffer (b)
+            , random (rng)
         {
         }
 
@@ -254,7 +257,10 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
                 ASSERT_TRUE (writer.blockSize2 == 0
                              || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
 
-                writer.forEach ([this, &n] (int index)  { this->buffer[index] = n++; });
+                writer.forEach ([this, &n] (int index)
+                                {
+                                    this->buffer[index] = n++;
+                                });
             }
         }
 
@@ -279,10 +285,10 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
         auto reader = fifo.read (num);
 
         if (! (reader.blockSize1 >= 0 && reader.blockSize2 >= 0)
-                && (reader.blockSize1 == 0
-                    || (reader.startIndex1 >= 0 && reader.startIndex1 < fifo.getTotalSize()))
-                && (reader.blockSize2 == 0
-                    || (reader.startIndex2 >= 0 && reader.startIndex2 < fifo.getTotalSize())))
+            && (reader.blockSize1 == 0
+                || (reader.startIndex1 >= 0 && reader.startIndex1 < fifo.getTotalSize()))
+            && (reader.blockSize2 == 0
+                || (reader.startIndex2 >= 0 && reader.startIndex2 < fifo.getTotalSize())))
         {
             FAIL() << "prepareToRead returned negative values";
             break;
@@ -291,9 +297,9 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
         bool failed = false;
 
         reader.forEach ([&failed, &buffer, &n] (int index)
-        {
-            failed = (buffer[index] != n++) || failed;
-        });
+                        {
+                            failed = (buffer[index] != n++) || failed;
+                        });
 
         if (failed)
         {

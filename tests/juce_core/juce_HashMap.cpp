@@ -45,16 +45,17 @@ template <typename KeyType>
 class RandomKeys
 {
 public:
-    RandomKeys (int maxUniqueKeys, int seed) : r(seed)
+    RandomKeys (int maxUniqueKeys, int seed)
+        : r (seed)
     {
         for (int i = 0; i < maxUniqueKeys; ++i)
-            keys.add (generateRandomKey(r));
+            keys.add (generateRandomKey (r));
     }
 
     KeyType next()
     {
         int i = r.nextInt (keys.size() - 1);
-        return keys.getReference(i);
+        return keys.getReference (i);
     }
 
 private:
@@ -65,10 +66,16 @@ private:
 };
 
 template <>
-int RandomKeys<int>::generateRandomKey (juce::Random& rnd) { return rnd.nextInt(); }
+int RandomKeys<int>::generateRandomKey (juce::Random& rnd)
+{
+    return rnd.nextInt();
+}
 
 template <>
-void* RandomKeys<void*>::generateRandomKey (juce::Random& rnd) { return reinterpret_cast<void*> (static_cast<uintptr_t> (rnd.nextInt64())); }
+void* RandomKeys<void*>::generateRandomKey (juce::Random& rnd)
+{
+    return reinterpret_cast<void*> (static_cast<uintptr_t> (rnd.nextInt64()));
+}
 
 template <>
 juce::String RandomKeys<juce::String>::generateRandomKey (juce::Random& rnd)
@@ -83,7 +90,11 @@ juce::String RandomKeys<juce::String>::generateRandomKey (juce::Random& rnd)
 template <typename KeyType, typename ValueType>
 struct AssociativeMap
 {
-    struct KeyValuePair { KeyType key; ValueType value; };
+    struct KeyValuePair
+    {
+        KeyType key;
+        ValueType value;
+    };
 
     juce::Array<KeyValuePair> pairs;
 
@@ -154,7 +165,7 @@ TEST_F (HashMapTests, BasicOperations)
 TEST_F (HashMapTests, NonExistingKey)
 {
     juce::HashMap<int, std::string> map;
-    EXPECT_EQ (map[999], "");  // Default string is empty
+    EXPECT_EQ (map[999], ""); // Default string is empty
 }
 
 TEST_F (HashMapTests, ContainsKey)
@@ -282,8 +293,8 @@ TEST_F (HashMapTests, SwapMaps)
 
 TEST_F (HashMapTests, IteratorValidityAcrossModifications)
 {
-    juce::HashMap<int, std::string>::Iterator it(threeMap);
-    it.next(); // move to first element
+    juce::HashMap<int, std::string>::Iterator it (threeMap);
+    it.next();                // move to first element
     threeMap.set (4, "four"); // Modify map after iterator creation
 
     // Test whether iterator continues safely
@@ -364,7 +375,11 @@ TEST_F (HashMapTests, RemoveTest)
 
 TEST_F (HashMapTests, PersistentMemoryLocationOfValues)
 {
-    struct AddressAndValue { int value; const int* valueAddress; };
+    struct AddressAndValue
+    {
+        int value;
+        const int* valueAddress;
+    };
 
     AssociativeMap<int, AddressAndValue> addresses;
     RandomKeys<int> keyOracle (300, 3827829);

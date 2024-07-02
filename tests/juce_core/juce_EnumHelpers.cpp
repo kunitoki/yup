@@ -45,15 +45,15 @@ using namespace juce;
 
 namespace
 {
-    enum class TestEnum
-    {
-        one    = 1 << 0,
-        four   = 1 << 1,
-        other  = 1 << 2
-    };
+enum class TestEnum
+{
+    one = 1 << 0,
+    four = 1 << 1,
+    other = 1 << 2
+};
 
-    JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (TestEnum)
-}
+JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (TestEnum)
+} // namespace
 
 TEST (ScopedEnumBitwiseOperatorsTests, BitwiseOrOperator)
 {
@@ -66,7 +66,7 @@ TEST (ScopedEnumBitwiseOperatorsTests, BitwiseAndOperator)
     TestEnum e = TestEnum::one | TestEnum::four;
     EXPECT_EQ (e & TestEnum::one, TestEnum::one);
     EXPECT_EQ (e & TestEnum::four, TestEnum::four);
-    EXPECT_EQ (e & TestEnum::other, TestEnum{});
+    EXPECT_EQ (e & TestEnum::other, TestEnum {});
 }
 
 TEST (ScopedEnumBitwiseOperatorsTests, BitwiseNotOperator)
@@ -92,9 +92,9 @@ TEST (ScopedEnumBitwiseOperatorsTests, BitwiseAndAssignmentOperator)
 TEST (ScopedEnumBitwiseOperatorsTests, HasBitValueSet)
 {
     TestEnum e = TestEnum::one | TestEnum::four;
-    EXPECT_TRUE (hasBitValueSet(e, TestEnum::one));
-    EXPECT_TRUE (hasBitValueSet(e, TestEnum::four));
-    EXPECT_FALSE (hasBitValueSet(e, TestEnum::other));
+    EXPECT_TRUE (hasBitValueSet (e, TestEnum::one));
+    EXPECT_TRUE (hasBitValueSet (e, TestEnum::four));
+    EXPECT_FALSE (hasBitValueSet (e, TestEnum::other));
 }
 
 TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSet)
@@ -114,8 +114,8 @@ TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueCleared)
 TEST (ScopedEnumBitwiseOperatorsTests, DefaultInitializedEnumIsNone)
 {
     TestEnum e = {};
-    EXPECT_EQ (e, TestEnum{});
-    EXPECT_FALSE (hasBitValueSet (e, TestEnum{}));
+    EXPECT_EQ (e, TestEnum {});
+    EXPECT_FALSE (hasBitValueSet (e, TestEnum {}));
 }
 
 TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnEmptyEnum)
@@ -129,8 +129,8 @@ TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnEmptyEnum)
 TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueSetCorrectBitOnNonEmptyEnum)
 {
     TestEnum e = withBitValueSet (TestEnum::other, TestEnum::one);
-    EXPECT_TRUE (hasBitValueSet(e, TestEnum::one));
-    EXPECT_TRUE (hasBitValueSet(e, TestEnum::other));
+    EXPECT_TRUE (hasBitValueSet (e, TestEnum::one));
+    EXPECT_TRUE (hasBitValueSet (e, TestEnum::other));
 }
 
 TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueClearedCorrectBit)
@@ -144,11 +144,11 @@ TEST (ScopedEnumBitwiseOperatorsTests, WithBitValueClearedCorrectBit)
 TEST (ScopedEnumBitwiseOperatorsTests, OperatorsWorkAsExpected)
 {
     TestEnum e = TestEnum::one;
-    EXPECT_NE ((e & TestEnum::one), TestEnum{});
+    EXPECT_NE ((e & TestEnum::one), TestEnum {});
     e |= TestEnum::other;
-    EXPECT_NE ((e & TestEnum::other), TestEnum{});
+    EXPECT_NE ((e & TestEnum::other), TestEnum {});
 
     e &= ~TestEnum::one;
-    EXPECT_EQ ((e & TestEnum::one), TestEnum{});
-    EXPECT_NE ((e & TestEnum::other), TestEnum{});
+    EXPECT_EQ ((e & TestEnum::one), TestEnum {});
+    EXPECT_NE ((e & TestEnum::other), TestEnum {});
 }

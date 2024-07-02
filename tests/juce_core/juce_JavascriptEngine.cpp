@@ -104,15 +104,18 @@ TEST (JavascriptEngineTests, RegisterNativeObject)
 {
     JavascriptEngine engine;
 
-    struct TestObject : public DynamicObject {};
-    DynamicObject::Ptr testObject = new TestObject();
-    testObject->setMethod ("add", [](const var::NativeFunctionArgs& args) -> var
+    struct TestObject : public DynamicObject
     {
-        if (args.numArguments != 2)
-            return 0;
+    };
 
-        return static_cast<int> (args.arguments[0]) + static_cast<int> (args.arguments[1]);
-    });
+    DynamicObject::Ptr testObject = new TestObject();
+    testObject->setMethod ("add", [] (const var::NativeFunctionArgs& args) -> var
+                           {
+                               if (args.numArguments != 2)
+                                   return 0;
+
+                               return static_cast<int> (args.arguments[0]) + static_cast<int> (args.arguments[1]);
+                           });
 
     engine.registerNativeObject ("testObject", testObject.get());
 
@@ -140,10 +143,10 @@ TEST (JavascriptEngineTests, StopExecution)
     WaitableEvent startEvent;
 
     auto executionThread = std::thread ([&]
-    {
-        startEvent.wait();
-        engine.execute ("while (true) {}");
-    });
+                                        {
+                                            startEvent.wait();
+                                            engine.execute ("while (true) {}");
+                                        });
 
     startEvent.signal();
     std::this_thread::sleep_for (std::chrono::milliseconds (100));

@@ -23,8 +23,10 @@
 
 #include <juce_core/juce_core.h>
 
-namespace {
-namespace Detail {
+namespace
+{
+namespace Detail
+{
 struct verboseLog;
 struct noErrorLog;
 } // namespace Detail
@@ -38,45 +40,45 @@ static inline constexpr LogOption noErrorLog = LogOption::declareValue<Detail::n
 TEST (FlagSet, Default_Constructed)
 {
     LogOption option;
-    EXPECT_FALSE(option.test (verboseLog));
-    EXPECT_FALSE(option.test (noErrorLog));
+    EXPECT_FALSE (option.test (verboseLog));
+    EXPECT_FALSE (option.test (noErrorLog));
 }
 
 TEST (FlagSet, Default_Constructed_From_Default)
 {
     LogOption option = defaultLog;
-    EXPECT_FALSE(option.test (verboseLog));
-    EXPECT_FALSE(option.test (noErrorLog));
+    EXPECT_FALSE (option.test (verboseLog));
+    EXPECT_FALSE (option.test (noErrorLog));
 }
 
 TEST (FlagSet, Default_Constructed_From_Value)
 {
     LogOption option = verboseLog;
-    EXPECT_TRUE(option.test (verboseLog));
-    EXPECT_FALSE(option.test (noErrorLog));
+    EXPECT_TRUE (option.test (verboseLog));
+    EXPECT_FALSE (option.test (noErrorLog));
 }
 
 TEST (FlagSet, Default_Constructed_From_Values)
 {
     LogOption option = verboseLog | noErrorLog;
-    EXPECT_TRUE(option.test (verboseLog));
-    EXPECT_TRUE(option.test (noErrorLog));
+    EXPECT_TRUE (option.test (verboseLog));
+    EXPECT_TRUE (option.test (noErrorLog));
 }
 
 TEST (FlagSet, To_String)
 {
-    EXPECT_EQ(juce::String ("00"), defaultLog.toString());
-    EXPECT_EQ(juce::String ("10"), verboseLog.toString());
-    EXPECT_EQ(juce::String ("01"), noErrorLog.toString());
+    EXPECT_EQ (juce::String ("00"), defaultLog.toString());
+    EXPECT_EQ (juce::String ("10"), verboseLog.toString());
+    EXPECT_EQ (juce::String ("01"), noErrorLog.toString());
 
     LogOption option = verboseLog | noErrorLog;
-    EXPECT_EQ(juce::String ("11"), option.toString());
+    EXPECT_EQ (juce::String ("11"), option.toString());
 }
 
 TEST (FlagSet, From_String)
 {
-    EXPECT_EQ(defaultLog, LogOption::fromString("00"));
-    EXPECT_EQ(verboseLog, LogOption::fromString("10"));
-    EXPECT_EQ(noErrorLog, LogOption::fromString("01"));
-    EXPECT_EQ((verboseLog | noErrorLog), LogOption::fromString("11"));
+    EXPECT_EQ (defaultLog, LogOption::fromString ("00"));
+    EXPECT_EQ (verboseLog, LogOption::fromString ("10"));
+    EXPECT_EQ (noErrorLog, LogOption::fromString ("01"));
+    EXPECT_EQ ((verboseLog | noErrorLog), LogOption::fromString ("11"));
 }

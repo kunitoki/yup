@@ -28,85 +28,85 @@ using namespace juce;
 TEST (Identifier, DefaultConstructorCreatesNullIdentifier)
 {
     Identifier id;
-    EXPECT_TRUE(id.isNull());
-    EXPECT_FALSE(id.isValid());
+    EXPECT_TRUE (id.isNull());
+    EXPECT_FALSE (id.isValid());
 }
 
 TEST (Identifier, ConstructFromStringLiteral)
 {
-    Identifier id("test");
-    EXPECT_EQ(id.toString(), "test");
-    EXPECT_TRUE(id.isValid());
+    Identifier id ("test");
+    EXPECT_EQ (id.toString(), "test");
+    EXPECT_TRUE (id.isValid());
 }
 
 TEST (Identifier, ConstructFromStringObject)
 {
     String name = "example";
-    Identifier id(name);
-    EXPECT_EQ(id.toString(), "example");
-    EXPECT_TRUE(id.isValid());
+    Identifier id (name);
+    EXPECT_EQ (id.toString(), "example");
+    EXPECT_TRUE (id.isValid());
 }
 
 TEST (Identifier, CopyConstructor)
 {
-    Identifier original("copyTest");
+    Identifier original ("copyTest");
     Identifier copy = original;
-    EXPECT_EQ(copy, original);
+    EXPECT_EQ (copy, original);
 }
 
 TEST (Identifier, MoveConstructor)
 {
-    Identifier original("moveTest");
-    Identifier moved = std::move(original);
-    EXPECT_EQ(moved.toString(), "moveTest");
+    Identifier original ("moveTest");
+    Identifier moved = std::move (original);
+    EXPECT_EQ (moved.toString(), "moveTest");
 }
 
 TEST (Identifier, AssignmentOperator)
 {
-    Identifier id1("first");
+    Identifier id1 ("first");
     Identifier id2 = id1;
-    EXPECT_EQ(id2, id1);
+    EXPECT_EQ (id2, id1);
 }
 
 TEST (Identifier, MoveAssignmentOperator)
 {
-    Identifier id1("first");
-    Identifier id2("second");
-    id2 = std::move(id1);
-    EXPECT_EQ(id2.toString(), "first");
+    Identifier id1 ("first");
+    Identifier id2 ("second");
+    id2 = std::move (id1);
+    EXPECT_EQ (id2.toString(), "first");
 }
 
 TEST (Identifier, ComparisonOperators)
 {
-    Identifier id1("same");
-    Identifier id2("same");
-    Identifier id3("different");
+    Identifier id1 ("same");
+    Identifier id2 ("same");
+    Identifier id3 ("different");
 
-    EXPECT_TRUE(id1 == id2);
-    EXPECT_FALSE(id1 == id3);
-    EXPECT_TRUE(id1 != id3);
-    EXPECT_FALSE(id1 != id2);
+    EXPECT_TRUE (id1 == id2);
+    EXPECT_FALSE (id1 == id3);
+    EXPECT_TRUE (id1 != id3);
+    EXPECT_FALSE (id1 != id2);
 }
 
 TEST (Identifier, IsValidIdentifier)
 {
-    EXPECT_TRUE(Identifier::isValidIdentifier("valid_name"));
-    EXPECT_FALSE(Identifier::isValidIdentifier("invalid name"));
-    EXPECT_TRUE(Identifier::isValidIdentifier("123"));
-    EXPECT_TRUE(Identifier::isValidIdentifier("_123"));
-    EXPECT_FALSE(Identifier::isValidIdentifier("_1 23"));
+    EXPECT_TRUE (Identifier::isValidIdentifier ("valid_name"));
+    EXPECT_FALSE (Identifier::isValidIdentifier ("invalid name"));
+    EXPECT_TRUE (Identifier::isValidIdentifier ("123"));
+    EXPECT_TRUE (Identifier::isValidIdentifier ("_123"));
+    EXPECT_FALSE (Identifier::isValidIdentifier ("_1 23"));
 }
 
 TEST (Identifier, ConversionToStringRef)
 {
-    Identifier id("conversion");
+    Identifier id ("conversion");
     StringRef ref = id;
-    EXPECT_EQ(ref, StringRef("conversion"));
+    EXPECT_EQ (ref, StringRef ("conversion"));
 }
 
 TEST (Identifier, ConversionToCharPointer)
 {
-    Identifier id("pointer");
+    Identifier id ("pointer");
     auto ptr = id.getCharPointer();
-    EXPECT_STREQ(ptr.getAddress(), "pointer");
+    EXPECT_STREQ (ptr.getAddress(), "pointer");
 }

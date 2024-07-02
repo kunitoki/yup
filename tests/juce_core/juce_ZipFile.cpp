@@ -48,7 +48,7 @@ class ZipFileTests : public ::testing::Test
 protected:
     File getNonExistingZipFile() const
     {
-        return File::getCurrentWorkingDirectory().getChildFile("test.zip");
+        return File::getCurrentWorkingDirectory().getChildFile ("test.zip");
     }
 
     MemoryBlock createZipMemoryBlock (const StringArray& entryNames) const
@@ -97,21 +97,20 @@ TEST_F (ZipFileTests, BasicZipFileFunctionality)
 
 TEST_F (ZipFileTests, ZipFileSlipTest)
 {
-    const std::map<String, bool> testCases =
-    {
-        { "a",                    true  },
+    const std::map<String, bool> testCases = {
+        { "a", true },
 #if JUCE_WINDOWS
-        { "C:/b",                 false },
+        { "C:/b", false },
 #else
-        { "/b",                   false },
+        { "/b", false },
 #endif
-        { "c/d",                  true  },
-        { "../e/f",               false },
-        { "../../g/h",            false },
-        { "i/../j",               true  },
-        { "k/l/../",              true  },
-        { "m/n/../../",           false },
-        { "o/p/../../../",        false }
+        { "c/d", true },
+        { "../e/f", false },
+        { "../../g/h", false },
+        { "i/../j", true },
+        { "k/l/../", true },
+        { "m/n/../../", false },
+        { "o/p/../../../", false }
     };
 
     StringArray entryNames;
@@ -145,9 +144,9 @@ TEST_F (ZipFileTests, ZipFileSlipTest)
 TEST_F (ZipFileTests, CreateFromFile)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    EXPECT_EQ(zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
 }
 
 TEST_F (ZipFileTests, CreateFromInputStream)
@@ -178,52 +177,54 @@ TEST_F (ZipFileTests, CreateFromInputSource)
     {
     public:
         InputStream* createInputStream() override { return nullptr; }
-        InputStream* createInputStreamFor(const String&) override { return nullptr; }
+
+        InputStream* createInputStreamFor (const String&) override { return nullptr; }
+
         int64 hashCode() const override { return 0; }
     };
 
     auto* inputSource = new TestInputSource;
-    ZipFile zip(inputSource);
+    ZipFile zip (inputSource);
 
-    EXPECT_EQ(zip.getNumEntries(), 0); // Assumes the TestInputSource returns null streams
+    EXPECT_EQ (zip.getNumEntries(), 0); // Assumes the TestInputSource returns null streams
 }
 
 TEST_F (ZipFileTests, GetNumEntries)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    EXPECT_EQ(zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
 }
 
 TEST_F (ZipFileTests, GetEntryByIndex)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    EXPECT_EQ(zip.getEntry(0), nullptr); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.getEntry (0), nullptr); // Assumes the test.zip is empty or non-existent
 }
 
 TEST_F (ZipFileTests, GetEntryByName)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    EXPECT_EQ(zip.getEntry("nonexistent.txt"), nullptr); // Assumes the test.zip does not contain this file
+    EXPECT_EQ (zip.getEntry ("nonexistent.txt"), nullptr); // Assumes the test.zip does not contain this file
 }
 
 TEST_F (ZipFileTests, GetIndexOfFileName)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    EXPECT_EQ(zip.getIndexOfFileName("nonexistent.txt"), -1); // Assumes the test.zip does not contain this file
+    EXPECT_EQ (zip.getIndexOfFileName ("nonexistent.txt"), -1); // Assumes the test.zip does not contain this file
 }
 
 TEST_F (ZipFileTests, SortEntriesByFilename)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
     zip.sortEntriesByFilename();
     // No direct way to verify sorting, but we can call it to ensure it doesn't crash
@@ -232,18 +233,18 @@ TEST_F (ZipFileTests, SortEntriesByFilename)
 TEST_F (ZipFileTests, CreateStreamForEntryByIndex)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    EXPECT_EQ(zip.createStreamForEntry(0), nullptr); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.createStreamForEntry (0), nullptr); // Assumes the test.zip is empty or non-existent
 }
 
 TEST_F (ZipFileTests, CreateStreamForEntryByName)
 {
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
+    ZipFile zip (zipFile);
 
-    const ZipFile::ZipEntry* entry = zip.getEntry("nonexistent.txt");
-    EXPECT_EQ(zip.createStreamForEntry(*entry), nullptr); // Assumes the test.zip does not contain this file
+    const ZipFile::ZipEntry* entry = zip.getEntry ("nonexistent.txt");
+    EXPECT_EQ (zip.createStreamForEntry (*entry), nullptr); // Assumes the test.zip does not contain this file
 }
 
 TEST_F (ZipFileTests, UncompressTo)
@@ -273,17 +274,17 @@ TEST_F (ZipFileTests, UncompressEntry)
 TEST_F (ZipFileTests, BuilderAddFile)
 {
     ZipFile::Builder builder;
-    File fileToAdd(File::getCurrentWorkingDirectory().getChildFile("test.txt"));
+    File fileToAdd (File::getCurrentWorkingDirectory().getChildFile ("test.txt"));
 
-    builder.addFile(fileToAdd, 9, "test.txt");
+    builder.addFile (fileToAdd, 9, "test.txt");
 }
 
 TEST_F (ZipFileTests, BuilderAddEntry)
 {
     ZipFile::Builder builder;
-    auto* memoryStream = new MemoryInputStream("dummy data", 10, false);
+    auto* memoryStream = new MemoryInputStream ("dummy data", 10, false);
 
-    builder.addEntry(memoryStream, 9, "dummy.txt", Time::getCurrentTime());
+    builder.addEntry (memoryStream, 9, "dummy.txt", Time::getCurrentTime());
 }
 
 TEST_F (ZipFileTests, BuilderWriteToStream)
@@ -291,6 +292,6 @@ TEST_F (ZipFileTests, BuilderWriteToStream)
     ZipFile::Builder builder;
     MemoryOutputStream outputStream;
 
-    bool result = builder.writeToStream(outputStream, nullptr);
-    EXPECT_TRUE(result); // Expecting true even if the builder is empty
+    bool result = builder.writeToStream (outputStream, nullptr);
+    EXPECT_TRUE (result); // Expecting true even if the builder is empty
 }
