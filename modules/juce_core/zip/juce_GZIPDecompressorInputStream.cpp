@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
+#include "zlib/zlib.h"
+
 namespace juce
 {
-
-JUCE_END_IGNORE_WARNINGS_MSVC
 
 //==============================================================================
 // internal helper object that holds the zlib structures so they don't have to be
