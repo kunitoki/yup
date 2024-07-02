@@ -25,10 +25,10 @@ namespace yup
 //==============================================================================
 
 AudioProcessorParameter::AudioProcessorParameter (
-        StringRef name,
-        float minValue,
-        float maxValue,
-        float defaultValue)
+    StringRef name,
+    float minValue,
+    float maxValue,
+    float defaultValue)
     : currentValue (defaultValue)
     , minValue (minValue)
     , maxValue (maxValue)

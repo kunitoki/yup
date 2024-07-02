@@ -35,10 +35,13 @@ public:
     virtual ~AudioProcessorParameter();
 
     float getValue() const { return currentValue; }
+
     void setValue (float value) { currentValue = jlimit (minValue, maxValue, value); }
 
     float getMinimumValue() const { return minValue; }
+
     float getMaximumValue() const { return maxValue; }
+
     float getDefaultValue() const { return defaultValue; }
 
     const String& getName() const { return name; }

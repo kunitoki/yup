@@ -43,6 +43,7 @@ public:
     virtual void flush() {}
 
     virtual bool hasEditor() const = 0;
+
     virtual AudioProcessorEditor* createEditor() { return nullptr; }
 };
 
