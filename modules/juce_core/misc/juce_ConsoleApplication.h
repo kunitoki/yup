@@ -220,7 +220,6 @@ struct ArgumentList
     Array<Argument> arguments;
 };
 
-
 //==============================================================================
 /**
     Represents a the set of commands that a console app can perform, and provides

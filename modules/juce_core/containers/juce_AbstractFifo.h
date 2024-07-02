@@ -86,7 +86,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  AbstractFifo
+class JUCE_API AbstractFifo
 {
 public:
     //==============================================================================
@@ -227,7 +227,8 @@ public:
             This object will hold a pointer back to the fifo, so make sure that
             the fifo outlives this object.
         */
-        ScopedReadWrite (AbstractFifo& f, int num) noexcept  : fifo (&f)
+        ScopedReadWrite (AbstractFifo& f, int num) noexcept
+            : fifo (&f)
         {
             prepare (*fifo, num);
         }
@@ -253,8 +254,10 @@ public:
         template <typename FunctionToApply>
         void forEach (FunctionToApply&& func) const
         {
-            for (auto i = startIndex1, e = startIndex1 + blockSize1; i != e; ++i)  func (i);
-            for (auto i = startIndex2, e = startIndex2 + blockSize2; i != e; ++i)  func (i);
+            for (auto i = startIndex1, e = startIndex1 + blockSize1; i != e; ++i)
+                func (i);
+            for (auto i = startIndex2, e = startIndex2 + blockSize2; i != e; ++i)
+                func (i);
         }
 
         int startIndex1, blockSize1, startIndex2, blockSize2;
@@ -267,7 +270,7 @@ public:
         AbstractFifo* fifo = nullptr;
     };
 
-    using ScopedRead  = ScopedReadWrite<ReadOrWrite::read>;
+    using ScopedRead = ScopedReadWrite<ReadOrWrite::read>;
     using ScopedWrite = ScopedReadWrite<ReadOrWrite::write>;
 
     /** Replaces prepareToRead/finishedRead with a single function.
@@ -345,6 +348,5 @@ inline void AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::write>::pre
 {
     f.prepareToWrite (num, startIndex1, blockSize1, startIndex2, blockSize2);
 }
-
 
 } // namespace juce

@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  RelativeTime
+class JUCE_API RelativeTime
 {
 public:
     //==============================================================================
@@ -115,7 +115,7 @@ public:
     /** Returns the number of seconds this time represents.
         @see inMilliseconds, inMinutes, inHours, inDays, inWeeks
     */
-    double inSeconds() const noexcept       { return numSeconds; }
+    double inSeconds() const noexcept { return numSeconds; }
 
     /** Returns the number of minutes this time represents.
         @see inMilliseconds, inSeconds, inHours, inDays, inWeeks
@@ -184,9 +184,9 @@ JUCE_API bool JUCE_CALLTYPE operator== (RelativeTime t1, RelativeTime t2) noexce
 /** Compares two RelativeTimes. */
 JUCE_API bool JUCE_CALLTYPE operator!= (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator>  (RelativeTime t1, RelativeTime t2) noexcept;
+JUCE_API bool JUCE_CALLTYPE operator> (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator<  (RelativeTime t1, RelativeTime t2) noexcept;
+JUCE_API bool JUCE_CALLTYPE operator<(RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
 JUCE_API bool JUCE_CALLTYPE operator>= (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
@@ -194,8 +194,8 @@ JUCE_API bool JUCE_CALLTYPE operator<= (RelativeTime t1, RelativeTime t2) noexce
 
 //==============================================================================
 /** Adds two RelativeTimes together. */
-JUCE_API RelativeTime  JUCE_CALLTYPE operator+  (RelativeTime t1, RelativeTime t2) noexcept;
+JUCE_API RelativeTime JUCE_CALLTYPE operator+ (RelativeTime t1, RelativeTime t2) noexcept;
 /** Subtracts two RelativeTimes. */
-JUCE_API RelativeTime  JUCE_CALLTYPE operator-  (RelativeTime t1, RelativeTime t2) noexcept;
+JUCE_API RelativeTime JUCE_CALLTYPE operator- (RelativeTime t1, RelativeTime t2) noexcept;
 
 } // namespace juce

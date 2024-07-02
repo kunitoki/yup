@@ -48,14 +48,16 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  AndroidDocumentInputSource   : public InputSource
+class JUCE_API AndroidDocumentInputSource : public InputSource
 {
 public:
     //==============================================================================
     /** Creates a new AndroidDocumentInputSource, backed by the provided document.
     */
     explicit AndroidDocumentInputSource (const AndroidDocument& doc)
-        : document (doc) {}
+        : document (doc)
+    {
+    }
 
     //==============================================================================
     /** Returns a new InputStream to read this item.

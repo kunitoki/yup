@@ -56,7 +56,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Thread
+class JUCE_API Thread
 {
 public:
     //==============================================================================
@@ -70,19 +70,19 @@ public:
     enum class Priority
     {
         /** The highest possible priority that isn't a dedicated realtime thread. */
-        highest     = 2,
+        highest = 2,
 
         /** Makes use of performance cores and higher clocks. */
-        high        = 1,
+        high = 1,
 
         /** The OS default. It will balance out across all cores. */
-        normal      = 0,
+        normal = 0,
 
         /** Uses efficiency cores when possible. */
-        low         = -1,
+        low = -1,
 
         /** Restricted to efficiency cores on platforms that have them. */
-        background  = -2
+        background = -2
     };
 
     //==============================================================================
@@ -218,7 +218,7 @@ public:
         int priority { 5 };
         std::optional<double> processingTimeMs;
         std::optional<double> maximumProcessingTimeMs;
-        std::optional<double> periodMs{};
+        std::optional<double> periodMs {};
     };
 
     //==============================================================================
@@ -520,7 +520,7 @@ public:
     ThreadID getThreadId() const noexcept;
 
     /** Returns the name of the thread. This is the name that gets set in the constructor. */
-    const String& getThreadName() const noexcept                    { return threadName; }
+    const String& getThreadName() const noexcept { return threadName; }
 
     /** Changes the name of the caller thread.
 
@@ -528,7 +528,7 @@ public:
     */
     static void JUCE_CALLTYPE setCurrentThreadName (const String& newThreadName);
 
-   #if JUCE_ANDROID || DOXYGEN
+#if JUCE_ANDROID || DOXYGEN
     //==============================================================================
     /** Initialises the JUCE subsystem for projects not created by the Projucer
 
@@ -568,7 +568,7 @@ public:
                         functions.
     */
     static void initialiseJUCE (void* jniEnv, void* jContext);
-   #endif
+#endif
 
 protected:
     //==============================================================================
@@ -609,13 +609,13 @@ private:
     std::atomic<bool> shouldExit { false };
     ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
-   #if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD || JUCE_WASM
+#if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD || JUCE_WASM
     std::atomic<Priority> priority;
-   #endif
+#endif
 
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     friend void JUCE_API juce_threadEntryPoint (void*);
-   #endif
+#endif
 
     bool startThreadInternal (Priority);
     bool createNativeThread (Priority);

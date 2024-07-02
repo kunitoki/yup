@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Time
+class JUCE_API Time
 {
 public:
     //==============================================================================
@@ -112,7 +112,7 @@ public:
                     midnight Jan 1st 1970 UTC.
         @see getMilliseconds
     */
-    int64 toMilliseconds() const noexcept                           { return millisSinceEpoch; }
+    int64 toMilliseconds() const noexcept { return millisSinceEpoch; }
 
     /** Returns the year (in this machine's local timezone).
         A 4-digit format is used, e.g. 2004.
@@ -407,11 +407,11 @@ JUCE_API bool operator== (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
 JUCE_API bool operator!= (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator<  (Time time1, Time time2) noexcept;
+JUCE_API bool operator<(Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
 JUCE_API bool operator<= (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator>  (Time time1, Time time2) noexcept;
+JUCE_API bool operator> (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
 JUCE_API bool operator>= (Time time1, Time time2) noexcept;
 

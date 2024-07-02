@@ -56,7 +56,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  HighResolutionTimer
+class JUCE_API HighResolutionTimer
 {
 protected:
     /** Creates a HighResolutionTimer.

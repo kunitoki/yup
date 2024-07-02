@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  SocketOptions
+class JUCE_API SocketOptions
 {
 public:
     /** The provided size will be used to configure the socket's SO_RCVBUF property. Increasing the
@@ -77,7 +77,7 @@ public:
     [[nodiscard]] auto getReceiveBufferSize() const { return receiveBufferSize; }
 
     /** @see withSendBufferSize() */
-    [[nodiscard]] auto getSendBufferSize() const    { return sendBufferSize; }
+    [[nodiscard]] auto getSendBufferSize() const { return sendBufferSize; }
 
 private:
     std::optional<int> receiveBufferSize;
@@ -95,7 +95,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  StreamingSocket  final
+class JUCE_API StreamingSocket final
 {
 public:
     using Options = SocketOptions;
@@ -124,7 +124,8 @@ public:
     */
     explicit StreamingSocket (const SocketOptions& optionsIn)
         : options { optionsIn }
-    {}
+    {
+    }
 
     /** Destructor. */
     ~StreamingSocket();
@@ -173,22 +174,22 @@ public:
                   int timeOutMillisecs = 3000);
 
     /** True if the socket is currently connected. */
-    bool isConnected() const noexcept                           { return connected; }
+    bool isConnected() const noexcept { return connected; }
 
     /** Closes the connection. */
     void close();
 
     /** Returns the name of the currently connected host. */
-    const String& getHostName() const noexcept                  { return hostName; }
+    const String& getHostName() const noexcept { return hostName; }
 
     /** Returns the port number that's currently open. */
-    int getPort() const noexcept                                { return portNumber; }
+    int getPort() const noexcept { return portNumber; }
 
     /** True if the socket is connected to this machine rather than over the network. */
     bool isLocal() const noexcept;
 
     /** Returns the OS's socket handle that's currently open. */
-    int getRawSocketHandle() const noexcept                     { return handle; }
+    int getRawSocketHandle() const noexcept { return handle; }
 
     //==============================================================================
     /** Waits until the socket is ready for reading or writing.
@@ -214,8 +215,7 @@ public:
         @returns  the number of bytes read, or -1 if there was an error
         @see waitUntilReady
     */
-    int read (void* destBuffer, int maxBytesToRead,
-              bool blockUntilSpecifiedAmountHasArrived);
+    int read (void* destBuffer, int maxBytesToRead, bool blockUntilSpecifiedAmountHasArrived);
 
     /** Writes bytes to the socket from a buffer.
 
@@ -266,7 +266,6 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StreamingSocket)
 };
 
-
 //==============================================================================
 /**
     A wrapper for a datagram (UDP) socket.
@@ -278,7 +277,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  DatagramSocket  final
+class JUCE_API DatagramSocket final
 {
 public:
     using Options = SocketOptions;
@@ -304,8 +303,9 @@ public:
         (may require extra privileges on linux)
     */
     explicit DatagramSocket (bool enableBroadcasting)
-        : DatagramSocket (enableBroadcasting, SocketOptions{})
-    {}
+        : DatagramSocket (enableBroadcasting, SocketOptions {})
+    {
+    }
 
     /** Creates a datagram socket.
 
@@ -314,8 +314,10 @@ public:
 
         This constructor creates a socket that does not allow sending broadcast messages.
     */
-    DatagramSocket() : DatagramSocket (false)
-    {}
+    DatagramSocket()
+        : DatagramSocket (false)
+    {
+    }
 
     /** Destructor. */
     ~DatagramSocket();
@@ -354,7 +356,7 @@ public:
     int getBoundPort() const noexcept;
 
     /** Returns the OS's socket handle that's currently open. */
-    int getRawSocketHandle() const noexcept                     { return handle; }
+    int getRawSocketHandle() const noexcept { return handle; }
 
     //==============================================================================
     /** Waits until the socket is ready for reading or writing.
@@ -380,8 +382,7 @@ public:
         @returns  the number of bytes read, or -1 if there was an error
         @see waitUntilReady
     */
-    int read (void* destBuffer, int maxBytesToRead,
-              bool blockUntilSpecifiedAmountHasArrived);
+    int read (void* destBuffer, int maxBytesToRead, bool blockUntilSpecifiedAmountHasArrived);
 
     /** Reads bytes from the socket and return the IP address of the sender.
 
@@ -394,9 +395,7 @@ public:
                   result, the senderIPAddress value will be set to the IP of the sender
         @see waitUntilReady
     */
-    int read (void* destBuffer, int maxBytesToRead,
-              bool blockUntilSpecifiedAmountHasArrived,
-              String& senderIPAddress, int& senderPortNumber);
+    int read (void* destBuffer, int maxBytesToRead, bool blockUntilSpecifiedAmountHasArrived, String& senderIPAddress, int& senderPortNumber);
 
     /** Writes bytes to the socket from a buffer.
 
@@ -405,8 +404,7 @@ public:
 
         @returns  the number of bytes written, or -1 if there was an error
     */
-    int write (const String& remoteHostname, int remotePortNumber,
-               const void* sourceBuffer, int numBytesToWrite);
+    int write (const String& remoteHostname, int remotePortNumber, const void* sourceBuffer, int numBytesToWrite);
 
     /** Closes the underlying socket object.
 

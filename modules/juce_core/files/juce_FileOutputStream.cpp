@@ -42,9 +42,9 @@ namespace juce
 
 //==============================================================================
 FileOutputStream::FileOutputStream (const File& f, const size_t bufferSizeToUse)
-    : file (f),
-      bufferSize (bufferSizeToUse),
-      buffer (jmax (bufferSizeToUse, (size_t) 16))
+    : file (f)
+    , bufferSize (bufferSizeToUse)
+    , buffer (jmax (bufferSizeToUse, (size_t) 16))
 {
     openHandle();
 }

@@ -160,14 +160,17 @@ public:
     ErasedScopeGuard addScoped (ListenerClass& listenerToAdd)
     {
         add (&listenerToAdd);
-        return ErasedScopeGuard { [this, &listenerToAdd] { remove (&listenerToAdd); } };
+        return ErasedScopeGuard { [this, &listenerToAdd]
+                                  {
+                                      remove (&listenerToAdd);
+                                  } };
     }
 
     /** Returns the number of registered listeners. */
-    int size() const noexcept                                { return initialiser.isInitialised() ? listeners->size() : 0; }
+    int size() const noexcept { return initialiser.isInitialised() ? listeners->size() : 0; }
 
     /** Returns true if no listeners are registered, false otherwise. */
-    bool isEmpty() const noexcept                            { return initialiser.isInitialised() ? listeners->isEmpty() : true; }
+    bool isEmpty() const noexcept { return initialiser.isInitialised() ? listeners->isEmpty() : true; }
 
     /** Clears the list.
 
@@ -217,7 +220,7 @@ public:
     void call (Callback&& callback)
     {
         callCheckedExcluding (nullptr,
-                              DummyBailOutChecker{},
+                              DummyBailOutChecker {},
                               std::forward<Callback> (callback));
     }
 
@@ -228,9 +231,8 @@ public:
     void callExcluding (ListenerClass* listenerToExclude, Callback&& callback)
     {
         callCheckedExcluding (listenerToExclude,
-                              DummyBailOutChecker{},
+                              DummyBailOutChecker {},
                               std::forward<Callback> (callback));
-
     }
 
     /** Calls an invokable object for each listener in the list, additionally
@@ -263,15 +265,15 @@ public:
         const auto localListeners = listeners;
         const ScopedLockType lock { localListeners->getLock() };
 
-        Iterator it{};
+        Iterator it {};
         it.end = localListeners->size();
 
         iterators->push_back (&it);
 
         const ScopeGuard scope { [i = iterators, &it]
-        {
-            i->erase (std::remove (i->begin(), i->end(), &it), i->end());
-        } };
+                                 {
+                                     i->erase (std::remove (i->begin(), i->end(), &it), i->end());
+                                 } };
 
         for (; it.index < it.end; ++it.index)
         {
@@ -293,7 +295,7 @@ public:
     void call (void (ListenerClass::*callbackFunction) (MethodArgs...), Args&&... args)
     {
         callCheckedExcluding (nullptr,
-                              DummyBailOutChecker{},
+                              DummyBailOutChecker {},
                               callbackFunction,
                               std::forward<Args> (args)...);
     }
@@ -307,7 +309,7 @@ public:
                         Args&&... args)
     {
         callCheckedExcluding (listenerToExclude,
-                              DummyBailOutChecker{},
+                              DummyBailOutChecker {},
                               callbackFunction,
                               std::forward<Args> (args)...);
     }
@@ -341,9 +343,9 @@ public:
                                Args&&... args)
     {
         callCheckedExcluding (listenerToExclude, bailOutChecker, [&] (ListenerClass& l)
-        {
-            (l.*callbackFunction) (args...);
-        });
+                              {
+                                  (l.*callbackFunction) (args...);
+                              });
     }
 
     //==============================================================================
@@ -356,8 +358,8 @@ public:
     };
 
     //==============================================================================
-    using ThisType      = ListenerList<ListenerClass, ArrayType>;
-    using ListenerType  = ListenerClass;
+    using ThisType = ListenerList<ListenerClass, ArrayType>;
+    using ListenerType = ListenerClass;
 
 private:
     //==============================================================================
@@ -370,8 +372,8 @@ private:
     //==============================================================================
     struct Iterator
     {
-        int index{};
-        int end{};
+        int index {};
+        int end {};
     };
 
     using SafeIterators = std::vector<Iterator*>;

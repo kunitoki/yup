@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  FileSearchPath
+class JUCE_API FileSearchPath
 {
 public:
     //==============================================================================

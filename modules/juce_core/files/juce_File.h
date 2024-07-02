@@ -41,7 +41,7 @@ namespace juce
 {
 
 #if ! DOXYGEN && (JUCE_MAC || JUCE_IOS)
- using OSType = unsigned int;
+using OSType = unsigned int;
 #endif
 
 //==============================================================================
@@ -58,7 +58,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  File final
+class JUCE_API File final
 {
 public:
     //==============================================================================
@@ -167,7 +167,7 @@ public:
 
         @see getFileName, getRelativePathFrom
     */
-    const String& getFullPathName() const noexcept          { return fullPath; }
+    const String& getFullPathName() const noexcept { return fullPath; }
 
     /** Returns the last section of the pathname.
 
@@ -345,7 +345,7 @@ public:
     /** Compares the pathnames for two files. */
     bool operator!= (const File&) const;
     /** Compares the pathnames for two files. */
-    bool operator< (const File&) const;
+    bool operator<(const File&) const;
     /** Compares the pathnames for two files. */
     bool operator> (const File&) const;
 
@@ -579,10 +579,10 @@ public:
     */
     enum TypesOfFileToFind
     {
-        findDirectories             = 1,    /**< Use this flag to indicate that you want to find directories. */
-        findFiles                   = 2,    /**< Use this flag to indicate that you want to find files. */
-        findFilesAndDirectories     = 3,    /**< Use this flag to indicate that you want to find both files and directories. */
-        ignoreHiddenFiles           = 4     /**< Add this flag to avoid returning any hidden files in the results. */
+        findDirectories = 1,         /**< Use this flag to indicate that you want to find directories. */
+        findFiles = 2,               /**< Use this flag to indicate that you want to find files. */
+        findFilesAndDirectories = 3, /**< Use this flag to indicate that you want to find both files and directories. */
+        ignoreHiddenFiles = 4        /**< Add this flag to avoid returning any hidden files in the results. */
     };
 
     enum class FollowSymlinks
@@ -629,9 +629,7 @@ public:
         array, and in almost all cases, you should use that one instead! This one is kept around
         mainly for legacy code to use.
     */
-    int findChildFiles (Array<File>& results, int whatToLookFor,
-                        bool searchRecursively, const String& wildCardPattern = "*",
-                        FollowSymlinks followSymlinks = FollowSymlinks::yes) const;
+    int findChildFiles (Array<File>& results, int whatToLookFor, bool searchRecursively, const String& wildCardPattern = "*", FollowSymlinks followSymlinks = FollowSymlinks::yes) const;
 
     /** Searches inside a directory and counts how many files match a wildcard pattern.
 
@@ -974,10 +972,10 @@ public:
         /** In a plugin, this will return the path of the host executable. */
         hostApplicationPath,
 
-       #if JUCE_WINDOWS || DOXYGEN
+#if JUCE_WINDOWS || DOXYGEN
         /** On a Windows machine, returns the location of the Windows/System32 folder. */
         windowsSystemDirectory,
-       #endif
+#endif
 
         /** The directory in which applications normally get installed.
             So on windows, this would be something like "C:\Program Files", on the
@@ -985,7 +983,7 @@ public:
         */
         globalApplicationsDirectory,
 
-       #if JUCE_WINDOWS || DOXYGEN
+#if JUCE_WINDOWS || DOXYGEN
         /** On a Windows machine, returns the directory in which 32 bit applications
             normally get installed. On a 64 bit machine this would be something like
             "C:\Program Files (x86)", whereas for 32 bit machines this would match
@@ -997,7 +995,7 @@ public:
 
         /** On a Windows machine returns the %LOCALAPPDATA% folder. */
         windowsLocalAppData
-       #endif
+#endif
     };
 
     /** Finds the location of a special type of file or directory, such as a home folder or
@@ -1104,31 +1102,31 @@ public:
         is a native path of the current OS and can be a relative, absolute or special path. */
     String getNativeLinkedTarget() const;
 
-   #if JUCE_WINDOWS || DOXYGEN
+#if JUCE_WINDOWS || DOXYGEN
     /** Windows ONLY - Creates a win32 .LNK shortcut file that links to this file. */
     bool createShortcut (const String& description, const File& linkFileToCreate) const;
 
     /** Windows ONLY - Returns true if this is a win32 .LNK file. */
     bool isShortcut() const;
-   #else
+#else
 
-   #endif
+#endif
 
     //==============================================================================
-   #if JUCE_MAC || JUCE_IOS || DOXYGEN
+#if JUCE_MAC || JUCE_IOS || DOXYGEN
     /** OSX ONLY - Finds the OSType of a file from the its resources. */
     OSType getMacOSType() const;
 
     /** OSX ONLY - Returns true if this file is actually a bundle. */
     bool isBundle() const;
-   #endif
+#endif
 
-   #if JUCE_MAC || DOXYGEN
+#if JUCE_MAC || DOXYGEN
     /** OSX ONLY - Adds this file to the OSX dock */
     void addToDock() const;
-   #endif
+#endif
 
-   #if JUCE_MAC || JUCE_IOS
+#if JUCE_MAC || JUCE_IOS
     /** Returns the path to the container shared by all apps with the provided app group ID.
 
         You *must* pass one of the app group IDs listed in your app's entitlements file.
@@ -1137,30 +1135,33 @@ public:
         that the path exists and is writable before trying to use it.
     */
     static File getContainerForSecurityApplicationGroupIdentifier (const String& appGroup);
-   #endif
+#endif
 
     //==============================================================================
     /** Comparator for files */
     struct NaturalFileComparator
     {
-        NaturalFileComparator (bool shouldPutFoldersFirst) noexcept : foldersFirst (shouldPutFoldersFirst) {}
+        NaturalFileComparator (bool shouldPutFoldersFirst) noexcept
+            : foldersFirst (shouldPutFoldersFirst)
+        {
+        }
 
         int compareElements (const File& firstFile, const File& secondFile) const
         {
             if (foldersFirst && (firstFile.isDirectory() != secondFile.isDirectory()))
                 return firstFile.isDirectory() ? -1 : 1;
 
-           #if NAMES_ARE_CASE_SENSITIVE
+#if NAMES_ARE_CASE_SENSITIVE
             return firstFile.getFullPathName().compareNatural (secondFile.getFullPathName(), true);
-           #else
+#else
             return firstFile.getFullPathName().compareNatural (secondFile.getFullPathName(), false);
-           #endif
+#endif
         }
 
         bool foldersFirst;
     };
 
-   #if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined (DOXYGEN)
+#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
     /* These static objects are deprecated because it's too easy to accidentally use them indirectly
        during a static constructor, which leads to very obscure order-of-initialisation bugs.
        Use File::getSeparatorChar() and File::getSeparatorString(), and instead of File::nonexistent,
@@ -1169,7 +1170,7 @@ public:
     [[deprecated]] static const juce_wchar separator;
     [[deprecated]] static const StringRef separatorString;
     [[deprecated]] static const File nonexistent;
-   #endif
+#endif
 
 private:
     //==============================================================================

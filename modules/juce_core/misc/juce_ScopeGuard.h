@@ -66,8 +66,14 @@ namespace juce
 
     @tags{Core}
 */
-template <typename Fn> struct ScopeGuard : Fn { ~ScopeGuard() { Fn::operator()(); } };
-template <typename Fn> ScopeGuard (Fn) -> ScopeGuard<Fn>;
+template <typename Fn>
+struct ScopeGuard : Fn
+{
+    ~ScopeGuard() { Fn::operator()(); }
+};
+
+template <typename Fn>
+ScopeGuard (Fn) -> ScopeGuard<Fn>;
 
 /**
     A ScopeGuard that uses a std::function internally to allow type erasure.

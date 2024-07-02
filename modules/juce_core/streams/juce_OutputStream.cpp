@@ -76,18 +76,18 @@ static DanglingStreamChecker danglingStreamChecker;
 OutputStream::OutputStream()
     : newLineString (NewLine::getDefault())
 {
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     if (! DanglingStreamChecker::hasBeenDestroyed)
         danglingStreamChecker.activeStreams.add (this);
-   #endif
+#endif
 }
 
 OutputStream::~OutputStream()
 {
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     if (! DanglingStreamChecker::hasBeenDestroyed)
         danglingStreamChecker.activeStreams.removeFirstMatchingValue (this);
-   #endif
+#endif
 }
 
 //==============================================================================
@@ -171,28 +171,48 @@ bool OutputStream::writeInt64BigEndian (int64 value)
 
 bool OutputStream::writeFloat (float value)
 {
-    union { int asInt; float asFloat; } n;
+    union
+    {
+        int asInt;
+        float asFloat;
+    } n;
+
     n.asFloat = value;
     return writeInt (n.asInt);
 }
 
 bool OutputStream::writeFloatBigEndian (float value)
 {
-    union { int asInt; float asFloat; } n;
+    union
+    {
+        int asInt;
+        float asFloat;
+    } n;
+
     n.asFloat = value;
     return writeIntBigEndian (n.asInt);
 }
 
 bool OutputStream::writeDouble (double value)
 {
-    union { int64 asInt; double asDouble; } n;
+    union
+    {
+        int64 asInt;
+        double asDouble;
+    } n;
+
     n.asDouble = value;
     return writeInt64 (n.asInt);
 }
 
 bool OutputStream::writeDoubleBigEndian (double value)
 {
-    union { int64 asInt; double asDouble; } n;
+    union
+    {
+        int64 asInt;
+        double asDouble;
+    } n;
+
     n.asDouble = value;
     return writeInt64BigEndian (n.asInt);
 }
@@ -201,20 +221,20 @@ bool OutputStream::writeString (const String& text)
 {
     auto numBytes = text.getNumBytesAsUTF8() + 1;
 
-   #if (JUCE_STRING_UTF_TYPE == 8)
+#if (JUCE_STRING_UTF_TYPE == 8)
     return write (text.toRawUTF8(), numBytes);
-   #else
+#else
     // (This avoids using toUTF8() to prevent the memory bloat that it would leave behind
     // if lots of large, persistent strings were to be written to streams).
     HeapBlock<char> temp (numBytes);
     text.copyToUTF8 (temp, numBytes);
     return write (temp, numBytes);
-   #endif
+#endif
 }
 
 bool OutputStream::writeText (const String& text, bool asUTF16, bool writeUTF16ByteOrderMark, const char* lf)
 {
-    bool replaceLineFeedWithUnix    = lf != nullptr && lf[0] == '\n' && lf[1] == 0;
+    bool replaceLineFeedWithUnix = lf != nullptr && lf[0] == '\n' && lf[1] == 0;
     bool replaceLineFeedWithWindows = lf != nullptr && lf[0] == '\r' && lf[1] == '\n' && lf[2] == 0;
 
     // The line-feed passed in must be either nullptr, or "\n" or "\r\n"

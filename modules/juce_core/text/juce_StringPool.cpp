@@ -43,19 +43,27 @@ namespace juce
 static const int minNumberOfStringsForGarbageCollection = 300;
 static const uint32 garbageCollectionInterval = 30000;
 
-
-StringPool::StringPool() noexcept  : lastGarbageCollectionTime (0) {}
+StringPool::StringPool() noexcept
+    : lastGarbageCollectionTime (0)
+{
+}
 
 struct StartEndString
 {
-    StartEndString (String::CharPointerType s, String::CharPointerType e) noexcept : start (s), end (e) {}
-    operator String() const   { return String (start, end); }
+    StartEndString (String::CharPointerType s, String::CharPointerType e) noexcept
+        : start (s)
+        , end (e)
+    {
+    }
+
+    operator String() const { return String (start, end); }
 
     String::CharPointerType start, end;
 };
 
-static int compareStrings (const String& s1, const String& s2) noexcept     { return s1.compare (s2); }
-static int compareStrings (CharPointer_UTF8 s1, const String& s2) noexcept  { return s1.compare (s2.getCharPointer()); }
+static int compareStrings (const String& s1, const String& s2) noexcept { return s1.compare (s2); }
+
+static int compareStrings (CharPointer_UTF8 s1, const String& s2) noexcept { return s1.compare (s2.getCharPointer()); }
 
 static int compareStrings (const StartEndString& string1, const String& string2) noexcept
 {
@@ -67,8 +75,10 @@ static int compareStrings (const StartEndString& string1, const String& string2)
         const int c2 = (int) s2.getAndAdvance();
         const int diff = c1 - c2;
 
-        if (diff != 0)  return diff < 0 ? -1 : 1;
-        if (c1 == 0)    break;
+        if (diff != 0)
+            return diff < 0 ? -1 : 1;
+        if (c1 == 0)
+            break;
     }
 
     return 0;
@@ -157,7 +167,7 @@ String StringPool::getPooledString (const String& newString)
 void StringPool::garbageCollectIfNeeded()
 {
     if (strings.size() > minNumberOfStringsForGarbageCollection
-         && Time::getApproximateMillisecondCounter() > lastGarbageCollectionTime + garbageCollectionInterval)
+        && Time::getApproximateMillisecondCounter() > lastGarbageCollectionTime + garbageCollectionInterval)
         garbageCollect();
 }
 

@@ -70,8 +70,11 @@ public:
                        ValueType intervalValue,
                        ValueType skewFactor,
                        bool useSymmetricSkew = false) noexcept
-        : start (rangeStart), end (rangeEnd), interval (intervalValue),
-          skew (skewFactor), symmetricSkew (useSymmetricSkew)
+        : start (rangeStart)
+        , end (rangeEnd)
+        , interval (intervalValue)
+        , skew (skewFactor)
+        , symmetricSkew (useSymmetricSkew)
     {
         checkInvariants();
     }
@@ -79,7 +82,8 @@ public:
     /** Creates a NormalisableRange with a given range, continuous interval, but a dummy skew-factor. */
     NormalisableRange (ValueType rangeStart,
                        ValueType rangeEnd) noexcept
-        : start (rangeStart), end (rangeEnd)
+        : start (rangeStart)
+        , end (rangeEnd)
     {
         checkInvariants();
     }
@@ -88,7 +92,9 @@ public:
     NormalisableRange (ValueType rangeStart,
                        ValueType rangeEnd,
                        ValueType intervalValue) noexcept
-        : start (rangeStart), end (rangeEnd), interval (intervalValue)
+        : start (rangeStart)
+        , end (rangeEnd)
+        , interval (intervalValue)
     {
         checkInvariants();
     }
@@ -106,9 +112,9 @@ public:
     }
 
     /** A function object which can remap a value in some way based on the start and end of a range. */
-    using ValueRemapFunction = std::function<ValueType(ValueType rangeStart,
-                                                       ValueType rangeEnd,
-                                                       ValueType valueToRemap)>;
+    using ValueRemapFunction = std::function<ValueType (ValueType rangeStart,
+                                                        ValueType rangeEnd,
+                                                        ValueType valueToRemap)>;
 
     /** Creates a NormalisableRange with a given range and an injective mapping function.
 
@@ -126,11 +132,11 @@ public:
                        ValueRemapFunction convertFrom0To1Func,
                        ValueRemapFunction convertTo0To1Func,
                        ValueRemapFunction snapToLegalValueFunc = {}) noexcept
-        : start (rangeStart),
-          end   (rangeEnd),
-          convertFrom0To1Function  (std::move (convertFrom0To1Func)),
-          convertTo0To1Function    (std::move (convertTo0To1Func)),
-          snapToLegalValueFunction (std::move (snapToLegalValueFunc))
+        : start (rangeStart)
+        , end (rangeEnd)
+        , convertFrom0To1Function (std::move (convertFrom0To1Func))
+        , convertTo0To1Function (std::move (convertTo0To1Func))
+        , snapToLegalValueFunction (std::move (snapToLegalValueFunc))
     {
         checkInvariants();
     }
@@ -153,10 +159,8 @@ public:
 
         auto distanceFromMiddle = static_cast<ValueType> (2) * proportion - static_cast<ValueType> (1);
 
-        return (static_cast<ValueType> (1) + std::pow (std::abs (distanceFromMiddle), skew)
-                                           * (distanceFromMiddle < ValueType() ? static_cast<ValueType> (-1)
-                                                                               : static_cast<ValueType> (1)))
-               / static_cast<ValueType> (2);
+        return (static_cast<ValueType> (1) + std::pow (std::abs (distanceFromMiddle), skew) * (distanceFromMiddle < ValueType() ? static_cast<ValueType> (-1) : static_cast<ValueType> (1)))
+             / static_cast<ValueType> (2);
     }
 
     /** Uses the properties of this mapping to convert a normalised 0->1 value to
@@ -181,8 +185,8 @@ public:
 
         if (! exactlyEqual (skew, static_cast<ValueType> (1)) && ! exactlyEqual (distanceFromMiddle, static_cast<ValueType> (0)))
             distanceFromMiddle = std::exp (std::log (std::abs (distanceFromMiddle)) / skew)
-                                 * (distanceFromMiddle < ValueType() ? static_cast<ValueType> (-1)
-                                                                     : static_cast<ValueType> (1));
+                               * (distanceFromMiddle < ValueType() ? static_cast<ValueType> (-1)
+                                                                   : static_cast<ValueType> (1));
 
         return start + (end - start) / static_cast<ValueType> (2) * (static_cast<ValueType> (1) + distanceFromMiddle);
     }
@@ -202,7 +206,7 @@ public:
     }
 
     /** Returns the extent of the normalisable range. */
-    Range<ValueType> getRange() const noexcept          { return { start, end }; }
+    Range<ValueType> getRange() const noexcept { return { start, end }; }
 
     /** Given a value which is between the start and end points, this sets the skew
         such that convertFrom0to1 (0.5) will return this value.

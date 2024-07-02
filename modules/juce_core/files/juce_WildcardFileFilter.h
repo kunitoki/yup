@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  WildcardFileFilter  : public FileFilter
+class JUCE_API WildcardFileFilter : public FileFilter
 {
 public:
     //==============================================================================

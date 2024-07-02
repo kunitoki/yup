@@ -84,7 +84,9 @@ struct NullCheckedInvocation
     }
 
     template <typename... Args>
-    static void invoke (std::nullptr_t, Args&&...) {}
+    static void invoke (std::nullptr_t, Args&&...)
+    {
+    }
 };
 
 /** Can be used to disable template constructors that would otherwise cause ambiguity with
@@ -97,7 +99,7 @@ using DisableIfSameOrDerived = std::enable_if_t<! std::is_base_of_v<A, std::remo
 
 /** Copies an object, sets one of the copy's members to the specified value, and then returns the copy. */
 template <typename Object, typename OtherObject, typename Member, typename Other>
-[[nodiscard]] Object withMember (Object copy, Member OtherObject::* member, Other&& value)
+[[nodiscard]] Object withMember (Object copy, Member OtherObject::*member, Other&& value)
 {
     copy.*member = std::forward<Other> (value);
     return copy;
@@ -106,16 +108,19 @@ template <typename Object, typename OtherObject, typename Member, typename Other
 #ifndef DOXYGEN
 namespace detail
 {
-template <typename Functor, typename Return, typename... Args>
-static constexpr auto toFnPtr (Functor functor, Return (Functor::*) (Args...) const)
-{
-    return static_cast<Return (*) (Args...)> (functor);
-}
+    template <typename Functor, typename Return, typename... Args>
+    static constexpr auto toFnPtr (Functor functor, Return (Functor::*) (Args...) const)
+    {
+        return static_cast<Return (*) (Args...)> (functor);
+    }
 } // namespace detail
 #endif
 
 /** Converts a captureless lambda to its equivalent function pointer type. */
 template <typename Functor>
-static constexpr auto toFnPtr (Functor functor) { return detail::toFnPtr (functor, &Functor::operator()); }
+static constexpr auto toFnPtr (Functor functor)
+{
+    return detail::toFnPtr (functor, &Functor::operator());
+}
 
 } // namespace juce

@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  ZipFile
+class JUCE_API ZipFile
 {
 public:
     /** Creates a ZipFile to read a specific file. */
@@ -196,8 +196,16 @@ public:
                             const File& targetDirectory,
                             bool shouldOverwriteFiles = true);
 
-    enum class OverwriteFiles { no, yes };
-    enum class FollowSymlinks { no, yes };
+    enum class OverwriteFiles
+    {
+        no,
+        yes
+    };
+    enum class FollowSymlinks
+    {
+        no,
+        yes
+    };
 
     /** Uncompresses one of the entries from the zip file.
 
@@ -222,7 +230,7 @@ public:
         Create a ZipFile::Builder object, and call its addFile() method to add some files,
         then you can write it to a stream with write().
     */
-    class JUCE_API  Builder
+    class JUCE_API Builder
     {
     public:
         /** Creates an empty builder object. */
@@ -239,8 +247,7 @@ public:
             If the storedPathName parameter is specified, you can customise the partial pathname that
             will be stored for this file.
         */
-        void addFile (const File& fileToAdd, int compressionLevel,
-                      const String& storedPathName = String());
+        void addFile (const File& fileToAdd, int compressionLevel, const String& storedPathName = String());
 
         /** Adds a stream to the list of items which will be added to the archive.
 
@@ -254,8 +261,7 @@ public:
             @param fileModificationTime the timestamp that will be stored as the last modification time
                                         of this entry
         */
-        void addEntry (InputStream* streamToRead, int compressionLevel,
-                       const String& storedPathName, Time fileModificationTime);
+        void addEntry (InputStream* streamToRead, int compressionLevel, const String& storedPathName, Time fileModificationTime);
 
         /** Generates the zip file, writing it to the specified stream.
             If the progress parameter is non-null, it will be updated with an approximate
@@ -282,7 +288,7 @@ private:
     std::unique_ptr<InputStream> streamToDelete;
     std::unique_ptr<InputSource> inputSource;
 
-   #if JUCE_DEBUG
+#if JUCE_DEBUG
     struct OpenStreamCounter
     {
         OpenStreamCounter() = default;
@@ -292,7 +298,7 @@ private:
     };
 
     OpenStreamCounter streamCounter;
-   #endif
+#endif
 
     void init();
 

@@ -42,7 +42,9 @@ namespace juce
 
 #if ! JUCE_WASM
 
-NamedPipe::NamedPipe() {}
+NamedPipe::NamedPipe()
+{
+}
 
 NamedPipe::~NamedPipe()
 {
@@ -79,11 +81,10 @@ String NamedPipe::getName() const
     return currentPipeName;
 }
 
-// other methods for this class are implemented in the platform-specific files
+    // other methods for this class are implemented in the platform-specific files
 
-
-//==============================================================================
-//==============================================================================
+    //==============================================================================
+    //==============================================================================
 #if JUCE_UNIT_TESTS
 
 class NamedPipeTests final : public UnitTest
@@ -92,7 +93,8 @@ public:
     //==============================================================================
     NamedPipeTests()
         : UnitTest ("NamedPipe", UnitTestCategories::networking)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -219,9 +221,10 @@ private:
     //==============================================================================
     struct NamedPipeThread : public Thread
     {
-        NamedPipeThread (const String& tName, const String& pName,
-                         bool shouldCreatePipe, WaitableEvent& completed)
-            : Thread (tName), pipeName (pName), workCompleted (completed)
+        NamedPipeThread (const String& tName, const String& pName, bool shouldCreatePipe, WaitableEvent& completed)
+            : Thread (tName)
+            , pipeName (pName)
+            , workCompleted (completed)
         {
             if (shouldCreatePipe)
                 pipe.createNewPipe (pipeName);
@@ -239,11 +242,11 @@ private:
     //==============================================================================
     struct SenderThread final : public NamedPipeThread
     {
-        SenderThread (const String& pName, bool shouldCreatePipe,
-                      WaitableEvent& completed, int sData)
-            : NamedPipeThread ("NamePipeSender", pName, shouldCreatePipe, completed),
-              sendData (sData)
-        {}
+        SenderThread (const String& pName, bool shouldCreatePipe, WaitableEvent& completed, int sData)
+            : NamedPipeThread ("NamePipeSender", pName, shouldCreatePipe, completed)
+            , sendData (sData)
+        {
+        }
 
         ~SenderThread() override
         {
@@ -262,10 +265,10 @@ private:
     //==============================================================================
     struct ReceiverThread final : public NamedPipeThread
     {
-        ReceiverThread (const String& pName, bool shouldCreatePipe,
-                        WaitableEvent& completed)
+        ReceiverThread (const String& pName, bool shouldCreatePipe, WaitableEvent& completed)
             : NamedPipeThread ("NamePipeSender", pName, shouldCreatePipe, completed)
-        {}
+        {
+        }
 
         ~ReceiverThread() override
         {

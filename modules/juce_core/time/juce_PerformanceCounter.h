@@ -63,7 +63,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  PerformanceCounter
+class JUCE_API PerformanceCounter
 {
 public:
     //==============================================================================
@@ -135,7 +135,6 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PerformanceCounter)
 };
 
-
 //==============================================================================
 /**
     Simple RAII class for measuring the time spent in a scope.
@@ -157,7 +156,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  ScopedTimeMeasurement
+class JUCE_API ScopedTimeMeasurement
 {
 public:
     ScopedTimeMeasurement (double& resultInSeconds) noexcept

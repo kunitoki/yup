@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class CharPointer_ASCII  final
+class CharPointer_ASCII final
 {
 public:
     using CharType = char;
@@ -76,27 +76,32 @@ public:
     }
 
     /** This is a pointer comparison, it doesn't compare the actual text. */
-    inline bool operator== (CharPointer_ASCII other) const noexcept     { return data == other.data; }
-    inline bool operator!= (CharPointer_ASCII other) const noexcept     { return data != other.data; }
-    inline bool operator<= (CharPointer_ASCII other) const noexcept     { return data <= other.data; }
-    inline bool operator<  (CharPointer_ASCII other) const noexcept     { return data <  other.data; }
-    inline bool operator>= (CharPointer_ASCII other) const noexcept     { return data >= other.data; }
-    inline bool operator>  (CharPointer_ASCII other) const noexcept     { return data >  other.data; }
+    inline bool operator== (CharPointer_ASCII other) const noexcept { return data == other.data; }
+
+    inline bool operator!= (CharPointer_ASCII other) const noexcept { return data != other.data; }
+
+    inline bool operator<= (CharPointer_ASCII other) const noexcept { return data <= other.data; }
+
+    inline bool operator<(CharPointer_ASCII other) const noexcept { return data < other.data; }
+
+    inline bool operator>= (CharPointer_ASCII other) const noexcept { return data >= other.data; }
+
+    inline bool operator> (CharPointer_ASCII other) const noexcept { return data > other.data; }
 
     /** Returns the address that this pointer is pointing to. */
-    inline CharType* getAddress() const noexcept        { return data; }
+    inline CharType* getAddress() const noexcept { return data; }
 
     /** Returns the address that this pointer is pointing to. */
-    inline operator const CharType*() const noexcept    { return data; }
+    inline operator const CharType*() const noexcept { return data; }
 
     /** Returns true if this pointer is pointing to a null character. */
-    inline bool isEmpty() const noexcept                { return *data == 0; }
+    inline bool isEmpty() const noexcept { return *data == 0; }
 
     /** Returns true if this pointer is not pointing to a null character. */
-    inline bool isNotEmpty() const noexcept             { return *data != 0; }
+    inline bool isNotEmpty() const noexcept { return *data != 0; }
 
     /** Returns the unicode character that this pointer is pointing to. */
-    inline juce_wchar operator*() const noexcept        { return (juce_wchar) (uint8) *data; }
+    inline juce_wchar operator*() const noexcept { return (juce_wchar) (uint8) *data; }
 
     /** Moves this pointer along to the next character in the string. */
     inline CharPointer_ASCII operator++() noexcept
@@ -114,7 +119,7 @@ public:
 
     /** Returns the character that this pointer is currently pointing to, and then
         advances the pointer to point to the next character. */
-    inline juce_wchar getAndAdvance() noexcept  { return (juce_wchar) (uint8) *data++; }
+    inline juce_wchar getAndAdvance() noexcept { return (juce_wchar) (uint8) *data++; }
 
     /** Moves this pointer along to the next character in the string. */
     CharPointer_ASCII operator++ (int) noexcept
@@ -138,7 +143,7 @@ public:
     /** Returns the character at a given character index from the start of the string. */
     inline juce_wchar operator[] (const int characterIndex) const noexcept
     {
-        return (juce_wchar) (uint8) data [characterIndex];
+        return (juce_wchar) (uint8) data[characterIndex];
     }
 
     /** Returns a pointer which is moved forwards from this one by the specified number of characters. */
@@ -282,13 +287,13 @@ public:
 
     int compareIgnoreCase (const CharPointer_ASCII other) const
     {
-       #if JUCE_MINGW || (JUCE_WINDOWS && JUCE_CLANG)
+#if JUCE_MINGW || (JUCE_WINDOWS && JUCE_CLANG)
         return CharacterFunctions::compareIgnoreCase (*this, other);
-       #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
         return stricmp (data, other.data);
-       #else
+#else
         return strcasecmp (data, other.data);
-       #endif
+#endif
     }
 
     /** Compares this string with another one, up to a specified number of characters. */
@@ -329,46 +334,52 @@ public:
     }
 
     /** Returns true if the first character of this string is whitespace. */
-    bool isWhitespace() const                   { return CharacterFunctions::isWhitespace (*data) != 0; }
+    bool isWhitespace() const { return CharacterFunctions::isWhitespace (*data) != 0; }
+
     /** Returns true if the first character of this string is a digit. */
-    bool isDigit() const                        { return CharacterFunctions::isDigit (*data) != 0; }
+    bool isDigit() const { return CharacterFunctions::isDigit (*data) != 0; }
+
     /** Returns true if the first character of this string is a letter. */
-    bool isLetter() const                       { return CharacterFunctions::isLetter (*data) != 0; }
+    bool isLetter() const { return CharacterFunctions::isLetter (*data) != 0; }
+
     /** Returns true if the first character of this string is a letter or digit. */
-    bool isLetterOrDigit() const                { return CharacterFunctions::isLetterOrDigit (*data) != 0; }
+    bool isLetterOrDigit() const { return CharacterFunctions::isLetterOrDigit (*data) != 0; }
+
     /** Returns true if the first character of this string is upper-case. */
-    bool isUpperCase() const                    { return CharacterFunctions::isUpperCase ((juce_wchar) (uint8) *data) != 0; }
+    bool isUpperCase() const { return CharacterFunctions::isUpperCase ((juce_wchar) (uint8) *data) != 0; }
+
     /** Returns true if the first character of this string is lower-case. */
-    bool isLowerCase() const                    { return CharacterFunctions::isLowerCase ((juce_wchar) (uint8) *data) != 0; }
+    bool isLowerCase() const { return CharacterFunctions::isLowerCase ((juce_wchar) (uint8) *data) != 0; }
 
     /** Returns an upper-case version of the first character of this string. */
-    juce_wchar toUpperCase() const noexcept     { return CharacterFunctions::toUpperCase ((juce_wchar) (uint8) *data); }
+    juce_wchar toUpperCase() const noexcept { return CharacterFunctions::toUpperCase ((juce_wchar) (uint8) *data); }
+
     /** Returns a lower-case version of the first character of this string. */
-    juce_wchar toLowerCase() const noexcept     { return CharacterFunctions::toLowerCase ((juce_wchar) (uint8) *data); }
+    juce_wchar toLowerCase() const noexcept { return CharacterFunctions::toLowerCase ((juce_wchar) (uint8) *data); }
 
     /** Parses this string as a 32-bit integer. */
-    int getIntValue32() const noexcept          { return atoi (data); }
+    int getIntValue32() const noexcept { return atoi (data); }
 
     /** Parses this string as a 64-bit integer. */
     int64 getIntValue64() const noexcept
     {
-       #if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID || JUCE_MINGW
+#if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID || JUCE_MINGW
         return atoll (data);
-       #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
         return _atoi64 (data);
-       #else
-        return CharacterFunctions::getIntValue <int64, CharPointer_ASCII> (*this);
-       #endif
+#else
+        return CharacterFunctions::getIntValue<int64, CharPointer_ASCII> (*this);
+#endif
     }
 
     /** Parses this string as a floating point double. */
-    double getDoubleValue() const noexcept                      { return CharacterFunctions::getDoubleValue (*this); }
+    double getDoubleValue() const noexcept { return CharacterFunctions::getDoubleValue (*this); }
 
     /** Returns the first non-whitespace character in the string. */
-    CharPointer_ASCII findEndOfWhitespace() const noexcept      { return CharacterFunctions::findEndOfWhitespace (*this); }
+    CharPointer_ASCII findEndOfWhitespace() const noexcept { return CharacterFunctions::findEndOfWhitespace (*this); }
 
     /** Move this pointer to the first non-whitespace character in the string. */
-    void incrementToEndOfWhitespace() noexcept                  { CharacterFunctions::incrementToEndOfWhitespace (*this); }
+    void incrementToEndOfWhitespace() noexcept { CharacterFunctions::incrementToEndOfWhitespace (*this); }
 
     /** Returns true if the given unicode character can be represented in this encoding. */
     static bool canRepresent (juce_wchar character) noexcept

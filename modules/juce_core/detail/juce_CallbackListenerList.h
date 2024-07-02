@@ -43,8 +43,9 @@ namespace juce::detail
 template <typename... Ts>
 constexpr bool isValueOrLvalueReferenceToConst()
 {
-    return ((   (! std::is_reference_v<Ts>)
-             || (std::is_lvalue_reference_v<Ts> && std::is_const_v<std::remove_reference_t<Ts>>)) && ...);
+    return (((! std::is_reference_v<Ts>)
+             || (std::is_lvalue_reference_v<Ts> && std::is_const_v<std::remove_reference_t<Ts>>) )
+            && ...);
 }
 
 template <typename... Args>
@@ -64,15 +65,18 @@ public:
         listeners.add (&*it);
 
         return ErasedScopeGuard { [this, it]
-        {
-            listeners.remove (&*it);
-            callbacks.erase (it);
-        } };
+                                  {
+                                      listeners.remove (&*it);
+                                      callbacks.erase (it);
+                                  } };
     }
 
     void call (Args... args)
     {
-        listeners.call ([&] (auto& l) { l (std::forward<Args> (args)...); });
+        listeners.call ([&] (auto& l)
+                        {
+                            l (std::forward<Args> (args)...);
+                        });
     }
 
 private:

@@ -98,31 +98,52 @@ public:
     inline WeakReference() = default;
 
     /** Creates a WeakReference that points at the given object. */
-    WeakReference (ObjectType* object)  : holder (getRef (object)) {}
+    WeakReference (ObjectType* object)
+        : holder (getRef (object))
+    {
+    }
 
     /** Creates a copy of another WeakReference. */
-    WeakReference (const WeakReference& other) noexcept         : holder (other.holder) {}
+    WeakReference (const WeakReference& other) noexcept
+        : holder (other.holder)
+    {
+    }
 
     /** Move constructor */
-    WeakReference (WeakReference&& other) noexcept              : holder (std::move (other.holder)) {}
+    WeakReference (WeakReference&& other) noexcept
+        : holder (std::move (other.holder))
+    {
+    }
 
     /** Copies another pointer to this one. */
-    WeakReference& operator= (const WeakReference& other)       { holder = other.holder; return *this; }
+    WeakReference& operator= (const WeakReference& other)
+    {
+        holder = other.holder;
+        return *this;
+    }
 
     /** Copies another pointer to this one. */
-    WeakReference& operator= (ObjectType* newObject)            { holder = getRef (newObject); return *this; }
+    WeakReference& operator= (ObjectType* newObject)
+    {
+        holder = getRef (newObject);
+        return *this;
+    }
 
     /** Move assignment operator */
-    WeakReference& operator= (WeakReference&& other) noexcept   { holder = std::move (other.holder); return *this; }
+    WeakReference& operator= (WeakReference&& other) noexcept
+    {
+        holder = std::move (other.holder);
+        return *this;
+    }
 
     /** Returns the object that this pointer refers to, or null if the object no longer exists. */
-    ObjectType* get() const noexcept                            { return holder != nullptr ? holder->get() : nullptr; }
+    ObjectType* get() const noexcept { return holder != nullptr ? holder->get() : nullptr; }
 
     /** Returns the object that this pointer refers to, or null if the object no longer exists. */
-    operator ObjectType*() const noexcept                       { return get(); }
+    operator ObjectType*() const noexcept { return get(); }
 
     /** Returns the object that this pointer refers to, or null if the object no longer exists. */
-    ObjectType* operator->() const noexcept                     { return get(); }
+    ObjectType* operator->() const noexcept { return get(); }
 
     /** This returns true if this reference has been pointing at an object, but that object has
         since been deleted.
@@ -131,20 +152,24 @@ public:
         operator=() to make this refer to a different object will reset this flag to match the status
         of the reference from which you're copying.
     */
-    bool wasObjectDeleted() const noexcept                      { return holder != nullptr && holder->get() == nullptr; }
+    bool wasObjectDeleted() const noexcept { return holder != nullptr && holder->get() == nullptr; }
 
     //==============================================================================
     /** This class is used internally by the WeakReference class - don't use it directly
         in your code!
         @see WeakReference
     */
-    class SharedPointer   : public ReferenceCountingType
+    class SharedPointer : public ReferenceCountingType
     {
     public:
-        explicit SharedPointer (ObjectType* obj) noexcept : owner (obj) {}
+        explicit SharedPointer (ObjectType* obj) noexcept
+            : owner (obj)
+        {
+        }
 
-        inline ObjectType* get() const noexcept     { return owner; }
-        void clearPointer() noexcept                { owner = nullptr; }
+        inline ObjectType* get() const noexcept { return owner; }
+
+        void clearPointer() noexcept { owner = nullptr; }
 
     private:
         ObjectType* owner;
@@ -224,7 +249,6 @@ private:
     }
 };
 
-
 //==============================================================================
 /**
      Macro to easily allow a class to be made weak-referenceable.
@@ -245,10 +269,12 @@ private:
 
      @see WeakReference, WeakReference::Master
 */
-#define JUCE_DECLARE_WEAK_REFERENCEABLE(Class) \
-    struct WeakRefMaster  : public juce::WeakReference<Class>::Master { ~WeakRefMaster() { this->clear(); } }; \
-    WeakRefMaster masterReference; \
-    friend class juce::WeakReference<Class>; \
-
+#define JUCE_DECLARE_WEAK_REFERENCEABLE(Class)                   \
+struct WeakRefMaster : public juce::WeakReference<Class>::Master \
+{                                                                \
+~WeakRefMaster() { this->clear(); }                              \
+};                                                               \
+WeakRefMaster masterReference;                                   \
+friend class juce::WeakReference<Class>;
 
 } // namespace juce

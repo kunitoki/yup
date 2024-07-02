@@ -51,12 +51,12 @@ static AllocationHooks& getAllocationHooksForThread()
 void notifyAllocationHooksForThread()
 {
     getAllocationHooksForThread().listenerList.call ([] (AllocationHooks::Listener& l)
-    {
-        l.newOrDeleteCalled();
-    });
+                                                     {
+                                                         l.newOrDeleteCalled();
+                                                     });
 }
 
-}
+} // namespace juce
 
 void* operator new (size_t s)
 {
@@ -112,6 +112,6 @@ UnitTestAllocationChecker::~UnitTestAllocationChecker() noexcept
 
 void UnitTestAllocationChecker::newOrDeleteCalled() noexcept { ++calls; }
 
-}
+} // namespace juce
 
 #endif

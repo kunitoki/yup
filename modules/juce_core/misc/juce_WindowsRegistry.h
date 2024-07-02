@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  WindowsRegistry
+class JUCE_API WindowsRegistry
 {
 public:
     /** These values can be used to specify whether the 32- or 64-bit registry should be used.
@@ -61,10 +61,10 @@ public:
         WoW64_Default = 0,
 
         /** Always use the 64-bit registry store. (KEY_WOW64_64KEY). */
-        WoW64_64bit  = 0x100,
+        WoW64_64bit = 0x100,
 
         /** Always use the 32-bit registry store. (KEY_WOW64_32KEY). */
-        WoW64_32bit  = 0x200
+        WoW64_32bit = 0x200
     };
 
     //==============================================================================
@@ -140,12 +140,12 @@ public:
                                                        bool registerForCurrentUserOnly,
                                                        WoW64Mode mode = WoW64_Default);
 
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     // DEPRECATED: use the other methods with a WoW64Mode parameter of WoW64_64bit instead.
     [[deprecated]] static String getValueWow64 (const String&, const String& defaultValue = String());
     [[deprecated]] static bool valueExistsWow64 (const String&);
     [[deprecated]] static bool keyExistsWow64 (const String&);
-   #endif
+#endif
 
 private:
     WindowsRegistry() = delete;

@@ -40,7 +40,8 @@
 namespace juce
 {
 
-TimeSliceThread::TimeSliceThread (const String& name)  : Thread (name)
+TimeSliceThread::TimeSliceThread (const String& name)
+    : Thread (name)
 {
 }
 
@@ -119,7 +120,10 @@ TimeSliceClient* TimeSliceThread::getClient (const int i) const
 bool TimeSliceThread::contains (const TimeSliceClient* c) const
 {
     const ScopedLock sl (listLock);
-    return std::any_of (clients.begin(), clients.end(), [=] (auto* registered) { return registered == c; });
+    return std::any_of (clients.begin(), clients.end(), [=] (auto* registered)
+                        {
+                            return registered == c;
+                        });
 }
 
 //==============================================================================

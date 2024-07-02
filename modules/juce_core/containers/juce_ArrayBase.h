@@ -54,7 +54,7 @@ namespace juce
     @tags{Core}
 */
 template <class ElementType, class TypeOfCriticalSectionToUse>
-class ArrayBase  : public TypeOfCriticalSectionToUse
+class ArrayBase : public TypeOfCriticalSectionToUse
 {
 private:
     using ParameterType = typename TypeHelpers::ParameterType<ElementType>::type;
@@ -73,9 +73,9 @@ public:
     }
 
     ArrayBase (ArrayBase&& other) noexcept
-        : elements (std::move (other.elements)),
-          numAllocated (other.numAllocated),
-          numUsed (other.numUsed)
+        : elements (std::move (other.elements))
+        , numAllocated (other.numAllocated)
+        , numUsed (other.numUsed)
     {
         other.numAllocated = 0;
         other.numUsed = 0;
@@ -101,9 +101,9 @@ public:
               class OtherCriticalSection,
               typename = AllowConversion<OtherElementType, OtherCriticalSection>>
     ArrayBase (ArrayBase<OtherElementType, OtherCriticalSection>&& other) noexcept
-        : elements (std::move (other.elements)),
-          numAllocated (other.numAllocated),
-          numUsed (other.numUsed)
+        : elements (std::move (other.elements))
+        , numAllocated (other.numAllocated)
+        , numUsed (other.numUsed)
     {
         other.numAllocated = 0;
         other.numUsed = 0;
@@ -266,7 +266,7 @@ public:
     {
         elements.swapWith (other.elements);
         std::swap (numAllocated, other.numAllocated);
-        std::swap (numUsed,      other.numUsed);
+        std::swap (numUsed, other.numUsed);
     }
 
     //==============================================================================
@@ -322,8 +322,9 @@ public:
 
     template <class OtherArrayType>
     std::enable_if_t<! std::is_pointer_v<OtherArrayType>, int>
-    addArray (const OtherArrayType& arrayToAddFrom,
-              int startIndex, int numElementsToAdd = -1)
+        addArray (const OtherArrayType& arrayToAddFrom,
+                  int startIndex,
+                  int numElementsToAdd = -1)
     {
         jassert ((const void*) this != (const void*) &arrayToAddFrom); // can't add from our own elements!
 
@@ -381,7 +382,7 @@ public:
     void swap (int index1, int index2)
     {
         if (isPositiveAndBelow (index1, numUsed)
-         && isPositiveAndBelow (index2, numUsed))
+            && isPositiveAndBelow (index2, numUsed))
         {
             std::swap (elements[index1],
                        elements[index2]);
@@ -402,11 +403,11 @@ public:
 
 private:
     //==============================================================================
-   #if defined (__GNUC__) && __GNUC__ < 5 && ! defined (__clang__)
+#if defined(__GNUC__) && __GNUC__ < 5 && ! defined(__clang__)
     static constexpr auto isTriviallyCopyable = std::is_scalar_v<ElementType>;
-   #else
+#else
     static constexpr auto isTriviallyCopyable = std::is_trivially_copyable_v<ElementType>;
-   #endif
+#endif
 
     //==============================================================================
     template <typename Type>
@@ -560,7 +561,7 @@ private:
     void addImpl (Elements&&... toAdd)
     {
         (checkSourceIsNotAMember (toAdd), ...);
-        ensureAllocatedSize (numUsed + (int) sizeof... (toAdd));
+        ensureAllocatedSize (numUsed + (int) sizeof...(toAdd));
         addAssumingCapacityIsReady (std::forward<Elements> (toAdd)...);
     }
 

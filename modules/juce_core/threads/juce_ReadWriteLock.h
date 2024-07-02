@@ -61,7 +61,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  ReadWriteLock
+class JUCE_API ReadWriteLock
 {
 public:
     //==============================================================================
@@ -139,7 +139,6 @@ public:
     */
     void exitWrite() const noexcept;
 
-
 private:
     //==============================================================================
     SpinLock accessLock;
@@ -153,7 +152,7 @@ private:
         int count;
     };
 
-    mutable Array <ThreadRecursionCount> readerThreads;
+    mutable Array<ThreadRecursionCount> readerThreads;
 
     bool tryEnterWriteInternal (Thread::ThreadID) const noexcept;
 

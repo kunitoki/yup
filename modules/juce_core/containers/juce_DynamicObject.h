@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  DynamicObject  : public ReferenceCountedObject
+class JUCE_API DynamicObject : public ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -113,10 +113,10 @@ public:
     void clear();
 
     /** Returns the NamedValueSet that holds the object's properties. */
-    NamedValueSet& getProperties() noexcept                 { return properties; }
+    NamedValueSet& getProperties() noexcept { return properties; }
 
     /** Returns the NamedValueSet that holds the object's properties. */
-    const NamedValueSet& getProperties() const noexcept     { return properties; }
+    const NamedValueSet& getProperties() const noexcept { return properties; }
 
     /** Calls var::clone() on all the properties that this object contains. */
     void cloneAllProperties();

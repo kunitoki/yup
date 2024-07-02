@@ -48,52 +48,52 @@ struct ThreadPriorities
         int native;
     };
 
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     enum AndroidThreadPriority
     {
-        THREAD_PRIORITY_AUDIO          = -16,
-        THREAD_PRIORITY_FOREGROUND     = -2,
+        THREAD_PRIORITY_AUDIO = -16,
+        THREAD_PRIORITY_FOREGROUND = -2,
         THREAD_PRIORITY_MORE_FAVORABLE = -1,
-        THREAD_PRIORITY_DEFAULT        = 0,
+        THREAD_PRIORITY_DEFAULT = 0,
         THREAD_PRIORITY_LESS_FAVORABLE = 1,
-        THREAD_PRIORITY_BACKGROUND     = 10,
-        THREAD_PRIORITY_LOWEST         = 19
+        THREAD_PRIORITY_BACKGROUND = 10,
+        THREAD_PRIORITY_LOWEST = 19
     };
-   #endif
+#endif
 
     inline static constexpr Entry table[]
     {
-       #if JUCE_ANDROID
-        { Thread::Priority::highest,    AndroidThreadPriority::THREAD_PRIORITY_AUDIO },
-        { Thread::Priority::high,       AndroidThreadPriority::THREAD_PRIORITY_FOREGROUND },
-        { Thread::Priority::normal,     AndroidThreadPriority::THREAD_PRIORITY_DEFAULT },
-        { Thread::Priority::low,        AndroidThreadPriority::THREAD_PRIORITY_BACKGROUND - 5 },
-        { Thread::Priority::background, AndroidThreadPriority::THREAD_PRIORITY_BACKGROUND },
-       #endif
+#if JUCE_ANDROID
+        { Thread::Priority::highest, AndroidThreadPriority::THREAD_PRIORITY_AUDIO },
+            { Thread::Priority::high, AndroidThreadPriority::THREAD_PRIORITY_FOREGROUND },
+            { Thread::Priority::normal, AndroidThreadPriority::THREAD_PRIORITY_DEFAULT },
+            { Thread::Priority::low, AndroidThreadPriority::THREAD_PRIORITY_BACKGROUND - 5 },
+            { Thread::Priority::background, AndroidThreadPriority::THREAD_PRIORITY_BACKGROUND },
+#endif
 
-       #if JUCE_LINUX || JUCE_BSD || JUCE_WASM
-        { Thread::Priority::highest,    0 },
-        { Thread::Priority::high,       0 },
-        { Thread::Priority::normal,     0 },
-        { Thread::Priority::low,        0 },
-        { Thread::Priority::background, 0 },
-       #endif
+#if JUCE_LINUX || JUCE_BSD || JUCE_WASM
+            { Thread::Priority::highest, 0 },
+            { Thread::Priority::high, 0 },
+            { Thread::Priority::normal, 0 },
+            { Thread::Priority::low, 0 },
+            { Thread::Priority::background, 0 },
+#endif
 
-       #if JUCE_MAC || JUCE_IOS
-        { Thread::Priority::highest,    4 },
-        { Thread::Priority::high,       3 },
-        { Thread::Priority::normal,     2 },
-        { Thread::Priority::low,        1 },
-        { Thread::Priority::background, 0 },
-       #endif
+#if JUCE_MAC || JUCE_IOS
+            { Thread::Priority::highest, 4 },
+            { Thread::Priority::high, 3 },
+            { Thread::Priority::normal, 2 },
+            { Thread::Priority::low, 1 },
+            { Thread::Priority::background, 0 },
+#endif
 
-       #if JUCE_WINDOWS
-        { Thread::Priority::highest,    THREAD_PRIORITY_TIME_CRITICAL },
-        { Thread::Priority::high,       THREAD_PRIORITY_HIGHEST },
-        { Thread::Priority::normal,     THREAD_PRIORITY_NORMAL },
-        { Thread::Priority::low,        THREAD_PRIORITY_LOWEST },
-        { Thread::Priority::background, THREAD_PRIORITY_IDLE },
-       #endif
+#if JUCE_WINDOWS
+            { Thread::Priority::highest, THREAD_PRIORITY_TIME_CRITICAL },
+            { Thread::Priority::high, THREAD_PRIORITY_HIGHEST },
+            { Thread::Priority::normal, THREAD_PRIORITY_NORMAL },
+            { Thread::Priority::low, THREAD_PRIORITY_LOWEST },
+            { Thread::Priority::background, THREAD_PRIORITY_IDLE },
+#endif
     };
 
     static_assert (std::size (table) == 5,
@@ -102,21 +102,24 @@ struct ThreadPriorities
     static Thread::Priority getJucePriority (const int value)
     {
         const auto iter = std::min_element (std::begin (table),
-                                            std::end   (table),
+                                            std::end (table),
                                             [value] (const auto& a, const auto& b)
                                             {
                                                 return std::abs (a.native - value) < std::abs (b.native - value);
                                             });
 
         jassert (iter != std::end (table));
-        return iter != std::end (table) ? iter->priority : Thread::Priority{};
+        return iter != std::end (table) ? iter->priority : Thread::Priority {};
     }
 
     static int getNativePriority (const Thread::Priority value)
     {
         const auto iter = std::find_if (std::begin (table),
-                                        std::end   (table),
-                                        [value] (const auto& entry) { return entry.priority == value; });
+                                        std::end (table),
+                                        [value] (const auto& entry)
+                                        {
+                                            return entry.priority == value;
+                                        });
 
         jassert (iter != std::end (table));
         return iter != std::end (table) ? iter->native : 0;

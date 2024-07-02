@@ -49,7 +49,7 @@ FileLogger::FileLogger (const File& file,
         trimFileSize (logFile, maxInitialFileSizeBytes);
 
     if (! file.exists())
-        file.create();  // (to create the parent directories)
+        file.create(); // (to create the parent directories)
 
     String welcome;
     welcome << newLine
@@ -118,16 +118,16 @@ void FileLogger::trimFileSize (const File& file, int64 maxFileSizeBytes)
 //==============================================================================
 File FileLogger::getSystemLogFileFolder()
 {
-   #if JUCE_MAC
+#if JUCE_MAC
     return File ("~/Library/Logs");
-   #elif JUCE_LINUX
+#elif JUCE_LINUX
     const char* state = ::getenv ("XDG_STATE_HOME");
     if (state == nullptr)
         state = ::getenv ("XDG_DATA_HOME");
     return (state != nullptr) ? File (state) : File ("~/.local/state");
-   #else
+#else
     return File::getSpecialLocation (File::userApplicationDataDirectory);
-   #endif
+#endif
 }
 
 FileLogger* FileLogger::createDefaultAppLogger (const String& logFileSubDirectoryName,
@@ -135,9 +135,9 @@ FileLogger* FileLogger::createDefaultAppLogger (const String& logFileSubDirector
                                                 const String& welcomeMessage,
                                                 const int64 maxInitialFileSizeBytes)
 {
-    return new FileLogger (getSystemLogFileFolder().getChildFile (logFileSubDirectoryName)
-                                                   .getChildFile (logFileName),
-                           welcomeMessage, maxInitialFileSizeBytes);
+    return new FileLogger (getSystemLogFileFolder().getChildFile (logFileSubDirectoryName).getChildFile (logFileName),
+                           welcomeMessage,
+                           maxInitialFileSizeBytes);
 }
 
 FileLogger* FileLogger::createDateStampedLogger (const String& logFileSubDirectoryName,
@@ -145,11 +145,9 @@ FileLogger* FileLogger::createDateStampedLogger (const String& logFileSubDirecto
                                                  const String& logFileNameSuffix,
                                                  const String& welcomeMessage)
 {
-    return new FileLogger (getSystemLogFileFolder().getChildFile (logFileSubDirectoryName)
-                                                   .getChildFile (logFileNameRoot + Time::getCurrentTime().formatted ("%Y-%m-%d_%H-%M-%S"))
-                                                   .withFileExtension (logFileNameSuffix)
-                                                   .getNonexistentSibling(),
-                           welcomeMessage, 0);
+    return new FileLogger (getSystemLogFileFolder().getChildFile (logFileSubDirectoryName).getChildFile (logFileNameRoot + Time::getCurrentTime().formatted ("%Y-%m-%d_%H-%M-%S")).withFileExtension (logFileNameSuffix).getNonexistentSibling(),
+                           welcomeMessage,
+                           0);
 }
 
 } // namespace juce

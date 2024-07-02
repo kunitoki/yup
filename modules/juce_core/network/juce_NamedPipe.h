@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  NamedPipe  final
+class JUCE_API NamedPipe final
 {
 public:
     //==============================================================================

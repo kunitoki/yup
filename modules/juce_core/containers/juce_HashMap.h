@@ -51,23 +51,29 @@ namespace juce
 struct DefaultHashFunctions
 {
     /** Generates a simple hash from an unsigned int. */
-    static int generateHash (uint32 key, int upperLimit) noexcept           { return (int) (key % (uint32) upperLimit); }
-    /** Generates a simple hash from an integer. */
-    static int generateHash (int32 key, int upperLimit) noexcept            { return generateHash ((uint32) key, upperLimit); }
-    /** Generates a simple hash from a uint64. */
-    static int generateHash (uint64 key, int upperLimit) noexcept           { return (int) (key % (uint64) upperLimit); }
-    /** Generates a simple hash from an int64. */
-    static int generateHash (int64 key, int upperLimit) noexcept            { return generateHash ((uint64) key, upperLimit); }
-    /** Generates a simple hash from a string. */
-    static int generateHash (const String& key, int upperLimit) noexcept    { return generateHash ((uint32) key.hashCode(), upperLimit); }
-    /** Generates a simple hash from a variant. */
-    static int generateHash (const var& key, int upperLimit) noexcept       { return generateHash (key.toString(), upperLimit); }
-    /** Generates a simple hash from a void ptr. */
-    static int generateHash (const void* key, int upperLimit) noexcept      { return generateHash ((uint64) (pointer_sized_uint) key, upperLimit); }
-    /** Generates a simple hash from a UUID. */
-    static int generateHash (const Uuid& key, int upperLimit) noexcept      { return generateHash (key.hash(), upperLimit); }
-};
+    static int generateHash (uint32 key, int upperLimit) noexcept { return (int) (key % (uint32) upperLimit); }
 
+    /** Generates a simple hash from an integer. */
+    static int generateHash (int32 key, int upperLimit) noexcept { return generateHash ((uint32) key, upperLimit); }
+
+    /** Generates a simple hash from a uint64. */
+    static int generateHash (uint64 key, int upperLimit) noexcept { return (int) (key % (uint64) upperLimit); }
+
+    /** Generates a simple hash from an int64. */
+    static int generateHash (int64 key, int upperLimit) noexcept { return generateHash ((uint64) key, upperLimit); }
+
+    /** Generates a simple hash from a string. */
+    static int generateHash (const String& key, int upperLimit) noexcept { return generateHash ((uint32) key.hashCode(), upperLimit); }
+
+    /** Generates a simple hash from a variant. */
+    static int generateHash (const var& key, int upperLimit) noexcept { return generateHash (key.toString(), upperLimit); }
+
+    /** Generates a simple hash from a void ptr. */
+    static int generateHash (const void* key, int upperLimit) noexcept { return generateHash ((uint64) (pointer_sized_uint) key, upperLimit); }
+
+    /** Generates a simple hash from a UUID. */
+    static int generateHash (const Uuid& key, int upperLimit) noexcept { return generateHash (key.hash(), upperLimit); }
+};
 
 //==============================================================================
 /**
@@ -120,7 +126,7 @@ template <typename KeyType,
 class HashMap
 {
 private:
-    using KeyTypeParameter   = typename TypeHelpers::ParameterType<KeyType>::type;
+    using KeyTypeParameter = typename TypeHelpers::ParameterType<KeyType>::type;
     using ValueTypeParameter = typename TypeHelpers::ParameterType<ValueType>::type;
 
 public:
@@ -137,7 +143,7 @@ public:
     */
     explicit HashMap (int numberOfSlots = defaultHashTableSize,
                       HashFunctionType hashFunction = HashFunctionType())
-       : hashFunctionToUse (hashFunction)
+        : hashFunctionToUse (hashFunction)
     {
         hashSlots.insertMultiple (0, nullptr, numberOfSlots);
     }
@@ -300,7 +306,7 @@ public:
         If there's already an item with the given key, this will replace its value. Otherwise, a new item
         will be added to the map.
     */
-    void set (KeyTypeParameter newKey, ValueTypeParameter newValue)        { getReference (newKey) = newValue; }
+    void set (KeyTypeParameter newKey, ValueTypeParameter newValue) { getReference (newKey) = newValue; }
 
     /** Removes an item with the given key. */
     void remove (KeyTypeParameter keyToRemove)
@@ -422,7 +428,7 @@ public:
         To lock, you can call getLock().enter() and getLock().exit(), or preferably use
         an object of ScopedLockType as an RAII lock for it.
     */
-    inline const TypeOfCriticalSectionToUse& getLock() const noexcept      { return lock; }
+    inline const TypeOfCriticalSectionToUse& getLock() const noexcept { return lock; }
 
     /** Returns the type of scoped lock to use for locking this array */
     using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
@@ -433,8 +439,11 @@ private:
     {
     public:
         HashEntry (KeyTypeParameter k, ValueTypeParameter val, HashEntry* const next)
-            : key (k), value (val), nextEntry (next)
-        {}
+            : key (k)
+            , value (val)
+            , nextEntry (next)
+        {
+        }
 
         const KeyType key;
         ValueType value;
@@ -470,12 +479,18 @@ public:
     struct Iterator
     {
         Iterator (const HashMap& hashMapToIterate) noexcept
-            : hashMap (hashMapToIterate), entry (nullptr), index (0)
-        {}
+            : hashMap (hashMapToIterate)
+            , entry (nullptr)
+            , index (0)
+        {
+        }
 
         Iterator (const Iterator& other) noexcept
-            : hashMap (other.hashMap), entry (other.entry), index (other.index)
-        {}
+            : hashMap (other.hashMap)
+            , entry (other.entry)
+            , index (other.index)
+        {
+        }
 
         /** Moves to the next item, if one is available.
             When this returns true, you can get the item's key and value using getKey() and
@@ -520,10 +535,17 @@ public:
             index = 0;
         }
 
-        Iterator& operator++() noexcept                         { next(); return *this; }
-        ValueType operator*() const                             { return getValue(); }
-        bool operator!= (const Iterator& other) const noexcept  { return entry != other.entry || index != other.index; }
-        void resetToEnd() noexcept                              { index = hashMap.getNumSlots(); }
+        Iterator& operator++() noexcept
+        {
+            next();
+            return *this;
+        }
+
+        ValueType operator*() const { return getValue(); }
+
+        bool operator!= (const Iterator& other) const noexcept { return entry != other.entry || index != other.index; }
+
+        void resetToEnd() noexcept { index = hashMap.getNumSlots(); }
 
     private:
         //==============================================================================
@@ -538,14 +560,27 @@ public:
     };
 
     /** Returns a start iterator for the values in this tree. */
-    Iterator begin() const noexcept             { Iterator i (*this); i.next(); return i; }
+    Iterator begin() const noexcept
+    {
+        Iterator i (*this);
+        i.next();
+        return i;
+    }
 
     /** Returns an end iterator for the values in this tree. */
-    Iterator end() const noexcept               { Iterator i (*this); i.resetToEnd(); return i; }
+    Iterator end() const noexcept
+    {
+        Iterator i (*this);
+        i.resetToEnd();
+        return i;
+    }
 
 private:
     //==============================================================================
-    enum { defaultHashTableSize = 101 };
+    enum
+    {
+        defaultHashTableSize = 101
+    };
     friend struct Iterator;
 
     HashFunctionType hashFunctionToUse;
@@ -569,7 +604,7 @@ private:
         return nullptr;
     }
 
-    inline HashEntry* getSlot (KeyType key) const noexcept     { return hashSlots.getUnchecked (generateHashFor (key, getNumSlots())); }
+    inline HashEntry* getSlot (KeyType key) const noexcept { return hashSlots.getUnchecked (generateHashFor (key, getNumSlots())); }
 
     JUCE_LEAK_DETECTOR (HashMap)
 };

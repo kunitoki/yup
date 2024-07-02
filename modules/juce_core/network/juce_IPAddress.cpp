@@ -59,7 +59,8 @@ IPAddress::IPAddress() noexcept
         address[i] = 0;
 }
 
-IPAddress::IPAddress (const uint8 bytes[], bool IPv6) noexcept : isIPv6 (IPv6)
+IPAddress::IPAddress (const uint8 bytes[], bool IPv6) noexcept
+    : isIPv6 (IPv6)
 {
     for (int i = 0; i < (isIPv6 ? 16 : 4); ++i)
         address[i] = bytes[i];
@@ -68,7 +69,8 @@ IPAddress::IPAddress (const uint8 bytes[], bool IPv6) noexcept : isIPv6 (IPv6)
         zeroUnusedBytes (address);
 }
 
-IPAddress::IPAddress (const uint16 bytes[8]) noexcept : isIPv6 (true)
+IPAddress::IPAddress (const uint16 bytes[8]) noexcept
+    : isIPv6 (true)
 {
     IPAddressByteUnion temp;
 
@@ -76,21 +78,24 @@ IPAddress::IPAddress (const uint16 bytes[8]) noexcept : isIPv6 (true)
     {
         temp.combined = bytes[i];
 
-        address[i * 2]     = temp.split[0];
+        address[i * 2] = temp.split[0];
         address[i * 2 + 1] = temp.split[1];
     }
 }
 
-IPAddress::IPAddress (uint8 a0, uint8 a1, uint8 a2, uint8 a3) noexcept : isIPv6 (false)
+IPAddress::IPAddress (uint8 a0, uint8 a1, uint8 a2, uint8 a3) noexcept
+    : isIPv6 (false)
 {
-    address[0] = a0;  address[1] = a1;
-    address[2] = a2;  address[3] = a3;
+    address[0] = a0;
+    address[1] = a1;
+    address[2] = a2;
+    address[3] = a3;
 
     zeroUnusedBytes (address);
 }
 
-IPAddress::IPAddress (uint16 a1, uint16 a2, uint16 a3, uint16 a4,
-                      uint16 a5, uint16 a6, uint16 a7, uint16 a8) noexcept : isIPv6 (true)
+IPAddress::IPAddress (uint16 a1, uint16 a2, uint16 a3, uint16 a4, uint16 a5, uint16 a6, uint16 a7, uint16 a8) noexcept
+    : isIPv6 (true)
 
 {
     uint16 array[8] = { a1, a2, a3, a4, a5, a6, a7, a8 };
@@ -100,12 +105,13 @@ IPAddress::IPAddress (uint16 a1, uint16 a2, uint16 a3, uint16 a4,
     for (int i = 0; i < 8; ++i)
     {
         temp.combined = array[i];
-        address[i * 2]     = temp.split[0];
+        address[i * 2] = temp.split[0];
         address[i * 2 + 1] = temp.split[1];
     }
 }
 
-IPAddress::IPAddress (uint32 n) noexcept : isIPv6 (false)
+IPAddress::IPAddress (uint32 n) noexcept
+    : isIPv6 (false)
 {
     address[0] = static_cast<uint8> (n >> 24);
     address[1] = static_cast<uint8> ((n >> 16) & 255);
@@ -185,7 +191,7 @@ IPAddress::IPAddress (const String& adr)
             IPAddressByteUnion temp;
             temp.combined = CharacterFunctions::HexParser<uint16>::parse (tokens[i].getCharPointer());
 
-            address[i * 2]     = temp.split[0];
+            address[i * 2] = temp.split[0];
             address[i * 2 + 1] = temp.split[1];
         }
     }
@@ -221,12 +227,17 @@ String IPAddress::toString() const
     return getFormattedAddress (addressString);
 }
 
-bool IPAddress::operator== (const IPAddress& other) const noexcept    { return compare (other) == 0; }
-bool IPAddress::operator!= (const IPAddress& other) const noexcept    { return compare (other) != 0; }
-bool IPAddress::operator<  (const IPAddress& other) const noexcept    { return compare (other) <  0; }
-bool IPAddress::operator<= (const IPAddress& other) const noexcept    { return compare (other) <= 0; }
-bool IPAddress::operator>  (const IPAddress& other) const noexcept    { return compare (other) >  0; }
-bool IPAddress::operator>= (const IPAddress& other) const noexcept    { return compare (other) >= 0; }
+bool IPAddress::operator== (const IPAddress& other) const noexcept { return compare (other) == 0; }
+
+bool IPAddress::operator!= (const IPAddress& other) const noexcept { return compare (other) != 0; }
+
+bool IPAddress::operator<(const IPAddress& other) const noexcept { return compare (other) < 0; }
+
+bool IPAddress::operator<= (const IPAddress& other) const noexcept { return compare (other) <= 0; }
+
+bool IPAddress::operator> (const IPAddress& other) const noexcept { return compare (other) > 0; }
+
+bool IPAddress::operator>= (const IPAddress& other) const noexcept { return compare (other) >= 0; }
 
 int IPAddress::compare (const IPAddress& other) const noexcept
 {
@@ -248,23 +259,27 @@ int IPAddress::compare (const IPAddress& other) const noexcept
 
     for (int i = 0; i < (isIPv6 ? 16 : 4); ++i)
     {
-        if (address[i] > other.address[i])  return 1;
-        if (address[i] < other.address[i])  return -1;
+        if (address[i] > other.address[i])
+            return 1;
+        if (address[i] < other.address[i])
+            return -1;
     }
 
     return 0;
 }
 
-IPAddress IPAddress::any() noexcept               { return IPAddress(); }
-IPAddress IPAddress::broadcast() noexcept         { return IPAddress (255, 255, 255, 255); }
-IPAddress IPAddress::local (bool IPv6) noexcept   { return IPv6 ? IPAddress (0, 0, 0, 0, 0, 0, 0, 1)
-                                                                : IPAddress (127, 0, 0, 1); }
+IPAddress IPAddress::any() noexcept { return IPAddress(); }
+
+IPAddress IPAddress::broadcast() noexcept { return IPAddress (255, 255, 255, 255); }
+
+IPAddress IPAddress::local (bool IPv6) noexcept { return IPv6 ? IPAddress (0, 0, 0, 0, 0, 0, 0, 1)
+                                                              : IPAddress (127, 0, 0, 1); }
 
 String IPAddress::getFormattedAddress (const String& unformattedAddress)
 {
     jassert (unformattedAddress.contains (":") && ! unformattedAddress.contains ("::")); // needs to be an unformatted IPv6 address!
 
-    auto portString    = unformattedAddress.fromFirstOccurrenceOf ("]", false, true);
+    auto portString = unformattedAddress.fromFirstOccurrenceOf ("]", false, true);
     auto addressString = unformattedAddress.dropLastCharacters (portString.length()).removeCharacters ("[]");
 
     auto tokens = StringArray::fromTokens (addressString, ":", {});
@@ -355,8 +370,7 @@ IPAddress IPAddress::convertIPv4MappedAddressToIPv4 (const IPAddress& mappedAddr
     jassert (mappedAddress.isIPv6);
 
     if (isIPv4MappedAddress (mappedAddress))
-        return { mappedAddress.address[12], mappedAddress.address[13],
-                 mappedAddress.address[14], mappedAddress.address[15] };
+        return { mappedAddress.address[12], mappedAddress.address[13], mappedAddress.address[14], mappedAddress.address[15] };
 
     return {};
 }
@@ -366,9 +380,7 @@ IPAddress IPAddress::convertIPv4AddressToIPv4Mapped (const IPAddress& addressToM
     // The address that you're converting needs to be IPv4!
     jassert (! addressToMap.isIPv6);
 
-    return { 0x0, 0x0, 0x0, 0x0, 0x0, 0xffff,
-            static_cast<uint16> ((addressToMap.address[0] << 8) | addressToMap.address[1]),
-            static_cast<uint16> ((addressToMap.address[2] << 8) | addressToMap.address[3]) };
+    return { 0x0, 0x0, 0x0, 0x0, 0x0, 0xffff, static_cast<uint16> ((addressToMap.address[0] << 8) | addressToMap.address[1]), static_cast<uint16> ((addressToMap.address[2] << 8) | addressToMap.address[3]) };
 }
 
 IPAddress IPAddress::getLocalAddress (bool includeIPv6)
@@ -389,7 +401,6 @@ Array<IPAddress> IPAddress::getAllAddresses (bool includeIPv6)
     return addresses;
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -398,7 +409,8 @@ struct IPAddressTests final : public UnitTest
 {
     IPAddressTests()
         : UnitTest ("IPAddress", UnitTestCategories::networking)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -418,7 +430,7 @@ struct IPAddressTests final : public UnitTest
         auto local = IPAddress::local();
         expect (! local.isNull());
 
-        IPAddress ipv4{1, 2, 3, 4};
+        IPAddress ipv4 { 1, 2, 3, 4 };
         expect (! ipv4.isNull());
         expect (! ipv4.isIPv6);
         expect (ipv4.toString() == "1.2.3.4");
@@ -471,7 +483,7 @@ struct IPAddressTests final : public UnitTest
         }
 
         // Expect to fail to find a broadcast for this address
-        IPAddress address{1, 2, 3, 4};
+        IPAddress address { 1, 2, 3, 4 };
         expect (IPAddress::getInterfaceBroadcastAddress (address).isNull());
     }
 };

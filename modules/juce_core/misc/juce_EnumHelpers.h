@@ -66,36 +66,35 @@
 
     @endcode
 */
-#define JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(EnumType)               \
-    static_assert (std::is_enum_v<EnumType>,                               \
-                   "JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS "           \
-                   "should only be used with enum types");                 \
-    constexpr auto operator& (EnumType a, EnumType b)                      \
-    {                                                                      \
-        using base_type = std::underlying_type<EnumType>::type;            \
-        return static_cast<EnumType> (base_type (a) & base_type (b));      \
-    }                                                                      \
-    constexpr auto operator| (EnumType a, EnumType b)                      \
-    {                                                                      \
-        using base_type = std::underlying_type<EnumType>::type;            \
-        return static_cast<EnumType> (base_type (a) | base_type (b));      \
-    }                                                                      \
-    constexpr auto operator~ (EnumType a)                                  \
-    {                                                                      \
-        using base_type = std::underlying_type<EnumType>::type;            \
-        return static_cast<EnumType> (~base_type (a));                     \
-    }                                                                      \
-    constexpr auto& operator|= (EnumType& a, EnumType b)                   \
-    {                                                                      \
-        a = (a | b);                                                       \
-        return a;                                                          \
-    }                                                                      \
-    constexpr auto& operator&= (EnumType& a, EnumType b)                   \
-    {                                                                      \
-        a = (a & b);                                                       \
-        return a;                                                          \
-    }
-
+#define JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(EnumType)  \
+static_assert (std::is_enum_v<EnumType>,                      \
+               "JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS "  \
+               "should only be used with enum types");        \
+constexpr auto operator& (EnumType a, EnumType b)             \
+{                                                             \
+using base_type = std::underlying_type<EnumType>::type;       \
+return static_cast<EnumType> (base_type (a) & base_type (b)); \
+}                                                             \
+constexpr auto operator| (EnumType a, EnumType b)             \
+{                                                             \
+using base_type = std::underlying_type<EnumType>::type;       \
+return static_cast<EnumType> (base_type (a) | base_type (b)); \
+}                                                             \
+constexpr auto operator~(EnumType a)                          \
+{                                                             \
+using base_type = std::underlying_type<EnumType>::type;       \
+return static_cast<EnumType> (~base_type (a));                \
+}                                                             \
+constexpr auto& operator|= (EnumType& a, EnumType b)          \
+{                                                             \
+a = (a | b);                                                  \
+return a;                                                     \
+}                                                             \
+constexpr auto& operator&= (EnumType& a, EnumType b)          \
+{                                                             \
+a = (a & b);                                                  \
+return a;                                                     \
+}
 
 namespace juce
 {
@@ -103,7 +102,7 @@ namespace juce
 template <typename EnumType, std::enable_if_t<std::is_enum_v<EnumType>, int> = 0>
 constexpr bool hasBitValueSet (EnumType enumValue, EnumType valueToLookFor) noexcept
 {
-    return (enumValue & valueToLookFor) != EnumType{};
+    return (enumValue & valueToLookFor) != EnumType {};
 }
 
 template <typename EnumType, std::enable_if_t<std::is_enum_v<EnumType>, int> = 0>
@@ -117,4 +116,4 @@ constexpr EnumType withBitValueCleared (EnumType enumValue, EnumType valueToRemo
 {
     return enumValue & ~valueToRemove;
 }
-}
+} // namespace juce

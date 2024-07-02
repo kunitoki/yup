@@ -43,31 +43,33 @@ namespace juce
 struct CURLSymbols
 {
     CURL* (*curl_easy_init) (void);
-    CURLcode (*curl_easy_setopt) (CURL *curl, CURLoption option, ...);
-    void (*curl_easy_cleanup) (CURL *curl);
-    CURLcode (*curl_easy_getinfo) (CURL *curl, CURLINFO info, ...);
-    CURLMcode (*curl_multi_add_handle) (CURLM *multi_handle, CURL *curl_handle);
-    CURLMcode (*curl_multi_cleanup) (CURLM *multi_handle);
-    CURLMcode (*curl_multi_fdset) (CURLM *multi_handle, fd_set *read_fd_set, fd_set *write_fd_set, fd_set *exc_fd_set, int *max_fd);
-    CURLMsg* (*curl_multi_info_read) (CURLM *multi_handle, int *msgs_in_queue);
+    CURLcode (*curl_easy_setopt) (CURL* curl, CURLoption option, ...);
+    void (*curl_easy_cleanup) (CURL* curl);
+    CURLcode (*curl_easy_getinfo) (CURL* curl, CURLINFO info, ...);
+    CURLMcode (*curl_multi_add_handle) (CURLM* multi_handle, CURL* curl_handle);
+    CURLMcode (*curl_multi_cleanup) (CURLM* multi_handle);
+    CURLMcode (*curl_multi_fdset) (CURLM* multi_handle, fd_set* read_fd_set, fd_set* write_fd_set, fd_set* exc_fd_set, int* max_fd);
+    CURLMsg* (*curl_multi_info_read) (CURLM* multi_handle, int* msgs_in_queue);
     CURLM* (*curl_multi_init) (void);
-    CURLMcode (*curl_multi_perform) (CURLM *multi_handle, int *running_handles);
-    CURLMcode (*curl_multi_remove_handle) (CURLM *multi_handle, CURL *curl_handle);
-    CURLMcode (*curl_multi_timeout) (CURLM *multi_handle, long *milliseconds);
-    struct curl_slist* (*curl_slist_append) (struct curl_slist *, const char *);
-    void (*curl_slist_free_all) (struct curl_slist *);
+    CURLMcode (*curl_multi_perform) (CURLM* multi_handle, int* running_handles);
+    CURLMcode (*curl_multi_remove_handle) (CURLM* multi_handle, CURL* curl_handle);
+    CURLMcode (*curl_multi_timeout) (CURLM* multi_handle, long* milliseconds);
+    struct curl_slist* (*curl_slist_append) (struct curl_slist*, const char*);
+    void (*curl_slist_free_all) (struct curl_slist*);
     curl_version_info_data* (*curl_version_info) (CURLversion);
 
     static std::unique_ptr<CURLSymbols> create()
     {
         std::unique_ptr<CURLSymbols> symbols (new CURLSymbols);
 
-       #if JUCE_LOAD_CURL_SYMBOLS_LAZILY
+#if JUCE_LOAD_CURL_SYMBOLS_LAZILY
         const ScopedLock sl (getLibcurlLock());
-        #define JUCE_INIT_CURL_SYMBOL(name)  if (! symbols->loadSymbol (symbols->name, #name)) return nullptr;
-       #else
-        #define JUCE_INIT_CURL_SYMBOL(name)  symbols->name = ::name;
-       #endif
+#define JUCE_INIT_CURL_SYMBOL(name)               \
+if (! symbols->loadSymbol (symbols->name, #name)) \
+return nullptr;
+#else
+#define JUCE_INIT_CURL_SYMBOL(name) symbols->name = ::name;
+#endif
 
         JUCE_INIT_CURL_SYMBOL (curl_easy_init)
         JUCE_INIT_CURL_SYMBOL (curl_easy_setopt)
@@ -99,7 +101,7 @@ struct CURLSymbols
 private:
     CURLSymbols() = default;
 
-   #if JUCE_LOAD_CURL_SYMBOLS_LAZILY
+#if JUCE_LOAD_CURL_SYMBOLS_LAZILY
     static DynamicLibrary& getLibcurl()
     {
         const ScopedLock sl (getLibcurlLock());
@@ -107,8 +109,10 @@ private:
 
         if (libcurl.getNativeHandle() == nullptr)
             for (auto libName : { "libcurl.so",
-                                  "libcurl.so.4", "libcurl.so.3",
-                                  "libcurl-gnutls.so.4", "libcurl-gnutls.so.3" })
+                                  "libcurl.so.4",
+                                  "libcurl.so.3",
+                                  "libcurl-gnutls.so.4",
+                                  "libcurl-gnutls.so.3" })
                 if (libcurl.open (libName))
                     break;
 
@@ -121,20 +125,19 @@ private:
         dst = reinterpret_cast<FuncPtr> (getLibcurl().getFunction (name));
         return (dst != nullptr);
     }
-   #endif
+#endif
 };
-
 
 //==============================================================================
 class WebInputStream::Pimpl
 {
 public:
     Pimpl (WebInputStream& ownerStream, const URL& urlToCopy, bool addParametersToBody)
-        : owner (ownerStream),
-          url (urlToCopy),
-          addParametersToRequestBody (addParametersToBody),
-          hasBodyDataToSend (url.hasBodyDataToSend() || addParametersToRequestBody),
-          httpRequest (hasBodyDataToSend ? "POST" : "GET")
+        : owner (ownerStream)
+        , url (urlToCopy)
+        , addParametersToRequestBody (addParametersToBody)
+        , hasBodyDataToSend (url.hasBodyDataToSend() || addParametersToRequestBody)
+        , httpRequest (hasBodyDataToSend ? "POST" : "GET")
     {
         jassert (symbols); // Unable to load libcurl!
 
@@ -162,10 +165,13 @@ public:
 
     //==============================================================================
     // Input Stream overrides
-    bool isError() const                 { return curl == nullptr || lastError != CURLE_OK; }
-    bool isExhausted()                   { return (isError() || finished) && curlBuffer.isEmpty(); }
-    int64 getPosition()                  { return streamPos; }
-    int64 getTotalLength()               { return contentLength; }
+    bool isError() const { return curl == nullptr || lastError != CURLE_OK; }
+
+    bool isExhausted() { return (isError() || finished) && curlBuffer.isEmpty(); }
+
+    int64 getPosition() { return streamPos; }
+
+    int64 getTotalLength() { return contentLength; }
 
     int read (void* buffer, int bytesToRead)
     {
@@ -200,12 +206,17 @@ public:
             requestHeaders << "\r\n";
     }
 
-    void withCustomRequestCommand (const String& customRequestCommand)    { httpRequest = customRequestCommand; }
-    void withConnectionTimeout (int timeoutInMs)                          { timeOutMs = timeoutInMs; }
-    void withNumRedirectsToFollow (int maxRedirectsToFollow)              { maxRedirects = maxRedirectsToFollow; }
-    StringPairArray getRequestHeaders() const                             { return WebInputStream::parseHttpHeaders (requestHeaders); }
-    StringPairArray getResponseHeaders() const                            { return WebInputStream::parseHttpHeaders (responseHeaders); }
-    int getStatusCode() const                                             { return statusCode; }
+    void withCustomRequestCommand (const String& customRequestCommand) { httpRequest = customRequestCommand; }
+
+    void withConnectionTimeout (int timeoutInMs) { timeOutMs = timeoutInMs; }
+
+    void withNumRedirectsToFollow (int maxRedirectsToFollow) { maxRedirects = maxRedirectsToFollow; }
+
+    StringPairArray getRequestHeaders() const { return WebInputStream::parseHttpHeaders (requestHeaders); }
+
+    StringPairArray getResponseHeaders() const { return WebInputStream::parseHttpHeaders (responseHeaders); }
+
+    int getStatusCode() const { return statusCode; }
 
     //==============================================================================
     void cleanup()
@@ -327,10 +338,10 @@ public:
 
                 // fromLines will always return at least one line if the string is not empty
                 jassert (headerLines.size() > 0);
-                headerList = symbols->curl_slist_append (headerList, headerLines [0].toRawUTF8());
+                headerList = symbols->curl_slist_append (headerList, headerLines[0].toRawUTF8());
 
                 for (int i = 1; (i < headerLines.size() && headerList != nullptr); ++i)
-                    headerList = symbols->curl_slist_append (headerList, headerLines [i].toRawUTF8());
+                    headerList = symbols->curl_slist_append (headerList, headerLines[i].toRawUTF8());
 
                 if (headerList == nullptr)
                 {
@@ -390,18 +401,18 @@ public:
             if (symbols->curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &responseCode) == CURLE_OK)
                 statusCode = static_cast<int> (responseCode);
 
-           #if LIBCURL_VERSION_MAJOR < 7 || (LIBCURL_VERSION_MAJOR == 7 && LIBCURL_VERSION_MINOR < 55)
+#if LIBCURL_VERSION_MAJOR < 7 || (LIBCURL_VERSION_MAJOR == 7 && LIBCURL_VERSION_MINOR < 55)
             double curlLength;
             if (symbols->curl_easy_getinfo (curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &curlLength) == CURLE_OK)
             {
-           #else
+#else
             curl_off_t curlLength;
             if (symbols->curl_easy_getinfo (curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &curlLength) == CURLE_OK)
             {
-           #endif
+#endif
                 contentLength = static_cast<int64> (curlLength);
             }
-       }
+        }
 
         return true;
     }
@@ -497,7 +508,8 @@ public:
             const ScopedLock lock (cleanupLock);
 
             while ((curlRet = (int) symbols->curl_multi_perform (multi, &still_running)) == CURLM_CALL_MULTI_PERFORM)
-            {}
+            {
+            }
         }
 
         if ((lastError = curlRet) != CURLM_OK)
@@ -585,7 +597,7 @@ public:
         const size_t len = size * nmemb;
 
         size_t max = jmin (postBuffer->getSize() - postPosition, len);
-        memcpy (ptr, (char*)postBuffer->getData() + postPosition, max);
+        memcpy (ptr, (char*) postBuffer->getData() + postPosition, max);
         postPosition += max;
 
         return max;
@@ -607,7 +619,6 @@ public:
 
         return len;
     }
-
 
     //==============================================================================
     // Static method wrappers

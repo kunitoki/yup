@@ -44,7 +44,9 @@ class PlatformTimer final
 {
 public:
     explicit PlatformTimer (PlatformTimerListener& ptl)
-        : listener { ptl } {}
+        : listener { ptl }
+    {
+    }
 
     void startTimer (int newIntervalMs)
     {

@@ -62,7 +62,7 @@ public:
         (e.g. when presenting transient information to the user, rather than writing data to
         disk that must be deserialised in the future).
     */
-    [[nodiscard]] ToVarOptions withVersionIncluded (bool x)               const { return withMember (*this, &ToVarOptions::versionIncluded, x); }
+    [[nodiscard]] ToVarOptions withVersionIncluded (bool x) const { return withMember (*this, &ToVarOptions::versionIncluded, x); }
 
     /** @see withExplicitVersion() */
     [[nodiscard]] auto getExplicitVersion() const { return explicitVersion; }
@@ -115,7 +115,7 @@ private:
         {
             constexpr auto fallbackVersion = detail::ForwardingSerialisationTraits<T>::marshallingVersion;
             const auto versionToUse = options.getExplicitVersion()
-                                             .value_or (fallbackVersion);
+                                          .value_or (fallbackVersion);
 
             if (versionToUse > fallbackVersion)
             {
@@ -138,17 +138,19 @@ private:
 
     private:
         Visitor (const std::optional<int>& explicitVersion, bool includeVersion)
-            : version (explicitVersion),
-              value ([&]() -> var
-              {
-                  if (! (version.has_value() && includeVersion))
-                      return var();
+            : version (explicitVersion)
+            , value ([&]() -> var
+                     {
+                         if (! (version.has_value() && includeVersion))
+                             return var();
 
-                  auto obj = std::make_unique<DynamicObject>();
-                  obj->setProperty ("__version__", *version);
-                  return obj.release();
-              }()),
-              versionIncluded (includeVersion) {}
+                         auto obj = std::make_unique<DynamicObject>();
+                         obj->setProperty ("__version__", *version);
+                         return obj.release();
+                     }())
+            , versionIncluded (includeVersion)
+        {
+        }
 
         template <typename T>
         void visit (const T& t)
@@ -202,7 +204,7 @@ private:
         template <typename T>
         void visit (const SerialisationSize<T>&)
         {
-            push (Array<var>{});
+            push (Array<var> {});
         }
 
         void visit (const bool& t)
@@ -223,7 +225,7 @@ private:
         template <typename T>
         std::optional<var> convert (const T& t)
         {
-            return convert (t, Options{}.withVersionIncluded (versionIncluded));
+            return convert (t, Options {}.withVersionIncluded (versionIncluded));
         }
 
         void push (var v)
@@ -303,7 +305,7 @@ private:
             }();
 
             Visitor visitor { version, v };
-            T t{};
+            T t {};
             detail::doLoad (visitor, t);
             return ! visitor.failed ? std::optional<T> (std::move (t))
                                     : std::nullopt;
@@ -319,7 +321,10 @@ private:
 
     private:
         Visitor (std::optional<int> vn, const var& i)
-            : version (vn), input (i) {}
+            : version (vn)
+            , input (i)
+        {
+        }
 
         template <typename T>
         void visit (T& t)
@@ -509,8 +514,9 @@ struct VariantConverter
 template <>
 struct VariantConverter<String>
 {
-    static String fromVar (const var& v)           { return v.toString(); }
-    static var toVar (const String& s)             { return s; }
+    static String fromVar (const var& v) { return v.toString(); }
+
+    static var toVar (const String& s) { return s; }
 };
 
 #endif
@@ -537,14 +543,14 @@ struct StrictVariantConverter
     {
         auto converted = FromVar::convert<Type> (v);
         jassert (converted.has_value());
-        return std::move (converted).value_or (Type{});
+        return std::move (converted).value_or (Type {});
     }
 
     static var toVar (const Type& t)
     {
         auto converted = ToVar::convert<> (t);
         jassert (converted.has_value());
-        return std::move (converted).value_or (var{});
+        return std::move (converted).value_or (var {});
     }
 };
 

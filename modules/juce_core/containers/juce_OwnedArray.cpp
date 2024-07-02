@@ -63,8 +63,10 @@ static struct OwnedArrayTest : public UnitTest
     {
         DestructorObj (OwnedArrayTest& p,
                        OwnedArray<DestructorObj>& arr)
-            : parent (p), objectArray (arr)
-        {}
+            : parent (p)
+            , objectArray (arr)
+        {
+        }
 
         ~DestructorObj()
         {
@@ -89,15 +91,16 @@ static struct OwnedArrayTest : public UnitTest
 
     OwnedArrayTest()
         : UnitTest ("OwnedArray", UnitTestCategories::containers)
-    {}
+    {
+    }
 
     void runTest() override
     {
         beginTest ("After converting move construction, ownership is transferred");
         {
-            OwnedArray<Derived> derived { new Derived{}, new Derived{}, new Derived{} };
+            OwnedArray<Derived> derived { new Derived {}, new Derived {}, new Derived {} };
 
-            OwnedArray<Base> base  { std::move (derived) };
+            OwnedArray<Base> base { std::move (derived) };
 
             expectEquals (base.size(), 3);
             expectEquals (derived.size(), 0);
@@ -107,7 +110,7 @@ static struct OwnedArrayTest : public UnitTest
         {
             OwnedArray<Base> base;
 
-            base = OwnedArray<Derived> { new Derived{}, new Derived{}, new Derived{} };
+            base = OwnedArray<Derived> { new Derived {}, new Derived {}, new Derived {} };
 
             expectEquals (base.size(), 3);
         }
@@ -144,4 +147,4 @@ static struct OwnedArrayTest : public UnitTest
 
 #endif
 
-}
+} // namespace juce

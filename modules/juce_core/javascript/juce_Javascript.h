@@ -61,7 +61,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  JavascriptEngine  final
+class JUCE_API JavascriptEngine final
 {
 public:
     /** Creates an instance of the engine.

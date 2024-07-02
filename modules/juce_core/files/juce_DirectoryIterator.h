@@ -69,7 +69,7 @@ namespace juce
     @tags{Core}
     @see RangedDirectoryIterator
 */
-class JUCE_API  DirectoryIterator  final
+class JUCE_API DirectoryIterator final
 {
 public:
     //==============================================================================
@@ -90,12 +90,11 @@ public:
 
         @see RangedDirectoryIterator
     */
-    [[deprecated ("This class is now deprecated in favour of RangedDirectoryIterator.")]]
-    DirectoryIterator (const File& directory,
-                       bool recursive,
-                       const String& pattern = "*",
-                       int type = File::findFiles,
-                       File::FollowSymlinks follow = File::FollowSymlinks::yes)
+    [[deprecated ("This class is now deprecated in favour of RangedDirectoryIterator.")]] DirectoryIterator (const File& directory,
+                                                                                                             bool recursive,
+                                                                                                             const String& pattern = "*",
+                                                                                                             int type = File::findFiles,
+                                                                                                             File::FollowSymlinks follow = File::FollowSymlinks::yes)
         : DirectoryIterator (directory, recursive, pattern, type, follow, nullptr)
     {
     }
@@ -148,14 +147,14 @@ private:
                        int type,
                        File::FollowSymlinks follow,
                        KnownPaths* seenPaths)
-            : wildCards (parseWildcards (pattern)),
-              fileFinder (directory, (recursive || wildCards.size() > 1) ? "*" : pattern),
-              wildCard (pattern),
-              path (File::addTrailingSeparator (directory.getFullPathName())),
-              whatToLookFor (type),
-              isRecursive (recursive),
-              followSymlinks (follow),
-              knownPaths (seenPaths)
+        : wildCards (parseWildcards (pattern))
+        , fileFinder (directory, (recursive || wildCards.size() > 1) ? "*" : pattern)
+        , wildCard (pattern)
+        , path (File::addTrailingSeparator (directory.getFullPathName()))
+        , whatToLookFor (type)
+        , isRecursive (recursive)
+        , followSymlinks (follow)
+        , knownPaths (seenPaths)
     {
         // you have to specify the type of files you're looking for!
         jassert ((whatToLookFor & (File::findFiles | File::findDirectories)) != 0);
@@ -180,8 +179,12 @@ private:
         ~NativeIterator();
 
         bool next (String& filenameFound,
-                   bool* isDirectory, bool* isHidden, int64* fileSize,
-                   Time* modTime, Time* creationTime, bool* isReadOnly);
+                   bool* isDirectory,
+                   bool* isHidden,
+                   int64* fileSize,
+                   Time* modTime,
+                   Time* creationTime,
+                   bool* isReadOnly);
 
         class Pimpl;
         std::unique_ptr<Pimpl> pimpl;

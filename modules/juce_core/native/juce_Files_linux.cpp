@@ -42,10 +42,10 @@ namespace juce
 
 enum
 {
-    U_ISOFS_SUPER_MAGIC = 0x9660,   // linux/iso_fs.h
-    U_MSDOS_SUPER_MAGIC = 0x4d44,   // linux/msdos_fs.h
-    U_NFS_SUPER_MAGIC = 0x6969,     // linux/nfs_fs.h
-    U_SMB_SUPER_MAGIC = 0x517B      // linux/smb_fs.h
+    U_ISOFS_SUPER_MAGIC = 0x9660, // linux/iso_fs.h
+    U_MSDOS_SUPER_MAGIC = 0x4d44, // linux/msdos_fs.h
+    U_NFS_SUPER_MAGIC = 0x6969,   // linux/nfs_fs.h
+    U_SMB_SUPER_MAGIC = 0x517B    // linux/smb_fs.h
 };
 
 bool File::isOnCDRomDrive() const
@@ -53,7 +53,7 @@ bool File::isOnCDRomDrive() const
     struct statfs buf;
 
     return statfs (getFullPathName().toUTF8(), &buf) == 0
-             && buf.f_type == (unsigned int) U_ISOFS_SUPER_MAGIC;
+        && buf.f_type == (unsigned int) U_ISOFS_SUPER_MAGIC;
 }
 
 bool File::isOnHardDisk() const
@@ -64,13 +64,14 @@ bool File::isOnHardDisk() const
     {
         switch (buf.f_type)
         {
-            case U_ISOFS_SUPER_MAGIC:   // CD-ROM
-            case U_MSDOS_SUPER_MAGIC:   // Probably floppy (but could be mounted FAT filesystem)
-            case U_NFS_SUPER_MAGIC:     // Network NFS
-            case U_SMB_SUPER_MAGIC:     // Network Samba
+            case U_ISOFS_SUPER_MAGIC: // CD-ROM
+            case U_MSDOS_SUPER_MAGIC: // Probably floppy (but could be mounted FAT filesystem)
+            case U_NFS_SUPER_MAGIC:   // Network NFS
+            case U_SMB_SUPER_MAGIC:   // Network Samba
                 return false;
 
-            default: break;
+            default:
+                break;
         }
     }
 
@@ -104,7 +105,8 @@ static File resolveXDGFolder (const char* const type, const char* const fallback
             // eg. resolve XDG_MUSIC_DIR="$HOME/Music" to /home/user/Music
             const File f (line.replace ("$HOME", File ("~").getFullPathName())
                               .fromFirstOccurrenceOf ("=", false, false)
-                              .trim().unquoted());
+                              .trim()
+                              .unquoted());
 
             if (f.isDirectory())
                 return f;
@@ -132,15 +134,23 @@ File File::getSpecialLocation (const SpecialLocationType type)
             return {};
         }
 
-        case userDocumentsDirectory:          return resolveXDGFolder ("XDG_DOCUMENTS_DIR", "~/Documents");
-        case userMusicDirectory:              return resolveXDGFolder ("XDG_MUSIC_DIR",     "~/Music");
-        case userMoviesDirectory:             return resolveXDGFolder ("XDG_VIDEOS_DIR",    "~/Videos");
-        case userPicturesDirectory:           return resolveXDGFolder ("XDG_PICTURES_DIR",  "~/Pictures");
-        case userDesktopDirectory:            return resolveXDGFolder ("XDG_DESKTOP_DIR",   "~/Desktop");
-        case userApplicationDataDirectory:    return resolveXDGFolder ("XDG_CONFIG_HOME",   "~/.config");
+        case userDocumentsDirectory:
+            return resolveXDGFolder ("XDG_DOCUMENTS_DIR", "~/Documents");
+        case userMusicDirectory:
+            return resolveXDGFolder ("XDG_MUSIC_DIR", "~/Music");
+        case userMoviesDirectory:
+            return resolveXDGFolder ("XDG_VIDEOS_DIR", "~/Videos");
+        case userPicturesDirectory:
+            return resolveXDGFolder ("XDG_PICTURES_DIR", "~/Pictures");
+        case userDesktopDirectory:
+            return resolveXDGFolder ("XDG_DESKTOP_DIR", "~/Desktop");
+        case userApplicationDataDirectory:
+            return resolveXDGFolder ("XDG_CONFIG_HOME", "~/.config");
         case commonDocumentsDirectory:
-        case commonApplicationDataDirectory:  return File ("/opt");
-        case globalApplicationsDirectory:     return File ("/usr");
+        case commonApplicationDataDirectory:
+            return File ("/opt");
+        case globalApplicationsDirectory:
+            return File ("/usr");
 
         case tempDirectory:
         {
@@ -165,12 +175,12 @@ File File::getSpecialLocation (const SpecialLocationType type)
 
         case hostApplicationPath:
         {
-           #if JUCE_BSD
+#if JUCE_BSD
             return juce_getExecutableFile();
-           #else
+#else
             const File f ("/proc/self/exe");
             return f.isSymbolicLink() ? f.getLinkedTarget() : juce_getExecutableFile();
-           #endif
+#endif
         }
 
         default:
@@ -205,8 +215,8 @@ static bool isFileExecutable (const String& filename)
     juce_statStruct info;
 
     return juce_stat (filename, info)
-            && S_ISREG (info.st_mode)
-            && access (filename.toUTF8(), X_OK) == 0;
+        && S_ISREG (info.st_mode)
+        && access (filename.toUTF8(), X_OK) == 0;
 }
 
 static bool openDocumentExternally (const String& fileName, const String& parameters, const Array<char*>* environment = nullptr)
@@ -221,8 +231,7 @@ static bool openDocumentExternally (const String& fileName, const String& parame
 
             StringArray cmdLines;
 
-            for (auto browserName : { "xdg-open", "/etc/alternatives/x-www-browser", "firefox", "mozilla",
-                                      "google-chrome", "chromium-browser", "opera", "konqueror" })
+            for (auto browserName : { "xdg-open", "/etc/alternatives/x-www-browser", "firefox", "mozilla", "google-chrome", "chromium-browser", "opera", "konqueror" })
             {
                 cmdLines.add (String (browserName) + " " + singleCommand);
             }

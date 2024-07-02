@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Uuid
+class JUCE_API Uuid
 {
 public:
     //==============================================================================
@@ -77,8 +77,8 @@ public:
 
     bool operator== (const Uuid&) const noexcept;
     bool operator!= (const Uuid&) const noexcept;
-    bool operator<  (const Uuid&) const noexcept;
-    bool operator>  (const Uuid&) const noexcept;
+    bool operator<(const Uuid&) const noexcept;
+    bool operator> (const Uuid&) const noexcept;
     bool operator<= (const Uuid&) const noexcept;
     bool operator>= (const Uuid&) const noexcept;
 
@@ -107,7 +107,6 @@ public:
     */
     Uuid& operator= (const String& uuidString);
 
-
     //==============================================================================
     /** Returns the time-low section of the UUID. */
     uint32 getTimeLow() const noexcept;
@@ -116,9 +115,9 @@ public:
     /** Returns the time-high-and-version section of the UUID. */
     uint16 getTimeHighAndVersion() const noexcept;
     /** Returns the clock-seq-and-reserved section of the UUID. */
-    uint8  getClockSeqAndReserved() const noexcept;
+    uint8 getClockSeqAndReserved() const noexcept;
     /** Returns the clock-seq-low section of the UUID. */
-    uint8  getClockSeqLow() const noexcept;
+    uint8 getClockSeqLow() const noexcept;
     /** Returns the node section of the UUID. */
     uint64 getNode() const noexcept;
 
@@ -131,7 +130,7 @@ public:
         This is an array of 16 bytes. To reconstruct a Uuid from its data, use
         the constructor or operator= method that takes an array of uint8s.
     */
-    const uint8* getRawData() const noexcept                { return uuid; }
+    const uint8* getRawData() const noexcept { return uuid; }
 
     /** Creates a UUID from a 16-byte array.
         @see getRawData
@@ -140,7 +139,6 @@ public:
 
     /** Sets this UUID from 16-bytes of raw data. */
     Uuid& operator= (const uint8* rawData) noexcept;
-
 
 private:
     //==============================================================================
@@ -156,9 +154,10 @@ private:
 #ifndef DOXYGEN
 namespace std
 {
-    template <> struct hash<juce::Uuid>
-    {
-        size_t operator() (const juce::Uuid& u) const noexcept   { return (size_t) u.hash(); }
-    };
-}
+template <>
+struct hash<juce::Uuid>
+{
+    size_t operator() (const juce::Uuid& u) const noexcept { return (size_t) u.hash(); }
+};
+} // namespace std
 #endif

@@ -44,11 +44,11 @@ namespace TimeHelpers
 {
     static std::tm millisToLocal (int64 millis) noexcept
     {
-       #if JUCE_WINDOWS && JUCE_MINGW
+#if JUCE_WINDOWS && JUCE_MINGW
         auto now = (time_t) (millis / 1000);
         return *localtime (&now);
 
-       #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
         std::tm result;
         millis /= 1000;
 
@@ -57,7 +57,7 @@ namespace TimeHelpers
 
         return result;
 
-       #else
+#else
         std::tm result;
         auto now = (time_t) (millis / 1000);
 
@@ -65,16 +65,16 @@ namespace TimeHelpers
             zerostruct (result);
 
         return result;
-       #endif
+#endif
     }
 
     static std::tm millisToUTC (int64 millis) noexcept
     {
-       #if JUCE_WINDOWS && JUCE_MINGW
+#if JUCE_WINDOWS && JUCE_MINGW
         auto now = (time_t) (millis / 1000);
         return *gmtime (&now);
 
-       #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
         std::tm result;
         millis /= 1000;
 
@@ -83,7 +83,7 @@ namespace TimeHelpers
 
         return result;
 
-       #else
+#else
         std::tm result;
         auto now = (time_t) (millis / 1000);
 
@@ -91,13 +91,13 @@ namespace TimeHelpers
             zerostruct (result);
 
         return result;
-       #endif
+#endif
     }
 
     static int getUTCOffsetSeconds (const int64 millis) noexcept
     {
         auto utc = millisToUTC (millis);
-        utc.tm_isdst = -1;  // Treat this UTC time as local to find the offset
+        utc.tm_isdst = -1; // Treat this UTC time as local to find the offset
 
         return (int) ((millis / 1000) - (int64) mktime (&utc));
     }
@@ -110,31 +110,31 @@ namespace TimeHelpers
 
     static String formatString (const String& format, const std::tm* const tm)
     {
-       #if JUCE_ANDROID
+#if JUCE_ANDROID
         using StringType = CharPointer_UTF8;
-       #elif JUCE_WINDOWS
+#elif JUCE_WINDOWS
         using StringType = CharPointer_UTF16;
-       #else
+#else
         using StringType = CharPointer_UTF32;
-       #endif
+#endif
 
-       #ifdef JUCE_MSVC
+#ifdef JUCE_MSVC
         if (tm->tm_year < -1900 || tm->tm_year > 8099)
-            return {};   // Visual Studio's library can only handle 0 -> 9999 AD
-        #endif
+            return {}; // Visual Studio's library can only handle 0 -> 9999 AD
+#endif
 
-        for (size_t bufferSize = 256; ; bufferSize += 256)
+        for (size_t bufferSize = 256;; bufferSize += 256)
         {
             HeapBlock<StringType::CharType> buffer (bufferSize);
 
             auto numChars =
-                       #if JUCE_ANDROID
-                        strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
-                       #elif JUCE_WINDOWS
-                        wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
-                       #else
-                        wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
-                       #endif
+#if JUCE_ANDROID
+                strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
+#elif JUCE_WINDOWS
+                wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
+#else
+                wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
+#endif
 
             if (numChars > 0 || format.isEmpty())
                 return String (StringType (buffer),
@@ -150,10 +150,9 @@ namespace TimeHelpers
 
     static int daysFromJan1 (int year, int month) noexcept
     {
-        const short dayOfYear[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334,
-                                    0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 };
+        const short dayOfYear[] = { 0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335 };
 
-        return dayOfYear [(isLeapYear (year) ? 12 : 0) + month];
+        return dayOfYear[(isLeapYear (year) ? 12 : 0) + month];
     }
 
     static int64 daysFromYear0 (int year) noexcept
@@ -189,9 +188,9 @@ namespace TimeHelpers
     static int64 mktime_utc (const std::tm& t) noexcept
     {
         return 24 * 3600 * (daysFrom1970 (t.tm_year + 1900, t.tm_mon) + (t.tm_mday - 1))
-                + 3600 * t.tm_hour
-                + 60 * t.tm_min
-                + t.tm_sec;
+             + 3600 * t.tm_hour
+             + 60 * t.tm_min
+             + t.tm_sec;
     }
 
     static Atomic<uint32> lastMSCounterValue { (uint32) 0 };
@@ -210,41 +209,41 @@ namespace TimeHelpers
 
         return "Z";
     }
-}
+} // namespace TimeHelpers
 
 //==============================================================================
-Time::Time (int64 ms) noexcept  : millisSinceEpoch (ms) {}
+Time::Time (int64 ms) noexcept
+    : millisSinceEpoch (ms)
+{
+}
 
-Time::Time (int year, int month, int day,
-            int hours, int minutes, int seconds, int milliseconds,
-            bool useLocalTime) noexcept
+Time::Time (int year, int month, int day, int hours, int minutes, int seconds, int milliseconds, bool useLocalTime) noexcept
 {
     std::tm t;
-    t.tm_year   = year - 1900;
-    t.tm_mon    = month;
-    t.tm_mday   = day;
-    t.tm_hour   = hours;
-    t.tm_min    = minutes;
-    t.tm_sec    = seconds;
-    t.tm_isdst  = -1;
+    t.tm_year = year - 1900;
+    t.tm_mon = month;
+    t.tm_mday = day;
+    t.tm_hour = hours;
+    t.tm_min = minutes;
+    t.tm_sec = seconds;
+    t.tm_isdst = -1;
 
-    millisSinceEpoch = 1000 * (useLocalTime ? (int64) mktime (&t)
-                                            : TimeHelpers::mktime_utc (t))
-                         + milliseconds;
+    millisSinceEpoch = 1000 * (useLocalTime ? (int64) mktime (&t) : TimeHelpers::mktime_utc (t))
+                     + milliseconds;
 }
 
 //==============================================================================
 int64 Time::currentTimeMillis() noexcept
 {
-   #if JUCE_WINDOWS && ! JUCE_MINGW
+#if JUCE_WINDOWS && ! JUCE_MINGW
     struct _timeb t;
     _ftime_s (&t);
     return ((int64) t.time) * 1000 + t.millitm;
-   #else
+#else
     struct timeval tv;
     gettimeofday (&tv, nullptr);
     return ((int64) tv.tv_sec) * 1000 + tv.tv_usec / 1000;
-   #endif
+#endif
 }
 
 Time JUCE_CALLTYPE Time::getCurrentTime() noexcept
@@ -362,22 +361,32 @@ String Time::formatted (const String& format) const
 }
 
 //==============================================================================
-int Time::getYear() const noexcept          { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_year + 1900; }
-int Time::getMonth() const noexcept         { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_mon; }
-int Time::getDayOfYear() const noexcept     { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_yday; }
-int Time::getDayOfMonth() const noexcept    { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_mday; }
-int Time::getDayOfWeek() const noexcept     { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_wday; }
-int Time::getHours() const noexcept         { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_hour; }
-int Time::getMinutes() const noexcept       { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_min; }
-int Time::getSeconds() const noexcept       { return TimeHelpers::extendedModulo (millisSinceEpoch / 1000, 60); }
-int Time::getMilliseconds() const noexcept  { return TimeHelpers::extendedModulo (millisSinceEpoch, 1000); }
+int Time::getYear() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_year + 1900; }
+
+int Time::getMonth() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_mon; }
+
+int Time::getDayOfYear() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_yday; }
+
+int Time::getDayOfMonth() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_mday; }
+
+int Time::getDayOfWeek() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_wday; }
+
+int Time::getHours() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_hour; }
+
+int Time::getMinutes() const noexcept { return TimeHelpers::millisToLocal (millisSinceEpoch).tm_min; }
+
+int Time::getSeconds() const noexcept { return TimeHelpers::extendedModulo (millisSinceEpoch / 1000, 60); }
+
+int Time::getMilliseconds() const noexcept { return TimeHelpers::extendedModulo (millisSinceEpoch, 1000); }
 
 int Time::getHoursInAmPmFormat() const noexcept
 {
     auto hours = getHours();
 
-    if (hours == 0)  return 12;
-    if (hours <= 12) return hours;
+    if (hours == 0)
+        return 12;
+    if (hours <= 12)
+        return hours;
 
     return hours - 12;
 }
@@ -396,7 +405,7 @@ String Time::getTimeZone() const
 {
     String zone[2];
 
-  #if JUCE_WINDOWS && (JUCE_MSVC || JUCE_CLANG)
+#if JUCE_WINDOWS && (JUCE_MSVC || JUCE_CLANG)
     _tzset();
 
     for (int i = 0; i < 2; ++i)
@@ -406,21 +415,21 @@ String Time::getTimeZone() const
         _get_tzname (&length, name, sizeof (name) - 1, i);
         zone[i] = name;
     }
-  #else
+#else
     tzset();
 
     auto zonePtr = (const char**) tzname;
     zone[0] = zonePtr[0];
     zone[1] = zonePtr[1];
-  #endif
+#endif
 
     if (isDaylightSavingTime())
     {
         zone[0] = zone[1];
 
         if (zone[0].length() > 3
-             && zone[0].containsIgnoreCase ("daylight")
-             && zone[0].contains ("GMT"))
+            && zone[0].containsIgnoreCase ("daylight")
+            && zone[0].contains ("GMT"))
             zone[0] = "BST";
     }
 
@@ -447,7 +456,7 @@ String Time::toISO8601 (bool includeDividerCharacters) const
                               getHours(),
                               getMinutes(),
                               getSeconds() + getMilliseconds() / 1000.0)
-            + getUTCOffsetString (includeDividerCharacters);
+         + getUTCOffsetString (includeDividerCharacters);
 }
 
 static int parseFixedSizeIntAndSkip (String::CharPointerType& t, int numChars, char charToSkip) noexcept
@@ -507,7 +516,7 @@ Time Time::fromISO8601 (StringRef iso)
         auto seconds = parseFixedSizeIntAndSkip (t, 2, 0);
 
         if (seconds < 0)
-             return {};
+            return {};
 
         if (*t == '.' || *t == ',')
         {
@@ -557,43 +566,71 @@ String Time::getWeekdayName (const bool threeLetterVersion) const
 }
 
 static const char* const shortMonthNames[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-static const char* const longMonthNames[]  = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
+static const char* const longMonthNames[] = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
 
 String Time::getMonthName (int monthNumber, const bool threeLetterVersion)
 {
     monthNumber %= 12;
 
-    return TRANS (threeLetterVersion ? shortMonthNames [monthNumber]
-                                     : longMonthNames [monthNumber]);
+    return TRANS (threeLetterVersion ? shortMonthNames[monthNumber]
+                                     : longMonthNames[monthNumber]);
 }
 
 String Time::getWeekdayName (int day, const bool threeLetterVersion)
 {
     static const char* const shortDayNames[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
-    static const char* const longDayNames[]  = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+    static const char* const longDayNames[] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 
     day %= 7;
 
-    return TRANS (threeLetterVersion ? shortDayNames [day]
-                                     : longDayNames [day]);
+    return TRANS (threeLetterVersion ? shortDayNames[day]
+                                     : longDayNames[day]);
 }
 
 //==============================================================================
-Time& Time::operator+= (RelativeTime delta) noexcept           { millisSinceEpoch += delta.inMilliseconds(); return *this; }
-Time& Time::operator-= (RelativeTime delta) noexcept           { millisSinceEpoch -= delta.inMilliseconds(); return *this; }
+Time& Time::operator+= (RelativeTime delta) noexcept
+{
+    millisSinceEpoch += delta.inMilliseconds();
+    return *this;
+}
 
-Time operator+ (Time time, RelativeTime delta) noexcept        { Time t (time); return t += delta; }
-Time operator- (Time time, RelativeTime delta) noexcept        { Time t (time); return t -= delta; }
-Time operator+ (RelativeTime delta, Time time) noexcept        { Time t (time); return t += delta; }
+Time& Time::operator-= (RelativeTime delta) noexcept
+{
+    millisSinceEpoch -= delta.inMilliseconds();
+    return *this;
+}
+
+Time operator+ (Time time, RelativeTime delta) noexcept
+{
+    Time t (time);
+    return t += delta;
+}
+
+Time operator- (Time time, RelativeTime delta) noexcept
+{
+    Time t (time);
+    return t -= delta;
+}
+
+Time operator+ (RelativeTime delta, Time time) noexcept
+{
+    Time t (time);
+    return t += delta;
+}
 
 RelativeTime operator- (Time time1, Time time2) noexcept { return RelativeTime::milliseconds (time1.toMilliseconds() - time2.toMilliseconds()); }
 
-bool operator== (Time time1, Time time2) noexcept      { return time1.toMilliseconds() == time2.toMilliseconds(); }
-bool operator!= (Time time1, Time time2) noexcept      { return time1.toMilliseconds() != time2.toMilliseconds(); }
-bool operator<  (Time time1, Time time2) noexcept      { return time1.toMilliseconds() <  time2.toMilliseconds(); }
-bool operator>  (Time time1, Time time2) noexcept      { return time1.toMilliseconds() >  time2.toMilliseconds(); }
-bool operator<= (Time time1, Time time2) noexcept      { return time1.toMilliseconds() <= time2.toMilliseconds(); }
-bool operator>= (Time time1, Time time2) noexcept      { return time1.toMilliseconds() >= time2.toMilliseconds(); }
+bool operator== (Time time1, Time time2) noexcept { return time1.toMilliseconds() == time2.toMilliseconds(); }
+
+bool operator!= (Time time1, Time time2) noexcept { return time1.toMilliseconds() != time2.toMilliseconds(); }
+
+bool operator<(Time time1, Time time2) noexcept { return time1.toMilliseconds() < time2.toMilliseconds(); }
+
+bool operator> (Time time1, Time time2) noexcept { return time1.toMilliseconds() > time2.toMilliseconds(); }
+
+bool operator<= (Time time1, Time time2) noexcept { return time1.toMilliseconds() <= time2.toMilliseconds(); }
+
+bool operator>= (Time time1, Time time2) noexcept { return time1.toMilliseconds() >= time2.toMilliseconds(); }
 
 static int getMonthNumberForCompileDate (const String& m)
 {
@@ -623,7 +660,6 @@ Time Time::getCompilationDate()
                  timeTokens[1].getIntValue());
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -633,7 +669,8 @@ class TimeTests final : public UnitTest
 public:
     TimeTests()
         : UnitTest ("Time", UnitTestCategories::time)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -646,7 +683,7 @@ public:
         expect (Time::getCurrentTime() > t);
 
         expect (t.getTimeZone().isNotEmpty());
-        expect (t.getUTCOffsetString (true)  == "Z" || t.getUTCOffsetString (true).length() == 6);
+        expect (t.getUTCOffsetString (true) == "Z" || t.getUTCOffsetString (true).length() == 6);
         expect (t.getUTCOffsetString (false) == "Z" || t.getUTCOffsetString (false).length() == 5);
 
         expect (TimeHelpers::getUTCOffsetString (-(3 * 60 + 15) * 60, true) == "-03:15");
@@ -659,28 +696,28 @@ public:
         expect (Time::fromISO8601 (t.toISO8601 (false)) == t);
 
         expect (Time::fromISO8601 ("2016-02-16") == Time (2016, 1, 16, 0, 0, 0, 0, false));
-        expect (Time::fromISO8601 ("20160216Z")  == Time (2016, 1, 16, 0, 0, 0, 0, false));
+        expect (Time::fromISO8601 ("20160216Z") == Time (2016, 1, 16, 0, 0, 0, 0, false));
 
         expect (Time::fromISO8601 ("2016-02-16T15:03:57+00:00") == Time (2016, 1, 16, 15, 3, 57, 0, false));
-        expect (Time::fromISO8601 ("20160216T150357+0000")      == Time (2016, 1, 16, 15, 3, 57, 0, false));
+        expect (Time::fromISO8601 ("20160216T150357+0000") == Time (2016, 1, 16, 15, 3, 57, 0, false));
 
         expect (Time::fromISO8601 ("2016-02-16T15:03:57.999+00:00") == Time (2016, 1, 16, 15, 3, 57, 999, false));
-        expect (Time::fromISO8601 ("20160216T150357.999+0000")      == Time (2016, 1, 16, 15, 3, 57, 999, false));
-        expect (Time::fromISO8601 ("2016-02-16T15:03:57.999Z")      == Time (2016, 1, 16, 15, 3, 57, 999, false));
-        expect (Time::fromISO8601 ("2016-02-16T15:03:57,999Z")      == Time (2016, 1, 16, 15, 3, 57, 999, false));
-        expect (Time::fromISO8601 ("20160216T150357.999Z")          == Time (2016, 1, 16, 15, 3, 57, 999, false));
-        expect (Time::fromISO8601 ("20160216T150357,999Z")          == Time (2016, 1, 16, 15, 3, 57, 999, false));
+        expect (Time::fromISO8601 ("20160216T150357.999+0000") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+        expect (Time::fromISO8601 ("2016-02-16T15:03:57.999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+        expect (Time::fromISO8601 ("2016-02-16T15:03:57,999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+        expect (Time::fromISO8601 ("20160216T150357.999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+        expect (Time::fromISO8601 ("20160216T150357,999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
 
         expect (Time::fromISO8601 ("2016-02-16T15:03:57.999-02:30") == Time (2016, 1, 16, 17, 33, 57, 999, false));
         expect (Time::fromISO8601 ("2016-02-16T15:03:57,999-02:30") == Time (2016, 1, 16, 17, 33, 57, 999, false));
-        expect (Time::fromISO8601 ("20160216T150357.999-0230")      == Time (2016, 1, 16, 17, 33, 57, 999, false));
-        expect (Time::fromISO8601 ("20160216T150357,999-0230")      == Time (2016, 1, 16, 17, 33, 57, 999, false));
+        expect (Time::fromISO8601 ("20160216T150357.999-0230") == Time (2016, 1, 16, 17, 33, 57, 999, false));
+        expect (Time::fromISO8601 ("20160216T150357,999-0230") == Time (2016, 1, 16, 17, 33, 57, 999, false));
 
-        expect (Time (1970,  0,  1,  0,  0,  0, 0, false) == Time (0));
-        expect (Time (2106,  1,  7,  6, 28, 15, 0, false) == Time (4294967295000));
-        expect (Time (2007, 10,  7,  1,  7, 20, 0, false) == Time (1194397640000));
-        expect (Time (2038,  0, 19,  3, 14,  7, 0, false) == Time (2147483647000));
-        expect (Time (2016,  2,  7, 11, 20,  8, 0, false) == Time (1457349608000));
+        expect (Time (1970, 0, 1, 0, 0, 0, 0, false) == Time (0));
+        expect (Time (2106, 1, 7, 6, 28, 15, 0, false) == Time (4294967295000));
+        expect (Time (2007, 10, 7, 1, 7, 20, 0, false) == Time (1194397640000));
+        expect (Time (2038, 0, 19, 3, 14, 7, 0, false) == Time (2147483647000));
+        expect (Time (2016, 2, 7, 11, 20, 8, 0, false) == Time (1457349608000));
         expect (Time (1969, 11, 31, 23, 59, 59, 0, false) == Time (-1000));
         expect (Time (1901, 11, 13, 20, 45, 53, 0, false) == Time (-2147483647000));
 

@@ -40,8 +40,9 @@
 namespace juce
 {
 //==============================================================================
-Thread::Thread (const String& name, size_t stackSize) : threadName (name),
-                                                        threadStackSize (stackSize)
+Thread::Thread (const String& name, size_t stackSize)
+    : threadName (name)
+    , threadStackSize (stackSize)
 {
 }
 
@@ -75,7 +76,7 @@ struct CurrentThreadHolder final : public ReferenceCountedObject
     JUCE_DECLARE_NON_COPYABLE (CurrentThreadHolder)
 };
 
-static char currentThreadHolderLock [sizeof (SpinLock)]; // (statically initialised to zeros).
+static char currentThreadHolderLock[sizeof (SpinLock)]; // (statically initialised to zeros).
 
 static SpinLock* castToSpinLockWithoutAliasingWarning (void* s)
 {
@@ -146,9 +147,9 @@ bool Thread::startThreadInternal (Priority threadPriority)
     // has any options but we need to set this here to satisfy
     // later queries, otherwise we get inconsistent results across
     // platforms.
-   #if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD
+#if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD
     priority = threadPriority;
-   #endif
+#endif
 
     if (createNativeThread (threadPriority))
     {
@@ -213,7 +214,10 @@ Thread::ThreadID Thread::getThreadId() const noexcept
 void Thread::signalThreadShouldExit()
 {
     shouldExit = true;
-    listeners.call ([] (Listener& l) { l.exitSignalSent(); });
+    listeners.call ([] (Listener& l)
+                    {
+                        l.exitSignalSent();
+                    });
 }
 
 bool Thread::threadShouldExit() const
@@ -315,7 +319,11 @@ void Thread::notify() const
 //==============================================================================
 struct LambdaThread final : public Thread
 {
-    LambdaThread (std::function<void()>&& f) : Thread ("anonymous"), fn (std::move (f)) {}
+    LambdaThread (std::function<void()>&& f)
+        : Thread ("anonymous")
+        , fn (std::move (f))
+    {
+    }
 
     void run() override
     {
@@ -376,7 +384,8 @@ class AtomicTests final : public UnitTest
 public:
     AtomicTests()
         : UnitTest ("Atomics", UnitTestCategories::threads)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -392,29 +401,30 @@ public:
         expect (ByteOrder::swap ((uint64) 0x1122334455667788ULL) == (uint64) 0x8877665544332211LL);
 
         beginTest ("Atomic int");
-        AtomicTester <int>::testInteger (*this);
+        AtomicTester<int>::testInteger (*this);
         beginTest ("Atomic unsigned int");
-        AtomicTester <unsigned int>::testInteger (*this);
+        AtomicTester<unsigned int>::testInteger (*this);
         beginTest ("Atomic int32");
-        AtomicTester <int32>::testInteger (*this);
+        AtomicTester<int32>::testInteger (*this);
         beginTest ("Atomic uint32");
-        AtomicTester <uint32>::testInteger (*this);
+        AtomicTester<uint32>::testInteger (*this);
         beginTest ("Atomic long");
-        AtomicTester <long>::testInteger (*this);
+        AtomicTester<long>::testInteger (*this);
         beginTest ("Atomic int*");
-        AtomicTester <int*>::testInteger (*this);
+        AtomicTester<int*>::testInteger (*this);
         beginTest ("Atomic float");
-        AtomicTester <float>::testFloat (*this);
-      #if ! JUCE_64BIT_ATOMICS_UNAVAILABLE  // 64-bit intrinsics aren't available on some old platforms
+        AtomicTester<float>::testFloat (*this);
+#if ! JUCE_64BIT_ATOMICS_UNAVAILABLE // 64-bit intrinsics aren't available on some old platforms
         beginTest ("Atomic int64");
-        AtomicTester <int64>::testInteger (*this);
+        AtomicTester<int64>::testInteger (*this);
         beginTest ("Atomic uint64");
-        AtomicTester <uint64>::testInteger (*this);
+        AtomicTester<uint64>::testInteger (*this);
         beginTest ("Atomic double");
-        AtomicTester <double>::testFloat (*this);
-      #endif
+        AtomicTester<double>::testFloat (*this);
+#endif
         beginTest ("Atomic pointer increment/decrement");
-        Atomic<int*> a (a2); int* b (a2);
+        Atomic<int*> a (a2);
+        int* b (a2);
         expect (++a == ++b);
 
         {
@@ -466,8 +476,6 @@ public:
             testFloat (test);
         }
 
-
-
         static void testFloat (UnitTest& test)
         {
             Atomic<Type> a, b;
@@ -495,14 +503,15 @@ public:
 static AtomicTests atomicUnitTests;
 
 //==============================================================================
-class ThreadLocalValueUnitTest final : public UnitTest,
-                                       private Thread
+class ThreadLocalValueUnitTest final : public UnitTest
+    , private Thread
 {
 public:
     ThreadLocalValueUnitTest()
-        : UnitTest ("ThreadLocalValue", UnitTestCategories::threads),
-          Thread ("ThreadLocalValue Thread")
-    {}
+        : UnitTest ("ThreadLocalValue", UnitTestCategories::threads)
+        , Thread ("ThreadLocalValue Thread")
+    {
+    }
 
     void runTest() override
     {

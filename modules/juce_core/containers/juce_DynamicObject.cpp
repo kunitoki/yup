@@ -45,7 +45,8 @@ DynamicObject::DynamicObject()
 }
 
 DynamicObject::DynamicObject (const DynamicObject& other)
-   : ReferenceCountedObject(), properties (other.properties)
+    : ReferenceCountedObject()
+    , properties (other.properties)
 {
 }
 
@@ -61,7 +62,7 @@ bool DynamicObject::hasProperty (const Identifier& propertyName) const
 
 const var& DynamicObject::getProperty (const Identifier& propertyName) const
 {
-    return properties [propertyName];
+    return properties[propertyName];
 }
 
 void DynamicObject::setProperty (const Identifier& propertyName, const var& newValue)
@@ -81,7 +82,7 @@ bool DynamicObject::hasMethod (const Identifier& methodName) const
 
 var DynamicObject::invokeMethod (Identifier method, const var::NativeFunctionArgs& args)
 {
-    if (auto function = properties [method].getNativeFunction())
+    if (auto function = properties[method].getNativeFunction())
         return function (args);
 
     return {};
@@ -141,9 +142,14 @@ void DynamicObject::writeAsJSON (OutputStream& out, const JSON::FormatOptions& f
 
             switch (format.getSpacing())
             {
-                case JSON::Spacing::none: break;
-                case JSON::Spacing::singleLine: out << ' '; break;
-                case JSON::Spacing::multiLine: out << newLine; break;
+                case JSON::Spacing::none:
+                    break;
+                case JSON::Spacing::singleLine:
+                    out << ' ';
+                    break;
+                case JSON::Spacing::multiLine:
+                    out << newLine;
+                    break;
             }
         }
         else if (format.getSpacing() == JSON::Spacing::multiLine)

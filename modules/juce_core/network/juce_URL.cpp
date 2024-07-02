@@ -40,26 +40,26 @@
 namespace juce
 {
 
-struct FallbackDownloadTask final : public URL::DownloadTask,
-                                    public Thread
+struct FallbackDownloadTask final : public URL::DownloadTask
+    , public Thread
 {
     FallbackDownloadTask (std::unique_ptr<FileOutputStream> outputStreamToUse,
                           size_t bufferSizeToUse,
                           std::unique_ptr<WebInputStream> streamToUse,
                           URL::DownloadTask::Listener* listenerToUse)
-        : Thread ("DownloadTask thread"),
-          fileStream (std::move (outputStreamToUse)),
-          stream (std::move (streamToUse)),
-          bufferSize (bufferSizeToUse),
-          buffer (bufferSize),
-          listener (listenerToUse)
+        : Thread ("DownloadTask thread")
+        , fileStream (std::move (outputStreamToUse))
+        , stream (std::move (streamToUse))
+        , bufferSize (bufferSizeToUse)
+        , buffer (bufferSize)
+        , listener (listenerToUse)
     {
         jassert (fileStream != nullptr);
         jassert (stream != nullptr);
 
         targetLocation = fileStream->getFile();
-        contentLength  = stream->getTotalLength();
-        httpCode       = stream->getStatusCode();
+        contentLength = stream->getTotalLength();
+        httpCode = stream->getStatusCode();
 
         startThread();
     }
@@ -79,8 +79,7 @@ struct FallbackDownloadTask final : public URL::DownloadTask,
             if (listener != nullptr)
                 listener->progress (this, downloaded, contentLength);
 
-            auto max = (int) jmin ((int64) bufferSize, contentLength < 0 ? std::numeric_limits<int64>::max()
-                                                                         : static_cast<int64> (contentLength - downloaded));
+            auto max = (int) jmin ((int64) bufferSize, contentLength < 0 ? std::numeric_limits<int64>::max() : static_cast<int64> (contentLength - downloaded));
 
             auto actual = stream->read (buffer.get(), max);
 
@@ -149,12 +148,14 @@ std::unique_ptr<URL::DownloadTask> URL::DownloadTask::createFallbackDownloader (
 }
 
 URL::DownloadTask::DownloadTask() {}
+
 URL::DownloadTask::~DownloadTask() {}
 
 //==============================================================================
 URL::URL() {}
 
-URL::URL (const String& u)  : url (u)
+URL::URL (const String& u)
+    : url (u)
 {
     init();
 }
@@ -164,9 +165,9 @@ URL::URL (File localFile)
     if (localFile == File())
         return;
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     bool isUncPath = localFile.getFullPathName().startsWith ("\\\\");
-   #endif
+#endif
 
     while (! localFile.isRoot())
     {
@@ -176,13 +177,13 @@ URL::URL (File localFile)
 
     url = addEscapeChars (localFile.getFileName(), false) + url;
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     if (isUncPath)
     {
         url = url.fromFirstOccurrenceOf ("/", false, false);
     }
     else
-   #endif
+#endif
     {
         if (! url.startsWithChar (L'/'))
             url = "/" + url;
@@ -209,7 +210,7 @@ void URL::init()
     {
         do
         {
-            auto nextAmp   = url.indexOfChar (i + 1, '&');
+            auto nextAmp = url.indexOfChar (i + 1, '&');
             auto equalsPos = url.indexOfChar (i + 1, '=');
 
             if (nextAmp < 0)
@@ -224,14 +225,16 @@ void URL::init()
             }
 
             i = nextAmp;
-        }
-        while (i >= 0);
+        } while (i >= 0);
 
         url = url.upToFirstOccurrenceOf ("?", false, false);
     }
 }
 
-URL::URL (const String& u, int)  : url (u) {}
+URL::URL (const String& u, int)
+    : url (u)
+{
+}
 
 URL URL::createWithoutParsing (const String& u)
 {
@@ -325,7 +328,7 @@ namespace URLHelpers
 
         return url.substring (0, std::max (startOfPath, lastSlash));
     }
-}
+} // namespace URLHelpers
 
 void URL::addParameter (const String& name, const String& value)
 {
@@ -427,21 +430,21 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
 
     auto path = removeEscapeChars (fileURL.getDomainInternal (true)).replace ("+", "%2B");
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     bool isUncPath = (! fileURL.url.startsWith ("file:///"));
-   #else
+#else
     path = File::getSeparatorString() + path;
-   #endif
+#endif
 
     auto urlElements = StringArray::fromTokens (fileURL.getSubPath(), "/", "");
 
     for (auto urlElement : urlElements)
         path += File::getSeparatorString() + removeEscapeChars (urlElement.replace ("+", "%2B"));
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     if (isUncPath)
         path = "\\\\" + path;
-   #endif
+#endif
 
     return path;
 }
@@ -524,7 +527,8 @@ void URL::createHeadersAndPostData (String& headers,
         for (int i = 0; i < parameterNames.size(); ++i)
         {
             data << "\r\nContent-Disposition: form-data; name=\"" << parameterNames[i]
-                 << "\"\r\n\r\n" << parameterValues[i]
+                 << "\"\r\n\r\n"
+                 << parameterValues[i]
                  << "\r\n--" << boundary;
         }
 
@@ -574,7 +578,7 @@ bool URL::isProbablyAWebsiteURL (const String& possibleURL)
         return false;
 
     auto topLevelDomain = possibleURL.upToFirstOccurrenceOf ("/", false, false)
-                                     .fromLastOccurrenceOf (".", false, false);
+                              .fromLastOccurrenceOf (".", false, false);
 
     return topLevelDomain.isNotEmpty() && topLevelDomain.length() <= 3;
 }
@@ -601,7 +605,8 @@ String URL::getDomainInternal (bool ignorePort) const
 }
 
 #if JUCE_IOS
-URL::Bookmark::Bookmark (void* bookmarkToUse) : data (bookmarkToUse)
+URL::Bookmark::Bookmark (void* bookmarkToUse)
+    : data (bookmarkToUse)
 {
 }
 
@@ -623,17 +628,27 @@ void* getURLBookmark (URL& u)
     return u.bookmark.get()->data;
 }
 
-template <typename Stream> struct iOSFileStreamWrapperFlush    { static void flush (Stream*) {} };
-template <> struct iOSFileStreamWrapperFlush<FileOutputStream> { static void flush (OutputStream* o) { o->flush(); } };
+template <typename Stream>
+struct iOSFileStreamWrapperFlush
+{
+    static void flush (Stream*) {}
+};
+
+template <>
+struct iOSFileStreamWrapperFlush<FileOutputStream>
+{
+    static void flush (OutputStream* o) { o->flush(); }
+};
 
 template <typename Stream>
 class iOSFileStreamWrapper final : public Stream
 {
 public:
     iOSFileStreamWrapper (URL& urlToUse)
-        : Stream (getLocalFileAccess (urlToUse)),
-          url (urlToUse)
-    {}
+        : Stream (getLocalFileAccess (urlToUse))
+        , url (urlToUse)
+    {
+    }
 
     ~iOSFileStreamWrapper()
     {
@@ -644,11 +659,11 @@ public:
             BOOL isBookmarkStale = false;
             NSError* error = nil;
 
-            auto nsURL = [NSURL URLByResolvingBookmarkData: bookmark
-                                                   options: 0
-                                             relativeToURL: nil
-                                       bookmarkDataIsStale: &isBookmarkStale
-                                                     error: &error];
+            auto nsURL = [NSURL URLByResolvingBookmarkData:bookmark
+                                                   options:0
+                                             relativeToURL:nil
+                                       bookmarkDataIsStale:&isBookmarkStale
+                                                     error:&error];
 
             if (error == nil)
             {
@@ -676,11 +691,11 @@ private:
             BOOL isBookmarkStale = false;
             NSError* error = nil;
 
-            auto nsURL = [NSURL URLByResolvingBookmarkData: bookmark
-                                                   options: 0
-                                             relativeToURL: nil
-                                       bookmarkDataIsStale: &isBookmarkStale
-                                                      error: &error];
+            auto nsURL = [NSURL URLByResolvingBookmarkData:bookmark
+                                                   options:0
+                                             relativeToURL:nil
+                                       bookmarkDataIsStale:&isBookmarkStale
+                                                     error:&error];
 
             if (error == nil)
             {
@@ -703,10 +718,10 @@ private:
     {
         NSError* error = nil;
 
-        NSData* bookmark = [nsURL bookmarkDataWithOptions: NSURLBookmarkCreationSuitableForBookmarkFile
-                           includingResourceValuesForKeys: nil
-                                            relativeToURL: nil
-                                                    error: &error];
+        NSData* bookmark = [nsURL bookmarkDataWithOptions:NSURLBookmarkCreationSuitableForBookmarkFile
+                           includingResourceValuesForKeys:nil
+                                            relativeToURL:nil
+                                                    error:&error];
 
         if (error == nil)
             setURLBookmark (juceUrl, (void*) bookmark);
@@ -723,7 +738,10 @@ static URL::InputStreamOptions with (URL::InputStreamOptions options, Member&& m
     return options;
 }
 
-URL::InputStreamOptions::InputStreamOptions (ParameterHandling handling)  : parameterHandling (handling)  {}
+URL::InputStreamOptions::InputStreamOptions (ParameterHandling handling)
+    : parameterHandling (handling)
+{
+}
 
 URL::InputStreamOptions URL::InputStreamOptions::withProgressCallback (std::function<bool (int, int)> cb) const
 {
@@ -765,12 +783,12 @@ std::unique_ptr<InputStream> URL::createInputStream (const InputStreamOptions& o
 {
     if (isLocalFile())
     {
-       #if JUCE_IOS
+#if JUCE_IOS
         // We may need to refresh the embedded bookmark.
         return std::make_unique<iOSFileStreamWrapper<FileInputStream>> (const_cast<URL&> (*this));
-       #else
+#else
         return getLocalFile().createInputStream();
-       #endif
+#endif
     }
 
     auto webInputStream = [&]
@@ -840,19 +858,19 @@ std::unique_ptr<InputStream> URL::createInputStream (const InputStreamOptions& o
 
 std::unique_ptr<OutputStream> URL::createOutputStream() const
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     if (auto stream = AndroidDocument::fromDocument (*this).createOutputStream())
         return stream;
-   #endif
+#endif
 
     if (isLocalFile())
     {
-       #if JUCE_IOS
+#if JUCE_IOS
         // We may need to refresh the embedded bookmark.
         return std::make_unique<iOSFileStreamWrapper<FileOutputStream>> (const_cast<URL&> (*this));
-       #else
+#else
         return std::make_unique<FileOutputStream> (getLocalFile());
-       #endif
+#endif
     }
 
     return nullptr;
@@ -929,9 +947,12 @@ URL URL::withPOSTData (const MemoryBlock& newPostData) const
     return u;
 }
 
-URL::Upload::Upload (const String& param, const String& name,
-                     const String& mime, const File& f, MemoryBlock* mb)
-    : parameterName (param), filename (name), mimeType (mime), file (f), data (mb)
+URL::Upload::Upload (const String& param, const String& name, const String& mime, const File& f, MemoryBlock* mb)
+    : parameterName (param)
+    , filename (name)
+    , mimeType (mime)
+    , file (f)
+    , data (mb)
 {
     jassert (mimeType.isNotEmpty()); // You need to supply a mime type!
 }
@@ -948,18 +969,14 @@ URL URL::withUpload (Upload* const f) const
     return u;
 }
 
-URL URL::withFileToUpload (const String& parameterName, const File& fileToUpload,
-                           const String& mimeType) const
+URL URL::withFileToUpload (const String& parameterName, const File& fileToUpload, const String& mimeType) const
 {
-    return withUpload (new Upload (parameterName, fileToUpload.getFileName(),
-                                   mimeType, fileToUpload, nullptr));
+    return withUpload (new Upload (parameterName, fileToUpload.getFileName(), mimeType, fileToUpload, nullptr));
 }
 
-URL URL::withDataToUpload (const String& parameterName, const String& filename,
-                           const MemoryBlock& fileContentToUpload, const String& mimeType) const
+URL URL::withDataToUpload (const String& parameterName, const String& filename, const MemoryBlock& fileContentToUpload, const String& mimeType) const
 {
-    return withUpload (new Upload (parameterName, filename, mimeType, File(),
-                                   new MemoryBlock (fileContentToUpload)));
+    return withUpload (new Upload (parameterName, filename, mimeType, File(), new MemoryBlock (fileContentToUpload)));
 }
 
 //==============================================================================
@@ -978,8 +995,8 @@ String URL::removeEscapeChars (const String& s)
     {
         if (utf8.getUnchecked (i) == '%')
         {
-            auto hexDigit1 = CharacterFunctions::getHexDigitValue ((juce_wchar) (uint8) utf8 [i + 1]);
-            auto hexDigit2 = CharacterFunctions::getHexDigitValue ((juce_wchar) (uint8) utf8 [i + 2]);
+            auto hexDigit1 = CharacterFunctions::getHexDigitValue ((juce_wchar) (uint8) utf8[i + 1]);
+            auto hexDigit2 = CharacterFunctions::getHexDigitValue ((juce_wchar) (uint8) utf8[i + 2]);
 
             if (hexDigit1 >= 0 && hexDigit2 >= 0)
             {
@@ -1007,11 +1024,11 @@ String URL::addEscapeChars (const String& s, bool isParameter, bool roundBracket
         auto c = utf8.getUnchecked (i);
 
         if (! (CharacterFunctions::isLetterOrDigit (c)
-                 || legalChars.containsChar ((juce_wchar) c)))
+               || legalChars.containsChar ((juce_wchar) c)))
         {
             utf8.set (i, '%');
-            utf8.insert (++i, "0123456789ABCDEF" [((uint8) c) >> 4]);
-            utf8.insert (++i, "0123456789ABCDEF" [c & 15]);
+            utf8.insert (++i, "0123456789ABCDEF"[((uint8) c) >> 4]);
+            utf8.insert (++i, "0123456789ABCDEF"[c & 15]);
         }
     }
 
@@ -1043,16 +1060,19 @@ std::unique_ptr<InputStream> URL::createInputStream (bool usePostCommand,
     std::function<bool (int, int)> callback;
 
     if (cb != nullptr)
-        callback = [context, cb] (int sent, int total) { return cb (context, sent, total); };
+        callback = [context, cb] (int sent, int total)
+        {
+            return cb (context, sent, total);
+        };
 
     return createInputStream (InputStreamOptions (toHandling (usePostCommand))
-                                .withProgressCallback (std::move (callback))
-                                .withExtraHeaders (headers)
-                                .withConnectionTimeoutMs (timeOutMs)
-                                .withResponseHeaders (responseHeaders)
-                                .withStatusCode (statusCode)
-                                .withNumRedirectsToFollow (numRedirectsToFollow)
-                                .withHttpRequestCmd (httpRequestCmd));
+                                  .withProgressCallback (std::move (callback))
+                                  .withExtraHeaders (headers)
+                                  .withConnectionTimeoutMs (timeOutMs)
+                                  .withResponseHeaders (responseHeaders)
+                                  .withStatusCode (statusCode)
+                                  .withNumRedirectsToFollow (numRedirectsToFollow)
+                                  .withHttpRequestCmd (httpRequestCmd));
 }
 
 std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocation,
@@ -1060,9 +1080,7 @@ std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocati
                                                         DownloadTask::Listener* listener,
                                                         bool usePostCommand)
 {
-    auto options = DownloadTaskOptions().withExtraHeaders (std::move (extraHeaders))
-                                        .withListener (listener)
-                                        .withUsePost (usePostCommand);
+    auto options = DownloadTaskOptions().withExtraHeaders (std::move (extraHeaders)).withListener (listener).withUsePost (usePostCommand);
     return downloadToFile (targetLocation, std::move (options));
 }
 

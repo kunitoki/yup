@@ -79,7 +79,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  ReferenceCountedObject
+class JUCE_API ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -115,8 +115,7 @@ public:
     }
 
     /** Returns the object's current reference count. */
-    int getReferenceCount() const noexcept       { return refCount.get(); }
-
+    int getReferenceCount() const noexcept { return refCount.get(); }
 
 protected:
     //==============================================================================
@@ -125,12 +124,15 @@ protected:
 
     /** Copying from another object does not affect this one's reference-count. */
     ReferenceCountedObject (const ReferenceCountedObject&) noexcept {}
+
     /** Copying from another object does not affect this one's reference-count. */
     ReferenceCountedObject (ReferenceCountedObject&&) noexcept {}
+
     /** Copying from another object does not affect this one's reference-count. */
-    ReferenceCountedObject& operator= (const ReferenceCountedObject&) noexcept  { return *this; }
+    ReferenceCountedObject& operator= (const ReferenceCountedObject&) noexcept { return *this; }
+
     /** Copying from another object does not affect this one's reference-count. */
-    ReferenceCountedObject& operator= (ReferenceCountedObject&&) noexcept       { return *this; }
+    ReferenceCountedObject& operator= (ReferenceCountedObject&&) noexcept { return *this; }
 
     /** Destructor. */
     virtual ~ReferenceCountedObject()
@@ -153,7 +155,6 @@ private:
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
 };
 
-
 //==============================================================================
 /**
     Adds reference-counting to an object.
@@ -167,7 +168,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  SingleThreadedReferenceCountedObject
+class JUCE_API SingleThreadedReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -203,8 +204,7 @@ public:
     }
 
     /** Returns the object's current reference count. */
-    int getReferenceCount() const noexcept       { return refCount; }
-
+    int getReferenceCount() const noexcept { return refCount; }
 
 protected:
     //==============================================================================
@@ -213,10 +213,13 @@ protected:
 
     /** Copying from another object does not affect this one's reference-count. */
     SingleThreadedReferenceCountedObject (const SingleThreadedReferenceCountedObject&) {}
+
     /** Copying from another object does not affect this one's reference-count. */
     SingleThreadedReferenceCountedObject (SingleThreadedReferenceCountedObject&&) {}
+
     /** Copying from another object does not affect this one's reference-count. */
     SingleThreadedReferenceCountedObject& operator= (const SingleThreadedReferenceCountedObject&) { return *this; }
+
     /** Copying from another object does not affect this one's reference-count. */
     SingleThreadedReferenceCountedObject& operator= (SingleThreadedReferenceCountedObject&&) { return *this; }
 
@@ -232,7 +235,6 @@ private:
     int refCount = 0;
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
 };
-
 
 //==============================================================================
 /**
@@ -395,14 +397,14 @@ public:
     /** Returns the object that this pointer references.
         The pointer returned may be null, of course.
     */
-    ReferencedType* get() const noexcept                    { return referencedObject; }
+    ReferencedType* get() const noexcept { return referencedObject; }
 
     /** Resets this object to a null pointer. */
     void reset() noexcept
     {
-        auto oldObject = referencedObject;  // need to null the pointer before deleting the object
-        referencedObject = nullptr;         // in case this ptr is itself deleted as a side-effect
-        decIfNotNull (oldObject);           // of the destructor
+        auto oldObject = referencedObject; // need to null the pointer before deleting the object
+        referencedObject = nullptr;        // in case this ptr is itself deleted as a side-effect
+        decIfNotNull (oldObject);          // of the destructor
     }
 
     // the -> operator is called on the referenced object
@@ -415,40 +417,50 @@ public:
     /** Dereferences the object that this pointer references.
         The pointer returned may be null, of course.
     */
-    ReferencedType& operator*() const noexcept              { jassert (referencedObject != nullptr); return *referencedObject; }
+    ReferencedType& operator*() const noexcept
+    {
+        jassert (referencedObject != nullptr);
+        return *referencedObject;
+    }
 
     /** Checks whether this pointer is null */
-    bool operator== (decltype (nullptr)) const noexcept     { return referencedObject == nullptr; }
+    bool operator== (decltype (nullptr)) const noexcept { return referencedObject == nullptr; }
+
     /** Checks whether this pointer is null */
-    bool operator!= (decltype (nullptr)) const noexcept     { return referencedObject != nullptr; }
+    bool operator!= (decltype (nullptr)) const noexcept { return referencedObject != nullptr; }
 
     /** Compares two ReferenceCountedObjectPtrs. */
-    bool operator== (const ObjectType* other) const noexcept                 { return referencedObject == other; }
-    /** Compares two ReferenceCountedObjectPtrs. */
-    bool operator== (const ReferenceCountedObjectPtr& other) const noexcept  { return referencedObject == other.get(); }
-    /** Compares two ReferenceCountedObjectPtrs. */
-    bool operator!= (const ObjectType* other) const noexcept                 { return referencedObject != other; }
-    /** Compares two ReferenceCountedObjectPtrs. */
-    bool operator!= (const ReferenceCountedObjectPtr& other) const noexcept  { return referencedObject != other.get(); }
+    bool operator== (const ObjectType* other) const noexcept { return referencedObject == other; }
 
-   #if JUCE_STRICT_REFCOUNTEDPOINTER
+    /** Compares two ReferenceCountedObjectPtrs. */
+    bool operator== (const ReferenceCountedObjectPtr& other) const noexcept { return referencedObject == other.get(); }
+
+    /** Compares two ReferenceCountedObjectPtrs. */
+    bool operator!= (const ObjectType* other) const noexcept { return referencedObject != other; }
+
+    /** Compares two ReferenceCountedObjectPtrs. */
+    bool operator!= (const ReferenceCountedObjectPtr& other) const noexcept { return referencedObject != other.get(); }
+
+#if JUCE_STRICT_REFCOUNTEDPOINTER
     /** Checks whether this pointer is null */
-    explicit operator bool() const noexcept                 { return referencedObject != nullptr; }
+    explicit operator bool() const noexcept { return referencedObject != nullptr; }
 
-   #else
+#else
     /** Returns the object that this pointer references.
         The pointer returned may be null, of course.
         Note that this methods allows the compiler to be very lenient with what it allows you to do
         with the pointer, it's safer to disable this by setting JUCE_STRICT_REFCOUNTEDPOINTER=1, which
         increased type safety and can prevent some common slip-ups.
     */
-    operator ReferencedType*() const noexcept               { return referencedObject; }
-   #endif
+    operator ReferencedType*() const noexcept { return referencedObject; }
+#endif
 
-   #ifndef DOXYGEN
-    [[deprecated ("Use the get method instead.")]]
-    ReferencedType* getObject() const { return get(); }
-   #endif
+#ifndef DOXYGEN
+    [[deprecated ("Use the get method instead.")]] ReferencedType* getObject() const
+    {
+        return get();
+    }
+#endif
 
 private:
     //==============================================================================
@@ -466,7 +478,6 @@ private:
             ContainerDeletePolicy<ReferencedType>::destroy (o);
     }
 };
-
 
 //==============================================================================
 /** Compares two ReferenceCountedObjectPtrs. */

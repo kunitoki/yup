@@ -49,7 +49,10 @@ struct TypeWithExternalUnifiedSerialisation
 
     auto operator== (const TypeWithExternalUnifiedSerialisation& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.a, x.b, x.c, x.d); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.a, x.b, x.c, x.d);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -83,7 +86,10 @@ struct TypeWithInternalUnifiedSerialisation
 
     auto operator== (const TypeWithInternalUnifiedSerialisation& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.a, x.b, x.c, x.d); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.a, x.b, x.c, x.d);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -110,7 +116,10 @@ struct TypeWithExternalSplitSerialisation
 
     auto operator== (const TypeWithExternalSplitSerialisation& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.a, x.b); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.a, x.b);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -153,23 +162,23 @@ struct SerialisationTraits<TypeWithExternalSplitSerialisation>
 static_assert (detail::serialisationKind<TypeWithExternalSplitSerialisation> == detail::SerialisationKind::external);
 
 // Check that serialisation kinds are correctly detected for primitives
-static_assert (detail::serialisationKind<bool>               == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<  int8_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind< uint8_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind< int16_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<uint16_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind< int32_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<uint32_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind< int64_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<uint64_t>           == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<float>              == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<double>             == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<std::byte>          == detail::SerialisationKind::primitive);
-static_assert (detail::serialisationKind<String>             == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<bool> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<int8_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<uint8_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<int16_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<uint16_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<int32_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<uint32_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<int64_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<uint64_t> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<float> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<double> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<std::byte> == detail::SerialisationKind::primitive);
+static_assert (detail::serialisationKind<String> == detail::SerialisationKind::primitive);
 
 // Check that serialisation is disabled for types with no serialsation defined
-static_assert (detail::serialisationKind<Logger>             == detail::SerialisationKind::none);
-static_assert (detail::serialisationKind<CriticalSection>    == detail::SerialisationKind::none);
+static_assert (detail::serialisationKind<Logger> == detail::SerialisationKind::none);
+static_assert (detail::serialisationKind<CriticalSection> == detail::SerialisationKind::none);
 
 struct TypeWithInternalSplitSerialisation
 {
@@ -178,7 +187,10 @@ struct TypeWithInternalSplitSerialisation
 
     auto operator== (const TypeWithInternalSplitSerialisation& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.a, x.b); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.a, x.b);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -293,11 +305,14 @@ struct TypeWithBrokenDynamicSerialisation
 
 struct TypeWithVersionedSerialisation
 {
-    int a{}, b{}, c{}, d{};
+    int a {}, b {}, c {}, d {};
 
     bool operator== (const TypeWithVersionedSerialisation& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.a, x.b, x.c, x.d); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.a, x.b, x.c, x.d);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -329,7 +344,10 @@ struct TypeWithRawVarLast
 
     bool operator== (const TypeWithRawVarLast& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.status, x.message, x.extended); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.status, x.message, x.extended);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -354,7 +372,10 @@ struct TypeWithRawVarFirst
 
     bool operator== (const TypeWithRawVarFirst& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.status, x.message, x.extended); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.status, x.message, x.extended);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -378,7 +399,10 @@ struct TypeWithInnerVar
 
     bool operator== (const TypeWithInnerVar& other) const
     {
-        const auto tie = [] (const auto& x) { return std::tie (x.eventId, x.payload); };
+        const auto tie = [] (const auto& x)
+        {
+            return std::tie (x.eventId, x.payload);
+        };
         return tie (*this) == tie (other);
     }
 
@@ -397,7 +421,10 @@ struct TypeWithInnerVar
 class JSONSerialisationTest final : public UnitTest
 {
 public:
-    JSONSerialisationTest() : UnitTest ("JSONSerialisation", UnitTestCategories::json) {}
+    JSONSerialisationTest()
+        : UnitTest ("JSONSerialisation", UnitTestCategories::json)
+    {
+    }
 
     void runTest() override
     {
@@ -492,9 +519,7 @@ public:
                                                                                            { "extended", true } }) }),
                              JSONUtils::makeObject ({ { "status", 200 },
                                                       { "message", "success" },
-                                                      { "extended", JSONUtils::makeObject ({ { "status", 123.456 },
-                                                                                             { "message", "failure" },
-                                                                                             { "extended", true } }) } }));
+                                                      { "extended", JSONUtils::makeObject ({ { "status", 123.456 }, { "message", "failure" }, { "extended", true } }) } }));
 
             expectDeepEqual (ToVar::convert (TypeWithRawVarFirst { 200, "success", true }),
                              JSONUtils::makeObject ({ { "status", 200 }, { "message", "success" }, { "extended", true } }));
@@ -505,9 +530,7 @@ public:
                                                                                             { "extended", true } }) }),
                              JSONUtils::makeObject ({ { "status", 200 },
                                                       { "message", "success" },
-                                                      { "extended", JSONUtils::makeObject ({ { "status", 123.456 },
-                                                                                             { "message", "failure" },
-                                                                                             { "extended", true } }) } }));
+                                                      { "extended", JSONUtils::makeObject ({ { "status", 123.456 }, { "message", "failure" }, { "extended", true } }) } }));
 
             const auto payload = JSONUtils::makeObject ({ { "foo", 1 }, { "bar", 2 } });
             expectDeepEqual (ToVar::convert (TypeWithInnerVar { 404, payload }),
@@ -615,8 +638,8 @@ private:
     void expectDeepEqual (const std::optional<var>& a, const std::optional<var>& b)
     {
         const auto text = a.has_value() && b.has_value()
-                        ? JSON::toString (*a) + " != " + JSON::toString (*b)
-                        : String();
+                            ? JSON::toString (*a) + " != " + JSON::toString (*b)
+                            : String();
         expect (deepEqual (a, b), text);
     }
 

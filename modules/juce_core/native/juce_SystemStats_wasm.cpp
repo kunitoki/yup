@@ -46,22 +46,37 @@ void Logger::outputDebugString (const String& text)
 }
 
 //==============================================================================
-SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()  { return WASM; }
-String SystemStats::getOperatingSystemName()    { return "WASM"; }
-bool SystemStats::isOperatingSystem64Bit()      { return true; }
-String SystemStats::getDeviceDescription()      { return "Web-browser"; }
-String SystemStats::getDeviceManufacturer()     { return {}; }
-String SystemStats::getCpuVendor()              { return {}; }
-String SystemStats::getCpuModel()               { return {}; }
-int SystemStats::getCpuSpeedInMegahertz()       { return 0; }
-int SystemStats::getMemorySizeInMegabytes()     { return 0; }
-int SystemStats::getPageSize()                  { return 0; }
-String SystemStats::getLogonName()              { return {}; }
-String SystemStats::getFullUserName()           { return {}; }
-String SystemStats::getComputerName()           { return {}; }
-String SystemStats::getUserLanguage()           { return {}; }
-String SystemStats::getUserRegion()             { return {}; }
-String SystemStats::getDisplayLanguage()        { return {}; }
+SystemStats::OperatingSystemType SystemStats::getOperatingSystemType() { return WASM; }
+
+String SystemStats::getOperatingSystemName() { return "WASM"; }
+
+bool SystemStats::isOperatingSystem64Bit() { return true; }
+
+String SystemStats::getDeviceDescription() { return "Web-browser"; }
+
+String SystemStats::getDeviceManufacturer() { return {}; }
+
+String SystemStats::getCpuVendor() { return {}; }
+
+String SystemStats::getCpuModel() { return {}; }
+
+int SystemStats::getCpuSpeedInMegahertz() { return 0; }
+
+int SystemStats::getMemorySizeInMegabytes() { return 0; }
+
+int SystemStats::getPageSize() { return 0; }
+
+String SystemStats::getLogonName() { return {}; }
+
+String SystemStats::getFullUserName() { return {}; }
+
+String SystemStats::getComputerName() { return {}; }
+
+String SystemStats::getUserLanguage() { return {}; }
+
+String SystemStats::getUserRegion() { return {}; }
+
+String SystemStats::getDisplayLanguage() { return {}; }
 
 //==============================================================================
 void CPUInformation::initialise() noexcept
@@ -83,7 +98,7 @@ int64 Time::getHighResolutionTicks() noexcept
 
 int64 Time::getHighResolutionTicksPerSecond() noexcept
 {
-    return 1000000;  // (microseconds)
+    return 1000000; // (microseconds)
 }
 
 double Time::getMillisecondCounterHiRes() noexcept

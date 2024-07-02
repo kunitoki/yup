@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  WaitableEvent
+class JUCE_API WaitableEvent
 {
 public:
     //==============================================================================

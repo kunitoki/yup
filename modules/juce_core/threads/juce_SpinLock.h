@@ -55,7 +55,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  SpinLock
+class JUCE_API SpinLock
 {
 public:
     inline SpinLock() = default;

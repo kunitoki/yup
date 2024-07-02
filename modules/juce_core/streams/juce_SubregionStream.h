@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  SubregionStream  : public InputStream
+class JUCE_API SubregionStream : public InputStream
 {
 public:
     //==============================================================================
@@ -80,7 +80,6 @@ public:
         buffered stream was created.
     */
     ~SubregionStream() override;
-
 
     //==============================================================================
     int64 getTotalLength() override;

@@ -53,23 +53,23 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  NewLine
+class JUCE_API NewLine
 {
 public:
     /** Returns the default new-line sequence that the library uses.
         @see OutputStream::setNewLineString()
     */
-    static const char* getDefault() noexcept        { return "\r\n"; }
+    static const char* getDefault() noexcept { return "\r\n"; }
 
     /** Returns the default new-line sequence that the library uses.
         @see getDefault()
     */
-    operator String() const                         { return getDefault(); }
+    operator String() const { return getDefault(); }
 
     /** Returns the default new-line sequence that the library uses.
         @see OutputStream::setNewLineString()
     */
-    operator StringRef() const noexcept             { return getDefault(); }
+    operator StringRef() const noexcept { return getDefault(); }
 };
 
 //==============================================================================
@@ -90,10 +90,13 @@ extern NewLine newLine;
     @endcode
 */
 inline String& operator<< (String& string1, const NewLine&) { return string1 += NewLine::getDefault(); }
-inline String& operator+= (String& s1, const NewLine&)      { return s1 += NewLine::getDefault(); }
 
-inline String operator+ (const NewLine&, const NewLine&)    { return String (NewLine::getDefault()) + NewLine::getDefault(); }
-inline String operator+ (String s1, const NewLine&)         { return s1 += NewLine::getDefault(); }
-inline String operator+ (const NewLine&, const char* s2)    { return String (NewLine::getDefault()) + s2; }
+inline String& operator+= (String& s1, const NewLine&) { return s1 += NewLine::getDefault(); }
+
+inline String operator+ (const NewLine&, const NewLine&) { return String (NewLine::getDefault()) + NewLine::getDefault(); }
+
+inline String operator+ (String s1, const NewLine&) { return s1 += NewLine::getDefault(); }
+
+inline String operator+ (const NewLine&, const char* s2) { return String (NewLine::getDefault()) + s2; }
 
 } // namespace juce

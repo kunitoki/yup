@@ -44,8 +44,8 @@ class PlatformTimer final : private Thread
 {
 public:
     explicit PlatformTimer (PlatformTimerListener& ptl)
-        : Thread { "HighResolutionTimerThread" },
-          listener { ptl }
+        : Thread { "HighResolutionTimerThread" }
+        , listener { ptl }
     {
         startThread (Priority::highest);
     }
@@ -112,7 +112,10 @@ private:
     {
     public:
         Timer (PlatformTimerListener& l, int i)
-            : listener { l }, intervalMs { i } {}
+            : listener { l }
+            , intervalMs { i }
+        {
+        }
 
         int getIntervalMs() const
         {
@@ -126,9 +129,9 @@ private:
 
         void run()
         {
-           #if JUCE_MAC || JUCE_IOS
-            tryToUpgradeCurrentThreadToRealtime (Thread::RealtimeOptions{}.withPeriodMs (intervalMs));
-           #endif
+#if JUCE_MAC || JUCE_IOS
+            tryToUpgradeCurrentThreadToRealtime (Thread::RealtimeOptions {}.withPeriodMs (intervalMs));
+#endif
 
             const auto millisecondsUntil = [] (auto time)
             {

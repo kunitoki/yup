@@ -98,8 +98,8 @@ MemoryBlock& MemoryBlock::operator= (const MemoryBlock& other)
 }
 
 MemoryBlock::MemoryBlock (MemoryBlock&& other) noexcept
-    : data (std::move (other.data)),
-      size (other.size)
+    : data (std::move (other.data))
+    , size (other.size)
 {
 }
 
@@ -124,7 +124,7 @@ bool MemoryBlock::operator!= (const MemoryBlock& other) const noexcept
 bool MemoryBlock::matches (const void* dataToCompare, size_t dataSize) const noexcept
 {
     return size == dataSize
-            && memcmp (data, dataToCompare, size) == 0;
+        && memcmp (data, dataToCompare, size) == 0;
 }
 
 //==============================================================================
@@ -351,9 +351,21 @@ void MemoryBlock::loadFromHexString (StringRef hex)
             {
                 auto c = t.getAndAdvance();
 
-                if (c >= '0' && c <= '9')    { byte |= c - '0';        break; }
-                if (c >= 'a' && c <= 'z')    { byte |= c - ('a' - 10); break; }
-                if (c >= 'A' && c <= 'Z')    { byte |= c - ('A' - 10); break; }
+                if (c >= '0' && c <= '9')
+                {
+                    byte |= c - '0';
+                    break;
+                }
+                if (c >= 'a' && c <= 'z')
+                {
+                    byte |= c - ('a' - 10);
+                    break;
+                }
+                if (c >= 'A' && c <= 'Z')
+                {
+                    byte |= c - ('A' - 10);
+                    break;
+                }
 
                 if (c == 0)
                 {
@@ -389,11 +401,87 @@ String MemoryBlock::toBase64Encoding() const
     return destString;
 }
 
-static const char base64DecodingTable[] =
-{
-    63, 0, 0, 0, 0, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 0, 0, 0, 0, 0, 0, 0,
-    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    0, 0, 0, 0, 0, 0, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52
+static const char base64DecodingTable[] = {
+    63,
+    0,
+    0,
+    0,
+    0,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    59,
+    60,
+    61,
+    62,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45,
+    46,
+    47,
+    48,
+    49,
+    50,
+    51,
+    52
 };
 
 bool MemoryBlock::fromBase64Encoding (StringRef s)

@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  FileInputSource     : public InputSource
+class JUCE_API FileInputSource : public InputSource
 {
 public:
     //==============================================================================
@@ -74,4 +74,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileInputSource)
 };
 
-}
+} // namespace juce

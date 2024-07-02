@@ -41,7 +41,8 @@ namespace juce
 {
 
 FileInputSource::FileInputSource (const File& f, bool useFileTimeInHash)
-    : file (f), useFileTimeInHashGeneration (useFileTimeInHash)
+    : file (f)
+    , useFileTimeInHashGeneration (useFileTimeInHash)
 {
 }
 

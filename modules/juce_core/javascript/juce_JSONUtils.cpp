@@ -154,7 +154,10 @@ bool JSONUtils::deepEqual (const var& a, const var& b)
 
     if (auto* i = a.getArray())
         if (auto* j = b.getArray())
-            return std::equal (i->begin(), i->end(), j->begin(), j->end(), [] (const var& x, const var& y) { return deepEqual (x, y); });
+            return std::equal (i->begin(), i->end(), j->begin(), j->end(), [] (const var& x, const var& y)
+                               {
+                                   return deepEqual (x, y);
+                               });
 
     return a == b;
 }
@@ -166,7 +169,10 @@ bool JSONUtils::deepEqual (const var& a, const var& b)
 class JSONUtilsTests final : public UnitTest
 {
 public:
-    JSONUtilsTests() : UnitTest ("JSONUtils", UnitTestCategories::json) {}
+    JSONUtilsTests()
+        : UnitTest ("JSONUtils", UnitTestCategories::json)
+    {
+    }
 
     void runTest() override
     {
@@ -214,8 +220,8 @@ public:
     void expectDeepEqual (const std::optional<var>& a, const std::optional<var>& b)
     {
         const auto text = a.has_value() && b.has_value()
-                        ? JSON::toString (*a) + " != " + JSON::toString (*b)
-                        : String();
+                            ? JSON::toString (*a) + " != " + JSON::toString (*b)
+                            : String();
         expect (deepEqual (a, b), text);
     }
 

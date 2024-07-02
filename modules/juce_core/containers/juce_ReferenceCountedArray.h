@@ -330,7 +330,7 @@ public:
         @param objectToLookFor    the object to look for
         @returns                  the index at which the object was found, or -1 if it's not found
     */
-    int indexOf (const ObjectClassPtr& objectToLookFor) const noexcept      { return indexOf (objectToLookFor.get()); }
+    int indexOf (const ObjectClassPtr& objectToLookFor) const noexcept { return indexOf (objectToLookFor.get()); }
 
     /** Returns true if the array contains a specified object.
 
@@ -359,7 +359,7 @@ public:
         @param objectToLookFor      the object to look for
         @returns                    true if the object is in the array
     */
-    bool contains (const ObjectClassPtr& objectToLookFor) const noexcept    { return contains (objectToLookFor.get()); }
+    bool contains (const ObjectClassPtr& objectToLookFor) const noexcept { return contains (objectToLookFor.get()); }
 
     /** Appends a new object to the end of the array.
 
@@ -386,7 +386,7 @@ public:
         @param newObject       the new object to add to the array
         @see set, insert, addIfNotAlreadyThere, addSorted, addArray
     */
-    ObjectClass* add (const ObjectClassPtr& newObject)          { return add (newObject.get()); }
+    ObjectClass* add (const ObjectClassPtr& newObject) { return add (newObject.get()); }
 
     /** Inserts a new object into the array at the given index.
 
@@ -424,7 +424,7 @@ public:
         @param newObject            the new object to add to the array
         @see add, addSorted, addIfNotAlreadyThere, set
     */
-    ObjectClass* insert (int indexToInsertAt, const ObjectClassPtr& newObject)      { return insert (indexToInsertAt, newObject.get()); }
+    ObjectClass* insert (int indexToInsertAt, const ObjectClassPtr& newObject) { return insert (indexToInsertAt, newObject.get()); }
 
     /** Appends a new object at the end of the array as long as the array doesn't
         already contain it.
@@ -453,7 +453,7 @@ public:
         @param newObject   the new object to add to the array
         @returns           true if the object has been added, false otherwise
     */
-    bool addIfNotAlreadyThere (const ObjectClassPtr& newObject)         { return addIfNotAlreadyThere (newObject.get()); }
+    bool addIfNotAlreadyThere (const ObjectClassPtr& newObject) { return addIfNotAlreadyThere (newObject.get()); }
 
     /** Replaces an object in the array with a different one.
 
@@ -501,7 +501,7 @@ public:
         @param newObject            the new value to set for this index.
         @see add, insert, remove
     */
-    void set (int indexToChange, const ObjectClassPtr& newObject)       { set (indexToChange, newObject.get()); }
+    void set (int indexToChange, const ObjectClassPtr& newObject) { set (indexToChange, newObject.get()); }
 
     /** Adds elements from another array to the end of this array.
 
@@ -564,7 +564,7 @@ public:
         if (index > 0 && comparator.compareElements (newObject, values[index - 1]) == 0)
             set (index - 1, newObject); // replace an existing object that matches
         else
-            insert (index, newObject);  // no match, so insert the new one
+            insert (index, newObject); // no match, so insert the new one
     }
 
     /** Finds the index of an object in the array, assuming that the array is sorted.
@@ -661,7 +661,7 @@ public:
         @param objectToRemove   the object to try to remove
         @see remove, removeRange
     */
-    void removeObject (const ObjectClassPtr& objectToRemove)    { removeObject (objectToRemove.get()); }
+    void removeObject (const ObjectClassPtr& objectToRemove) { removeObject (objectToRemove.get()); }
 
     /** Removes a range of objects from the array.
 
@@ -682,7 +682,7 @@ public:
                       int numberToRemove)
     {
         const ScopedLockType lock (getLock());
-        startIndex    = jlimit (0, values.size(), startIndex);
+        startIndex = jlimit (0, values.size(), startIndex);
         auto endIndex = jlimit (0, values.size(), startIndex + numberToRemove);
         numberToRemove = endIndex - startIndex;
 
@@ -730,7 +730,7 @@ public:
         const ScopedLockType lock (getLock());
 
         if (isPositiveAndBelow (index1, values.size())
-         && isPositiveAndBelow (index2, values.size()))
+            && isPositiveAndBelow (index2, values.size()))
         {
             std::swap (values[index1], values[index2]);
         }
@@ -853,17 +853,20 @@ public:
         To lock, you can call getLock().enter() and getLock().exit(), or preferably use
         an object of ScopedLockType as an RAII lock for it.
     */
-    inline const TypeOfCriticalSectionToUse& getLock() const noexcept      { return values; }
+    inline const TypeOfCriticalSectionToUse& getLock() const noexcept { return values; }
 
     /** Returns the type of scoped lock to use for locking this array */
     using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     [[deprecated ("This method has been replaced by a more flexible templated version and renamed "
-                 "to swapWith to be more consistent with the names used in other classes.")]]
-    void swapWithArray (ReferenceCountedArray& other) noexcept { swapWith (other); }
-   #endif
+                  "to swapWith to be more consistent with the names used in other classes.")]] void
+        swapWithArray (ReferenceCountedArray& other) noexcept
+    {
+        swapWith (other);
+    }
+#endif
 
 private:
     //==============================================================================

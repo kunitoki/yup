@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  InputStream
+class JUCE_API InputStream
 {
 public:
     /** Destructor. */
@@ -268,7 +268,6 @@ public:
         with the required position.
     */
     virtual void skipNextBytes (int64 numBytesToSkip);
-
 
 protected:
     //==============================================================================

@@ -78,18 +78,18 @@ String SystemStats::getOperatingSystemName()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-   #if JUCE_64BIT
+#if JUCE_64BIT
     return true;
-   #else
+#else
     //xxx not sure how to find this out?..
     return false;
-   #endif
+#endif
 }
 
 //==============================================================================
 String SystemStats::getDeviceDescription()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     int mib[] = {
         CTL_HW,
         HW_MACHINE
@@ -103,9 +103,9 @@ String SystemStats::getDeviceDescription()
     MemoryBlock machineDescription { machineDescriptionLength };
     result = sysctl (mib, numElementsInArray (mib), machineDescription.getData(), &machineDescriptionLength, nullptr, 0);
     return String::fromUTF8 (result == 0 ? (char*) machineDescription.getData() : "");
-   #else
+#else
     return getCpuInfo ("Hardware");
-   #endif
+#endif
 }
 
 String SystemStats::getDeviceManufacturer()
@@ -115,21 +115,21 @@ String SystemStats::getDeviceManufacturer()
 
 String SystemStats::getCpuVendor()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     return {};
-   #else
+#else
     auto v = getCpuInfo ("vendor_id");
 
     if (v.isEmpty())
         v = getCpuInfo ("model name");
 
     return v;
-   #endif
+#endif
 }
 
 String SystemStats::getCpuModel()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     int mib[] = {
         CTL_HW,
         HW_MODEL
@@ -143,26 +143,26 @@ String SystemStats::getCpuModel()
     MemoryBlock model { modelLength };
     result = sysctl (mib, numElementsInArray (mib), model.getData(), &modelLength, nullptr, 0);
     return String::fromUTF8 (result == 0 ? (char*) model.getData() : "");
-   #else
+#else
     return getCpuInfo ("model name");
-   #endif
+#endif
 }
 
 int SystemStats::getCpuSpeedInMegahertz()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     int32 clockRate = 0;
     auto clockRateSize = sizeof (clockRate);
     auto result = sysctlbyname ("hw.clockrate", &clockRate, &clockRateSize, nullptr, 0);
     return result == 0 ? clockRate : 0;
-   #else
+#else
     return roundToInt (getCpuInfo ("cpu MHz").getFloatValue());
-   #endif
+#endif
 }
 
 int SystemStats::getMemorySizeInMegabytes()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     int mib[] = {
         CTL_HW,
         HW_PHYSMEM
@@ -171,14 +171,14 @@ int SystemStats::getMemorySizeInMegabytes()
     auto memorySize = sizeof (memory);
     auto result = sysctl (mib, numElementsInArray (mib), &memory, &memorySize, nullptr, 0);
     return result == 0 ? (int) (memory / (int64) 1e6) : 0;
-   #else
+#else
     struct sysinfo sysi;
 
     if (sysinfo (&sysi) == 0)
         return (int) (sysi.totalram * sysi.mem_unit / (1024 * 1024));
 
     return 0;
-   #endif
+#endif
 }
 
 int SystemStats::getPageSize()
@@ -215,23 +215,23 @@ String SystemStats::getComputerName()
 
 String SystemStats::getUserLanguage()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     if (auto langEnv = getenv ("LANG"))
         return String::fromUTF8 (langEnv).upToLastOccurrenceOf (".UTF-8", false, true);
 
     return {};
-   #else
+#else
     return getLocaleValue (_NL_ADDRESS_LANG_AB);
-   #endif
+#endif
 }
 
 String SystemStats::getUserRegion()
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     return {};
-   #else
+#else
     return getLocaleValue (_NL_ADDRESS_COUNTRY_AB2);
-   #endif
+#endif
 }
 
 String SystemStats::getDisplayLanguage()
@@ -248,8 +248,8 @@ String SystemStats::getDisplayLanguage()
 //==============================================================================
 void CPUInformation::initialise() noexcept
 {
-  #if JUCE_BSD
-   #if JUCE_INTEL && ! JUCE_NO_INLINE_ASM
+#if JUCE_BSD
+#if JUCE_INTEL && ! JUCE_NO_INLINE_ASM
     SystemStatsHelpers::getCPUInfo (hasMMX,
                                     hasSSE,
                                     hasSSE2,
@@ -272,7 +272,7 @@ void CPUInformation::initialise() noexcept
                                     hasAVX512VL,
                                     hasAVX512VBMI,
                                     hasAVX512VPOPCNTDQ);
-   #endif
+#endif
 
     numLogicalCPUs = numPhysicalCPUs = []
     {
@@ -285,40 +285,40 @@ void CPUInformation::initialise() noexcept
         auto result = sysctl (mib, numElementsInArray (mib), &numCPUs, &numCPUsSize, nullptr, 0);
         return result == 0 ? numCPUs : 1;
     }();
-  #else
+#else
     auto flags = getCpuInfo ("flags");
 
-    hasMMX             = flags.contains ("mmx");
-    hasFMA3            = flags.contains ("fma");
-    hasFMA4            = flags.contains ("fma4");
-    hasSSE             = flags.contains ("sse");
-    hasSSE2            = flags.contains ("sse2");
-    hasSSE3            = flags.contains ("sse3");
-    has3DNow           = flags.contains ("3dnow");
-    hasSSSE3           = flags.contains ("ssse3");
-    hasSSE41           = flags.contains ("sse4_1");
-    hasSSE42           = flags.contains ("sse4_2");
-    hasAVX             = flags.contains ("avx");
-    hasAVX2            = flags.contains ("avx2");
-    hasAVX512F         = flags.contains ("avx512f");
-    hasAVX512BW        = flags.contains ("avx512bw");
-    hasAVX512CD        = flags.contains ("avx512cd");
-    hasAVX512DQ        = flags.contains ("avx512dq");
-    hasAVX512ER        = flags.contains ("avx512er");
-    hasAVX512IFMA      = flags.contains ("avx512ifma");
-    hasAVX512PF        = flags.contains ("avx512pf");
-    hasAVX512VBMI      = flags.contains ("avx512vbmi");
-    hasAVX512VL        = flags.contains ("avx512vl");
+    hasMMX = flags.contains ("mmx");
+    hasFMA3 = flags.contains ("fma");
+    hasFMA4 = flags.contains ("fma4");
+    hasSSE = flags.contains ("sse");
+    hasSSE2 = flags.contains ("sse2");
+    hasSSE3 = flags.contains ("sse3");
+    has3DNow = flags.contains ("3dnow");
+    hasSSSE3 = flags.contains ("ssse3");
+    hasSSE41 = flags.contains ("sse4_1");
+    hasSSE42 = flags.contains ("sse4_2");
+    hasAVX = flags.contains ("avx");
+    hasAVX2 = flags.contains ("avx2");
+    hasAVX512F = flags.contains ("avx512f");
+    hasAVX512BW = flags.contains ("avx512bw");
+    hasAVX512CD = flags.contains ("avx512cd");
+    hasAVX512DQ = flags.contains ("avx512dq");
+    hasAVX512ER = flags.contains ("avx512er");
+    hasAVX512IFMA = flags.contains ("avx512ifma");
+    hasAVX512PF = flags.contains ("avx512pf");
+    hasAVX512VBMI = flags.contains ("avx512vbmi");
+    hasAVX512VL = flags.contains ("avx512vl");
     hasAVX512VPOPCNTDQ = flags.contains ("avx512_vpopcntdq");
 
-    numLogicalCPUs  = getCpuInfo ("processor").getIntValue() + 1;
+    numLogicalCPUs = getCpuInfo ("processor").getIntValue() + 1;
 
     // Assume CPUs in all sockets have the same number of cores
     numPhysicalCPUs = getCpuInfo ("cpu cores").getIntValue() * (getCpuInfo ("physical id").getIntValue() + 1);
 
     if (numPhysicalCPUs <= 0)
         numPhysicalCPUs = numLogicalCPUs;
-  #endif
+#endif
 }
 
 String SystemStats::getUniqueDeviceID()
@@ -389,21 +389,21 @@ int64 Time::getHighResolutionTicks() noexcept
 {
     timespec t;
 
-   #if JUCE_BELA
+#if JUCE_BELA
     if (cobalt_thread_mode() == 0x200 /*XNRELAX*/)
         clock_gettime (CLOCK_MONOTONIC, &t);
     else
         __wrap_clock_gettime (CLOCK_MONOTONIC, &t);
-   #else
+#else
     clock_gettime (CLOCK_MONOTONIC, &t);
-   #endif
+#endif
 
     return (t.tv_sec * (int64) 1000000) + (t.tv_nsec / 1000);
 }
 
 int64 Time::getHighResolutionTicksPerSecond() noexcept
 {
-    return 1000000;  // (microseconds)
+    return 1000000; // (microseconds)
 }
 
 double Time::getMillisecondCounterHiRes() noexcept
@@ -422,9 +422,8 @@ bool Time::setSystemTimeToThisTime() const
 
 JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
 {
-   #if JUCE_BSD
-    int mib[] =
-    {
+#if JUCE_BSD
+    int mib[] = {
         CTL_KERN,
         KERN_PROC,
         KERN_PROC_PID,
@@ -434,9 +433,9 @@ JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
     auto infoSize = sizeof (info);
     auto result = sysctl (mib, numElementsInArray (mib), &info, &infoSize, nullptr, 0);
     return result == 0 ? ((info.ki_flag & P_TRACED) != 0) : false;
-   #else
+#else
     return readPosixConfigFileValue ("/proc/self/status", "TracerPid").getIntValue() > 0;
-   #endif
+#endif
 }
 
 } // namespace juce

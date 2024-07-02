@@ -43,70 +43,70 @@ namespace juce
 namespace detail
 {
 
-template <typename T, typename = void>
-constexpr auto canPreDecrement = false;
+    template <typename T, typename = void>
+    constexpr auto canPreDecrement = false;
 
-template <typename T>
-constexpr auto canPreDecrement<T, std::void_t<decltype (--std::declval<T>())>> = true;
+    template <typename T>
+    constexpr auto canPreDecrement<T, std::void_t<decltype (--std::declval<T>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canAddAssign = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canAddAssign = false;
 
-template <typename T, typename I>
-constexpr auto canAddAssign<T, I, std::void_t<decltype (std::declval<T>() += std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canAddAssign<T, I, std::void_t<decltype (std::declval<T>() += std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canSubAssign = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canSubAssign = false;
 
-template <typename T, typename I>
-constexpr auto canSubAssign<T, I, std::void_t<decltype (std::declval<T>() -= std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canSubAssign<T, I, std::void_t<decltype (std::declval<T>() -= std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canAdd = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canAdd = false;
 
-template <typename T, typename I>
-constexpr auto canAdd<T, I, std::void_t<decltype (std::declval<T>() + std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canAdd<T, I, std::void_t<decltype (std::declval<T>() + std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canSub = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canSub = false;
 
-template <typename T, typename I>
-constexpr auto canSub<T, I, std::void_t<decltype (std::declval<T>() - std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canSub<T, I, std::void_t<decltype (std::declval<T>() - std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canLessThan = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canLessThan = false;
 
-template <typename T, typename I>
-constexpr auto canLessThan<T, I, std::void_t<decltype (std::declval<T>() < std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canLessThan<T, I, std::void_t<decltype (std::declval<T>() < std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canLessThanEqual = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canLessThanEqual = false;
 
-template <typename T, typename I>
-constexpr auto canLessThanEqual<T, I, std::void_t<decltype (std::declval<T>() <= std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canLessThanEqual<T, I, std::void_t<decltype (std::declval<T>() <= std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canGreaterThan = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canGreaterThan = false;
 
-template <typename T, typename I>
-constexpr auto canGreaterThan<T, I, std::void_t<decltype (std::declval<T>() > std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canGreaterThan<T, I, std::void_t<decltype (std::declval<T>() > std::declval<I>())>> = true;
 
-template <typename T, typename I, typename = void>
-constexpr auto canGreaterThanEqual = false;
+    template <typename T, typename I, typename = void>
+    constexpr auto canGreaterThanEqual = false;
 
-template <typename T, typename I>
-constexpr auto canGreaterThanEqual<T, I, std::void_t<decltype (std::declval<T>() >= std::declval<I>())>> = true;
+    template <typename T, typename I>
+    constexpr auto canGreaterThanEqual<T, I, std::void_t<decltype (std::declval<T>() >= std::declval<I>())>> = true;
 
-namespace withAdlSize
-{
-    using std::size;
+    namespace withAdlSize
+    {
+        using std::size;
 
-    template <typename Range>
-    using AdlSize = decltype (size (std::declval<Range>()));
+        template <typename Range>
+        using AdlSize = decltype (size (std::declval<Range>()));
 
-    template <typename Range>
-    using AdlSignedSize = std::common_type_t<std::ptrdiff_t, std::make_signed_t<AdlSize<Range>>>;
-}
+        template <typename Range>
+        using AdlSignedSize = std::common_type_t<std::ptrdiff_t, std::make_signed_t<AdlSize<Range>>>;
+    } // namespace withAdlSize
 
 } // namespace detail
 
@@ -149,11 +149,16 @@ public:
 
     /** Wraps the provided iterator, and sets the internal count to 0. */
     constexpr explicit EnumerateIterator (Iter iter)
-        : EnumerateIterator (std::move (iter), Index{}) {}
+        : EnumerateIterator (std::move (iter), Index {})
+    {
+    }
 
     /** Wraps the provided iterator, and sets the internal count to the provided value. */
     constexpr EnumerateIterator (Iter iter, Index ind)
-        : iterator (std::move (iter)), index (ind) {}
+        : iterator (std::move (iter))
+        , index (ind)
+    {
+    }
 
     /** Two EnumerateIterators are considered equal if the wrapped iterators are equal. */
     template <typename OtherIter, typename OtherInd>
@@ -264,7 +269,7 @@ public:
         Only participates in overload resolution if the wrapped iterators are comparable.
     */
     template <typename OtherIter, typename OtherInd, std::enable_if_t<detail::canLessThan<Iter, OtherIter>, int> = 0>
-    [[nodiscard]] constexpr bool operator< (const EnumerateIterator<OtherIter, OtherInd>& other) const
+    [[nodiscard]] constexpr bool operator<(const EnumerateIterator<OtherIter, OtherInd>& other) const
     {
         return iterator < other.iterator;
     }
@@ -324,7 +329,7 @@ public:
     }
 
 private:
-    Iter iterator{};
+    Iter iterator {};
     Index index = 0;
 };
 
@@ -346,13 +351,16 @@ public:
         Instead of calling this directly, use makeRange().
     */
     constexpr IteratorPair (Begin bIn, End eIn)
-        : b (std::move (bIn)), e (std::move (eIn)) {}
+        : b (std::move (bIn))
+        , e (std::move (eIn))
+    {
+    }
 
     /** Returns the begin iterator. */
     constexpr auto begin() const { return b; }
 
     /** Returns the end iterator. */
-    constexpr auto end()   const { return e; }
+    constexpr auto end() const { return e; }
 
 private:
     Begin b;
@@ -438,7 +446,7 @@ template <typename Range, typename Index = detail::withAdlSize::AdlSignedSize<Ra
     // This ensures argument-dependent lookup works properly for user-defined non-member begin/end
     using std::begin, std::end;
     return makeRange (EnumerateIterator { begin (range), startingValue },
-                      EnumerateIterator { end   (range), startingValue });
+                      EnumerateIterator { end (range), startingValue });
 }
 
 } // namespace juce

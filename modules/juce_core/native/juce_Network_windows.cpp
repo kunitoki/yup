@@ -41,11 +41,11 @@ namespace juce
 {
 
 #ifndef INTERNET_FLAG_NEED_FILE
- #define INTERNET_FLAG_NEED_FILE 0x00000010
+#define INTERNET_FLAG_NEED_FILE 0x00000010
 #endif
 
 #ifndef INTERNET_OPTION_DISABLE_AUTODIAL
- #define INTERNET_OPTION_DISABLE_AUTODIAL 70
+#define INTERNET_OPTION_DISABLE_AUTODIAL 70
 #endif
 
 //==============================================================================
@@ -53,11 +53,11 @@ class WebInputStream::Pimpl
 {
 public:
     Pimpl (WebInputStream& pimplOwner, const URL& urlToCopy, bool addParametersToBody)
-        : owner (pimplOwner),
-          url (urlToCopy),
-          addParametersToRequestBody (addParametersToBody),
-          hasBodyDataToSend (addParametersToRequestBody || url.hasBodyDataToSend()),
-          httpRequestCmd (hasBodyDataToSend ? "POST" : "GET")
+        : owner (pimplOwner)
+        , url (urlToCopy)
+        , addParametersToRequestBody (addParametersToBody)
+        , hasBodyDataToSend (addParametersToRequestBody || url.hasBodyDataToSend())
+        , httpRequestCmd (hasBodyDataToSend ? "POST" : "GET")
     {
     }
 
@@ -79,12 +79,17 @@ public:
             headers << "\r\n";
     }
 
-    void withCustomRequestCommand (const String& customRequestCommand)    { httpRequestCmd = customRequestCommand; }
-    void withConnectionTimeout (int timeoutInMs)                          { timeOutMs = timeoutInMs; }
-    void withNumRedirectsToFollow (int maxRedirectsToFollow)              { numRedirectsToFollow = maxRedirectsToFollow; }
-    StringPairArray getRequestHeaders() const                             { return WebInputStream::parseHttpHeaders (headers); }
-    StringPairArray getResponseHeaders() const                            { return responseHeaders; }
-    int getStatusCode() const                                             { return statusCode; }
+    void withCustomRequestCommand (const String& customRequestCommand) { httpRequestCmd = customRequestCommand; }
+
+    void withConnectionTimeout (int timeoutInMs) { timeOutMs = timeoutInMs; }
+
+    void withNumRedirectsToFollow (int maxRedirectsToFollow) { numRedirectsToFollow = maxRedirectsToFollow; }
+
+    StringPairArray getRequestHeaders() const { return WebInputStream::parseHttpHeaders (headers); }
+
+    StringPairArray getResponseHeaders() const { return responseHeaders; }
+
+    int getStatusCode() const { return statusCode; }
 
     //==============================================================================
     bool connect (WebInputStream::Listener* listener)
@@ -119,7 +124,7 @@ public:
                         for (int i = 0; i < headersArray.size(); ++i)
                         {
                             const String& header = headersArray[i];
-                            const String key   (header.upToFirstOccurrenceOf (": ", false, false));
+                            const String key (header.upToFirstOccurrenceOf (": ", false, false));
                             const String value (header.fromFirstOccurrenceOf (": ", false, false));
                             const String previousValue (dataHeaders[key]);
                             dataHeaders.set (key, previousValue.isEmpty() ? value : (previousValue + "," + value));
@@ -142,15 +147,15 @@ public:
                     statusCode = (int) status;
 
                     if (numRedirectsToFollow >= 0
-                         && (statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307))
+                        && (statusCode == 301 || statusCode == 302 || statusCode == 303 || statusCode == 307))
                     {
                         String newLocation (dataHeaders["Location"]);
 
                         // Check whether location is a relative URI - this is an incomplete test for relative path,
                         // but we'll use it for now (valid protocols for this implementation are http, https & ftp)
                         if (! (newLocation.startsWithIgnoreCase ("http://")
-                                || newLocation.startsWithIgnoreCase ("https://")
-                                || newLocation.startsWithIgnoreCase ("ftp://")))
+                               || newLocation.startsWithIgnoreCase ("https://")
+                               || newLocation.startsWithIgnoreCase ("ftp://")))
                         {
                             if (newLocation.startsWithChar ('/'))
                                 newLocation = URL (address).withNewSubPath (newLocation).toString (true);
@@ -175,9 +180,11 @@ public:
         return (request != nullptr);
     }
 
-    bool isError() const        { return request == nullptr; }
-    bool isExhausted()          { return finished; }
-    int64 getPosition()         { return position; }
+    bool isError() const { return request == nullptr; }
+
+    bool isExhausted() { return finished; }
+
+    int64 getPosition() { return position; }
 
     int64 getTotalLength()
     {
@@ -303,7 +310,7 @@ private:
             const int usernameNumChars = 1024;
             const int passwordNumChars = 1024;
             HeapBlock<TCHAR> file (fileNumChars), server (serverNumChars),
-                             username (usernameNumChars), password (passwordNumChars);
+                username (usernameNumChars), password (passwordNumChars);
 
             URL_COMPONENTS uc = {};
             uc.dwStructSize = sizeof (uc);
@@ -327,9 +334,7 @@ private:
         }
     }
 
-    void openConnection (URL_COMPONENTS& uc, HINTERNET sessionHandle,
-                         const String& address,
-                         WebInputStream::Listener* listener)
+    void openConnection (URL_COMPONENTS& uc, HINTERNET sessionHandle, const String& address, WebInputStream::Listener* listener)
     {
         int disable = 1;
         InternetSetOption (sessionHandle, INTERNET_OPTION_DISABLE_AUTODIAL, &disable, sizeof (disable));
@@ -352,18 +357,20 @@ private:
 
             connection = hasBeenCancelled ? nullptr
                                           : InternetConnect (sessionHandle,
-                                                             uc.lpszHostName, uc.nPort,
-                                                             uc.lpszUserName, uc.lpszPassword,
+                                                             uc.lpszHostName,
+                                                             uc.nPort,
+                                                             uc.lpszUserName,
+                                                             uc.lpszPassword,
                                                              isFtp ? (DWORD) INTERNET_SERVICE_FTP
                                                                    : (DWORD) INTERNET_SERVICE_HTTP,
-                                                             0, 0);
+                                                             0,
+                                                             0);
         }
 
         if (connection != nullptr)
         {
             if (isFtp)
-                request = FtpOpenFile (connection, uc.lpszUrlPath, GENERIC_READ,
-                                       FTP_TRANSFER_TYPE_BINARY | INTERNET_FLAG_NEED_FILE, 0);
+                request = FtpOpenFile (connection, uc.lpszUrlPath, GENERIC_READ, FTP_TRANSFER_TYPE_BINARY | INTERNET_FLAG_NEED_FILE, 0);
             else
                 openHTTPConnection (uc, address, listener);
         }
@@ -387,8 +394,7 @@ private:
             DWORD bytesSent = 0;
 
             if (bytesToSend == 0
-                || ! InternetWriteFile (request, static_cast<const char*> (postData.getData()) + totalBytesSent,
-                                        (DWORD) bytesToSend, &bytesSent))
+                || ! InternetWriteFile (request, static_cast<const char*> (postData.getData()) + totalBytesSent, (DWORD) bytesToSend, &bytesSent))
             {
                 return;
             }
@@ -408,27 +414,26 @@ private:
         const TCHAR* mimeTypes[] = { _T ("*/*"), nullptr };
 
         DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_NO_COOKIES
-                        | INTERNET_FLAG_NO_AUTO_REDIRECT;
+                    | INTERNET_FLAG_NO_AUTO_REDIRECT;
 
         if (address.startsWithIgnoreCase ("https:"))
-            flags |= INTERNET_FLAG_SECURE;  // (this flag only seems necessary if the OS is running IE6 -
-                                            //  IE7 seems to automatically work out when it's https)
+            flags |= INTERNET_FLAG_SECURE; // (this flag only seems necessary if the OS is running IE6 -
+                                           //  IE7 seems to automatically work out when it's https)
 
         {
             const ScopedLock lock (createConnectionLock);
 
             request = hasBeenCancelled ? nullptr
-                                       : HttpOpenRequest (connection, httpRequestCmd.toWideCharPointer(),
-                                                          uc.lpszUrlPath, nullptr, nullptr, mimeTypes, flags, 0);
+                                       : HttpOpenRequest (connection, httpRequestCmd.toWideCharPointer(), uc.lpszUrlPath, nullptr, nullptr, mimeTypes, flags, 0);
         }
 
         if (request != nullptr)
         {
             INTERNET_BUFFERS buffers = {};
-            buffers.dwStructSize    = sizeof (INTERNET_BUFFERS);
-            buffers.lpcszHeader     = headers.toWideCharPointer();
+            buffers.dwStructSize = sizeof (INTERNET_BUFFERS);
+            buffers.lpcszHeader = headers.toWideCharPointer();
             buffers.dwHeadersLength = (DWORD) headers.length();
-            buffers.dwBufferTotal   = (DWORD) postData.getSize();
+            buffers.dwBufferTotal = (DWORD) postData.getSize();
 
             auto sendRequestAndTryEnd = [this, &buffers, &listener]() -> bool
             {
@@ -455,7 +460,6 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
-
 
 //==============================================================================
 struct GetAdaptersAddressesHelper
@@ -535,7 +539,7 @@ namespace MACAddressHelpers
                     struct ASTAT
                     {
                         ADAPTER_STATUS adapt;
-                        NAME_BUFFER    NameBuff [30];
+                        NAME_BUFFER NameBuff[30];
                     };
 
                     ASTAT astat;
@@ -552,13 +556,13 @@ namespace MACAddressHelpers
 
     static void split (const sockaddr_in6* sa_in6, int off, uint8* split)
     {
-       #if JUCE_MINGW
+#if JUCE_MINGW
         split[0] = sa_in6->sin6_addr._S6_un._S6_u8[off + 1];
         split[1] = sa_in6->sin6_addr._S6_un._S6_u8[off];
-       #else
+#else
         split[0] = sa_in6->sin6_addr.u.Byte[off + 1];
         split[1] = sa_in6->sin6_addr.u.Byte[off];
-       #endif
+#endif
     }
 
     static IPAddress createAddress (const sockaddr_in6* sa_in6)
@@ -591,7 +595,7 @@ namespace MACAddressHelpers
                 result.addIfNotAlreadyThere (createAddress (unalignedPointerCast<sockaddr_in6*> (addr->Address.lpSockaddr)));
         }
     }
-}
+} // namespace MACAddressHelpers
 
 void MACAddress::findAllAddresses (Array<MACAddress>& result)
 {
@@ -625,7 +629,6 @@ IPAddress IPAddress::getInterfaceBroadcastAddress (const IPAddress&)
     return {};
 }
 
-
 //==============================================================================
 bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& targetEmailAddress,
                                                       const String& emailSubject,
@@ -633,8 +636,7 @@ bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& targetEmailA
                                                       const StringArray& filesToAttach)
 {
     DynamicLibrary dll ("MAPI32.dll");
-    JUCE_LOAD_WINAPI_FUNCTION (dll, MAPISendMail, mapiSendMail,
-                               ULONG, (LHANDLE, ULONG, lpMapiMessage, ::FLAGS, ULONG))
+    JUCE_LOAD_WINAPI_FUNCTION (dll, MAPISendMail, mapiSendMail, ULONG, (LHANDLE, ULONG, lpMapiMessage, ::FLAGS, ULONG))
 
     if (mapiSendMail == nullptr)
         return false;

@@ -78,7 +78,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  RuntimePermissions
+class JUCE_API RuntimePermissions
 {
 public:
     //==============================================================================

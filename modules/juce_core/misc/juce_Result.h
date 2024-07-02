@@ -70,12 +70,12 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Result
+class JUCE_API Result
 {
 public:
     //==============================================================================
     /** Creates and returns a 'successful' result. */
-    static Result ok() noexcept                         { return Result(); }
+    static Result ok() noexcept { return Result(); }
 
     /** Creates a 'failure' result.
         If you pass a blank error message in here, a default "Unknown Error" message

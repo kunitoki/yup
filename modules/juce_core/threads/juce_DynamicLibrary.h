@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  DynamicLibrary
+class JUCE_API DynamicLibrary
 {
 public:
     /** Creates an unopened DynamicLibrary object.
@@ -59,7 +59,7 @@ public:
 
     /**
     */
-    DynamicLibrary (const String& name)  { open (name); }
+    DynamicLibrary (const String& name) { open (name); }
 
     /** Move constructor */
     DynamicLibrary (DynamicLibrary&& other) noexcept
@@ -70,7 +70,7 @@ public:
     /** Destructor.
         If a library is currently open, it will be closed when this object is destroyed.
     */
-    ~DynamicLibrary()   { close(); }
+    ~DynamicLibrary() { close(); }
 
     /** Opens a DLL.
         The name and the method by which it gets found is of course platform-specific, and
@@ -92,7 +92,7 @@ public:
     /** Returns the platform-specific native library handle.
         You'll need to cast this to whatever is appropriate for the OS that's in use.
     */
-    void* getNativeHandle() const noexcept     { return handle; }
+    void* getNativeHandle() const noexcept { return handle; }
 
 private:
     void* handle = nullptr;

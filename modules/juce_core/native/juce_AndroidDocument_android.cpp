@@ -49,9 +49,9 @@ namespace juce
 */
 struct AndroidDocument::NativeInfo
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     GlobalRef uri;
-   #endif
+#endif
 };
 
 //==============================================================================
@@ -63,7 +63,11 @@ struct AndroidDocumentDetail
     {
         Opt() = default;
 
-        explicit Opt (int64 v) : value (v), valid (true) {}
+        explicit Opt (int64 v)
+            : value (v)
+            , valid (true)
+        {
+        }
 
         int64 value = 0;
         bool valid = false;
@@ -71,7 +75,7 @@ struct AndroidDocumentDetail
 
     static constexpr auto dirMime = "vnd.android.document/directory";
 
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     /*
         A very basic type that acts a bit like an iterator, in that it can be incremented, and read-from.
 
@@ -83,8 +87,8 @@ struct AndroidDocumentDetail
     {
     public:
         AndroidIteratorEngine (Columns columnsIn, jobject uri)
-            : columns (std::move (columnsIn)),
-              cursor { LocalRef<jobject> { getEnv()->CallObjectMethod (AndroidContentUriResolver::getContentResolver().get(),
+            : columns (std::move (columnsIn))
+            , cursor { LocalRef<jobject> { getEnv()->CallObjectMethod (AndroidContentUriResolver::getContentResolver().get(),
                                                                        ContentResolver.query,
                                                                        uri,
                                                                        columns.getColumnNames().get(),
@@ -116,7 +120,7 @@ struct AndroidDocumentDetail
     static LocalRef<jobjectArray> makeStringArray (std::index_sequence<Ix...>, Args&&... args)
     {
         auto* env = getEnv();
-        LocalRef<jobjectArray> array { env->NewObjectArray (sizeof... (args), JavaString, nullptr) };
+        LocalRef<jobjectArray> array { env->NewObjectArray (sizeof...(args), JavaString, nullptr) };
 
         (env->SetObjectArrayElement (array.get(), Ix, args.get()), ...);
 
@@ -126,7 +130,7 @@ struct AndroidDocumentDetail
     template <typename... Args>
     static LocalRef<jobjectArray> makeStringArray (Args&&... args)
     {
-        return makeStringArray (std::make_index_sequence<sizeof... (args)>(), std::forward<Args> (args)...);
+        return makeStringArray (std::make_index_sequence<sizeof...(args)>(), std::forward<Args> (args)...);
     }
 
     static URL uriToUrl (jobject uri)
@@ -152,7 +156,7 @@ struct AndroidDocumentDetail
             const auto documentUri = [&]
             {
                 if (idColumnIndex < 0)
-                    return LocalRef<jobject>{};
+                    return LocalRef<jobject> {};
 
                 LocalRef<jstring> documentId { (jstring) env->CallObjectMethod (cursor, AndroidCursor.getString, idColumnIndex) };
                 return LocalRef<jobject> { getEnv()->CallStaticObjectMethod (DocumentsContract21,
@@ -169,13 +173,13 @@ struct AndroidDocumentDetail
 
     static DocumentsContractIteratorEngine makeDocumentsContractIteratorEngine (const GlobalRef& uri)
     {
-        const LocalRef <jobject> documentId { getEnv()->CallStaticObjectMethod (DocumentsContract19,
-                                                                                DocumentsContract19.getDocumentId,
-                                                                                uri.get()) };
-        const LocalRef <jobject> childrenUri { getEnv()->CallStaticObjectMethod (DocumentsContract21,
-                                                                                 DocumentsContract21.buildChildDocumentsUriUsingTree,
-                                                                                 uri.get(),
-                                                                                 documentId.get()) };
+        const LocalRef<jobject> documentId { getEnv()->CallStaticObjectMethod (DocumentsContract19,
+                                                                               DocumentsContract19.getDocumentId,
+                                                                               uri.get()) };
+        const LocalRef<jobject> childrenUri { getEnv()->CallStaticObjectMethod (DocumentsContract21,
+                                                                                DocumentsContract21.buildChildDocumentsUriUsingTree,
+                                                                                uri.get(),
+                                                                                documentId.get()) };
 
         return DocumentsContractIteratorEngine { Columns { GlobalRef { uri },
                                                            GlobalRefImpl<jstring> { javaString ("document_id") } },
@@ -186,7 +190,9 @@ struct AndroidDocumentDetail
     {
     public:
         explicit RecursiveEngine (GlobalRef uri)
-            : engine (makeDocumentsContractIteratorEngine (uri)) {}
+            : engine (makeDocumentsContractIteratorEngine (uri))
+        {
+        }
 
         AndroidDocument read() const
         {
@@ -219,7 +225,11 @@ struct AndroidDocumentDetail
         bool directory = false;
     };
 
-    enum { FLAG_GRANT_READ_URI_PERMISSION = 1, FLAG_GRANT_WRITE_URI_PERMISSION = 2 };
+    enum
+    {
+        FLAG_GRANT_READ_URI_PERMISSION = 1,
+        FLAG_GRANT_WRITE_URI_PERMISSION = 2
+    };
 
     static void setPermissions (const URL& url, jmethodID func)
     {
@@ -235,22 +245,27 @@ struct AndroidDocumentDetail
             jniCheckHasExceptionOccurredAndClear();
         }
     }
-   #endif
+#endif
 
     struct DirectoryIteratorEngine
     {
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
         JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
+
         DirectoryIteratorEngine (const File& dir, bool recursive)
-            : iterator (dir, recursive, "*", File::findFilesAndDirectories) {}
+            : iterator (dir, recursive, "*", File::findFilesAndDirectories)
+        {
+        }
+
         JUCE_END_IGNORE_WARNINGS_MSVC
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
         auto read() const { return AndroidDocument::fromFile (iterator.getFile()); }
+
         bool increment() { return iterator.next(); }
+
         DirectoryIterator iterator;
     };
-
 };
 
 //==============================================================================
@@ -259,13 +274,19 @@ class AndroidDocumentInfo::Args
 public:
     using Detail = AndroidDocumentDetail;
 
-    Args withName       (String x)                      const { return with (&Args::name, std::move (x)); }
-    Args withType       (String x)                      const { return with (&Args::type, std::move (x)); }
-    Args withFlags      (int x)                         const { return with (&Args::flags, x); }
-    Args withSize       (Detail::Opt x)                 const { return with (&Args::sizeInBytes, x); }
-    Args withModified   (Detail::Opt x)                 const { return with (&Args::lastModified, x); }
-    Args withReadPermission  (bool x)                   const { return with (&Args::readPermission,  x); }
-    Args withWritePermission (bool x)                   const { return with (&Args::writePermission, x); }
+    Args withName (String x) const { return with (&Args::name, std::move (x)); }
+
+    Args withType (String x) const { return with (&Args::type, std::move (x)); }
+
+    Args withFlags (int x) const { return with (&Args::flags, x); }
+
+    Args withSize (Detail::Opt x) const { return with (&Args::sizeInBytes, x); }
+
+    Args withModified (Detail::Opt x) const { return with (&Args::lastModified, x); }
+
+    Args withReadPermission (bool x) const { return with (&Args::readPermission, x); }
+
+    Args withWritePermission (bool x) const { return with (&Args::writePermission, x); }
 
     String name;
     String type;
@@ -297,7 +318,7 @@ public:
 
 private:
     template <typename Value>
-    Args with (Value Args::* member, Value v) const
+    Args with (Value Args::*member, Value v) const
     {
         auto copy = *this;
         copy.*member = std::move (v);
@@ -306,20 +327,20 @@ private:
 };
 
 AndroidDocumentInfo::AndroidDocumentInfo (Args args)
-    : name (args.name),
-      type (args.type),
-      lastModified (args.lastModified.value),
-      sizeInBytes (args.sizeInBytes.value),
-      nativeFlags (args.flags),
-      juceFlags (flagExists
-                 | (args.lastModified.valid ? flagValidModified      : 0)
-                 | (args.sizeInBytes.valid  ? flagValidSize          : 0)
-                 | (args.readPermission     ? flagHasReadPermission  : 0)
-                 | (args.writePermission    ? flagHasWritePermission : 0))
+    : name (args.name)
+    , type (args.type)
+    , lastModified (args.lastModified.value)
+    , sizeInBytes (args.sizeInBytes.value)
+    , nativeFlags (args.flags)
+    , juceFlags (flagExists
+                 | (args.lastModified.valid ? flagValidModified : 0)
+                 | (args.sizeInBytes.valid ? flagValidSize : 0)
+                 | (args.readPermission ? flagHasReadPermission : 0)
+                 | (args.writePermission ? flagHasWritePermission : 0))
 {
 }
 
-bool AndroidDocumentInfo::isDirectory() const            { return type == AndroidDocumentDetail::dirMime; }
+bool AndroidDocumentInfo::isDirectory() const { return type == AndroidDocumentDetail::dirMime; }
 
 //==============================================================================
 class AndroidDocument::Pimpl
@@ -334,7 +355,7 @@ public:
     virtual ~Pimpl() = default;
     virtual std::unique_ptr<Pimpl> clone() const = 0;
     virtual bool deleteDocument() const = 0;
-    virtual std::unique_ptr<InputStream>  createInputStream()  const = 0;
+    virtual std::unique_ptr<InputStream> createInputStream() const = 0;
     virtual std::unique_ptr<OutputStream> createOutputStream() const = 0;
     virtual AndroidDocumentInfo getInfo() const = 0;
     virtual URL getUrl() const = 0;
@@ -380,8 +401,12 @@ struct AndroidDocument::Utils
 
     ~Utils() = delete; // This stuct is a single-file namespace
 
-   #if JUCE_ANDROID
-    template <typename> struct VersionTag { int version; };
+#if JUCE_ANDROID
+    template <typename>
+    struct VersionTag
+    {
+        int version;
+    };
 
     class MimeConverter
     {
@@ -413,10 +438,14 @@ struct AndroidDocument::Utils
         AndroidDocumentPimplApi19() = default;
 
         explicit AndroidDocumentPimplApi19 (const URL& uriIn)
-            : AndroidDocumentPimplApi19 (urlToUri (uriIn)) {}
+            : AndroidDocumentPimplApi19 (urlToUri (uriIn))
+        {
+        }
 
         explicit AndroidDocumentPimplApi19 (const LocalRef<jobject>& uriIn)
-            : uri (uriIn) {}
+            : uri (uriIn)
+        {
+        }
 
         std::unique_ptr<Pimpl> clone() const override { return std::make_unique<AndroidDocumentPimplApi19> (*this); }
 
@@ -461,16 +490,19 @@ struct AndroidDocument::Utils
                     auto* env = getEnv();
 
                     const auto flagsColumnIndex = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, flagsColumn.get());
-                    const auto nameColumnIndex  = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, nameColumn.get());
-                    const auto mimeColumnIndex  = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, mimeColumn.get());
-                    const auto idColumnIndex    = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, idColumn.get());
-                    const auto modColumnIndex   = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, modifiedColumn.get());
-                    const auto sizeColumnIndex  = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, sizeColumn.get());
+                    const auto nameColumnIndex = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, nameColumn.get());
+                    const auto mimeColumnIndex = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, mimeColumn.get());
+                    const auto idColumnIndex = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, idColumn.get());
+                    const auto modColumnIndex = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, modifiedColumn.get());
+                    const auto sizeColumnIndex = env->CallIntMethod (cursor, AndroidCursor.getColumnIndex, sizeColumn.get());
 
                     const auto indices = { flagsColumnIndex, nameColumnIndex, mimeColumnIndex, idColumnIndex, modColumnIndex, sizeColumnIndex };
 
-                    if (std::any_of (indices.begin(), indices.end(), [] (auto index) { return index < 0; }))
-                        return AndroidDocumentInfo::Args{};
+                    if (std::any_of (indices.begin(), indices.end(), [] (auto index)
+                                     {
+                                         return index < 0;
+                                     }))
+                        return AndroidDocumentInfo::Args {};
 
                     const LocalRef<jstring> nameString { (jstring) env->CallObjectMethod (cursor, AndroidCursor.getString, nameColumnIndex) };
                     const LocalRef<jstring> mimeString { (jstring) env->CallObjectMethod (cursor, AndroidCursor.getString, mimeColumnIndex) };
@@ -485,25 +517,21 @@ struct AndroidDocument::Utils
                         return Detail::Opt { env->CallLongMethod (cursor, AndroidCursor.getLong, column) };
                     };
 
-                    return AndroidDocumentInfo::Args{}.withName (juceString (nameString.get()))
-                                                      .withType (juceString (mimeString.get()))
-                                                      .withFlags (env->CallIntMethod (cursor,  AndroidCursor.getInt,  flagsColumnIndex))
-                                                      .withModified (readOpt (modColumnIndex))
-                                                      .withSize     (readOpt (sizeColumnIndex));
+                    return AndroidDocumentInfo::Args {}.withName (juceString (nameString.get())).withType (juceString (mimeString.get())).withFlags (env->CallIntMethod (cursor, AndroidCursor.getInt, flagsColumnIndex)).withModified (readOpt (modColumnIndex)).withSize (readOpt (sizeColumnIndex));
                 }
 
-                GlobalRefImpl<jstring> flagsColumn    { javaString ("flags") };
-                GlobalRefImpl<jstring> nameColumn     { javaString ("_display_name") };
-                GlobalRefImpl<jstring> mimeColumn     { javaString ("mime_type") };
-                GlobalRefImpl<jstring> idColumn       { javaString ("document_id") };
+                GlobalRefImpl<jstring> flagsColumn { javaString ("flags") };
+                GlobalRefImpl<jstring> nameColumn { javaString ("_display_name") };
+                GlobalRefImpl<jstring> mimeColumn { javaString ("mime_type") };
+                GlobalRefImpl<jstring> idColumn { javaString ("document_id") };
                 GlobalRefImpl<jstring> modifiedColumn { javaString ("last_modified") };
-                GlobalRefImpl<jstring> sizeColumn     { javaString ("_size") };
+                GlobalRefImpl<jstring> sizeColumn { javaString ("_size") };
             };
 
-            Detail::AndroidIteratorEngine<Columns> iterator { Columns{}, uri };
+            Detail::AndroidIteratorEngine<Columns> iterator { Columns {}, uri };
 
             if (! iterator.increment())
-                return AndroidDocumentInfo{};
+                return AndroidDocumentInfo {};
 
             auto* env = getEnv();
             auto ctx = getAppContext();
@@ -514,9 +542,9 @@ struct AndroidDocument::Utils
             };
 
             return iterator.read()
-                           .withReadPermission  (hasPermission (Detail::FLAG_GRANT_READ_URI_PERMISSION))
-                           .withWritePermission (hasPermission (Detail::FLAG_GRANT_WRITE_URI_PERMISSION))
-                           .build();
+                .withReadPermission (hasPermission (Detail::FLAG_GRANT_READ_URI_PERMISSION))
+                .withWritePermission (hasPermission (Detail::FLAG_GRANT_WRITE_URI_PERMISSION))
+                .build();
         }
 
         URL getUrl() const override
@@ -632,7 +660,7 @@ struct AndroidDocument::Utils
         return createPimplForSdkImpl (uri, tail...);
     }
 
-   #else
+#else
     class MimeConverter
     {
     public:
@@ -646,7 +674,7 @@ struct AndroidDocument::Utils
             return detail::MimeTypeTable::getFileExtensionsForMimeType (str)[0];
         }
     };
-   #endif
+#endif
 
     //==============================================================================
     class AndroidDocumentPimplFile final : public Pimpl
@@ -672,7 +700,7 @@ struct AndroidDocument::Utils
                                             : nullptr;
         }
 
-        std::unique_ptr<InputStream>  createInputStream()  const override { return file.createInputStream(); }
+        std::unique_ptr<InputStream> createInputStream() const override { return file.createInputStream(); }
 
         std::unique_ptr<OutputStream> createOutputStream() const override
         {
@@ -733,21 +761,14 @@ struct AndroidDocument::Utils
         AndroidDocumentInfo getInfo() const override
         {
             if (! file.exists())
-                return AndroidDocumentInfo{};
+                return AndroidDocumentInfo {};
 
             const auto size = file.getSize();
             const auto extension = file.getFileExtension().removeCharacters (".").toLowerCase();
             const auto type = file.isDirectory() ? Detail::dirMime
                                                  : mimeConverter.getMimeTypeFromExtension (extension);
 
-            return AndroidDocumentInfo::Args{}.withName (file.getFileName())
-                                              .withType (type.isNotEmpty() ? type : "application/octet-stream")
-                                              .withFlags (AndroidDocumentInfo::Args::getFlagsForFile (file))
-                                              .withModified (Detail::Opt { file.getLastModificationTime().toMilliseconds() })
-                                              .withSize (size != 0 ? Detail::Opt { size } : Detail::Opt{})
-                                              .withReadPermission (file.hasReadAccess())
-                                              .withWritePermission (file.hasWriteAccess())
-                                              .build();
+            return AndroidDocumentInfo::Args {}.withName (file.getFileName()).withType (type.isNotEmpty() ? type : "application/octet-stream").withFlags (AndroidDocumentInfo::Args::getFlagsForFile (file)).withModified (Detail::Opt { file.getLastModificationTime().toMilliseconds() }).withSize (size != 0 ? Detail::Opt { size } : Detail::Opt {}).withReadPermission (file.hasReadAccess()).withWritePermission (file.hasWriteAccess()).build();
         }
 
         URL getUrl() const override { return URL (file); }
@@ -763,23 +784,23 @@ struct AndroidDocument::Utils
 //==============================================================================
 void AndroidDocumentPermission::takePersistentReadWriteAccess ([[maybe_unused]] const URL& url)
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     AndroidDocumentDetail::setPermissions (url, ContentResolver19.takePersistableUriPermission);
-   #endif
+#endif
 }
 
 void AndroidDocumentPermission::releasePersistentReadWriteAccess ([[maybe_unused]] const URL& url)
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     AndroidDocumentDetail::setPermissions (url, ContentResolver19.releasePersistableUriPermission);
-   #endif
+#endif
 }
 
 std::vector<AndroidDocumentPermission> AndroidDocumentPermission::getPersistedPermissions()
 {
-   #if ! JUCE_ANDROID
+#if ! JUCE_ANDROID
     return {};
-   #else
+#else
     if (getAndroidSDKVersion() < 19)
         return {};
 
@@ -798,16 +819,16 @@ std::vector<AndroidDocumentPermission> AndroidDocumentPermission::getPersistedPe
         const LocalRef<jobject> uriPermission { env->CallObjectMethod (permissions, JavaList.get, i) };
 
         AndroidDocumentPermission permission;
-        permission.time  = env->CallLongMethod    (uriPermission, AndroidUriPermission.getPersistedTime);
-        permission.read  = env->CallBooleanMethod (uriPermission, AndroidUriPermission.isReadPermission);
+        permission.time = env->CallLongMethod (uriPermission, AndroidUriPermission.getPersistedTime);
+        permission.read = env->CallBooleanMethod (uriPermission, AndroidUriPermission.isReadPermission);
         permission.write = env->CallBooleanMethod (uriPermission, AndroidUriPermission.isWritePermission);
-        permission.url = AndroidDocumentDetail::uriToUrl (env->CallObjectMethod  (uriPermission, AndroidUriPermission.getUri));
+        permission.url = AndroidDocumentDetail::uriToUrl (env->CallObjectMethod (uriPermission, AndroidUriPermission.getUri));
 
         result.push_back (std::move (permission));
     }
 
     return result;
-   #endif
+#endif
 }
 
 //==============================================================================
@@ -815,7 +836,7 @@ AndroidDocument::AndroidDocument() = default;
 
 AndroidDocument AndroidDocument::fromFile (const File& filePath)
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     const LocalRef<jobject> info { getEnv()->CallObjectMethod (getAppContext(), AndroidContext.getApplicationInfo) };
     const auto targetSdkVersion = getEnv()->GetIntField (info.get(), AndroidApplicationInfo.targetSdkVersion);
 
@@ -823,7 +844,7 @@ AndroidDocument AndroidDocument::fromFile (const File& filePath)
     // locations. It's recommended to use fromDocument() or fromTree() instead when targeting this
     // API level.
     jassert (__ANDROID_API_Q__ <= targetSdkVersion);
-   #endif
+#endif
 
     return AndroidDocument { filePath != File() ? std::make_unique<Utils::AndroidDocumentPimplFile> (filePath)
                                                 : nullptr };
@@ -831,12 +852,12 @@ AndroidDocument AndroidDocument::fromFile (const File& filePath)
 
 AndroidDocument AndroidDocument::fromDocument ([[maybe_unused]] const URL& documentUrl)
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     if (getAndroidSDKVersion() < 19)
     {
         // This function is unsupported on this platform.
         jassertfalse;
-        return AndroidDocument{};
+        return AndroidDocument {};
     }
 
     const auto javaUri = urlToUri (documentUrl);
@@ -846,23 +867,23 @@ AndroidDocument AndroidDocument::fromDocument ([[maybe_unused]] const URL& docum
                                              getAppContext().get(),
                                              javaUri.get()))
     {
-        return AndroidDocument{};
+        return AndroidDocument {};
     }
 
     return AndroidDocument { Utils::createPimplForSdk (javaUri) };
-   #else
-    return AndroidDocument{};
-   #endif
+#else
+    return AndroidDocument {};
+#endif
 }
 
 AndroidDocument AndroidDocument::fromTree ([[maybe_unused]] const URL& treeUrl)
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     if (getAndroidSDKVersion() < 21)
     {
         // This function is unsupported on this platform.
         jassertfalse;
-        return AndroidDocument{};
+        return AndroidDocument {};
     }
 
     const auto javaUri = urlToUri (treeUrl);
@@ -875,7 +896,7 @@ AndroidDocument AndroidDocument::fromTree ([[maybe_unused]] const URL& treeUrl)
     if (treeDocumentId == nullptr)
     {
         jassertfalse;
-        return AndroidDocument{};
+        return AndroidDocument {};
     }
 
     LocalRef<jobject> documentUri { getEnv()->CallStaticObjectMethod (DocumentsContract21,
@@ -884,16 +905,20 @@ AndroidDocument AndroidDocument::fromTree ([[maybe_unused]] const URL& treeUrl)
                                                                       treeDocumentId.get()) };
 
     return AndroidDocument { Utils::createPimplForSdk (documentUri) };
-   #else
-    return AndroidDocument{};
-   #endif
+#else
+    return AndroidDocument {};
+#endif
 }
 
 AndroidDocument::AndroidDocument (const AndroidDocument& other)
-    : AndroidDocument (other.pimpl != nullptr ? other.pimpl->clone() : nullptr) {}
+    : AndroidDocument (other.pimpl != nullptr ? other.pimpl->clone() : nullptr)
+{
+}
 
 AndroidDocument::AndroidDocument (std::unique_ptr<Pimpl> pimplIn)
-    : pimpl (std::move (pimplIn)) {}
+    : pimpl (std::move (pimplIn))
+{
+}
 
 AndroidDocument::AndroidDocument (AndroidDocument&&) noexcept = default;
 
@@ -953,7 +978,7 @@ bool AndroidDocument::moveDocumentFromParentToParent (const AndroidDocument& cur
     return true;
 }
 
-std::unique_ptr<InputStream>  AndroidDocument::createInputStream()  const
+std::unique_ptr<InputStream> AndroidDocument::createInputStream() const
 {
     jassert (hasValue());
     return pimpl->createInputStream();
@@ -1008,12 +1033,17 @@ struct AndroidDocumentIterator::Utils
     ~Utils() = delete; // This struct is a single-file namespace
 
     template <typename Engine>
-    struct TemplatePimpl final : public Pimpl, public Engine
+    struct TemplatePimpl final : public Pimpl
+        , public Engine
     {
         template <typename... Args>
-        TemplatePimpl (Args&&... args) : Engine (std::forward<Args> (args)...) {}
+        TemplatePimpl (Args&&... args)
+            : Engine (std::forward<Args> (args)...)
+        {
+        }
 
         AndroidDocument read() const override { return Engine::read(); }
+
         bool increment() override { return Engine::increment(); }
     };
 
@@ -1044,13 +1074,13 @@ AndroidDocumentIterator AndroidDocumentIterator::makeNonRecursive (const Android
 
     using Detail = AndroidDocumentDetail;
 
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     if (21 <= getAndroidSDKVersion())
     {
         if (auto uri = dir.getNativeInfo().uri)
             return Utils::makeWithEngine (Detail::makeDocumentsContractIteratorEngine (uri));
     }
-   #endif
+#endif
 
     return Utils::makeWithEngineInplace<Detail::DirectoryIteratorEngine> (dir.getUrl().getLocalFile(), false);
 }
@@ -1062,13 +1092,13 @@ AndroidDocumentIterator AndroidDocumentIterator::makeRecursive (const AndroidDoc
 
     using Detail = AndroidDocumentDetail;
 
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     if (21 <= getAndroidSDKVersion())
     {
         if (auto uri = dir.getNativeInfo().uri)
             return Utils::makeWithEngine (Detail::RecursiveEngine { uri });
     }
-   #endif
+#endif
 
     return Utils::makeWithEngineInplace<Detail::DirectoryIteratorEngine> (dir.getUrl().getLocalFile(), true);
 }

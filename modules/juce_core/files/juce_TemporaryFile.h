@@ -78,15 +78,15 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  TemporaryFile
+class JUCE_API TemporaryFile
 {
 public:
     //==============================================================================
     enum OptionFlags
     {
-        useHiddenFile = 1,          /**< Indicates that the temporary file should be hidden -
+        useHiddenFile = 1,       /**< Indicates that the temporary file should be hidden -
                                          i.e. its name should start with a dot. */
-        putNumbersInBrackets = 2    /**< Indicates that when numbers are appended to make sure
+        putNumbersInBrackets = 2 /**< Indicates that when numbers are appended to make sure
                                          the file is unique, they should go in brackets rather
                                          than just being appended (see File::getNonexistentSibling() )*/
     };
@@ -140,10 +140,10 @@ public:
 
     //==============================================================================
     /** Returns the temporary file. */
-    const File& getFile() const noexcept                { return temporaryFile; }
+    const File& getFile() const noexcept { return temporaryFile; }
 
     /** Returns the target file that was specified in the constructor. */
-    const File& getTargetFile() const noexcept          { return targetFile; }
+    const File& getTargetFile() const noexcept { return targetFile; }
 
     /** Tries to move the temporary file to overwrite the target file that was
         specified in the constructor.
@@ -167,7 +167,6 @@ public:
         @returns true if the file is successfully deleted (or if it didn't exist).
     */
     bool deleteTemporaryFile() const;
-
 
 private:
     //==============================================================================

@@ -41,11 +41,12 @@ namespace juce
 {
 
 SubregionStream::SubregionStream (InputStream* sourceStream,
-                                  int64 start, int64 length,
+                                  int64 start,
+                                  int64 length,
                                   bool deleteSourceWhenDestroyed)
-  : source (sourceStream, deleteSourceWhenDestroyed),
-    startPositionInSourceStream (start),
-    lengthOfSourceStream (length)
+    : source (sourceStream, deleteSourceWhenDestroyed)
+    , startPositionInSourceStream (start)
+    , lengthOfSourceStream (length)
 {
     SubregionStream::setPosition (0);
 }
@@ -95,7 +96,6 @@ bool SubregionStream::isExhausted()
     return source->isExhausted();
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -104,7 +104,8 @@ struct SubregionInputStreamTests final : public UnitTest
 {
     SubregionInputStreamTests()
         : UnitTest ("SubregionInputStream", UnitTestCategories::streams)
-    {}
+    {
+    }
 
     void runTest() override
     {

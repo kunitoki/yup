@@ -44,25 +44,25 @@ namespace juce
 
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4127 4389 4018)
 
-#ifndef AI_NUMERICSERV  // (missing in older Mac SDKs)
- #define AI_NUMERICSERV 0x1000
+#ifndef AI_NUMERICSERV // (missing in older Mac SDKs)
+#define AI_NUMERICSERV 0x1000
 #endif
 
 #if JUCE_WINDOWS
- using juce_socklen_t       = int;
- using juce_recvsend_size_t = int;
- using SocketHandle         = SOCKET;
- static const SocketHandle invalidSocket = INVALID_SOCKET;
+using juce_socklen_t = int;
+using juce_recvsend_size_t = int;
+using SocketHandle = SOCKET;
+static const SocketHandle invalidSocket = INVALID_SOCKET;
 #elif JUCE_ANDROID
- using juce_socklen_t       = socklen_t;
- using juce_recvsend_size_t = size_t;
- using SocketHandle         = int;
- static const SocketHandle invalidSocket = -1;
+using juce_socklen_t = socklen_t;
+using juce_recvsend_size_t = size_t;
+using SocketHandle = int;
+static const SocketHandle invalidSocket = -1;
 #else
- using juce_socklen_t       = socklen_t;
- using juce_recvsend_size_t = socklen_t;
- using SocketHandle         = int;
- static const SocketHandle invalidSocket = -1;
+using juce_socklen_t = socklen_t;
+using juce_recvsend_size_t = socklen_t;
+using SocketHandle = int;
+static const SocketHandle invalidSocket = -1;
 #endif
 
 //==============================================================================
@@ -70,7 +70,7 @@ namespace SocketHelpers
 {
     static void initSockets()
     {
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         static bool socketsStarted = false;
 
         if (! socketsStarted)
@@ -79,7 +79,7 @@ namespace SocketHelpers
             const WORD wVersionRequested = MAKEWORD (1, 1);
             socketsStarted = WSAStartup (wVersionRequested, &wsaData) == 0;
         }
-       #endif
+#endif
     }
 
     inline bool isValidPortNumber (int port) noexcept
@@ -126,13 +126,13 @@ namespace SocketHelpers
         };
 
         const auto receiveBufferSize = options.getReceiveBufferSize().value_or (getCurrentBufferSizeWithMinimum (SO_RCVBUF));
-        const auto sendBufferSize    = options.getSendBufferSize()   .value_or (getCurrentBufferSizeWithMinimum (SO_SNDBUF));
+        const auto sendBufferSize = options.getSendBufferSize().value_or (getCurrentBufferSizeWithMinimum (SO_SNDBUF));
 
         return handle != invalidSocket
-                && setOption (handle, SO_RCVBUF, receiveBufferSize)
-                && setOption (handle, SO_SNDBUF, sendBufferSize)
-                && (isDatagram ? ((! allowBroadcast) || setOption (handle, SO_BROADCAST, (int) 1))
-                               : setOption (handle, IPPROTO_TCP, TCP_NODELAY, (int) 1));
+            && setOption (handle, SO_RCVBUF, receiveBufferSize)
+            && setOption (handle, SO_SNDBUF, sendBufferSize)
+            && (isDatagram ? ((! allowBroadcast) || setOption (handle, SO_BROADCAST, (int) 1))
+                           : setOption (handle, IPPROTO_TCP, TCP_NODELAY, (int) 1));
     }
 
     static void closeSocket (std::atomic<int>& handle,
@@ -144,14 +144,14 @@ namespace SocketHelpers
         const auto h = (SocketHandle) handle.load();
         handle = -1;
 
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         if (h != invalidSocket || connected)
             closesocket (h);
 
         // make sure any read process finishes before we delete the socket
         CriticalSection::ScopedLockType lock (readLock);
         connected = false;
-       #else
+#else
         if (connected)
         {
             connected = false;
@@ -170,21 +170,21 @@ namespace SocketHelpers
             ::shutdown (h, SHUT_RDWR);
 
             {
-                // see man-page of recv on linux about a race condition where the
-                // shutdown command is lost if the receiving thread does not have
-                // a chance to process before close is called. On Mac OS X shutdown
-                // does not unblock a select call, so using a lock here will dead-lock
-                // both threads.
-               #if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
+                    // see man-page of recv on linux about a race condition where the
+                    // shutdown command is lost if the receiving thread does not have
+                    // a chance to process before close is called. On Mac OS X shutdown
+                    // does not unblock a select call, so using a lock here will dead-lock
+                    // both threads.
+#if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
                 CriticalSection::ScopedLockType lock (readLock);
                 ::close (h);
-               #else
+#else
                 ::close (h);
                 CriticalSection::ScopedLockType lock (readLock);
-              #endif
+#endif
             }
         }
-       #endif
+#endif
     }
 
     static bool bindSocket (SocketHandle handle, int port, const String& address) noexcept
@@ -230,10 +230,10 @@ namespace SocketHelpers
 
     static bool setSocketBlockingState (SocketHandle handle, bool shouldBlock) noexcept
     {
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         u_long nonBlocking = shouldBlock ? 0 : (u_long) 1;
         return ioctlsocket (handle, (long) FIONBIO, &nonBlocking) == 0;
-       #else
+#else
         int socketFlags = fcntl (handle, F_GETFL, 0);
 
         if (socketFlags == -1)
@@ -245,27 +245,28 @@ namespace SocketHelpers
             socketFlags |= O_NONBLOCK;
 
         return fcntl (handle, F_SETFL, socketFlags) == 0;
-       #endif
+#endif
     }
 
-   #if ! JUCE_WINDOWS
+#if ! JUCE_WINDOWS
     static bool getSocketBlockingState (SocketHandle handle)
     {
         return (fcntl (handle, F_GETFL, 0) & O_NONBLOCK) == 0;
     }
-   #endif
+#endif
 
     static int readSocket (SocketHandle handle,
-                           void* destBuffer, int maxBytesToRead,
+                           void* destBuffer,
+                           int maxBytesToRead,
                            std::atomic<bool>& connected,
                            bool blockUntilSpecifiedAmountHasArrived,
                            CriticalSection& readLock,
                            String* senderIP = nullptr,
                            int* senderPort = nullptr) noexcept
     {
-       #if ! JUCE_WINDOWS
+#if ! JUCE_WINDOWS
         if (blockUntilSpecifiedAmountHasArrived != getSocketBlockingState (handle))
-       #endif
+#endif
             setSocketBlockingState (handle, blockUntilSpecifiedAmountHasArrived);
 
         int bytesRead = 0;
@@ -316,8 +317,7 @@ namespace SocketHelpers
         return (int) bytesRead;
     }
 
-    static int waitForReadiness (std::atomic<int>& handle, CriticalSection& readLock,
-                                 bool forReading, int timeoutMsecs) noexcept
+    static int waitForReadiness (std::atomic<int>& handle, CriticalSection& readLock, bool forReading, int timeoutMsecs) noexcept
     {
         // avoid race-condition
         CriticalSection::ScopedTryLockType lock (readLock);
@@ -335,7 +335,7 @@ namespace SocketHelpers
             int opt;
             juce_socklen_t len = sizeof (opt);
 
-            if (getsockopt (h, SOL_SOCKET, SO_ERROR, (char*) &opt, &len) < 0  || opt != 0)
+            if (getsockopt (h, SOL_SOCKET, SO_ERROR, (char*) &opt, &len) < 0 || opt != 0)
                 return true;
 
             return false;
@@ -343,7 +343,7 @@ namespace SocketHelpers
 
         auto h = handle.load();
 
-       #if JUCE_WINDOWS || JUCE_MINGW
+#if JUCE_WINDOWS || JUCE_MINGW
         struct timeval timeout;
         struct timeval* timeoutp;
 
@@ -372,7 +372,7 @@ namespace SocketHelpers
             return -1;
 
         return FD_ISSET (h, forReading ? &rset : &wset) ? 1 : 0;
-      #else
+#else
         short eventsFlag = (forReading ? POLLIN : POLLOUT);
         pollfd pfd { (SocketHandle) h, eventsFlag, 0 };
 
@@ -390,7 +390,7 @@ namespace SocketHelpers
             return -1;
 
         return (pfd.revents & eventsFlag) != 0;
-      #endif
+#endif
     }
 
     static addrinfo* getAddressInfo (bool isDatagram, const String& hostName, int portNumber)
@@ -433,11 +433,11 @@ namespace SocketHelpers
 
                     if (! success)
                     {
-                       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
                         if (result == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK)
-                       #else
+#else
                         if (errno == EINPROGRESS)
-                       #endif
+#endif
                         {
                             std::atomic<int> cvHandle { (int) newHandle };
 
@@ -452,11 +452,11 @@ namespace SocketHelpers
                         break;
                     }
 
-                   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
                     closesocket (newHandle);
-                   #else
+#else
                     ::close (newHandle);
-                   #endif
+#endif
                 }
             }
 
@@ -478,8 +478,7 @@ namespace SocketHelpers
         setOption ((SocketHandle) handle, SO_REUSEADDR, (int) 1);
     }
 
-    static bool multicast (int handle, const String& multicastIPAddress,
-                           const String& interfaceIPAddress, bool join) noexcept
+    static bool multicast (int handle, const String& multicastIPAddress, const String& interfaceIPAddress, bool join) noexcept
     {
         struct ip_mreq mreq;
 
@@ -490,12 +489,9 @@ namespace SocketHelpers
         if (interfaceIPAddress.isNotEmpty())
             mreq.imr_interface.s_addr = inet_addr (interfaceIPAddress.toRawUTF8());
 
-        return setsockopt ((SocketHandle) handle, IPPROTO_IP,
-                           join ? IP_ADD_MEMBERSHIP
-                                : IP_DROP_MEMBERSHIP,
-                           (const char*) &mreq, sizeof (mreq)) == 0;
+        return setsockopt ((SocketHandle) handle, IPPROTO_IP, join ? IP_ADD_MEMBERSHIP : IP_DROP_MEMBERSHIP, (const char*) &mreq, sizeof (mreq)) == 0;
     }
-}
+} // namespace SocketHelpers
 
 //==============================================================================
 StreamingSocket::StreamingSocket()
@@ -504,11 +500,11 @@ StreamingSocket::StreamingSocket()
 }
 
 StreamingSocket::StreamingSocket (const String& host, int portNum, int h, const SocketOptions& optionsIn)
-    : options (optionsIn),
-      hostName (host),
-      portNumber (portNum),
-      handle (h),
-      connected (true)
+    : options (optionsIn)
+    , hostName (host)
+    , portNumber (portNum)
+    , handle (h)
+    , connected (true)
 {
     jassert (SocketHelpers::isValidPortNumber (portNum));
 
@@ -524,8 +520,7 @@ StreamingSocket::~StreamingSocket()
 //==============================================================================
 int StreamingSocket::read (void* destBuffer, int maxBytesToRead, bool shouldBlock)
 {
-    return (connected && ! isListener) ? SocketHelpers::readSocket ((SocketHandle) handle.load(), destBuffer,maxBytesToRead,
-                                                                    connected, shouldBlock, readLock)
+    return (connected && ! isListener) ? SocketHelpers::readSocket ((SocketHandle) handle.load(), destBuffer, maxBytesToRead, connected, shouldBlock, readLock)
                                        : -1;
 }
 
@@ -580,8 +575,7 @@ bool StreamingSocket::connect (const String& remoteHostName, int remotePortNumbe
     portNumber = remotePortNumber;
     isListener = false;
 
-    connected = SocketHelpers::connectSocket (handle, readLock, remoteHostName,
-                                              remotePortNumber, timeOutMillisecs, options);
+    connected = SocketHelpers::connectSocket (handle, readLock, remoteHostName, remotePortNumber, timeOutMillisecs, options);
 
     if (! connected)
         return false;
@@ -623,12 +617,12 @@ bool StreamingSocket::createListener (int newPortNumber, const String& localHost
     if (handle < 0)
         return false;
 
-   #if ! JUCE_WINDOWS // on windows, adding this option produces behaviour different to posix
+#if ! JUCE_WINDOWS // on windows, adding this option produces behaviour different to posix
     SocketHelpers::makeReusable (handle);
-   #endif
+#endif
 
     if (SocketHelpers::bindSocket ((SocketHandle) handle.load(), portNumber, localHostName)
-         && listen ((SocketHandle) handle.load(), SOMAXCONN) >= 0)
+        && listen ((SocketHandle) handle.load(), SOMAXCONN) >= 0)
     {
         connected = true;
         return true;
@@ -652,7 +646,9 @@ StreamingSocket* StreamingSocket::waitForNextConnection() const
 
         if (newSocket >= 0 && connected)
             return new StreamingSocket (inet_ntoa (((struct sockaddr_in*) &address)->sin_addr),
-                                        portNumber, newSocket, options);
+                                        portNumber,
+                                        newSocket,
+                                        options);
     }
 
     return nullptr;
@@ -671,7 +667,6 @@ bool StreamingSocket::isLocal() const noexcept
 
     return hostName == "127.0.0.1";
 }
-
 
 //==============================================================================
 //==============================================================================
@@ -753,8 +748,7 @@ int DatagramSocket::read (void* destBuffer, int maxBytesToRead, bool shouldBlock
         return -1;
 
     std::atomic<bool> connected { true };
-    return SocketHelpers::readSocket ((SocketHandle) handle.load(), destBuffer, maxBytesToRead,
-                                      connected, shouldBlock, readLock);
+    return SocketHelpers::readSocket ((SocketHandle) handle.load(), destBuffer, maxBytesToRead, connected, shouldBlock, readLock);
 }
 
 int DatagramSocket::read (void* destBuffer, int maxBytesToRead, bool shouldBlock, String& senderIPAddress, int& senderPort)
@@ -763,12 +757,10 @@ int DatagramSocket::read (void* destBuffer, int maxBytesToRead, bool shouldBlock
         return -1;
 
     std::atomic<bool> connected { true };
-    return SocketHelpers::readSocket ((SocketHandle) handle.load(), destBuffer, maxBytesToRead, connected,
-                                      shouldBlock, readLock, &senderIPAddress, &senderPort);
+    return SocketHelpers::readSocket ((SocketHandle) handle.load(), destBuffer, maxBytesToRead, connected, shouldBlock, readLock, &senderIPAddress, &senderPort);
 }
 
-int DatagramSocket::write (const String& remoteHostname, int remotePortNumber,
-                           const void* sourceBuffer, int numBytesToWrite)
+int DatagramSocket::write (const String& remoteHostname, int remotePortNumber, const void* sourceBuffer, int numBytesToWrite)
 {
     jassert (SocketHelpers::isValidPortNumber (remotePortNumber));
 
@@ -790,9 +782,7 @@ int DatagramSocket::write (const String& remoteHostname, int remotePortNumber,
         lastServerPort = remotePortNumber;
     }
 
-    return (int) ::sendto ((SocketHandle) handle.load(), (const char*) sourceBuffer,
-                           (juce_recvsend_size_t) numBytesToWrite, 0,
-                           info->ai_addr, (socklen_t) info->ai_addrlen);
+    return (int) ::sendto ((SocketHandle) handle.load(), (const char*) sourceBuffer, (juce_recvsend_size_t) numBytesToWrite, 0, info->ai_addr, (socklen_t) info->ai_addrlen);
 }
 
 bool DatagramSocket::joinMulticast (const String& multicastIPAddress)
@@ -821,24 +811,24 @@ bool DatagramSocket::setMulticastLoopbackEnabled (bool enable)
 
 bool DatagramSocket::setEnablePortReuse ([[maybe_unused]] bool enabled)
 {
-   #if ! JUCE_ANDROID
+#if ! JUCE_ANDROID
     if (handle >= 0)
         return SocketHelpers::setOption ((SocketHandle) handle.load(),
-                                        #if JUCE_WINDOWS || JUCE_LINUX || JUCE_BSD
-                                         SO_REUSEADDR,  // port re-use is implied by addr re-use on these platforms
-                                        #else
+#if JUCE_WINDOWS || JUCE_LINUX || JUCE_BSD
+                                         SO_REUSEADDR, // port re-use is implied by addr re-use on these platforms
+#else
                                          SO_REUSEPORT,
-                                        #endif
+#endif
                                          (int) (enabled ? 1 : 0));
-   #endif
+#endif
 
     return false;
 }
 
 JUCE_END_IGNORE_WARNINGS_MSVC
 
-//==============================================================================
-//==============================================================================
+    //==============================================================================
+    //==============================================================================
 #if JUCE_UNIT_TESTS
 
 struct SocketTests final : public UnitTest

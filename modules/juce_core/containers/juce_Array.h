@@ -494,8 +494,7 @@ public:
         @param numberOfTimesToInsertIt  how many copies of the value to insert
         @see insert, add, addSorted, set
     */
-    void insertMultiple (int indexToInsertAt, ParameterType newElement,
-                         int numberOfTimesToInsertIt)
+    void insertMultiple (int indexToInsertAt, ParameterType newElement, int numberOfTimesToInsertIt)
     {
         if (numberOfTimesToInsertIt > 0)
         {
@@ -667,9 +666,9 @@ public:
     */
     template <class OtherArrayType>
     std::enable_if_t<! std::is_pointer_v<OtherArrayType>, void>
-    addArray (const OtherArrayType& arrayToAddFrom,
-              int startIndex,
-              int numElementsToAdd = -1)
+        addArray (const OtherArrayType& arrayToAddFrom,
+                  int startIndex,
+                  int numElementsToAdd = -1)
     {
         const typename OtherArrayType::ScopedLockType lock1 (arrayToAddFrom.getLock());
         const ScopedLockType lock2 (getLock());
@@ -727,7 +726,7 @@ public:
     */
     void addUsingDefaultSort (ParameterType newElement)
     {
-        DefaultElementComparator <ElementType> comparator;
+        DefaultElementComparator<ElementType> comparator;
         addSorted (comparator, newElement);
     }
 
@@ -913,7 +912,7 @@ public:
         const ScopedLockType lock (getLock());
 
         auto endIndex = jlimit (0, values.size(), startIndex + numberToRemove);
-        startIndex    = jlimit (0, values.size(), startIndex);
+        startIndex = jlimit (0, values.size(), startIndex);
         numberToRemove = endIndex - startIndex;
 
         if (numberToRemove > 0)
@@ -1105,18 +1104,20 @@ public:
         To lock, you can call getLock().enter() and getLock().exit(), or preferably use
         an object of ScopedLockType as an RAII lock for it.
     */
-    inline const TypeOfCriticalSectionToUse& getLock() const noexcept      { return values; }
+    inline const TypeOfCriticalSectionToUse& getLock() const noexcept { return values; }
 
     /** Returns the type of scoped lock to use for locking this array */
     using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
 
-
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     [[deprecated ("This method has been replaced by a more flexible templated version and renamed "
-                 "to swapWith to be more consistent with the names used in other classes.")]]
-    void swapWithArray (Array& other) noexcept { swapWith (other); }
-   #endif
+                  "to swapWith to be more consistent with the names used in other classes.")]] void
+        swapWithArray (Array& other) noexcept
+    {
+        swapWith (other);
+    }
+#endif
 
 private:
     //==============================================================================

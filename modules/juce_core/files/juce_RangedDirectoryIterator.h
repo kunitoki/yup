@@ -53,25 +53,25 @@ class DirectoryEntry final
 {
 public:
     /** The path to a file or folder. */
-    File getFile()              const { return file; }
+    File getFile() const { return file; }
 
     /** The time at which the item was last modified. */
-    Time getModificationTime()  const { return modTime; }
+    Time getModificationTime() const { return modTime; }
 
     /** The time at which the item was created. */
-    Time getCreationTime()      const { return creationTime; }
+    Time getCreationTime() const { return creationTime; }
 
     /** The size of the item. */
-    int64 getFileSize()         const { return fileSize; }
+    int64 getFileSize() const { return fileSize; }
 
     /** True if the item is a directory, false otherwise. */
-    bool isDirectory()          const { return directory; }
+    bool isDirectory() const { return directory; }
 
     /** True if the item is hidden, false otherwise. */
-    bool isHidden()             const { return hidden; }
+    bool isHidden() const { return hidden; }
 
     /** True if the item is read-only, false otherwise. */
-    bool isReadOnly()           const { return readOnly; }
+    bool isReadOnly() const { return readOnly; }
 
     /** The estimated proportion of the range that has been visited
         by the iterator, from 0.0 to 1.0.
@@ -83,10 +83,10 @@ private:
     File file;
     Time modTime;
     Time creationTime;
-    int64 fileSize  = 0;
-    bool directory  = false;
-    bool hidden     = false;
-    bool readOnly   = false;
+    int64 fileSize = 0;
+    bool directory = false;
+    bool hidden = false;
+    bool readOnly = false;
 
     friend class RangedDirectoryIterator;
 };
@@ -116,10 +116,10 @@ inline const DirectoryEntry& operator* (const DirectoryEntry& e) noexcept { retu
 class RangedDirectoryIterator final
 {
 public:
-    using difference_type   = std::ptrdiff_t;
-    using value_type        = DirectoryEntry;
-    using reference         = DirectoryEntry;
-    using pointer           = void;
+    using difference_type = std::ptrdiff_t;
+    using value_type = DirectoryEntry;
+    using reference = DirectoryEntry;
+    using pointer = void;
     using iterator_category = std::input_iterator_tag;
 
     /** The default-constructed iterator acts as the 'end' sentinel. */
@@ -160,7 +160,8 @@ public:
     /** Return an object containing metadata about the file or folder to
         which the iterator is currently pointing.
     */
-    const DirectoryEntry& operator* () const noexcept { return  entry; }
+    const DirectoryEntry& operator*() const noexcept { return entry; }
+
     const DirectoryEntry* operator->() const noexcept { return &entry; }
 
     /** Moves the iterator along to the next file. */
@@ -198,8 +199,7 @@ inline RangedDirectoryIterator begin (const RangedDirectoryIterator& it) { retur
 /** Returns a default-constructed sentinel value.
     Provided for range-for compatibility.
 */
-inline RangedDirectoryIterator end   (const RangedDirectoryIterator&)    { return {}; }
-
+inline RangedDirectoryIterator end (const RangedDirectoryIterator&) { return {}; }
 
 JUCE_END_IGNORE_WARNINGS_MSVC
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE

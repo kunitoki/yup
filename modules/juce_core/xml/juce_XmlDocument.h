@@ -77,7 +77,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  XmlDocument
+class JUCE_API XmlDocument
 {
 public:
     //==============================================================================
@@ -161,7 +161,6 @@ public:
     */
     static std::unique_ptr<XmlElement> parse (const String& xmlData);
 
-
     //==============================================================================
 private:
     String originalText;
@@ -219,6 +218,5 @@ std::unique_ptr<XmlElement> parseXMLIfTagMatches (const String& textToParse, Str
     @see parseXML
 */
 std::unique_ptr<XmlElement> parseXMLIfTagMatches (const File& fileToParse, StringRef requiredTag);
-
 
 } // namespace juce

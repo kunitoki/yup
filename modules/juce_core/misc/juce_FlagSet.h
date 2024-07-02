@@ -186,7 +186,7 @@ public:
 
         @return A new FlagSet with all flags inverted.
     */
-    constexpr FlagSet operator~ () const noexcept
+    constexpr FlagSet operator~() const noexcept
     {
         return FlagSet (~flags);
     }
@@ -201,7 +201,7 @@ public:
     /** Inequality operator between two FlagSet. */
     constexpr bool operator!= (const FlagSet& other) const noexcept
     {
-        return !(*this == other);
+        return ! (*this == other);
     }
 
     //==============================================================================
@@ -234,7 +234,7 @@ public:
         {
             const int currentFlag = 1 << index;
 
-            if (text[index] == juce_wchar('1'))
+            if (text[index] == juce_wchar ('1'))
                 flags |= currentFlag;
         }
 
@@ -266,6 +266,3 @@ private:
 };
 
 } // namespace juce
-
-
-

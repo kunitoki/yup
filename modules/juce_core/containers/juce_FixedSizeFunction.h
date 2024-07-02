@@ -49,15 +49,19 @@ namespace detail
     {
         using Storage = void*;
 
-        using Move  = void (*) (Storage, Storage);
-        using Call  = Ret  (*) (Storage, Args...);
+        using Move = void (*) (Storage, Storage);
+        using Call = Ret (*) (Storage, Args...);
         using Clear = void (*) (Storage);
 
         constexpr Vtable (Move moveIn, Call callIn, Clear clearIn) noexcept
-                : move (moveIn), call (callIn), clear (clearIn) {}
+            : move (moveIn)
+            , call (callIn)
+            , clear (clearIn)
+        {
+        }
 
-        Move  move  = nullptr;
-        Call  call  = nullptr;
+        Move move = nullptr;
+        Call call = nullptr;
         Clear clear = nullptr;
     };
 
@@ -90,7 +94,7 @@ namespace detail
     template <typename Fn, typename Ret, typename... Args>
     constexpr Vtable<Ret, Args...> makeVtable()
     {
-        return { move <Fn>, call <Fn, Ret, Args...>, clear<Fn> };
+        return { move<Fn>, call<Fn, Ret, Args...>, clear<Fn> };
     }
 } // namespace detail
 
@@ -130,7 +134,9 @@ public:
 
     /** Create an empty function. */
     FixedSizeFunction (std::nullptr_t) noexcept
-        : FixedSizeFunction() {}
+        : FixedSizeFunction()
+    {
+    }
 
     FixedSizeFunction (const FixedSizeFunction&) = delete;
 
@@ -237,15 +243,27 @@ private:
 };
 
 template <size_t len, typename T>
-bool operator!= (const FixedSizeFunction<len, T>& fn, std::nullptr_t) { return bool (fn); }
+bool operator!= (const FixedSizeFunction<len, T>& fn, std::nullptr_t)
+{
+    return bool (fn);
+}
 
 template <size_t len, typename T>
-bool operator!= (std::nullptr_t, const FixedSizeFunction<len, T>& fn) { return bool (fn); }
+bool operator!= (std::nullptr_t, const FixedSizeFunction<len, T>& fn)
+{
+    return bool (fn);
+}
 
 template <size_t len, typename T>
-bool operator== (const FixedSizeFunction<len, T>& fn, std::nullptr_t) { return ! (fn != nullptr); }
+bool operator== (const FixedSizeFunction<len, T>& fn, std::nullptr_t)
+{
+    return ! (fn != nullptr);
+}
 
 template <size_t len, typename T>
-bool operator== (std::nullptr_t, const FixedSizeFunction<len, T>& fn) { return ! (fn != nullptr); }
+bool operator== (std::nullptr_t, const FixedSizeFunction<len, T>& fn)
+{
+    return ! (fn != nullptr);
+}
 
 } // namespace juce

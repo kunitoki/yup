@@ -50,7 +50,8 @@ static StringArray jucePermissionToAndroidPermissions (RuntimePermissions::Permi
 
     switch (permission)
     {
-        case RuntimePermissions::recordAudio:           return { "android.permission.RECORD_AUDIO" };
+        case RuntimePermissions::recordAudio:
+            return { "android.permission.RECORD_AUDIO" };
         case RuntimePermissions::bluetoothMidi:
         {
             if (getAndroidSDKVersion() < 31)
@@ -63,9 +64,10 @@ static StringArray jucePermissionToAndroidPermissions (RuntimePermissions::Permi
         // WRITE_EXTERNAL_STORAGE has no effect on SDK 29+
         case RuntimePermissions::writeExternalStorage:
             return getAndroidSDKVersion() < 29 ? StringArray { "android.permission.WRITE_EXTERNAL_STORAGE" }
-                                               : StringArray{};
+                                               : StringArray {};
 
-        case RuntimePermissions::camera:                return { "android.permission.CAMERA" };
+        case RuntimePermissions::camera:
+            return { "android.permission.CAMERA" };
 
         case RuntimePermissions::readExternalStorage:
         {
@@ -95,17 +97,16 @@ static StringArray jucePermissionToAndroidPermissions (RuntimePermissions::Permi
 
 static RuntimePermissions::PermissionID androidPermissionToJucePermission (const String& permission)
 {
-    static const std::map<String, RuntimePermissions::PermissionID> map
-    {
-        { "android.permission.RECORD_AUDIO",            RuntimePermissions::recordAudio },
-        { "android.permission.ACCESS_FINE_LOCATION",    RuntimePermissions::bluetoothMidi },
-        { "android.permission.READ_EXTERNAL_STORAGE",   RuntimePermissions::readExternalStorage },
-        { "android.permission.WRITE_EXTERNAL_STORAGE",  RuntimePermissions::writeExternalStorage },
-        { "android.permission.CAMERA",                  RuntimePermissions::camera },
-        { "android.permission.READ_MEDIA_AUDIO",        RuntimePermissions::readMediaAudio },
-        { "android.permission.READ_MEDIA_IMAGES",       RuntimePermissions::readMediaImages },
-        { "android.permission.READ_MEDIA_VIDEO",        RuntimePermissions::readMediaVideo },
-        { "android.permission.BLUETOOTH_SCAN",          RuntimePermissions::bluetoothMidi },
+    static const std::map<String, RuntimePermissions::PermissionID> map {
+        { "android.permission.RECORD_AUDIO", RuntimePermissions::recordAudio },
+        { "android.permission.ACCESS_FINE_LOCATION", RuntimePermissions::bluetoothMidi },
+        { "android.permission.READ_EXTERNAL_STORAGE", RuntimePermissions::readExternalStorage },
+        { "android.permission.WRITE_EXTERNAL_STORAGE", RuntimePermissions::writeExternalStorage },
+        { "android.permission.CAMERA", RuntimePermissions::camera },
+        { "android.permission.READ_MEDIA_AUDIO", RuntimePermissions::readMediaAudio },
+        { "android.permission.READ_MEDIA_IMAGES", RuntimePermissions::readMediaImages },
+        { "android.permission.READ_MEDIA_VIDEO", RuntimePermissions::readMediaVideo },
+        { "android.permission.BLUETOOTH_SCAN", RuntimePermissions::bluetoothMidi },
     };
 
     const auto iter = map.find (permission);
@@ -123,7 +124,11 @@ struct PermissionsRequest
 //==============================================================================
 struct PermissionsOverlay final : public FragmentOverlay
 {
-    PermissionsOverlay (CriticalSection& cs) : overlayGuard (cs) {}
+    PermissionsOverlay (CriticalSection& cs)
+        : overlayGuard (cs)
+    {
+    }
+
     ~PermissionsOverlay() override = default;
 
     struct PermissionResult
@@ -132,7 +137,7 @@ struct PermissionsOverlay final : public FragmentOverlay
         bool granted;
     };
 
-    void onStart() override    { onRequestPermissionsResult (0, {}, {}); }
+    void onStart() override { onRequestPermissionsResult (0, {}, {}); }
 
     void onRequestPermissionsResult (int /*requestCode*/,
                                      const StringArray& permissions,
@@ -149,7 +154,7 @@ struct PermissionsOverlay final : public FragmentOverlay
 
                 if (RuntimePermissions::isGranted (request.permission))
                 {
-                    results.push_back ({std::move (request), true});
+                    results.push_back ({ std::move (request), true });
                     it = requests.erase (it);
                 }
                 else
@@ -171,7 +176,7 @@ struct PermissionsOverlay final : public FragmentOverlay
 
                     if (request.permission == permission)
                     {
-                        results.push_back ({std::move (request), granted});
+                        results.push_back ({ std::move (request), granted });
                         it = requests.erase (it);
                     }
                     else
@@ -192,14 +197,12 @@ struct PermissionsOverlay final : public FragmentOverlay
 
             if (requests.size() > 0)
             {
-                auto &request = requests.front();
+                auto& request = requests.front();
 
                 auto permissionsArray = jucePermissionToAndroidPermissions (request.permission);
                 auto jPermissionsArray = juceStringArrayToJava (permissionsArray);
 
-
-                auto requestPermissionsMethodID
-                    = env->GetMethodID (AndroidFragment, "requestPermissions", "([Ljava/lang/String;I)V");
+                auto requestPermissionsMethodID = env->GetMethodID (AndroidFragment, "requestPermissions", "([Ljava/lang/String;I)V");
 
                 // this code should only be reached for SDKs >= 23, so this method should be
                 // be available
@@ -288,12 +291,9 @@ bool RuntimePermissions::isGranted (PermissionID permission)
     const auto requestedPermissions = jucePermissionToAndroidPermissions (permission);
 
     return std::all_of (requestedPermissions.begin(), requestedPermissions.end(), [env] (const auto& p)
-    {
-        return 0 == env->CallIntMethod (getAppContext().get(),
-                                        AndroidContext.checkCallingOrSelfPermission,
-                                        javaString (p).get());
-    });
-
+                        {
+                            return 0 == env->CallIntMethod (getAppContext().get(), AndroidContext.checkCallingOrSelfPermission, javaString (p).get());
+                        });
 }
 
 } // namespace juce

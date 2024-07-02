@@ -68,7 +68,7 @@ public:
     {
     }
 
-    inline ~ScopedPointer()         { reset(); }
+    inline ~ScopedPointer() { reset(); }
 
     ScopedPointer& operator= (ScopedPointer& objectToTransferFrom)
     {
@@ -89,7 +89,8 @@ public:
         return *this;
     }
 
-    ScopedPointer (ScopedPointer&& other) noexcept  : object (other.object)
+    ScopedPointer (ScopedPointer&& other) noexcept
+        : object (other.object)
     {
         other.object = nullptr;
     }
@@ -101,10 +102,13 @@ public:
     }
 
     //==============================================================================
-    inline operator ObjectType*() const noexcept                                    { return object; }
-    inline ObjectType* get() const noexcept                                         { return object; }
-    inline ObjectType& operator*() const noexcept                                   { return *object; }
-    inline ObjectType* operator->() const noexcept                                  { return object; }
+    inline operator ObjectType*() const noexcept { return object; }
+
+    inline ObjectType* get() const noexcept { return object; }
+
+    inline ObjectType& operator*() const noexcept { return *object; }
+
+    inline ObjectType* operator->() const noexcept { return object; }
 
     void reset()
     {
@@ -134,7 +138,12 @@ public:
         reset (newObject.release());
     }
 
-    ObjectType* release() noexcept  { auto* o = object; object = {}; return o; }
+    ObjectType* release() noexcept
+    {
+        auto* o = object;
+        object = {};
+        return o;
+    }
 
     //==============================================================================
     void swapWith (ScopedPointer<ObjectType>& other) noexcept
@@ -152,12 +161,12 @@ private:
     //==============================================================================
     ObjectType* object = nullptr;
 
-    const ScopedPointer* getAddress() const noexcept  { return this; } // Used internally to avoid the & operator
+    const ScopedPointer* getAddress() const noexcept { return this; } // Used internally to avoid the & operator
 
-   #if ! JUCE_MSVC  // (MSVC can't deal with multiple copy constructors)
+#if ! JUCE_MSVC // (MSVC can't deal with multiple copy constructors)
     ScopedPointer (const ScopedPointer&) = delete;
     ScopedPointer& operator= (const ScopedPointer&) = delete;
-   #endif
+#endif
 
     JUCE_END_IGNORE_WARNINGS_MSVC
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
@@ -230,8 +239,11 @@ bool operator!= (const ScopedPointer<ObjectType>& pointer, decltype (nullptr)) n
 //==============================================================================
 // NB: This is just here to prevent any silly attempts to call deleteAndZero() on a ScopedPointer.
 template <typename Type>
-void deleteAndZero (ScopedPointer<Type>&)  { static_assert (sizeof (Type) == 12345,
-                                                            "Attempt to call deleteAndZero() on a ScopedPointer"); }
+void deleteAndZero (ScopedPointer<Type>&)
+{
+    static_assert (sizeof (Type) == 12345,
+                   "Attempt to call deleteAndZero() on a ScopedPointer");
+}
 
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 JUCE_END_IGNORE_WARNINGS_MSVC

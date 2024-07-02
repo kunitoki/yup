@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  BigInteger
+class JUCE_API BigInteger
 {
 public:
     //==============================================================================
@@ -241,9 +241,9 @@ public:
 
     bool operator== (const BigInteger&) const noexcept;
     bool operator!= (const BigInteger&) const noexcept;
-    bool operator<  (const BigInteger&) const noexcept;
+    bool operator<(const BigInteger&) const noexcept;
     bool operator<= (const BigInteger&) const noexcept;
-    bool operator>  (const BigInteger&) const noexcept;
+    bool operator> (const BigInteger&) const noexcept;
     bool operator>= (const BigInteger&) const noexcept;
 
     //==============================================================================
@@ -291,15 +291,13 @@ public:
         To get this result, we need modulus, modulusp and k such as R = 2^k, with
         modulus * modulusp - R * R1 = GCD(modulus, R) = 1
     */
-    void montgomeryMultiplication (const BigInteger& other, const BigInteger& modulus,
-                                   const BigInteger& modulusp, int k);
+    void montgomeryMultiplication (const BigInteger& other, const BigInteger& modulus, const BigInteger& modulusp, int k);
 
     /** Performs the Extended Euclidean algorithm.
         This method will set the xOut and yOut arguments such that (a * xOut) - (b * yOut) = GCD (a, b).
         On return, this object is left containing the value of the GCD.
     */
-    void extendedEuclidean (const BigInteger& a, const BigInteger& b,
-                            BigInteger& xOut, BigInteger& yOut);
+    void extendedEuclidean (const BigInteger& a, const BigInteger& b, BigInteger& xOut, BigInteger& yOut);
 
     //==============================================================================
     /** Converts the number to a string.
@@ -338,7 +336,11 @@ public:
 
 private:
     //==============================================================================
-    enum { numPreallocatedInts = 4 };
+    enum
+    {
+        numPreallocatedInts = 4
+    };
+
     HeapBlock<uint32> heapAllocation;
     uint32 preallocated[numPreallocatedInts];
     size_t allocatedSize;

@@ -79,12 +79,13 @@ namespace juce
 
     @tags{Core}
 */
-template <typename T> struct SerialisationTraits
+template <typename T>
+struct SerialisationTraits
 {
     /*  Intentionally left blank. */
 };
 
-#define JUCE_COMPARISON_OPS X(==) X(!=) X(<) X(<=) X(>) X(>=)
+#define JUCE_COMPARISON_OPS X (==) X (!=) X (<) X (<=) X (>) X (>=)
 
 /**
     Combines an object with a name.
@@ -103,19 +104,28 @@ template <typename T> struct SerialisationTraits
 template <typename T>
 struct Named
 {
-   #define X(op) auto operator op (const Named& other) const { return value op other.value; }
+#define X(op) \
+auto operator op (const Named& other) const { return value op other.value; }
     JUCE_COMPARISON_OPS
-   #undef X
+#undef X
 
     std::string_view name; ///< A name that corresponds to the value
     T& value;              ///< A reference to a value to wrap
 };
 
 /** Produces a Named instance that holds a mutable reference. */
-template <typename T> constexpr auto named (std::string_view c, T& t)       { return Named<T>       { c, t }; }
+template <typename T>
+constexpr auto named (std::string_view c, T& t)
+{
+    return Named<T> { c, t };
+}
 
 /** Produces a Named instance that holds an immutable reference. */
-template <typename T> constexpr auto named (std::string_view c, const T& t) { return Named<const T> { c, t }; }
+template <typename T>
+constexpr auto named (std::string_view c, const T& t)
+{
+    return Named<const T> { c, t };
+}
 
 /**
     Holds a reference to some kind of size value, used to indicate that an object being marshalled
@@ -133,18 +143,27 @@ template <typename T> constexpr auto named (std::string_view c, const T& t) { re
 template <typename T>
 struct SerialisationSize
 {
-   #define X(op) auto operator op (const SerialisationSize& other) const { return size op other.size; }
+#define X(op) \
+auto operator op (const SerialisationSize& other) const { return size op other.size; }
     JUCE_COMPARISON_OPS
-   #undef X
+#undef X
 
     T& size;
 };
 
 /** Produces a SerialisationSize instance that holds a mutable reference to a size value. */
-template <typename T> constexpr auto serialisationSize       (T& t) -> std::enable_if_t<std::is_integral_v<T>, SerialisationSize<T>>       { return { t }; }
+template <typename T>
+constexpr auto serialisationSize (T& t) -> std::enable_if_t<std::is_integral_v<T>, SerialisationSize<T>>
+{
+    return { t };
+}
 
 /** Produces a SerialisationSize instance that holds an immutable reference to a size value. */
-template <typename T> constexpr auto serialisationSize (const T& t) -> std::enable_if_t<std::is_integral_v<T>, SerialisationSize<const T>> { return { t }; }
+template <typename T>
+constexpr auto serialisationSize (const T& t) -> std::enable_if_t<std::is_integral_v<T>, SerialisationSize<const T>>
+{
+    return { t };
+}
 
 #undef JUCE_COMPARISON_OPS
 
@@ -346,7 +365,10 @@ struct SerialisationTraits<char[N]>
     static constexpr auto marshallingVersion = std::nullopt;
 
     template <typename Archive, typename T>
-    static void serialise (Archive& archive, T& t) { archive (String (t, N)); }
+    static void serialise (Archive& archive, T& t)
+    {
+        archive (String (t, N));
+    }
 };
 
 template <typename Element, size_t N>
@@ -442,27 +464,30 @@ namespace detail
     constexpr auto hasInternalSave<Traits, T, std::void_t<decltype (Traits::save (std::declval<DummyArchive&>(), std::declval<const T&>()))>> = true;
 
     template <typename T>
-    struct SerialisedTypeTrait { using type = T; };
+    struct SerialisedTypeTrait
+    {
+        using type = T;
+    };
 
     template <typename T>
-    struct SerialisedTypeTrait<SerialisationTraits<T>> { using type = T; };
+    struct SerialisedTypeTrait<SerialisationTraits<T>>
+    {
+        using type = T;
+    };
 
     template <typename T>
     using SerialisedType = typename SerialisedTypeTrait<T>::type;
 
     template <typename T>
-    constexpr auto hasSerialisation = hasInternalVersion<SerialisedType<T>>
-                                   || hasInternalSerialise<T, SerialisedType<T>>
-                                   || hasInternalLoad<T, SerialisedType<T>>
-                                   || hasInternalSave<T, SerialisedType<T>>;
+    constexpr auto hasSerialisation = hasInternalVersion<SerialisedType<T>> || hasInternalSerialise<T, SerialisedType<T>> || hasInternalLoad<T, SerialisedType<T>> || hasInternalSave<T, SerialisedType<T>>;
 
     /*  Different kinds of serialisation function. */
     enum class SerialisationKind
     {
-        none,       // The type doesn't have any serialisation
-        primitive,  // The type has serialisation handling defined directly on the archiver. enums will be converted to equivalent integral values
-        internal,   // The type has internally-defined serialisation utilities
-        external,   // The type has an external specialisation of SerialisationTraits
+        none,      // The type doesn't have any serialisation
+        primitive, // The type has serialisation handling defined directly on the archiver. enums will be converted to equivalent integral values
+        internal,  // The type has internally-defined serialisation utilities
+        external,  // The type has an external specialisation of SerialisationTraits
     };
 
     /*  The SerialisationKind to use for the type T.
@@ -520,13 +545,22 @@ namespace detail
         static constexpr std::optional<int> marshallingVersion { T::marshallingVersion };
 
         template <typename Archive, typename Item>
-        static auto serialise (Archive& archive, Item& t) -> decltype (Item::serialise (archive, t)) { return Item::serialise (archive, t); }
+        static auto serialise (Archive& archive, Item& t) -> decltype (Item::serialise (archive, t))
+        {
+            return Item::serialise (archive, t);
+        }
 
         template <typename Archive, typename Item>
-        static auto load (Archive& archive, Item& t) -> decltype (Item::load (archive, t)) { return Item::load (archive, t); }
+        static auto load (Archive& archive, Item& t) -> decltype (Item::load (archive, t))
+        {
+            return Item::load (archive, t);
+        }
 
         template <typename Archive, typename Item>
-        static auto save (Archive& archive, const Item& t) -> decltype (Item::save (archive, t)) { return Item::save (archive, t); }
+        static auto save (Archive& archive, const Item& t) -> decltype (Item::save (archive, t))
+        {
+            return Item::save (archive, t);
+        }
     };
 
     /*  This specialisation will be used for types with external serialisation.
@@ -534,7 +568,9 @@ namespace detail
         @see SerialisationTraits
     */
     template <typename T>
-    struct ForwardingSerialisationTraits<T, SerialisationKind::external> : SerialisationTraits<T> {};
+    struct ForwardingSerialisationTraits<T, SerialisationKind::external> : SerialisationTraits<T>
+    {
+    };
 
     template <typename T, typename = void>
     constexpr auto hasSerialise = false;

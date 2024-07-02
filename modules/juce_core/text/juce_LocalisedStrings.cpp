@@ -51,8 +51,10 @@ LocalisedStrings::LocalisedStrings (const File& fileToLoad, bool ignoreCase)
 }
 
 LocalisedStrings::LocalisedStrings (const LocalisedStrings& other)
-    : languageName (other.languageName), countryCodes (other.countryCodes),
-      translations (other.translations), fallback (createCopyIfNotNull (other.fallback.get()))
+    : languageName (other.languageName)
+    , countryCodes (other.countryCodes)
+    , translations (other.translations)
+    , fallback (createCopyIfNotNull (other.fallback.get()))
 {
 }
 
@@ -84,7 +86,7 @@ String LocalisedStrings::translate (const String& text, const String& resultIfNo
 
 namespace
 {
-   #if JUCE_CHECK_MEMORY_LEAKS
+#if JUCE_CHECK_MEMORY_LEAKS
     // By using this object to force a LocalisedStrings object to be created
     // before the currentMappings object, we can force the static order-of-destruction to
     // delete the currentMappings object first, which avoids a bogus leak warning.
@@ -99,7 +101,7 @@ namespace
     };
 
     LeakAvoidanceTrick leakAvoidanceTrick;
-   #endif
+#endif
 
     SpinLock currentMappingsLock;
     std::unique_ptr<LocalisedStrings> currentMappings;
@@ -126,12 +128,12 @@ namespace
     static String unescapeString (const String& s)
     {
         return s.replace ("\\\"", "\"")
-                .replace ("\\\'", "\'")
-                .replace ("\\t", "\t")
-                .replace ("\\r", "\r")
-                .replace ("\\n", "\n");
+            .replace ("\\\'", "\'")
+            .replace ("\\t", "\t")
+            .replace ("\\r", "\r")
+            .replace ("\\n", "\n");
     }
-}
+} // namespace
 
 void LocalisedStrings::loadFromText (const String& fileContents, bool ignoreCase)
 {
@@ -199,12 +201,15 @@ LocalisedStrings* LocalisedStrings::getCurrentMappings()
     return currentMappings.get();
 }
 
-String LocalisedStrings::translateWithCurrentMappings (const String& text)  { return juce::translate (text); }
-String LocalisedStrings::translateWithCurrentMappings (const char* text)    { return juce::translate (text); }
+String LocalisedStrings::translateWithCurrentMappings (const String& text) { return juce::translate (text); }
 
-JUCE_API String translate (const String& text)       { return juce::translate (text, text); }
-JUCE_API String translate (const char* text)         { return juce::translate (String (text)); }
-JUCE_API String translate (CharPointer_UTF8 text)    { return juce::translate (String (text)); }
+String LocalisedStrings::translateWithCurrentMappings (const char* text) { return juce::translate (text); }
+
+JUCE_API String translate (const String& text) { return juce::translate (text, text); }
+
+JUCE_API String translate (const char* text) { return juce::translate (String (text)); }
+
+JUCE_API String translate (CharPointer_UTF8 text) { return juce::translate (String (text)); }
 
 JUCE_API String translate (const String& text, const String& resultIfNotFound)
 {

@@ -58,20 +58,20 @@ public:
     AndroidDocumentInfo() = default;
 
     /** True if this file really exists. */
-    bool exists() const                 { return isJuceFlagSet (flagExists); }
+    bool exists() const { return isJuceFlagSet (flagExists); }
 
     /** True if this is a directory rather than a file. */
     bool isDirectory() const;
 
     /** True if this is a file rather than a directory. */
-    bool isFile() const                 { return type.isNotEmpty() && ! isDirectory(); }
+    bool isFile() const { return type.isNotEmpty() && ! isDirectory(); }
 
     /** True if this process has permission to read this file.
 
         If this returns true, and the AndroidDocument refers to a file rather than a directory,
         then AndroidDocument::createInputStream should work on this document.
     */
-    bool canRead() const                { return isJuceFlagSet (flagHasReadPermission) && type.isNotEmpty(); }
+    bool canRead() const { return isJuceFlagSet (flagHasReadPermission) && type.isNotEmpty(); }
 
     /** True if this is a document that can be written, or a directory that can be modified.
 
@@ -81,59 +81,59 @@ public:
     bool canWrite() const
     {
         return isJuceFlagSet (flagHasWritePermission)
-               && type.isNotEmpty()
-               && (isNativeFlagSet (flagSupportsWrite)
-                   || isNativeFlagSet (flagSupportsDelete)
-                   || isNativeFlagSet (flagDirSupportsCreate));
+            && type.isNotEmpty()
+            && (isNativeFlagSet (flagSupportsWrite)
+                || isNativeFlagSet (flagSupportsDelete)
+                || isNativeFlagSet (flagDirSupportsCreate));
     }
 
     /** True if this document can be removed completely from the filesystem. */
-    bool canDelete() const              { return isNativeFlagSet (flagSupportsDelete); }
+    bool canDelete() const { return isNativeFlagSet (flagSupportsDelete); }
 
     /** True if this is a directory and adding child documents is supported. */
-    bool canCreateChildren() const      { return isNativeFlagSet (flagDirSupportsCreate); }
+    bool canCreateChildren() const { return isNativeFlagSet (flagDirSupportsCreate); }
 
     /** True if this document can be renamed. */
-    bool canRename() const              { return isNativeFlagSet (flagSupportsRename); }
+    bool canRename() const { return isNativeFlagSet (flagSupportsRename); }
 
     /** True if this document can be copied. */
-    bool canCopy() const                { return isNativeFlagSet (flagSupportsCopy); }
+    bool canCopy() const { return isNativeFlagSet (flagSupportsCopy); }
 
     /** True if this document can be moved. */
-    bool canMove() const                { return isNativeFlagSet (flagSupportsMove); }
+    bool canMove() const { return isNativeFlagSet (flagSupportsMove); }
 
     /** True if this document isn't a physical file on storage. */
-    bool isVirtual() const              { return isNativeFlagSet (flagVirtualDocument); }
+    bool isVirtual() const { return isNativeFlagSet (flagVirtualDocument); }
 
     /** The user-facing name.
 
         This may or may not contain a file extension. For files identified by a URL, the MIME type
         is stored separately.
     */
-    String getName() const              { return name; }
+    String getName() const { return name; }
 
     /** The MIME type of this document. */
-    String getType() const              { return isDirectory() ? String{} : type; }
+    String getType() const { return isDirectory() ? String {} : type; }
 
     /** Timestamp when a document was last modified, in milliseconds since January 1, 1970 00:00:00.0 UTC.
 
         Use isLastModifiedValid() to determine whether or not the result of this
         function is valid.
     */
-    int64 getLastModified() const       { return isJuceFlagSet (flagValidModified) ? lastModified : 0; }
+    int64 getLastModified() const { return isJuceFlagSet (flagValidModified) ? lastModified : 0; }
 
     /** True if the filesystem provided a modification time. */
-    bool isLastModifiedValid() const    { return isJuceFlagSet (flagValidModified); }
+    bool isLastModifiedValid() const { return isJuceFlagSet (flagValidModified); }
 
     /** The size of the document in bytes, if known.
 
         Use isSizeInBytesValid() to determine whether or not the result of this
         function is valid.
     */
-    int64 getSizeInBytes() const        { return isJuceFlagSet (flagValidSize) ? sizeInBytes : 0; }
+    int64 getSizeInBytes() const { return isJuceFlagSet (flagValidSize) ? sizeInBytes : 0; }
 
     /** True if the filesystem provided a size in bytes. */
-    bool isSizeInBytesValid() const     { return isJuceFlagSet (flagValidSize); }
+    bool isSizeInBytesValid() const { return isJuceFlagSet (flagValidSize); }
 
     /** @internal */
     class Args;
@@ -142,34 +142,35 @@ private:
     explicit AndroidDocumentInfo (Args);
 
     bool isNativeFlagSet (int flag) const { return (nativeFlags & flag) != 0; }
-    bool isJuceFlagSet   (int flag) const { return (juceFlags   & flag) != 0; }
+
+    bool isJuceFlagSet (int flag) const { return (juceFlags & flag) != 0; }
 
     /*  Native Android flags that might be set in the COLUMN_FLAGS for a particular document */
     enum
     {
-        flagSupportsWrite       = 0x0002,
-        flagSupportsDelete      = 0x0004,
-        flagDirSupportsCreate   = 0x0008,
-        flagSupportsRename      = 0x0040,
-        flagSupportsCopy        = 0x0080,
-        flagSupportsMove        = 0x0100,
-        flagVirtualDocument     = 0x0200,
+        flagSupportsWrite = 0x0002,
+        flagSupportsDelete = 0x0004,
+        flagDirSupportsCreate = 0x0008,
+        flagSupportsRename = 0x0040,
+        flagSupportsCopy = 0x0080,
+        flagSupportsMove = 0x0100,
+        flagVirtualDocument = 0x0200,
     };
 
     /*  Flags for other binary properties that aren't exposed in COLUMN_FLAGS */
     enum
     {
-        flagExists              = 1 << 0,
-        flagValidModified       = 1 << 1,
-        flagValidSize           = 1 << 2,
-        flagHasReadPermission   = 1 << 3,
-        flagHasWritePermission  = 1 << 4,
+        flagExists = 1 << 0,
+        flagValidModified = 1 << 1,
+        flagValidSize = 1 << 2,
+        flagHasReadPermission = 1 << 3,
+        flagHasWritePermission = 1 << 4,
     };
 
     String name;
     String type;
     int64 lastModified = 0;
-    int64 sizeInBytes  = 0;
+    int64 sizeInBytes = 0;
     int nativeFlags = 0, juceFlags = 0;
 };
 
@@ -187,16 +188,16 @@ class AndroidDocumentPermission
 {
 public:
     /** The url of the document with persisted permissions. */
-    URL getUrl() const                          { return url; }
+    URL getUrl() const { return url; }
 
     /** The time when the permissions were persisted, in milliseconds since January 1, 1970 00:00:00.0 UTC. */
-    int64 getPersistedTime() const              { return time; }
+    int64 getPersistedTime() const { return time; }
 
     /** True if the permission allows read access. */
-    bool isReadPermission() const               { return read; }
+    bool isReadPermission() const { return read; }
 
     /** True if the permission allows write access. */
-    bool isWritePermission() const              { return write; }
+    bool isWritePermission() const { return write; }
 
     /** Gives your app access to a particular document or tree, even after the device is rebooted.
 
@@ -358,13 +359,13 @@ public:
         If this function returns false, you *must not* call any function on this instance other
         than the special member functions to copy, move, and/or destruct the instance.
     */
-    bool hasValue() const               { return pimpl != nullptr; }
+    bool hasValue() const { return pimpl != nullptr; }
 
     /** Like hasValue(), but allows declaring AndroidDocument instances directly in 'if' statements. */
-    explicit operator bool() const      { return hasValue(); }
+    explicit operator bool() const { return hasValue(); }
 
     /** Creates a stream for reading from this document. */
-    std::unique_ptr<InputStream>  createInputStream()  const;
+    std::unique_ptr<InputStream> createInputStream() const;
 
     /** Creates a stream for writing to this document. */
     std::unique_ptr<OutputStream> createOutputStream() const;
@@ -467,6 +468,7 @@ public:
     AndroidDocumentIterator() = default;
 
     bool operator== (const AndroidDocumentIterator& other) const noexcept { return pimpl == nullptr && other.pimpl == nullptr; }
+
     bool operator!= (const AndroidDocumentIterator& other) const noexcept { return ! operator== (other); }
 
     /** Returns the document to which this iterator points. */
@@ -479,7 +481,7 @@ public:
     AndroidDocumentIterator begin() const { return *this; }
 
     /** Allows this iterator to be used directly in a range-for. */
-    AndroidDocumentIterator end()   const { return AndroidDocumentIterator{}; }
+    AndroidDocumentIterator end() const { return AndroidDocumentIterator {}; }
 
 private:
     struct Utils;

@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  BufferedInputStream  : public InputStream
+class JUCE_API BufferedInputStream : public InputStream
 {
 public:
     //==============================================================================
@@ -80,7 +80,6 @@ public:
     */
     ~BufferedInputStream() override;
 
-
     //==============================================================================
     /** Returns the next byte that would be read by a call to readByte() */
     char peekByte();
@@ -91,7 +90,6 @@ public:
     int read (void* destBuffer, int maxBytesToRead) override;
     String readString() override;
     bool isExhausted() override;
-
 
 private:
     //==============================================================================

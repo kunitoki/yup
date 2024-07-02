@@ -40,11 +40,13 @@
 namespace juce
 {
 
-Random::Random (int64 seedValue) noexcept  : seed (seedValue)
+Random::Random (int64 seedValue) noexcept
+    : seed (seedValue)
 {
 }
 
-Random::Random()  : seed (1)
+Random::Random()
+    : seed (1)
 {
     setSeedRandomly();
 }
@@ -119,7 +121,7 @@ bool Random::nextBool() noexcept
 float Random::nextFloat() noexcept
 {
     auto result = static_cast<float> (static_cast<uint32> (nextInt()))
-                  / (static_cast<float> (std::numeric_limits<uint32>::max()) + 1.0f);
+                / (static_cast<float> (std::numeric_limits<uint32>::max()) + 1.0f);
     return jmin (result, 1.0f - std::numeric_limits<float>::epsilon());
 }
 
@@ -135,8 +137,7 @@ BigInteger Random::nextLargeNumber (const BigInteger& maximumValue)
     do
     {
         fillBitsRandomly (n, 0, maximumValue.getHighestBit() + 1);
-    }
-    while (n >= maximumValue);
+    } while (n >= maximumValue);
 
     return n;
 }
@@ -157,7 +158,7 @@ void Random::fillBitsRandomly (void* const buffer, size_t bytes)
 
 void Random::fillBitsRandomly (BigInteger& arrayToChange, int startBit, int numBits)
 {
-    arrayToChange.setBit (startBit + numBits - 1, true);  // to force the array to pre-allocate space
+    arrayToChange.setBit (startBit + numBits - 1, true); // to force the array to pre-allocate space
 
     while ((startBit & 31) != 0 && numBits > 0)
     {
@@ -176,7 +177,6 @@ void Random::fillBitsRandomly (BigInteger& arrayToChange, int startBit, int numB
         arrayToChange.setBit (startBit + numBits, nextBool());
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -186,7 +186,8 @@ class RandomTests final : public UnitTest
 public:
     RandomTests()
         : UnitTest ("Random", UnitTestCategories::maths)
-    {}
+    {
+    }
 
     void runTest() override
     {

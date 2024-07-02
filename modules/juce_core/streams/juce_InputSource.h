@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  InputSource
+class JUCE_API InputSource
 {
 public:
     //==============================================================================
@@ -79,7 +79,6 @@ public:
     /** Returns a hash code that uniquely represents this item.
     */
     virtual int64 hashCode() const = 0;
-
 
 private:
     //==============================================================================

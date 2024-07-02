@@ -57,8 +57,7 @@ private:
 
 static LockedRandom lockedRandom;
 
-static File createTempFile (const File& parentDirectory, String name,
-                            const String& suffix, int optionFlags)
+static File createTempFile (const File& parentDirectory, String name, const String& suffix, int optionFlags)
 {
     if ((optionFlags & TemporaryFile::useHiddenFile) != 0)
         name = "." + name;
@@ -69,24 +68,27 @@ static File createTempFile (const File& parentDirectory, String name,
 TemporaryFile::TemporaryFile (const String& suffix, const int optionFlags)
     : temporaryFile (createTempFile (File::getSpecialLocation (File::tempDirectory),
                                      "temp_" + String::toHexString (lockedRandom.nextInt()),
-                                     suffix, optionFlags)),
-      targetFile()
+                                     suffix,
+                                     optionFlags))
+    , targetFile()
 {
 }
 
 TemporaryFile::TemporaryFile (const File& target, const int optionFlags)
     : temporaryFile (createTempFile (target.getParentDirectory(),
                                      target.getFileNameWithoutExtension()
-                                       + "_temp" + String::toHexString (lockedRandom.nextInt()),
-                                     target.getFileExtension(), optionFlags)),
-      targetFile (target)
+                                         + "_temp" + String::toHexString (lockedRandom.nextInt()),
+                                     target.getFileExtension(),
+                                     optionFlags))
+    , targetFile (target)
 {
     // If you use this constructor, you need to give it a valid target file!
     jassert (targetFile != File());
 }
 
 TemporaryFile::TemporaryFile (const File& target, const File& temporary)
-    : temporaryFile (temporary), targetFile (target)
+    : temporaryFile (temporary)
+    , targetFile (target)
 {
 }
 

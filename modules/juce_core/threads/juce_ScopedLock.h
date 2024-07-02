@@ -81,14 +81,18 @@ public:
         otherwise there are no guarantees what will happen! Best just to use it
         as a local stack object, rather than creating one with the new() operator.
     */
-    inline explicit GenericScopedLock (const LockType& lock) noexcept : lock_ (lock)     { lock.enter(); }
+    inline explicit GenericScopedLock (const LockType& lock) noexcept
+        : lock_ (lock)
+    {
+        lock.enter();
+    }
 
     /** Destructor.
         The lock will be released when the destructor is called.
         Make sure this object is created and deleted by the same thread, otherwise there are
         no guarantees what will happen!
     */
-    inline ~GenericScopedLock() noexcept                                                 { lock_.exit(); }
+    inline ~GenericScopedLock() noexcept { lock_.exit(); }
 
 private:
     //==============================================================================
@@ -96,7 +100,6 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE (GenericScopedLock)
 };
-
 
 //==============================================================================
 /**
@@ -153,7 +156,11 @@ public:
         otherwise there are no guarantees what will happen! Best just to use it
         as a local stack object, rather than creating one with the new() operator.
     */
-    inline explicit GenericScopedUnlock (const LockType& lock) noexcept : lock_ (lock)   { lock.exit(); }
+    inline explicit GenericScopedUnlock (const LockType& lock) noexcept
+        : lock_ (lock)
+    {
+        lock.exit();
+    }
 
     /** Destructor.
 
@@ -162,8 +169,7 @@ public:
         Make sure this object is created and deleted by the same thread,
         otherwise there are no guarantees what will happen!
     */
-    inline ~GenericScopedUnlock() noexcept                                               { lock_.enter(); }
-
+    inline ~GenericScopedUnlock() noexcept { lock_.enter(); }
 
 private:
     //==============================================================================
@@ -171,7 +177,6 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE (GenericScopedUnlock)
 };
-
 
 //==============================================================================
 /**
@@ -232,7 +237,10 @@ public:
         @see retryLock, isLocked
     */
     inline explicit GenericScopedTryLock (const LockType& lock, bool acquireLockOnInitialisation = true) noexcept
-        : lock_ (lock), lockWasSuccessful (acquireLockOnInitialisation && lock.tryEnter()) {}
+        : lock_ (lock)
+        , lockWasSuccessful (acquireLockOnInitialisation && lock.tryEnter())
+    {
+    }
 
     /** Destructor.
 
@@ -242,13 +250,21 @@ public:
         Make sure this object is created and deleted by the same thread,
         otherwise there are no guarantees what will happen!
     */
-    inline ~GenericScopedTryLock() noexcept         { if (lockWasSuccessful) lock_.exit(); }
+    inline ~GenericScopedTryLock() noexcept
+    {
+        if (lockWasSuccessful)
+            lock_.exit();
+    }
 
     /** Returns true if the mutex was successfully locked. */
-    bool isLocked() const noexcept                  { return lockWasSuccessful; }
+    bool isLocked() const noexcept { return lockWasSuccessful; }
 
     /** Retry gaining the lock by calling tryEnter on the underlying lock. */
-    bool retryLock() const noexcept                 { lockWasSuccessful = lock_.tryEnter(); return lockWasSuccessful; }
+    bool retryLock() const noexcept
+    {
+        lockWasSuccessful = lock_.tryEnter();
+        return lockWasSuccessful;
+    }
 
 private:
     //==============================================================================

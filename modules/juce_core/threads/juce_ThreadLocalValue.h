@@ -85,24 +85,28 @@ public:
         value object will be created - so if your value's class has a non-trivial
         constructor, be aware that this method could invoke it.
     */
-    Type& operator*() const noexcept                        { return get(); }
+    Type& operator*() const noexcept { return get(); }
 
     /** Returns a pointer to this thread's instance of the value.
         Note that the first time a thread tries to access the value, an instance of the
         value object will be created - so if your value's class has a non-trivial
         constructor, be aware that this method could invoke it.
     */
-    operator Type*() const noexcept                         { return &get(); }
+    operator Type*() const noexcept { return &get(); }
 
     /** Accesses a method or field of the value object.
         Note that the first time a thread tries to access the value, an instance of the
         value object will be created - so if your value's class has a non-trivial
         constructor, be aware that this method could invoke it.
     */
-    Type* operator->() const noexcept                       { return &get(); }
+    Type* operator->() const noexcept { return &get(); }
 
     /** Assigns a new value to the thread-local object. */
-    ThreadLocalValue& operator= (const Type& newValue)      { get() = newValue; return *this; }
+    ThreadLocalValue& operator= (const Type& newValue)
+    {
+        get() = newValue;
+        return *this;
+    }
 
     /** Returns a reference to this thread's instance of the value.
         Note that the first time a thread tries to access the value, an instance of the
@@ -127,7 +131,8 @@ public:
         else
             for (o = new ObjectHolder (threadId, first.get());
                  ! first.compareAndSetBool (o, o->next);
-                 o->next = first.get());
+                 o->next = first.get())
+                ;
 
         return o->object;
     }
@@ -148,7 +153,12 @@ private:
     //==============================================================================
     struct ObjectHolder
     {
-        ObjectHolder (Thread::ThreadID idToUse, ObjectHolder* n) : threadId (idToUse), next (n), object() {}
+        ObjectHolder (Thread::ThreadID idToUse, ObjectHolder* n)
+            : threadId (idToUse)
+            , next (n)
+            , object()
+        {
+        }
 
         Atomic<Thread::ThreadID> threadId;
         ObjectHolder* next;

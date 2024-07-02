@@ -66,9 +66,9 @@ InputStream* URLInputSource::createInputStreamFor (const String& relatedItemPath
                                           : String();
 
     return u.withNewSubPath (parent)
-            .getChildURL (relatedItemPath)
-            .createInputStream (URL::InputStreamOptions (URL::ParameterHandling::inAddress))
-            .release();
+        .getChildURL (relatedItemPath)
+        .createInputStream (URL::InputStreamOptions (URL::ParameterHandling::inAddress))
+        .release();
 }
 
 int64 URLInputSource::hashCode() const

@@ -45,17 +45,20 @@ CriticalSection::CriticalSection() noexcept
     pthread_mutexattr_t atts;
     pthread_mutexattr_init (&atts);
     pthread_mutexattr_settype (&atts, PTHREAD_MUTEX_RECURSIVE);
-   #if ! JUCE_ANDROID
+#if ! JUCE_ANDROID
     pthread_mutexattr_setprotocol (&atts, PTHREAD_PRIO_INHERIT);
-   #endif
+#endif
     pthread_mutex_init (&lock, &atts);
     pthread_mutexattr_destroy (&atts);
 }
 
-CriticalSection::~CriticalSection() noexcept        { pthread_mutex_destroy (&lock); }
-void CriticalSection::enter() const noexcept        { pthread_mutex_lock (&lock); }
-bool CriticalSection::tryEnter() const noexcept     { return pthread_mutex_trylock (&lock) == 0; }
-void CriticalSection::exit() const noexcept         { pthread_mutex_unlock (&lock); }
+CriticalSection::~CriticalSection() noexcept { pthread_mutex_destroy (&lock); }
+
+void CriticalSection::enter() const noexcept { pthread_mutex_lock (&lock); }
+
+bool CriticalSection::tryEnter() const noexcept { return pthread_mutex_trylock (&lock) == 0; }
+
+void CriticalSection::exit() const noexcept { pthread_mutex_unlock (&lock); }
 
 //==============================================================================
 bool SystemStats::setEnvironmentVariable (const String& name, const String& value)
@@ -99,13 +102,12 @@ void JUCE_CALLTYPE Thread::sleep (int millisecs)
 
 void JUCE_CALLTYPE Process::terminate()
 {
-   #if JUCE_ANDROID
+#if JUCE_ANDROID
     _exit (EXIT_FAILURE);
-   #else
+#else
     std::_Exit (EXIT_FAILURE);
-   #endif
+#endif
 }
-
 
 #if JUCE_MAC || JUCE_LINUX || JUCE_BSD
 bool Process::setMaxNumberOfFileHandles (int newMaxNumber) noexcept
@@ -129,9 +131,12 @@ struct MaxNumFileHandlesInitialiser
 {
     MaxNumFileHandlesInitialiser() noexcept
     {
-       #ifndef JUCE_PREFERRED_MAX_FILE_HANDLES
-        enum { JUCE_PREFERRED_MAX_FILE_HANDLES = 8192 };
-       #endif
+#ifndef JUCE_PREFERRED_MAX_FILE_HANDLES
+        enum
+        {
+            JUCE_PREFERRED_MAX_FILE_HANDLES = 8192
+        };
+#endif
 
         // Try to give our app a decent number of file handles by default
         if (! Process::setMaxNumberOfFileHandles (0))
@@ -158,9 +163,12 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 #endif
 
-juce_wchar File::getSeparatorChar()    { return '/'; }
-StringRef File::getSeparatorString()   { return "/"; }
+juce_wchar File::getSeparatorChar()
+{
+    return '/';
+}
 
+StringRef File::getSeparatorString() { return "/"; }
 
 //==============================================================================
 File File::getCurrentWorkingDirectory()
@@ -190,14 +198,14 @@ bool File::setAsCurrentWorkingDirectory() const
 // The unix siginterrupt function is deprecated - this does the same job.
 int juce_siginterrupt ([[maybe_unused]] int sig, [[maybe_unused]] int flag)
 {
-   #if JUCE_WASM
+#if JUCE_WASM
     return 0;
-   #else
-    #if JUCE_ANDROID
-     using juce_sigactionflags_type = unsigned long;
-    #else
-     using juce_sigactionflags_type = int;
-    #endif
+#else
+#if JUCE_ANDROID
+    using juce_sigactionflags_type = unsigned long;
+#else
+    using juce_sigactionflags_type = int;
+#endif
 
     struct ::sigaction act;
     (void) ::sigaction (sig, nullptr, &act);
@@ -208,27 +216,27 @@ int juce_siginterrupt ([[maybe_unused]] int sig, [[maybe_unused]] int flag)
         act.sa_flags |= static_cast<juce_sigactionflags_type> (SA_RESTART);
 
     return ::sigaction (sig, &act, nullptr);
-   #endif
+#endif
 }
 
 //==============================================================================
 namespace
 {
-   #if JUCE_LINUX || (JUCE_IOS && (! TARGET_OS_MACCATALYST) && (! __DARWIN_ONLY_64_BIT_INO_T)) // (this iOS stuff is to avoid a simulator bug)
+#if JUCE_LINUX || (JUCE_IOS && (! TARGET_OS_MACCATALYST) && (! __DARWIN_ONLY_64_BIT_INO_T)) // (this iOS stuff is to avoid a simulator bug)
     using juce_statStruct = struct stat64;
-    #define JUCE_STAT  stat64
-   #else
+#define JUCE_STAT stat64
+#else
     using juce_statStruct = struct stat;
-    #define JUCE_STAT  stat
-   #endif
+#define JUCE_STAT stat
+#endif
 
     bool juce_stat (const String& fileName, juce_statStruct& info)
     {
         return fileName.isNotEmpty()
-                 && JUCE_STAT (fileName.toUTF8(), &info) == 0;
+            && JUCE_STAT (fileName.toUTF8(), &info) == 0;
     }
 
-   #if ! JUCE_WASM
+#if ! JUCE_WASM
     // if this file doesn't exist, find a parent of it that does..
     bool juce_doStatFS (File f, struct statfs& result)
     {
@@ -243,30 +251,39 @@ namespace
         return statfs (f.getFullPathName().toUTF8(), &result) == 0;
     }
 
-   #if JUCE_MAC || JUCE_IOS
-    static int64 getCreationTime (const juce_statStruct& s) noexcept     { return (int64) s.st_birthtime; }
-   #else
-    static int64 getCreationTime (const juce_statStruct& s) noexcept     { return (int64) s.st_ctime; }
-   #endif
+#if JUCE_MAC || JUCE_IOS
+    static int64 getCreationTime (const juce_statStruct& s) noexcept
+    {
+        return (int64) s.st_birthtime;
+    }
+#else
+    static int64 getCreationTime (const juce_statStruct& s) noexcept
+    {
+        return (int64) s.st_ctime;
+    }
+#endif
 
-    void updateStatInfoForFile (const String& path, bool* isDir, int64* fileSize,
-                                Time* modTime, Time* creationTime, bool* isReadOnly)
+    void updateStatInfoForFile (const String& path, bool* isDir, int64* fileSize, Time* modTime, Time* creationTime, bool* isReadOnly)
     {
         if (isDir != nullptr || fileSize != nullptr || modTime != nullptr || creationTime != nullptr)
         {
             juce_statStruct info;
             const bool statOk = juce_stat (path, info);
 
-            if (isDir != nullptr)         *isDir        = statOk && ((info.st_mode & S_IFDIR) != 0);
-            if (fileSize != nullptr)      *fileSize     = statOk ? (int64) info.st_size : 0;
-            if (modTime != nullptr)       *modTime      = Time (statOk ? (int64) info.st_mtime  * 1000 : 0);
-            if (creationTime != nullptr)  *creationTime = Time (statOk ? getCreationTime (info) * 1000 : 0);
+            if (isDir != nullptr)
+                *isDir = statOk && ((info.st_mode & S_IFDIR) != 0);
+            if (fileSize != nullptr)
+                *fileSize = statOk ? (int64) info.st_size : 0;
+            if (modTime != nullptr)
+                *modTime = Time (statOk ? (int64) info.st_mtime * 1000 : 0);
+            if (creationTime != nullptr)
+                *creationTime = Time (statOk ? getCreationTime (info) * 1000 : 0);
         }
 
         if (isReadOnly != nullptr)
             *isReadOnly = access (path.toUTF8(), W_OK) != 0;
     }
-   #endif
+#endif
 
     Result getResultForErrno()
     {
@@ -278,22 +295,23 @@ namespace
         return value == -1 ? getResultForErrno() : Result::ok();
     }
 
-    int getFD (void* handle) noexcept        { return (int) (pointer_sized_int) handle; }
-    void* fdToVoidPointer (int fd) noexcept  { return (void*) (pointer_sized_int) fd; }
-}
+    int getFD (void* handle) noexcept { return (int) (pointer_sized_int) handle; }
+
+    void* fdToVoidPointer (int fd) noexcept { return (void*) (pointer_sized_int) fd; }
+} // namespace
 
 bool File::isDirectory() const
 {
     juce_statStruct info;
 
     return fullPath.isNotEmpty()
-             && (juce_stat (fullPath, info) && ((info.st_mode & S_IFDIR) != 0));
+        && (juce_stat (fullPath, info) && ((info.st_mode & S_IFDIR) != 0));
 }
 
 bool File::exists() const
 {
     return fullPath.isNotEmpty()
-             && access (fullPath.toUTF8(), F_OK) == 0;
+        && access (fullPath.toUTF8(), F_OK) == 0;
 }
 
 bool File::existsAsFile() const
@@ -315,11 +333,11 @@ uint64 File::getFileIdentifier() const
 
 static bool hasEffectiveRootFilePermissions()
 {
-   #if JUCE_LINUX || JUCE_BSD
+#if JUCE_LINUX || JUCE_BSD
     return geteuid() == 0;
-   #else
+#else
     return false;
-   #endif
+#endif
 }
 
 //==============================================================================
@@ -327,7 +345,7 @@ bool File::hasWriteAccess() const
 {
     if (exists())
         return (hasEffectiveRootFilePermissions()
-             || access (fullPath.toUTF8(), W_OK) == 0);
+                || access (fullPath.toUTF8(), W_OK) == 0);
 
     if ((! isDirectory()) && fullPath.containsChar (getSeparatorChar()))
         return getParentDirectory().hasWriteAccess();
@@ -338,7 +356,7 @@ bool File::hasWriteAccess() const
 bool File::hasReadAccess() const
 {
     return fullPath.isNotEmpty()
-           && access (fullPath.toUTF8(), R_OK) == 0;
+        && access (fullPath.toUTF8(), R_OK) == 0;
 }
 
 static bool setFileModeFlags (const String& fullPath, mode_t flags, bool shouldSet) noexcept
@@ -379,57 +397,57 @@ void File::getFileTimesInternal (int64& modificationTime, int64& accessTime, int
 
     if (juce_stat (fullPath, info))
     {
-      #if JUCE_MAC || (JUCE_IOS && __DARWIN_ONLY_64_BIT_INO_T)
-        modificationTime  = (int64) info.st_mtimespec.tv_sec * 1000 + info.st_mtimespec.tv_nsec / 1000000;
-        accessTime        = (int64) info.st_atimespec.tv_sec * 1000 + info.st_atimespec.tv_nsec / 1000000;
-        creationTime      = (int64) info.st_birthtimespec.tv_sec * 1000 + info.st_birthtimespec.tv_nsec / 1000000;
-      #else
-        modificationTime  = (int64) info.st_mtime * 1000;
-        accessTime        = (int64) info.st_atime * 1000;
-       #if JUCE_IOS
-        creationTime      = (int64) info.st_birthtime * 1000;
-       #else
-        creationTime      = (int64) info.st_ctime * 1000;
-       #endif
-      #endif
+#if JUCE_MAC || (JUCE_IOS && __DARWIN_ONLY_64_BIT_INO_T)
+        modificationTime = (int64) info.st_mtimespec.tv_sec * 1000 + info.st_mtimespec.tv_nsec / 1000000;
+        accessTime = (int64) info.st_atimespec.tv_sec * 1000 + info.st_atimespec.tv_nsec / 1000000;
+        creationTime = (int64) info.st_birthtimespec.tv_sec * 1000 + info.st_birthtimespec.tv_nsec / 1000000;
+#else
+        modificationTime = (int64) info.st_mtime * 1000;
+        accessTime = (int64) info.st_atime * 1000;
+#if JUCE_IOS
+        creationTime = (int64) info.st_birthtime * 1000;
+#else
+        creationTime = (int64) info.st_ctime * 1000;
+#endif
+#endif
     }
 }
 
 bool File::setFileTimesInternal (int64 modificationTime, int64 accessTime, int64 /*creationTime*/) const
 {
-   #if ! JUCE_WASM
+#if ! JUCE_WASM
     juce_statStruct info;
 
     if ((modificationTime != 0 || accessTime != 0) && juce_stat (fullPath, info))
     {
-       #if JUCE_MAC || (JUCE_IOS && __DARWIN_ONLY_64_BIT_INO_T)
+#if JUCE_MAC || (JUCE_IOS && __DARWIN_ONLY_64_BIT_INO_T)
         struct timeval times[2];
 
         bool setModificationTime = (modificationTime != 0);
-        bool setAccessTime       = (accessTime != 0);
+        bool setAccessTime = (accessTime != 0);
 
-        times[0].tv_sec  = setAccessTime ? static_cast<__darwin_time_t> (accessTime / 1000)
-                                         : info.st_atimespec.tv_sec;
+        times[0].tv_sec = setAccessTime ? static_cast<__darwin_time_t> (accessTime / 1000)
+                                        : info.st_atimespec.tv_sec;
 
         times[0].tv_usec = setAccessTime ? static_cast<__darwin_suseconds_t> ((accessTime % 1000) * 1000)
                                          : static_cast<__darwin_suseconds_t> (info.st_atimespec.tv_nsec / 1000);
 
-        times[1].tv_sec  = setModificationTime ? static_cast<__darwin_time_t> (modificationTime / 1000)
-                                               : info.st_mtimespec.tv_sec;
+        times[1].tv_sec = setModificationTime ? static_cast<__darwin_time_t> (modificationTime / 1000)
+                                              : info.st_mtimespec.tv_sec;
 
         times[1].tv_usec = setModificationTime ? static_cast<__darwin_suseconds_t> ((modificationTime % 1000) * 1000)
                                                : static_cast<__darwin_suseconds_t> (info.st_mtimespec.tv_nsec / 1000);
 
         return utimes (fullPath.toUTF8(), times) == 0;
-       #else
+#else
         struct utimbuf times;
-        times.actime  = accessTime != 0       ? static_cast<time_t> (accessTime / 1000)       : static_cast<time_t> (info.st_atime);
+        times.actime = accessTime != 0 ? static_cast<time_t> (accessTime / 1000) : static_cast<time_t> (info.st_atime);
         times.modtime = modificationTime != 0 ? static_cast<time_t> (modificationTime / 1000) : static_cast<time_t> (info.st_mtime);
 
         return utime (fullPath.toUTF8(), &times) == 0;
-       #endif
+#endif
     }
-   #endif
+#endif
 
     return false;
 }
@@ -450,10 +468,10 @@ bool File::deleteFile() const
 
 bool File::moveInternal (const File& dest) const
 {
-   #if ! JUCE_WASM
+#if ! JUCE_WASM
     if (rename (fullPath.toUTF8(), dest.getFullPathName().toUTF8()) == 0)
         return true;
-   #endif
+#endif
 
     if (isNonEmptyDirectory())
         return false;
@@ -628,10 +646,7 @@ void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exc
 
     if (fileHandle != -1)
     {
-        auto m = mmap (nullptr, (size_t) range.getLength(),
-                       mode == readWrite ? (PROT_READ | PROT_WRITE) : PROT_READ,
-                       exclusive ? MAP_PRIVATE : MAP_SHARED, fileHandle,
-                       (off_t) range.getStart());
+        auto m = mmap (nullptr, (size_t) range.getLength(), mode == readWrite ? (PROT_READ | PROT_WRITE) : PROT_READ, exclusive ? MAP_PRIVATE : MAP_SHARED, fileHandle, (off_t) range.getStart());
 
         if (m != MAP_FAILED)
         {
@@ -659,6 +674,7 @@ MemoryMappedFile::~MemoryMappedFile()
 
 //==============================================================================
 File juce_getExecutableFile();
+
 File juce_getExecutableFile()
 {
     struct DLAddrReader
@@ -700,12 +716,12 @@ int64 File::getVolumeTotalSize() const
 
 String File::getVolumeLabel() const
 {
-   #if JUCE_MAC
+#if JUCE_MAC
     struct VolAttrBuf
     {
-        u_int32_t       length;
+        u_int32_t length;
         attrreference_t mountPointRef;
-        char            mountPointSpace[MAXPATHLEN];
+        char mountPointSpace[MAXPATHLEN];
     } attrBuf;
 
     struct attrlist attrList;
@@ -728,7 +744,7 @@ String File::getVolumeLabel() const
 
         f = parent;
     }
-   #endif
+#endif
 
     return {};
 }
@@ -743,17 +759,19 @@ int File::getVolumeSerialNumber() const
 //==============================================================================
 #if ! JUCE_IOS
 void juce_runSystemCommand (const String&);
+
 void juce_runSystemCommand (const String& command)
 {
     [[maybe_unused]] int result = system (command.toUTF8());
 }
 
 String juce_getOutputFromCommand (const String&);
+
 String juce_getOutputFromCommand (const String& command)
 {
     // slight bodge here, as we just pipe the output into a temp file and read it...
     auto tempFile = File::getSpecialLocation (File::tempDirectory)
-                      .getNonexistentChildFile (String::toHexString (Random::getSystemRandom().nextInt()), ".tmp", false);
+                        .getNonexistentChildFile (String::toHexString (Random::getSystemRandom().nextInt()), ".tmp", false);
 
     juce_runSystemCommand (command + " > " + tempFile.getFullPathName());
 
@@ -768,9 +786,9 @@ String juce_getOutputFromCommand (const String& command)
 class InterProcessLock::Pimpl
 {
 public:
-    Pimpl (const String&, int)  {}
+    Pimpl (const String&, int) {}
 
-    int handle = 1, refCount = 1;  // On iOS just fake success..
+    int handle = 1, refCount = 1; // On iOS just fake success..
 };
 
 #else
@@ -780,19 +798,19 @@ class InterProcessLock::Pimpl
 public:
     Pimpl (const String& lockName, int timeOutMillisecs)
     {
-       #if JUCE_MAC
+#if JUCE_MAC
         if (! createLockFile (File ("~/Library/Caches/com.juce.locks").getChildFile (lockName), timeOutMillisecs))
             // Fallback if the user's home folder is on a network drive with no ability to lock..
             createLockFile (File ("/tmp/com.juce.locks").getChildFile (lockName), timeOutMillisecs);
 
-       #else
+#else
         File tempFolder ("/var/tmp");
 
         if (! tempFolder.isDirectory())
             tempFolder = "/tmp";
 
         createLockFile (tempFolder.getChildFile (lockName), timeOutMillisecs);
-       #endif
+#endif
     }
 
     ~Pimpl()
@@ -830,7 +848,7 @@ public:
                         return false;
 
                     if (timeOutMillisecs == 0
-                         || (timeOutMillisecs > 0 && Time::currentTimeMillis() >= endTime))
+                        || (timeOutMillisecs > 0 && Time::currentTimeMillis() >= endTime))
                         break;
 
                     Thread::sleep (10);
@@ -853,7 +871,8 @@ public:
             fl.l_type = F_UNLCK;
 
             while (! (fcntl (handle, F_SETLKW, &fl) >= 0 || errno != EINTR))
-            {}
+            {
+            }
 
             close (handle);
             handle = 0;
@@ -864,7 +883,8 @@ public:
 };
 #endif
 
-InterProcessLock::InterProcessLock (const String& nm)  : name (nm)
+InterProcessLock::InterProcessLock (const String& nm)
+    : name (nm)
 {
 }
 
@@ -929,8 +949,8 @@ class PosixSchedulerPriority
 public:
     static PosixSchedulerPriority findCurrentSchedulerAndPriority()
     {
-        int scheduler{};
-        sched_param param{};
+        int scheduler {};
+        sched_param param {};
         pthread_getschedparam (pthread_self(), &scheduler, &param);
         return { scheduler, param.sched_priority };
     }
@@ -944,80 +964,92 @@ public:
         {
             if (isRealtime)
             {
-               #if ! JUCE_WASM
+#if ! JUCE_WASM
                 const auto min = jmax (0, sched_get_priority_min (SCHED_RR));
                 const auto max = jmax (1, sched_get_priority_max (SCHED_RR));
-               #else
+#else
                 const auto min = 0;
                 const auto max = 100;
-               #endif
+#endif
 
                 return jmap (rt->getPriority(), 0, 10, min, max);
             }
 
-            // We only use this helper if we're on an old macos/ios platform that might
-            // still respect legacy pthread priorities for SCHED_OTHER.
-            #if JUCE_MAC || JUCE_IOS
-             const auto min = jmax (0, sched_get_priority_min (SCHED_OTHER));
-             const auto max = jmax (0, sched_get_priority_max (SCHED_OTHER));
+// We only use this helper if we're on an old macos/ios platform that might
+// still respect legacy pthread priorities for SCHED_OTHER.
+#if JUCE_MAC || JUCE_IOS
+            const auto min = jmax (0, sched_get_priority_min (SCHED_OTHER));
+            const auto max = jmax (0, sched_get_priority_max (SCHED_OTHER));
 
-             const auto p = [prio]
-             {
-                 switch (prio)
-                 {
-                     case Thread::Priority::highest:    return 4;
-                     case Thread::Priority::high:       return 3;
-                     case Thread::Priority::normal:     return 2;
-                     case Thread::Priority::low:        return 1;
-                     case Thread::Priority::background: return 0;
-                 }
+            const auto p = [prio]
+            {
+                switch (prio)
+                {
+                    case Thread::Priority::highest:
+                        return 4;
+                    case Thread::Priority::high:
+                        return 3;
+                    case Thread::Priority::normal:
+                        return 2;
+                    case Thread::Priority::low:
+                        return 1;
+                    case Thread::Priority::background:
+                        return 0;
+                }
 
-                 return 3;
-             }();
+                return 3;
+            }();
 
-             if (min != 0 && max != 0)
-                 return jmap (p, 0, 4, min, max);
-            #endif
+            if (min != 0 && max != 0)
+                return jmap (p, 0, 4, min, max);
+#endif
 
             return 0;
         }();
 
-        #if JUCE_MAC || JUCE_IOS || JUCE_BSD
-         const auto scheduler = SCHED_OTHER;
-        #elif JUCE_LINUX
-         const auto backgroundSched = prio == Thread::Priority::background ? SCHED_IDLE
-                                                                           : SCHED_OTHER;
-         const auto scheduler = isRealtime ? SCHED_RR : backgroundSched;
-        #else
-         const auto scheduler = 0;
-        #endif
+#if JUCE_MAC || JUCE_IOS || JUCE_BSD
+        const auto scheduler = SCHED_OTHER;
+#elif JUCE_LINUX
+        const auto backgroundSched = prio == Thread::Priority::background ? SCHED_IDLE
+                                                                          : SCHED_OTHER;
+        const auto scheduler = isRealtime ? SCHED_RR : backgroundSched;
+#else
+        const auto scheduler = 0;
+#endif
 
-         return { scheduler, priority };
+        return { scheduler, priority };
     }
 
     void apply ([[maybe_unused]] PosixThreadAttribute& attr) const
     {
-        #if JUCE_LINUX || JUCE_BSD
-         const struct sched_param param { getPriority() };
+#if JUCE_LINUX || JUCE_BSD
+        const struct sched_param param
+        {
+            getPriority()
+        };
 
-         pthread_attr_setinheritsched (attr.get(), PTHREAD_EXPLICIT_SCHED);
-         pthread_attr_setschedpolicy (attr.get(), getScheduler());
-         pthread_attr_setschedparam (attr.get(), &param);
-        #endif
+        pthread_attr_setinheritsched (attr.get(), PTHREAD_EXPLICIT_SCHED);
+        pthread_attr_setschedpolicy (attr.get(), getScheduler());
+        pthread_attr_setschedparam (attr.get(), &param);
+#endif
     }
 
     constexpr int getScheduler() const { return scheduler; }
-    constexpr int  getPriority() const { return priority; }
+
+    constexpr int getPriority() const { return priority; }
 
 private:
     constexpr PosixSchedulerPriority (int schedulerIn, int priorityIn)
-        : scheduler (schedulerIn), priority (priorityIn) {}
+        : scheduler (schedulerIn)
+        , priority (priorityIn)
+    {
+    }
 
     int scheduler;
     int priority;
 };
 
-static void* makeThreadHandle (PosixThreadAttribute& attr, void* userData, void* (*threadEntryProc) (void*))
+static void* makeThreadHandle (PosixThreadAttribute& attr, void* userData, void* (*threadEntryProc) (void*) )
 {
     pthread_t handle = {};
 
@@ -1038,21 +1070,21 @@ void Thread::closeThreadHandle()
 
 void JUCE_CALLTYPE Thread::setCurrentThreadName (const String& name)
 {
-   #if JUCE_IOS || JUCE_MAC
+#if JUCE_IOS || JUCE_MAC
     JUCE_AUTORELEASEPOOL
     {
-        [[NSThread currentThread] setName: juceStringToNS (name)];
+        [[NSThread currentThread] setName:juceStringToNS (name)];
     }
-   #elif JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
-    #if (JUCE_BSD \
-          || (JUCE_LINUX && (__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2012) \
-          || (JUCE_ANDROID && __ANDROID_API__ >= 9))
-     if (pthread_setname_np (pthread_self(), name.toRawUTF8()) == ERANGE)
-         pthread_setname_np (pthread_self(), name.substring (0, 15).toRawUTF8());
-    #else
-     prctl (PR_SET_NAME, name.toRawUTF8(), 0, 0, 0);
-    #endif
-   #endif
+#elif JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
+#if (JUCE_BSD                                                        \
+     || (JUCE_LINUX && (__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2012) \
+     || (JUCE_ANDROID && __ANDROID_API__ >= 9))
+    if (pthread_setname_np (pthread_self(), name.toRawUTF8()) == ERANGE)
+        pthread_setname_np (pthread_self(), name.substring (0, 15).toRawUTF8());
+#else
+    prctl (PR_SET_NAME, name.toRawUTF8(), 0, 0, 0);
+#endif
+#endif
 }
 
 Thread::ThreadID JUCE_CALLTYPE Thread::getCurrentThreadId()
@@ -1070,13 +1102,13 @@ void JUCE_CALLTYPE Thread::yield()
    calls (the API for these has changed about quite a bit in various Linux
    versions, and a lot of distros seem to ship with obsolete versions)
 */
-#if (! JUCE_WASM) && defined (CPU_ISSET) && ! defined (SUPPORT_AFFINITIES)
- #define SUPPORT_AFFINITIES 1
+#if (! JUCE_WASM) && defined(CPU_ISSET) && ! defined(SUPPORT_AFFINITIES)
+#define SUPPORT_AFFINITIES 1
 #endif
 
 void JUCE_CALLTYPE Thread::setCurrentThreadAffinityMask ([[maybe_unused]] uint32 affinityMask)
 {
-   #if SUPPORT_AFFINITIES
+#if SUPPORT_AFFINITIES
     cpu_set_t affinity;
     CPU_ZERO (&affinity);
 
@@ -1092,24 +1124,24 @@ void JUCE_CALLTYPE Thread::setCurrentThreadAffinityMask ([[maybe_unused]] uint32
         }
     }
 
-   #if (! JUCE_ANDROID) && ((! (JUCE_LINUX || JUCE_BSD)) || ((__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2004))
+#if (! JUCE_ANDROID) && ((! (JUCE_LINUX || JUCE_BSD)) || ((__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2004))
     pthread_setaffinity_np (pthread_self(), sizeof (cpu_set_t), &affinity);
-   #elif JUCE_ANDROID
+#elif JUCE_ANDROID
     sched_setaffinity (gettid(), sizeof (cpu_set_t), &affinity);
-   #else
+#else
     // NB: this call isn't really correct because it sets the affinity of the process,
     // (getpid) not the thread (not gettid). But it's included here as a fallback for
     // people who are using ridiculously old versions of glibc
     sched_setaffinity (getpid(), sizeof (cpu_set_t), &affinity);
-   #endif
+#endif
 
     sched_yield();
 
-   #else
+#else
     // affinities aren't supported because either the appropriate header files weren't found,
     // or the SUPPORT_AFFINITIES macro was turned off
     jassertfalse;
-   #endif
+#endif
 }
 
 //==============================================================================
@@ -1135,7 +1167,7 @@ void* DynamicLibrary::getFunction (const String& functionName) noexcept
     return handle != nullptr ? dlsym (handle, functionName.toUTF8()) : nullptr;
 }
 
-//==============================================================================
+    //==============================================================================
 #if JUCE_LINUX || JUCE_ANDROID
 static String readPosixConfigFileValue (const char* file, const char* key)
 {
@@ -1150,17 +1182,16 @@ static String readPosixConfigFileValue (const char* file, const char* key)
 }
 #endif
 
-
 //==============================================================================
 class ChildProcess::ActiveProcess
 {
 public:
     ActiveProcess (const StringArray& arguments, int streamFlags)
     {
-        startProcess(arguments, streamFlags, {}, [](const String& exe, const Array<char*>& argv, const Array<char*>&)
-        {
-            execvp (exe.toRawUTF8(), argv.getRawDataPointer());
-        });
+        startProcess (arguments, streamFlags, {}, [] (const String& exe, const Array<char*>& argv, const Array<char*>&)
+                      {
+                          execvp (exe.toRawUTF8(), argv.getRawDataPointer());
+                      });
     }
 
     ActiveProcess (const StringArray& arguments, const StringPairArray& environment, int streamFlags)
@@ -1180,7 +1211,7 @@ public:
 
         StringArray args = arguments;
 
-        if (args.size() > 0 && !File::isAbsolutePath (args[0]))
+        if (args.size() > 0 && ! File::isAbsolutePath (args[0]))
         {
             auto pathVariable = environment.getValue ("PATH", SystemStats::getEnvironmentVariable ("PATH", {}));
             auto pathArray = StringArray::fromTokens (pathVariable, ":", "\"");
@@ -1196,10 +1227,10 @@ public:
             }
         }
 
-        startProcess(args, streamFlags, env, [](const String& exe, const Array<char*>& argv, const Array<char*>& env)
-        {
-            execve (exe.toRawUTF8(), argv.getRawDataPointer(), env.getRawDataPointer());
-        });
+        startProcess (args, streamFlags, env, [] (const String& exe, const Array<char*>& argv, const Array<char*>& env)
+                      {
+                          execve (exe.toRawUTF8(), argv.getRawDataPointer(), env.getRawDataPointer());
+                      });
     }
 
     ~ActiveProcess()
@@ -1216,7 +1247,7 @@ public:
         // Looks like you're trying to launch a non-existent exe or a folder (perhaps on OSX
         // you're trying to launch the .app folder rather than the actual binary inside it?)
         jassert (File::getCurrentWorkingDirectory().getChildFile (exe).existsAsFile()
-                  || ! exe.containsChar (File::getSeparatorChar()));
+                 || ! exe.containsChar (File::getSeparatorChar()));
 
         int pipeHandles[2] = {};
 
@@ -1232,7 +1263,7 @@ public:
             else if (result == 0)
             {
                 // we're the child process..
-                close (pipeHandles[0]);   // close the read handle
+                close (pipeHandles[0]); // close the read handle
 
                 if ((streamFlags & wantStdOut) != 0)
                     dup2 (pipeHandles[1], STDOUT_FILENO); // turns the pipe into stdout

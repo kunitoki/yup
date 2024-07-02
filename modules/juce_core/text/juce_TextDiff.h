@@ -71,8 +71,8 @@ public:
     {
         String insertedText; /**< If this change is a deletion, this string will be empty; otherwise,
                                   it'll be the text that should be inserted at the index specified by start. */
-        int start;    /**< Specifies the character index in a string at which text should be inserted or deleted. */
-        int length;   /**< If this change is a deletion, this specifies the number of characters to delete. For an
+        int start;           /**< Specifies the character index in a string at which text should be inserted or deleted. */
+        int length;          /**< If this change is a deletion, this specifies the number of characters to delete. For an
                            insertion, this is the length of the new text being inserted. */
 
         /** Returns true if this change is a deletion, or false for an insertion. */

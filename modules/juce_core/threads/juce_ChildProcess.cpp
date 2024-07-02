@@ -41,6 +41,7 @@ namespace juce
 {
 
 ChildProcess::ChildProcess() {}
+
 ChildProcess::~ChildProcess() {}
 
 bool ChildProcess::isRunning() const
@@ -73,8 +74,7 @@ bool ChildProcess::waitForProcessToFinish (const int timeoutMs) const
             return true;
 
         Thread::sleep (2);
-    }
-    while (timeoutMs < 0 || Time::getMillisecondCounter() < timeoutTime);
+    } while (timeoutMs < 0 || Time::getMillisecondCounter() < timeoutTime);
 
     return false;
 }
@@ -97,7 +97,6 @@ String ChildProcess::readAllProcessOutput()
     return result.toString();
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -107,24 +106,25 @@ class ChildProcessTests final : public UnitTest
 public:
     ChildProcessTests()
         : UnitTest ("ChildProcess", UnitTestCategories::threads)
-    {}
+    {
+    }
 
     void runTest() override
     {
         beginTest ("Child Processes");
 
-      #if JUCE_WINDOWS || JUCE_MAC || JUCE_LINUX || JUCE_BSD
+#if JUCE_WINDOWS || JUCE_MAC || JUCE_LINUX || JUCE_BSD
         ChildProcess p;
 
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         expect (p.start ("tasklist"));
-       #else
+#else
         expect (p.start ("ls /"));
-       #endif
+#endif
 
         auto output = p.readAllProcessOutput();
         expect (output.isNotEmpty());
-      #endif
+#endif
     }
 };
 

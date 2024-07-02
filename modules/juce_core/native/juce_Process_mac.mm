@@ -40,13 +40,13 @@ namespace juce
 {
 
 #if JUCE_MAC
-void Process::setDockIconVisible (bool isVisible)
+void Process::setDockIconVisible(bool isVisible)
 {
-    ProcessSerialNumber psn { 0, kCurrentProcess };
+    ProcessSerialNumber psn{0, kCurrentProcess};
 
-    [[maybe_unused]] OSStatus err = TransformProcessType (&psn, isVisible ? kProcessTransformToForegroundApplication
-                                                                          : kProcessTransformToUIElementApplication);
-    jassert (err == 0);
+    [[maybe_unused]] OSStatus err = TransformProcessType(&psn, isVisible ? kProcessTransformToForegroundApplication
+                                                                         : kProcessTransformToUIElementApplication);
+    jassert(err == 0);
 }
 #endif
 

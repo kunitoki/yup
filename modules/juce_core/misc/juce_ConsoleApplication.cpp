@@ -92,13 +92,17 @@ File ArgumentList::Argument::resolveAsExistingFolder() const
     return f;
 }
 
-static bool isShortOptionFormat (StringRef s)  { return s[0] == '-' && s[1] != '-'; }
-static bool isLongOptionFormat  (StringRef s)  { return s[0] == '-' && s[1] == '-' && s[2] != '-'; }
-static bool isOptionFormat      (StringRef s)  { return s[0] == '-'; }
+static bool isShortOptionFormat (StringRef s) { return s[0] == '-' && s[1] != '-'; }
 
-bool ArgumentList::Argument::isLongOption() const     { return isLongOptionFormat (text); }
-bool ArgumentList::Argument::isShortOption() const    { return isShortOptionFormat (text); }
-bool ArgumentList::Argument::isOption() const         { return isOptionFormat (text); }
+static bool isLongOptionFormat (StringRef s) { return s[0] == '-' && s[1] == '-' && s[2] != '-'; }
+
+static bool isOptionFormat (StringRef s) { return s[0] == '-'; }
+
+bool ArgumentList::Argument::isLongOption() const { return isLongOptionFormat (text); }
+
+bool ArgumentList::Argument::isShortOption() const { return isShortOptionFormat (text); }
+
+bool ArgumentList::Argument::isOption() const { return isOptionFormat (text); }
 
 bool ArgumentList::Argument::isLongOption (const String& option) const
 {
@@ -148,7 +152,7 @@ bool ArgumentList::Argument::operator== (StringRef wildcard) const
     return false;
 }
 
-bool ArgumentList::Argument::operator!= (StringRef s) const   { return ! operator== (s); }
+bool ArgumentList::Argument::operator!= (StringRef s) const { return ! operator== (s); }
 
 //==============================================================================
 ArgumentList::ArgumentList (String exeName, StringArray args)
@@ -171,8 +175,9 @@ ArgumentList::ArgumentList (const String& exeName, const String& args)
 {
 }
 
-int ArgumentList::size() const                                      { return arguments.size(); }
-ArgumentList::Argument ArgumentList::operator[] (int index) const   { return arguments[index]; }
+int ArgumentList::size() const { return arguments.size(); }
+
+ArgumentList::Argument ArgumentList::operator[] (int index) const { return arguments[index]; }
 
 void ArgumentList::checkMinNumArguments (int expectedMinNumberOfArgs) const
 {
@@ -351,14 +356,14 @@ const ConsoleApplication::Command* ConsoleApplication::findCommand (const Argume
 int ConsoleApplication::findAndRunCommand (const ArgumentList& args, bool optionMustBeFirstArg) const
 {
     return invokeCatchingFailures ([&args, optionMustBeFirstArg, this]
-    {
-        if (auto c = findCommand (args, optionMustBeFirstArg))
-            c->command (args);
-        else
-            fail ("Unrecognised arguments");
+                                   {
+                                       if (auto c = findCommand (args, optionMustBeFirstArg))
+                                           c->command (args);
+                                       else
+                                           fail ("Unrecognised arguments");
 
-        return 0;
-    });
+                                       return 0;
+                                   });
 }
 
 int ConsoleApplication::findAndRunCommand (int argc, char* argv[]) const
@@ -379,12 +384,11 @@ void ConsoleApplication::addDefaultCommand (Command c)
 
 void ConsoleApplication::addHelpCommand (String arg, String helpMessage, bool makeDefaultCommand)
 {
-    Command c { arg, arg, "Prints the list of commands", {},
-                [this, helpMessage] (const ArgumentList& args)
+    Command c { arg, arg, "Prints the list of commands", {}, [this, helpMessage] (const ArgumentList& args)
                 {
                     std::cout << helpMessage << std::endl;
                     printCommandList (args);
-                }};
+                } };
 
     if (makeDefaultCommand)
         addDefaultCommand (std::move (c));
@@ -394,11 +398,10 @@ void ConsoleApplication::addHelpCommand (String arg, String helpMessage, bool ma
 
 void ConsoleApplication::addVersionCommand (String arg, String versionText)
 {
-    addCommand ({ arg, arg, "Prints the current version number", {},
-                  [versionText] (const ArgumentList&)
+    addCommand ({ arg, arg, "Prints the current version number", {}, [versionText] (const ArgumentList&)
                   {
                       std::cout << versionText << std::endl;
-                  }});
+                  } });
 }
 
 const std::vector<ConsoleApplication::Command>& ConsoleApplication::getCommands() const
@@ -409,18 +412,18 @@ const std::vector<ConsoleApplication::Command>& ConsoleApplication::getCommands(
 static String getExeNameAndArgs (const ArgumentList& args, const ConsoleApplication::Command& command)
 {
     auto exeName = args.executableName.fromLastOccurrenceOf ("/", false, false)
-                                      .fromLastOccurrenceOf ("\\", false, false);
+                       .fromLastOccurrenceOf ("\\", false, false);
 
     return " " + exeName + " " + command.argumentDescription;
 }
 
-static void printCommandDescription (const ArgumentList& args, const ConsoleApplication::Command& command,
-                                     int descriptionIndent)
+static void printCommandDescription (const ArgumentList& args, const ConsoleApplication::Command& command, int descriptionIndent)
 {
     auto nameAndArgs = getExeNameAndArgs (args, command);
 
     if (nameAndArgs.length() > descriptionIndent)
-        std::cout << nameAndArgs << std::endl << String().paddedRight (' ', descriptionIndent);
+        std::cout << nameAndArgs << std::endl
+                  << String().paddedRight (' ', descriptionIndent);
     else
         std::cout << nameAndArgs.paddedRight (' ', descriptionIndent);
 
@@ -449,8 +452,8 @@ void ConsoleApplication::printCommandDetails (const ArgumentList& args, const Co
     printCommandDescription (args, command, std::min (len + 3, 40));
 
     if (command.longDescription.isNotEmpty())
-        std::cout << std::endl << command.longDescription << std::endl;
+        std::cout << std::endl
+                  << command.longDescription << std::endl;
 }
-
 
 } // namespace juce

@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  IPAddress  final
+class JUCE_API IPAddress final
 {
 public:
     //==============================================================================
@@ -93,8 +93,7 @@ public:
     IPAddress (uint8 address1, uint8 address2, uint8 address3, uint8 address4) noexcept;
 
     /** Creates an IPv6 address from 8 16-bit integers */
-    IPAddress (uint16 address1, uint16 address2, uint16 address3, uint16 address4,
-               uint16 address5, uint16 address6, uint16 address7, uint16 address8) noexcept;
+    IPAddress (uint16 address1, uint16 address2, uint16 address3, uint16 address4, uint16 address5, uint16 address6, uint16 address7, uint16 address8) noexcept;
 
     /** Creates an IPv4 address from a packed 32-bit integer, where the
         MSB is the first number in the address, and the LSB is the last.
@@ -120,8 +119,8 @@ public:
 
     bool operator== (const IPAddress&) const noexcept;
     bool operator!= (const IPAddress&) const noexcept;
-    bool operator<  (const IPAddress&) const noexcept;
-    bool operator>  (const IPAddress&) const noexcept;
+    bool operator<(const IPAddress&) const noexcept;
+    bool operator> (const IPAddress&) const noexcept;
     bool operator<= (const IPAddress&) const noexcept;
     bool operator>= (const IPAddress&) const noexcept;
 

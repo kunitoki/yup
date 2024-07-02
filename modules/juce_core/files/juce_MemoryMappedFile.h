@@ -46,14 +46,14 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  MemoryMappedFile
+class JUCE_API MemoryMappedFile
 {
 public:
     /** The read/write flags used when opening a memory mapped file. */
     enum AccessMode
     {
-        readOnly,   /**< Indicates that the memory can only be read. */
-        readWrite   /**< Indicates that the memory can be read and written to - changes that are
+        readOnly, /**< Indicates that the memory can only be read. */
+        readWrite /**< Indicates that the memory can be read and written to - changes that are
                          made will be flushed back to disk at the whim of the OS. */
     };
 
@@ -103,26 +103,26 @@ public:
     /** Returns the address at which this file has been mapped, or a null pointer if
         the file couldn't be successfully mapped.
     */
-    void* getData() const noexcept              { return address; }
+    void* getData() const noexcept { return address; }
 
     /** Returns the number of bytes of data that are available for reading or writing.
         This will normally be the size of the file.
     */
-    size_t getSize() const noexcept             { return (size_t) range.getLength(); }
+    size_t getSize() const noexcept { return (size_t) range.getLength(); }
 
     /** Returns the section of the file at which the mapped memory represents. */
-    Range<int64> getRange() const noexcept      { return range; }
+    Range<int64> getRange() const noexcept { return range; }
 
 private:
     //==============================================================================
     void* address = nullptr;
     Range<int64> range;
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     void* fileHandle = nullptr;
-   #else
+#else
     int fileHandle = 0;
-   #endif
+#endif
 
     void openInternal (const File&, AccessMode, bool);
 

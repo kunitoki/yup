@@ -65,13 +65,17 @@ Uuid& Uuid::operator= (const Uuid& other) noexcept
     return *this;
 }
 
-bool Uuid::operator== (const Uuid& other) const noexcept    { return memcmp (uuid, other.uuid, sizeof (uuid)) == 0; }
-bool Uuid::operator!= (const Uuid& other) const noexcept    { return ! operator== (other); }
+bool Uuid::operator== (const Uuid& other) const noexcept { return memcmp (uuid, other.uuid, sizeof (uuid)) == 0; }
 
-bool Uuid::operator<  (const Uuid& other) const noexcept    { return compare (other) < 0; }
-bool Uuid::operator>  (const Uuid& other) const noexcept    { return compare (other) > 0; }
-bool Uuid::operator<= (const Uuid& other) const noexcept    { return compare (other) <= 0; }
-bool Uuid::operator>= (const Uuid& other) const noexcept    { return compare (other) >= 0; }
+bool Uuid::operator!= (const Uuid& other) const noexcept { return ! operator== (other); }
+
+bool Uuid::operator<(const Uuid& other) const noexcept { return compare (other) < 0; }
+
+bool Uuid::operator> (const Uuid& other) const noexcept { return compare (other) > 0; }
+
+bool Uuid::operator<= (const Uuid& other) const noexcept { return compare (other) <= 0; }
+
+bool Uuid::operator>= (const Uuid& other) const noexcept { return compare (other) >= 0; }
 
 int Uuid::compare (Uuid other) const noexcept
 {
@@ -109,10 +113,10 @@ String Uuid::toString() const
 String Uuid::toDashedString() const
 {
     return getHexRegion (0, 4)
-            + "-" + getHexRegion (4, 2)
-            + "-" + getHexRegion (6, 2)
-            + "-" + getHexRegion (8, 2)
-            + "-" + getHexRegion (10, 6);
+         + "-" + getHexRegion (4, 2)
+         + "-" + getHexRegion (6, 2)
+         + "-" + getHexRegion (8, 2)
+         + "-" + getHexRegion (10, 6);
 }
 
 Uuid::Uuid (const String& uuidString)
@@ -144,12 +148,17 @@ Uuid& Uuid::operator= (const uint8* const rawData) noexcept
     return *this;
 }
 
-uint32 Uuid::getTimeLow() const noexcept                  { return ByteOrder::bigEndianInt (uuid); }
-uint16 Uuid::getTimeMid() const noexcept                  { return ByteOrder::bigEndianShort (uuid + 4); }
-uint16 Uuid::getTimeHighAndVersion() const noexcept       { return ByteOrder::bigEndianShort (uuid + 6); }
-uint8  Uuid::getClockSeqAndReserved() const noexcept      { return uuid[8]; }
-uint8  Uuid::getClockSeqLow() const noexcept              { return uuid[9]; }
-uint64 Uuid::getNode() const noexcept                     { return (((uint64) ByteOrder::bigEndianShort (uuid + 10)) << 32) + ByteOrder::bigEndianInt (uuid + 12); }
+uint32 Uuid::getTimeLow() const noexcept { return ByteOrder::bigEndianInt (uuid); }
+
+uint16 Uuid::getTimeMid() const noexcept { return ByteOrder::bigEndianShort (uuid + 4); }
+
+uint16 Uuid::getTimeHighAndVersion() const noexcept { return ByteOrder::bigEndianShort (uuid + 6); }
+
+uint8 Uuid::getClockSeqAndReserved() const noexcept { return uuid[8]; }
+
+uint8 Uuid::getClockSeqLow() const noexcept { return uuid[9]; }
+
+uint64 Uuid::getNode() const noexcept { return (((uint64) ByteOrder::bigEndianShort (uuid + 10)) << 32) + ByteOrder::bigEndianInt (uuid + 12); }
 
 uint64 Uuid::hash() const noexcept
 {

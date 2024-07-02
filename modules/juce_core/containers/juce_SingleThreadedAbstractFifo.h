@@ -94,13 +94,13 @@ public:
     }
 
     /** Returns the number of unused elements present in the buffer. */
-    int getRemainingSpace() const   { return size - numReadable; }
+    int getRemainingSpace() const { return size - numReadable; }
 
     /** Returns the number of pending elements present in the buffer. */
-    int getNumReadable() const      { return numReadable; }
+    int getNumReadable() const { return numReadable; }
 
     /** Returns the size of the managed buffer. */
-    int getSize() const             { return size; }
+    int getSize() const { return size; }
 
     /** Returns two blocks in the buffer where new items may be written.
 
@@ -138,6 +138,5 @@ public:
 private:
     int size = 0, readPos = 0, numReadable = 0;
 };
-
 
 } // namespace juce

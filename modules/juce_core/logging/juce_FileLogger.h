@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  FileLogger  : public Logger
+class JUCE_API FileLogger : public Logger
 {
 public:
     //==============================================================================
@@ -77,7 +77,7 @@ public:
 
     //==============================================================================
     /** Returns the file that this logger is writing to. */
-    const File& getLogFile() const noexcept               { return logFile; }
+    const File& getLogFile() const noexcept { return logFile; }
 
     //==============================================================================
     /** Helper function to create a log file in the correct place for this platform.

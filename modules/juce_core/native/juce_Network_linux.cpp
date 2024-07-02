@@ -42,7 +42,7 @@ namespace juce
 
 void MACAddress::findAllAddresses (Array<MACAddress>& result)
 {
-   #if JUCE_BSD
+#if JUCE_BSD
     struct ifaddrs* addrs = nullptr;
 
     if (getifaddrs (&addrs) != -1)
@@ -61,7 +61,7 @@ void MACAddress::findAllAddresses (Array<MACAddress>& result)
 
         freeifaddrs (addrs);
     }
-   #else
+#else
     auto s = socket (AF_INET, SOCK_DGRAM, 0);
 
     if (s != -1)
@@ -90,16 +90,15 @@ void MACAddress::findAllAddresses (Array<MACAddress>& result)
 
         ::close (s);
     }
-   #endif
+#endif
 }
-
 
 bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmailAddress */,
                                                       const String& /* emailSubject */,
                                                       const String& /* bodyText */,
                                                       const StringArray& /* filesToAttach */)
 {
-    jassertfalse;    // xxx todo
+    jassertfalse; // xxx todo
     return false;
 }
 
@@ -109,11 +108,11 @@ class WebInputStream::Pimpl
 {
 public:
     Pimpl (WebInputStream& pimplOwner, const URL& urlToCopy, bool addParametersToBody)
-        : owner (pimplOwner),
-          url (urlToCopy),
-          addParametersToRequestBody (addParametersToBody),
-          hasBodyDataToSend (addParametersToRequestBody || url.hasBodyDataToSend()),
-          httpRequestCmd (hasBodyDataToSend ? "POST" : "GET")
+        : owner (pimplOwner)
+        , url (urlToCopy)
+        , addParametersToRequestBody (addParametersToBody)
+        , hasBodyDataToSend (addParametersToRequestBody || url.hasBodyDataToSend())
+        , httpRequestCmd (hasBodyDataToSend ? "POST" : "GET")
     {
     }
 
@@ -135,11 +134,15 @@ public:
             headers << "\r\n";
     }
 
-    void withCustomRequestCommand (const String& customRequestCommand)    { httpRequestCmd = customRequestCommand; }
-    void withConnectionTimeout (int timeoutInMs)                          { timeOutMs = timeoutInMs; }
-    void withNumRedirectsToFollow (int maxRedirectsToFollow)              { numRedirectsToFollow = maxRedirectsToFollow; }
-    int getStatusCode() const                                             { return statusCode; }
-    StringPairArray getRequestHeaders() const                             { return WebInputStream::parseHttpHeaders (headers); }
+    void withCustomRequestCommand (const String& customRequestCommand) { httpRequestCmd = customRequestCommand; }
+
+    void withConnectionTimeout (int timeoutInMs) { timeOutMs = timeoutInMs; }
+
+    void withNumRedirectsToFollow (int maxRedirectsToFollow) { numRedirectsToFollow = maxRedirectsToFollow; }
+
+    int getStatusCode() const { return statusCode; }
+
+    StringPairArray getRequestHeaders() const { return WebInputStream::parseHttpHeaders (headers); }
 
     StringPairArray getResponseHeaders() const
     {
@@ -150,7 +153,7 @@ public:
             for (int i = 0; i < headerLines.size(); ++i)
             {
                 auto& headersEntry = headerLines[i];
-                auto key   = headersEntry.upToFirstOccurrenceOf (": ", false, false);
+                auto key = headersEntry.upToFirstOccurrenceOf (": ", false, false);
                 auto value = headersEntry.fromFirstOccurrenceOf (": ", false, false);
                 auto previousValue = responseHeaders[key];
                 responseHeaders.set (key, previousValue.isEmpty() ? value : (previousValue + "," + value));
@@ -187,10 +190,13 @@ public:
     }
 
     //==============================================================================
-    bool isError() const                 { return socketHandle < 0; }
-    bool isExhausted()                   { return finished; }
-    int64 getPosition()                  { return position; }
-    int64 getTotalLength()               { return contentLength; }
+    bool isError() const { return socketHandle < 0; }
+
+    bool isExhausted() { return finished; }
+
+    int64 getPosition() { return position; }
+
+    int64 getTotalLength() { return contentLength; }
 
     int read (void* buffer, int bytesToRead)
     {
@@ -208,7 +214,7 @@ public:
                 if (chunkEnd > 0)
                 {
                     if (read (&c, 1) != 1 || c != '\r'
-                         || read (&c, 1) != 1 || c != '\n')
+                        || read (&c, 1) != 1 || c != '\n')
                     {
                         finished = true;
                         return 0;
@@ -398,9 +404,9 @@ private:
         setsockopt (socketHandle, SOL_SOCKET, SO_RCVBUF, (char*) &receiveBufferSize, sizeof (receiveBufferSize));
         setsockopt (socketHandle, SOL_SOCKET, SO_KEEPALIVE, nullptr, 0);
 
-      #if JUCE_MAC
+#if JUCE_MAC
         setsockopt (socketHandle, SOL_SOCKET, SO_NOSIGPIPE, 0, 0);
-      #endif
+#endif
 
         if (::connect (socketHandle, result->ai_addr, result->ai_addrlen) == -1)
         {
@@ -412,8 +418,7 @@ private:
         freeaddrinfo (result);
 
         {
-            const MemoryBlock requestHeader (createRequestHeader (hostName, hostPort, proxyName, proxyPort, hostPath, address,
-                                                                  headers, postData, httpRequestCmd));
+            const MemoryBlock requestHeader (createRequestHeader (hostName, hostPort, proxyName, proxyPort, hostPath, address, headers, postData, httpRequestCmd));
 
             if (! sendHeader (socketHandle, requestHeader, timeOutTime, owner, listener))
             {
@@ -430,17 +435,18 @@ private:
             headerLines = StringArray::fromLines (responseHeader);
 
             auto status = responseHeader.fromFirstOccurrenceOf (" ", false, false)
-                                        .substring (0, 3).getIntValue();
+                              .substring (0, 3)
+                              .getIntValue();
 
             auto location = findHeaderItem (headerLines, "Location:");
 
             if (++levelsOfRedirection <= numRedirects
-                 && status >= 300 && status < 400
-                 && location.isNotEmpty() && location != address)
+                && status >= 300 && status < 400
+                && location.isNotEmpty() && location != address)
             {
                 if (! (location.startsWithIgnoreCase ("http://")
-                        || location.startsWithIgnoreCase ("https://")
-                        || location.startsWithIgnoreCase ("ftp://")))
+                       || location.startsWithIgnoreCase ("https://")
+                       || location.startsWithIgnoreCase ("ftp://")))
                 {
                     // The following is a bit dodgy. Ideally, we should do a proper transform of the relative URI to a target URI
                     if (location.startsWithChar ('/'))
@@ -470,13 +476,13 @@ private:
     //==============================================================================
     String readResponse (uint32 timeOutTime)
     {
-        int numConsecutiveLFs  = 0;
+        int numConsecutiveLFs = 0;
         MemoryOutputStream buffer;
 
         while (numConsecutiveLFs < 2
-                && buffer.getDataSize() < 32768
-                && Time::getMillisecondCounter() <= timeOutTime
-                && ! (finished || isError()))
+               && buffer.getDataSize() < 32768
+               && Time::getMillisecondCounter() <= timeOutTime
+               && ! (finished || isError()))
         {
             char c = 0;
 
@@ -502,11 +508,11 @@ private:
     static void writeValueIfNotPresent (MemoryOutputStream& dest, const String& headers, const String& key, const String& value)
     {
         if (! headers.containsIgnoreCase (key))
-            dest << "\r\n" << key << ' ' << value;
+            dest << "\r\n"
+                 << key << ' ' << value;
     }
 
-    static void writeHost (MemoryOutputStream& dest, const String& httpRequestCmd,
-                           const String& path, const String& host, int port)
+    static void writeHost (MemoryOutputStream& dest, const String& httpRequestCmd, const String& path, const String& host, int port)
     {
         dest << httpRequestCmd << ' ' << path << " HTTP/1.1\r\nHost: " << host;
 
@@ -515,11 +521,7 @@ private:
             dest << ':' << port;
     }
 
-    static MemoryBlock createRequestHeader (const String& hostName, int hostPort,
-                                            const String& proxyName, int proxyPort,
-                                            const String& hostPath, const String& originalURL,
-                                            const String& userHeaders, const MemoryBlock& postData,
-                                            const String& httpRequestCmd)
+    static MemoryBlock createRequestHeader (const String& hostName, int hostPort, const String& proxyName, int proxyPort, const String& hostPath, const String& originalURL, const String& userHeaders, const MemoryBlock& postData, const String& httpRequestCmd)
     {
         MemoryOutputStream header;
 
@@ -528,9 +530,7 @@ private:
         else
             writeHost (header, httpRequestCmd, originalURL, proxyName, proxyPort);
 
-        writeValueIfNotPresent (header, userHeaders, "User-Agent:", "JUCE/" JUCE_STRINGIFY (JUCE_MAJOR_VERSION)
-                                                                        "." JUCE_STRINGIFY (JUCE_MINOR_VERSION)
-                                                                        "." JUCE_STRINGIFY (JUCE_BUILDNUMBER));
+        writeValueIfNotPresent (header, userHeaders, "User-Agent:", "JUCE/" JUCE_STRINGIFY (JUCE_MAJOR_VERSION) "." JUCE_STRINGIFY (JUCE_MINOR_VERSION) "." JUCE_STRINGIFY (JUCE_BUILDNUMBER));
         writeValueIfNotPresent (header, userHeaders, "Connection:", "close");
 
         const auto postDataSize = postData.getSize();
@@ -540,7 +540,8 @@ private:
             writeValueIfNotPresent (header, userHeaders, "Content-Length:", String ((int) postDataSize));
 
         if (userHeaders.isNotEmpty())
-            header << "\r\n" << userHeaders;
+            header << "\r\n"
+                   << userHeaders;
 
         header << "\r\n\r\n";
 
@@ -550,8 +551,7 @@ private:
         return header.getMemoryBlock();
     }
 
-    static bool sendHeader (int socketHandle, const MemoryBlock& requestHeader, uint32 timeOutTime,
-                            WebInputStream& pimplOwner, WebInputStream::Listener* listener)
+    static bool sendHeader (int socketHandle, const MemoryBlock& requestHeader, uint32 timeOutTime, WebInputStream& pimplOwner, WebInputStream::Listener* listener)
     {
         size_t totalHeaderSent = 0;
 

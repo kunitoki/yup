@@ -66,8 +66,7 @@ bool DirectoryIterator::next()
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
 JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
-bool DirectoryIterator::next (bool* isDirResult, bool* isHiddenResult, int64* fileSize,
-                              Time* modTime, Time* creationTime, bool* isReadOnly)
+bool DirectoryIterator::next (bool* isDirResult, bool* isHiddenResult, int64* fileSize, Time* modTime, Time* creationTime, bool* isReadOnly)
 {
     for (;;)
     {
@@ -84,9 +83,7 @@ bool DirectoryIterator::next (bool* isDirResult, bool* isHiddenResult, int64* fi
         String filename;
         bool isDirectory, isHidden = false, shouldContinue = false;
 
-        while (fileFinder.next (filename, &isDirectory,
-                                (isHiddenResult != nullptr || (whatToLookFor & File::ignoreHiddenFiles) != 0) ? &isHidden : nullptr,
-                                fileSize, modTime, creationTime, isReadOnly))
+        while (fileFinder.next (filename, &isDirectory, (isHiddenResult != nullptr || (whatToLookFor & File::ignoreHiddenFiles) != 0) ? &isHidden : nullptr, fileSize, modTime, creationTime, isReadOnly))
         {
             ++index;
 
@@ -130,8 +127,10 @@ bool DirectoryIterator::next (bool* isDirResult, bool* isHiddenResult, int64* fi
                 if (matches)
                 {
                     currentFile = fullPath;
-                    if (isHiddenResult != nullptr)     *isHiddenResult = isHidden;
-                    if (isDirResult != nullptr)        *isDirResult = isDirectory;
+                    if (isHiddenResult != nullptr)
+                        *isHiddenResult = isHidden;
+                    if (isDirResult != nullptr)
+                        *isDirResult = isDirectory;
 
                     return true;
                 }

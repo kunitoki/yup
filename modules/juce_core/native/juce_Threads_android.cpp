@@ -46,7 +46,7 @@ namespace juce
 */
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
- FIELD (activityInfo, "activityInfo", "Landroid/content/pm/ActivityInfo;")
+FIELD (activityInfo, "activityInfo", "Landroid/content/pm/ActivityInfo;")
 
 DECLARE_JNI_CLASS (AndroidResolveInfo, "android/content/pm/ResolveInfo")
 #undef JNI_CLASS_MEMBERS
@@ -93,8 +93,7 @@ extern "C" jint JNIEXPORT JNI_OnLoad (JavaVM* vm, void*)
 
     if (juceJavaClass != nullptr)
     {
-        JNINativeMethod method {"initialiseJUCE", "(Landroid/content/Context;)V",
-                                reinterpret_cast<void*> (juce_JavainitialiseJUCE)};
+        JNINativeMethod method { "initialiseJUCE", "(Landroid/content/Context;)V", reinterpret_cast<void*> (juce_JavainitialiseJUCE) };
 
         auto status = env->RegisterNatives (juceJavaClass, &method, 1);
         jassert (status == 0);
@@ -255,8 +254,7 @@ private:
                 LocalRef<jobject> pkgManager (env->CallObjectMethod (appContext.get(), AndroidContext.getPackageManager));
                 LocalRef<jstring> pkgName ((jstring) env->CallObjectMethod (appContext.get(), AndroidContext.getPackageName));
 
-                LocalRef<jobject> intent (env->NewObject (AndroidIntent, AndroidIntent.constructWithString,
-                                                          javaString ("android.intent.action.MAIN").get()));
+                LocalRef<jobject> intent (env->NewObject (AndroidIntent, AndroidIntent.constructWithString, javaString ("android.intent.action.MAIN").get()));
 
                 intent = LocalRef<jobject> (env->CallObjectMethod (intent.get(),
                                                                    AndroidIntent.setPackage,
@@ -281,7 +279,7 @@ private:
     GlobalRef myself;
     CriticalSection currentActivityLock;
     jweak currentActivity = nullptr;
-    jweak mainActivity    = nullptr;
+    jweak mainActivity = nullptr;
 };
 
 //==============================================================================
@@ -319,9 +317,9 @@ void Thread::initialiseJUCE (void* jniEnv, void* context)
         androidApkContext = env->NewGlobalRef (static_cast<jobject> (context));
         JuceActivityWatcher::getInstance();
 
-       #if JUCE_MODULE_AVAILABLE_juce_events && JUCE_ANDROID
+#if JUCE_MODULE_AVAILABLE_juce_events && JUCE_ANDROID
         juce_juceEventsAndroidStartApp();
-       #endif
+#endif
     }
 }
 
@@ -367,7 +365,10 @@ using RealtimeThreadFactory = pthread_t (*) (void* (*entry) (void*), void* userP
 RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 
 #if ! JUCE_MODULE_AVAILABLE_juce_audio_devices
-RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
+RealtimeThreadFactory getAndroidRealtimeThreadFactory()
+{
+    return nullptr;
+}
 #endif
 
 extern JavaVM* androidJNIJavaVM;
@@ -376,7 +377,8 @@ static auto setPriorityOfThisThread (Thread::Priority p)
 {
     return setpriority (PRIO_PROCESS,
                         (id_t) gettid(),
-                        ThreadPriorities::getNativePriority (p)) == 0;
+                        ThreadPriorities::getNativePriority (p))
+        == 0;
 }
 
 bool Thread::createNativeThread (Priority)
@@ -463,6 +465,7 @@ JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
 }
 
 JUCE_API void JUCE_CALLTYPE Process::raisePrivilege() {}
+
 JUCE_API void JUCE_CALLTYPE Process::lowerPrivilege() {}
 
 } // namespace juce

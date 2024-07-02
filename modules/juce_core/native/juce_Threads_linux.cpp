@@ -51,13 +51,13 @@ bool Thread::createNativeThread (Priority)
     PosixSchedulerPriority::getNativeSchedulerAndPriority (realtimeOptions, {}).apply (attr);
 
     threadId = threadHandle = makeThreadHandle (attr, this, [] (void* userData) -> void*
-    {
-        auto* myself = static_cast<Thread*> (userData);
+                                                {
+                                                    auto* myself = static_cast<Thread*> (userData);
 
-        juce_threadEntryPoint (myself);
+                                                    juce_threadEntryPoint (myself);
 
-        return nullptr;
-    });
+                                                    return nullptr;
+                                                });
 
     return threadId != nullptr;
 }
@@ -95,7 +95,16 @@ static bool swapUserAndEffectiveUser()
     return result1 == 0 && result2 == 0;
 }
 
-JUCE_API void JUCE_CALLTYPE Process::raisePrivilege()  { if (geteuid() != 0 && getuid() == 0) swapUserAndEffectiveUser(); }
-JUCE_API void JUCE_CALLTYPE Process::lowerPrivilege()  { if (geteuid() == 0 && getuid() != 0) swapUserAndEffectiveUser(); }
+JUCE_API void JUCE_CALLTYPE Process::raisePrivilege()
+{
+    if (geteuid() != 0 && getuid() == 0)
+        swapUserAndEffectiveUser();
+}
+
+JUCE_API void JUCE_CALLTYPE Process::lowerPrivilege()
+{
+    if (geteuid() == 0 && getuid() != 0)
+        swapUserAndEffectiveUser();
+}
 
 } // namespace juce

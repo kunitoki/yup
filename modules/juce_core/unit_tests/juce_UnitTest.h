@@ -42,7 +42,6 @@ namespace juce
 
 class UnitTestRunner;
 
-
 //==============================================================================
 /**
     This is a base class for classes that perform a unit test.
@@ -83,7 +82,7 @@ class UnitTestRunner;
 
     @tags{Core}
 */
-class JUCE_API  UnitTest
+class JUCE_API UnitTest
 {
 public:
     //==============================================================================
@@ -94,10 +93,10 @@ public:
     virtual ~UnitTest();
 
     /** Returns the name of the test. */
-    const String& getName() const noexcept       { return name; }
+    const String& getName() const noexcept { return name; }
 
     /** Returns the category of the test. */
-    const String& getCategory() const noexcept   { return category; }
+    const String& getCategory() const noexcept { return category; }
 
     /** Runs the test, using the specified UnitTestRunner.
         You shouldn't need to call this method directly - use
@@ -231,49 +230,49 @@ public:
         const ValueType diff = std::abs (actual - expected);
         const bool result = diff <= maxAbsoluteError;
 
-        expectResultAndPrint (actual, expected, result, " within " + String (maxAbsoluteError) + " of" , failureMessage);
+        expectResultAndPrint (actual, expected, result, " within " + String (maxAbsoluteError) + " of", failureMessage);
     }
 
-    //==============================================================================
-    /** Checks that the result of an expression does not throw an exception. */
-    #define expectDoesNotThrow(expr)         \
-        try                                  \
-        {                                    \
-            (expr);                          \
-            expect (true);                   \
-        }                                    \
-        catch (...)                          \
-        {                                    \
-            expect (false, "Expected: does not throw an exception, Actual: throws."); \
-        }
+//==============================================================================
+/** Checks that the result of an expression does not throw an exception. */
+#define expectDoesNotThrow(expr)                                          \
+try                                                                       \
+{                                                                         \
+(expr);                                                                   \
+expect (true);                                                            \
+}                                                                         \
+catch (...)                                                               \
+{                                                                         \
+expect (false, "Expected: does not throw an exception, Actual: throws."); \
+}
 
-    /** Checks that the result of an expression throws an exception. */
-    #define expectThrows(expr)               \
-        try                                  \
-        {                                    \
-            (expr);                          \
-            expect (false, "Expected: throws an exception, Actual: does not throw."); \
-        }                                    \
-        catch (...)                          \
-        {                                    \
-            expect (true);                   \
-        }
+/** Checks that the result of an expression throws an exception. */
+#define expectThrows(expr)                                                \
+try                                                                       \
+{                                                                         \
+(expr);                                                                   \
+expect (false, "Expected: throws an exception, Actual: does not throw."); \
+}                                                                         \
+catch (...)                                                               \
+{                                                                         \
+expect (true);                                                            \
+}
 
-    /** Checks that the result of an expression throws an exception of a certain type. */
-    #define expectThrowsType(expr, type)     \
-        try                                  \
-        {                                    \
-            (expr);                          \
-            expect (false, "Expected: throws an exception of type " #type ", Actual: does not throw."); \
-        }                                    \
-        catch (type&)                        \
-        {                                    \
-            expect (true);                   \
-        }                                    \
-        catch (...)                          \
-        {                                    \
-            expect (false, "Expected: throws an exception of type " #type ", Actual: throws another type."); \
-        }
+/** Checks that the result of an expression throws an exception of a certain type. */
+#define expectThrowsType(expr, type)                                                             \
+try                                                                                              \
+{                                                                                                \
+(expr);                                                                                          \
+expect (false, "Expected: throws an exception of type " #type ", Actual: does not throw.");      \
+}                                                                                                \
+catch (type&)                                                                                    \
+{                                                                                                \
+expect (true);                                                                                   \
+}                                                                                                \
+catch (...)                                                                                      \
+{                                                                                                \
+expect (false, "Expected: throws an exception of type " #type ", Actual: throws another type."); \
+}
 
     //==============================================================================
     /** Writes a message to the test log.
@@ -300,8 +299,7 @@ public:
 private:
     //==============================================================================
     template <class ValueType>
-    void expectResultAndPrint (ValueType value, ValueType valueToCompareTo, bool result,
-                               String compDescription, String failureMessage)
+    void expectResultAndPrint (ValueType value, ValueType valueToCompareTo, bool result, String compDescription, String failureMessage)
     {
         if (! result)
         {
@@ -323,7 +321,6 @@ private:
     JUCE_DECLARE_NON_COPYABLE (UnitTest)
 };
 
-
 //==============================================================================
 /**
     Runs a set of unit tests.
@@ -338,7 +335,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  UnitTestRunner
+class JUCE_API UnitTestRunner
 {
 public:
     //==============================================================================
@@ -396,8 +393,8 @@ public:
         TestResult() = default;
 
         explicit TestResult (const String& name, const String& subCategory)
-             : unitTestName (name),
-               subcategoryName (subCategory)
+            : unitTestName (name)
+            , subcategoryName (subCategory)
         {
         }
 

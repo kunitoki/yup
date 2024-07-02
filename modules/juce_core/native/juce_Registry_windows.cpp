@@ -57,8 +57,7 @@ struct RegistryKeyWrapper
             DWORD result;
 
             if (createForWriting)
-                RegCreateKeyEx (rootKey, wideCharName, 0, nullptr, REG_OPTION_NON_VOLATILE,
-                                KEY_WRITE | KEY_QUERY_VALUE | wow64Flags, nullptr, &key, &result);
+                RegCreateKeyEx (rootKey, wideCharName, 0, nullptr, REG_OPTION_NON_VOLATILE, KEY_WRITE | KEY_QUERY_VALUE | wow64Flags, nullptr, &key, &result);
             else
                 RegOpenKeyEx (rootKey, wideCharName, 0, KEY_READ | wow64Flags, &key);
         }
@@ -72,28 +71,33 @@ struct RegistryKeyWrapper
 
     static HKEY getRootKey (const String& name) noexcept
     {
-        if (name.startsWithIgnoreCase ("HKEY_CURRENT_USER\\"))  return HKEY_CURRENT_USER;
-        if (name.startsWithIgnoreCase ("HKCU\\"))               return HKEY_CURRENT_USER;
-        if (name.startsWithIgnoreCase ("HKEY_LOCAL_MACHINE\\")) return HKEY_LOCAL_MACHINE;
-        if (name.startsWithIgnoreCase ("HKLM\\"))               return HKEY_LOCAL_MACHINE;
-        if (name.startsWithIgnoreCase ("HKEY_CLASSES_ROOT\\"))  return HKEY_CLASSES_ROOT;
-        if (name.startsWithIgnoreCase ("HKCR\\"))               return HKEY_CLASSES_ROOT;
-        if (name.startsWithIgnoreCase ("HKEY_USERS\\"))         return HKEY_USERS;
-        if (name.startsWithIgnoreCase ("HKU\\"))                return HKEY_USERS;
+        if (name.startsWithIgnoreCase ("HKEY_CURRENT_USER\\"))
+            return HKEY_CURRENT_USER;
+        if (name.startsWithIgnoreCase ("HKCU\\"))
+            return HKEY_CURRENT_USER;
+        if (name.startsWithIgnoreCase ("HKEY_LOCAL_MACHINE\\"))
+            return HKEY_LOCAL_MACHINE;
+        if (name.startsWithIgnoreCase ("HKLM\\"))
+            return HKEY_LOCAL_MACHINE;
+        if (name.startsWithIgnoreCase ("HKEY_CLASSES_ROOT\\"))
+            return HKEY_CLASSES_ROOT;
+        if (name.startsWithIgnoreCase ("HKCR\\"))
+            return HKEY_CLASSES_ROOT;
+        if (name.startsWithIgnoreCase ("HKEY_USERS\\"))
+            return HKEY_USERS;
+        if (name.startsWithIgnoreCase ("HKU\\"))
+            return HKEY_USERS;
 
         jassertfalse; // The name starts with an unknown root key (or maybe an old Win9x type)
         return nullptr;
     }
 
-    static bool setValue (const String& regValuePath, const DWORD type,
-                          const void* data, size_t dataSize, const DWORD wow64Flags)
+    static bool setValue (const String& regValuePath, const DWORD type, const void* data, size_t dataSize, const DWORD wow64Flags)
     {
         const RegistryKeyWrapper key (regValuePath, true, wow64Flags);
 
         return key.key != nullptr
-                && RegSetValueEx (key.key, key.wideCharValueName, 0, type,
-                                  reinterpret_cast<const BYTE*> (data),
-                                  (DWORD) dataSize) == ERROR_SUCCESS;
+            && RegSetValueEx (key.key, key.wideCharValueName, 0, type, reinterpret_cast<const BYTE*> (data), (DWORD) dataSize) == ERROR_SUCCESS;
     }
 
     static uint32 getBinaryValue (const String& regValuePath, MemoryBlock& result, DWORD wow64Flags)
@@ -102,13 +106,12 @@ struct RegistryKeyWrapper
 
         if (key.key != nullptr)
         {
-            for (unsigned long bufferSize = 1024; ; bufferSize *= 2)
+            for (unsigned long bufferSize = 1024;; bufferSize *= 2)
             {
                 result.setSize (bufferSize, false);
                 DWORD type = REG_NONE;
 
-                auto err = RegQueryValueEx (key.key, key.wideCharValueName, nullptr, &type,
-                                            (LPBYTE) result.getData(), &bufferSize);
+                auto err = RegQueryValueEx (key.key, key.wideCharValueName, nullptr, &type, (LPBYTE) result.getData(), &bufferSize);
 
                 if (err == ERROR_SUCCESS)
                 {
@@ -130,9 +133,12 @@ struct RegistryKeyWrapper
 
         switch (getBinaryValue (regValuePath, buffer, wow64Flags))
         {
-            case REG_SZ:    return static_cast<const WCHAR*> (buffer.getData());
-            case REG_DWORD: return String ((int) *reinterpret_cast<const DWORD*> (buffer.getData()));
-            default:        break;
+            case REG_SZ:
+                return static_cast<const WCHAR*> (buffer.getData());
+            case REG_DWORD:
+                return String ((int) *reinterpret_cast<const DWORD*> (buffer.getData()));
+            default:
+                break;
         }
 
         return defaultValue;
@@ -150,12 +156,11 @@ struct RegistryKeyWrapper
         if (key.key == nullptr)
             return false;
 
-        unsigned char buffer [512];
+        unsigned char buffer[512];
         unsigned long bufferSize = sizeof (buffer);
         DWORD type = 0;
 
-        auto result = RegQueryValueEx (key.key, key.wideCharValueName,
-                                       nullptr, &type, buffer, &bufferSize);
+        auto result = RegQueryValueEx (key.key, key.wideCharValueName, nullptr, &type, buffer, &bufferSize);
 
         return result == ERROR_SUCCESS || result == ERROR_MORE_DATA;
     }
@@ -179,8 +184,7 @@ String JUCE_CALLTYPE WindowsRegistry::getValue (const String& regValuePath, cons
 
 bool JUCE_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const String& value, WoW64Mode mode)
 {
-    return RegistryKeyWrapper::setValue (regValuePath, REG_SZ, value.toWideCharPointer(),
-                                         CharPointer_UTF16::getBytesRequiredFor (value.getCharPointer()), mode);
+    return RegistryKeyWrapper::setValue (regValuePath, REG_SZ, value.toWideCharPointer(), CharPointer_UTF16::getBytesRequiredFor (value.getCharPointer()), mode);
 }
 
 bool JUCE_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const uint32 value, WoW64Mode mode)
@@ -233,7 +237,7 @@ bool JUCE_CALLTYPE WindowsRegistry::deleteKey (const String& regKeyPath, WoW64Mo
         DWORD subKeySize = MAX_PATH;
 
         if (RegEnumKeyEx (key.key, 0, subKey, &subKeySize, nullptr, nullptr, nullptr, nullptr) != ERROR_SUCCESS
-             || ! deleteKey (regKeyPath + "\\" + String (subKey), mode))
+            || ! deleteKey (regKeyPath + "\\" + String (subKey), mode))
             break;
     }
 
@@ -256,13 +260,15 @@ bool JUCE_CALLTYPE WindowsRegistry::registerFileAssociation (const String& fileE
         && setValue (key + "\\", fullDescription, mode)
         && setValue (key + "\\shell\\open\\command\\", targetExecutable.getFullPathName() + " \"%1\"", mode)
         && (iconResourceNumber == 0
-              || setValue (key + "\\DefaultIcon\\",
-                           targetExecutable.getFullPathName() + "," + String (iconResourceNumber)));
+            || setValue (key + "\\DefaultIcon\\",
+                         targetExecutable.getFullPathName() + "," + String (iconResourceNumber)));
 }
 
 // These methods are deprecated:
-String WindowsRegistry::getValueWow64 (const String& p, const String& defVal)  { return getValue (p, defVal, WoW64_64bit); }
-bool WindowsRegistry::valueExistsWow64 (const String& p)                       { return valueExists (p, WoW64_64bit); }
-bool WindowsRegistry::keyExistsWow64 (const String& p)                         { return keyExists (p, WoW64_64bit); }
+String WindowsRegistry::getValueWow64 (const String& p, const String& defVal) { return getValue (p, defVal, WoW64_64bit); }
+
+bool WindowsRegistry::valueExistsWow64 (const String& p) { return valueExists (p, WoW64_64bit); }
+
+bool WindowsRegistry::keyExistsWow64 (const String& p) { return keyExists (p, WoW64_64bit); }
 
 } // namespace juce

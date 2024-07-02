@@ -50,16 +50,16 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Process
+class JUCE_API Process
 {
 public:
     //==============================================================================
     enum ProcessPriority
     {
-        LowPriority         = 0,
-        NormalPriority      = 1,
-        HighPriority        = 2,
-        RealtimePriority    = 3
+        LowPriority = 0,
+        NormalPriority = 1,
+        HighPriority = 2,
+        RealtimePriority = 3
     };
 
     /** Changes the current process's priority.
@@ -112,7 +112,6 @@ public:
     /** Returns true if this process is being hosted by a debugger. */
     static bool JUCE_CALLTYPE isRunningUnderDebugger() noexcept;
 
-
     //==============================================================================
     /** Tries to launch the OS's default reader application for a given file or URL. */
     static bool JUCE_CALLTYPE openDocument (const String& documentURL, const String& parameters);
@@ -129,7 +128,7 @@ public:
                                                         const StringArray& filesToAttach);
 
     //==============================================================================
-   #if JUCE_WINDOWS || DOXYGEN
+#if JUCE_WINDOWS || DOXYGEN
     /** WINDOWS ONLY - This returns the HINSTANCE of the current module.
 
         The return type is a void* to avoid being dependent on windows.h - just cast
@@ -153,22 +152,22 @@ public:
         @see getCurrentModuleInstanceHandle()
     */
     static void JUCE_CALLTYPE setCurrentModuleInstanceHandle (void* newHandle) noexcept;
-   #endif
+#endif
 
     //==============================================================================
-   #if JUCE_MAC || DOXYGEN
+#if JUCE_MAC || DOXYGEN
     /** OSX ONLY - Shows or hides the OSX dock icon for this app. */
     static void setDockIconVisible (bool isVisible);
-   #endif
+#endif
 
     //==============================================================================
-   #if JUCE_MAC || JUCE_LINUX || JUCE_BSD || DOXYGEN
+#if JUCE_MAC || JUCE_LINUX || JUCE_BSD || DOXYGEN
     /** UNIX ONLY - Attempts to use setrlimit to change the maximum number of file
         handles that the app can open. Pass 0 or less as the parameter to mean
         'infinite'. Returns true if it succeeds.
     */
     static bool setMaxNumberOfFileHandles (int maxNumberOfFiles) noexcept;
-   #endif
+#endif
 
 private:
     Process();

@@ -51,7 +51,7 @@ namespace juce
     @tags{Core}
 */
 template <class ElementType, class TypeOfCriticalSectionToUse>
-class ArrayAllocationBase  : public TypeOfCriticalSectionToUse
+class ArrayAllocationBase : public TypeOfCriticalSectionToUse
 {
 public:
     //==============================================================================
@@ -62,8 +62,8 @@ public:
     ~ArrayAllocationBase() = default;
 
     ArrayAllocationBase (ArrayAllocationBase&& other) noexcept
-        : elements (std::move (other.elements)),
-          numAllocated (other.numAllocated)
+        : elements (std::move (other.elements))
+        , numAllocated (other.numAllocated)
     {
     }
 

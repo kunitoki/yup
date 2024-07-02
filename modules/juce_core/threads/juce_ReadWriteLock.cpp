@@ -74,7 +74,7 @@ bool ReadWriteLock::tryEnterRead() const noexcept
     }
 
     if (numWriters + numWaitingWriters == 0
-         || (threadId == writerThreadId && numWriters > 0))
+        || (threadId == writerThreadId && numWriters > 0))
     {
         readerThreads.add ({ threadId, 1 });
         return true;
@@ -134,8 +134,8 @@ bool ReadWriteLock::tryEnterWrite() const noexcept
 bool ReadWriteLock::tryEnterWriteInternal (Thread::ThreadID threadId) const noexcept
 {
     if (readerThreads.size() + numWriters == 0
-         || threadId == writerThreadId
-         || (readerThreads.size() == 1 && readerThreads.getReference (0).threadID == threadId))
+        || threadId == writerThreadId
+        || (readerThreads.size() == 1 && readerThreads.getReference (0).threadID == threadId))
     {
         writerThreadId = threadId;
         ++numWriters;

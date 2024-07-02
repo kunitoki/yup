@@ -44,14 +44,21 @@ class SharedResourcePointerTest final : public UnitTest
 {
 public:
     SharedResourcePointerTest()
-        : UnitTest ("SharedResourcePointer", UnitTestCategories::memory) {}
+        : UnitTest ("SharedResourcePointer", UnitTestCategories::memory)
+    {
+    }
 
     void runTest() final
     {
         beginTest ("Only one instance is created");
         {
             static int count = 0;
-            struct CountIncrementer { CountIncrementer() { ++count; } };
+
+            struct CountIncrementer
+            {
+                CountIncrementer() { ++count; }
+            };
+
             expect (count == 0);
 
             const SharedResourcePointer<CountIncrementer> instance1;
@@ -66,9 +73,11 @@ public:
         beginTest ("The shared object is destroyed when the reference count reaches 0");
         {
             static int count = 0;
+
             struct ReferenceCounter
             {
                 ReferenceCounter() { ++count; }
+
                 ~ReferenceCounter() { --count; }
             };
 
@@ -85,7 +94,9 @@ public:
 
         beginTest ("getInstanceWithoutCreating()");
         {
-            struct Object{};
+            struct Object
+            {
+            };
 
             expect (SharedResourcePointer<Object>::getSharedObjectWithoutCreating() == std::nullopt);
 

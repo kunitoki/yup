@@ -41,8 +41,8 @@ namespace juce
 {
 
 MemoryInputStream::MemoryInputStream (const void* sourceData, size_t sourceDataSize, bool keepCopy)
-    : data (sourceData),
-      dataSize (sourceDataSize)
+    : data (sourceData)
+    , dataSize (sourceDataSize)
 {
     if (keepCopy)
     {
@@ -52,8 +52,8 @@ MemoryInputStream::MemoryInputStream (const void* sourceData, size_t sourceDataS
 }
 
 MemoryInputStream::MemoryInputStream (const MemoryBlock& sourceData, bool keepCopy)
-    : data (sourceData.getData()),
-      dataSize (sourceData.getSize())
+    : data (sourceData.getData())
+    , dataSize (sourceData.getSize())
 {
     if (keepCopy)
     {
@@ -116,7 +116,6 @@ void MemoryInputStream::skipNextBytes (int64 numBytesToSkip)
         setPosition (getPosition() + numBytesToSkip);
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -126,7 +125,8 @@ class MemoryStreamTests final : public UnitTest
 public:
     MemoryStreamTests()
         : UnitTest ("MemoryInputStream & MemoryOutputStream", UnitTestCategories::streams)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -215,7 +215,7 @@ public:
 
     static String createRandomWideCharString (Random& r)
     {
-        juce_wchar buffer [50] = { 0 };
+        juce_wchar buffer[50] = { 0 };
 
         for (int i = 0; i < numElementsInArray (buffer) - 1; ++i)
         {
@@ -224,8 +224,7 @@ public:
                 do
                 {
                     buffer[i] = (juce_wchar) (1 + r.nextInt (0x10ffff - 1));
-                }
-                while (! CharPointer_UTF16::canRepresent (buffer[i]));
+                } while (! CharPointer_UTF16::canRepresent (buffer[i]));
             }
             else
                 buffer[i] = (juce_wchar) (1 + r.nextInt (0xff));

@@ -67,11 +67,11 @@ public:
 
             int sleepZeroCount = 10;
             while (! isInitialised() && --sleepZeroCount >= 0)
-                std::this_thread::sleep_for (std::chrono::microseconds(0));
+                std::this_thread::sleep_for (std::chrono::microseconds (0));
 
             int sleepOneCount = 1;
             while (! isInitialised() && --sleepOneCount >= 0)
-                std::this_thread::sleep_for (std::chrono::microseconds(1));
+                std::this_thread::sleep_for (std::chrono::microseconds (1));
         }
     }
 

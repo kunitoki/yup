@@ -76,11 +76,13 @@ namespace detail
         constexpr NumBase() = default;
 
         constexpr explicit NumBase (size_t arg)
-            : num (arg) {}
+            : num (arg)
+        {
+        }
 
         constexpr size_t size() const { return num; }
 
-        size_t num{};
+        size_t num {};
     };
 
     template <typename T>
@@ -97,7 +99,7 @@ namespace detail
         else
             return toAddress (it.operator->());
     }
-}
+} // namespace detail
 
 //==============================================================================
 /**
@@ -117,15 +119,23 @@ public:
     static constexpr auto extent = Extent;
 
     template <size_t e = extent, std::enable_if_t<e == 0 || e == dynamicExtent, int> = 0>
-    constexpr Span() {}
+    constexpr Span()
+    {
+    }
 
     template <typename It>
     constexpr Span (It it, size_t end)
-        : Base (end), ptr (detail::toAddress (it)) {}
+        : Base (end)
+        , ptr (detail::toAddress (it))
+    {
+    }
 
     template <typename Range, std::enable_if_t<detail::hasDataAndSize<Range>, int> = 0>
     constexpr Span (Range&& range)
-        : Base (std::size (range)), ptr (std::data (range)) {}
+        : Base (std::size (range))
+        , ptr (std::data (range))
+    {
+    }
 
     constexpr Span (const Span&) = default;
 
@@ -138,12 +148,15 @@ public:
     using Base::size;
 
     constexpr Value* begin() const { return ptr; }
-    constexpr Value* end()   const { return ptr + size(); }
+
+    constexpr Value* end() const { return ptr + size(); }
 
     constexpr auto& front() const { return ptr[0]; }
-    constexpr auto& back()  const { return ptr[size() - 1]; }
+
+    constexpr auto& back() const { return ptr[size() - 1]; }
 
     constexpr auto& operator[] (size_t index) const { return ptr[index]; }
+
     constexpr Value* data() const { return ptr; }
 
     constexpr bool empty() const { return size() == 0; }
@@ -156,7 +169,7 @@ template <typename T, typename End>
 Span (T, End) -> Span<std::remove_pointer_t<decltype (detail::toAddress (std::declval<T>()))>>;
 
 template <typename T, size_t N>
-Span (T (&) [N]) -> Span<T, N>;
+Span (T (&)[N]) -> Span<T, N>;
 
 template <typename T, size_t N>
 Span (std::array<T, N>&) -> Span<T, N>;
@@ -166,6 +179,5 @@ Span (const std::array<T, N>&) -> Span<const T, N>;
 
 template <typename Range>
 Span (Range&& r) -> Span<std::remove_pointer_t<decltype (std::data (r))>>;
-
 
 } // namespace juce

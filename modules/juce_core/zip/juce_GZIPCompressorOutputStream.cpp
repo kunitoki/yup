@@ -49,9 +49,7 @@ public:
         using namespace zlibNamespace;
         zerostruct (stream);
 
-        streamIsValid = (deflateInit2 (&stream, compLevel, Z_DEFLATED,
-                                       windowBits != 0 ? windowBits : MAX_WBITS,
-                                       8, strategy) == Z_OK);
+        streamIsValid = (deflateInit2 (&stream, compLevel, Z_DEFLATED, windowBits != 0 ? windowBits : MAX_WBITS, 8, strategy) == Z_OK);
     }
 
     ~GZIPCompressorHelper()
@@ -83,7 +81,10 @@ public:
     }
 
 private:
-    enum { strategy = 0 };
+    enum
+    {
+        strategy = 0
+    };
 
     zlibNamespace::z_stream stream;
     const int compLevel;
@@ -96,9 +97,9 @@ private:
 
         if (streamIsValid)
         {
-            stream.next_in   = const_cast<uint8*> (data);
-            stream.next_out  = buffer;
-            stream.avail_in  = (z_uInt) dataSize;
+            stream.next_in = const_cast<uint8*> (data);
+            stream.next_out = buffer;
+            stream.avail_in = (z_uInt) dataSize;
             stream.avail_out = (z_uInt) sizeof (buffer);
 
             auto result = isFirstDeflate ? deflateParams (&stream, compLevel, strategy)
@@ -131,13 +132,13 @@ private:
 
 //==============================================================================
 GZIPCompressorOutputStream::GZIPCompressorOutputStream (OutputStream& s, int compressionLevel, int windowBits)
-   : GZIPCompressorOutputStream (&s, compressionLevel, false, windowBits)
+    : GZIPCompressorOutputStream (&s, compressionLevel, false, windowBits)
 {
 }
 
 GZIPCompressorOutputStream::GZIPCompressorOutputStream (OutputStream* out, int compressionLevel, bool deleteDestStream, int windowBits)
-   : destStream (out, deleteDestStream),
-     helper (new GZIPCompressorHelper (compressionLevel, windowBits))
+    : destStream (out, deleteDestStream)
+    , helper (new GZIPCompressorHelper (compressionLevel, windowBits))
 {
     jassert (out != nullptr);
 }
@@ -171,7 +172,6 @@ bool GZIPCompressorOutputStream::setPosition (int64 /*newPosition*/)
     return false;
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -180,7 +180,8 @@ struct GZIPTests final : public UnitTest
 {
     GZIPTests()
         : UnitTest ("GZIP", UnitTestCategories::compression)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -202,7 +203,7 @@ struct GZIPTests final : public UnitTest
                         data[k] = (char) rng.nextInt (255);
 
                     original << data;
-                    zipper   << data;
+                    zipper << data;
                 }
             }
 
@@ -219,7 +220,8 @@ struct GZIPTests final : public UnitTest
             if (original.getDataSize() == uncompressed.getDataSize())
                 expect (memcmp (uncompressed.getData(),
                                 original.getData(),
-                                original.getDataSize()) == 0);
+                                original.getDataSize())
+                        == 0);
         }
     }
 };

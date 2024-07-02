@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  GZIPDecompressorInputStream  : public InputStream
+class JUCE_API GZIPDecompressorInputStream : public InputStream
 {
 public:
     enum Format

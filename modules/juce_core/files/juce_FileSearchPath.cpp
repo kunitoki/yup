@@ -46,7 +46,7 @@ FileSearchPath::FileSearchPath (const String& path)
 }
 
 FileSearchPath::FileSearchPath (const FileSearchPath& other)
-   : directories (other.directories)
+    : directories (other.directories)
 {
 }
 
@@ -149,7 +149,10 @@ void FileSearchPath::removeRedundantPaths()
         if (std::find_if (reduced.begin(), reduced.end(), fContainsDirectory) != reduced.end())
             continue;
 
-        const auto directoryContainsF = [&] (const auto& f) { return checkedIsChildOf (f, directory); };
+        const auto directoryContainsF = [&] (const auto& f)
+        {
+            return checkedIsChildOf (f, directory);
+        };
 
         reduced.erase (std::remove_if (reduced.begin(), reduced.end(), directoryContainsF), reduced.end());
         reduced.push_back (directory);
@@ -172,8 +175,7 @@ Array<File> FileSearchPath::findChildFiles (int whatToLookFor, bool recurse, con
     return results;
 }
 
-int FileSearchPath::findChildFiles (Array<File>& results, int whatToLookFor,
-                                    bool recurse, const String& wildcard) const
+int FileSearchPath::findChildFiles (Array<File>& results, int whatToLookFor, bool recurse, const String& wildcard) const
 {
     int total = 0;
 
@@ -210,17 +212,20 @@ bool FileSearchPath::isFileInPath (const File& fileToCheck,
 class FileSearchPathTests final : public UnitTest
 {
 public:
-    FileSearchPathTests() : UnitTest ("FileSearchPath", UnitTestCategories::files) {}
+    FileSearchPathTests()
+        : UnitTest ("FileSearchPath", UnitTestCategories::files)
+    {
+    }
 
     void runTest() override
     {
         beginTest ("removeRedundantPaths");
         {
-           #if JUCE_WINDOWS
+#if JUCE_WINDOWS
             const String prefix = "C:";
-           #else
+#else
             const String prefix = "";
-           #endif
+#endif
 
             {
                 FileSearchPath fsp { prefix + "/a/b/c/d;" + prefix + "/a/b/c/e;" + prefix + "/a/b/c" };

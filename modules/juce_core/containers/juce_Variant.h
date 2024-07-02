@@ -55,14 +55,14 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  var
+class JUCE_API var
 {
 public:
     //==============================================================================
     /** This structure is passed to a NativeFunction callback, and contains invocation
         details about the function's arguments and context.
     */
-    struct JUCE_API  NativeFunctionArgs
+    struct JUCE_API NativeFunctionArgs
     {
         NativeFunctionArgs (const var& thisObject, const var* args, int numArgs) noexcept;
 
@@ -300,13 +300,12 @@ public:
     static var readFromStream (InputStream& input);
 
     //==============================================================================
-   #if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined (DOXYGEN)
+#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
     [[deprecated ("This was a static empty var object, but is now deprecated as it's too easy to accidentally "
-                 "use it indirectly during a static constructor leading to hard-to-find order-of-initialisation "
-                 "problems. Use var() or {} instead. For returning an empty var from a function by reference, "
-                 "use a function-local static var and return that.")]]
-    static const var null;
-   #endif
+                  "use it indirectly during a static constructor leading to hard-to-find order-of-initialisation "
+                  "problems. Use var() or {} instead. For returning an empty var from a function by reference, "
+                  "use a function-local static var and return that.")]] static const var null;
+#endif
 
 private:
     //==============================================================================
@@ -345,11 +344,11 @@ JUCE_API bool operator== (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator!= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator<  (const var&, const var&);
+JUCE_API bool operator<(const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator<= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator>  (const var&, const var&);
+JUCE_API bool operator> (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator>= (const var&, const var&);
 

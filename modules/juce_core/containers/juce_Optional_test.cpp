@@ -44,14 +44,19 @@ namespace juce
 struct ThrowOnMoveOrSwap
 {
     ThrowOnMoveOrSwap() = default;
-    ThrowOnMoveOrSwap (ThrowOnMoveOrSwap&&) { throw std::bad_alloc{}; }
+
+    ThrowOnMoveOrSwap (ThrowOnMoveOrSwap&&) { throw std::bad_alloc {}; }
 };
-static void swap (ThrowOnMoveOrSwap&, ThrowOnMoveOrSwap&) { throw std::bad_alloc{}; }
+
+static void swap (ThrowOnMoveOrSwap&, ThrowOnMoveOrSwap&) { throw std::bad_alloc {}; }
 
 class OptionalUnitTest final : public UnitTest
 {
 public:
-    OptionalUnitTest() : UnitTest ("Optional", UnitTestCategories::containers) {}
+    OptionalUnitTest()
+        : UnitTest ("Optional", UnitTestCategories::containers)
+    {
+    }
 
     void runTest() override
     {
@@ -75,7 +80,10 @@ public:
         }
 
         using Ptr = std::shared_ptr<int>;
-        const auto makePtr = [] { return std::make_shared<int>(); };
+        const auto makePtr = []
+        {
+            return std::make_shared<int>();
+        };
 
         beginTest ("Constructing from a moved optional calls appropriate member functions");
         {
@@ -206,14 +214,14 @@ public:
             ThrowOnCopy (const ThrowOnCopy&)
             {
                 value = -100;
-                throw std::bad_alloc{};
+                throw std::bad_alloc {};
             }
 
             // Put into an invalid state and throw
             ThrowOnCopy& operator= (const ThrowOnCopy&)
             {
                 value = -100;
-                throw std::bad_alloc{};
+                throw std::bad_alloc {};
             }
 
             ThrowOnCopy (ThrowOnCopy&&) noexcept = default;
@@ -271,7 +279,7 @@ public:
 
             try
             {
-                Optional<ThrowOnCopy> t = ThrowOnCopy{};
+                Optional<ThrowOnCopy> t = ThrowOnCopy {};
                 a = t;
             }
             catch (const std::bad_alloc&)
@@ -291,7 +299,7 @@ public:
 
             try
             {
-                Optional<ThrowOnCopy> t = ThrowOnCopy{};
+                Optional<ThrowOnCopy> t = ThrowOnCopy {};
                 a = t;
             }
             catch (const std::bad_alloc&)
@@ -313,8 +321,13 @@ public:
             expect (ptr.use_count() == 1);
         }
 
-        struct Foo {};
-        struct Bar final : public Foo {};
+        struct Foo
+        {
+        };
+
+        struct Bar final : public Foo
+        {
+        };
 
         beginTest ("Can be constructed from compatible type");
         {
@@ -361,7 +374,7 @@ public:
 
         beginTest ("An exception thrown during emplace leaves the optional without a value");
         {
-            Optional<ThrowOnCopy> opt { ThrowOnCopy{} };
+            Optional<ThrowOnCopy> opt { ThrowOnCopy {} };
             bool threw = false;
 
             try

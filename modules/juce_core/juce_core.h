@@ -37,7 +37,6 @@
   ==============================================================================
 */
 
-
 /*******************************************************************************
  The block below describes the properties of this module, and is read by
  the Projucer to automatically generate project code that uses it.
@@ -71,12 +70,12 @@
 
 //==============================================================================
 #ifdef _MSC_VER
- #pragma warning (push)
- // Disable warnings for long class names, padding, and undefined preprocessor definitions.
- #pragma warning (disable: 4251 4786 4668 4820)
- #ifdef __INTEL_COMPILER
-  #pragma warning (disable: 1125)
- #endif
+#pragma warning(push)
+    // Disable warnings for long class names, padding, and undefined preprocessor definitions.
+#pragma warning(disable : 4251 4786 4668 4820)
+#ifdef __INTEL_COMPILER
+#pragma warning(disable : 1125)
+#endif
 #endif
 
 #include "system/juce_TargetPlatform.h"
@@ -88,7 +87,7 @@
     but if you define this value, you can override this to force it to be true or false.
 */
 #ifndef JUCE_FORCE_DEBUG
- //#define JUCE_FORCE_DEBUG 0
+//#define JUCE_FORCE_DEBUG 0
 #endif
 
 //==============================================================================
@@ -104,11 +103,11 @@
     @see jassert, jassertfalse, Logger
 */
 #ifndef JUCE_LOG_ASSERTIONS
- #if JUCE_ANDROID
-  #define JUCE_LOG_ASSERTIONS 1
- #else
-  #define JUCE_LOG_ASSERTIONS 0
- #endif
+#if JUCE_ANDROID
+#define JUCE_LOG_ASSERTIONS 1
+#else
+#define JUCE_LOG_ASSERTIONS 0
+#endif
 #endif
 
 //==============================================================================
@@ -117,8 +116,8 @@
     Enables a memory-leak check for certain objects when the app terminates. See the LeakedObjectDetector
     class and the JUCE_LEAK_DETECTOR macro for more details about enabling leak checking for specific classes.
 */
-#if JUCE_DEBUG && ! defined (JUCE_CHECK_MEMORY_LEAKS)
- #define JUCE_CHECK_MEMORY_LEAKS 1
+#if JUCE_DEBUG && ! defined(JUCE_CHECK_MEMORY_LEAKS)
+#define JUCE_CHECK_MEMORY_LEAKS 1
 #endif
 
 //==============================================================================
@@ -128,7 +127,7 @@
     automatically added to the link stage.
 */
 #ifndef JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
- #define JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES 0
+#define JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES 0
 #endif
 
 /** Config: JUCE_INCLUDE_ZLIB_CODE
@@ -140,11 +139,11 @@
     specify the path where your zlib headers live.
 */
 #ifndef JUCE_INCLUDE_ZLIB_CODE
- #define JUCE_INCLUDE_ZLIB_CODE 1
+#define JUCE_INCLUDE_ZLIB_CODE 1
 #endif
 
 #ifndef JUCE_ZLIB_INCLUDE_PATH
- #define JUCE_ZLIB_INCLUDE_PATH <zlib.h>
+#define JUCE_ZLIB_INCLUDE_PATH <zlib.h>
 #endif
 
 /** Config: JUCE_USE_CURL
@@ -154,7 +153,7 @@
     If you disable this then https/ssl support will not be available on Linux.
 */
 #ifndef JUCE_USE_CURL
- #define JUCE_USE_CURL 1
+#define JUCE_USE_CURL 1
 #endif
 
 /** Config: JUCE_LOAD_CURL_SYMBOLS_LAZILY
@@ -165,7 +164,7 @@
     you are not using WebInputStream or the URL classes.
 */
 #ifndef JUCE_LOAD_CURL_SYMBOLS_LAZILY
- #define JUCE_LOAD_CURL_SYMBOLS_LAZILY 0
+#define JUCE_LOAD_CURL_SYMBOLS_LAZILY 0
 #endif
 
 /** Config: JUCE_CATCH_UNHANDLED_EXCEPTIONS
@@ -173,7 +172,7 @@
     to your JUCEApplicationBase::unhandledException() callback.
 */
 #ifndef JUCE_CATCH_UNHANDLED_EXCEPTIONS
- #define JUCE_CATCH_UNHANDLED_EXCEPTIONS 0
+#define JUCE_CATCH_UNHANDLED_EXCEPTIONS 0
 #endif
 
 /** Config: JUCE_ALLOW_STATIC_NULL_VARIABLES
@@ -182,7 +181,7 @@
     constructor code.
 */
 #ifndef JUCE_ALLOW_STATIC_NULL_VARIABLES
- #define JUCE_ALLOW_STATIC_NULL_VARIABLES 0
+#define JUCE_ALLOW_STATIC_NULL_VARIABLES 0
 #endif
 
 /** Config: JUCE_STRICT_REFCOUNTEDPOINTER
@@ -191,7 +190,7 @@
     with old code, but if possible, you should always enable it to improve code safety!
 */
 #ifndef JUCE_STRICT_REFCOUNTEDPOINTER
- #define JUCE_STRICT_REFCOUNTEDPOINTER 0
+#define JUCE_STRICT_REFCOUNTEDPOINTER 0
 #endif
 
 /** Config: JUCE_ENABLE_ALLOCATION_HOOKS
@@ -199,42 +198,42 @@
     help when debugging allocations in unit tests.
 */
 #ifndef JUCE_ENABLE_ALLOCATION_HOOKS
- #define JUCE_ENABLE_ALLOCATION_HOOKS 0
+#define JUCE_ENABLE_ALLOCATION_HOOKS 0
 #endif
 
 #ifndef JUCE_STRING_UTF_TYPE
- #define JUCE_STRING_UTF_TYPE 8
+#define JUCE_STRING_UTF_TYPE 8
 #endif
 
 //==============================================================================
 //==============================================================================
 
 #if JUCE_CORE_INCLUDE_NATIVE_HEADERS
- #include "native/juce_BasicNativeHeaders.h"
+#include "native/juce_BasicNativeHeaders.h"
 #endif
 
 #if JUCE_WINDOWS
- #undef small
+#undef small
 #endif
 
 #include "system/juce_StandardHeader.h"
 
 namespace juce
 {
-    class StringRef;
-    class MemoryBlock;
-    class File;
-    class InputStream;
-    class OutputStream;
-    class DynamicObject;
-    class FileInputStream;
-    class FileOutputStream;
-    class XmlElement;
+class StringRef;
+class MemoryBlock;
+class File;
+class InputStream;
+class OutputStream;
+class DynamicObject;
+class FileInputStream;
+class FileOutputStream;
+class XmlElement;
 
-    extern JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept;
-    extern JUCE_API void JUCE_CALLTYPE logAssertion (const char* file, int line) noexcept;
-    extern JUCE_API void JUCE_CALLTYPE logAssertion (const wchar_t* file, int line) noexcept;
-}
+extern JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept;
+extern JUCE_API void JUCE_CALLTYPE logAssertion (const char* file, int line) noexcept;
+extern JUCE_API void JUCE_CALLTYPE logAssertion (const wchar_t* file, int line) noexcept;
+} // namespace juce
 
 #include "misc/juce_EnumHelpers.h"
 #include "memory/juce_Memory.h"
@@ -378,27 +377,27 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "detail/juce_CallbackListenerList.h"
 
 #if JUCE_CORE_INCLUDE_OBJC_HELPERS && (JUCE_MAC || JUCE_IOS)
- #include "native/juce_CFHelpers_mac.h"
- #include "native/juce_ObjCHelpers_mac.h"
+#include "native/juce_CFHelpers_mac.h"
+#include "native/juce_ObjCHelpers_mac.h"
 #endif
 
 #if JUCE_CORE_INCLUDE_COM_SMART_PTR && JUCE_WINDOWS
- #include "native/juce_ComSmartPtr_windows.h"
+#include "native/juce_ComSmartPtr_windows.h"
 #endif
 
 #if JUCE_CORE_INCLUDE_JNI_HELPERS && JUCE_ANDROID
- #include <jni.h>
- #include "native/juce_JNIHelpers_android.h"
+#include <jni.h>
+#include "native/juce_JNIHelpers_android.h"
 #endif
 
 #if JUCE_UNIT_TESTS
- #include "unit_tests/juce_UnitTestCategories.h"
+#include "unit_tests/juce_UnitTestCategories.h"
 #endif
 
 #ifndef DOXYGEN
 namespace juce
 {
- /*
+    /*
     As the very long class names here try to explain, the purpose of this code is to cause
     a linker error if not all of your compile units are consistent in the options that they
     enable before including JUCE headers. The reason this is important is that if you have
@@ -406,25 +405,32 @@ namespace juce
     without that, then each will be generating code with different class layouts, and you'll
     get subtle and hard-to-track-down memory corruption!
  */
- #if JUCE_DEBUG
-  struct JUCE_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode
-  { this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept; };
-  static this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode compileUnitMismatchSentinel;
- #else
-  struct JUCE_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode
-  { this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode() noexcept; };
-  static this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode compileUnitMismatchSentinel;
- #endif
-}
+#if JUCE_DEBUG
+struct JUCE_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode
+{
+    this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept;
+};
+
+static this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode compileUnitMismatchSentinel;
+#else
+struct JUCE_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode
+{
+    this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode() noexcept;
+};
+
+static this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode compileUnitMismatchSentinel;
+#endif
+} // namespace juce
 #endif
 
 JUCE_END_IGNORE_WARNINGS_MSVC
 
 // In DLL builds, need to disable this warnings for other modules
-#if defined (JUCE_DLL_BUILD) || defined (JUCE_DLL)
- JUCE_IGNORE_MSVC (4251)
+#if defined(JUCE_DLL_BUILD) || defined(JUCE_DLL)
+JUCE_IGNORE_MSVC (4251)
 #endif
 
-namespace yup {
+namespace yup
+{
 using namespace ::juce;
 } // namespace yup

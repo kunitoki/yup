@@ -49,7 +49,7 @@ bool Base64::convertToBase64 (OutputStream& base64Result, const void* sourceData
     {
         char frame[4];
         auto byte0 = *source++;
-        frame[0] = lookup [(byte0 & 0xfcu) >> 2];
+        frame[0] = lookup[(byte0 & 0xfcu) >> 2];
         uint32 bits = (byte0 & 0x03u) << 4;
 
         if (sourceDataSize > 1)
@@ -97,13 +97,24 @@ bool Base64::convertFromBase64 (OutputStream& binaryOutput, StringRef base64Text
         {
             auto c = (uint32) s.getAndAdvance();
 
-            if (c >= 'A' && c <= 'Z')         c -= 'A';
-            else if (c >= 'a' && c <= 'z')    c -= 'a' - 26;
-            else if (c >= '0' && c <= '9')    c += 52 - '0';
-            else if (c == '+')                c = 62;
-            else if (c == '/')                c = 63;
-            else if (c == '=')                { c = 64; if (i <= 1) return false; }
-            else                              return false;
+            if (c >= 'A' && c <= 'Z')
+                c -= 'A';
+            else if (c >= 'a' && c <= 'z')
+                c -= 'a' - 26;
+            else if (c >= '0' && c <= '9')
+                c += 52 - '0';
+            else if (c == '+')
+                c = 62;
+            else if (c == '/')
+                c = 63;
+            else if (c == '=')
+            {
+                c = 64;
+                if (i <= 1)
+                    return false;
+            }
+            else
+                return false;
 
             data[i] = (uint8) c;
         }
@@ -135,7 +146,6 @@ String Base64::toBase64 (const String& text)
     return toBase64 (text.toRawUTF8(), strlen (text.toRawUTF8()));
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -145,7 +155,8 @@ class Base64Tests final : public UnitTest
 public:
     Base64Tests()
         : UnitTest ("Base64 class", UnitTestCategories::text)
-    {}
+    {
+    }
 
     static MemoryBlock createRandomData (Random& r)
     {

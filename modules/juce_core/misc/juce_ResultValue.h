@@ -55,10 +55,9 @@ namespace juce
     @tags{Core}
 */
 template <class T>
-class JUCE_API  ResultValue
+class JUCE_API ResultValue
 {
 public:
-
     //==============================================================================
     /** Creates and returns a 'successful' result value. */
     template <class U>
@@ -73,7 +72,7 @@ public:
     */
     static ResultValue fail (StringRef errorMessage) noexcept
     {
-        return ResultValue (errorMessage.isEmpty() ? "Unknown Error" : errorMessage, ErrorTag{});
+        return ResultValue (errorMessage.isEmpty() ? "Unknown Error" : errorMessage, ErrorTag {});
     }
 
     //==============================================================================
@@ -161,7 +160,9 @@ public:
 private:
     std::variant<std::monostate, T, String> valueOrErrorMessage;
 
-    struct ErrorTag {};
+    struct ErrorTag
+    {
+    };
 
     // The default constructor is not for public use!
     // Instead, use ResultValue::ok() or ResultValue::fail()

@@ -56,10 +56,10 @@ static int calcBufferStreamBufferSize (int requestedSize, InputStream* source) n
 
 //==============================================================================
 BufferedInputStream::BufferedInputStream (InputStream* sourceStream, int size, bool takeOwnership)
-    : source (sourceStream, takeOwnership),
-      bufferedRange (sourceStream->getPosition(), sourceStream->getPosition()),
-      position (bufferedRange.getStart()),
-      bufferLength (calcBufferStreamBufferSize (size, sourceStream))
+    : source (sourceStream, takeOwnership)
+    , bufferedRange (sourceStream->getPosition(), sourceStream->getPosition())
+    , position (bufferedRange.getStart())
+    , bufferLength (calcBufferStreamBufferSize (size, sourceStream))
 {
     buffer.malloc (bufferLength);
 }
@@ -110,8 +110,8 @@ bool BufferedInputStream::ensureBuffered()
         int bytesRead = 0;
 
         if (position < lastReadPos
-             && position >= bufferEndOverlap
-             && position >= bufferedRange.getStart())
+            && position >= bufferEndOverlap
+            && position >= bufferedRange.getStart())
         {
             auto bytesToKeep = (int) (lastReadPos - position);
             memmove (buffer, buffer + (int) (position - bufferedRange.getStart()), (size_t) bytesToKeep);
@@ -151,7 +151,10 @@ int BufferedInputStream::read (void* destBuffer, const int maxBytesToRead)
 {
     const auto initialPosition = position;
 
-    const auto getBufferedRange = [this] { return bufferedRange; };
+    const auto getBufferedRange = [this]
+    {
+        return bufferedRange;
+    };
 
     const auto readFromReservoir = [this, &destBuffer, &initialPosition] (const Range<int64> rangeToRead)
     {
@@ -179,7 +182,7 @@ int BufferedInputStream::read (void* destBuffer, const int maxBytesToRead)
 String BufferedInputStream::readString()
 {
     if (position >= bufferedRange.getStart()
-         && position < lastReadPos)
+        && position < lastReadPos)
     {
         auto maxChars = (int) (lastReadPos - position);
         auto* src = buffer + (int) (position - bufferedRange.getStart());
@@ -197,7 +200,6 @@ String BufferedInputStream::readString()
     return InputStream::readString();
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -213,7 +215,7 @@ struct BufferedInputStreamTests final : public UnitTest
     template <typename Fn, typename... Values>
     static void apply (Fn&& fn, std::tuple<Values...> values)
     {
-        applyImpl (fn, std::make_index_sequence<sizeof... (Values)>(), values);
+        applyImpl (fn, std::make_index_sequence<sizeof...(Values)>(), values);
     }
 
     template <typename Fn, typename Values>
@@ -237,7 +239,8 @@ struct BufferedInputStreamTests final : public UnitTest
 
     BufferedInputStreamTests()
         : UnitTest ("BufferedInputStream", UnitTestCategories::streams)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -249,9 +252,9 @@ struct BufferedInputStreamTests final : public UnitTest
             auto r = getRandom();
 
             std::for_each (mb.begin(), mb.end(), [&] (char& item)
-            {
-                item = (char) r.nextInt (std::numeric_limits<char>::max());
-            });
+                           {
+                               item = (char) r.nextInt (std::numeric_limits<char>::max());
+                           });
 
             return mb;
         }();

@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  ChildProcess
+class JUCE_API ChildProcess
 {
 public:
     //==============================================================================

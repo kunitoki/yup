@@ -109,9 +109,10 @@ Array<MACAddress> MACAddress::getAllAddresses()
     return addresses;
 }
 
-bool MACAddress::isNull() const noexcept                                { return toInt64() == 0; }
+bool MACAddress::isNull() const noexcept { return toInt64() == 0; }
 
-bool MACAddress::operator== (const MACAddress& other) const noexcept    { return memcmp (address, other.address, sizeof (address)) == 0; }
-bool MACAddress::operator!= (const MACAddress& other) const noexcept    { return ! operator== (other); }
+bool MACAddress::operator== (const MACAddress& other) const noexcept { return memcmp (address, other.address, sizeof (address)) == 0; }
+
+bool MACAddress::operator!= (const MACAddress& other) const noexcept { return ! operator== (other); }
 
 } // namespace juce

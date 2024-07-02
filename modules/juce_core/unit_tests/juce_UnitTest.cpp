@@ -41,7 +41,8 @@ namespace juce
 {
 
 UnitTest::UnitTest (const String& nm, const String& ctg)
-    : name (nm), category (ctg)
+    : name (nm)
+    , category (ctg)
 {
     getAllTests().add (this);
 }
@@ -82,8 +83,9 @@ StringArray UnitTest::getAllCategories()
     return categories;
 }
 
-void UnitTest::initialise()  {}
-void UnitTest::shutdown()   {}
+void UnitTest::initialise() {}
+
+void UnitTest::shutdown() {}
 
 void UnitTest::performTest (UnitTestRunner* const newRunner)
 {
@@ -132,6 +134,7 @@ Random UnitTest::getRandom() const
 
 //==============================================================================
 UnitTestRunner::UnitTestRunner() {}
+
 UnitTestRunner::~UnitTestRunner() {}
 
 void UnitTestRunner::setAssertOnFailure (bool shouldAssert) noexcept
@@ -151,7 +154,7 @@ int UnitTestRunner::getNumResults() const noexcept
 
 const UnitTestRunner::TestResult* UnitTestRunner::getResult (int index) const noexcept
 {
-    return results [index];
+    return results[index];
 }
 
 void UnitTestRunner::resultsUpdated()
@@ -174,9 +177,9 @@ void UnitTestRunner::runTests (const Array<UnitTest*>& tests, int64 randomSeed)
         if (shouldAbortTests())
             break;
 
-       #if JUCE_EXCEPTIONS_DISABLED
+#if JUCE_EXCEPTIONS_DISABLED
         t->performTest (this);
-       #else
+#else
         try
         {
             t->performTest (this);
@@ -185,7 +188,7 @@ void UnitTestRunner::runTests (const Array<UnitTest*>& tests, int64 randomSeed)
         {
             addFail ("An unhandled exception was thrown!");
         }
-       #endif
+#endif
     }
 
     endTest();
@@ -297,7 +300,10 @@ void UnitTestRunner::addFail (const String& failureMessage)
 
     resultsUpdated();
 
-    if (assertOnFailure) { jassertfalse; }
+    if (assertOnFailure)
+    {
+        jassertfalse;
+    }
 }
 
 } // namespace juce

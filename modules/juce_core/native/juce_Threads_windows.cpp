@@ -40,7 +40,7 @@
 namespace juce
 {
 
-HWND juce_messageWindowHandle = nullptr;  // (this is used by other parts of the codebase)
+HWND juce_messageWindowHandle = nullptr; // (this is used by other parts of the codebase)
 
 void* getUser32Function (const char* functionName)
 {
@@ -63,17 +63,21 @@ CriticalSection::CriticalSection() noexcept
     InitializeCriticalSection ((CRITICAL_SECTION*) &lock);
 }
 
-CriticalSection::~CriticalSection() noexcept        { DeleteCriticalSection ((CRITICAL_SECTION*) &lock); }
-void CriticalSection::enter() const noexcept        { EnterCriticalSection ((CRITICAL_SECTION*) &lock); }
-bool CriticalSection::tryEnter() const noexcept     { return TryEnterCriticalSection ((CRITICAL_SECTION*) &lock) != FALSE; }
-void CriticalSection::exit() const noexcept         { LeaveCriticalSection ((CRITICAL_SECTION*) &lock); }
+CriticalSection::~CriticalSection() noexcept { DeleteCriticalSection ((CRITICAL_SECTION*) &lock); }
+
+void CriticalSection::enter() const noexcept { EnterCriticalSection ((CRITICAL_SECTION*) &lock); }
+
+bool CriticalSection::tryEnter() const noexcept { return TryEnterCriticalSection ((CRITICAL_SECTION*) &lock) != FALSE; }
+
+void CriticalSection::exit() const noexcept { LeaveCriticalSection ((CRITICAL_SECTION*) &lock); }
 
 //==============================================================================
 static unsigned int STDMETHODCALLTYPE threadEntryProc (void* userData)
 {
     if (juce_messageWindowHandle != nullptr)
         AttachThreadInput (GetWindowThreadProcessId (juce_messageWindowHandle, nullptr),
-                           GetCurrentThreadId(), TRUE);
+                           GetCurrentThreadId(),
+                           TRUE);
 
     juce_threadEntryPoint (userData);
 
@@ -95,9 +99,7 @@ static bool setPriorityInternal (bool isRealtime, HANDLE handle, Thread::Priorit
 bool Thread::createNativeThread (Priority priority)
 {
     unsigned int newThreadId;
-    threadHandle = (void*) _beginthreadex (nullptr, (unsigned int) threadStackSize,
-                                           &threadEntryProc, this, CREATE_SUSPENDED,
-                                           &newThreadId);
+    threadHandle = (void*) _beginthreadex (nullptr, (unsigned int) threadStackSize, &threadEntryProc, this, CREATE_SUSPENDED, &newThreadId);
 
     if (threadHandle != nullptr)
     {
@@ -141,9 +143,9 @@ void Thread::killThread()
 {
     if (threadHandle != nullptr)
     {
-       #if JUCE_DEBUG
+#if JUCE_DEBUG
         OutputDebugStringA ("** Warning - Forced thread termination **\n");
-       #endif
+#endif
 
         JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6258)
         TerminateThread (threadHandle, 0);
@@ -153,7 +155,7 @@ void Thread::killThread()
 
 void JUCE_CALLTYPE Thread::setCurrentThreadName ([[maybe_unused]] const String& name)
 {
-   #if JUCE_DEBUG && JUCE_MSVC
+#if JUCE_DEBUG && JUCE_MSVC
     struct
     {
         DWORD dwType;
@@ -176,7 +178,7 @@ void JUCE_CALLTYPE Thread::setCurrentThreadName ([[maybe_unused]] const String& 
     {
         OutputDebugStringA ("** Warning - Encountered noncontinuable exception **\n");
     }
-   #endif
+#endif
 }
 
 Thread::ThreadID JUCE_CALLTYPE Thread::getCurrentThreadId()
@@ -194,12 +196,13 @@ struct SleepEvent
 {
     SleepEvent() noexcept
         : handle (CreateEvent (nullptr, FALSE, FALSE,
-                              #if JUCE_DEBUG
+#if JUCE_DEBUG
                                _T ("JUCE Sleep Event")))
-                              #else
+#else
                                nullptr))
-                              #endif
-    {}
+#endif
+    {
+    }
 
     ~SleepEvent() noexcept
     {
@@ -236,6 +239,7 @@ static int lastProcessPriority = -1;
 // called when the app gains focus because Windows does weird things to process priority
 // when you swap apps, and this forces an update when the app is brought to the front.
 void juce_repeatLastProcessPriority();
+
 void juce_repeatLastProcessPriority()
 {
     if (lastProcessPriority >= 0) // (avoid changing this if it's not been explicitly set by the app..)
@@ -244,11 +248,21 @@ void juce_repeatLastProcessPriority()
 
         switch (lastProcessPriority)
         {
-            case Process::LowPriority:          p = IDLE_PRIORITY_CLASS; break;
-            case Process::NormalPriority:       p = NORMAL_PRIORITY_CLASS; break;
-            case Process::HighPriority:         p = HIGH_PRIORITY_CLASS; break;
-            case Process::RealtimePriority:     p = REALTIME_PRIORITY_CLASS; break;
-            default:                            jassertfalse; return; // bad priority value
+            case Process::LowPriority:
+                p = IDLE_PRIORITY_CLASS;
+                break;
+            case Process::NormalPriority:
+                p = NORMAL_PRIORITY_CLASS;
+                break;
+            case Process::HighPriority:
+                p = HIGH_PRIORITY_CLASS;
+                break;
+            case Process::RealtimePriority:
+                p = REALTIME_PRIORITY_CLASS;
+                break;
+            default:
+                jassertfalse;
+                return; // bad priority value
         }
 
         SetPriorityClass (GetCurrentProcess(), p);
@@ -292,19 +306,21 @@ void JUCE_CALLTYPE Process::setCurrentModuleInstanceHandle (void* const newHandl
 }
 
 void JUCE_CALLTYPE Process::raisePrivilege() {}
+
 void JUCE_CALLTYPE Process::lowerPrivilege() {}
 
 void JUCE_CALLTYPE Process::terminate()
 {
-   #if JUCE_MSVC && JUCE_CHECK_MEMORY_LEAKS
+#if JUCE_MSVC && JUCE_CHECK_MEMORY_LEAKS
     _CrtDumpMemoryLeaks();
-   #endif
+#endif
 
     // bullet in the head in case there's a problem shutting down..
     ExitProcess (1);
 }
 
 bool juce_isRunningInWine();
+
 bool juce_isRunningInWine()
 {
     HMODULE ntdll = GetModuleHandleA ("ntdll");
@@ -334,13 +350,13 @@ void* DynamicLibrary::getFunction (const String& functionName) noexcept
                              : nullptr;
 }
 
-
 //==============================================================================
 class InterProcessLock::Pimpl
 {
 public:
     Pimpl (String nameIn, const int timeOutMillisecs)
-        : handle (nullptr), refCount (1)
+        : handle (nullptr)
+        , refCount (1)
     {
         nameIn = nameIn.replaceCharacter ('\\', '/');
         handle = CreateMutexW (nullptr, TRUE, ("Global\\" + nameIn).toWideCharPointer());
@@ -493,18 +509,16 @@ public:
         securityAtts.bInheritHandle = TRUE;
 
         if (CreatePipe (&readPipe, &writePipe, &securityAtts, 0)
-             && SetHandleInformation (readPipe, HANDLE_FLAG_INHERIT, 0))
+            && SetHandleInformation (readPipe, HANDLE_FLAG_INHERIT, 0))
         {
             STARTUPINFOW startupInfo = {};
             startupInfo.cb = sizeof (startupInfo);
 
             startupInfo.hStdOutput = (streamFlags & wantStdOut) != 0 ? writePipe : nullptr;
-            startupInfo.hStdError  = (streamFlags & wantStdErr) != 0 ? writePipe : nullptr;
+            startupInfo.hStdError = (streamFlags & wantStdErr) != 0 ? writePipe : nullptr;
             startupInfo.dwFlags = STARTF_USESTDHANDLES;
 
-            ok = CreateProcess (nullptr, const_cast<LPWSTR> (command.toWideCharPointer()),
-                                nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-                                environment, nullptr, &startupInfo, &processInfo) != FALSE;
+            ok = CreateProcess (nullptr, const_cast<LPWSTR> (command.toWideCharPointer()), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT, environment, nullptr, &startupInfo, &processInfo) != FALSE;
         }
     }
 

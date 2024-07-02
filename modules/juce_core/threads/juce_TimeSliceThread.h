@@ -42,7 +42,6 @@ namespace juce
 
 class TimeSliceThread;
 
-
 //==============================================================================
 /**
     Used by the TimeSliceThread class.
@@ -57,7 +56,7 @@ class TimeSliceThread;
 
     @tags{Core}
 */
-class JUCE_API  TimeSliceClient
+class JUCE_API TimeSliceClient
 {
 public:
     /** Destructor. */
@@ -80,12 +79,10 @@ public:
     */
     virtual int useTimeSlice() = 0;
 
-
 private:
     friend class TimeSliceThread;
     Time nextCallTime;
 };
-
 
 //==============================================================================
 /**
@@ -96,7 +93,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  TimeSliceThread   : public Thread
+class JUCE_API TimeSliceThread : public Thread
 {
 public:
     //==============================================================================
@@ -152,9 +149,9 @@ public:
     bool contains (const TimeSliceClient*) const;
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     void run() override;
-   #endif
+#endif
 
     //==============================================================================
 private:

@@ -63,17 +63,25 @@ public:
     SparseSet (const SparseSet&) = default;
     SparseSet& operator= (const SparseSet&) = default;
 
-    SparseSet (SparseSet&& other) noexcept : ranges (std::move (other.ranges)) {}
-    SparseSet& operator= (SparseSet&& other) noexcept { ranges = std::move (other.ranges); return *this; }
+    SparseSet (SparseSet&& other) noexcept
+        : ranges (std::move (other.ranges))
+    {
+    }
+
+    SparseSet& operator= (SparseSet&& other) noexcept
+    {
+        ranges = std::move (other.ranges);
+        return *this;
+    }
 
     //==============================================================================
     /** Clears the set. */
-    void clear()                                { ranges.clear(); }
+    void clear() { ranges.clear(); }
 
     /** Checks whether the set is empty.
         This is much quicker than using (size() == 0).
     */
-    bool isEmpty() const noexcept               { return ranges.isEmpty(); }
+    bool isEmpty() const noexcept { return ranges.isEmpty(); }
 
     /** Returns the number of values in the set.
 
@@ -132,14 +140,14 @@ public:
     /** Returns the number of contiguous blocks of values.
         @see getRange
     */
-    int getNumRanges() const noexcept                           { return ranges.size(); }
+    int getNumRanges() const noexcept { return ranges.size(); }
 
     /** Returns one of the contiguous ranges of values stored.
         @param rangeIndex   the index of the range to look up, between 0
                             and (getNumRanges() - 1)
         @see getTotalRange
     */
-    Range<Type> getRange (int rangeIndex) const noexcept        { return ranges[rangeIndex]; }
+    Range<Type> getRange (int rangeIndex) const noexcept { return ranges[rangeIndex]; }
 
     /** Returns the range between the lowest and highest values in the set.
         @see getRange
@@ -163,8 +171,10 @@ public:
         {
             removeRange (range);
             ranges.add (range);
-            std::sort (ranges.begin(), ranges.end(),
-                       [] (Range<Type> a, Range<Type> b) { return a.getStart() < b.getStart(); });
+            std::sort (ranges.begin(), ranges.end(), [] (Range<Type> a, Range<Type> b)
+                       {
+                           return a.getStart() < b.getStart();
+                       });
             simplify();
         }
     }
@@ -256,11 +266,12 @@ public:
     }
 
     /** Returns the set as a list of ranges, which you may want to iterate over. */
-    const Array<Range<Type>>& getRanges() const noexcept        { return ranges; }
+    const Array<Range<Type>>& getRanges() const noexcept { return ranges; }
 
     //==============================================================================
-    bool operator== (const SparseSet& other) const noexcept     { return ranges == other.ranges; }
-    bool operator!= (const SparseSet& other) const noexcept     { return ranges != other.ranges; }
+    bool operator== (const SparseSet& other) const noexcept { return ranges == other.ranges; }
+
+    bool operator!= (const SparseSet& other) const noexcept { return ranges != other.ranges; }
 
 private:
     //==============================================================================

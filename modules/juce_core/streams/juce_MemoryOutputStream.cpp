@@ -41,21 +41,22 @@ namespace juce
 {
 
 MemoryOutputStream::MemoryOutputStream (const size_t initialSize)
-  : blockToUse (&internalBlock)
+    : blockToUse (&internalBlock)
 {
     internalBlock.setSize (initialSize, false);
 }
 
 MemoryOutputStream::MemoryOutputStream (MemoryBlock& memoryBlockToWriteTo,
                                         const bool appendToExistingBlockContent)
-  : blockToUse (&memoryBlockToWriteTo)
+    : blockToUse (&memoryBlockToWriteTo)
 {
     if (appendToExistingBlockContent)
         position = size = memoryBlockToWriteTo.getSize();
 }
 
 MemoryOutputStream::MemoryOutputStream (void* destBuffer, size_t destBufferSize)
-  : externalData (destBuffer), availableSize (destBufferSize)
+    : externalData (destBuffer)
+    , availableSize (destBufferSize)
 {
     jassert (externalData != nullptr); // This must be a valid pointer.
 }
@@ -168,7 +169,7 @@ const void* MemoryOutputStream::getData() const noexcept
         return externalData;
 
     if (blockToUse->getSize() > size)
-        static_cast<char*> (blockToUse->getData()) [size] = 0;
+        static_cast<char*> (blockToUse->getData())[size] = 0;
 
     return blockToUse->getData();
 }

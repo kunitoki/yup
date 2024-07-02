@@ -42,9 +42,9 @@ namespace juce
 
 int64 juce_fileSetPosition (void* handle, int64 pos);
 
-
 //==============================================================================
-FileInputStream::FileInputStream (const File& f)  : file (f)
+FileInputStream::FileInputStream (const File& f)
+    : file (f)
 {
     openHandle();
 }
@@ -93,7 +93,6 @@ bool FileInputStream::setPosition (int64 pos)
     return currentPosition == pos;
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -102,7 +101,8 @@ struct FileInputStreamTests final : public UnitTest
 {
     FileInputStreamTests()
         : UnitTest ("FileInputStream", UnitTestCategories::streams)
-    {}
+    {
+    }
 
     void runTest() override
     {

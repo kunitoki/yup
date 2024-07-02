@@ -61,10 +61,11 @@ class HeavyweightLeakedObjectDetector
 {
 public:
     //==============================================================================
-    HeavyweightLeakedObjectDetector() noexcept                                           { getBacktraceMap()[this] = SystemStats::getStackBacktrace(); }
-    HeavyweightLeakedObjectDetector (const HeavyweightLeakedObjectDetector&) noexcept    { getBacktraceMap()[this] = SystemStats::getStackBacktrace(); }
+    HeavyweightLeakedObjectDetector() noexcept { getBacktraceMap()[this] = SystemStats::getStackBacktrace(); }
 
-    ~HeavyweightLeakedObjectDetector()                                                   { getBacktraceMap().erase (this); }
+    HeavyweightLeakedObjectDetector (const HeavyweightLeakedObjectDetector&) noexcept { getBacktraceMap()[this] = SystemStats::getStackBacktrace(); }
+
+    ~HeavyweightLeakedObjectDetector() { getBacktraceMap().erase (this); }
 
 private:
     //==============================================================================
@@ -101,8 +102,9 @@ private:
             int counter = 1;
             for (auto& bt : map)
             {
-                str << "\nBacktrace " << String (counter++)                                << "\n"
-                    << "-----------------------------------------------------------------" << "\n"
+                str << "\nBacktrace " << String (counter++) << "\n"
+                    << "-----------------------------------------------------------------"
+                    << "\n"
                     << bt.second;
             }
 
@@ -125,9 +127,9 @@ private:
 };
 
 //==============================================================================
-#if DOXYGEN || ! defined (JUCE_HEAVYWEIGHT_LEAK_DETECTOR)
- #if (DOXYGEN || JUCE_CHECK_MEMORY_LEAKS)
-  /** This macro lets you embed a heavyweight leak-detecting object inside a class.
+#if DOXYGEN || ! defined(JUCE_HEAVYWEIGHT_LEAK_DETECTOR)
+#if (DOXYGEN || JUCE_CHECK_MEMORY_LEAKS)
+        /** This macro lets you embed a heavyweight leak-detecting object inside a class.
 
       To use it, simply declare a JUCE_HEAVYWEIGHT_LEAK_DETECTOR (YourClassName) inside a private section
       of the class declaration. E.g.
@@ -149,13 +151,13 @@ private:
 
       @see HeavyweightLeakedObjectDetector, JUCE_LEAK_DETECTOR, LeakedObjectDetector
   */
-  #define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass) \
-        friend class juce::HeavyweightLeakedObjectDetector<OwnerClass>; \
-        static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
-        juce::HeavyweightLeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
- #else
-  #define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)
- #endif
+#define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                             \
+friend class juce::HeavyweightLeakedObjectDetector<OwnerClass>;                \
+static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
+juce::HeavyweightLeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
+#else
+#define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)
+#endif
 #endif
 
 } // namespace juce

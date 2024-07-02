@@ -41,40 +41,40 @@ namespace juce
 {
 
 //==============================================================================
-#if JUCE_WINDOWS && ! defined (DOXYGEN)
- #define JUCE_NATIVE_WCHAR_IS_UTF8      0
- #define JUCE_NATIVE_WCHAR_IS_UTF16     1
- #define JUCE_NATIVE_WCHAR_IS_UTF32     0
+#if JUCE_WINDOWS && ! defined(DOXYGEN)
+#define JUCE_NATIVE_WCHAR_IS_UTF8 0
+#define JUCE_NATIVE_WCHAR_IS_UTF16 1
+#define JUCE_NATIVE_WCHAR_IS_UTF32 0
 #else
- /** This macro will be set to 1 if the compiler's native wchar_t is an 8-bit type. */
- #define JUCE_NATIVE_WCHAR_IS_UTF8      0
- /** This macro will be set to 1 if the compiler's native wchar_t is a 16-bit type. */
- #define JUCE_NATIVE_WCHAR_IS_UTF16     0
- /** This macro will be set to 1 if the compiler's native wchar_t is a 32-bit type. */
- #define JUCE_NATIVE_WCHAR_IS_UTF32     1
+    /** This macro will be set to 1 if the compiler's native wchar_t is an 8-bit type. */
+#define JUCE_NATIVE_WCHAR_IS_UTF8 0
+    /** This macro will be set to 1 if the compiler's native wchar_t is a 16-bit type. */
+#define JUCE_NATIVE_WCHAR_IS_UTF16 0
+    /** This macro will be set to 1 if the compiler's native wchar_t is a 32-bit type. */
+#define JUCE_NATIVE_WCHAR_IS_UTF32 1
 #endif
 
 #if JUCE_NATIVE_WCHAR_IS_UTF32 || DOXYGEN
- /** A platform-independent 32-bit unicode character type. */
- using juce_wchar = wchar_t;
+/** A platform-independent 32-bit unicode character type. */
+using juce_wchar = wchar_t;
 #else
- using juce_wchar = uint32;
+using juce_wchar = uint32;
 #endif
 
 #ifndef DOXYGEN
- /** This macro is deprecated, but preserved for compatibility with old code. */
- #define JUCE_T(stringLiteral)   (L##stringLiteral)
+    /** This macro is deprecated, but preserved for compatibility with old code. */
+#define JUCE_T(stringLiteral) (L##stringLiteral)
 #endif
 
 #if JUCE_DEFINE_T_MACRO
- /** The 'T' macro is an alternative for using the "L" prefix in front of a string literal.
+    /** The 'T' macro is an alternative for using the "L" prefix in front of a string literal.
 
      This macro is deprecated, but available for compatibility with old code if you set
      JUCE_DEFINE_T_MACRO = 1. The fastest, most portable and best way to write your string
      literals is as standard char strings, using escaped utf-8 character sequences for extended
      characters, rather than trying to store them as wide-char strings.
  */
- #define T(stringLiteral)   JUCE_T(stringLiteral)
+#define T(stringLiteral) JUCE_T (stringLiteral)
 #endif
 
 #ifndef DOXYGEN
@@ -83,14 +83,48 @@ namespace juce
 // GNU libstdc++ does not have std::make_unsigned
 namespace internal
 {
-    template <typename Type> struct make_unsigned               { using type = Type; };
-    template <> struct make_unsigned<signed char>               { using type = unsigned char; };
-    template <> struct make_unsigned<char>                      { using type = unsigned char; };
-    template <> struct make_unsigned<short>                     { using type = unsigned short; };
-    template <> struct make_unsigned<int>                       { using type = unsigned int; };
-    template <> struct make_unsigned<long>                      { using type = unsigned long; };
-    template <> struct make_unsigned<long long>                 { using type = unsigned long long; };
-}
+    template <typename Type>
+    struct make_unsigned
+    {
+        using type = Type;
+    };
+
+    template <>
+    struct make_unsigned<signed char>
+    {
+        using type = unsigned char;
+    };
+
+    template <>
+    struct make_unsigned<char>
+    {
+        using type = unsigned char;
+    };
+
+    template <>
+    struct make_unsigned<short>
+    {
+        using type = unsigned short;
+    };
+
+    template <>
+    struct make_unsigned<int>
+    {
+        using type = unsigned int;
+    };
+
+    template <>
+    struct make_unsigned<long>
+    {
+        using type = unsigned long;
+    };
+
+    template <>
+    struct make_unsigned<long long>
+    {
+        using type = unsigned long long;
+    };
+} // namespace internal
 
 #endif
 
@@ -105,7 +139,7 @@ namespace internal
 
     @tags{Core}
 */
-class JUCE_API  CharacterFunctions
+class JUCE_API CharacterFunctions
 {
 public:
     //==============================================================================
@@ -166,12 +200,12 @@ public:
         constexpr auto inf = std::numeric_limits<double>::infinity();
 
         bool isNegative = false;
-       #if ! JUCE_MINGW
-        constexpr const int maxSignificantDigits = 17 + 1; // An additional digit for rounding
+#if ! JUCE_MINGW
+        constexpr const int maxSignificantDigits = 17 + 1;             // An additional digit for rounding
         constexpr const int bufferSize = maxSignificantDigits + 7 + 1; // -.E-XXX and a trailing null-terminator
         char buffer[(size_t) bufferSize] = {};
         char* writePtr = &(buffer[0]);
-       #endif
+#endif
 
         const auto endOfWhitspace = text.findEndOfWhitespace();
         text = endOfWhitspace;
@@ -182,9 +216,9 @@ public:
         {
             case '-':
                 isNegative = true;
-               #if ! JUCE_MINGW
+#if ! JUCE_MINGW
                 *writePtr++ = '-';
-               #endif
+#endif
                 JUCE_FALLTHROUGH
             case '+':
                 c = *++text;
@@ -225,7 +259,7 @@ public:
                 break;
         }
 
-       #if JUCE_MINGW
+#if JUCE_MINGW
         // MinGW does not have access to the locale functions required for strtold, so we parse the doubles
         // ourselves. There are some edge cases where the least significant digit will be wrong!
         double result[3] = { 0 }, accumulator[2] = { 0 };
@@ -252,9 +286,9 @@ public:
                 if (++numSignificantDigits > maxSignificantDigits)
                 {
                     if (digit > 5)
-                        ++accumulator [decPointIndex];
+                        ++accumulator[decPointIndex];
                     else if (digit == 5 && (lastDigit & 1) != 0)
-                        ++accumulator [decPointIndex];
+                        ++accumulator[decPointIndex];
 
                     if (decPointIndex > 0)
                         exponentAdjustment[1]--;
@@ -271,16 +305,16 @@ public:
                 else
                 {
                     const auto maxAccumulatorValue = (double) ((std::numeric_limits<unsigned int>::max() - 9) / 10);
-                    if (accumulator [decPointIndex] > maxAccumulatorValue)
+                    if (accumulator[decPointIndex] > maxAccumulatorValue)
                     {
-                        result [decPointIndex] = mulexp10 (result [decPointIndex], exponentAccumulator [decPointIndex])
-                                                 + accumulator [decPointIndex];
-                        accumulator [decPointIndex] = 0;
-                        exponentAccumulator [decPointIndex] = 0;
+                        result[decPointIndex] = mulexp10 (result[decPointIndex], exponentAccumulator[decPointIndex])
+                                              + accumulator[decPointIndex];
+                        accumulator[decPointIndex] = 0;
+                        exponentAccumulator[decPointIndex] = 0;
                     }
 
-                    accumulator [decPointIndex] = accumulator[decPointIndex] * 10 + digit;
-                    exponentAccumulator [decPointIndex]++;
+                    accumulator[decPointIndex] = accumulator[decPointIndex] * 10 + digit;
+                    exponentAccumulator[decPointIndex]++;
                 }
             }
             else if (decPointIndex == 0 && *text == '.')
@@ -313,8 +347,11 @@ public:
 
             switch (*++text)
             {
-                case '-':   negativeExponent = true; JUCE_FALLTHROUGH
-                case '+':   ++text;
+                case '-':
+                    negativeExponent = true;
+                    JUCE_FALLTHROUGH
+                case '+':
+                    ++text;
             }
 
             while (text.isDigit())
@@ -330,7 +367,7 @@ public:
 
         return isNegative ? -r : r;
 
-       #else   // ! JUCE_MINGW
+#else // ! JUCE_MINGW
 
         int numSigFigs = 0, extraExponent = 0;
         bool decimalPointFound = false, leadingZeros = false;
@@ -454,19 +491,19 @@ public:
             writeExponentDigits (extraExponent, writePtr);
         }
 
-       #if JUCE_WINDOWS
+#if JUCE_WINDOWS
         static _locale_t locale = _create_locale (LC_ALL, "C");
         return _strtod_l (&buffer[0], nullptr, locale);
-       #else
+#else
         static locale_t locale = newlocale (LC_ALL_MASK, "C", nullptr);
-        #if JUCE_ANDROID
+#if JUCE_ANDROID
         return (double) strtold_l (&buffer[0], nullptr, locale);
-        #else
+#else
         return strtod_l (&buffer[0], nullptr, locale);
-        #endif
-       #endif
+#endif
+#endif
 
-       #endif   // JUCE_MINGW
+#endif // JUCE_MINGW
     }
 
     /** Parses a character string, to read a floating-point value. */
@@ -500,7 +537,7 @@ public:
                 break;
         }
 
-        return isNeg ? - (IntType) v : (IntType) v;
+        return isNeg ? -(IntType) v : (IntType) v;
     }
 
     /** Parses a character string, to read a hexadecimal value. */
@@ -588,7 +625,7 @@ public:
         dest.writeNull();
 
         return (size_t) getAddressDifference (dest.getAddress(), startAddress)
-                 + sizeof (typename DestCharPointerType::CharType);
+             + sizeof (typename DestCharPointerType::CharType);
     }
 
     /** Copies characters from one string to another, up to a null terminator
@@ -727,7 +764,7 @@ public:
         auto substringLength = (int) substringToLookFor.length();
 
         while (textToSearch.compareUpTo (substringToLookFor, substringLength) != 0
-                 && ! textToSearch.isEmpty())
+               && ! textToSearch.isEmpty())
             ++textToSearch;
 
         return textToSearch;

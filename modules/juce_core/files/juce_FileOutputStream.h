@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  FileOutputStream  : public OutputStream
+class JUCE_API FileOutputStream : public OutputStream
 {
 public:
     //==============================================================================
@@ -89,23 +89,23 @@ public:
     //==============================================================================
     /** Returns the file that this stream is writing to.
     */
-    const File& getFile() const                         { return file; }
+    const File& getFile() const { return file; }
 
     /** Returns the status of the file stream.
         The result will be ok if the file opened successfully. If an error occurs while
         opening or writing to the file, this will contain an error message.
     */
-    const Result& getStatus() const noexcept            { return status; }
+    const Result& getStatus() const noexcept { return status; }
 
     /** Returns true if the stream couldn't be opened for some reason.
         @see getResult()
     */
-    bool failedToOpen() const noexcept                  { return status.failed(); }
+    bool failedToOpen() const noexcept { return status.failed(); }
 
     /** Returns true if the stream opened without problems.
         @see getResult()
     */
-    bool openedOk() const noexcept                      { return status.wasOk(); }
+    bool openedOk() const noexcept { return status.wasOk(); }
 
     /** Attempts to truncate the file to the current write position.
         To truncate a file to a specific size, first use setPosition() to seek to the
@@ -119,7 +119,6 @@ public:
     bool setPosition (int64) override;
     bool write (const void*, size_t) override;
     bool writeRepeatedByte (uint8 byte, size_t numTimesToRepeat) override;
-
 
 private:
     //==============================================================================

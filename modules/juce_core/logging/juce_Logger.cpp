@@ -51,8 +51,9 @@ Logger::~Logger()
 
 Logger* Logger::currentLogger = nullptr;
 
-void Logger::setCurrentLogger (Logger* const newLogger) noexcept    { currentLogger = newLogger; }
-Logger* Logger::getCurrentLogger()  noexcept                        { return currentLogger; }
+void Logger::setCurrentLogger (Logger* const newLogger) noexcept { currentLogger = newLogger; }
+
+Logger* Logger::getCurrentLogger() noexcept { return currentLogger; }
 
 void Logger::writeToLog (const String& message)
 {
@@ -68,23 +69,23 @@ void JUCE_API JUCE_CALLTYPE logAssertion (const char* const filename, const int 
     String m ("JUCE Assertion failure in ");
     m << File::createFileWithoutCheckingPath (CharPointer_UTF8 (filename)).getFileName() << ':' << lineNum;
 
-   #if JUCE_LOG_ASSERTIONS
+#if JUCE_LOG_ASSERTIONS
     Logger::writeToLog (m);
-   #else
+#else
     DBG (m);
-   #endif
+#endif
 }
 
-void JUCE_API JUCE_CALLTYPE logAssertion(const wchar_t* const filename, const int lineNum) noexcept
+void JUCE_API JUCE_CALLTYPE logAssertion (const wchar_t* const filename, const int lineNum) noexcept
 {
-	String m("JUCE Assertion failure in ");
-	m << File::createFileWithoutCheckingPath (filename).getFileName() << ':' << lineNum;
+    String m ("JUCE Assertion failure in ");
+    m << File::createFileWithoutCheckingPath (filename).getFileName() << ':' << lineNum;
 
-   #if JUCE_LOG_ASSERTIONS
-	Logger::writeToLog (m);
-   #else
-	DBG (m);
-   #endif
+#if JUCE_LOG_ASSERTIONS
+    Logger::writeToLog (m);
+#else
+    DBG (m);
+#endif
 }
 #endif
 

@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  StringPool
+class JUCE_API StringPool
 {
 public:
     //==============================================================================

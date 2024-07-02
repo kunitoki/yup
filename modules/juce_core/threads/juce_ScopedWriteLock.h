@@ -65,7 +65,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  ScopedWriteLock
+class JUCE_API ScopedWriteLock
 {
 public:
     //==============================================================================
@@ -79,7 +79,11 @@ public:
         otherwise there are no guarantees what will happen! Best just to use it
         as a local stack object, rather than creating one with the new() operator.
     */
-    inline explicit ScopedWriteLock (const ReadWriteLock& lock) noexcept : lock_ (lock) { lock.enterWrite(); }
+    inline explicit ScopedWriteLock (const ReadWriteLock& lock) noexcept
+        : lock_ (lock)
+    {
+        lock.enterWrite();
+    }
 
     /** Destructor.
 
@@ -88,8 +92,7 @@ public:
         Make sure this object is created and deleted by the same thread,
         otherwise there are no guarantees what will happen!
     */
-    inline ~ScopedWriteLock() noexcept                                   { lock_.exitWrite(); }
-
+    inline ~ScopedWriteLock() noexcept { lock_.exitWrite(); }
 
 private:
     //==============================================================================
@@ -133,7 +136,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  ScopedTryWriteLock
+class JUCE_API ScopedTryWriteLock
 {
 public:
     //==============================================================================
@@ -146,7 +149,9 @@ public:
         one with the new() operator.
     */
     ScopedTryWriteLock (ReadWriteLock& lockIn) noexcept
-            : ScopedTryWriteLock (lockIn, true) {}
+        : ScopedTryWriteLock (lockIn, true)
+    {
+    }
 
     /** Creates a ScopedTryWriteLock.
 
@@ -159,7 +164,10 @@ public:
         one with the new() operator.
     */
     ScopedTryWriteLock (ReadWriteLock& lockIn, bool acquireLockOnInitialisation) noexcept
-        : lock (lockIn), lockWasSuccessful (acquireLockOnInitialisation && lock.tryEnterWrite()) {}
+        : lock (lockIn)
+        , lockWasSuccessful (acquireLockOnInitialisation && lock.tryEnterWrite())
+    {
+    }
 
     /** Destructor.
 
@@ -168,13 +176,17 @@ public:
         Make sure this object is created and destructed by the same thread,
         otherwise there are no guarantees what will happen!
     */
-    ~ScopedTryWriteLock() noexcept                  { if (lockWasSuccessful) lock.exitWrite(); }
+    ~ScopedTryWriteLock() noexcept
+    {
+        if (lockWasSuccessful)
+            lock.exitWrite();
+    }
 
     /** Returns true if the mutex was successfully locked. */
-    bool isLocked() const noexcept                  { return lockWasSuccessful; }
+    bool isLocked() const noexcept { return lockWasSuccessful; }
 
     /** Retry gaining the lock by calling tryEnter on the underlying lock. */
-    bool retryLock() noexcept                       { return lockWasSuccessful = lock.tryEnterWrite(); }
+    bool retryLock() noexcept { return lockWasSuccessful = lock.tryEnterWrite(); }
 
 private:
     //==============================================================================
@@ -184,4 +196,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE (ScopedTryWriteLock)
 };
 
-}
+} // namespace juce

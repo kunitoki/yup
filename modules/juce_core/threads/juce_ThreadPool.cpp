@@ -43,8 +43,8 @@ namespace juce
 struct ThreadPool::ThreadPoolThread final : public Thread
 {
     ThreadPoolThread (ThreadPool& p, const Options& options)
-       : Thread { options.threadName, options.threadStackSizeBytes },
-         pool { p }
+        : Thread { options.threadName, options.threadStackSizeBytes }
+        , pool { p }
     {
     }
 
@@ -65,7 +65,8 @@ struct ThreadPool::ThreadPoolThread final : public Thread
 };
 
 //==============================================================================
-ThreadPoolJob::ThreadPoolJob (const String& name)  : jobName (name)
+ThreadPoolJob::ThreadPoolJob (const String& name)
+    : jobName (name)
 {
 }
 
@@ -89,7 +90,10 @@ void ThreadPoolJob::setJobName (const String& newName)
 void ThreadPoolJob::signalJobShouldExit()
 {
     shouldStop = true;
-    listeners.call ([] (Thread::Listener& l) { l.exitSignalSent(); });
+    listeners.call ([] (Thread::Listener& l)
+                    {
+                        l.exitSignalSent();
+                    });
 }
 
 void ThreadPoolJob::addListener (Thread::Listener* listener)
@@ -126,9 +130,7 @@ ThreadPool::ThreadPool (const Options& options)
 ThreadPool::ThreadPool (int numberOfThreads,
                         size_t threadStackSizeBytes,
                         Thread::Priority desiredThreadPriority)
-    : ThreadPool { Options{}.withNumberOfThreads (numberOfThreads)
-                            .withThreadStackSizeBytes (threadStackSizeBytes)
-                            .withDesiredThreadPriority (desiredThreadPriority) }
+    : ThreadPool { Options {}.withNumberOfThreads (numberOfThreads).withThreadStackSizeBytes (threadStackSizeBytes).withDesiredThreadPriority (desiredThreadPriority) }
 {
 }
 
@@ -173,8 +175,13 @@ void ThreadPool::addJob (std::function<ThreadPoolJob::JobStatus()> jobToRun)
 {
     struct LambdaJobWrapper final : public ThreadPoolJob
     {
-        LambdaJobWrapper (std::function<ThreadPoolJob::JobStatus()> j) : ThreadPoolJob ("lambda"), job (j) {}
-        JobStatus runJob() override      { return job(); }
+        LambdaJobWrapper (std::function<ThreadPoolJob::JobStatus()> j)
+            : ThreadPoolJob ("lambda")
+            , job (j)
+        {
+        }
+
+        JobStatus runJob() override { return job(); }
 
         std::function<ThreadPoolJob::JobStatus()> job;
     };
@@ -186,8 +193,17 @@ void ThreadPool::addJob (std::function<void()> jobToRun)
 {
     struct LambdaJobWrapper final : public ThreadPoolJob
     {
-        LambdaJobWrapper (std::function<void()> j) : ThreadPoolJob ("lambda"), job (std::move (j)) {}
-        JobStatus runJob() override      { job(); return ThreadPoolJob::jobHasFinished; }
+        LambdaJobWrapper (std::function<void()> j)
+            : ThreadPoolJob ("lambda")
+            , job (std::move (j))
+        {
+        }
+
+        JobStatus runJob() override
+        {
+            job();
+            return ThreadPoolJob::jobHasFinished;
+        }
 
         std::function<void()> job;
     };
@@ -209,7 +225,7 @@ int ThreadPool::getNumThreads() const noexcept
 ThreadPoolJob* ThreadPool::getJob (int index) const noexcept
 {
     const ScopedLock sl (lock);
-    return jobs [index];
+    return jobs[index];
 }
 
 bool ThreadPool::contains (const ThreadPoolJob* job) const noexcept
@@ -281,8 +297,7 @@ bool ThreadPool::removeJob (ThreadPoolJob* job, bool interruptIfRunning, int tim
     return dontWait || waitForJobToFinish (job, timeOutMs);
 }
 
-bool ThreadPool::removeAllJobs (bool interruptRunningJobs, int timeOutMs,
-                                ThreadPool::JobSelector* selectedJobsToRemove)
+bool ThreadPool::removeAllJobs (bool interruptRunningJobs, int timeOutMs, ThreadPool::JobSelector* selectedJobsToRemove)
 {
     Array<ThreadPoolJob*> jobsToWaitFor;
 

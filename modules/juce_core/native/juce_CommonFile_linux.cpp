@@ -90,8 +90,9 @@ class DirectoryIterator::NativeIterator::Pimpl
 {
 public:
     Pimpl (const File& directory, const String& wc)
-        : parentDir (File::addTrailingSeparator (directory.getFullPathName())),
-          wildCard (wc), dir (opendir (directory.getFullPathName().toUTF8()))
+        : parentDir (File::addTrailingSeparator (directory.getFullPathName()))
+        , wildCard (wc)
+        , dir (opendir (directory.getFullPathName().toUTF8()))
     {
     }
 
@@ -102,8 +103,12 @@ public:
     }
 
     bool next (String& filenameFound,
-               bool* const isDir, bool* const isHidden, int64* const fileSize,
-               Time* const modTime, Time* const creationTime, bool* const isReadOnly)
+               bool* const isDir,
+               bool* const isHidden,
+               int64* const fileSize,
+               Time* const modTime,
+               Time* const creationTime,
+               bool* const isReadOnly)
     {
         if (dir != nullptr)
         {
@@ -151,8 +156,12 @@ DirectoryIterator::NativeIterator::NativeIterator (const File& directory, const 
 DirectoryIterator::NativeIterator::~NativeIterator() {}
 
 bool DirectoryIterator::NativeIterator::next (String& filenameFound,
-                                              bool* isDir, bool* isHidden, int64* fileSize,
-                                              Time* modTime, Time* creationTime, bool* isReadOnly)
+                                              bool* isDir,
+                                              bool* isHidden,
+                                              int64* fileSize,
+                                              Time* modTime,
+                                              Time* creationTime,
+                                              bool* isReadOnly)
 {
     return pimpl->next (filenameFound, isDir, isHidden, fileSize, modTime, creationTime, isReadOnly);
 }

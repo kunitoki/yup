@@ -41,11 +41,20 @@ namespace juce
 {
 
 #ifndef DOXYGEN
- namespace AtomicHelpers
- {
-     template <typename T> struct DiffTypeHelper     { using Type = T; };
-     template <typename T> struct DiffTypeHelper<T*> { using Type = std::ptrdiff_t; };
- }
+namespace AtomicHelpers
+{
+    template <typename T>
+    struct DiffTypeHelper
+    {
+        using Type = T;
+    };
+
+    template <typename T>
+    struct DiffTypeHelper<T*>
+    {
+        using Type = std::ptrdiff_t;
+    };
+} // namespace AtomicHelpers
 #endif
 
 //==============================================================================
@@ -55,36 +64,45 @@ namespace juce
     @tags{Core}
 */
 template <typename Type>
-struct Atomic  final
+struct Atomic final
 {
     using DiffType = typename AtomicHelpers::DiffTypeHelper<Type>::Type;
 
     /** Creates a new value, initialised to zero. */
-    Atomic() noexcept  : value (Type()) {}
+    Atomic() noexcept
+        : value (Type())
+    {
+    }
 
     /** Creates a new value, with a given initial value. */
-    Atomic (Type initialValue) noexcept  : value (initialValue) {}
+    Atomic (Type initialValue) noexcept
+        : value (initialValue)
+    {
+    }
 
     /** Copies another value (atomically). */
-    Atomic (const Atomic& other) noexcept  : value (other.get()) {}
+    Atomic (const Atomic& other) noexcept
+        : value (other.get())
+    {
+    }
 
     /** Destructor. */
     ~Atomic() noexcept
     {
-       #if __cpp_lib_atomic_is_always_lock_free
+#if __cpp_lib_atomic_is_always_lock_free
         static_assert (std::atomic<Type>::is_always_lock_free,
                        "This class can only be used for lock-free types");
-       #endif
+#endif
     }
 
     /** Atomically reads and returns the current value. */
-    Type get() const noexcept               { return value.load(); }
+    Type get() const noexcept { return value.load(); }
 
     /** Atomically sets the current value. */
-    void set (Type newValue) noexcept       { value = newValue; }
+    void set (Type newValue) noexcept { value = newValue; }
 
     /** Atomically sets the current value, returning the value that was replaced. */
-    Type exchange (Type newValue) noexcept  { return value.exchange (newValue); }
+    Type exchange (Type newValue) noexcept { return value.exchange (newValue); }
 
     /** Atomically compares this value with a target value, and if it is equal, sets
         this to be equal to a new value.
@@ -146,17 +164,16 @@ struct Atomic  final
         Internally this calls std::atomic_thread_fence with
         memory_order_seq_cst (the strictest std::memory_order).
      */
-    void memoryBarrier() noexcept          { atomic_thread_fence (std::memory_order_seq_cst); }
+    void memoryBarrier() noexcept { atomic_thread_fence (std::memory_order_seq_cst); }
 
     /** The std::atomic object that this class operates on. */
     std::atomic<Type> value;
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     [[deprecated ("This method has been deprecated as there is no equivalent method in "
-                 "std::atomic. Use compareAndSetBool instead.")]]
-    Type compareAndSetValue (Type, Type) noexcept;
-   #endif
+                  "std::atomic. Use compareAndSetBool instead.")]] Type compareAndSetValue (Type, Type) noexcept;
+#endif
 };
 
 } // namespace juce

@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  GZIPCompressorOutputStream  : public OutputStream
+class JUCE_API GZIPCompressorOutputStream : public OutputStream
 {
 public:
     //==============================================================================

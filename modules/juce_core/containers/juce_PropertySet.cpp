@@ -41,15 +41,15 @@ namespace juce
 {
 
 PropertySet::PropertySet (bool ignoreCaseOfKeyNames)
-    : properties (ignoreCaseOfKeyNames),
-      fallbackProperties (nullptr),
-      ignoreCaseOfKeys (ignoreCaseOfKeyNames)
+    : properties (ignoreCaseOfKeyNames)
+    , fallbackProperties (nullptr)
+    , ignoreCaseOfKeys (ignoreCaseOfKeyNames)
 {
 }
 
 PropertySet::PropertySet (const PropertySet& other)
-    : fallbackProperties (other.fallbackProperties),
-      ignoreCaseOfKeys (other.ignoreCaseOfKeys)
+    : fallbackProperties (other.fallbackProperties)
+    , ignoreCaseOfKeys (other.ignoreCaseOfKeys)
 {
     const ScopedLock sl (other.lock);
 
@@ -57,8 +57,8 @@ PropertySet::PropertySet (const PropertySet& other)
 }
 
 PropertySet::PropertySet (PropertySet&& other)
-    : fallbackProperties (other.fallbackProperties),
-      ignoreCaseOfKeys (other.ignoreCaseOfKeys)
+    : fallbackProperties (other.fallbackProperties)
+    , ignoreCaseOfKeys (other.ignoreCaseOfKeys)
 {
     const ScopedLock sl (other.lock);
 
@@ -118,7 +118,7 @@ String PropertySet::getValue (StringRef keyName, const String& defaultValue) con
     auto index = properties.getAllKeys().indexOf (keyName, ignoreCaseOfKeys);
 
     if (index >= 0)
-        return properties.getAllValues() [index];
+        return properties.getAllValues()[index];
 
     return fallbackProperties != nullptr ? fallbackProperties->getValue (keyName, defaultValue)
                                          : defaultValue;
@@ -130,7 +130,7 @@ int PropertySet::getIntValue (StringRef keyName, int defaultValue) const noexcep
     auto index = properties.getAllKeys().indexOf (keyName, ignoreCaseOfKeys);
 
     if (index >= 0)
-        return properties.getAllValues() [index].getIntValue();
+        return properties.getAllValues()[index].getIntValue();
 
     return fallbackProperties != nullptr ? fallbackProperties->getIntValue (keyName, defaultValue)
                                          : defaultValue;
@@ -154,7 +154,7 @@ bool PropertySet::getBoolValue (StringRef keyName, bool defaultValue) const noex
     auto index = properties.getAllKeys().indexOf (keyName, ignoreCaseOfKeys);
 
     if (index >= 0)
-        return properties.getAllValues() [index].getIntValue() != 0;
+        return properties.getAllValues()[index].getIntValue() != 0;
 
     return fallbackProperties != nullptr ? fallbackProperties->getBoolValue (keyName, defaultValue)
                                          : defaultValue;
@@ -176,7 +176,7 @@ void PropertySet::setValue (StringRef keyName, const var& v)
         const ScopedLock sl (lock);
         auto index = properties.getAllKeys().indexOf (keyName, ignoreCaseOfKeys);
 
-        if (index < 0 || properties.getAllValues() [index] != value)
+        if (index < 0 || properties.getAllValues()[index] != value)
         {
             properties.set (keyName, value);
             propertyChanged();
@@ -201,8 +201,7 @@ void PropertySet::removeValue (StringRef keyName)
 
 void PropertySet::setValue (StringRef keyName, const XmlElement* xml)
 {
-    setValue (keyName, xml == nullptr ? var()
-                                      : var (xml->toString (XmlElement::TextFormat().singleLine().withoutHeader())));
+    setValue (keyName, xml == nullptr ? var() : var (xml->toString (XmlElement::TextFormat().singleLine().withoutHeader())));
 }
 
 bool PropertySet::containsKey (StringRef keyName) const noexcept
@@ -216,8 +215,8 @@ void PropertySet::addAllPropertiesFrom (const PropertySet& source)
     const ScopedLock sl (source.getLock());
 
     for (int i = 0; i < source.properties.size(); ++i)
-        setValue (source.properties.getAllKeys() [i],
-                  source.properties.getAllValues() [i]);
+        setValue (source.properties.getAllKeys()[i],
+                  source.properties.getAllValues()[i]);
 }
 
 void PropertySet::setFallbackPropertySet (PropertySet* fallbackProperties_) noexcept
@@ -250,7 +249,7 @@ void PropertySet::restoreFromXml (const XmlElement& xml)
     for (auto* e : xml.getChildWithTagNameIterator ("VALUE"))
     {
         if (e->hasAttribute ("name")
-             && e->hasAttribute ("val"))
+            && e->hasAttribute ("val"))
         {
             properties.set (e->getStringAttribute ("name"),
                             e->getStringAttribute ("val"));

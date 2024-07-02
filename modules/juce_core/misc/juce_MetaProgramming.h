@@ -28,4 +28,4 @@ inline constexpr bool dependentBoolValue = Value;
 template <auto... Args>
 inline constexpr bool dependentFalse = dependentBoolValue<false, Args...>;
 
-} // namespace juce::detail
+} // namespace juce

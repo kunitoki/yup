@@ -41,10 +41,14 @@ namespace juce
 {
 
 ErasedScopeGuard::ErasedScopeGuard (std::function<void()> d)
-    : detach (std::move (d)) {}
+    : detach (std::move (d))
+{
+}
 
 ErasedScopeGuard::ErasedScopeGuard (ErasedScopeGuard&& other) noexcept
-    : detach (std::exchange (other.detach, nullptr)) {}
+    : detach (std::exchange (other.detach, nullptr))
+{
+}
 
 ErasedScopeGuard& ErasedScopeGuard::operator= (ErasedScopeGuard&& other) noexcept
 {

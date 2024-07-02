@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  FileFilter
+class JUCE_API FileFilter
 {
 public:
     //==============================================================================
@@ -78,7 +78,6 @@ public:
         the object is being used.
     */
     virtual bool isDirectorySuitable (const File& file) const = 0;
-
 
 protected:
     //==============================================================================

@@ -38,12 +38,12 @@
 */
 
 #ifdef JUCE_CORE_H_INCLUDED
- /* When you add this cpp file to your project, you mustn't include it in a file where you've
+    /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
  */
- #error "Incorrect use of JUCE cpp file"
+#error "Incorrect use of JUCE cpp file"
 #endif
 
 #define JUCE_CORE_INCLUDE_OBJC_HELPERS 1
@@ -59,91 +59,91 @@
 #include <thread>
 
 #if ! (JUCE_ANDROID || JUCE_BSD)
- #include <sys/timeb.h>
- #include <cwctype>
+#include <sys/timeb.h>
+#include <cwctype>
 #endif
 
 #if JUCE_WINDOWS
- #include <ctime>
+#include <ctime>
 
- #if JUCE_MINGW
-  #include <ws2spi.h>
-  #include <cstdio>
-  #include <locale.h>
- #else
-  JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4091)
-  #include <Dbghelp.h>
-  JUCE_END_IGNORE_WARNINGS_MSVC
+#if JUCE_MINGW
+#include <ws2spi.h>
+#include <cstdio>
+#include <locale.h>
+#else
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4091)
+#include <Dbghelp.h>
+JUCE_END_IGNORE_WARNINGS_MSVC
 
-  #if ! JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
-   #pragma comment (lib, "DbgHelp.lib")
-  #endif
- #endif
+#if ! JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#pragma comment(lib, "DbgHelp.lib")
+#endif
+#endif
 
 #else
- #if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
-  #include <sys/types.h>
-  #include <sys/socket.h>
-  #include <sys/errno.h>
-  #include <unistd.h>
-  #include <netinet/in.h>
- #endif
+#if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/errno.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#endif
 
- #if JUCE_WASM
-  #include <stdio.h>
-  #include <sys/socket.h>
-  #include <sys/stat.h>
-  #include <sys/types.h>
-  #include <sys/vfs.h>
-  #include <errno.h>
-  #include <unistd.h>
-  #include <netinet/in.h>
- #endif
+#if JUCE_WASM
+#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/vfs.h>
+#include <errno.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#endif
 
- #if JUCE_EMSCRIPTEN
-  #include <emscripten.h>
- #endif
+#if JUCE_EMSCRIPTEN
+#include <emscripten.h>
+#endif
 
- #if JUCE_LINUX || JUCE_BSD
-  #include <stdio.h>
-  #include <langinfo.h>
-  #include <ifaddrs.h>
-  #include <sys/resource.h>
+#if JUCE_LINUX || JUCE_BSD
+#include <stdio.h>
+#include <langinfo.h>
+#include <ifaddrs.h>
+#include <sys/resource.h>
 
-  #if JUCE_USE_CURL
-   #include <curl/curl.h>
-  #endif
- #endif
+#if JUCE_USE_CURL
+#include <curl/curl.h>
+#endif
+#endif
 
- #include <pwd.h>
- #include <fcntl.h>
- #include <netdb.h>
- #include <arpa/inet.h>
- #include <netinet/tcp.h>
- #include <sys/time.h>
- #include <net/if.h>
- #include <sys/ioctl.h>
+#include <pwd.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+#include <sys/time.h>
+#include <net/if.h>
+#include <sys/ioctl.h>
 
- #if ! (JUCE_WASM || (JUCE_ANDROID && __ANDROID_API__ < 33))
-  #include <execinfo.h>
- #endif
+#if ! (JUCE_WASM || (JUCE_ANDROID && __ANDROID_API__ < 33))
+#include <execinfo.h>
+#endif
 
- #if ! (JUCE_WASM || JUCE_MINGW)
-  #include <cxxabi.h>
- #endif
+#if ! (JUCE_WASM || JUCE_MINGW)
+#include <cxxabi.h>
+#endif
 
- extern char** environ;
+extern char** environ;
 #endif
 
 #if JUCE_MAC || JUCE_IOS
- #include <xlocale.h>
- #include <mach/mach.h>
+#include <xlocale.h>
+#include <mach/mach.h>
 #endif
 
 #if JUCE_ANDROID
- #include <ifaddrs.h>
- #include <unwind.h>
- #include <android/log.h>
+#include <ifaddrs.h>
+#include <unwind.h>
+#include <android/log.h>
 #endif
 
 #undef check
@@ -221,76 +221,76 @@
 
 //==============================================================================
 #if ! JUCE_WINDOWS
- #include "native/juce_SharedCode_posix.h"
- #include "native/juce_NamedPipe_posix.cpp"
- #if ! JUCE_ANDROID || __ANDROID_API__ >= 24
-  #include "native/juce_IPAddress_posix.h"
- #endif
+#include "native/juce_SharedCode_posix.h"
+#include "native/juce_NamedPipe_posix.cpp"
+#if ! JUCE_ANDROID || __ANDROID_API__ >= 24
+#include "native/juce_IPAddress_posix.h"
+#endif
 #endif
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
- #include "native/juce_Files_mac.mm"
- #include "native/juce_Network_mac.mm"
- #include "native/juce_Strings_mac.mm"
- #include "native/juce_SharedCode_intel.h"
- #include "native/juce_SystemStats_mac.mm"
- #include "native/juce_Threads_mac.mm"
- #include "native/juce_PlatformTimer_generic.cpp"
- #include "native/juce_Process_mac.mm"
+#include "native/juce_Files_mac.mm"
+#include "native/juce_Network_mac.mm"
+#include "native/juce_Strings_mac.mm"
+#include "native/juce_SharedCode_intel.h"
+#include "native/juce_SystemStats_mac.mm"
+#include "native/juce_Threads_mac.mm"
+#include "native/juce_PlatformTimer_generic.cpp"
+#include "native/juce_Process_mac.mm"
 
 //==============================================================================
 #elif JUCE_WINDOWS
- #include "native/juce_Files_windows.cpp"
- #include "native/juce_Network_windows.cpp"
- #include "native/juce_Registry_windows.cpp"
- #include "native/juce_SystemStats_windows.cpp"
- #include "native/juce_Threads_windows.cpp"
- #include "native/juce_PlatformTimer_windows.cpp"
+#include "native/juce_Files_windows.cpp"
+#include "native/juce_Network_windows.cpp"
+#include "native/juce_Registry_windows.cpp"
+#include "native/juce_SystemStats_windows.cpp"
+#include "native/juce_Threads_windows.cpp"
+#include "native/juce_PlatformTimer_windows.cpp"
 
 //==============================================================================
 #elif JUCE_LINUX
- #include "native/juce_CommonFile_linux.cpp"
- #include "native/juce_Files_linux.cpp"
- #include "native/juce_Network_linux.cpp"
- #if JUCE_USE_CURL
-  #include "native/juce_Network_curl.cpp"
- #endif
- #include "native/juce_SystemStats_linux.cpp"
- #include "native/juce_Threads_linux.cpp"
- #include "native/juce_PlatformTimer_generic.cpp"
+#include "native/juce_CommonFile_linux.cpp"
+#include "native/juce_Files_linux.cpp"
+#include "native/juce_Network_linux.cpp"
+#if JUCE_USE_CURL
+#include "native/juce_Network_curl.cpp"
+#endif
+#include "native/juce_SystemStats_linux.cpp"
+#include "native/juce_Threads_linux.cpp"
+#include "native/juce_PlatformTimer_generic.cpp"
 
 //==============================================================================
 #elif JUCE_BSD
- #include "native/juce_CommonFile_linux.cpp"
- #include "native/juce_Files_linux.cpp"
- #include "native/juce_Network_linux.cpp"
- #if JUCE_USE_CURL
-  #include "native/juce_Network_curl.cpp"
- #endif
- #include "native/juce_SharedCode_intel.h"
- #include "native/juce_SystemStats_linux.cpp"
- #include "native/juce_Threads_linux.cpp"
- #include "native/juce_PlatformTimer_generic.cpp"
+#include "native/juce_CommonFile_linux.cpp"
+#include "native/juce_Files_linux.cpp"
+#include "native/juce_Network_linux.cpp"
+#if JUCE_USE_CURL
+#include "native/juce_Network_curl.cpp"
+#endif
+#include "native/juce_SharedCode_intel.h"
+#include "native/juce_SystemStats_linux.cpp"
+#include "native/juce_Threads_linux.cpp"
+#include "native/juce_PlatformTimer_generic.cpp"
 
 //==============================================================================
 #elif JUCE_ANDROID
- #include "native/juce_CommonFile_linux.cpp"
- #include "native/juce_JNIHelpers_android.cpp"
- #include "native/juce_Files_android.cpp"
- #include "native/juce_Misc_android.cpp"
- #include "native/juce_Network_android.cpp"
- #include "native/juce_SystemStats_android.cpp"
- #include "native/juce_Threads_android.cpp"
- #include "native/juce_RuntimePermissions_android.cpp"
- #include "native/juce_PlatformTimer_generic.cpp"
+#include "native/juce_CommonFile_linux.cpp"
+#include "native/juce_JNIHelpers_android.cpp"
+#include "native/juce_Files_android.cpp"
+#include "native/juce_Misc_android.cpp"
+#include "native/juce_Network_android.cpp"
+#include "native/juce_SystemStats_android.cpp"
+#include "native/juce_Threads_android.cpp"
+#include "native/juce_RuntimePermissions_android.cpp"
+#include "native/juce_PlatformTimer_generic.cpp"
 
 //==============================================================================
 #elif JUCE_WASM
- #include "native/juce_SystemStats_wasm.cpp"
- #include "native/juce_Files_wasm.cpp"
- #include "native/juce_Threads_wasm.cpp"
- #include "native/juce_PlatformTimer_generic.cpp"
+#include "native/juce_SystemStats_wasm.cpp"
+#include "native/juce_Files_wasm.cpp"
+#include "native/juce_Threads_wasm.cpp"
+#include "native/juce_PlatformTimer_generic.cpp"
 #endif
 
 #include "files/juce_common_MimeTypes.h"
@@ -301,24 +301,24 @@
 #include "network/juce_URL.cpp"
 
 #if ! JUCE_WASM
- #include "threads/juce_ChildProcess.cpp"
- #include "network/juce_WebInputStream.cpp"
- #include "streams/juce_URLInputSource.cpp"
+#include "threads/juce_ChildProcess.cpp"
+#include "network/juce_WebInputStream.cpp"
+#include "streams/juce_URLInputSource.cpp"
 #endif
 
 //==============================================================================
 #if JUCE_UNIT_TESTS
- #include "containers/juce_HashMap_test.cpp"
- #include "containers/juce_Optional_test.cpp"
- #include "containers/juce_Enumerate_test.cpp"
- #include "maths/juce_MathsFunctions_test.cpp"
- #include "misc/juce_EnumHelpers_test.cpp"
- #include "containers/juce_FixedSizeFunction_test.cpp"
- #include "javascript/juce_JSONSerialisation_test.cpp"
- #include "memory/juce_SharedResourcePointer_test.cpp"
- #if JUCE_MAC || JUCE_IOS
-  #include "native/juce_ObjCHelpers_mac_test.mm"
- #endif
+#include "containers/juce_HashMap_test.cpp"
+#include "containers/juce_Optional_test.cpp"
+#include "containers/juce_Enumerate_test.cpp"
+#include "maths/juce_MathsFunctions_test.cpp"
+#include "misc/juce_EnumHelpers_test.cpp"
+#include "containers/juce_FixedSizeFunction_test.cpp"
+#include "javascript/juce_JSONSerialisation_test.cpp"
+#include "memory/juce_SharedResourcePointer_test.cpp"
+#if JUCE_MAC || JUCE_IOS
+#include "native/juce_ObjCHelpers_mac_test.mm"
+#endif
 #endif
 
 //==============================================================================
@@ -333,10 +333,12 @@ namespace juce
     you'll get subtle and hard-to-track-down memory corruption bugs!
 */
 #if JUCE_DEBUG
- this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode
-    ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept {}
-#else
- this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode
-    ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode() noexcept {}
-#endif
+this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept
+{
 }
+#else
+this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode() noexcept
+{
+}
+#endif
+} // namespace juce

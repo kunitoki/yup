@@ -75,7 +75,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  StringRef  final
+class JUCE_API StringRef final
 {
 public:
     /** Creates a StringRef from a raw string literal.
@@ -110,47 +110,56 @@ public:
 
     //==============================================================================
     /** Returns a raw pointer to the underlying string data. */
-    operator const String::CharPointerType::CharType*() const noexcept  { return text.getAddress(); }
+    operator const String::CharPointerType::CharType*() const noexcept { return text.getAddress(); }
+
     /** Returns a pointer to the underlying string data as a char pointer object. */
-    operator String::CharPointerType() const noexcept                   { return text; }
+    operator String::CharPointerType() const noexcept { return text; }
 
     /** Returns true if the string is empty. */
-    bool isEmpty() const noexcept                                       { return text.isEmpty(); }
+    bool isEmpty() const noexcept { return text.isEmpty(); }
+
     /** Returns true if the string is not empty. */
-    bool isNotEmpty() const noexcept                                    { return ! text.isEmpty(); }
+    bool isNotEmpty() const noexcept { return ! text.isEmpty(); }
+
     /** Returns the number of characters in the string. */
-    int length() const noexcept                                         { return (int) text.length(); }
+    int length() const noexcept { return (int) text.length(); }
 
     /** Retrieves a character by index. */
-    juce_wchar operator[] (int index) const noexcept                    { return text[index]; }
+    juce_wchar operator[] (int index) const noexcept { return text[index]; }
 
     /** Compares this StringRef with a String. */
-    bool operator== (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) == 0; }
+    bool operator== (const String& s) const noexcept { return text.compare (s.getCharPointer()) == 0; }
+
     /** Compares this StringRef with a String. */
-    bool operator!= (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) != 0; }
+    bool operator!= (const String& s) const noexcept { return text.compare (s.getCharPointer()) != 0; }
+
     /** Compares this StringRef with a String. */
-    bool operator<  (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) < 0; }
+    bool operator<(const String& s) const noexcept { return text.compare (s.getCharPointer()) < 0; }
+
     /** Compares this StringRef with a String. */
-    bool operator<= (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) <= 0; }
+    bool operator<= (const String& s) const noexcept { return text.compare (s.getCharPointer()) <= 0; }
+
     /** Compares this StringRef with a String. */
-    bool operator>  (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) > 0; }
+    bool operator> (const String& s) const noexcept { return text.compare (s.getCharPointer()) > 0; }
+
     /** Compares this StringRef with a String. */
-    bool operator>= (const String& s) const noexcept                    { return text.compare (s.getCharPointer()) >= 0; }
+    bool operator>= (const String& s) const noexcept { return text.compare (s.getCharPointer()) >= 0; }
 
     /** Case-sensitive comparison of two StringRefs. */
-    bool operator== (StringRef s) const noexcept                        { return text.compare (s.text) == 0; }
+    bool operator== (StringRef s) const noexcept { return text.compare (s.text) == 0; }
+
     /** Case-sensitive comparison of two StringRefs. */
-    bool operator!= (StringRef s) const noexcept                        { return text.compare (s.text) != 0; }
+    bool operator!= (StringRef s) const noexcept { return text.compare (s.text) != 0; }
 
     //==============================================================================
     /** The text that is referenced. */
     String::CharPointerType text;
 
-    #if JUCE_STRING_UTF_TYPE != 8 && ! defined (DOXYGEN)
-     // Sorry, non-UTF8 people, you're unable to take advantage of StringRef, because
-     // you've chosen a character encoding that doesn't match C++ string literals.
-     String stringCopy;
-    #endif
+#if JUCE_STRING_UTF_TYPE != 8 && ! defined(DOXYGEN)
+    // Sorry, non-UTF8 people, you're unable to take advantage of StringRef, because
+    // you've chosen a character encoding that doesn't match C++ string literals.
+    String stringCopy;
+#endif
 };
 
 //==============================================================================
@@ -159,17 +168,20 @@ JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, StringRef string2
 /** Case-sensitive comparison of two strings. */
 JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator<  (const String& string1, StringRef string2) noexcept;
+JUCE_API bool JUCE_CALLTYPE operator<(const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
 JUCE_API bool JUCE_CALLTYPE operator<= (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator>  (const String& string1, StringRef string2) noexcept;
+JUCE_API bool JUCE_CALLTYPE operator> (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
 JUCE_API bool JUCE_CALLTYPE operator>= (const String& string1, StringRef string2) noexcept;
 
-inline String operator+ (String s1, StringRef s2)           { return s1 += String (s2.text); }
-inline String operator+ (StringRef s1, const String& s2)    { return String (s1.text) + s2; }
-inline String operator+ (const char* s1, StringRef s2)      { return String (s1) + String (s2.text); }
-inline String operator+ (StringRef s1, const char* s2)      { return String (s1.text) + String (s2); }
+inline String operator+ (String s1, StringRef s2) { return s1 += String (s2.text); }
+
+inline String operator+ (StringRef s1, const String& s2) { return String (s1.text) + s2; }
+
+inline String operator+ (const char* s1, StringRef s2) { return String (s1) + String (s2.text); }
+
+inline String operator+ (StringRef s1, const char* s2) { return String (s1.text) + String (s2); }
 
 } // namespace juce

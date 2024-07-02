@@ -49,20 +49,65 @@ WebInputStream::~WebInputStream()
 {
 }
 
-WebInputStream& WebInputStream::withExtraHeaders (const String& extra)         { pimpl->withExtraHeaders (extra);       return *this; }
-WebInputStream& WebInputStream::withCustomRequestCommand (const String& cmd)   { pimpl->withCustomRequestCommand (cmd); return *this; }
-WebInputStream& WebInputStream::withConnectionTimeout (int t)                  { pimpl->withConnectionTimeout (t);      return *this; }
-WebInputStream& WebInputStream::withNumRedirectsToFollow (int num)             { pimpl->withNumRedirectsToFollow (num); return *this; }
-StringPairArray WebInputStream::getRequestHeaders() const                      { return pimpl->getRequestHeaders(); }
-StringPairArray WebInputStream::getResponseHeaders()                           { connect (nullptr); return pimpl->getResponseHeaders(); }
-bool WebInputStream::isError() const                                           { return pimpl->isError(); }
-void WebInputStream::cancel()                                                  { pimpl->cancel(); }
-bool WebInputStream::isExhausted()                                             { return pimpl->isExhausted(); }
-int64 WebInputStream::getPosition()                                            { return pimpl->getPosition(); }
-int64 WebInputStream::getTotalLength()                                         { connect (nullptr); return pimpl->getTotalLength(); }
-int WebInputStream::read (void* buffer, int bytes)                             { connect (nullptr); return pimpl->read (buffer, bytes); }
-bool WebInputStream::setPosition (int64 pos)                                   { return pimpl->setPosition (pos); }
-int WebInputStream::getStatusCode()                                            { connect (nullptr); return pimpl->getStatusCode(); }
+WebInputStream& WebInputStream::withExtraHeaders (const String& extra)
+{
+    pimpl->withExtraHeaders (extra);
+    return *this;
+}
+
+WebInputStream& WebInputStream::withCustomRequestCommand (const String& cmd)
+{
+    pimpl->withCustomRequestCommand (cmd);
+    return *this;
+}
+
+WebInputStream& WebInputStream::withConnectionTimeout (int t)
+{
+    pimpl->withConnectionTimeout (t);
+    return *this;
+}
+
+WebInputStream& WebInputStream::withNumRedirectsToFollow (int num)
+{
+    pimpl->withNumRedirectsToFollow (num);
+    return *this;
+}
+
+StringPairArray WebInputStream::getRequestHeaders() const { return pimpl->getRequestHeaders(); }
+
+StringPairArray WebInputStream::getResponseHeaders()
+{
+    connect (nullptr);
+    return pimpl->getResponseHeaders();
+}
+
+bool WebInputStream::isError() const { return pimpl->isError(); }
+
+void WebInputStream::cancel() { pimpl->cancel(); }
+
+bool WebInputStream::isExhausted() { return pimpl->isExhausted(); }
+
+int64 WebInputStream::getPosition() { return pimpl->getPosition(); }
+
+int64 WebInputStream::getTotalLength()
+{
+    connect (nullptr);
+    return pimpl->getTotalLength();
+}
+
+int WebInputStream::read (void* buffer, int bytes)
+{
+    connect (nullptr);
+    return pimpl->read (buffer, bytes);
+}
+
+bool WebInputStream::setPosition (int64 pos) { return pimpl->setPosition (pos); }
+
+int WebInputStream::getStatusCode()
+{
+    connect (nullptr);
+    return pimpl->getStatusCode();
+}
 
 bool WebInputStream::connect (Listener* listener)
 {
@@ -87,7 +132,7 @@ StringPairArray WebInputStream::parseHttpHeaders (const String& headerData)
             auto value = [&headersEntry, &headerPairs, &key]
             {
                 const auto currentValue = headersEntry.fromFirstOccurrenceOf (": ", false, false);
-                const auto previousValue = headerPairs [key];
+                const auto previousValue = headerPairs[key];
 
                 if (previousValue.isNotEmpty())
                     return previousValue + "," + currentValue;

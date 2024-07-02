@@ -96,7 +96,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  XmlElement
+class JUCE_API XmlElement
 {
 public:
     //==============================================================================
@@ -161,8 +161,8 @@ public:
         int lineWrapLength = 60;           /**< A maximum line length before wrapping is done. (If newLineChars is nullptr, this is ignored) */
         const char* newLineChars = "\r\n"; /**< Allows the newline characters to be set. If you set this to nullptr, then the whole XML document will be placed on a single line. */
 
-        [[nodiscard]] TextFormat singleLine() const;     /**< returns a copy of this format with newLineChars set to nullptr. */
-        [[nodiscard]] TextFormat withoutHeader() const;  /**< returns a copy of this format with the addDefaultHeader flag set to false. */
+        [[nodiscard]] TextFormat singleLine() const;    /**< returns a copy of this format with newLineChars set to nullptr. */
+        [[nodiscard]] TextFormat withoutHeader() const; /**< returns a copy of this format with the addDefaultHeader flag set to false. */
     };
 
     /** Returns a text version of this XML element.
@@ -187,7 +187,7 @@ public:
         E.g. for an element such as \<MOOSE legs="4" antlers="2">, this would return "MOOSE".
         @see hasTagName
     */
-    const String& getTagName() const noexcept            { return tagName; }
+    const String& getTagName() const noexcept { return tagName; }
 
     /** Returns the namespace portion of the tag-name, or an empty string if none is specified. */
     String getNamespace() const;
@@ -365,7 +365,7 @@ public:
 
         @see getChildIterator
     */
-    XmlElement* getFirstChildElement() const noexcept       { return firstChildElement; }
+    XmlElement* getFirstChildElement() const noexcept { return firstChildElement; }
 
     /** Returns the next of this element's siblings.
 
@@ -393,7 +393,7 @@ public:
 
         @see getNextElement, isTextElement, getChildIterator
     */
-    inline XmlElement* getNextElement() const noexcept          { return nextListItem; }
+    inline XmlElement* getNextElement() const noexcept { return nextListItem; }
 
     /** Returns the next of this element's siblings which has the specified tag
         name.
@@ -668,7 +668,12 @@ private:
     struct GetNextElementWithTagName
     {
         GetNextElementWithTagName() = default;
-        explicit GetNextElementWithTagName (String n) : name (std::move (n)) {}
+
+        explicit GetNextElementWithTagName (String n)
+            : name (std::move (n))
+        {
+        }
+
         XmlElement* getNext (const XmlElement& e) const { return e.getNextElementWithTagName (name); }
 
         String name;
@@ -679,26 +684,32 @@ private:
     class Iterator : private Traits
     {
     public:
-        using difference_type   = ptrdiff_t;
-        using value_type        = XmlElement*;
-        using pointer           = const value_type*;
-        using reference         = value_type;
+        using difference_type = ptrdiff_t;
+        using value_type = XmlElement*;
+        using pointer = const value_type*;
+        using reference = value_type;
         using iterator_category = std::input_iterator_tag;
 
         Iterator() = default;
 
         template <typename... Args>
         Iterator (XmlElement* e, Args&&... args)
-            : Traits (std::forward<Args> (args)...), element (e) {}
+            : Traits (std::forward<Args> (args)...)
+            , element (e)
+        {
+        }
 
-        Iterator begin()    const { return *this; }
-        Iterator end()      const { return Iterator{}; }
+        Iterator begin() const { return *this; }
+
+        Iterator end() const { return Iterator {}; }
 
         bool operator== (const Iterator& other) const { return element == other.element; }
+
         bool operator!= (const Iterator& other) const { return ! operator== (other); }
 
-        reference operator*()  const { return  element; }
-        pointer   operator->() const { return &element; }
+        reference operator*() const { return element; }
+
+        pointer operator->() const { return &element; }
 
         Iterator& operator++()
         {
@@ -749,30 +760,29 @@ public:
         return Iterator<GetNextElementWithTagName> { getChildByName (name), name };
     }
 
-   #ifndef DOXYGEN
-    [[deprecated]] void macroBasedForLoop() const noexcept {}
+#ifndef DOXYGEN
+    [[deprecated]] void macroBasedForLoop() const noexcept
+    {
+    }
 
-    [[deprecated ("This has been deprecated in favour of the toString method.")]]
-    String createDocument (StringRef dtdToUse,
-                           bool allOnOneLine = false,
-                           bool includeXmlHeader = true,
-                           StringRef encodingType = "UTF-8",
-                           int lineWrapLength = 60) const;
+    [[deprecated ("This has been deprecated in favour of the toString method.")]] String createDocument (StringRef dtdToUse,
+                                                                                                         bool allOnOneLine = false,
+                                                                                                         bool includeXmlHeader = true,
+                                                                                                         StringRef encodingType = "UTF-8",
+                                                                                                         int lineWrapLength = 60) const;
 
-    [[deprecated ("This has been deprecated in favour of the writeTo method.")]]
-    void writeToStream (OutputStream& output,
-                        StringRef dtdToUse,
-                        bool allOnOneLine = false,
-                        bool includeXmlHeader = true,
-                        StringRef encodingType = "UTF-8",
-                        int lineWrapLength = 60) const;
+    [[deprecated ("This has been deprecated in favour of the writeTo method.")]] void writeToStream (OutputStream& output,
+                                                                                                     StringRef dtdToUse,
+                                                                                                     bool allOnOneLine = false,
+                                                                                                     bool includeXmlHeader = true,
+                                                                                                     StringRef encodingType = "UTF-8",
+                                                                                                     int lineWrapLength = 60) const;
 
-    [[deprecated ("This has been deprecated in favour of the writeTo method.")]]
-    bool writeToFile (const File& destinationFile,
-                      StringRef dtdToUse,
-                      StringRef encodingType = "UTF-8",
-                      int lineWrapLength = 60) const;
-   #endif
+    [[deprecated ("This has been deprecated in favour of the writeTo method.")]] bool writeToFile (const File& destinationFile,
+                                                                                                   StringRef dtdToUse,
+                                                                                                   StringRef encodingType = "UTF-8",
+                                                                                                   int lineWrapLength = 60) const;
+#endif
 
 private:
     //==============================================================================
@@ -818,7 +828,7 @@ private:
 //==============================================================================
 #ifndef DOXYGEN
 
-/** DEPRECATED: A handy macro to make it easy to iterate all the child elements in an XmlElement.
+    /** DEPRECATED: A handy macro to make it easy to iterate all the child elements in an XmlElement.
 
     New code should avoid this macro, and instead use getChildIterator directly.
 
@@ -839,9 +849,9 @@ private:
     @see forEachXmlChildElementWithTagName
 */
 #define forEachXmlChildElement(parentXmlElement, childElementVariableName) \
-    for (auto* (childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
+for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
 
-/** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
+    /** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
     which have a specified tag.
 
     New code should avoid this macro, and instead use getChildWithTagNameIterator directly.
@@ -867,7 +877,7 @@ private:
     @see forEachXmlChildElement
 */
 #define forEachXmlChildElementWithTagName(parentXmlElement, childElementVariableName, requiredTagName) \
-    for (auto* (childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
+for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
 
 #endif
 

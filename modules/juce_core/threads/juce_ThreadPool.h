@@ -58,7 +58,7 @@ class ThreadPool;
 
     @tags{Core}
 */
-class JUCE_API  ThreadPoolJob
+class JUCE_API ThreadPoolJob
 {
 public:
     //==============================================================================
@@ -86,10 +86,10 @@ public:
     */
     enum JobStatus
     {
-        jobHasFinished = 0,     /**< indicates that the job has finished and can be
+        jobHasFinished = 0, /**< indicates that the job has finished and can be
                                      removed from the pool. */
 
-        jobNeedsRunningAgain    /**< indicates that the job would like to be called
+        jobNeedsRunningAgain /**< indicates that the job would like to be called
                                      again when a thread is free. */
     };
 
@@ -109,10 +109,9 @@ public:
     */
     virtual JobStatus runJob() = 0;
 
-
     //==============================================================================
     /** Returns true if this job is currently running its runJob() method. */
-    bool isRunning() const noexcept                     { return isActive; }
+    bool isRunning() const noexcept { return isActive; }
 
     /** Returns true if something is trying to interrupt this job and make it stop.
 
@@ -121,7 +120,7 @@ public:
 
         @see signalJobShouldExit()
     */
-    bool shouldExit() const noexcept                    { return shouldStop; }
+    bool shouldExit() const noexcept { return shouldStop; }
 
     /** Calling this will cause the shouldExit() method to return true, and the job
         should (if it's been implemented correctly) stop as soon as possible.
@@ -202,7 +201,6 @@ struct ThreadPoolOptions
     Thread::Priority desiredThreadPriority { Thread::Priority::normal };
 };
 
-
 //==============================================================================
 /**
     A set of threads that will run a list of jobs.
@@ -214,7 +212,7 @@ struct ThreadPoolOptions
 
     @tags{Core}
 */
-class JUCE_API  ThreadPool
+class JUCE_API ThreadPool
 {
 public:
     using Options = ThreadPoolOptions;
@@ -234,7 +232,10 @@ public:
 
         @see ThreadPoolOptions
     */
-    ThreadPool() : ThreadPool { Options{} } {}
+    ThreadPool()
+        : ThreadPool { Options {} }
+    {
+    }
 
     /** Creates a thread pool.
         Once you've created a pool, you can give it some jobs by calling addJob().
@@ -263,7 +264,7 @@ public:
         for some kind of operation.
         @see ThreadPool::removeAllJobs
     */
-    class JUCE_API  JobSelector
+    class JUCE_API JobSelector
     {
     public:
         virtual ~JobSelector() = default;

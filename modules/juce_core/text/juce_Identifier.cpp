@@ -41,11 +41,18 @@ namespace juce
 {
 
 Identifier::Identifier() noexcept {}
+
 Identifier::~Identifier() noexcept {}
 
-Identifier::Identifier (const Identifier& other) noexcept  : name (other.name) {}
+Identifier::Identifier (const Identifier& other) noexcept
+    : name (other.name)
+{
+}
 
-Identifier::Identifier (Identifier&& other) noexcept : name (std::move (other.name)) {}
+Identifier::Identifier (Identifier&& other) noexcept
+    : name (std::move (other.name))
+{
+}
 
 Identifier& Identifier::operator= (Identifier&& other) noexcept
 {
@@ -85,7 +92,7 @@ Identifier Identifier::null;
 bool Identifier::isValidIdentifier (const String& possibleIdentifier) noexcept
 {
     return possibleIdentifier.isNotEmpty()
-            && possibleIdentifier.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:#@$%");
+        && possibleIdentifier.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:#@$%");
 }
 
 } // namespace juce

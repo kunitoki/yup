@@ -40,21 +40,22 @@
 namespace juce
 {
 
-StringPairArray::StringPairArray (bool shouldIgnoreCase)  : ignoreCase (shouldIgnoreCase)
+StringPairArray::StringPairArray (bool shouldIgnoreCase)
+    : ignoreCase (shouldIgnoreCase)
 {
 }
 
 StringPairArray::StringPairArray (const StringPairArray& other)
-    : keys (other.keys),
-      values (other.values),
-      ignoreCase (other.ignoreCase)
+    : keys (other.keys)
+    , values (other.values)
+    , ignoreCase (other.ignoreCase)
 {
 }
 
 StringPairArray::StringPairArray (StringPairArray&& other)
-    : keys (std::move (other.keys)),
-      values (std::move (other.values)),
-      ignoreCase (other.ignoreCase)
+    : keys (std::move (other.keys))
+    , values (std::move (other.values))
+    , ignoreCase (other.ignoreCase)
 {
 }
 
@@ -234,7 +235,8 @@ void StringPairArray::addMapImpl (const Map& toAdd)
 }
 
 void StringPairArray::addUnorderedMap (const std::unordered_map<String, String>& toAdd) { addMapImpl (toAdd); }
-void StringPairArray::addMap (const std::map<String, String>& toAdd)                    { addMapImpl (toAdd); }
+
+void StringPairArray::addMap (const std::map<String, String>& toAdd) { addMapImpl (toAdd); }
 
 //==============================================================================
 //==============================================================================
@@ -250,7 +252,8 @@ class StringPairArrayTests final : public UnitTest
 public:
     StringPairArrayTests()
         : UnitTest ("StringPairArray", UnitTestCategories::text)
-    {}
+    {
+    }
 
     void runTest() override
     {
@@ -323,12 +326,12 @@ public:
 
             auto withAddArray = initial;
             withAddArray.addArray ([]
-            {
-                StringPairArray toAdd;
-                toAdd.set ("ZZZ", "ZZZ");
-                toAdd.set ("ddd", "ddd");
-                return toAdd;
-            }());
+                                   {
+                                       StringPairArray toAdd;
+                                       toAdd.set ("ZZZ", "ZZZ");
+                                       toAdd.set ("ddd", "ddd");
+                                       return toAdd;
+                                   }());
 
             expect (withAddMap == withAddArray);
         }

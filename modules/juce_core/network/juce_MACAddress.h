@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  MACAddress  final
+class JUCE_API MACAddress final
 {
 public:
     //==============================================================================
@@ -76,7 +76,7 @@ public:
     explicit MACAddress (StringRef address);
 
     /** Returns a pointer to the 6 bytes that make up this address. */
-    const uint8* getBytes() const noexcept        { return address; }
+    const uint8* getBytes() const noexcept { return address; }
 
     /** Returns a dash-separated string in the form "11-22-33-44-55-66" */
     String toString() const;

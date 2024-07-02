@@ -37,18 +37,18 @@
   ==============================================================================
 */
 
-#if ! defined (DOXYGEN) && (JUCE_MAC || JUCE_IOS)
- // Annoyingly we can only forward-declare a typedef by forward-declaring the
- // aliased type
- #if __has_attribute(objc_bridge)
-  #define JUCE_CF_BRIDGED_TYPE(T) __attribute__ ((objc_bridge (T)))
- #else
-  #define JUCE_CF_BRIDGED_TYPE(T)
- #endif
+#if ! defined(DOXYGEN) && (JUCE_MAC || JUCE_IOS)
+    // Annoyingly we can only forward-declare a typedef by forward-declaring the
+    // aliased type
+#if __has_attribute(objc_bridge)
+#define JUCE_CF_BRIDGED_TYPE(T) __attribute__ ((objc_bridge (T)))
+#else
+#define JUCE_CF_BRIDGED_TYPE(T)
+#endif
 
- typedef const struct JUCE_CF_BRIDGED_TYPE(NSString) __CFString * CFStringRef;
+typedef const struct JUCE_CF_BRIDGED_TYPE (NSString) __CFString* CFStringRef;
 
- #undef JUCE_CF_BRIDGED_TYPE
+#undef JUCE_CF_BRIDGED_TYPE
 #endif
 
 namespace juce
@@ -66,7 +66,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  String  final
+class JUCE_API String final
 {
 public:
     //==============================================================================
@@ -187,15 +187,15 @@ public:
         It doesn't matter too much which format you pick, because the toUTF8(), toUTF16() and
         toUTF32() methods let you access the string's content in any of the other formats.
     */
-   #if (JUCE_STRING_UTF_TYPE == 32)
+#if (JUCE_STRING_UTF_TYPE == 32)
     using CharPointerType = CharPointer_UTF32;
-   #elif (JUCE_STRING_UTF_TYPE == 16)
+#elif (JUCE_STRING_UTF_TYPE == 16)
     using CharPointerType = CharPointer_UTF16;
-   #elif (DOXYGEN || JUCE_STRING_UTF_TYPE == 8)
+#elif (DOXYGEN || JUCE_STRING_UTF_TYPE == 8)
     using CharPointerType = CharPointer_UTF8;
-   #else
-    #error "You must set the value of JUCE_STRING_UTF_TYPE to be either 8, 16, or 32!"
-   #endif
+#else
+#error "You must set the value of JUCE_STRING_UTF_TYPE to be either 8, 16, or 32!"
+#endif
 
     //==============================================================================
     /** Generates a probably-unique 32-bit hashcode from this string. */
@@ -239,10 +239,10 @@ public:
     String& operator+= (char characterToAppend);
     /** Appends a character at the end of this string. */
     String& operator+= (wchar_t characterToAppend);
-   #if ! JUCE_NATIVE_WCHAR_IS_UTF32
+#if ! JUCE_NATIVE_WCHAR_IS_UTF32
     /** Appends a character at the end of this string. */
     String& operator+= (juce_wchar characterToAppend);
-   #endif
+#endif
 
     /** Appends a string to the end of this one.
 
@@ -328,13 +328,13 @@ public:
         Note that there's also an isNotEmpty() method to help write readable code.
         @see containsNonWhitespaceChars()
     */
-    bool isEmpty() const noexcept                           { return text.isEmpty(); }
+    bool isEmpty() const noexcept { return text.isEmpty(); }
 
     /** Returns true if the string contains at least one character.
         Note that there's also an isEmpty() method to help write readable code.
         @see containsNonWhitespaceChars()
     */
-    bool isNotEmpty() const noexcept                        { return ! text.isEmpty(); }
+    bool isNotEmpty() const noexcept { return ! text.isEmpty(); }
 
     /** Resets this string to be empty. */
     void clear() noexcept;
@@ -607,7 +607,6 @@ public:
     */
     int lastIndexOfAnyOf (StringRef charactersToLookFor,
                           bool ignoreCase = false) const noexcept;
-
 
     //==============================================================================
     // Substring extraction and manipulation methods..
@@ -900,7 +899,6 @@ public:
     */
     String quoted (juce_wchar quoteCharacter = '"') const;
 
-
     //==============================================================================
     /** Creates a string which is a version of a string repeated and joined together.
 
@@ -942,10 +940,13 @@ public:
         literals can't be safely used as parameters if you're writing portable code.
     */
     template <typename... Args>
-    static String formatted (const String& formatStr, Args... args)      { return formattedRaw (formatStr.toRawUTF8(), args...); }
+    static String formatted (const String& formatStr, Args... args)
+    {
+        return formattedRaw (formatStr.toRawUTF8(), args...);
+    }
 
     /** Returns an iterator pointing at the beginning of the string. */
-    CharPointerType begin() const                                        { return getCharPointer(); }
+    CharPointerType begin() const { return getCharPointer(); }
 
     /** Returns an iterator pointing at the terminating null of the string.
 
@@ -971,7 +972,7 @@ public:
             DBG (*ptr);
         @endcode
     */
-    CharPointerType end() const                                          { return begin().findTerminatingNull(); }
+    CharPointerType end() const { return begin().findTerminatingNull(); }
 
     //==============================================================================
     // Numeric conversions..
@@ -1051,11 +1052,11 @@ public:
     */
     String (double doubleValue, int numberOfDecimalPlaces, bool useScientificNotation = false);
 
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     // Automatically creating a String from a bool opens up lots of nasty type conversion edge cases.
     // If you want a String representation of a bool you can cast the bool to an int first.
     explicit String (bool) = delete;
-   #endif
+#endif
 
     /** Reads the value of the string as a decimal number (up to 32 bits in size).
 
@@ -1119,7 +1120,10 @@ public:
 
     /** Returns a string representing this numeric value in hexadecimal. */
     template <typename IntegerType>
-    static String toHexString (IntegerType number)      { return createHex (number); }
+    static String toHexString (IntegerType number)
+    {
+        return createHex (number);
+    }
 
     /** Returns a string containing a hex dump of a block of binary data.
 
@@ -1175,7 +1179,7 @@ public:
         that is returned must not be stored anywhere, as it can be deleted whenever the
         string changes.
     */
-    CharPointerType getCharPointer() const noexcept             { return text; }
+    CharPointerType getCharPointer() const noexcept { return text; }
 
     /** Returns a pointer to a UTF-8 version of this string.
 
@@ -1330,7 +1334,7 @@ public:
     void swapWith (String& other) noexcept;
 
     //==============================================================================
-   #if JUCE_MAC || JUCE_IOS || DOXYGEN
+#if JUCE_MAC || JUCE_IOS || DOXYGEN
     /** OSX ONLY - Creates a String from an OSX CFString. */
     static String fromCFString (CFStringRef cfString);
 
@@ -1343,7 +1347,7 @@ public:
     /** OSX ONLY - Returns a copy of this string in which any decomposed unicode characters have
         been converted to their precomposed equivalents. */
     String convertToPrecomposedUnicode() const;
-   #endif
+#endif
 
     /** Returns the number of String objects which are currently sharing the same internal
         data as this one.
@@ -1351,13 +1355,12 @@ public:
     int getReferenceCount() const noexcept;
 
     //==============================================================================
-   #if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined (DOXYGEN)
+#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
     [[deprecated ("This was a static empty string object, but is now deprecated as it's too easy to accidentally "
-                 "use it indirectly during a static constructor, leading to hard-to-find order-of-initialisation "
-                 "problems. If you need an empty String object, just use String() or {}. For returning an empty "
-                 "String from a function by reference, use a function-local static String object and return that.")]]
-    static const String empty;
-   #endif
+                  "use it indirectly during a static constructor, leading to hard-to-find order-of-initialisation "
+                  "problems. If you need an empty String object, just use String() or {}. For returning an empty "
+                  "String from a function by reference, use a function-local static String object and return that.")]] static const String empty;
+#endif
 
 private:
     //==============================================================================
@@ -1376,7 +1379,7 @@ private:
     // This private cast operator should prevent strings being accidentally cast
     // to bools (this is possible because the compiler can add an implicit cast
     // via a const char*)
-    operator bool() const noexcept  { return false; }
+    operator bool() const noexcept { return false; }
 
     //==============================================================================
     static String formattedRaw (const char*, ...);
@@ -1387,21 +1390,24 @@ private:
     static String createHex (uint64);
 
     template <typename Type>
-    static String createHex (Type n)  { return createHex (static_cast<typename TypeHelpers::UnsignedTypeWithSize<(int) sizeof (n)>::type> (n)); }
+    static String createHex (Type n)
+    {
+        return createHex (static_cast<typename TypeHelpers::UnsignedTypeWithSize<(int) sizeof (n)>::type> (n));
+    }
 };
 
 //==============================================================================
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (const char* string1,     const String& string2);
+JUCE_API String JUCE_CALLTYPE operator+ (const char* string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (const wchar_t* string1,  const String& string2);
+JUCE_API String JUCE_CALLTYPE operator+ (const wchar_t* string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (char string1,            const String& string2);
+JUCE_API String JUCE_CALLTYPE operator+ (char string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (wchar_t string1,         const String& string2);
+JUCE_API String JUCE_CALLTYPE operator+ (wchar_t string1, const String& string2);
 #if ! JUCE_NATIVE_WCHAR_IS_UTF32
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (juce_wchar string1,      const String& string2);
+JUCE_API String JUCE_CALLTYPE operator+ (juce_wchar string1, const String& string2);
 #endif
 
 /** Concatenates two strings. */
@@ -1499,7 +1505,7 @@ JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, CharPointer_UTF32
     This is handy for writing strings to std::cout, std::cerr, etc.
 */
 template <class traits>
-std::basic_ostream <char, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream <char, traits>& stream, const String& stringToWrite)
+std::basic_ostream<char, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream<char, traits>& stream, const String& stringToWrite)
 {
     return stream << stringToWrite.toRawUTF8();
 }
@@ -1508,7 +1514,7 @@ std::basic_ostream <char, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream 
     This is handy for writing strings to std::wcout, std::wcerr, etc.
 */
 template <class traits>
-std::basic_ostream <wchar_t, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream <wchar_t, traits>& stream, const String& stringToWrite)
+std::basic_ostream<wchar_t, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream<wchar_t, traits>& stream, const String& stringToWrite)
 {
     return stream << stringToWrite.toWideCharPointer();
 }
@@ -1524,9 +1530,10 @@ JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, StringRef
 #ifndef DOXYGEN
 namespace std
 {
-    template <> struct hash<juce::String>
-    {
-        size_t operator() (const juce::String& s) const noexcept    { return s.hash(); }
-    };
-}
+template <>
+struct hash<juce::String>
+{
+    size_t operator() (const juce::String& s) const noexcept { return s.hash(); }
+};
+} // namespace std
 #endif

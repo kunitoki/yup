@@ -53,7 +53,7 @@ namespace
             && lhs.broadcastAddress == rhs.broadcastAddress;
     }
 
-   #if ! JUCE_WASM
+#if ! JUCE_WASM
     static IPAddress makeAddress (const sockaddr_in6* addr_in)
     {
         if (addr_in == nullptr)
@@ -109,15 +109,15 @@ namespace
 
         return false;
     }
-   #endif
+#endif
 
     Array<InterfaceInfo> getAllInterfaceInfo()
     {
         Array<InterfaceInfo> interfaces;
 
-       #if JUCE_WASM
+#if JUCE_WASM
         // TODO
-       #else
+#else
         struct ifaddrs* ifaddr = nullptr;
 
         if (getifaddrs (&ifaddr) != -1)
@@ -132,11 +132,11 @@ namespace
 
             freeifaddrs (ifaddr);
         }
-       #endif
+#endif
 
         return interfaces;
     }
-}
+} // namespace
 
 void IPAddress::findAllAddresses (Array<IPAddress>& result, bool includeIPv6)
 {

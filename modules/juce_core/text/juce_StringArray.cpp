@@ -290,16 +290,20 @@ void StringArray::trim()
 void StringArray::sort (bool ignoreCase)
 {
     if (ignoreCase)
-        std::sort (strings.begin(), strings.end(),
-                   [] (const String& a, const String& b) { return a.compareIgnoreCase (b) < 0; });
+        std::sort (strings.begin(), strings.end(), [] (const String& a, const String& b)
+                   {
+                       return a.compareIgnoreCase (b) < 0;
+                   });
     else
         std::sort (strings.begin(), strings.end());
 }
 
 void StringArray::sortNatural()
 {
-    std::sort (strings.begin(), strings.end(),
-               [] (const String& a, const String& b) { return a.compareNatural (b) < 0; });
+    std::sort (strings.begin(), strings.end(), [] (const String& a, const String& b)
+               {
+                   return a.compareNatural (b) < 0;
+               });
 }
 
 //==============================================================================
@@ -386,10 +390,17 @@ int StringArray::addLines (StringRef sourceText)
 
             switch (text.getAndAdvance())
             {
-                case 0:     finished = true; break;
-                case '\n':  break;
-                case '\r':  if (*text == '\n') ++text; break;
-                default:    continue;
+                case 0:
+                    finished = true;
+                    break;
+                case '\n':
+                    break;
+                case '\r':
+                    if (*text == '\n')
+                        ++text;
+                    break;
+                default:
+                    continue;
             }
 
             strings.add (String (startOfLine, endOfLine));

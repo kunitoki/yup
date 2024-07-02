@@ -48,12 +48,12 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  NamedValueSet
+class JUCE_API NamedValueSet
 {
 public:
     //==============================================================================
     /** Structure for a named var object */
-    struct JUCE_API  NamedValue
+    struct JUCE_API NamedValue
     {
         NamedValue() noexcept;
         ~NamedValue() noexcept;
@@ -94,8 +94,9 @@ public:
     bool operator== (const NamedValueSet&) const noexcept;
     bool operator!= (const NamedValueSet&) const noexcept;
 
-    const NamedValueSet::NamedValue* begin() const noexcept     { return values.begin(); }
-    const NamedValueSet::NamedValue* end() const noexcept       { return values.end();   }
+    const NamedValueSet::NamedValue* begin() const noexcept { return values.begin(); }
+
+    const NamedValueSet::NamedValue* end() const noexcept { return values.end(); }
 
     //==============================================================================
     /** Returns the total number of values that the set contains. */

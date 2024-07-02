@@ -51,7 +51,8 @@ public:
         virtual void newOrDeleteCalled() noexcept = 0;
     };
 
-    void addListener    (Listener* l)          { listenerList.add (l); }
+    void addListener (Listener* l) { listenerList.add (l); }
+
     void removeListener (Listener* l) noexcept { listenerList.remove (l); }
 
 private:
@@ -63,7 +64,7 @@ private:
 /** Scoped checker which will cause a unit test failure if any new/delete calls
     are made during the lifetime of the UnitTestAllocationChecker.
 */
-class UnitTestAllocationChecker  : private AllocationHooks::Listener
+class UnitTestAllocationChecker : private AllocationHooks::Listener
 {
 public:
     /** Create a checker which will log a failure to the passed test if
@@ -85,6 +86,6 @@ private:
     size_t calls = 0;
 };
 
-}
+} // namespace juce
 
 #endif

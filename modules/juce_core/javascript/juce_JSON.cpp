@@ -42,7 +42,11 @@ namespace juce
 
 struct JSONParser
 {
-    JSONParser (String::CharPointerType text) : startLocation (text), currentLocation (text) {}
+    JSONParser (String::CharPointerType text)
+        : startLocation (text)
+        , currentLocation (text)
+    {
+    }
 
     String::CharPointerType startLocation, currentLocation;
 
@@ -51,8 +55,9 @@ struct JSONParser
         String message;
         int line = 1, column = 1;
 
-        String getDescription() const   { return String (line) + ":" + String (column) + ": error: " + message; }
-        Result getResult() const        { return Result::fail (getDescription()); }
+        String getDescription() const { return String (line) + ":" + String (column) + ": error: " + message; }
+
+        Result getResult() const { return Result::fail (getDescription()); }
     };
 
     [[noreturn]] void throwError (juce::String message, String::CharPointerType location)
@@ -63,17 +68,33 @@ struct JSONParser
         for (auto i = startLocation; i < location && ! i.isEmpty(); ++i)
         {
             ++e.column;
-            if (*i == '\n')  { e.column = 1; e.line++; }
+            if (*i == '\n')
+            {
+                e.column = 1;
+                e.line++;
+            }
         }
 
         throw e;
     }
 
-    void skipWhitespace()             { currentLocation = currentLocation.findEndOfWhitespace(); }
-    juce_wchar readChar()             { return currentLocation.getAndAdvance(); }
-    juce_wchar peekChar() const       { return *currentLocation; }
-    bool matchIf (char c)             { if (peekChar() == (juce_wchar) c) { ++currentLocation; return true; } return false; }
-    bool isEOF() const                { return peekChar() == 0; }
+    void skipWhitespace() { currentLocation = currentLocation.findEndOfWhitespace(); }
+
+    juce_wchar readChar() { return currentLocation.getAndAdvance(); }
+
+    juce_wchar peekChar() const { return *currentLocation; }
+
+    bool matchIf (char c)
+    {
+        if (peekChar() == (juce_wchar) c)
+        {
+            ++currentLocation;
+            return true;
+        }
+        return false;
+    }
+
+    bool isEOF() const { return peekChar() == 0; }
 
     bool matchString (const char* t)
     {
@@ -88,8 +109,10 @@ struct JSONParser
     {
         skipWhitespace();
 
-        if (matchIf ('{')) return parseObject();
-        if (matchIf ('[')) return parseArray();
+        if (matchIf ('{'))
+            return parseObject();
+        if (matchIf ('['))
+            return parseArray();
 
         if (! isEOF())
             throwError ("Expected '{' or '['", currentLocation);
@@ -118,14 +141,27 @@ struct JSONParser
                     case '"':
                     case '\'':
                     case '\\':
-                    case '/':  break;
+                    case '/':
+                        break;
 
-                    case 'a':  c = '\a'; break;
-                    case 'b':  c = '\b'; break;
-                    case 'f':  c = '\f'; break;
-                    case 'n':  c = '\n'; break;
-                    case 'r':  c = '\r'; break;
-                    case 't':  c = '\t'; break;
+                    case 'a':
+                        c = '\a';
+                        break;
+                    case 'b':
+                        c = '\b';
+                        break;
+                    case 'f':
+                        c = '\f';
+                        break;
+                    case 'n':
+                        c = '\n';
+                        break;
+                    case 'r':
+                        c = '\r';
+                        break;
+                    case 't':
+                        c = '\t';
+                        break;
 
                     case 'u':
                     {
@@ -144,7 +180,8 @@ struct JSONParser
                         break;
                     }
 
-                    default:  break;
+                    default:
+                        break;
                 }
             }
 
@@ -164,33 +201,45 @@ struct JSONParser
 
         switch (readChar())
         {
-            case '{':    return parseObject();
-            case '[':    return parseArray();
-            case '"':    return parseString ('"');
-            case '\'':   return parseString ('\'');
+            case '{':
+                return parseObject();
+            case '[':
+                return parseArray();
+            case '"':
+                return parseString ('"');
+            case '\'':
+                return parseString ('\'');
 
             case '-':
                 skipWhitespace();
                 return parseNumber (true);
 
-            case '0': case '1': case '2': case '3': case '4':
-            case '5': case '6': case '7': case '8': case '9':
+            case '0':
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+            case '6':
+            case '7':
+            case '8':
+            case '9':
                 currentLocation = originalLocation;
                 return parseNumber (false);
 
-            case 't':   // "true"
+            case 't': // "true"
                 if (matchString ("rue"))
                     return var (true);
 
                 break;
 
-            case 'f':   // "false"
+            case 'f': // "false"
                 if (matchString ("alse"))
                     return var (false);
 
                 break;
 
-            case 'n':   // "null"
+            case 'n': // "null"
                 if (matchString ("ull"))
                     return {};
 
@@ -230,7 +279,7 @@ struct JSONParser
             }
 
             if (CharacterFunctions::isWhitespace (c)
-                 || c == ',' || c == '}' || c == ']' || c == 0)
+                || c == ',' || c == '}' || c == ']' || c == 0)
             {
                 currentLocation = lastPos;
                 break;
@@ -282,8 +331,10 @@ struct JSONParser
             resultProperties.set (propertyName, parseAny());
 
             skipWhitespace();
-            if (matchIf (',')) continue;
-            if (matchIf ('}')) break;
+            if (matchIf (','))
+                continue;
+            if (matchIf ('}'))
+                break;
 
             throwError ("Expected ',' or '}'", currentLocation);
         }
@@ -310,8 +361,10 @@ struct JSONParser
             destArray->add (parseAny());
             skipWhitespace();
 
-            if (matchIf (',')) continue;
-            if (matchIf (']')) break;
+            if (matchIf (','))
+                continue;
+            if (matchIf (']'))
+                break;
 
             throwError ("Expected ',' or ']'", currentLocation);
         }
@@ -336,16 +389,33 @@ struct JSONFormatter
 
             switch (c)
             {
-                case 0:  return;
+                case 0:
+                    return;
 
-                case '\"':  out << "\\\""; break;
-                case '\\':  out << "\\\\"; break;
-                case '\a':  out << "\\a";  break;
-                case '\b':  out << "\\b";  break;
-                case '\f':  out << "\\f";  break;
-                case '\t':  out << "\\t";  break;
-                case '\r':  out << "\\r";  break;
-                case '\n':  out << "\\n";  break;
+                case '\"':
+                    out << "\\\"";
+                    break;
+                case '\\':
+                    out << "\\\\";
+                    break;
+                case '\a':
+                    out << "\\a";
+                    break;
+                case '\b':
+                    out << "\\b";
+                    break;
+                case '\f':
+                    out << "\\f";
+                    break;
+                case '\t':
+                    out << "\\t";
+                    break;
+                case '\r':
+                    out << "\\r";
+                    break;
+                case '\n':
+                    out << "\\n";
+                    break;
 
                 default:
                     if (c >= 32 && c < 127)
@@ -401,9 +471,14 @@ struct JSONFormatter
 
                     switch (format.getSpacing())
                     {
-                        case JSON::Spacing::none: break;
-                        case JSON::Spacing::singleLine: out << ' '; break;
-                        case JSON::Spacing::multiLine: out << newLine; break;
+                        case JSON::Spacing::none:
+                            break;
+                        case JSON::Spacing::singleLine:
+                            out << ' ';
+                            break;
+                        case JSON::Spacing::multiLine:
+                            out << newLine;
+                            break;
                     }
                 }
                 else if (format.getSpacing() == JSON::Spacing::multiLine)
@@ -417,9 +492,11 @@ struct JSONFormatter
         out << ']';
     }
 
-    enum { indentSize = 2 };
+    enum
+    {
+        indentSize = 2
+    };
 };
-
 
 void JSON::writeToStream (OutputStream& out, const var& v, const FormatOptions& opt)
 {
@@ -498,7 +575,9 @@ var JSON::fromString (StringRef text)
     {
         return JSONParser (text.text).parseAny();
     }
-    catch (const JSONParser::ErrorException&) {}
+    catch (const JSONParser::ErrorException&)
+    {
+    }
 
     return {};
 }
@@ -529,14 +608,12 @@ Result JSON::parse (const String& text, var& result)
 
 String JSON::toString (const var& data, const bool allOnOneLine, int maximumDecimalPlaces)
 {
-    return toString (data, FormatOptions{}.withSpacing (allOnOneLine ? Spacing::singleLine : Spacing::multiLine)
-                                          .withMaxDecimalPlaces (maximumDecimalPlaces));
+    return toString (data, FormatOptions {}.withSpacing (allOnOneLine ? Spacing::singleLine : Spacing::multiLine).withMaxDecimalPlaces (maximumDecimalPlaces));
 }
 
 void JSON::writeToStream (OutputStream& output, const var& data, const bool allOnOneLine, int maximumDecimalPlaces)
 {
-    writeToStream (output, data, FormatOptions{}.withSpacing (allOnOneLine ? Spacing::singleLine : Spacing::multiLine)
-                                                .withMaxDecimalPlaces (maximumDecimalPlaces));
+    writeToStream (output, data, FormatOptions {}.withSpacing (allOnOneLine ? Spacing::singleLine : Spacing::multiLine).withMaxDecimalPlaces (maximumDecimalPlaces));
 }
 
 String JSON::escapeString (StringRef s)
@@ -567,7 +644,6 @@ Result JSON::parseQuotedString (String::CharPointerType& t, var& result)
     return Result::ok();
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -577,7 +653,8 @@ class JSONTests final : public UnitTest
 public:
     JSONTests()
         : UnitTest ("JSON", UnitTestCategories::json)
-    {}
+    {
+    }
 
     static String createRandomWideCharString (Random& r)
     {
@@ -590,8 +667,7 @@ public:
                 do
                 {
                     buffer[i] = (juce_wchar) (1 + r.nextInt (0x10ffff - 1));
-                }
-                while (! CharPointer_UTF16::canRepresent (buffer[i]));
+                } while (! CharPointer_UTF16::canRepresent (buffer[i]));
             }
             else
                 buffer[i] = (juce_wchar) (1 + r.nextInt (0xff));
@@ -607,7 +683,7 @@ public:
         for (int i = 0; i < numElementsInArray (buffer) - 1; ++i)
         {
             static const char chars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:";
-            buffer[i] = chars [r.nextInt (sizeof (chars) - 1)];
+            buffer[i] = chars[r.nextInt (sizeof (chars) - 1)];
         }
 
         return CharPointer_ASCII (buffer);
@@ -624,12 +700,18 @@ public:
     {
         switch (r.nextInt (depth > 3 ? 6 : 8))
         {
-            case 0:     return {};
-            case 1:     return r.nextInt();
-            case 2:     return r.nextInt64();
-            case 3:     return r.nextBool();
-            case 4:     return createRandomDouble (r);
-            case 5:     return createRandomWideCharString (r);
+            case 0:
+                return {};
+            case 1:
+                return r.nextInt();
+            case 2:
+                return r.nextInt64();
+            case 3:
+                return r.nextBool();
+            case 4:
+                return createRandomDouble (r);
+            case 5:
+                return createRandomWideCharString (r);
 
             case 6:
             {

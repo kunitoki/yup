@@ -46,9 +46,9 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API WebInputStream  : public InputStream
+class JUCE_API WebInputStream : public InputStream
 {
- public:
+public:
     /** Creates a new WebInputStream which can be used to read from a URL.
 
         @param url      the URL that should be retrieved. This parameter may also contain
@@ -234,7 +234,7 @@ class JUCE_API WebInputStream  : public InputStream
     */
     bool setPosition (int64 wantedPos) override;
 
- private:
+private:
     static void createHeadersAndPostData (const URL&, String&, MemoryBlock&, bool);
     static StringPairArray parseHttpHeaders (const String&);
 

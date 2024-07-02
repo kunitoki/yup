@@ -41,25 +41,37 @@ namespace juce
 {
 
 NamedValueSet::NamedValue::NamedValue() noexcept {}
+
 NamedValueSet::NamedValue::~NamedValue() noexcept {}
 
-NamedValueSet::NamedValue::NamedValue (const Identifier& n, const var& v)  : name (n), value (v) {}
-NamedValueSet::NamedValue::NamedValue (const NamedValue& other) : NamedValue (other.name, other.value) {}
+NamedValueSet::NamedValue::NamedValue (const Identifier& n, const var& v)
+    : name (n)
+    , value (v)
+{
+}
+
+NamedValueSet::NamedValue::NamedValue (const NamedValue& other)
+    : NamedValue (other.name, other.value)
+{
+}
 
 NamedValueSet::NamedValue::NamedValue (NamedValue&& other) noexcept
-   : NamedValue (std::move (other.name),
-                 std::move (other.value))
-{}
+    : NamedValue (std::move (other.name),
+                  std::move (other.value))
+{
+}
 
 NamedValueSet::NamedValue::NamedValue (const Identifier& n, var&& v) noexcept
-   : name (n), value (std::move (v))
+    : name (n)
+    , value (std::move (v))
 {
 }
 
 NamedValueSet::NamedValue::NamedValue (Identifier&& n, var&& v) noexcept
-   : name (std::move (n)),
-     value (std::move (v))
-{}
+    : name (std::move (n))
+    , value (std::move (v))
+{
+}
 
 NamedValueSet::NamedValue& NamedValueSet::NamedValue::operator= (NamedValue&& other) noexcept
 {
@@ -68,20 +80,27 @@ NamedValueSet::NamedValue& NamedValueSet::NamedValue::operator= (NamedValue&& ot
     return *this;
 }
 
-bool NamedValueSet::NamedValue::operator== (const NamedValue& other) const noexcept   { return name == other.name && value == other.value; }
-bool NamedValueSet::NamedValue::operator!= (const NamedValue& other) const noexcept   { return ! operator== (other); }
+bool NamedValueSet::NamedValue::operator== (const NamedValue& other) const noexcept { return name == other.name && value == other.value; }
+
+bool NamedValueSet::NamedValue::operator!= (const NamedValue& other) const noexcept { return ! operator== (other); }
 
 //==============================================================================
 NamedValueSet::NamedValueSet() noexcept {}
+
 NamedValueSet::~NamedValueSet() noexcept {}
 
-NamedValueSet::NamedValueSet (const NamedValueSet& other)  : values (other.values) {}
+NamedValueSet::NamedValueSet (const NamedValueSet& other)
+    : values (other.values)
+{
+}
 
 NamedValueSet::NamedValueSet (NamedValueSet&& other) noexcept
-   : values (std::move (other.values)) {}
+    : values (std::move (other.values))
+{
+}
 
 NamedValueSet::NamedValueSet (std::initializer_list<NamedValue> list)
-   : values (std::move (list))
+    : values (std::move (list))
 {
 }
 
@@ -137,10 +156,11 @@ bool NamedValueSet::operator== (const NamedValueSet& other) const noexcept
     return true;
 }
 
-bool NamedValueSet::operator!= (const NamedValueSet& other) const noexcept   { return ! operator== (other); }
+bool NamedValueSet::operator!= (const NamedValueSet& other) const noexcept { return ! operator== (other); }
 
-int NamedValueSet::size() const noexcept        { return values.size(); }
-bool NamedValueSet::isEmpty() const noexcept    { return values.isEmpty(); }
+int NamedValueSet::size() const noexcept { return values.size(); }
+
+bool NamedValueSet::isEmpty() const noexcept { return values.isEmpty(); }
 
 static const var& getNullVarRef() noexcept
 {

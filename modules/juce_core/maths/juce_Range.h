@@ -62,7 +62,8 @@ public:
 
     /** Constructs a range with given start and end values. */
     constexpr Range (const ValueType startValue, const ValueType endValue) noexcept
-        : start (startValue), end (jmax (startValue, endValue))
+        : start (startValue)
+        , end (jmax (startValue, endValue))
     {
     }
 
@@ -94,16 +95,16 @@ public:
 
     //==============================================================================
     /** Returns the start of the range. */
-    constexpr inline ValueType getStart() const noexcept          { return start; }
+    constexpr inline ValueType getStart() const noexcept { return start; }
 
     /** Returns the length of the range. */
-    constexpr inline ValueType getLength() const noexcept         { return end - start; }
+    constexpr inline ValueType getLength() const noexcept { return end - start; }
 
     /** Returns the end of the range. */
-    constexpr inline ValueType getEnd() const noexcept            { return end; }
+    constexpr inline ValueType getEnd() const noexcept { return end; }
 
     /** Returns true if the range has a length of zero. */
-    constexpr inline bool isEmpty() const noexcept                { return exactlyEqual (start, end); }
+    constexpr inline bool isEmpty() const noexcept { return exactlyEqual (start, end); }
 
     //==============================================================================
     /** Changes the start position of the range, leaving the end position unchanged.
@@ -217,11 +218,14 @@ public:
 
     constexpr bool operator== (Range other) const noexcept
     {
-        const auto tie = [] (const Range& r) { return std::tie (r.start, r.end); };
+        const auto tie = [] (const Range& r)
+        {
+            return std::tie (r.start, r.end);
+        };
         return tie (*this) == tie (other);
     }
 
-    constexpr bool operator!= (Range other) const noexcept     { return ! operator== (other); }
+    constexpr bool operator!= (Range other) const noexcept { return ! operator== (other); }
 
     //==============================================================================
     /** Returns true if the given position lies inside this range.
@@ -287,8 +291,8 @@ public:
     {
         const ValueType otherLen = rangeToConstrain.getLength();
         return getLength() <= otherLen
-                ? *this
-                : rangeToConstrain.movedToStartAt (jlimit (start, end - otherLen, rangeToConstrain.getStart()));
+                 ? *this
+                 : rangeToConstrain.movedToStartAt (jlimit (start, end - otherLen, rangeToConstrain.getStart()));
     }
 
     /** Scans an array of values for its min and max, and returns these as a Range. */
@@ -305,8 +309,10 @@ public:
         {
             const ValueType v (*values++);
 
-            if (r.end < v)    r.end = v;
-            if (v < r.start)  r.start = v;
+            if (r.end < v)
+                r.end = v;
+            if (v < r.start)
+                r.start = v;
         }
 
         return r;
@@ -314,7 +320,7 @@ public:
 
 private:
     //==============================================================================
-    ValueType start{}, end{};
+    ValueType start {}, end {};
 };
 
 } // namespace juce

@@ -67,14 +67,16 @@ public:
         sumSquares += v * v;
         ++count;
 
-        if (v > maximum) maximum = v;
-        if (v < minimum) minimum = v;
+        if (v > maximum)
+            maximum = v;
+        if (v < minimum)
+            minimum = v;
     }
 
     /** Reset the accumulator.
         This will reset all currently saved statistcs.
     */
-    void reset() noexcept               { *this = StatisticsAccumulator<FloatType>(); }
+    void reset() noexcept { *this = StatisticsAccumulator<FloatType>(); }
 
     //==============================================================================
     /** Returns the average (arithmetic mean) of all previously added values.
@@ -91,7 +93,7 @@ public:
     **/
     FloatType getEnergy() const noexcept
     {
-        return count > 0 ? sumSquares: FloatType();
+        return count > 0 ? sumSquares : FloatType();
     }
 
     /** Returns the variance of all previously added values.
@@ -138,7 +140,8 @@ private:
     struct KahanSum
     {
         KahanSum() = default;
-        operator FloatType() const noexcept             { return sum; }
+
+        operator FloatType() const noexcept { return sum; }
 
         void JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS operator+= (FloatType value) noexcept
         {
@@ -148,14 +151,14 @@ private:
             sum = newSum;
         }
 
-        FloatType sum{}, error{};
+        FloatType sum {}, error {};
     };
 
     //==============================================================================
     size_t count { 0 };
     KahanSum sum, sumSquares;
-    FloatType minimum {  std::numeric_limits<FloatType>::infinity() },
-              maximum { -std::numeric_limits<FloatType>::infinity() };
+    FloatType minimum { std::numeric_limits<FloatType>::infinity() },
+        maximum { -std::numeric_limits<FloatType>::infinity() };
 };
 
 } // namespace juce

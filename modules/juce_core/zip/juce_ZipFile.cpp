@@ -56,12 +56,12 @@ struct ZipFile::ZipEntryHolder
 {
     ZipEntryHolder (const char* buffer, int fileNameLen)
     {
-        isCompressed           = readUnalignedLittleEndianShort (buffer + 10) != 0;
-        entry.fileTime         = parseFileTime (readUnalignedLittleEndianShort (buffer + 12),
-                                                readUnalignedLittleEndianShort (buffer + 14));
-        compressedSize         = (int64) readUnalignedLittleEndianInt (buffer + 20);
+        isCompressed = readUnalignedLittleEndianShort (buffer + 10) != 0;
+        entry.fileTime = parseFileTime (readUnalignedLittleEndianShort (buffer + 12),
+                                        readUnalignedLittleEndianShort (buffer + 14));
+        compressedSize = (int64) readUnalignedLittleEndianInt (buffer + 20);
         entry.uncompressedSize = (int64) readUnalignedLittleEndianInt (buffer + 24);
-        streamOffset           = (int64) readUnalignedLittleEndianInt (buffer + 42);
+        streamOffset = (int64) readUnalignedLittleEndianInt (buffer + 42);
 
         entry.externalFileAttributes = readUnalignedLittleEndianInt (buffer + 38);
         auto fileType = (entry.externalFileAttributes >> 28) & 0xf;
@@ -72,12 +72,12 @@ struct ZipFile::ZipEntryHolder
 
     static Time parseFileTime (uint32 time, uint32 date) noexcept
     {
-        auto year      = (int) (1980 + (date >> 9));
-        auto month     = (int) (((date >> 5) & 15) - 1);
-        auto day       = (int) (date & 31);
-        auto hours     = (int) time >> 11;
-        auto minutes   = (int) ((time >> 5) & 63);
-        auto seconds   = (int) ((time & 31) << 1);
+        auto year = (int) (1980 + (date >> 9));
+        auto month = (int) (((date >> 5) & 15) - 1);
+        auto day = (int) (date & 31);
+        auto hours = (int) time >> 11;
+        auto minutes = (int) ((time >> 5) & 63);
+        auto seconds = (int) ((time & 31) << 1);
 
         return { year, month, day, hours, minutes, seconds };
     }
@@ -156,9 +156,9 @@ static bool hasSymbolicPart (const File& root, const File& f)
 struct ZipFile::ZipInputStream final : public InputStream
 {
     ZipInputStream (ZipFile& zf, const ZipFile::ZipEntryHolder& zei)
-        : file (zf),
-          zipEntryHolder (zei),
-          inputStream (zf.inputStream)
+        : file (zf)
+        , zipEntryHolder (zei)
+        , inputStream (zf.inputStream)
     {
         if (zf.inputSource != nullptr)
         {
@@ -167,29 +167,29 @@ struct ZipFile::ZipInputStream final : public InputStream
         }
         else
         {
-           #if JUCE_DEBUG
+#if JUCE_DEBUG
             zf.streamCounter.numOpenStreams++;
-           #endif
+#endif
         }
 
         char buffer[30];
 
         if (inputStream != nullptr
-             && inputStream->setPosition (zei.streamOffset)
-             && inputStream->read (buffer, 30) == 30
-             && ByteOrder::littleEndianInt (buffer) == 0x04034b50)
+            && inputStream->setPosition (zei.streamOffset)
+            && inputStream->read (buffer, 30) == 30
+            && ByteOrder::littleEndianInt (buffer) == 0x04034b50)
         {
             headerSize = 30 + ByteOrder::littleEndianShort (buffer + 26)
-                            + ByteOrder::littleEndianShort (buffer + 28);
+                       + ByteOrder::littleEndianShort (buffer + 28);
         }
     }
 
     ~ZipInputStream() override
     {
-       #if JUCE_DEBUG
+#if JUCE_DEBUG
         if (inputStream != nullptr && inputStream == file.inputStream)
             file.streamCounter.numOpenStreams--;
-       #endif
+#endif
     }
 
     int64 getTotalLength() override
@@ -252,10 +252,9 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZipInputStream)
 };
 
-
 //==============================================================================
 ZipFile::ZipFile (InputStream* stream, bool deleteStreamWhenDestroyed)
-   : inputStream (stream)
+    : inputStream (stream)
 {
     if (deleteStreamWhenDestroyed)
         streamToDelete.reset (inputStream);
@@ -263,17 +262,20 @@ ZipFile::ZipFile (InputStream* stream, bool deleteStreamWhenDestroyed)
     init();
 }
 
-ZipFile::ZipFile (InputStream& stream)  : inputStream (&stream)
+ZipFile::ZipFile (InputStream& stream)
+    : inputStream (&stream)
 {
     init();
 }
 
-ZipFile::ZipFile (const File& file)  : inputSource (new FileInputSource (file))
+ZipFile::ZipFile (const File& file)
+    : inputSource (new FileInputSource (file))
 {
     init();
 }
 
-ZipFile::ZipFile (InputSource* source)  : inputSource (source)
+ZipFile::ZipFile (InputSource* source)
+    : inputSource (source)
 {
     init();
 }
@@ -338,9 +340,7 @@ InputStream* ZipFile::createStreamForEntry (const int index)
 
         if (zei->isCompressed)
         {
-            stream = new GZIPDecompressorInputStream (stream, true,
-                                                      GZIPDecompressorInputStream::deflateFormat,
-                                                      zei->entry.uncompressedSize);
+            stream = new GZIPDecompressorInputStream (stream, true, GZIPDecompressorInputStream::deflateFormat, zei->entry.uncompressedSize);
 
             // (much faster to unzip in big blocks using a buffer..)
             stream = new BufferedInputStream (stream, 32768, true);
@@ -361,8 +361,10 @@ InputStream* ZipFile::createStreamForEntry (const ZipEntry& entry)
 
 void ZipFile::sortEntriesByFilename()
 {
-    std::sort (entries.begin(), entries.end(),
-               [] (const ZipEntryHolder* e1, const ZipEntryHolder* e2) { return e1->entry.filename < e2->entry.filename; });
+    std::sort (entries.begin(), entries.end(), [] (const ZipEntryHolder* e1, const ZipEntryHolder* e2)
+               {
+                   return e1->entry.filename < e2->entry.filename;
+               });
 }
 
 //==============================================================================
@@ -407,8 +409,8 @@ void ZipFile::init()
                     entries.add (new ZipEntryHolder (buffer, fileNameLen));
 
                     pos += 46u + fileNameLen
-                            + readUnalignedLittleEndianShort (buffer + 30u)
-                            + readUnalignedLittleEndianShort (buffer + 32u);
+                         + readUnalignedLittleEndianShort (buffer + 30u)
+                         + readUnalignedLittleEndianShort (buffer + 32u);
                 }
             }
         }
@@ -441,11 +443,11 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
 {
     auto* zei = entries.getUnchecked (index);
 
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     auto entryPath = zei->entry.filename;
-   #else
+#else
     auto entryPath = zei->entry.filename.replaceCharacter ('\\', '/');
-   #endif
+#endif
 
     if (entryPath.isEmpty())
         return Result::ok();
@@ -481,7 +483,7 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
     if (zei->entry.isSymbolicLink)
     {
         String originalFilePath (in->readEntireStreamAsString()
-                                    .replaceCharacter (L'/', File::getSeparatorChar()));
+                                     .replaceCharacter (L'/', File::getSeparatorChar()));
 
         if (! File::createSymbolicLink (targetFile, originalFilePath, true))
             return Result::fail ("Failed to create symbolic link: " + originalFilePath);
@@ -503,12 +505,15 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
     return Result::ok();
 }
 
-
 //==============================================================================
 struct ZipFile::Builder::Item
 {
     Item (const File& f, InputStream* s, int compression, const String& storedPath, Time time)
-        : file (f), stream (s), storedPathname (storedPath), fileTime (time), compressionLevel (compression)
+        : file (f)
+        , stream (s)
+        , storedPathname (storedPath)
+        , fileTime (time)
+        , compressionLevel (compression)
     {
         symbolicLink = (file.exists() && file.isSymbolicLink());
     }
@@ -528,8 +533,7 @@ struct ZipFile::Builder::Item
         }
         else if (compressionLevel > 0)
         {
-            GZIPCompressorOutputStream compressor (compressedData, compressionLevel,
-                                                   GZIPCompressorOutputStream::windowBitsRaw);
+            GZIPCompressorOutputStream compressor (compressedData, compressionLevel, GZIPCompressorOutputStream::windowBitsRaw);
             if (! writeSource (compressor))
                 return false;
         }
@@ -555,9 +559,9 @@ struct ZipFile::Builder::Item
         target.writeInt (0x02014b50);
         target.writeShort (symbolicLink ? 0x0314 : 0x0014);
         writeFlagsAndSizes (target);
-        target.writeShort (0); // comment length
-        target.writeShort (0); // start disk num
-        target.writeShort (0); // internal attributes
+        target.writeShort (0);                                   // comment length
+        target.writeShort (0);                                   // start disk num
+        target.writeShort (0);                                   // internal attributes
         target.writeInt ((int) (symbolicLink ? 0xA1ED0000 : 0)); // external attributes
         target.writeInt ((int) (uint32) headerStart);
         target << storedPathname;
@@ -614,8 +618,8 @@ private:
 
     void writeFlagsAndSizes (OutputStream& target) const
     {
-        target.writeShort (10); // version needed
-        target.writeShort ((short) (1 << 11)); // this flag indicates UTF-8 filename encoding
+        target.writeShort (10);                                                               // version needed
+        target.writeShort ((short) (1 << 11));                                                // this flag indicates UTF-8 filename encoding
         target.writeShort ((! symbolicLink && compressionLevel > 0) ? (short) 8 : (short) 0); //symlink target path is not compressed
         writeTimeAndDate (target, fileTime);
         target.writeInt ((int) checksum);
@@ -630,13 +634,12 @@ private:
 
 //==============================================================================
 ZipFile::Builder::Builder() {}
+
 ZipFile::Builder::~Builder() {}
 
 void ZipFile::Builder::addFile (const File& file, int compression, const String& path)
 {
-    items.add (new Item (file, nullptr, compression,
-                         path.isEmpty() ? file.getFileName() : path,
-                         file.getLastModificationTime()));
+    items.add (new Item (file, nullptr, compression, path.isEmpty() ? file.getFileName() : path, file.getLastModificationTime()));
 }
 
 void ZipFile::Builder::addEntry (InputStream* stream, int compression, const String& path, Time time)

@@ -56,7 +56,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  CriticalSection
+class JUCE_API CriticalSection
 {
 public:
     //==============================================================================
@@ -104,7 +104,6 @@ public:
     */
     void exit() const noexcept;
 
-
     //==============================================================================
     /** Provides the type of scoped lock to use with a CriticalSection. */
     using ScopedLockType = GenericScopedLock<CriticalSection>;
@@ -115,25 +114,23 @@ public:
     /** Provides the type of scoped try-locker to use with a CriticalSection. */
     using ScopedTryLockType = GenericScopedTryLock<CriticalSection>;
 
-
 private:
     //==============================================================================
-   #if JUCE_WINDOWS
+#if JUCE_WINDOWS
     // To avoid including windows.h in the public JUCE headers, we'll just allocate
     // a block of memory here that's big enough to be used internally as a windows
     // CRITICAL_SECTION structure.
-    #if JUCE_64BIT
-     std::aligned_storage_t<44, 8> lock;
-    #else
-     std::aligned_storage_t<24, 8> lock;
-    #endif
-   #else
+#if JUCE_64BIT
+    std::aligned_storage_t<44, 8> lock;
+#else
+    std::aligned_storage_t<24, 8> lock;
+#endif
+#else
     mutable pthread_mutex_t lock;
-   #endif
+#endif
 
     JUCE_DECLARE_NON_COPYABLE (CriticalSection)
 };
-
 
 //==============================================================================
 /**
@@ -147,15 +144,17 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  DummyCriticalSection
+class JUCE_API DummyCriticalSection
 {
 public:
     inline DummyCriticalSection() = default;
     inline ~DummyCriticalSection() = default;
 
-    inline void enter() const noexcept          {}
-    inline bool tryEnter() const noexcept       { return true; }
-    inline void exit() const noexcept           {}
+    inline void enter() const noexcept {}
+
+    inline bool tryEnter() const noexcept { return true; }
+
+    inline void exit() const noexcept {}
 
     //==============================================================================
     /** A dummy scoped-lock type to use with a dummy critical section. */

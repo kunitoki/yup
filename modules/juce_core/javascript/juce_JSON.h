@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  JSON
+class JUCE_API JSON
 {
 public:
     //==============================================================================
@@ -107,9 +107,9 @@ public:
 
     enum class Spacing
     {
-        none,           ///< All optional whitespace should be omitted
-        singleLine,     ///< All output should be on a single line, but with some additional spacing, e.g. after commas and colons
-        multiLine,      ///< Newlines and spaces will be included in the output, in order to make it easy to read for humans
+        none,       ///< All optional whitespace should be omitted
+        singleLine, ///< All output should be on a single line, but with some additional spacing, e.g. after commas and colons
+        multiLine,  ///< Newlines and spaces will be included in the output, in order to make it easy to read for humans
     };
 
     /**
@@ -119,7 +119,7 @@ public:
     {
     public:
         /** Returns a copy of this Formatter with the specified spacing. */
-        FormatOptions withSpacing (Spacing x)      const { return withMember (*this, &FormatOptions::spacing, x); }
+        FormatOptions withSpacing (Spacing x) const { return withMember (*this, &FormatOptions::spacing, x); }
 
         /** Returns a copy of this Formatter with the specified maximum number of decimal places.
             This option determines the precision of floating point numbers in scientific notation.
@@ -129,16 +129,16 @@ public:
         /** Returns a copy of this Formatter with the specified indent level.
             This should only be necessary when serialising multiline nested types.
         */
-        FormatOptions withIndentLevel (int x)      const { return withMember (*this, &FormatOptions::indent, x); }
+        FormatOptions withIndentLevel (int x) const { return withMember (*this, &FormatOptions::indent, x); }
 
         /** Returns the spacing used by this Formatter. */
-        Spacing getSpacing()      const { return spacing; }
+        Spacing getSpacing() const { return spacing; }
 
         /** Returns the maximum number of decimal places used by this Formatter. */
         int getMaxDecimalPlaces() const { return maxDecimalPlaces; }
 
         /** Returns the indent level of this Formatter. */
-        int getIndentLevel()      const { return indent; }
+        int getIndentLevel() const { return indent; }
 
     private:
         Spacing spacing = Spacing::multiLine;

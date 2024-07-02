@@ -51,7 +51,7 @@ class WebInputStream;
 
     @tags{Core}
 */
-class JUCE_API  URL
+class JUCE_API URL
 {
 public:
     //==============================================================================
@@ -242,8 +242,8 @@ public:
         @see withDataToUpload
     */
     [[nodiscard]] URL withFileToUpload (const String& parameterName,
-                                         const File& fileToUpload,
-                                         const String& mimeType) const;
+                                        const File& fileToUpload,
+                                        const String& mimeType) const;
 
     /** Returns a copy of this URL, with a file-upload type parameter added to it.
 
@@ -256,9 +256,9 @@ public:
         @see withFileToUpload
     */
     [[nodiscard]] URL withDataToUpload (const String& parameterName,
-                                         const String& filename,
-                                         const MemoryBlock& fileContentToUpload,
-                                         const String& mimeType) const;
+                                        const String& filename,
+                                        const MemoryBlock& fileContentToUpload,
+                                        const String& mimeType) const;
 
     /** Returns an array of the names of all the URL's parameters.
 
@@ -270,7 +270,7 @@ public:
 
         @see getParameterValues, withParameter
     */
-    const StringArray& getParameterNames() const noexcept       { return parameterNames; }
+    const StringArray& getParameterNames() const noexcept { return parameterNames; }
 
     /** Returns an array of the values of all the URL's parameters.
 
@@ -284,7 +284,7 @@ public:
 
         @see getParameterNames, withParameter
     */
-    const StringArray& getParameterValues() const noexcept      { return parameterValues; }
+    const StringArray& getParameterValues() const noexcept { return parameterValues; }
 
     /** Returns a copy of this URL, with a block of data to send as the POST data.
 
@@ -307,10 +307,10 @@ public:
     [[nodiscard]] URL withPOSTData (const MemoryBlock& postData) const;
 
     /** Returns the data that was set using withPOSTData(). */
-    String getPostData() const                                      { return postData.toString(); }
+    String getPostData() const { return postData.toString(); }
 
     /** Returns the data that was set using withPOSTData() as a MemoryBlock. */
-    const MemoryBlock& getPostDataAsMemoryBlock() const noexcept    { return postData; }
+    const MemoryBlock& getPostDataAsMemoryBlock() const noexcept { return postData; }
 
     //==============================================================================
     /** Tries to launch the system's default browser to open the URL.
@@ -351,7 +351,7 @@ public:
         }
         @endcode
     */
-    class JUCE_API  InputStreamOptions
+    class JUCE_API InputStreamOptions
     {
     public:
         /** Constructor.
@@ -408,14 +408,21 @@ public:
         [[nodiscard]] InputStreamOptions withHttpRequestCmd (const String& httpRequestCmd) const;
 
         //==============================================================================
-        ParameterHandling getParameterHandling() const noexcept             { return parameterHandling; }
+        ParameterHandling getParameterHandling() const noexcept { return parameterHandling; }
+
         std::function<bool (int, int)> getProgressCallback() const noexcept { return progressCallback; }
-        String getExtraHeaders() const noexcept                             { return extraHeaders; }
-        int getConnectionTimeoutMs() const noexcept                         { return connectionTimeOutMs; }
-        StringPairArray* getResponseHeaders() const noexcept                { return responseHeaders; }
-        int* getStatusCode() const noexcept                                 { return statusCode; }
-        int getNumRedirectsToFollow() const noexcept                        { return numRedirectsToFollow; }
-        String getHttpRequestCmd() const noexcept                           { return httpRequestCmd; }
+
+        String getExtraHeaders() const noexcept { return extraHeaders; }
+
+        int getConnectionTimeoutMs() const noexcept { return connectionTimeOutMs; }
+
+        StringPairArray* getResponseHeaders() const noexcept { return responseHeaders; }
+
+        int* getStatusCode() const noexcept { return statusCode; }
+
+        int getNumRedirectsToFollow() const noexcept { return numRedirectsToFollow; }
+
+        String getHttpRequestCmd() const noexcept { return httpRequestCmd; }
 
     private:
         //==============================================================================
@@ -461,7 +468,7 @@ public:
     class DownloadTask;
 
     /** Used to receive callbacks for download progress. */
-    struct JUCE_API  DownloadTaskListener
+    struct JUCE_API DownloadTaskListener
     {
         virtual ~DownloadTaskListener() = default;
 
@@ -489,7 +496,7 @@ public:
         bool usePost = false;
 
         /** Specifies headers to add to the request. */
-        [[nodiscard]] auto withExtraHeaders (String value) const            { return with (&DownloadTaskOptions::extraHeaders, std::move (value)); }
+        [[nodiscard]] auto withExtraHeaders (String value) const { return with (&DownloadTaskOptions::extraHeaders, std::move (value)); }
 
         /** On iOS, specifies the container where the downloaded file will be stored.
 
@@ -498,13 +505,13 @@ public:
 
             This is currently unused on other platforms.
         */
-        [[nodiscard]] auto withSharedContainer (String value) const         { return with (&DownloadTaskOptions::sharedContainer, std::move (value)); }
+        [[nodiscard]] auto withSharedContainer (String value) const { return with (&DownloadTaskOptions::sharedContainer, std::move (value)); }
 
         /** Specifies an observer for the download task. */
         [[nodiscard]] auto withListener (DownloadTaskListener* value) const { return with (&DownloadTaskOptions::listener, std::move (value)); }
 
         /** Specifies whether a post command should be used. */
-        [[nodiscard]] auto withUsePost (bool value) const                   { return with (&DownloadTaskOptions::usePost, value); }
+        [[nodiscard]] auto withUsePost (bool value) const { return with (&DownloadTaskOptions::usePost, value); }
 
     private:
         template <typename Member, typename Value>
@@ -520,7 +527,7 @@ public:
 
         Returned by downloadToFile() to allow querying and controlling the download task.
     */
-    class JUCE_API  DownloadTask
+    class JUCE_API DownloadTask
     {
     public:
         using Listener = DownloadTaskListener;
@@ -534,13 +541,13 @@ public:
 
             This may return -1 if the length was not returned by the server.
         */
-        int64 getTotalLength() const                      { return contentLength; }
+        int64 getTotalLength() const { return contentLength; }
 
         /** Returns the number of bytes that have been downloaded so far. */
-        int64 getLengthDownloaded() const                 { return downloaded; }
+        int64 getLengthDownloaded() const { return downloaded; }
 
         /** Returns true if the download finished or there was an error. */
-        bool isFinished() const                           { return finished; }
+        bool isFinished() const { return finished; }
 
         /** Returns the status code of the server's response.
 
@@ -548,13 +555,13 @@ public:
 
             @see isFinished
         */
-        int statusCode() const                            { return httpCode; }
+        int statusCode() const { return httpCode; }
 
         /** Returns true if there was an error. */
-        inline bool hadError() const                      { return error; }
+        inline bool hadError() const { return error; }
 
         /** Returns the target file location that was provided in URL::downloadToFile. */
-        File getTargetLocation() const                    { return targetLocation; }
+        File getTargetLocation() const { return targetLocation; }
 
     protected:
         int64 contentLength = -1, downloaded = 0;
@@ -569,21 +576,20 @@ public:
         static std::unique_ptr<DownloadTask> createFallbackDownloader (const URL&, const File&, const DownloadTaskOptions&);
 
     public:
-       #if JUCE_IOS
+#if JUCE_IOS
         /** internal **/
         static void juce_iosURLSessionNotify (const String&);
-       #endif
+#endif
 
     private:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DownloadTask)
     };
 
     /** This function is replaced by a new overload accepting a DownloadTaskOptions argument. */
-    [[deprecated ("Use the overload with a DownloadTaskOptions argument instead")]]
-    std::unique_ptr<DownloadTask> downloadToFile (const File& targetLocation,
-                                                  String extraHeaders = String(),
-                                                  DownloadTaskListener* listener = nullptr,
-                                                  bool usePostCommand = false);
+    [[deprecated ("Use the overload with a DownloadTaskOptions argument instead")]] std::unique_ptr<DownloadTask> downloadToFile (const File& targetLocation,
+                                                                                                                                  String extraHeaders = String(),
+                                                                                                                                  DownloadTaskListener* listener = nullptr,
+                                                                                                                                  bool usePostCommand = false);
 
     /** Download the URL to a file.
 
@@ -689,28 +695,27 @@ public:
     static URL createWithoutParsing (const String& url);
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     using OpenStreamProgressCallback = bool (void* context, int bytesSent, int totalBytes);
 
     /** This method has been deprecated.
 
         @see InputStreamOptions
     */
-    [[deprecated ("New code should use the method which takes an InputStreamOptions argument instead.")]]
-    std::unique_ptr<InputStream> createInputStream (bool doPostLikeRequest,
-                                                    OpenStreamProgressCallback* progressCallback = nullptr,
-                                                    void* progressCallbackContext = nullptr,
-                                                    String extraHeaders = {},
-                                                    int connectionTimeOutMs = 0,
-                                                    StringPairArray* responseHeaders = nullptr,
-                                                    int* statusCode = nullptr,
-                                                    int numRedirectsToFollow = 5,
-                                                    String httpRequestCmd = {}) const;
-   #endif
+    [[deprecated ("New code should use the method which takes an InputStreamOptions argument instead.")]] std::unique_ptr<InputStream> createInputStream (bool doPostLikeRequest,
+                                                                                                                                                          OpenStreamProgressCallback* progressCallback = nullptr,
+                                                                                                                                                          void* progressCallbackContext = nullptr,
+                                                                                                                                                          String extraHeaders = {},
+                                                                                                                                                          int connectionTimeOutMs = 0,
+                                                                                                                                                          StringPairArray* responseHeaders = nullptr,
+                                                                                                                                                          int* statusCode = nullptr,
+                                                                                                                                                          int numRedirectsToFollow = 5,
+                                                                                                                                                          String httpRequestCmd = {}) const;
+#endif
 
 private:
     //==============================================================================
-   #if JUCE_IOS
+#if JUCE_IOS
     struct Bookmark : public ReferenceCountedObject
     {
         using Ptr = ReferenceCountedObjectPtr<Bookmark>;
@@ -725,10 +730,10 @@ private:
 
     friend void setURLBookmark (URL&, void*);
     friend void* getURLBookmark (URL&);
-   #endif
+#endif
 
     //==============================================================================
-    struct Upload  : public ReferenceCountedObject
+    struct Upload : public ReferenceCountedObject
     {
         Upload (const String&, const String&, const String&, const File&, MemoryBlock*);
         String parameterName, filename, mimeType;

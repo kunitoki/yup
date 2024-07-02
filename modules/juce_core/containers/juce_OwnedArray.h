@@ -613,7 +613,7 @@ public:
 
         if (isPositiveAndBelow (indexToRemove, values.size()))
         {
-           removedItem = values[indexToRemove];
+            removedItem = values[indexToRemove];
 
             values.removeElements (indexToRemove, 1);
 
@@ -805,21 +805,24 @@ public:
         To lock, you can call getLock().enter() and getLock().exit(), or preferably use
         an object of ScopedLockType as an RAII lock for it.
     */
-    inline const TypeOfCriticalSectionToUse& getLock() const noexcept      { return values; }
+    inline const TypeOfCriticalSectionToUse& getLock() const noexcept { return values; }
 
     /** Returns the type of scoped lock to use for locking this array */
     using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
 
     //==============================================================================
-   #ifndef DOXYGEN
+#ifndef DOXYGEN
     [[deprecated ("This method has been replaced by a more flexible templated version and renamed "
-                 "to swapWith to be more consistent with the names used in other classes.")]]
-    void swapWithArray (OwnedArray& other) noexcept { swapWith (other); }
-   #endif
+                  "to swapWith to be more consistent with the names used in other classes.")]] void
+        swapWithArray (OwnedArray& other) noexcept
+    {
+        swapWith (other);
+    }
+#endif
 
 private:
     //==============================================================================
-    ArrayBase <ObjectClass*, TypeOfCriticalSectionToUse> values;
+    ArrayBase<ObjectClass*, TypeOfCriticalSectionToUse> values;
 
     void deleteAllObjects()
     {

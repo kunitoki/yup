@@ -51,11 +51,18 @@ namespace juce
 template <typename ElementComparator>
 struct SortFunctionConverter
 {
-    SortFunctionConverter (ElementComparator& e) : comparator (e) {}
+    SortFunctionConverter (ElementComparator& e)
+        : comparator (e)
+    {
+    }
+
     SortFunctionConverter (const SortFunctionConverter&) = default;
 
     template <typename Type>
-    bool operator() (Type a, Type b)  { return comparator.compareElements (a, b) < 0; }
+    bool operator() (Type a, Type b)
+    {
+        return comparator.compareElements (a, b) < 0;
+    }
 
 private:
     ElementComparator& comparator;
@@ -64,7 +71,6 @@ private:
 };
 
 #endif
-
 
 //==============================================================================
 /**
@@ -110,10 +116,9 @@ static void sortArray (ElementComparator& comparator,
         if (retainOrderOfEquivalentItems)
             std::stable_sort (array + firstElement, array + lastElement + 1, converter);
         else
-            std::sort        (array + firstElement, array + lastElement + 1, converter);
+            std::sort (array + firstElement, array + lastElement + 1, converter);
     }
 }
-
 
 //==============================================================================
 /**
@@ -150,7 +155,7 @@ static int findInsertIndexInSortedArray ([[maybe_unused]] ElementComparator& com
 
     while (firstElement < lastElement)
     {
-        if (comparator.compareElements (newElement, array [firstElement]) == 0)
+        if (comparator.compareElements (newElement, array[firstElement]) == 0)
         {
             ++firstElement;
             break;
@@ -161,12 +166,12 @@ static int findInsertIndexInSortedArray ([[maybe_unused]] ElementComparator& com
 
             if (halfway == firstElement)
             {
-                if (comparator.compareElements (newElement, array [halfway]) >= 0)
+                if (comparator.compareElements (newElement, array[halfway]) >= 0)
                     ++firstElement;
 
                 break;
             }
-            else if (comparator.compareElements (newElement, array [halfway]) >= 0)
+            else if (comparator.compareElements (newElement, array[halfway]) >= 0)
             {
                 firstElement = halfway;
             }

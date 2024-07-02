@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  StringArray
+class JUCE_API StringArray
 {
 public:
     //==============================================================================
@@ -67,7 +67,9 @@ public:
     /** Creates an array containing a list of strings. */
     template <typename... OtherElements>
     StringArray (StringRef firstValue, OtherElements&&... otherValues)
-        : strings (firstValue, std::forward<OtherElements> (otherValues)...) {}
+        : strings (firstValue, std::forward<OtherElements> (otherValues)...)
+    {
+    }
 
     /** Creates an array containing a list of strings. */
     StringArray (const std::initializer_list<const char*>& strings);
@@ -150,10 +152,10 @@ public:
 
     //==============================================================================
     /** Returns the number of strings in the array */
-    inline int size() const noexcept                                    { return strings.size(); }
+    inline int size() const noexcept { return strings.size(); }
 
     /** Returns true if the array is empty, false otherwise. */
-    inline bool isEmpty() const noexcept                                { return size() == 0; }
+    inline bool isEmpty() const noexcept { return size() == 0; }
 
     /** Returns one of the strings from the array.
 
@@ -179,22 +181,22 @@ public:
     /** Returns a pointer to the first String in the array.
         This method is provided for compatibility with standard C++ iteration mechanisms.
     */
-    inline String* begin() noexcept                 { return strings.begin(); }
+    inline String* begin() noexcept { return strings.begin(); }
 
     /** Returns a pointer to the first String in the array.
         This method is provided for compatibility with standard C++ iteration mechanisms.
     */
-    inline const String* begin() const noexcept     { return strings.begin(); }
+    inline const String* begin() const noexcept { return strings.begin(); }
 
     /** Returns a pointer to the String which follows the last element in the array.
         This method is provided for compatibility with standard C++ iteration mechanisms.
     */
-    inline String* end() noexcept                  { return strings.end(); }
+    inline String* end() noexcept { return strings.end(); }
 
     /** Returns a pointer to the String which follows the last element in the array.
         This method is provided for compatibility with standard C++ iteration mechanisms.
     */
-    inline const String* end() const noexcept       { return strings.end(); }
+    inline const String* end() const noexcept { return strings.end(); }
 
     /** Searches for a string in the array.
 

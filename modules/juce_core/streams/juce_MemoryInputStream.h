@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  MemoryInputStream  : public InputStream
+class JUCE_API MemoryInputStream : public InputStream
 {
 public:
     //==============================================================================
@@ -86,10 +86,10 @@ public:
     ~MemoryInputStream() override;
 
     /** Returns a pointer to the source data block from which this stream is reading. */
-    const void* getData() const noexcept        { return data; }
+    const void* getData() const noexcept { return data; }
 
     /** Returns the number of bytes of source data in the block from which this stream is reading. */
-    size_t getDataSize() const noexcept         { return dataSize; }
+    size_t getDataSize() const noexcept { return dataSize; }
 
     //==============================================================================
     int64 getPosition() override;

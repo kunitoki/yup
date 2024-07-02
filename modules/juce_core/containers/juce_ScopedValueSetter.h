@@ -76,8 +76,8 @@ public:
     */
     ScopedValueSetter (ValueType& valueToSet,
                        ValueType newValue)
-        : value (valueToSet),
-          originalValue (valueToSet)
+        : value (valueToSet)
+        , originalValue (valueToSet)
     {
         valueToSet = newValue;
     }
@@ -88,8 +88,8 @@ public:
     ScopedValueSetter (ValueType& valueToSet,
                        ValueType newValue,
                        ValueType valueWhenDeleted)
-        : value (valueToSet),
-          originalValue (valueWhenDeleted)
+        : value (valueToSet)
+        , originalValue (valueWhenDeleted)
     {
         valueToSet = newValue;
     }

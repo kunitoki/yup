@@ -47,7 +47,8 @@ class ReferenceCountedArrayTests final : public UnitTest
 public:
     ReferenceCountedArrayTests()
         : UnitTest ("ReferenceCountedArray", UnitTestCategories::containers)
-    {}
+    {
+    }
 
     //==============================================================================
     void runTest() override
@@ -86,7 +87,7 @@ public:
             for (auto o : baseArray)
                 expectEquals (o->getReferenceCount(), 2);
 
-            expectEquals (baseObject->getReferenceCount(),    2);
+            expectEquals (baseObject->getReferenceCount(), 2);
             expectEquals (derivedObject->getReferenceCount(), 2);
 
             derivedArray.add (derivedObject);
@@ -97,7 +98,7 @@ public:
             derivedArray.clearQuick();
             baseArray.clearQuick();
 
-            expectEquals (baseObject->getReferenceCount(),    1);
+            expectEquals (baseObject->getReferenceCount(), 1);
             expectEquals (derivedObject->getReferenceCount(), 1);
 
             baseArray.add (baseObjectPtr);
@@ -164,8 +165,10 @@ private:
     {
         DestructorObj (ReferenceCountedArrayTests& p,
                        ReferenceCountedArray<DestructorObj>& arr)
-            : parent (p), objectArray (arr)
-        {}
+            : parent (p)
+            , objectArray (arr)
+        {
+        }
 
         ~DestructorObj()
         {

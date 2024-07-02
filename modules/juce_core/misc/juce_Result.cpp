@@ -89,9 +89,12 @@ const String& Result::getErrorMessage() const noexcept
     return errorMessage;
 }
 
-bool Result::wasOk() const noexcept         { return errorMessage.isEmpty(); }
-Result::operator bool() const noexcept      { return errorMessage.isEmpty(); }
-bool Result::failed() const noexcept        { return errorMessage.isNotEmpty(); }
-bool Result::operator!() const noexcept     { return errorMessage.isNotEmpty(); }
+bool Result::wasOk() const noexcept { return errorMessage.isEmpty(); }
+
+Result::operator bool() const noexcept { return errorMessage.isEmpty(); }
+
+bool Result::failed() const noexcept { return errorMessage.isNotEmpty(); }
+
+bool Result::operator!() const noexcept { return errorMessage.isNotEmpty(); }
 
 } // namespace juce

@@ -68,13 +68,14 @@ class ApproximatelyEqualTests final : public UnitTest
 public:
     ApproximatelyEqualTests()
         : UnitTest { getTemplatedMathsFunctionUnitTestName<T> ("approximatelyEqual"), UnitTestCategories::maths }
-    {}
+    {
+    }
 
     void runTest() final
     {
         using limits = std::numeric_limits<T>;
 
-        constexpr auto zero = T{};
+        constexpr auto zero = T {};
         constexpr auto one = T (1);
         constexpr auto min = limits::min();
         constexpr auto max = limits::max();
@@ -96,7 +97,7 @@ public:
             expect (approximatelyEqual (max, max));
             expect (approximatelyEqual (-max, -max));
 
-            const Tolerance<T> zeroTolerance{};
+            const Tolerance<T> zeroTolerance {};
 
             expect (approximatelyEqual (zero, zero, zeroTolerance));
             expect (approximatelyEqual (zero, -zero, zeroTolerance));
@@ -114,16 +115,16 @@ public:
 
         beginTest ("Comparing subnormal values to zero, returns true");
         {
-            expect (! exactlyEqual     (zero, nextFloatUp (zero)));
+            expect (! exactlyEqual (zero, nextFloatUp (zero)));
             expect (approximatelyEqual (zero, nextFloatUp (zero)));
 
-            expect (! exactlyEqual     (zero, nextFloatDown (zero)));
+            expect (! exactlyEqual (zero, nextFloatDown (zero)));
             expect (approximatelyEqual (zero, nextFloatDown (zero)));
 
-            expect (! exactlyEqual     (zero, nextFloatDown (min)));
+            expect (! exactlyEqual (zero, nextFloatDown (min)));
             expect (approximatelyEqual (zero, nextFloatDown (min)));
 
-            expect (! exactlyEqual     (zero, nextFloatUp (-min)));
+            expect (! exactlyEqual (zero, nextFloatUp (-min)));
             expect (approximatelyEqual (zero, nextFloatUp (-min)));
         }
 
@@ -144,8 +145,8 @@ public:
         beginTest ("Values with large ranges can be compared");
         {
             expect (! approximatelyEqual (zero, max));
-            expect (  approximatelyEqual (zero, max, absoluteTolerance (max)));
-            expect (  approximatelyEqual (zero, max, relativeTolerance (one)));
+            expect (approximatelyEqual (zero, max, absoluteTolerance (max)));
+            expect (approximatelyEqual (zero, max, relativeTolerance (one)));
             expect (! approximatelyEqual (-one, max));
             expect (! approximatelyEqual (-max, max));
         }
@@ -160,17 +161,16 @@ public:
                 expect (juce_isfinite (value));
                 expect (juce_isfinite (boundaryValue));
 
-                expect (  approximatelyEqual (value, boundaryValue));
+                expect (approximatelyEqual (value, boundaryValue));
                 expect (! approximatelyEqual (value, nextFloatUp (boundaryValue)));
 
-                expect (  approximatelyEqual (-value, -boundaryValue));
+                expect (approximatelyEqual (-value, -boundaryValue));
                 expect (! approximatelyEqual (-value, nextFloatDown (-boundaryValue)));
             }
         }
 
         beginTest ("Tolerances scale with the values being compared");
         {
-
             expect (approximatelyEqual ((T) 100'000'000'000'000.01,
                                         (T) 100'000'000'000'000.011));
 
@@ -178,39 +178,39 @@ public:
                                           (T) 100.011));
 
             expect (! approximatelyEqual ((T) 123'000, (T) 121'000, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 123'000, (T) 122'000, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 123'000, (T) 123'000, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 123'000, (T) 124'000, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 123'000, (T) 122'000, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 123'000, (T) 123'000, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 123'000, (T) 124'000, relativeTolerance ((T) 1e-2)));
             expect (! approximatelyEqual ((T) 123'000, (T) 125'000, relativeTolerance ((T) 1e-2)));
 
             expect (! approximatelyEqual ((T) 123, (T) 121, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 123, (T) 122, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 123, (T) 123, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 123, (T) 124, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 123, (T) 122, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 123, (T) 123, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 123, (T) 124, relativeTolerance ((T) 1e-2)));
             expect (! approximatelyEqual ((T) 123, (T) 125, relativeTolerance ((T) 1e-2)));
 
             expect (! approximatelyEqual ((T) 12.3, (T) 12.1, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 12.3, (T) 12.2, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 12.3, (T) 12.3, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 12.3, (T) 12.4, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 12.3, (T) 12.2, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 12.3, (T) 12.3, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 12.3, (T) 12.4, relativeTolerance ((T) 1e-2)));
             expect (! approximatelyEqual ((T) 12.3, (T) 12.5, relativeTolerance ((T) 1e-2)));
 
             expect (! approximatelyEqual ((T) 1.23, (T) 1.21, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 1.23, (T) 1.22, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 1.23, (T) 1.23, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 1.23, (T) 1.24, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 1.23, (T) 1.22, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 1.23, (T) 1.23, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 1.23, (T) 1.24, relativeTolerance ((T) 1e-2)));
             expect (! approximatelyEqual ((T) 1.23, (T) 1.25, relativeTolerance ((T) 1e-2)));
 
             expect (! approximatelyEqual ((T) 0.123, (T) 0.121, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 0.123, (T) 0.122, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 0.123, (T) 0.123, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 0.123, (T) 0.124, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 0.123, (T) 0.122, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 0.123, (T) 0.123, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 0.123, (T) 0.124, relativeTolerance ((T) 1e-2)));
             expect (! approximatelyEqual ((T) 0.123, (T) 0.125, relativeTolerance ((T) 1e-2)));
 
             expect (! approximatelyEqual ((T) 0.000123, (T) 0.000121, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 0.000123, (T) 0.000122, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 0.000123, (T) 0.000123, relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual ((T) 0.000123, (T) 0.000124, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 0.000123, (T) 0.000122, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 0.000123, (T) 0.000123, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual ((T) 0.000123, (T) 0.000124, relativeTolerance ((T) 1e-2)));
             expect (! approximatelyEqual ((T) 0.000123, (T) 0.000125, relativeTolerance ((T) 1e-2)));
         }
 
@@ -280,8 +280,7 @@ public:
 
         beginTest ("Can set an absolute tolerance");
         {
-            constexpr std::array<T, 7> negativePowersOfTwo
-            {
+            constexpr std::array<T, 7> negativePowersOfTwo {
                 (T) 0.5 /* 2^-1 */,
                 (T) 0.25 /* 2^-2 */,
                 (T) 0.125 /* 2^-3 */,
@@ -293,9 +292,9 @@ public:
 
             const auto testTolerance = [&] (auto tolerance)
             {
-                const auto t = Tolerance<T>{}.withAbsolute ((T) tolerance);
+                const auto t = Tolerance<T> {}.withAbsolute ((T) tolerance);
 
-                const auto testValue= [&] (auto value)
+                const auto testValue = [&] (auto value)
                 {
                     const auto boundary = value + tolerance;
 
@@ -321,28 +320,28 @@ public:
 
         beginTest ("Can set a relative tolerance");
         {
-            expect (! approximatelyEqual (oneThird, (T) 0.34,  relativeTolerance ((T) 1e-2)));
-            expect (  approximatelyEqual (oneThird, (T) 0.334, relativeTolerance ((T) 1e-2)));
+            expect (! approximatelyEqual (oneThird, (T) 0.34, relativeTolerance ((T) 1e-2)));
+            expect (approximatelyEqual (oneThird, (T) 0.334, relativeTolerance ((T) 1e-2)));
 
-            expect (! approximatelyEqual (oneThird, (T) 0.334,  relativeTolerance ((T) 1e-3)));
-            expect (  approximatelyEqual (oneThird, (T) 0.3334, relativeTolerance ((T) 1e-3)));
+            expect (! approximatelyEqual (oneThird, (T) 0.334, relativeTolerance ((T) 1e-3)));
+            expect (approximatelyEqual (oneThird, (T) 0.3334, relativeTolerance ((T) 1e-3)));
 
-            expect (! approximatelyEqual (oneThird, (T) 0.3334,  relativeTolerance ((T) 1e-4)));
-            expect (  approximatelyEqual (oneThird, (T) 0.33334, relativeTolerance ((T) 1e-4)));
+            expect (! approximatelyEqual (oneThird, (T) 0.3334, relativeTolerance ((T) 1e-4)));
+            expect (approximatelyEqual (oneThird, (T) 0.33334, relativeTolerance ((T) 1e-4)));
 
-            expect (! approximatelyEqual (oneThird, (T) 0.33334,  relativeTolerance ((T) 1e-5)));
-            expect (  approximatelyEqual (oneThird, (T) 0.333334, relativeTolerance ((T) 1e-5)));
+            expect (! approximatelyEqual (oneThird, (T) 0.33334, relativeTolerance ((T) 1e-5)));
+            expect (approximatelyEqual (oneThird, (T) 0.333334, relativeTolerance ((T) 1e-5)));
 
-            expect (! approximatelyEqual (oneThird, (T) 0.333334,  relativeTolerance ((T) 1e-6)));
-            expect (  approximatelyEqual (oneThird, (T) 0.3333334, relativeTolerance ((T) 1e-6)));
+            expect (! approximatelyEqual (oneThird, (T) 0.333334, relativeTolerance ((T) 1e-6)));
+            expect (approximatelyEqual (oneThird, (T) 0.3333334, relativeTolerance ((T) 1e-6)));
 
-            expect (! approximatelyEqual (oneThird, (T) 0.3333334,  relativeTolerance ((T) 1e-7)));
-            expect (  approximatelyEqual (oneThird, (T) 0.33333334, relativeTolerance ((T) 1e-7)));
+            expect (! approximatelyEqual (oneThird, (T) 0.3333334, relativeTolerance ((T) 1e-7)));
+            expect (approximatelyEqual (oneThird, (T) 0.33333334, relativeTolerance ((T) 1e-7)));
 
-            expect (  approximatelyEqual ((T) 1e6, (T) 1e6 + (T) 1, relativeTolerance ((T) 1e-6)));
+            expect (approximatelyEqual ((T) 1e6, (T) 1e6 + (T) 1, relativeTolerance ((T) 1e-6)));
             expect (! approximatelyEqual ((T) 1e6, (T) 1e6 + (T) 1, relativeTolerance ((T) 1e-7)));
 
-            expect (  approximatelyEqual ((T) -1e-6, (T) -1.0000009e-6, relativeTolerance ((T) 1e-6)));
+            expect (approximatelyEqual ((T) -1e-6, (T) -1.0000009e-6, relativeTolerance ((T) 1e-6)));
             expect (! approximatelyEqual ((T) -1e-6, (T) -1.0000009e-6, relativeTolerance ((T) 1e-7)));
 
             const auto a = (T) 1.234567;
@@ -351,18 +350,18 @@ public:
             for (auto exponent = 0; exponent < 39; ++exponent)
             {
                 const auto m = std::pow ((T) 10, (T) exponent);
-                expect (  approximatelyEqual (a * m, b * m, relativeTolerance ((T) 1e-6)));
+                expect (approximatelyEqual (a * m, b * m, relativeTolerance ((T) 1e-6)));
                 expect (! approximatelyEqual (a * m, b * m, relativeTolerance ((T) 1e-7)));
             }
         }
 
         beginTest ("A relative tolerance is always scaled by the maximum value");
         {
-            expect (  approximatelyEqual ((T) 9, (T) 10, absoluteTolerance ((T) 10.0 * (T) 0.1)));
-            expect (! approximatelyEqual ((T) 9, (T) 10, absoluteTolerance ((T)  9.0 * (T) 0.1)));
+            expect (approximatelyEqual ((T) 9, (T) 10, absoluteTolerance ((T) 10.0 * (T) 0.1)));
+            expect (! approximatelyEqual ((T) 9, (T) 10, absoluteTolerance ((T) 9.0 * (T) 0.1)));
 
-            expect (approximatelyEqual ((T)  9, (T) 10, relativeTolerance ((T) 0.1)));
-            expect (approximatelyEqual ((T) 10, (T)  9, relativeTolerance ((T) 0.1)));
+            expect (approximatelyEqual ((T) 9, (T) 10, relativeTolerance ((T) 0.1)));
+            expect (approximatelyEqual ((T) 10, (T) 9, relativeTolerance ((T) 0.1)));
         }
 
         beginTest ("Documentation examples");
@@ -370,30 +369,31 @@ public:
             constexpr auto pi = MathConstants<T>::pi;
 
             expect (! approximatelyEqual (zero, std::sin (pi)));
-            expect (  approximatelyEqual (zero, std::sin (pi), absoluteTolerance (std::sin (pi))));
+            expect (approximatelyEqual (zero, std::sin (pi), absoluteTolerance (std::sin (pi))));
 
-            expect (  approximatelyEqual ((T) 100, (T) 95, relativeTolerance ((T) 0.05)));
+            expect (approximatelyEqual ((T) 100, (T) 95, relativeTolerance ((T) 0.05)));
             expect (! approximatelyEqual ((T) 100, (T) 94, relativeTolerance ((T) 0.05)));
         }
     }
 };
 
-template<>
+template <>
 class ApproximatelyEqualTests<int> final : public UnitTest
 {
 public:
     ApproximatelyEqualTests()
         : UnitTest { getTemplatedMathsFunctionUnitTestName<int> ("approximatelyEqual"), UnitTestCategories::maths }
-    {}
+    {
+    }
 
     void runTest() final
     {
         beginTest ("Identical integers are always equal");
         {
-            expect (approximatelyEqual ( 0,  0));
+            expect (approximatelyEqual (0, 0));
             expect (approximatelyEqual (-0, -0));
 
-            expect (approximatelyEqual ( 1,  1));
+            expect (approximatelyEqual (1, 1));
             expect (approximatelyEqual (-1, -1));
 
             using limits = std::numeric_limits<int>;
@@ -406,10 +406,10 @@ public:
 
         beginTest ("Non-identical integers are never equal");
         {
-            expect (! approximatelyEqual ( 0,  1));
-            expect (! approximatelyEqual ( 0, -1));
+            expect (! approximatelyEqual (0, 1));
+            expect (! approximatelyEqual (0, -1));
 
-            expect (! approximatelyEqual ( 1,  2));
+            expect (! approximatelyEqual (1, 2));
             expect (! approximatelyEqual (-1, -2));
 
             using limits = std::numeric_limits<int>;
@@ -422,8 +422,8 @@ public:
 
         beginTest ("Zero is equal regardless of the sign");
         {
-            expect (approximatelyEqual ( 0, -0));
-            expect (approximatelyEqual (-0,  0));
+            expect (approximatelyEqual (0, -0));
+            expect (approximatelyEqual (-0, 0));
         }
     }
 };
@@ -434,13 +434,14 @@ class IsFiniteTests final : public UnitTest
 public:
     IsFiniteTests()
         : UnitTest { getTemplatedMathsFunctionUnitTestName<T> ("juce_isfinite"), UnitTestCategories::maths }
-    {}
+    {
+    }
 
     void runTest() final
     {
         using limits = std::numeric_limits<T>;
 
-        constexpr auto zero = T{};
+        constexpr auto zero = T {};
         constexpr auto one = (T) 1;
         constexpr auto max = limits::max();
         constexpr auto inf = limits::infinity();
@@ -492,13 +493,14 @@ class NextFloatTests final : public UnitTest
 public:
     NextFloatTests()
         : UnitTest { getTemplatedMathsFunctionUnitTestName<T> ("nextFloat"), UnitTestCategories::maths }
-    {}
+    {
+    }
 
     void runTest() final
     {
         using limits = std::numeric_limits<T>;
 
-        constexpr auto zero = T{};
+        constexpr auto zero = T {};
         constexpr auto one = T (1);
         constexpr auto min = limits::min();
         constexpr auto epsilon = limits::epsilon();
@@ -524,11 +526,11 @@ public:
 
         beginTest ("nextFloat from one matches epsilon");
         {
-            expect (! exactlyEqual (one,           nextFloatUp (one)));
-            expect (  exactlyEqual (one + epsilon, nextFloatUp (one)));
+            expect (! exactlyEqual (one, nextFloatUp (one)));
+            expect (exactlyEqual (one + epsilon, nextFloatUp (one)));
 
-            expect (! exactlyEqual (-one,           nextFloatDown (-one)));
-            expect (  exactlyEqual (-one - epsilon, nextFloatDown (-one)));
+            expect (! exactlyEqual (-one, nextFloatDown (-one)));
+            expect (exactlyEqual (-one - epsilon, nextFloatDown (-one)));
         }
     }
 };
@@ -541,7 +543,7 @@ struct MathsFloatingPointFunctionsTests
     ApproximatelyEqualTests<Type> approximatelyEqualTests;
 };
 
-template<>
+template <>
 struct MathsFloatingPointFunctionsTests<int>
 {
     ApproximatelyEqualTests<int> approximatelyEqualTests;

@@ -54,7 +54,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Logger
+class JUCE_API Logger
 {
 public:
     //==============================================================================
@@ -82,7 +82,6 @@ public:
     */
     static void JUCE_CALLTYPE writeToLog (const String& message);
 
-
     //==============================================================================
     /** Writes a message to the standard error stream.
 
@@ -90,7 +89,6 @@ public:
         juce_PlatformDefs.h (which will avoid calling the method in non-debug builds).
     */
     static void JUCE_CALLTYPE outputDebugString (const String& text);
-
 
 protected:
     //==============================================================================

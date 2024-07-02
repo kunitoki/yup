@@ -44,83 +44,83 @@ namespace juce
 {
 
 //==============================================================================
-inline Range<int> nsRangeToJuce (NSRange range)
+inline Range<int> nsRangeToJuce(NSRange range)
 {
-    return { (int) range.location, (int) (range.location + range.length) };
+    return {(int)range.location, (int)(range.location + range.length)};
 }
 
-inline NSRange juceRangeToNS (Range<int> range)
+inline NSRange juceRangeToNS(Range<int> range)
 {
-    return NSMakeRange ((NSUInteger) range.getStart(), (NSUInteger) range.getLength());
+    return NSMakeRange((NSUInteger)range.getStart(), (NSUInteger)range.getLength());
 }
 
-inline String nsStringToJuce (NSString* s)
+inline String nsStringToJuce(NSString* s)
 {
-    return CharPointer_UTF8 ([s UTF8String]);
+    return CharPointer_UTF8([s UTF8String]);
 }
 
-inline NSString* juceStringToNS (const String& s)
+inline NSString* juceStringToNS(const String& s)
 {
     // This cast helps linters determine nullability
-    return (NSString* _Nonnull) [NSString stringWithUTF8String: s.toUTF8()];
+    return (NSString* _Nonnull)[NSString stringWithUTF8String:s.toUTF8()];
 }
 
-inline NSString* nsStringLiteral (const char* const s) noexcept
+inline NSString* nsStringLiteral(const char* const s) noexcept
 {
-    jassert (s != nullptr);
+    jassert(s != nullptr);
 
     // This cast helps linters determine nullability
-    return (NSString* _Nonnull) [NSString stringWithUTF8String: s];
+    return (NSString* _Nonnull)[NSString stringWithUTF8String:s];
 }
 
 inline NSString* nsEmptyString() noexcept
 {
     // This cast helps linters determine nullability
-    return (NSString* _Nonnull) [NSString string];
+    return (NSString* _Nonnull)[NSString string];
 }
 
-inline NSURL* createNSURLFromFile (const String& f)
+inline NSURL* createNSURLFromFile(const String& f)
 {
-    return [NSURL fileURLWithPath: juceStringToNS (f)];
+    return [NSURL fileURLWithPath:juceStringToNS(f)];
 }
 
-inline NSURL* createNSURLFromFile (const File& f)
+inline NSURL* createNSURLFromFile(const File& f)
 {
-    return createNSURLFromFile (f.getFullPathName());
+    return createNSURLFromFile(f.getFullPathName());
 }
 
-inline NSArray* createNSArrayFromStringArray (const StringArray& strings)
+inline NSArray* createNSArrayFromStringArray(const StringArray& strings)
 {
-    auto array = [[NSMutableArray alloc] initWithCapacity: (NSUInteger) strings.size()];
+    auto array = [[NSMutableArray alloc] initWithCapacity:(NSUInteger)strings.size()];
 
-    for (const auto& string: strings)
-        [array addObject: juceStringToNS (string)];
+    for (const auto& string : strings)
+        [array addObject:juceStringToNS(string)];
 
     return [array autorelease];
 }
 
-inline NSData* varToJsonData (const var& varToParse)
+inline NSData* varToJsonData(const var& varToParse)
 {
-    return [juceStringToNS (JSON::toString (varToParse)) dataUsingEncoding: NSUTF8StringEncoding];
+    return [juceStringToNS(JSON::toString(varToParse)) dataUsingEncoding:NSUTF8StringEncoding];
 }
 
-inline var jsonDataToVar (NSData* jsonData)
+inline var jsonDataToVar(NSData* jsonData)
 {
-    auto* jsonString = [[NSString alloc] initWithData: jsonData
-                                             encoding: NSUTF8StringEncoding];
+    auto* jsonString = [[NSString alloc] initWithData:jsonData
+                                             encoding:NSUTF8StringEncoding];
 
-    jassert (jsonString != nullptr);
-    return JSON::parse (nsStringToJuce ([jsonString autorelease]));
+    jassert(jsonString != nullptr);
+    return JSON::parse(nsStringToJuce([jsonString autorelease]));
 }
 
 // If for any reason the given var cannot be converted into a valid dictionary
 // an empty dictionary will be returned instead
-inline NSDictionary* varToNSDictionary (const var& varToParse)
+inline NSDictionary* varToNSDictionary(const var& varToParse)
 {
-    NSError* error { nullptr };
-    NSDictionary* dictionary = [NSJSONSerialization JSONObjectWithData: varToJsonData (varToParse)
-                                                               options: NSJSONReadingMutableContainers
-                                                                 error: &error];
+    NSError* error{nullptr};
+    NSDictionary* dictionary = [NSJSONSerialization JSONObjectWithData:varToJsonData(varToParse)
+                                                               options:NSJSONReadingMutableContainers
+                                                                 error:&error];
 
     if (dictionary == nullptr || error != nullptr)
         return @{};
@@ -128,73 +128,85 @@ inline NSDictionary* varToNSDictionary (const var& varToParse)
     return dictionary;
 }
 
-inline NSData* jsonObjectToData (const NSObject* jsonObject)
+inline NSData* jsonObjectToData(const NSObject* jsonObject)
 {
-    NSError* error { nullptr };
-    auto* jsonData = [NSJSONSerialization dataWithJSONObject: jsonObject
-                                                     options: 0
-                                                       error: &error];
+    NSError* error{nullptr};
+    auto* jsonData = [NSJSONSerialization dataWithJSONObject:jsonObject
+                                                     options:0
+                                                       error:&error];
 
-    jassert (error == nullptr);
-    jassert (jsonData != nullptr);
+    jassert(error == nullptr);
+    jassert(jsonData != nullptr);
 
     return jsonData;
 }
 
-inline var nsDictionaryToVar (const NSDictionary* dictionary)
+inline var nsDictionaryToVar(const NSDictionary* dictionary)
 {
-    return jsonDataToVar (jsonObjectToData (dictionary));
+    return jsonDataToVar(jsonObjectToData(dictionary));
 }
 
 #if JUCE_MAC
 template <typename RectangleType>
-NSRect makeNSRect (const RectangleType& r) noexcept
+NSRect makeNSRect(const RectangleType& r) noexcept
 {
-    return NSMakeRect (static_cast<CGFloat> (r.getX()),
-                       static_cast<CGFloat> (r.getY()),
-                       static_cast<CGFloat> (r.getWidth()),
-                       static_cast<CGFloat> (r.getHeight()));
+    return NSMakeRect(static_cast<CGFloat>(r.getX()),
+                      static_cast<CGFloat>(r.getY()),
+                      static_cast<CGFloat>(r.getWidth()),
+                      static_cast<CGFloat>(r.getHeight()));
 }
 #endif
 
 #if JUCE_INTEL
- template <typename T>
- struct NeedsStret
- {
-    #if JUCE_32BIT
-     static constexpr auto value = sizeof (T) > 8;
-    #else
-     static constexpr auto value = sizeof (T) > 16;
-    #endif
- };
-
- template <>
- struct NeedsStret<void> { static constexpr auto value = false; };
-
- template <typename T, bool b = NeedsStret<T>::value>
- struct MetaSuperFn { static constexpr auto value = objc_msgSendSuper_stret; };
-
- template <typename T>
- struct MetaSuperFn<T, false> { static constexpr auto value = objc_msgSendSuper; };
+template <typename T>
+struct NeedsStret
+{
+#if JUCE_32BIT
+    static constexpr auto value = sizeof(T) > 8;
 #else
- template <typename>
- struct MetaSuperFn { static constexpr auto value = objc_msgSendSuper; };
+    static constexpr auto value = sizeof(T) > 16;
+#endif
+};
+
+template <>
+struct NeedsStret<void>
+{
+    static constexpr auto value = false;
+};
+
+template <typename T, bool b = NeedsStret<T>::value>
+struct MetaSuperFn
+{
+    static constexpr auto value = objc_msgSendSuper_stret;
+};
+
+template <typename T>
+struct MetaSuperFn<T, false>
+{
+    static constexpr auto value = objc_msgSendSuper;
+};
+#else
+template <typename>
+struct MetaSuperFn
+{
+    static constexpr auto value = objc_msgSendSuper;
+};
 #endif
 
 template <typename SuperType, typename ReturnType, typename... Params>
-inline ReturnType ObjCMsgSendSuper (id self, SEL sel, Params... params)
+inline ReturnType ObjCMsgSendSuper(id self, SEL sel, Params... params)
 {
-    using SuperFn = ReturnType (*) (struct objc_super*, SEL, Params...);
-    const auto fn = reinterpret_cast<SuperFn> (MetaSuperFn<ReturnType>::value);
+    using SuperFn = ReturnType (*)(struct objc_super*, SEL, Params...);
+    const auto fn = reinterpret_cast<SuperFn>(MetaSuperFn<ReturnType>::value);
 
-    objc_super s = { self, [SuperType class] };
-    return fn (&s, sel, params...);
+    objc_super s = {self, [SuperType class]};
+    return fn(&s, sel, params...);
 }
 
 //==============================================================================
 struct NSObjectDeleter
 {
-    void operator() (NSObject* object) const noexcept
+    void operator()(NSObject* object) const noexcept
     {
         if (object != nullptr)
             [object release];
@@ -211,39 +223,40 @@ using NSUniquePtr = std::unique_ptr<NSType, NSObjectDeleter>;
 template <typename T>
 class ObjCObjectHandle
 {
-public:
+   public:
     ObjCObjectHandle() = default;
 
     // Note that this does *not* retain the argument.
-    explicit ObjCObjectHandle (T ptr) : item (ptr) {}
+    explicit ObjCObjectHandle(T ptr)
+        : item(ptr) {}
 
     ~ObjCObjectHandle() noexcept { reset(); }
 
-    ObjCObjectHandle (const ObjCObjectHandle& other)
-        : item (other.item)
+    ObjCObjectHandle(const ObjCObjectHandle& other)
+        : item(other.item)
     {
         if (item != nullptr)
             [item retain];
     }
 
-    ObjCObjectHandle& operator= (const ObjCObjectHandle& other)
+    ObjCObjectHandle& operator=(const ObjCObjectHandle& other)
     {
         auto copy = other;
-        swap (copy);
+        swap(copy);
         return *this;
     }
 
-    ObjCObjectHandle (ObjCObjectHandle&& other) noexcept { swap (other); }
+    ObjCObjectHandle(ObjCObjectHandle&& other) noexcept { swap(other); }
 
-    ObjCObjectHandle& operator= (ObjCObjectHandle&& other) noexcept
+    ObjCObjectHandle& operator=(ObjCObjectHandle&& other) noexcept
     {
         reset();
-        swap (other);
+        swap(other);
         return *this;
     }
 
     // Note that this does *not* retain the argument.
-    void reset (T ptr) { *this = ObjCObjectHandle { ptr }; }
+    void reset(T ptr) { *this = ObjCObjectHandle{ptr}; }
 
     T get() const { return item; }
 
@@ -255,14 +268,14 @@ public:
         item = {};
     }
 
-    bool operator== (const ObjCObjectHandle& other) const { return item == other.item; }
-    bool operator!= (const ObjCObjectHandle& other) const { return ! (*this == other); }
+    bool operator==(const ObjCObjectHandle& other) const { return item == other.item; }
+    bool operator!=(const ObjCObjectHandle& other) const { return !(*this == other); }
 
-    bool operator== (std::nullptr_t) const { return item == nullptr; }
-    bool operator!= (std::nullptr_t) const { return ! (*this == nullptr); }
+    bool operator==(std::nullptr_t) const { return item == nullptr; }
+    bool operator!=(std::nullptr_t) const { return !(*this == nullptr); }
 
-private:
-    void swap (ObjCObjectHandle& other) noexcept { std::swap (other.item, item); }
+   private:
+    void swap(ObjCObjectHandle& other) noexcept { std::swap(other.item, item); }
 
     T item{};
 };
@@ -270,109 +283,111 @@ private:
 //==============================================================================
 namespace detail
 {
-    constexpr auto makeCompileTimeStr()
-    {
-        return std::array<char, 1> { { '\0' } };
-    }
+constexpr auto makeCompileTimeStr()
+{
+    return std::array<char, 1>{{'\0'}};
+}
 
-    template <typename A, size_t... As, typename B, size_t... Bs>
-    constexpr auto joinCompileTimeStrImpl (A&& a, std::index_sequence<As...>,
-                                           B&& b, std::index_sequence<Bs...>)
-    {
-        return std::array<char, sizeof... (As) + sizeof... (Bs) + 1> { { a[As]..., b[Bs]..., '\0' } };
-    }
+template <typename A, size_t... As, typename B, size_t... Bs>
+constexpr auto joinCompileTimeStrImpl(A&& a, std::index_sequence<As...>, B&& b, std::index_sequence<Bs...>)
+{
+    return std::array<char, sizeof...(As) + sizeof...(Bs) + 1>{{a[As]..., b[Bs]..., '\0'}};
+}
 
-    template <size_t A, size_t B>
-    constexpr auto joinCompileTimeStr (const char (&a)[A], std::array<char, B> b)
-    {
-        return joinCompileTimeStrImpl (a, std::make_index_sequence<A - 1>(),
-                                       b, std::make_index_sequence<B - 1>());
-    }
+template <size_t A, size_t B>
+constexpr auto joinCompileTimeStr(const char (&a)[A], std::array<char, B> b)
+{
+    return joinCompileTimeStrImpl(a, std::make_index_sequence<A - 1>(),
+                                  b, std::make_index_sequence<B - 1>());
+}
 
-    template <size_t A, typename... Others>
-    constexpr auto makeCompileTimeStr (const char (&v)[A], Others&&... others)
-    {
-        return joinCompileTimeStr (v, makeCompileTimeStr (others...));
-    }
+template <size_t A, typename... Others>
+constexpr auto makeCompileTimeStr(const char (&v)[A], Others&&... others)
+{
+    return joinCompileTimeStr(v, makeCompileTimeStr(others...));
+}
 } // namespace detail
 
 //==============================================================================
 template <typename Type>
-inline Type getIvar (id self, const char* name)
+inline Type getIvar(id self, const char* name)
 {
     void* v = nullptr;
-    object_getInstanceVariable (self, name, &v);
-    return static_cast<Type> (v);
+    object_getInstanceVariable(self, name, &v);
+    return static_cast<Type>(v);
 }
 
 template <typename SuperclassType>
 struct ObjCClass
 {
-    ObjCClass (const char* nameRoot)
-        : cls (objc_allocateClassPair ([SuperclassType class], getRandomisedName (nameRoot).toUTF8(), 0))
+    ObjCClass(const char* nameRoot)
+        : cls(objc_allocateClassPair([SuperclassType class], getRandomisedName(nameRoot).toUTF8(), 0))
     {
         // The class could not be created. Is the name already in use?
-        jassert (cls != nil);
+        jassert(cls != nil);
     }
 
     virtual ~ObjCClass()
     {
-        auto kvoSubclassName = String ("NSKVONotifying_") + class_getName (cls);
+        auto kvoSubclassName = String("NSKVONotifying_") + class_getName(cls);
 
-        if (objc_getClass (kvoSubclassName.toUTF8()) == nullptr)
-            objc_disposeClassPair (cls);
+        if (objc_getClass(kvoSubclassName.toUTF8()) == nullptr)
+            objc_disposeClassPair(cls);
     }
 
     void registerClass()
     {
         if (cls != nil)
-            objc_registerClassPair (cls);
+            objc_registerClassPair(cls);
     }
 
     SuperclassType* createInstance() const
     {
-        return class_createInstance (cls, 0);
+        return class_createInstance(cls, 0);
     }
 
     template <typename Type>
-    void addIvar (const char* name)
+    void addIvar(const char* name)
     {
-        [[maybe_unused]] BOOL b = class_addIvar (cls, name, sizeof (Type), (uint8_t) rint (log2 (sizeof (Type))), @encode (Type));
-        jassert (b);
+        [[maybe_unused]] BOOL b = class_addIvar(cls, name, sizeof(Type), (uint8_t)rint(log2(sizeof(Type))), @encode(Type));
+        jassert(b);
     }
 
     template <typename Fn>
-    void addMethod (SEL selector, Fn callbackFn) { addMethod (selector, toFnPtr (callbackFn)); }
-
-    template <typename Result, typename... Args>
-    void addMethod (SEL selector, Result (*callbackFn) (id, SEL, Args...))
+    void addMethod(SEL selector, Fn callbackFn)
     {
-        const auto s = detail::makeCompileTimeStr (@encode (Result), @encode (id), @encode (SEL), @encode (Args)...);
-        [[maybe_unused]] const auto b = class_addMethod (cls, selector, (IMP) callbackFn, s.data());
-        jassert (b);
+        addMethod(selector, toFnPtr(callbackFn));
     }
 
-    void addProtocol (Protocol* protocol)
+    template <typename Result, typename... Args>
+    void addMethod(SEL selector, Result (*callbackFn)(id, SEL, Args...))
     {
-        [[maybe_unused]] BOOL b = class_addProtocol (cls, protocol);
-        jassert (b);
+        const auto s = detail::makeCompileTimeStr(@encode(Result), @encode(id), @encode(SEL), @encode(Args)...);
+        [[maybe_unused]] const auto b = class_addMethod(cls, selector, (IMP)callbackFn, s.data());
+        jassert(b);
+    }
+
+    void addProtocol(Protocol* protocol)
+    {
+        [[maybe_unused]] BOOL b = class_addProtocol(cls, protocol);
+        jassert(b);
     }
 
     template <typename ReturnType, typename... Params>
-    static ReturnType sendSuperclassMessage (id self, SEL sel, Params... params)
+    static ReturnType sendSuperclassMessage(id self, SEL sel, Params... params)
     {
-        return ObjCMsgSendSuper<SuperclassType, ReturnType, Params...> (self, sel, params...);
+        return ObjCMsgSendSuper<SuperclassType, ReturnType, Params...>(self, sel, params...);
     }
 
     Class cls;
 
-private:
-    static String getRandomisedName (const char* root)
+   private:
+    static String getRandomisedName(const char* root)
     {
-        return root + String::toHexString (juce::Random::getSystemRandom().nextInt64());
+        return root + String::toHexString(juce::Random::getSystemRandom().nextInt64());
     }
 
-    JUCE_DECLARE_NON_COPYABLE (ObjCClass)
+    JUCE_DECLARE_NON_COPYABLE(ObjCClass)
 };
 
 //==============================================================================
@@ -381,36 +396,36 @@ template <class JuceClass>
 struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
 {
     ObjCLifetimeManagedClass()
-        : ObjCClass<NSObject> ("ObjCLifetimeManagedClass_")
+        : ObjCClass<NSObject>("ObjCLifetimeManagedClass_")
     {
-        addIvar<JuceClass*> ("cppObject");
+        addIvar<JuceClass*>("cppObject");
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
-        addMethod (@selector (initWithJuceObject:), initWithJuceObject);
+        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+        addMethod(@selector(initWithJuceObject:), initWithJuceObject);
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-        addMethod (@selector (dealloc),             dealloc);
+        addMethod(@selector(dealloc), dealloc);
 
         registerClass();
     }
 
-    static id initWithJuceObject (id _self, SEL, JuceClass* obj)
+    static id initWithJuceObject(id _self, SEL, JuceClass* obj)
     {
-        NSObject* self = sendSuperclassMessage<NSObject*> (_self, @selector (init));
-        object_setInstanceVariable (self, "cppObject", obj);
+        NSObject* self = sendSuperclassMessage<NSObject*>(_self, @selector(init));
+        object_setInstanceVariable(self, "cppObject", obj);
 
         return self;
     }
 
-    static void dealloc (id _self, SEL)
+    static void dealloc(id _self, SEL)
     {
-        if (auto* obj = getIvar<JuceClass*> (_self, "cppObject"))
+        if (auto* obj = getIvar<JuceClass*>(_self, "cppObject"))
         {
             delete obj;
-            object_setInstanceVariable (_self, "cppObject", nullptr);
+            object_setInstanceVariable(_self, "cppObject", nullptr);
         }
 
-        sendSuperclassMessage<void> (_self, @selector (dealloc));
+        sendSuperclassMessage<void>(_self, @selector(dealloc));
     }
 
     static ObjCLifetimeManagedClass objCLifetimeManagedClass;
@@ -423,9 +438,9 @@ ObjCLifetimeManagedClass<Class> ObjCLifetimeManagedClass<Class>::objCLifetimeMan
 // this will return an NSObject which takes ownership of the JUCE instance passed-in
 // This is useful to tie the life-time of a juce instance to the life-time of an NSObject
 template <typename Class>
-NSObject* createNSObjectFromJuceClass (Class* obj)
+NSObject* createNSObjectFromJuceClass(Class* obj)
 {
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wobjc-method-access")
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wobjc-method-access")
     return [ObjCLifetimeManagedClass<Class>::objCLifetimeManagedClass.createInstance() initWithJuceObject:obj];
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 }
@@ -433,34 +448,46 @@ NSObject* createNSObjectFromJuceClass (Class* obj)
 // Get the JUCE class instance that was tied to the life-time of an NSObject with the
 // function above
 template <typename Class>
-Class* getJuceClassFromNSObject (NSObject* obj)
+Class* getJuceClassFromNSObject(NSObject* obj)
 {
-    return obj != nullptr ? getIvar<Class*> (obj, "cppObject") : nullptr;
+    return obj != nullptr ? getIvar<Class*>(obj, "cppObject") : nullptr;
 }
 
 namespace detail
 {
-template <typename> struct Signature;
-template <typename R, typename... A> struct Signature<R (A...)> {};
+template <typename>
+struct Signature;
+template <typename R, typename... A>
+struct Signature<R(A...)>
+{
+};
 
 template <typename Class, typename Result, typename... Args>
-constexpr auto getSignature (Result (Class::*) (Args...))       { return Signature<Result (Args...)>{}; }
+constexpr auto getSignature(Result (Class::*)(Args...))
+{
+    return Signature<Result(Args...)>{};
+}
 
 template <typename Class, typename Result, typename... Args>
-constexpr auto getSignature (Result (Class::*) (Args...) const) { return Signature<Result (Args...)>{}; }
+constexpr auto getSignature(Result (Class::*)(Args...) const)
+{
+    return Signature<Result(Args...)>{};
+}
 
 template <typename Class, typename Fn, typename Result, typename... Params>
-auto createObjCBlockImpl (Class* object, Fn func, Signature<Result (Params...)>)
+auto createObjCBlockImpl(Class* object, Fn func, Signature<Result(Params...)>)
 {
-    return [[^Result (Params... params) { return (object->*func) (params...); } copy] autorelease];
+    return [[^Result(Params... params) {
+      return (object->*func)(params...);
+    } copy] autorelease];
 }
 } // namespace detail
 
 /*  Creates an Obj-C block automatically from a member function. */
 template <typename Class, typename MemberFunc>
-auto CreateObjCBlock (Class* object, MemberFunc fn)
+auto CreateObjCBlock(Class* object, MemberFunc fn)
 {
-    return detail::createObjCBlockImpl (object, fn, detail::getSignature (fn));
+    return detail::createObjCBlockImpl(object, fn, detail::getSignature(fn));
 }
 
 /*  Automatically copies and releases a block, a bit like a smart pointer for an Obj-C block.
@@ -476,18 +503,18 @@ auto CreateObjCBlock (Class* object, MemberFunc fn)
 template <typename BlockType>
 class ObjCBlock
 {
-public:
+   public:
     ObjCBlock() = default;
 
-    ObjCBlock (BlockType b)
-        : block ([b copy]) {}
+    ObjCBlock(BlockType b)
+        : block([b copy]) {}
 
-    ObjCBlock (const ObjCBlock& other)
-        : block (other.block != nullptr ? [other.block copy] : nullptr) {}
+    ObjCBlock(const ObjCBlock& other)
+        : block(other.block != nullptr ? [other.block copy] : nullptr) {}
 
-    ObjCBlock& operator= (const BlockType& other)
+    ObjCBlock& operator=(const BlockType& other)
     {
-        ObjCBlock { other }.swap (*this);
+        ObjCBlock{other}.swap(*this);
         return *this;
     }
 
@@ -497,70 +524,70 @@ public:
             [block release];
     }
 
-    bool operator== (BlockType ptr) const  { return block == ptr; }
-    bool operator!= (BlockType ptr) const  { return block != ptr; }
+    bool operator==(BlockType ptr) const { return block == ptr; }
+    bool operator!=(BlockType ptr) const { return block != ptr; }
 
     operator BlockType() const { return block; }
 
-    void swap (ObjCBlock& other) noexcept
+    void swap(ObjCBlock& other) noexcept
     {
-        std::swap (other.block, block);
+        std::swap(other.block, block);
     }
 
-private:
+   private:
     BlockType block = nullptr;
 };
 
 //==============================================================================
 class ScopedNotificationCenterObserver
 {
-public:
+   public:
     ScopedNotificationCenterObserver() = default;
 
-    ScopedNotificationCenterObserver (id observerIn,
-                                      SEL selector,
-                                      NSNotificationName nameIn,
-                                      id objectIn,
-                                      Class klassIn = [NSNotificationCenter class])
-        : observer (observerIn), name (nameIn), object (objectIn), klass (klassIn)
+    ScopedNotificationCenterObserver(id observerIn,
+                                     SEL selector,
+                                     NSNotificationName nameIn,
+                                     id objectIn,
+                                     Class klassIn = [NSNotificationCenter class])
+        : observer(observerIn), name(nameIn), object(objectIn), klass(klassIn)
     {
-        [[klass defaultCenter] addObserver: observer
-                                  selector: selector
-                                      name: name
-                                    object: object];
+        [[klass defaultCenter] addObserver:observer
+                                  selector:selector
+                                      name:name
+                                    object:object];
     }
 
     ~ScopedNotificationCenterObserver()
     {
         if (observer != nullptr && name != nullptr)
         {
-            [[klass defaultCenter] removeObserver: observer
-                                             name: name
-                                           object: object];
+            [[klass defaultCenter] removeObserver:observer
+                                             name:name
+                                           object:object];
         }
     }
 
-    ScopedNotificationCenterObserver (ScopedNotificationCenterObserver&& other) noexcept
+    ScopedNotificationCenterObserver(ScopedNotificationCenterObserver&& other) noexcept
     {
-        swap (other);
+        swap(other);
     }
 
-    ScopedNotificationCenterObserver& operator= (ScopedNotificationCenterObserver&& other) noexcept
+    ScopedNotificationCenterObserver& operator=(ScopedNotificationCenterObserver&& other) noexcept
     {
-        ScopedNotificationCenterObserver (std::move (other)).swap (*this);
+        ScopedNotificationCenterObserver(std::move(other)).swap(*this);
         return *this;
     }
 
-    ScopedNotificationCenterObserver (const ScopedNotificationCenterObserver&) = delete;
-    ScopedNotificationCenterObserver& operator= (const ScopedNotificationCenterObserver&) = delete;
+    ScopedNotificationCenterObserver(const ScopedNotificationCenterObserver&) = delete;
+    ScopedNotificationCenterObserver& operator=(const ScopedNotificationCenterObserver&) = delete;
 
-private:
-    void swap (ScopedNotificationCenterObserver& other) noexcept
+   private:
+    void swap(ScopedNotificationCenterObserver& other) noexcept
     {
-        std::swap (other.observer, observer);
-        std::swap (other.name, name);
-        std::swap (other.object, object);
-        std::swap (other.klass, klass);
+        std::swap(other.observer, observer);
+        std::swap(other.name, name);
+        std::swap(other.object, object);
+        std::swap(other.klass, klass);
     }
 
     id observer = nullptr;

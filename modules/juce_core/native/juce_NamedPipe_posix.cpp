@@ -46,9 +46,9 @@ class NamedPipe::Pimpl
 {
 public:
     Pimpl (const String& pipePath, bool createPipe)
-       : pipeInName  (pipePath + "_in"),
-         pipeOutName (pipePath + "_out"),
-         createdPipe (createPipe)
+        : pipeInName (pipePath + "_in")
+        , pipeOutName (pipePath + "_out")
+        , createdPipe (createPipe)
     {
         signal (SIGPIPE, signalHandler);
         juce_siginterrupt (SIGPIPE, 1);
@@ -56,13 +56,15 @@ public:
 
     ~Pimpl()
     {
-        pipeIn .close();
+        pipeIn.close();
         pipeOut.close();
 
         if (createdPipe)
         {
-            if (createdFifoIn)  unlink (pipeInName.toUTF8());
-            if (createdFifoOut) unlink (pipeOutName.toUTF8());
+            if (createdFifoIn)
+                unlink (pipeInName.toUTF8());
+            if (createdFifoOut)
+                unlink (pipeOutName.toUTF8());
         }
     }
 
@@ -91,9 +93,7 @@ public:
                     return -1;
 
                 const int maxWaitingTime = 30;
-                waitForInput (pipe, timeoutEnd == 0 ? maxWaitingTime
-                                                    : jmin (maxWaitingTime,
-                                                            (int) (timeoutEnd - Time::getMillisecondCounter())));
+                waitForInput (pipe, timeoutEnd == 0 ? maxWaitingTime : jmin (maxWaitingTime, (int) (timeoutEnd - Time::getMillisecondCounter())));
                 continue;
             }
 
@@ -126,9 +126,7 @@ public:
                 const int maxWaitingTime = 30;
 
                 if (error == EWOULDBLOCK || error == EAGAIN)
-                    waitToWrite (pipe, timeoutEnd == 0 ? maxWaitingTime
-                                                       : jmin (maxWaitingTime,
-                                                               (int) (timeoutEnd - Time::getMillisecondCounter())));
+                    waitToWrite (pipe, timeoutEnd == 0 ? maxWaitingTime : jmin (maxWaitingTime, (int) (timeoutEnd - Time::getMillisecondCounter())));
                 else
                     return -1;
 
@@ -149,7 +147,7 @@ public:
 
     bool createFifos (bool mustNotExist)
     {
-        createdFifoIn  = createFifo (pipeInName, mustNotExist);
+        createdFifoIn = createFifo (pipeInName, mustNotExist);
         createdFifoOut = createFifo (pipeOutName, mustNotExist);
 
         return createdFifoIn && createdFifoOut;
@@ -241,9 +239,9 @@ private:
                                          : (createdPipe ? pipeOutName : pipeInName);
 
         return pipe.get ([this, &pipeName, &flags, &timeoutEnd]
-        {
-            return openPipe (pipeName, flags, timeoutEnd);
-        });
+                         {
+                             return openPipe (pipeName, flags, timeoutEnd);
+                         });
     }
 
     static void waitForInput (int handle, int timeoutMsecs) noexcept
@@ -283,17 +281,19 @@ void NamedPipe::close()
 
 bool NamedPipe::openInternal (const String& pipeName, bool createPipe, bool mustNotExist)
 {
-   #if JUCE_IOS
+#if JUCE_IOS
     pimpl.reset (new Pimpl (File::getSpecialLocation (File::tempDirectory)
-                             .getChildFile (File::createLegalFileName (pipeName)).getFullPathName(), createPipe));
-   #else
+                                .getChildFile (File::createLegalFileName (pipeName))
+                                .getFullPathName(),
+                            createPipe));
+#else
     auto file = pipeName;
 
     if (! File::isAbsolutePath (file))
         file = "/tmp/" + File::createLegalFileName (file);
 
     pimpl.reset (new Pimpl (file, createPipe));
-   #endif
+#endif
 
     if (createPipe && ! pimpl->createFifos (mustNotExist))
     {

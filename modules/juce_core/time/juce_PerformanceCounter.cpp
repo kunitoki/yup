@@ -52,7 +52,9 @@ static void appendToFile (const File& f, const String& s)
 }
 
 PerformanceCounter::PerformanceCounter (const String& name, int runsPerPrintout, const File& loggingFile)
-    : runsPerPrint (runsPerPrintout), startTime (0), outputFile (loggingFile)
+    : runsPerPrint (runsPerPrintout)
+    , startTime (0)
+    , outputFile (loggingFile)
 {
     stats.name = name;
     appendToFile (outputFile, "**** Counter for \"" + name + "\" started at: " + Time::getCurrentTime().toString (true, true));
@@ -65,7 +67,11 @@ PerformanceCounter::~PerformanceCounter()
 }
 
 PerformanceCounter::Statistics::Statistics() noexcept
-    : averageSeconds(), maximumSeconds(), minimumSeconds(), totalSeconds(), numRuns()
+    : averageSeconds()
+    , maximumSeconds()
+    , minimumSeconds()
+    , totalSeconds()
+    , numRuns()
 {
 }
 
@@ -95,7 +101,7 @@ void PerformanceCounter::Statistics::addResult (double elapsed) noexcept
 static String timeToString (double secs)
 {
     return String ((int64) (secs * (secs < 0.01 ? 1000000.0 : 1000.0) + 0.5))
-                    + (secs < 0.01 ? " microsecs" : " millisecs");
+         + (secs < 0.01 ? " microsecs" : " millisecs");
 }
 
 String PerformanceCounter::Statistics::toString() const
@@ -103,10 +109,10 @@ String PerformanceCounter::Statistics::toString() const
     MemoryOutputStream s;
 
     s << "Performance count for \"" << name << "\" over " << numRuns << " run(s)" << newLine
-      << "Average = "   << timeToString (averageSeconds)
+      << "Average = " << timeToString (averageSeconds)
       << ", minimum = " << timeToString (minimumSeconds)
       << ", maximum = " << timeToString (maximumSeconds)
-      << ", total = "   << timeToString (totalSeconds);
+      << ", total = " << timeToString (totalSeconds);
 
     return s.toString();
 }

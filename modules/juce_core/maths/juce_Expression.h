@@ -57,7 +57,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  Expression
+class JUCE_API Expression
 {
 public:
     //==============================================================================
@@ -122,7 +122,7 @@ public:
     /** When evaluating an Expression object, this class is used to resolve symbols and
         perform functions that the expression uses.
     */
-    class JUCE_API  Scope
+    class JUCE_API Scope
     {
     public:
         Scope();
@@ -144,7 +144,8 @@ public:
             @throws Expression::EvaluationError
         */
         virtual double evaluateFunction (const String& functionName,
-                                         const double* parameters, int numParameters) const;
+                                         const double* parameters,
+                                         int numParameters) const;
 
         /** Used as a callback by the Scope::visitRelativeScope() method.
             You should never create an instance of this class yourself, it's used by the
@@ -205,8 +206,8 @@ public:
         bool operator== (const Symbol&) const noexcept;
         bool operator!= (const Symbol&) const noexcept;
 
-        String scopeUID;    /**< The unique ID of the Scope that contains this symbol. */
-        String symbolName;  /**< The name of the symbol. */
+        String scopeUID;   /**< The unique ID of the Scope that contains this symbol. */
+        String symbolName; /**< The name of the symbol. */
     };
 
     /** Returns a copy of this expression in which all instances of a given symbol have been renamed. */

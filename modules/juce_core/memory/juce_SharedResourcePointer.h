@@ -119,24 +119,26 @@ public:
     ~SharedResourcePointer() = default;
 
     /** Returns a pointer to the shared object. */
-    operator SharedObjectType*() const noexcept         { return sharedObject.get(); }
+    operator SharedObjectType*() const noexcept { return sharedObject.get(); }
 
     /** Returns a reference to the shared object. */
-    SharedObjectType& get() const noexcept              { return *sharedObject; }
+    SharedObjectType& get() const noexcept { return *sharedObject; }
 
     /** Returns a reference to the shared object. */
-    SharedObjectType& getObject() const noexcept        { return *sharedObject; }
+    SharedObjectType& getObject() const noexcept { return *sharedObject; }
 
     /** Returns a pointer to the shared object. */
-    SharedObjectType* operator->() const noexcept       { return sharedObject.get(); }
+    SharedObjectType* operator->() const noexcept { return sharedObject.get(); }
 
     /** Returns a reference to the shared object. */
-    SharedObjectType& operator*() const noexcept        { return *sharedObject; }
+    SharedObjectType& operator*() const noexcept { return *sharedObject; }
 
-   #ifndef DOXYGEN
-    [[deprecated ("If you are relying on this function please inform the JUCE team as we are planing on removing this in a subsequent release")]]
-    int getReferenceCount() const noexcept              { return (int) sharedObject.use_count(); }
-   #endif
+#ifndef DOXYGEN
+    [[deprecated ("If you are relying on this function please inform the JUCE team as we are planing on removing this in a subsequent release")]] int getReferenceCount() const noexcept
+    {
+        return (int) sharedObject.use_count();
+    }
+#endif
 
     /** Returns the SharedResourcePointer if one already exists, or a null optional otherwise. */
     static std::optional<SharedResourcePointer> getSharedObjectWithoutCreating()

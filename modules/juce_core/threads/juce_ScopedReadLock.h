@@ -65,7 +65,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API  ScopedReadLock
+class JUCE_API ScopedReadLock
 {
 public:
     //==============================================================================
@@ -79,7 +79,11 @@ public:
         otherwise there are no guarantees what will happen! Best just to use it
         as a local stack object, rather than creating one with the new() operator.
     */
-    inline explicit ScopedReadLock (const ReadWriteLock& lock) noexcept   : lock_ (lock) { lock.enterRead(); }
+    inline explicit ScopedReadLock (const ReadWriteLock& lock) noexcept
+        : lock_ (lock)
+    {
+        lock.enterRead();
+    }
 
     /** Destructor.
 
@@ -88,8 +92,7 @@ public:
         Make sure this object is created and deleted by the same thread,
         otherwise there are no guarantees what will happen!
     */
-    inline ~ScopedReadLock() noexcept                                     { lock_.exitRead(); }
-
+    inline ~ScopedReadLock() noexcept { lock_.exitRead(); }
 
 private:
     //==============================================================================
@@ -133,7 +136,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API  ScopedTryReadLock
+class JUCE_API ScopedTryReadLock
 {
 public:
     //==============================================================================
@@ -146,7 +149,9 @@ public:
         one with the new() operator.
     */
     explicit ScopedTryReadLock (ReadWriteLock& lockIn)
-        : ScopedTryReadLock (lockIn, true) {}
+        : ScopedTryReadLock (lockIn, true)
+    {
+    }
 
     /** Creates a ScopedTryReadLock.
 
@@ -159,7 +164,10 @@ public:
         one with the new() operator.
     */
     ScopedTryReadLock (ReadWriteLock& lockIn, bool acquireLockOnInitialisation) noexcept
-        : lock (lockIn), lockWasSuccessful (acquireLockOnInitialisation && lock.tryEnterRead()) {}
+        : lock (lockIn)
+        , lockWasSuccessful (acquireLockOnInitialisation && lock.tryEnterRead())
+    {
+    }
 
     /** Destructor.
 
@@ -168,13 +176,17 @@ public:
         Make sure this object is created and destructed by the same thread, otherwise there are no
         guarantees what will happen!
     */
-    ~ScopedTryReadLock() noexcept                   { if (lockWasSuccessful) lock.exitRead(); }
+    ~ScopedTryReadLock() noexcept
+    {
+        if (lockWasSuccessful)
+            lock.exitRead();
+    }
 
     /** Returns true if the mutex was successfully locked. */
-    bool isLocked() const noexcept                  { return lockWasSuccessful; }
+    bool isLocked() const noexcept { return lockWasSuccessful; }
 
     /** Retry gaining the lock by calling tryEnter on the underlying lock. */
-    bool retryLock() noexcept                       { return lockWasSuccessful = lock.tryEnterRead(); }
+    bool retryLock() noexcept { return lockWasSuccessful = lock.tryEnterRead(); }
 
 private:
     //==============================================================================

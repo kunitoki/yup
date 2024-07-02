@@ -66,8 +66,8 @@ public:
         OptionalScopedPointer just holds a normal pointer to the object, and won't delete it.
     */
     OptionalScopedPointer (ObjectType* objectToHold, bool takeOwnership)
-        : object (objectToHold),
-          shouldDelete (takeOwnership)
+        : object (objectToHold)
+        , shouldDelete (takeOwnership)
     {
     }
 
@@ -80,8 +80,8 @@ public:
         copied from the source object.
     */
     OptionalScopedPointer (OptionalScopedPointer&& other) noexcept
-        : object (std::move (other.object)),
-          shouldDelete (std::move (other.shouldDelete))
+        : object (std::move (other.object))
+        , shouldDelete (std::move (other.shouldDelete))
     {
     }
 
@@ -123,22 +123,22 @@ public:
 
     //==============================================================================
     /** Returns the object that this pointer is managing. */
-    operator ObjectType*() const noexcept                    { return object.get(); }
+    operator ObjectType*() const noexcept { return object.get(); }
 
     /** Returns the object that this pointer is managing. */
-    ObjectType* get() const noexcept                         { return object.get(); }
+    ObjectType* get() const noexcept { return object.get(); }
 
     /** Returns the object that this pointer is managing. */
-    ObjectType& operator*() const noexcept                   { return *object; }
+    ObjectType& operator*() const noexcept { return *object; }
 
     /** Lets you access methods and properties of the object that this pointer is holding. */
-    ObjectType* operator->() const noexcept                  { return object.get(); }
+    ObjectType* operator->() const noexcept { return object.get(); }
 
     //==============================================================================
     /** Removes the current object from this OptionalScopedPointer without deleting it.
         This will return the current object, and set this OptionalScopedPointer to a null pointer.
     */
-    ObjectType* release() noexcept                                  { return object.release(); }
+    ObjectType* release() noexcept { return object.release(); }
 
     /** Resets this pointer to null, possibly deleting the object that it holds, if it has
         ownership of it.
@@ -152,7 +152,7 @@ public:
     }
 
     /** Does the same thing as reset(). */
-    void clear()                                                    { reset(); }
+    void clear() { reset(); }
 
     /** Makes this OptionalScopedPointer point at a new object, specifying whether the
         OptionalScopedPointer will take ownership of the object.
@@ -187,7 +187,7 @@ public:
     /** Returns true if the target object will be deleted when this pointer
         object is deleted.
     */
-    bool willDeleteObject() const noexcept                          { return shouldDelete; }
+    bool willDeleteObject() const noexcept { return shouldDelete; }
 
     //==============================================================================
     /** Swaps this object with another OptionalScopedPointer.

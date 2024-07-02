@@ -44,63 +44,63 @@ JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4309 4305 4365 6385 6326 6340)
 
 namespace zlibNamespace
 {
- #if JUCE_INCLUDE_ZLIB_CODE
-  JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wconversion",
-                                       "-Wsign-conversion",
-                                       "-Wshadow",
-                                       "-Wdeprecated-register",
-                                       "-Wswitch-enum",
-                                       "-Wswitch-default",
-                                       "-Wredundant-decls",
-                                       "-Wimplicit-fallthrough",
-                                       "-Wzero-as-null-pointer-constant",
-                                       "-Wcomma")
+#if JUCE_INCLUDE_ZLIB_CODE
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wconversion",
+                                         "-Wsign-conversion",
+                                         "-Wshadow",
+                                         "-Wdeprecated-register",
+                                         "-Wswitch-enum",
+                                         "-Wswitch-default",
+                                         "-Wredundant-decls",
+                                         "-Wimplicit-fallthrough",
+                                         "-Wzero-as-null-pointer-constant",
+                                         "-Wcomma")
 
-  #undef OS_CODE
-  #undef fdopen
-  #define ZLIB_INTERNAL
-  #define NO_DUMMY_DECL
-  #include "zlib/zlib.h"
-  #include "zlib/adler32.c"
-  #include "zlib/compress.c"
-  #undef DO1
-  #undef DO8
-  #include "zlib/crc32.c"
-  #include "zlib/deflate.c"
-  #include "zlib/inffast.c"
-  #undef PULLBYTE
-  #undef LOAD
-  #undef RESTORE
-  #undef INITBITS
-  #undef NEEDBITS
-  #undef DROPBITS
-  #undef BYTEBITS
-  #include "zlib/inflate.c"
-  #include "zlib/inftrees.c"
-  #include "zlib/trees.c"
-  #include "zlib/zutil.c"
-  #undef Byte
-  #undef fdopen
-  #undef local
-  #undef Freq
-  #undef Code
-  #undef Dad
-  #undef Len
+#undef OS_CODE
+#undef fdopen
+#define ZLIB_INTERNAL
+#define NO_DUMMY_DECL
+#include "zlib/zlib.h"
+#include "zlib/adler32.c"
+#include "zlib/compress.c"
+#undef DO1
+#undef DO8
+#include "zlib/crc32.c"
+#include "zlib/deflate.c"
+#include "zlib/inffast.c"
+#undef PULLBYTE
+#undef LOAD
+#undef RESTORE
+#undef INITBITS
+#undef NEEDBITS
+#undef DROPBITS
+#undef BYTEBITS
+#include "zlib/inflate.c"
+#include "zlib/inftrees.c"
+#include "zlib/trees.c"
+#include "zlib/zutil.c"
+#undef Byte
+#undef fdopen
+#undef local
+#undef Freq
+#undef Code
+#undef Dad
+#undef Len
 
-  JUCE_END_IGNORE_WARNINGS_GCC_LIKE
- #else
-  #include JUCE_ZLIB_INCLUDE_PATH
+    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+#else
+#include JUCE_ZLIB_INCLUDE_PATH
 
-  #ifndef z_uInt
-   #ifdef uInt
-    #define z_uInt uInt
-   #else
-    #define z_uInt unsigned int
-   #endif
-  #endif
+#ifndef z_uInt
+#ifdef uInt
+#define z_uInt uInt
+#else
+#define z_uInt unsigned int
+#endif
+#endif
 
- #endif
-}
+#endif
+} // namespace zlibNamespace
 
 JUCE_END_IGNORE_WARNINGS_MSVC
 
@@ -124,7 +124,7 @@ public:
             zlibNamespace::inflateEnd (&stream);
     }
 
-    bool needsInput() const noexcept        { return dataSize <= 0; }
+    bool needsInput() const noexcept { return dataSize <= 0; }
 
     void setInput (uint8* const data_, const size_t size) noexcept
     {
@@ -138,33 +138,33 @@ public:
 
         if (streamIsValid && data != nullptr && ! finished)
         {
-            stream.next_in  = data;
+            stream.next_in = data;
             stream.next_out = dest;
-            stream.avail_in  = (z_uInt) dataSize;
+            stream.avail_in = (z_uInt) dataSize;
             stream.avail_out = (z_uInt) destSize;
 
             switch (inflate (&stream, Z_PARTIAL_FLUSH))
             {
-            case Z_STREAM_END:
-                finished = true;
-                JUCE_FALLTHROUGH
-            case Z_OK:
-                data += dataSize - stream.avail_in;
-                dataSize = (z_uInt) stream.avail_in;
-                return (int) (destSize - stream.avail_out);
+                case Z_STREAM_END:
+                    finished = true;
+                    JUCE_FALLTHROUGH
+                case Z_OK:
+                    data += dataSize - stream.avail_in;
+                    dataSize = (z_uInt) stream.avail_in;
+                    return (int) (destSize - stream.avail_out);
 
-            case Z_NEED_DICT:
-                needsDictionary = true;
-                data += dataSize - stream.avail_in;
-                dataSize = (size_t) stream.avail_in;
-                break;
+                case Z_NEED_DICT:
+                    needsDictionary = true;
+                    data += dataSize - stream.avail_in;
+                    dataSize = (size_t) stream.avail_in;
+                    break;
 
-            case Z_DATA_ERROR:
-            case Z_MEM_ERROR:
-                error = true;
-                JUCE_FALLTHROUGH
-            default:
-                break;
+                case Z_DATA_ERROR:
+                case Z_MEM_ERROR:
+                    error = true;
+                    JUCE_FALLTHROUGH
+                default:
+                    break;
             }
         }
 
@@ -175,10 +175,15 @@ public:
     {
         switch (f)
         {
-            case zlibFormat:     return  MAX_WBITS;
-            case deflateFormat:  return -MAX_WBITS;
-            case gzipFormat:     return  MAX_WBITS | 16;
-            default:             jassertfalse; break;
+            case zlibFormat:
+                return MAX_WBITS;
+            case deflateFormat:
+                return -MAX_WBITS;
+            case gzipFormat:
+                return MAX_WBITS | 16;
+            default:
+                jassertfalse;
+                break;
         }
 
         return MAX_WBITS;
@@ -186,7 +191,10 @@ public:
 
     bool finished = true, needsDictionary = false, error = true, streamIsValid = false;
 
-    enum { gzipDecompBufferSize = 32768 };
+    enum
+    {
+        gzipDecompBufferSize = 32768
+    };
 
 private:
     zlibNamespace::z_stream stream;
@@ -197,24 +205,23 @@ private:
 };
 
 //==============================================================================
-GZIPDecompressorInputStream::GZIPDecompressorInputStream (InputStream* source, bool deleteSourceWhenDestroyed,
-                                                          Format f, int64 uncompressedLength)
-  : sourceStream (source, deleteSourceWhenDestroyed),
-    uncompressedStreamLength (uncompressedLength),
-    format (f),
-    originalSourcePos (source->getPosition()),
-    buffer ((size_t) GZIPDecompressHelper::gzipDecompBufferSize),
-    helper (new GZIPDecompressHelper (f))
+GZIPDecompressorInputStream::GZIPDecompressorInputStream (InputStream* source, bool deleteSourceWhenDestroyed, Format f, int64 uncompressedLength)
+    : sourceStream (source, deleteSourceWhenDestroyed)
+    , uncompressedStreamLength (uncompressedLength)
+    , format (f)
+    , originalSourcePos (source->getPosition())
+    , buffer ((size_t) GZIPDecompressHelper::gzipDecompBufferSize)
+    , helper (new GZIPDecompressHelper (f))
 {
 }
 
 GZIPDecompressorInputStream::GZIPDecompressorInputStream (InputStream& source)
-  : sourceStream (&source, false),
-    uncompressedStreamLength (-1),
-    format (zlibFormat),
-    originalSourcePos (source.getPosition()),
-    buffer ((size_t) GZIPDecompressHelper::gzipDecompBufferSize),
-    helper (new GZIPDecompressHelper (zlibFormat))
+    : sourceStream (&source, false)
+    , uncompressedStreamLength (-1)
+    , format (zlibFormat)
+    , originalSourcePos (source.getPosition())
+    , buffer ((size_t) GZIPDecompressHelper::gzipDecompBufferSize)
+    , helper (new GZIPDecompressHelper (zlibFormat))
 {
 }
 
@@ -306,7 +313,6 @@ bool GZIPDecompressorInputStream::setPosition (int64 newPos)
     return true;
 }
 
-
 //==============================================================================
 //==============================================================================
 #if JUCE_UNIT_TESTS
@@ -315,7 +321,8 @@ struct GZIPDecompressorInputStreamTests final : public UnitTest
 {
     GZIPDecompressorInputStreamTests()
         : UnitTest ("GZIPDecompressorInputStreamTests", UnitTestCategories::streams)
-    {}
+    {
+    }
 
     void runTest() override
     {
