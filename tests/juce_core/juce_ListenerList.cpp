@@ -722,6 +722,7 @@ TEST_F (ListenerListTests, ClearListenersDuringCallback)
     EXPECT_FALSE (called);
 }
 
+#if !JUCE_WASM
 class MyListenerType
 {
 public:
@@ -875,3 +876,4 @@ TEST_F (ListenerListTests, ThreadSafeAddRemoveWhileCalling)
     EXPECT_GE (listener2.getCallbackCount(), 0);
     EXPECT_EQ (listener3.getCallbackCount(), 1000);
 }
+#endif
