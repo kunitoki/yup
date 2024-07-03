@@ -32,6 +32,10 @@ FetchContent_Declare(
 )
 set (gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable (googletest)
+set_target_properties (gtest PROPERTIES FOLDER "Tests")
+set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
+set_target_properties (gmock PROPERTIES FOLDER "Tests")
+set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 
 # ==== Create executable
 set (target_name yup_tests)
@@ -58,3 +62,4 @@ file (GLOB_RECURSE sources
       "${CMAKE_CURRENT_LIST_DIR}/*.mm")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})
+set_target_properties (${target_name} PROPERTIES FOLDER "Tests")

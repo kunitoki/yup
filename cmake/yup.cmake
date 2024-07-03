@@ -160,31 +160,40 @@ function (_yup_module_collect_sources folder output_variable)
         if (NOT "${yup_platform}" MATCHES "^(win32|uwp)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(win32)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_win32${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(uwp)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_uwp${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios|osx)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_apple${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(osx)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mobile${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(android)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_android${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_emscripten${extension}")
         endif()
@@ -345,6 +354,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
     file (GLOB_RECURSE all_module_files_clap "${module_path}/clap/*")
     add_library (${custom_target_name}-module INTERFACE ${all_module_files_clap})
     source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
+    set_target_properties (${custom_target_name}-module PROPERTIES FOLDER "Modules")
 
 endfunction()
 
@@ -500,6 +510,7 @@ function (yup_add_module module_path)
     file (GLOB_RECURSE all_module_files "${module_path}/*")
     add_library (${module_name}-module INTERFACE ${all_module_files})
     source_group (TREE ${module_path}/ FILES ${all_module_files})
+    set_target_properties (${module_name}-module PROPERTIES FOLDER "Modules")
 
     # ==== Setup parent scope variables
     set (${module_name}_Found ON PARENT_SCOPE)
@@ -522,7 +533,7 @@ endfunction()
 function (yup_standalone_app)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME TARGET_VERSION)
+    set (one_value_args TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -609,6 +620,10 @@ function (yup_standalone_app)
 
     endif()
 
+    if (YUP_ARG_TARGET_IDE_GROUP)
+        set_target_properties (${target_name} PROPERTIES FOLDER "${YUP_ARG_TARGET_IDE_GROUP}")
+    endif()
+
     # ==== Definitions and link libraries
     target_compile_options (${target_name} PRIVATE
         ${additional_options}
@@ -636,7 +651,7 @@ endfunction()
 function (yup_audio_plugin)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME PLUGIN_CREATE_CLAP PLUGIN_CREATE_STANDALONE)
+    set (one_value_args TARGET_NAME TARGET_IDE_GROUP PLUGIN_CREATE_CLAP PLUGIN_CREATE_STANDALONE)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -663,6 +678,7 @@ function (yup_audio_plugin)
         if (YUP_ARG_PLUGIN_CREATE_CLAP)
             FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
             FetchContent_MakeAvailable (clap)
+            set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
 
             _yup_module_setup_plugin_client_clap (${target_name} yup_audio_plugin_client ${YUP_ARG_UNPARSED_ARGUMENTS})
 
@@ -708,6 +724,10 @@ function (yup_audio_plugin)
 
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
         set_target_properties (${target_name} PROPERTIES SUFFIX ".clap")
+    endif()
+
+    if (YUP_ARG_TARGET_IDE_GROUP)
+        set_target_properties (${target_name} PROPERTIES FOLDER "${YUP_ARG_TARGET_IDE_GROUP}")
     endif()
 
     # ==== Definitions and link libraries
