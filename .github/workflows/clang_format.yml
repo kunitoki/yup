@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.YUP_BOT_TOKEN }}
 
       - name: Get changed files
         id: changed-files
@@ -45,9 +45,11 @@ jobs:
         env:
           ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
-          echo $ALL_CHANGED_FILES
-          clang-format -style=file -i $ALL_CHANGED_FILES
-          git diff
+          if [ -n "${ALL_CHANGED_FILES}" ]; then
+            echo ${ALL_CHANGED_FILES}
+            clang-format -style=file -i ${ALL_CHANGED_FILES}
+            git diff
+          fi
 
       - name: Push changes
         uses: stefanzweifel/git-auto-commit-action@v5

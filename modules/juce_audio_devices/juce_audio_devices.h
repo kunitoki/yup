@@ -182,9 +182,9 @@ namespace juce
 {
 /** Available modes for the WASAPI audio device.
 
-        Pass one of these to the AudioIODeviceType::createAudioIODeviceType_WASAPI()
-        method to create a WASAPI AudioIODeviceType object in this mode.
-    */
+    Pass one of these to the AudioIODeviceType::createAudioIODeviceType_WASAPI()
+    method to create a WASAPI AudioIODeviceType object in this mode.
+*/
 enum class WASAPIDeviceMode
 {
     shared,
