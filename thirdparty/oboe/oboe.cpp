@@ -21,7 +21,7 @@
 
 #include "oboe.h"
 
-#if defined (ANDROID)
+#if __ANDROID__
 #include "upstream/src/aaudio/AAudioLoader.cpp"
 #include "upstream/src/aaudio/AudioStreamAAudio.cpp"
 #include "upstream/src/common/AdpfWrapper.cpp"
@@ -82,6 +82,4 @@
 #include "upstream/src/common/StabilizedCallback.cpp"
 #include "upstream/src/common/Trace.cpp"
 #include "upstream/src/common/Version.cpp"
-#else
-enum __yup_dummy_oboe_enum {};
 #endif
