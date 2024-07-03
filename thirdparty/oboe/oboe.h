@@ -42,6 +42,6 @@
 
 #pragma once
 
-#if defined (ANDROID)
+#if __ANDROID__
 #include "upstream/include/Oboe.h"
 #endif
