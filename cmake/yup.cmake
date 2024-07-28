@@ -78,6 +78,20 @@ function (_yup_get_package_config_libs package_name output_variable)
     set (${output_variable} "PkgConfig::${package_name}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_glob_recurse folder output_variable)
+    file (GLOB_RECURSE all_files "${folder}")
+
+    set (non_hidden_files "")
+    foreach (item ${all_files})
+        get_filename_component (file_name ${item} NAME)
+        if (NOT ${file_name} MATCHES "^\\..*$")
+            list (APPEND non_hidden_files ${item})
+        endif()
+    endforeach()
+
+    set (${output_variable} "${non_hidden_files}" PARENT_SCOPE)
+endfunction()
+
 #==============================================================================
 
 macro(_yup_setup_platform)
@@ -293,7 +307,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
+function (_yup_module_setup_plugin_client_clap target_name plugin_client_target folder_name)
     if ("${yup_platform}" MATCHES "^(emscripten)$")
         return()
     endif()
@@ -307,6 +321,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
     set (custom_target_name "${target_name}_clap")
 
     add_library (${custom_target_name} INTERFACE)
+    set_target_properties (${custom_target_name} PROPERTIES FOLDER "${folder_name}")
 
     get_target_property (module_path ${plugin_client_target} YUP_MODULE_PATH)
     get_target_property (module_cpp_standard ${plugin_client_target} YUP_MODULE_CPP_STANDARD)
@@ -336,9 +351,9 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
     endif()
 
     if ("${yup_platform}" MATCHES "^(ios|osx)$")
-        file (GLOB_RECURSE module_sources "${module_path}/clap/*.mm")
+        _yup_glob_recurse ("${module_path}/clap/*.mm" module_sources)
     else()
-        file (GLOB_RECURSE module_sources "${module_path}/clap/*.cpp")
+        _yup_glob_recurse ("${module_path}/clap/*.cpp" module_sources)
     endif()
 
     _yup_module_setup_target (${custom_target_name}
@@ -351,10 +366,10 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
                               "${module_dependencies}"
                               "${module_arc_enabled}")
 
-    file (GLOB_RECURSE all_module_files_clap "${module_path}/clap/*")
-    add_library (${custom_target_name}-module INTERFACE ${all_module_files_clap})
-    source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
-    set_target_properties (${custom_target_name}-module PROPERTIES FOLDER "Modules")
+
+    _yup_glob_recurse ("${module_path}/clap/*" all_module_files_clap)
+    target_sources (${custom_target_name} PRIVATE ${all_module_files_clap})
+    set_source_files_properties (${all_module_files_clap} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 endfunction()
 
@@ -378,6 +393,7 @@ function (yup_add_module module_path)
 
     # ==== Add module as library
     add_library (${module_name} INTERFACE)
+    set_target_properties (${module_name} PROPERTIES FOLDER "Modules")
 
     # ==== Parse module declaration string
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
@@ -507,10 +523,9 @@ function (yup_add_module module_path)
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
 
-    file (GLOB_RECURSE all_module_files "${module_path}/*")
-    add_library (${module_name}-module INTERFACE ${all_module_files})
-    source_group (TREE ${module_path}/ FILES ${all_module_files})
-    set_target_properties (${module_name}-module PROPERTIES FOLDER "Modules")
+    _yup_glob_recurse ("${module_path}/*" all_module_files)
+    target_sources (${module_name} PRIVATE ${all_module_files})
+    set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 
     # ==== Setup parent scope variables
     set (${module_name}_Found ON PARENT_SCOPE)
@@ -683,7 +698,7 @@ function (yup_audio_plugin)
             FetchContent_MakeAvailable (clap)
             set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
 
-            _yup_module_setup_plugin_client_clap (${target_name} yup_audio_plugin_client ${YUP_ARG_UNPARSED_ARGUMENTS})
+            _yup_module_setup_plugin_client_clap (${target_name} yup_audio_plugin_client ${YUP_ARG_TARGET_IDE_GROUP} ${YUP_ARG_UNPARSED_ARGUMENTS})
 
             list (APPEND additional_libraries clap ${target_name}_clap)
         endif()
