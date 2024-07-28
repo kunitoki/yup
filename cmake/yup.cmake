@@ -557,6 +557,7 @@ function (yup_standalone_app)
         set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
         set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable (glfw)
+        set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
 
         list (APPEND additional_libraries glfw)
     endif()
@@ -672,6 +673,8 @@ function (yup_audio_plugin)
         set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
         set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
         FetchContent_MakeAvailable (glfw)
+        set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
+
         list (APPEND additional_libraries glfw)
 
         # ==== Fetch plugins SDKS
