@@ -23,6 +23,43 @@
 
 #==============================================================================
 
+include (FetchContent)
+
+#==============================================================================
+
+macro (_yup_setup_platform)
+    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
+        set (yup_platform "ios")
+
+    elseif (ANDROID)
+        set (yup_platform "android")
+
+    elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
+        set (yup_platform "emscripten")
+
+    elseif (APPLE)
+        set (yup_platform "osx")
+
+    elseif (UNIX)
+        set (yup_platform "linux")
+
+    elseif (WIN32)
+        if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+            set (yup_platform "uwp")
+        else()
+            set (yup_platform "win32")
+        endif()
+
+    else()
+        set (yup_platform "unknown")
+
+    endif()
+
+    message (STATUS "YUP -- Setting up for ${yup_platform} platform")
+endmacro()
+
+#==============================================================================
+
 function (_yup_strip_list input_list output_variable)
     set (inner_list "" PARENT_SCOPE)
     foreach (item ${input_list})
@@ -69,7 +106,7 @@ function (_yup_file_to_byte_array file_path output_variable)
     string (PREPEND formatted_hex "0x")
     string (APPEND formatted_hex "")
 
-    set (${output_variable} ${formatted_hex} PARENT_SCOPE)
+    set (${output_variable} "${formatted_hex}" PARENT_SCOPE)
 endfunction()
 
 function (_yup_get_package_config_libs package_name output_variable)
@@ -78,31 +115,29 @@ function (_yup_get_package_config_libs package_name output_variable)
     set (${output_variable} "PkgConfig::${package_name}" PARENT_SCOPE)
 endfunction()
 
-#==============================================================================
+function (_yup_glob_recurse folder output_variable)
+    file (GLOB_RECURSE all_files "${folder}")
 
-macro(_yup_setup_platform)
-    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
-        set (yup_platform "ios")
-    elseif (ANDROID)
-        set (yup_platform "android")
-    elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
-        set (yup_platform "emscripten")
-    elseif (APPLE)
-        set (yup_platform "osx")
-    elseif (UNIX)
-        set (yup_platform "linux")
-    elseif (WIN32)
-        if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-            set (yup_platform "uwp")
-        else()
-            set (yup_platform "win32")
+    set (non_hidden_files "")
+    foreach (item ${all_files})
+        get_filename_component (file_name ${item} NAME)
+        if (NOT ${file_name} MATCHES "^\\..*$")
+            list (APPEND non_hidden_files ${item})
         endif()
-    else()
-        set (yup_platform "unknown")
-    endif()
+    endforeach()
 
-    message (STATUS "YUP -- Setting up for ${yup_platform} platform")
-endmacro()
+    set (${output_variable} "${non_hidden_files}" PARENT_SCOPE)
+endfunction()
+
+function (_yup_fetch_glfw3)
+    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable (glfw)
+    set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
+endfunction()
 
 #==============================================================================
 
@@ -140,7 +175,7 @@ function (_yup_module_parse_config module_header output_module_configs output_mo
     endwhile()
 
     set (${output_module_configs} "${module_configs}" PARENT_SCOPE)
-    set (${output_module_user_configs} "${module_user_configs}")
+    set (${output_module_user_configs} "${module_user_configs}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================
@@ -160,31 +195,40 @@ function (_yup_module_collect_sources folder output_variable)
         if (NOT "${yup_platform}" MATCHES "^(win32|uwp)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(win32)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_win32${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(uwp)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_uwp${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios|osx)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_apple${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(osx)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mobile${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(android)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_android${extension}")
         endif()
+
         if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_emscripten${extension}")
         endif()
@@ -284,7 +328,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
+function (_yup_module_setup_plugin_client_clap target_name plugin_client_target folder_name)
     if ("${yup_platform}" MATCHES "^(emscripten)$")
         return()
     endif()
@@ -298,6 +342,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
     set (custom_target_name "${target_name}_clap")
 
     add_library (${custom_target_name} INTERFACE)
+    set_target_properties (${custom_target_name} PROPERTIES FOLDER "${folder_name}")
 
     get_target_property (module_path ${plugin_client_target} YUP_MODULE_PATH)
     get_target_property (module_cpp_standard ${plugin_client_target} YUP_MODULE_CPP_STANDARD)
@@ -327,9 +372,9 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
     endif()
 
     if ("${yup_platform}" MATCHES "^(ios|osx)$")
-        file (GLOB_RECURSE module_sources "${module_path}/clap/*.mm")
+        _yup_glob_recurse ("${module_path}/clap/*.mm" module_sources)
     else()
-        file (GLOB_RECURSE module_sources "${module_path}/clap/*.cpp")
+        _yup_glob_recurse ("${module_path}/clap/*.cpp" module_sources)
     endif()
 
     _yup_module_setup_target (${custom_target_name}
@@ -342,9 +387,10 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target)
                               "${module_dependencies}"
                               "${module_arc_enabled}")
 
-    file (GLOB_RECURSE all_module_files_clap "${module_path}/clap/*")
-    add_library (${custom_target_name}-module INTERFACE ${all_module_files_clap})
-    source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
+
+    _yup_glob_recurse ("${module_path}/clap/*" all_module_files_clap)
+    target_sources (${custom_target_name} PRIVATE ${all_module_files_clap})
+    set_source_files_properties (${all_module_files_clap} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 endfunction()
 
@@ -368,6 +414,7 @@ function (yup_add_module module_path)
 
     # ==== Add module as library
     add_library (${module_name} INTERFACE)
+    set_target_properties (${module_name} PROPERTIES FOLDER "Modules")
 
     # ==== Parse module declaration string
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
@@ -497,9 +544,9 @@ function (yup_add_module module_path)
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
 
-    file (GLOB_RECURSE all_module_files "${module_path}/*")
-    add_library (${module_name}-module INTERFACE ${all_module_files})
-    source_group (TREE ${module_path}/ FILES ${all_module_files})
+    _yup_glob_recurse ("${module_path}/*" all_module_files)
+    target_sources (${module_name} PRIVATE ${all_module_files})
+    set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 
     # ==== Setup parent scope variables
     set (${module_name}_Found ON PARENT_SCOPE)
@@ -522,7 +569,7 @@ endfunction()
 function (yup_standalone_app)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME TARGET_VERSION)
+    set (one_value_args TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -538,14 +585,7 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
-        include (FetchContent)
-
-        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-        set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable (glfw)
+        _yup_fetch_glfw3()
 
         list (APPEND additional_libraries glfw)
     endif()
@@ -609,6 +649,10 @@ function (yup_standalone_app)
 
     endif()
 
+    if (YUP_ARG_TARGET_IDE_GROUP)
+        set_target_properties (${target_name} PROPERTIES FOLDER "${YUP_ARG_TARGET_IDE_GROUP}")
+    endif()
+
     # ==== Definitions and link libraries
     target_compile_options (${target_name} PRIVATE
         ${additional_options}
@@ -636,7 +680,7 @@ endfunction()
 function (yup_audio_plugin)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME PLUGIN_CREATE_CLAP PLUGIN_CREATE_STANDALONE)
+    set (one_value_args TARGET_NAME TARGET_IDE_GROUP PLUGIN_CREATE_CLAP PLUGIN_CREATE_STANDALONE)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -651,20 +695,16 @@ function (yup_audio_plugin)
     include (FetchContent)
 
     if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
-        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-        set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable (glfw)
+        _yup_fetch_glfw3()
         list (APPEND additional_libraries glfw)
 
         # ==== Fetch plugins SDKS
         if (YUP_ARG_PLUGIN_CREATE_CLAP)
             FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
             FetchContent_MakeAvailable (clap)
+            set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
 
-            _yup_module_setup_plugin_client_clap (${target_name} yup_audio_plugin_client ${YUP_ARG_UNPARSED_ARGUMENTS})
+            _yup_module_setup_plugin_client_clap (${target_name} yup_audio_plugin_client ${YUP_ARG_TARGET_IDE_GROUP} ${YUP_ARG_UNPARSED_ARGUMENTS})
 
             list (APPEND additional_libraries clap ${target_name}_clap)
         endif()
@@ -708,6 +748,10 @@ function (yup_audio_plugin)
 
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
         set_target_properties (${target_name} PROPERTIES SUFFIX ".clap")
+    endif()
+
+    if (YUP_ARG_TARGET_IDE_GROUP)
+        set_target_properties (${target_name} PROPERTIES FOLDER "${YUP_ARG_TARGET_IDE_GROUP}")
     endif()
 
     # ==== Definitions and link libraries
