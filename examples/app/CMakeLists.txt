@@ -26,6 +26,7 @@ set (target_version "1.0.0")
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
+    TARGET_IDE_GROUP "Examples"
     MODULES
         juce_core
         juce_events

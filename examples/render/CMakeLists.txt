@@ -31,6 +31,7 @@ endif()
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
+    TARGET_IDE_GROUP "Examples"
     LINK_OPTIONS ${link_options}
     MODULES
         juce_core

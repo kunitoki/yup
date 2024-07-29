@@ -36,6 +36,7 @@ yup_add_embedded_binary_resources (
 
 yup_audio_plugin (
     TARGET_NAME                 ${target_name}
+    TARGET_IDE_GROUP            "Examples"
     PLUGIN_ID                   "kunitoki.YupCLAP"
     PLUGIN_NAME                 "YupCLAPPZ"
     PLUGIN_VENDOR               "kunitoki"
