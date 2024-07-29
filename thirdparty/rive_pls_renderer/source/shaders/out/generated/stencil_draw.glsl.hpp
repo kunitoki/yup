@@ -5,11 +5,11 @@
 namespace rive {
 namespace pls {
 namespace glsl {
-const char stencil_draw[] = R"===(#ifdef V
-U0(P)q0(0,H3,KB);V0 O1 P1 V1 W1 g1(TD,P,r,j,L){g B=i2(KB.xy);uint Y3=floatBitsToUint(KB.z)&0xffffu;B.z=J5(Y3);h1(B);}
+const char stencil_draw[] = R"===(#ifdef Y
+U0(R)v0(0,M3,LB);V0 Q1 R1 Y1 Z1 g1(VD,R,v,k,O){g C=k2(LB.xy);uint e4=floatBitsToUint(LB.z)&0xffffu;C.z=S5(e4);h1(C);}
 #endif
-#ifdef GB
-F2 G2 r2(i,SC){v2(M0(0));}
+#ifdef HB
+K2 L2 w2(j,UC){x2(j0(0));}
 #endif
 )===";
 } // namespace glsl

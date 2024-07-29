@@ -22,24 +22,19 @@ void Shape::addPath(Path* path)
     m_Paths.push_back(path);
 }
 
+void Shape::addFlags(PathFlags flags) { m_pathFlags |= flags; }
+bool Shape::isFlagged(PathFlags flags) const { return (int)(pathFlags() & flags) != 0x00; }
+
 bool Shape::canDeferPathUpdate()
 {
-    auto canDefer = renderOpacity() == 0 &&
-                    (pathSpace() & PathSpace::Clipping) != PathSpace::Clipping &&
-                    (pathSpace() & PathSpace::FollowPath) != PathSpace::FollowPath;
+    auto canDefer =
+        renderOpacity() == 0 && !isFlagged(PathFlags::clipping | PathFlags::neverDeferUpdate);
     if (canDefer)
     {
         // If we have a dependent Skin, don't defer the update
         for (auto d : dependents())
         {
             if (d->is<PointsPath>() && d->as<PointsPath>()->skin() != nullptr)
-            {
-                return false;
-            }
-        }
-        for (auto path : m_Paths)
-        {
-            if (!path->canDeferPathUpdate())
             {
                 return false;
             }
@@ -80,8 +75,7 @@ void Shape::pathChanged()
 
 void Shape::addToRenderPath(RenderPath* path, const Mat2D& transform)
 {
-    auto space = pathSpace();
-    if ((space & PathSpace::Local) == PathSpace::Local)
+    if (isFlagged(PathFlags::local))
     {
         path->addPath(m_PathComposer.localPath(), transform * worldTransform());
     }
@@ -97,7 +91,7 @@ void Shape::draw(Renderer* renderer)
     {
         return;
     }
-    ClipResult clipResult = clip(renderer);
+    ClipResult clipResult = applyClip(renderer);
 
     if (clipResult != ClipResult::emptyClip)
     {
@@ -108,14 +102,15 @@ void Shape::draw(Renderer* renderer)
                 continue;
             }
             renderer->save();
-            bool paintsInLocal = (shapePaint->pathSpace() & PathSpace::Local) == PathSpace::Local;
+            bool paintsInLocal = shapePaint->isFlagged(PathFlags::local);
             if (paintsInLocal)
             {
                 renderer->transform(worldTransform());
             }
-            shapePaint->draw(renderer,
-                             paintsInLocal ? m_PathComposer.localPath()
-                                           : m_PathComposer.worldPath());
+            shapePaint->draw(
+                renderer,
+                paintsInLocal ? m_PathComposer.localPath() : m_PathComposer.worldPath(),
+                paintsInLocal ? &m_PathComposer.localRawPath() : &m_PathComposer.worldRawPath());
             renderer->restore();
         }
     }
@@ -135,7 +130,7 @@ bool Shape::hitTest(const IAABB& area) const
         if (!path->isCollapsed())
         {
             tester.setXform(path->pathTransform());
-            path->buildPath(tester);
+            path->rawPath().addTo(&tester);
         }
     }
     return tester.wasHit();
@@ -150,7 +145,7 @@ Core* Shape::hitTest(HitInfo* hinfo, const Mat2D& xform)
 
     // TODO: clip:
 
-    const bool shapeIsLocal = (pathSpace() & PathSpace::Local) == PathSpace::Local;
+    const bool shapeIsLocal = isFlagged(PathFlags::local);
 
     for (auto rit = m_ShapePaints.rbegin(); rit != m_ShapePaints.rend(); ++rit)
     {
@@ -164,7 +159,7 @@ Core* Shape::hitTest(HitInfo* hinfo, const Mat2D& xform)
             continue;
         }
 
-        auto paintIsLocal = (shapePaint->pathSpace() & PathSpace::Local) == PathSpace::Local;
+        auto paintIsLocal = shapePaint->isFlagged(PathFlags::local);
 
         auto mx = xform;
         if (paintIsLocal)
@@ -184,7 +179,7 @@ Core* Shape::hitTest(HitInfo* hinfo, const Mat2D& xform)
             {
                 tester.setXform(mx * path->pathTransform());
             }
-            path->buildPath(tester);
+            path->rawPath().addTo(&tester);
         }
         if (tester.wasHit())
         {
@@ -210,8 +205,6 @@ void Shape::buildDependencies()
         paint->blendMode(blendMode());
     }
 }
-
-void Shape::addDefaultPathSpace(PathSpace space) { m_DefaultPathSpace |= space; }
 
 StatusCode Shape::onAddedDirty(CoreContext* context)
 {
@@ -284,8 +277,7 @@ AABB Shape::computeWorldBounds(const Mat2D* xform) const
         {
             continue;
         }
-
-        path->buildPath(boundsCalculator);
+        path->rawPath().addTo(&boundsCalculator);
 
         AABB aabb = boundsCalculator.bounds(xform == nullptr ? path->pathTransform()
                                                              : path->pathTransform() * *xform);

@@ -5,98 +5,98 @@
 namespace rive {
 namespace pls {
 namespace glsl {
-const char draw_image_mesh[] = R"===(#ifdef V
-U0(X1)q0(0,d,WB);V0 U0(l2)q0(1,d,XB);V0
+const char draw_image_mesh[] = R"===(#ifdef Y
+U0(a2)v0(0,d,XB);V0 U0(n2)v0(1,d,YB);V0
 #endif
-A1 k0 I(0,d,B0);
-#ifdef BB
-FB I(1,h,G0);
-#endif
-#ifdef Z
-k0 I(2,g,i0);
-#endif
-B1
-#ifdef V
-O1 P1 o4(OB,X1,Y1,l2,m2,j){v0(j,Y1,WB,d);v0(j,m2,XB,d);Q(B0,d);
-#ifdef BB
-Q(G0,h);
-#endif
-#ifdef Z
-Q(i0,g);
-#endif
-d R=h0(W0(J.m5),WB)+J.K0;B0=XB;
-#ifdef BB
-G0=F4(J.G1,v.v3);
-#endif
-#ifdef Z
-#ifndef CB
-i0=n4(W0(J.X0),J.i1,R);
-#else
-i7(W0(J.X0),J.i1,R);
-#endif
-#endif
-g B=i2(R);
+D1 n0 K(0,d,E0);
 #ifdef CB
-B.z=J5(J.Y3);
+GB K(1,h,K0);
 #endif
-S(B0);
-#ifdef BB
-S(G0);
+#ifdef AB
+n0 K(2,g,m0);
 #endif
-#ifdef Z
-S(i0);
-#endif
-h1(B);}
-#endif
-#ifdef GB
-F2 x1(k3,MB);
+E1
+#ifdef Y
+Q1 R1 y4(PB,a2,c2,n2,o2,k){z0(k,c2,XB,d);z0(k,o2,YB,d);S(E0,d);
 #ifdef CB
+S(K0,h);
+#endif
 #ifdef AB
-x1(z7,EC);
+S(m0,g);
+#endif
+d T=l0(W0(L.x5),XB)+L.O0;E0=YB;
+#ifdef CB
+K0=M4(L.I1,A.A3);
+#endif
+#ifdef AB
+#ifndef DB
+m0=x4(W0(L.X0),L.i1,T);
+#else
+q7(W0(L.X0),L.i1,T);
 #endif
 #endif
-G2 l3(k3,n2)L3 O3
-#ifndef CB
-E1 C0(v5,c0);D0(w5,Q0);D0(x5,w0);C0(v7,w2);F1 U3(IB){N(B0,d);
+g C=k2(T);
+#ifdef DB
+C.z=S5(L.e4);
+#endif
+U(E0);
+#ifdef CB
+U(K0);
+#endif
+#ifdef AB
+U(m0);
+#endif
+h1(C);}
+#endif
+#ifdef HB
+K2 z1(C5,p3,OB);
+#ifdef DB
 #ifdef BB
-N(G0,h);
+z1(d2,G7,FC);
 #endif
-#ifdef Z
-N(i0,g);
 #endif
-i f=M2(MB,n2,B0);h C=1.;
-#ifdef Z
-h K2=B5(M0(i0));C=clamp(K2,E0(0),C);
+L2 q3(p3,p2)Q3 T3
+#ifndef DB
+G1 F0(E5,e0);G0(F5,Y0);G0(G5,A0);F0(I7,y2);H1 Z3(JB){P(E0,d);
+#ifdef CB
+P(K0,h);
 #endif
-n1;
+#ifdef AB
+P(m0,g);
+#endif
+j f=R2(OB,p2,E0);h D=1.;
+#ifdef AB
+h P2=K5(j0(m0));D=clamp(P2,V(0),D);
+#endif
+p1;
+#ifdef CB
+if(K0!=.0){F a1=unpackHalf2x16(H0(A0));h D3=a1.y;h N2=D3==K0?a1.x:V(0);D=min(D,N2);}
+#endif
+f.w*=L.O2*D;j B1=I0(e0);
 #ifdef BB
-if(G0!=.0){l0 Z0=unpackHalf2x16(L0(w0));h y3=Z0.y;h I2=y3==G0?Z0.x:E0(0);C=min(C,I2);}
-#endif
-f.w*=J.J2*C;i y1=N0(c0);
-#ifdef AB
-if(J.a2!=0u){
-#ifdef JB
-f=E3(
+if(L.e2!=0u){
+#ifdef KB
+f=J3(
 #else
-f=F3(
+f=K3(
 #endif
-f,S3(y1),O0(J.a2));}else
+f,X3(B1),J0(L.e2));}else
 #endif
-{f.xyz*=f.w;f=f+y1*(1.-f.w);}F0(c0,f);y0(Q0);y0(w0);o1;c2;}
+{f.xyz*=f.w;f=f+B1*(1.-f.w);}w0(e0,f);A1(A0);q1;f2;}
 #else
-r2(i,IB){N(B0,d);i f=M2(MB,n2,B0);f.w*=J.J2;
-#ifdef AB
-i y1=I1(EC,m0(floor(n0.xy)));
-#ifdef JB
-f=E3(
+w2(j,JB){P(E0,d);j f=R2(OB,p2,E0);f.w*=L.O2;
+#ifdef BB
+j B1=K1(FC,o0(floor(p0.xy)));
+#ifdef KB
+f=J3(
 #else
-f=F3(
+f=K3(
 #endif
-f,S3(y1),O0(J.a2));
+f,X3(B1),J0(L.e2));
 #else
-f=p2(f);
+f=r2(f);
 #endif
-v2(f);}
+x2(f);}
 #endif
 #endif
 )===";

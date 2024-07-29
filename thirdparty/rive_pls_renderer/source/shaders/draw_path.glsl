@@ -235,11 +235,11 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
 #ifdef @FRAGMENT
 FRAG_TEXTURE_BLOCK_BEGIN
-TEXTURE_RGBA8(GRAD_TEXTURE_IDX, @gradTexture);
-TEXTURE_RGBA8(IMAGE_TEXTURE_IDX, @imageTexture);
+TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, GRAD_TEXTURE_IDX, @gradTexture);
+TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
 #ifdef @USING_DEPTH_STENCIL
 #ifdef @ENABLE_ADVANCED_BLEND
-TEXTURE_RGBA8(DST_COLOR_TEXTURE_IDX, @dstColorTexture);
+TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, DST_COLOR_TEXTURE_IDX, @dstColorTexture);
 #endif
 #endif
 FRAG_TEXTURE_BLOCK_END
@@ -360,7 +360,7 @@ PLS_MAIN(@drawFragmentMain)
     half coverage = abs(coverageCount);
 #ifdef @ENABLE_EVEN_ODD
     if (v_pathID < .0 /*even-odd*/)
-        coverage = 1. - abs(fract(coverage * .5) * 2. + -1.);
+        coverage = 1. - make_half(abs(fract(coverage * .5) * 2. + -1.));
 #endif
     coverage = min(coverage, make_half(1)); // This also caps stroke coverage, which can be >1.
 
@@ -394,14 +394,14 @@ PLS_MAIN(@drawFragmentMain)
                 outerClipCoverage = PLS_LOAD4F(originalDstColorBuffer).r;
 #ifndef @DRAW_INTERIOR_TRIANGLES
                 // Since interior triangles are always last, there's no need to preserve this value.
-                PLS_PRESERVE_VALUE(originalDstColorBuffer);
+                PLS_PRESERVE_4F(originalDstColorBuffer);
 #endif
             }
             coverage = min(coverage, outerClipCoverage);
         }
 #endif // @ENABLE_NESTED_CLIPPING
         PLS_STOREUI(clipBuffer, packHalf2x16(make_half2(coverage, clipID)));
-        PLS_PRESERVE_VALUE(framebuffer);
+        PLS_PRESERVE_4F(framebuffer);
     }
     else // Render to the main framebuffer.
 #endif   // @ENABLE_CLIPPING
@@ -417,7 +417,7 @@ PLS_MAIN(@drawFragmentMain)
             half clipCoverage = clipContentID == v_clipID ? clipData.r : make_half(0);
             coverage = min(coverage, clipCoverage);
         }
-        PLS_PRESERVE_VALUE(clipBuffer);
+        PLS_PRESERVE_UI(clipBuffer);
 #endif
 #ifdef @ENABLE_CLIP_RECT
         half clipRectCoverage = min_value(make_half4(v_clipRect));
@@ -449,7 +449,7 @@ PLS_MAIN(@drawFragmentMain)
             dstColor = PLS_LOAD4F(originalDstColorBuffer);
 #ifndef @DRAW_INTERIOR_TRIANGLES
             // Since interior triangles are always last, there's no need to preserve this value.
-            PLS_PRESERVE_VALUE(originalDstColorBuffer);
+            PLS_PRESERVE_4F(originalDstColorBuffer);
 #endif
         }
 
@@ -469,10 +469,8 @@ PLS_MAIN(@drawFragmentMain)
         else
 #endif
         {
-#ifndef @PLS_IMPL_NONE // Only attempt to blend if we can read the framebuffer.
             color.rgb *= color.a;
             color = color + dstColor * (1. - color.a);
-#endif
         }
 
         PLS_STORE4F(framebuffer, color);

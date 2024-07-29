@@ -1,7 +1,9 @@
 #ifndef _RIVE_TRANSFORM_COMPONENT_HPP_
 #define _RIVE_TRANSFORM_COMPONENT_HPP_
 #include "rive/generated/transform_component_base.hpp"
+#include "rive/math/aabb.hpp"
 #include "rive/math/mat2d.hpp"
+#include "rive/layout/layout_measure_mode.hpp"
 
 namespace rive
 {
@@ -10,11 +12,14 @@ class WorldTransformComponent;
 class AABB;
 class TransformComponent : public TransformComponentBase
 {
-private:
+protected:
     Mat2D m_Transform;
     float m_RenderOpacity = 0.0f;
     WorldTransformComponent* m_ParentTransformComponent = nullptr;
     std::vector<Constraint*> m_Constraints;
+
+protected:
+    void updateConstraints();
 
 public:
     bool collapse(bool value) override;
@@ -22,8 +27,8 @@ public:
     StatusCode onAddedClean(CoreContext* context) override;
     void buildDependencies() override;
     void update(ComponentDirt value) override;
-    void updateTransform();
-    void updateWorldTransform();
+    virtual void updateTransform();
+    virtual void updateWorldTransform();
     void markTransformDirty();
 
     /// Opacity inherited by any child of this transform component. This'll
@@ -47,6 +52,16 @@ public:
     void addConstraint(Constraint* constraint);
     virtual AABB localBounds() const;
     void markDirtyIfConstrained();
+
+    virtual Vec2D measureLayout(float width,
+                                LayoutMeasureMode widthMode,
+                                float height,
+                                LayoutMeasureMode heightMode)
+    {
+        return Vec2D();
+    }
+
+    virtual void controlSize(Vec2D size) {}
 };
 } // namespace rive
 

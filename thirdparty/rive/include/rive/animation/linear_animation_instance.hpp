@@ -3,13 +3,15 @@
 
 #include "rive/artboard.hpp"
 #include "rive/core/field_types/core_callback_type.hpp"
+#include "rive/nested_animation.hpp"
 #include "rive/scene.hpp"
 
 namespace rive
 {
 class LinearAnimation;
+class NestedEventNotifier;
 
-class LinearAnimationInstance : public Scene
+class LinearAnimationInstance : public Scene, public NestedEventNotifier
 {
 public:
     LinearAnimationInstance(const LinearAnimation*, ArtboardInstance*, float speedMultiplier = 1.0);
@@ -97,10 +99,12 @@ public:
     bool advanceAndApply(float seconds) override;
     std::string name() const override;
     void reset(float speedMultiplier);
+    void reportEvent(Event* event, float secondsDelay = 0.0f) override;
 
 private:
     const LinearAnimation* m_animation = nullptr;
     float m_time;
+    float m_speedDirection;
     float m_totalTime;
     float m_lastTotalTime;
     float m_spilledTime;

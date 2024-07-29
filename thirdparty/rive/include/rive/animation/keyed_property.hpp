@@ -20,12 +20,20 @@ public:
                               uint32_t objectId,
                               float secondsFrom,
                               float secondsTo,
-                              int secondsFromExactOffset) const;
+                              bool isAtStartFrame) const;
 
     /// Apply interpolating key frames.
     void apply(Core* object, float time, float mix);
 
     StatusCode import(ImportStack& importStack) override;
+    KeyFrame* first() const
+    {
+        if (m_keyFrames.size() > 0)
+        {
+            return m_keyFrames.front().get();
+        }
+        return nullptr;
+    }
 
 private:
     int closestFrameIndex(float seconds, int exactOffset = 0) const;

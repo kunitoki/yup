@@ -2,7 +2,7 @@
 
 using namespace rive;
 
-PathSpace Fill::pathSpace() const { return PathSpace::Local; }
+PathFlags Fill::pathFlags() const { return PathFlags::local; }
 
 RenderPaint* Fill::initRenderPaint(ShapePaintMutator* mutator)
 {
@@ -18,7 +18,7 @@ void Fill::applyTo(RenderPaint* renderPaint, float opacityModifier) const
     m_PaintMutator->applyTo(renderPaint, opacityModifier);
 }
 
-void Fill::draw(Renderer* renderer, CommandPath* path, RenderPaint* paint)
+void Fill::draw(Renderer* renderer, CommandPath* path, const RawPath* rawPath, RenderPaint* paint)
 {
     if (!isVisible())
     {

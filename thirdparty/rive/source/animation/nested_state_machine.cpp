@@ -32,13 +32,23 @@ void NestedStateMachine::initializeAnimation(ArtboardInstance* artboard)
             nestedInput->applyValue();
         }
     }
-    m_nestedInputs.clear();
 }
 
 StateMachineInstance* NestedStateMachine::stateMachineInstance()
 {
     return m_StateMachineInstance.get();
 }
+
+#ifdef WITH_RIVE_TOOLS
+bool NestedStateMachine::hitTest(Vec2D position) const
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        return m_StateMachineInstance->hitTest(position);
+    }
+    return false;
+}
+#endif
 
 HitResult NestedStateMachine::pointerMove(Vec2D position)
 {
@@ -76,4 +86,41 @@ HitResult NestedStateMachine::pointerExit(Vec2D position)
     return HitResult::none;
 }
 
+NestedInput* NestedStateMachine::input(size_t index)
+{
+    if (index < m_nestedInputs.size())
+    {
+        return m_nestedInputs[index];
+    }
+    return nullptr;
+}
+
+NestedInput* NestedStateMachine::input(std::string name)
+{
+    for (auto input : m_nestedInputs)
+    {
+        if (input->name() == name)
+        {
+            return input;
+        }
+    }
+    return nullptr;
+}
+
 void NestedStateMachine::addNestedInput(NestedInput* input) { m_nestedInputs.push_back(input); }
+
+void NestedStateMachine::dataContextFromInstance(ViewModelInstance* viewModelInstance)
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        m_StateMachineInstance->dataContextFromInstance(viewModelInstance);
+    }
+}
+
+void NestedStateMachine::dataContext(DataContext* dataContext)
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        m_StateMachineInstance->dataContext(dataContext);
+    }
+}

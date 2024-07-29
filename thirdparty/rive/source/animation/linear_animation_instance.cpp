@@ -13,6 +13,7 @@ LinearAnimationInstance::LinearAnimationInstance(const LinearAnimation* animatio
     Scene(instance),
     m_animation((assert(animation != nullptr), animation)),
     m_time((speedMultiplier >= 0) ? animation->startTime() : animation->endTime()),
+    m_speedDirection((speedMultiplier >= 0) ? 1 : -1),
     m_totalTime(0.0f),
     m_lastTotalTime(0.0f),
     m_spilledTime(0.0f),
@@ -23,6 +24,7 @@ LinearAnimationInstance::LinearAnimationInstance(LinearAnimationInstance const& 
     Scene(lhs),
     m_animation(lhs.m_animation),
     m_time(lhs.m_time),
+    m_speedDirection(lhs.m_speedDirection),
     m_totalTime(lhs.m_totalTime),
     m_lastTotalTime(lhs.m_lastTotalTime),
     m_spilledTime(lhs.m_spilledTime),
@@ -64,7 +66,7 @@ bool LinearAnimationInstance::advance(float elapsedSeconds, KeyedCallbackReporte
     m_time += deltaSeconds;
     if (reporter != nullptr)
     {
-        animation.reportKeyedCallbacks(reporter, lastTime, m_time);
+        animation.reportKeyedCallbacks(reporter, lastTime, m_time, m_speedDirection, false);
     }
 
     int fps = animation.fps();
@@ -84,14 +86,23 @@ bool LinearAnimationInstance::advance(float elapsedSeconds, KeyedCallbackReporte
         case Loop::oneShot:
             if (direction == 1 && frames > end)
             {
-                m_spilledTime = (frames - end) / fps;
+                // Account for the time dilation or contraction applied in the
+                // animation local time by its speed to calculate spilled time.
+                // Calculate the ratio of the time excess by the total elapsed
+                // time in local time (deltaFrames) and multiply the elapsed time
+                // by it.
+                auto deltaFrames = deltaSeconds * fps;
+                auto spilledFramesRatio = (frames - end) / deltaFrames;
+                m_spilledTime = spilledFramesRatio * elapsedSeconds;
                 frames = (float)end;
                 m_time = frames / fps;
                 didLoop = true;
             }
             else if (direction == -1 && frames < start)
             {
-                m_spilledTime = (start - frames) / fps;
+                auto deltaFrames = std::abs(deltaSeconds * fps);
+                auto spilledFramesRatio = (start - frames) / deltaFrames;
+                m_spilledTime = spilledFramesRatio * elapsedSeconds;
                 frames = (float)start;
                 m_time = frames / fps;
                 didLoop = true;
@@ -100,30 +111,46 @@ bool LinearAnimationInstance::advance(float elapsedSeconds, KeyedCallbackReporte
         case Loop::loop:
             if (direction == 1 && frames >= end)
             {
-                m_spilledTime = (frames - end) / fps;
-                frames = m_time * fps;
-                frames = start + std::fmod(frames - start, (float)range);
+                // How spilled time has to be calculated, given that local time can be scaled
+                // to a factor of the regular time:
+                // - for convenience, calculate the local elapsed time in frames (deltaFrames)
+                // - get the remainder of current frame position (frames) by duration (range)
+                // - use that remainder as the ratio of the original time that was not consumed
+                // by the loop (spilledFramesRatio)
+                // - multiply the original elapsedTime by the ratio to set the spilled time
+                auto deltaFrames = deltaSeconds * fps;
+                auto remainder = std::fmod(frames - start, (float)range);
+                auto spilledFramesRatio = remainder / deltaFrames;
+                m_spilledTime = spilledFramesRatio * elapsedSeconds;
+                frames = start + remainder;
                 m_time = frames / fps;
                 didLoop = true;
                 if (reporter != nullptr)
                 {
-                    animation.reportKeyedCallbacks(reporter, 0.0f, m_time);
+                    animation.reportKeyedCallbacks(reporter, 0.0f, m_time, m_speedDirection, false);
                 }
             }
             else if (direction == -1 && frames <= start)
             {
-                m_spilledTime = (start - frames) / fps;
-                frames = m_time * fps;
-                frames = end - std::abs(std::fmod(start - frames, (float)range));
+                auto deltaFrames = deltaSeconds * fps;
+                auto remainder = std::abs(std::fmod(start - frames, (float)range));
+                auto spilledFramesRatio = std::abs(remainder / deltaFrames);
+                m_spilledTime = spilledFramesRatio * elapsedSeconds;
+                frames = end - remainder;
                 m_time = frames / fps;
                 didLoop = true;
                 if (reporter != nullptr)
                 {
-                    animation.reportKeyedCallbacks(reporter, end / (float)fps, m_time);
+                    animation.reportKeyedCallbacks(reporter,
+                                                   end / (float)fps,
+                                                   m_time,
+                                                   m_speedDirection,
+                                                   false);
                 }
             }
             break;
         case Loop::pingPong:
+            bool fromPong = true;
             while (true)
             {
                 if (direction == 1 && frames >= end)
@@ -153,8 +180,13 @@ bool LinearAnimationInstance::advance(float elapsedSeconds, KeyedCallbackReporte
                 didLoop = true;
                 if (reporter != nullptr)
                 {
-                    animation.reportKeyedCallbacks(reporter, lastTime, m_time);
+                    animation.reportKeyedCallbacks(reporter,
+                                                   lastTime,
+                                                   m_time,
+                                                   m_speedDirection,
+                                                   fromPong);
                 }
+                fromPong = !fromPong;
             }
             break;
     }
@@ -233,3 +265,9 @@ void LinearAnimationInstance::loopValue(int value)
 }
 
 float LinearAnimationInstance::durationSeconds() const { return m_animation->durationSeconds(); }
+
+void LinearAnimationInstance::reportEvent(Event* event, float secondsDelay)
+{
+    const std::vector<Event*> events{event};
+    notifyListeners(events);
+}

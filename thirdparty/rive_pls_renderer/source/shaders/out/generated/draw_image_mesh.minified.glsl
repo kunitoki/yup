@@ -1,94 +1,94 @@
 #ifdef VERTEX
-U0(X1)q0(0,d,WB);V0 U0(l2)q0(1,d,XB);V0
+U0(a2)v0(0,d,XB);V0 U0(n2)v0(1,d,YB);V0
 #endif
-A1 k0 I(0,d,B0);
+D1 n0 K(0,d,E0);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT I(1,h,G0);
+OPTIONALLY_FLAT K(1,h,K0);
 #endif
 #ifdef ENABLE_CLIP_RECT
-k0 I(2,g,i0);
+n0 K(2,g,m0);
 #endif
-B1
+E1
 #ifdef VERTEX
-O1 P1 o4(OB,X1,Y1,l2,m2,j){v0(j,Y1,WB,d);v0(j,m2,XB,d);Q(B0,d);
+Q1 R1 y4(PB,a2,c2,n2,o2,k){z0(k,c2,XB,d);z0(k,o2,YB,d);S(E0,d);
 #ifdef ENABLE_CLIPPING
-Q(G0,h);
+S(K0,h);
 #endif
 #ifdef ENABLE_CLIP_RECT
-Q(i0,g);
+S(m0,g);
 #endif
-d R=h0(W0(J.m5),WB)+J.K0;B0=XB;
+d T=l0(W0(L.x5),XB)+L.O0;E0=YB;
 #ifdef ENABLE_CLIPPING
-G0=F4(J.G1,v.v3);
+K0=M4(L.I1,A.A3);
 #endif
 #ifdef ENABLE_CLIP_RECT
 #ifndef USING_DEPTH_STENCIL
-i0=n4(W0(J.X0),J.i1,R);
+m0=x4(W0(L.X0),L.i1,T);
 #else
-i7(W0(J.X0),J.i1,R);
+q7(W0(L.X0),L.i1,T);
 #endif
 #endif
-g B=i2(R);
+g C=k2(T);
 #ifdef USING_DEPTH_STENCIL
-B.z=J5(J.Y3);
+C.z=S5(L.e4);
 #endif
-S(B0);
+U(E0);
 #ifdef ENABLE_CLIPPING
-S(G0);
+U(K0);
 #endif
 #ifdef ENABLE_CLIP_RECT
-S(i0);
+U(m0);
 #endif
-h1(B);}
+h1(C);}
 #endif
 #ifdef FRAGMENT
-F2 x1(k3,MB);
+K2 z1(C5,p3,OB);
 #ifdef USING_DEPTH_STENCIL
 #ifdef ENABLE_ADVANCED_BLEND
-x1(z7,EC);
+z1(d2,G7,FC);
 #endif
 #endif
-G2 l3(k3,n2)L3 O3
+L2 q3(p3,p2)Q3 T3
 #ifndef USING_DEPTH_STENCIL
-E1 C0(v5,c0);D0(w5,Q0);D0(x5,w0);C0(v7,w2);F1 U3(IB){N(B0,d);
+G1 F0(E5,e0);G0(F5,Y0);G0(G5,A0);F0(I7,y2);H1 Z3(JB){P(E0,d);
 #ifdef ENABLE_CLIPPING
-N(G0,h);
+P(K0,h);
 #endif
 #ifdef ENABLE_CLIP_RECT
-N(i0,g);
+P(m0,g);
 #endif
-i f=M2(MB,n2,B0);h C=1.;
+j f=R2(OB,p2,E0);h D=1.;
 #ifdef ENABLE_CLIP_RECT
-h K2=B5(M0(i0));C=clamp(K2,E0(0),C);
+h P2=K5(j0(m0));D=clamp(P2,V(0),D);
 #endif
-n1;
+p1;
 #ifdef ENABLE_CLIPPING
-if(G0!=.0){l0 Z0=unpackHalf2x16(L0(w0));h y3=Z0.y;h I2=y3==G0?Z0.x:E0(0);C=min(C,I2);}
+if(K0!=.0){F a1=unpackHalf2x16(H0(A0));h D3=a1.y;h N2=D3==K0?a1.x:V(0);D=min(D,N2);}
 #endif
-f.w*=J.J2*C;i y1=N0(c0);
+f.w*=L.O2*D;j B1=I0(e0);
 #ifdef ENABLE_ADVANCED_BLEND
-if(J.a2!=0u){
+if(L.e2!=0u){
 #ifdef ENABLE_HSL_BLEND_MODES
-f=E3(
+f=J3(
 #else
-f=F3(
+f=K3(
 #endif
-f,S3(y1),O0(J.a2));}else
+f,X3(B1),J0(L.e2));}else
 #endif
-{f.xyz*=f.w;f=f+y1*(1.-f.w);}F0(c0,f);y0(Q0);y0(w0);o1;c2;}
+{f.xyz*=f.w;f=f+B1*(1.-f.w);}w0(e0,f);A1(A0);q1;f2;}
 #else
-r2(i,IB){N(B0,d);i f=M2(MB,n2,B0);f.w*=J.J2;
+w2(j,JB){P(E0,d);j f=R2(OB,p2,E0);f.w*=L.O2;
 #ifdef ENABLE_ADVANCED_BLEND
-i y1=I1(EC,m0(floor(n0.xy)));
+j B1=K1(FC,o0(floor(p0.xy)));
 #ifdef ENABLE_HSL_BLEND_MODES
-f=E3(
+f=J3(
 #else
-f=F3(
+f=K3(
 #endif
-f,S3(y1),O0(J.a2));
+f,X3(B1),J0(L.e2));
 #else
-f=p2(f);
+f=r2(f);
 #endif
-v2(f);}
+x2(f);}
 #endif
 #endif

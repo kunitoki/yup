@@ -19,10 +19,24 @@ public:
     void reportKeyedCallbacks(KeyedCallbackReporter* reporter,
                               float secondsFrom,
                               float secondsTo,
-                              int secondsFromExactOffset) const;
+                              bool isAtStartFrame) const;
     void apply(Artboard* coreContext, float time, float mix);
 
     StatusCode import(ImportStack& importStack) override;
+
+    const KeyedProperty* getProperty(size_t index) const
+    {
+        if (index < m_keyedProperties.size())
+        {
+            return m_keyedProperties[index].get();
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+
+    size_t numKeyedProperties() const { return m_keyedProperties.size(); }
 
 private:
     std::vector<std::unique_ptr<KeyedProperty>> m_keyedProperties;

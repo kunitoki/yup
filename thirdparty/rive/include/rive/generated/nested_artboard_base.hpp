@@ -1,7 +1,9 @@
 #ifndef _RIVE_NESTED_ARTBOARD_BASE_HPP_
 #define _RIVE_NESTED_ARTBOARD_BASE_HPP_
+#include "rive/core/field_types/core_bytes_type.hpp"
 #include "rive/core/field_types/core_uint_type.hpp"
 #include "rive/drawable.hpp"
+#include "rive/span.hpp"
 namespace rive
 {
 class NestedArtboardBase : public Drawable
@@ -34,6 +36,7 @@ public:
     uint16_t coreType() const override { return typeKey; }
 
     static const uint16_t artboardIdPropertyKey = 197;
+    static const uint16_t dataBindPathIdsPropertyKey = 582;
 
 private:
     uint32_t m_ArtboardId = -1;
@@ -50,10 +53,14 @@ public:
         artboardIdChanged();
     }
 
+    virtual void decodeDataBindPathIds(Span<const uint8_t> value) = 0;
+    virtual void copyDataBindPathIds(const NestedArtboardBase& object) = 0;
+
     Core* clone() const override;
     void copy(const NestedArtboardBase& object)
     {
         m_ArtboardId = object.m_ArtboardId;
+        copyDataBindPathIds(object);
         Drawable::copy(object);
     }
 
@@ -64,12 +71,16 @@ public:
             case artboardIdPropertyKey:
                 m_ArtboardId = CoreUintType::deserialize(reader);
                 return true;
+            case dataBindPathIdsPropertyKey:
+                decodeDataBindPathIds(CoreBytesType::deserialize(reader));
+                return true;
         }
         return Drawable::deserialize(propertyKey, reader);
     }
 
 protected:
     virtual void artboardIdChanged() {}
+    virtual void dataBindPathIdsChanged() {}
 };
 } // namespace rive
 

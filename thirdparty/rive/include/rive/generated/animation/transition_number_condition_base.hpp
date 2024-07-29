@@ -20,6 +20,7 @@ public:
         {
             case TransitionNumberConditionBase::typeKey:
             case TransitionValueConditionBase::typeKey:
+            case TransitionInputConditionBase::typeKey:
             case TransitionConditionBase::typeKey:
                 return true;
             default:

@@ -129,7 +129,7 @@ IMAGE_RECT_VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         if (aaRadiusX >= .5)
         {
             vertexPosition.x = .5;
-            v_edgeCoverage *= .5 / aaRadiusX;
+            v_edgeCoverage *= make_half(.5 / aaRadiusX);
         }
         else
         {
@@ -139,7 +139,7 @@ IMAGE_RECT_VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         if (aaRadiusY >= .5)
         {
             vertexPosition.y = .5;
-            v_edgeCoverage *= .5 / aaRadiusY;
+            v_edgeCoverage *= make_half(.5 / aaRadiusY);
         }
         else
         {
@@ -266,9 +266,9 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
 #ifdef @FRAGMENT
 FRAG_TEXTURE_BLOCK_BEGIN
-TEXTURE_RGBA8(GRAD_TEXTURE_IDX, @gradTexture);
+TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, GRAD_TEXTURE_IDX, @gradTexture);
 #ifdef NEEDS_IMAGE_TEXTURE
-TEXTURE_RGBA8(IMAGE_TEXTURE_IDX, @imageTexture);
+TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
 #endif
 FRAG_TEXTURE_BLOCK_END
 
@@ -301,10 +301,10 @@ FRAG_STORAGE_BUFFER_BLOCK_END
 
 uint to_fixed(float x) { return uint(x * FIXED_COVERAGE_FACTOR + FIXED_COVERAGE_ZERO); }
 
-float from_fixed(uint x)
+half from_fixed(uint x)
 {
-    return float(x) * FIXED_COVERAGE_INVERSE_FACTOR +
-           (-FIXED_COVERAGE_ZERO * FIXED_COVERAGE_INVERSE_FACTOR);
+    return make_half(float(x) * FIXED_COVERAGE_INVERSE_FACTOR +
+                     (-FIXED_COVERAGE_ZERO * FIXED_COVERAGE_INVERSE_FACTOR));
 }
 
 // Return the color of the path at index 'pathID' at location '_fragCoord'.
@@ -335,7 +335,7 @@ half4 resolve_path_color(half coverageCount,
         case SOLID_COLOR_PAINT_TYPE:
             color = unpackUnorm4x8(paintData.y);
 #ifdef @ENABLE_CLIPPING
-            PLS_PRESERVE_VALUE(clipBuffer);
+            PLS_PRESERVE_UI(clipBuffer);
 #endif
             break;
         case LINEAR_GRADIENT_PAINT_TYPE:
@@ -369,7 +369,7 @@ half4 resolve_path_color(half coverageCount,
                 color = make_half4(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, y), .0));
             }
 #ifdef @ENABLE_CLIPPING
-            PLS_PRESERVE_VALUE(clipBuffer);
+            PLS_PRESERVE_UI(clipBuffer);
 #endif
             break;
         }
@@ -436,7 +436,7 @@ void write_pls_blend(half4 color, uint2 paintData PLS_CONTEXT_DECL)
     }
     else
     {
-        PLS_PRESERVE_VALUE(framebuffer);
+        PLS_PRESERVE_4F(framebuffer);
     }
 }
 #endif // ENABLE_ADVANCED_BLEND
@@ -574,7 +574,7 @@ ATOMIC_PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
     // get resolved later like other draws because the @imageTexture binding is liable to change,
     // and furthermore in the case of imageMeshes, we can't calculate UV coordinates based on
     // fragment position.
-    half4 imageColor = TEXTURE_SAMPLE(@imageTexture, imageSampler, v_texCoord);
+    half4 imageColor = make_half4(TEXTURE_SAMPLE(@imageTexture, imageSampler, v_texCoord));
     half meshCoverage = 1.;
 #ifdef @DRAW_IMAGE_RECT
     meshCoverage = min(v_edgeCoverage, meshCoverage);
@@ -611,7 +611,7 @@ ATOMIC_PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
         meshCoverage = min(meshCoverage, clipCoverage);
     }
 #endif // ENABLE_CLIPPING
-    imageColor.a *= meshCoverage * imageDrawUniforms.opacity;
+    imageColor.a *= meshCoverage * make_half(imageDrawUniforms.opacity);
 
 #ifdef @ENABLE_ADVANCED_BLEND
     if (lastColor.a != .0 || imageColor.a != .0)
@@ -629,7 +629,7 @@ ATOMIC_PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
     }
     else
     {
-        PLS_PRESERVE_VALUE(framebuffer);
+        PLS_PRESERVE_4F(framebuffer);
     }
 #else
     // Leverage the property that premultiplied src-over blending is associative and blend the

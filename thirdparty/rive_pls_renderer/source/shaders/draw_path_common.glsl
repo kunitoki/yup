@@ -7,7 +7,7 @@
 #ifdef @VERTEX
 
 VERTEX_TEXTURE_BLOCK_BEGIN
-TEXTURE_RGBA32UI(TESS_VERTEX_TEXTURE_IDX, @tessVertexTexture);
+TEXTURE_RGBA32UI(PER_FLUSH_BINDINGS_SET, TESS_VERTEX_TEXTURE_IDX, @tessVertexTexture);
 VERTEX_TEXTURE_BLOCK_END
 
 VERTEX_STORAGE_BUFFER_BLOCK_BEGIN
@@ -291,7 +291,7 @@ INLINE float2 unpack_interior_triangle_vertex(float3 triangleVertex,
     float2x2 M = make_float2x2(uintBitsToFloat(STORAGE_BUFFER_LOAD4(@pathBuffer, o_pathID * 2u)));
     uint4 pathData = STORAGE_BUFFER_LOAD4(@pathBuffer, o_pathID * 2u + 1u);
     float2 translate = uintBitsToFloat(pathData.xy);
-    o_windingWeight = float(floatBitsToInt(triangleVertex.z) >> 16) * sign(determinant(M));
+    o_windingWeight = make_half(floatBitsToInt(triangleVertex.z) >> 16) * sign(determinant(M));
     return MUL(M, triangleVertex.xy) + translate;
 }
 #endif // @DRAW_INTERIOR_TRIANGLES

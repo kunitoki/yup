@@ -6,6 +6,7 @@
 #include "rive/nested_animation.hpp"
 #include "rive/animation/nested_state_machine.hpp"
 #include "rive/clip_result.hpp"
+#include <limits>
 #include <cassert>
 
 using namespace rive;
@@ -44,7 +45,9 @@ void NestedArtboard::nest(Artboard* artboard)
     {
         m_Instance.reset(static_cast<ArtboardInstance*>(artboard)); // take ownership
     }
-    m_Artboard->advance(0.0f);
+    // This allows for swapping after initial load (after onAddedClean has
+    // already been called).
+    m_Artboard->host(this);
 }
 
 static Mat2D makeTranslate(const Artboard* artboard)
@@ -59,7 +62,7 @@ void NestedArtboard::draw(Renderer* renderer)
     {
         return;
     }
-    ClipResult clipResult = clip(renderer);
+    ClipResult clipResult = applyClip(renderer);
     if (clipResult == ClipResult::noClip)
     {
         // We didn't clip, so make sure to save as we'll be doing some
@@ -82,7 +85,7 @@ Core* NestedArtboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
     }
     hinfo->mounts.push_back(this);
     auto mx = xform * worldTransform() * makeTranslate(m_Artboard);
-    if (auto c = m_Artboard->hitTest(hinfo, &mx))
+    if (auto c = m_Artboard->hitTest(hinfo, mx))
     {
         return c;
     }
@@ -123,6 +126,7 @@ StatusCode NestedArtboard::onAddedClean(CoreContext* context)
         {
             animation->initializeAnimation(m_Instance.get());
         }
+        m_Artboard->host(this);
     }
     return Super::onAddedClean(context);
 }
@@ -136,9 +140,9 @@ bool NestedArtboard::advance(float elapsedSeconds)
     }
     for (auto animation : m_NestedAnimations)
     {
-        keepGoing = keepGoing || animation->advance(elapsedSeconds);
+        keepGoing = animation->advance(elapsedSeconds) || keepGoing;
     }
-    return m_Artboard->advance(elapsedSeconds) || keepGoing;
+    return m_Artboard->advanceInternal(elapsedSeconds, false) || keepGoing;
 }
 
 void NestedArtboard::update(ComponentDirt value)
@@ -164,6 +168,56 @@ bool NestedArtboard::hasNestedStateMachines() const
 
 Span<NestedAnimation*> NestedArtboard::nestedAnimations() { return m_NestedAnimations; }
 
+NestedArtboard* NestedArtboard::nestedArtboard(std::string name) const
+{
+    if (m_Instance != nullptr)
+    {
+        return m_Instance->nestedArtboard(name);
+    }
+    return nullptr;
+}
+
+NestedStateMachine* NestedArtboard::stateMachine(std::string name) const
+{
+    for (auto animation : m_NestedAnimations)
+    {
+        if (animation->is<NestedStateMachine>() && animation->name() == name)
+        {
+            return animation->as<NestedStateMachine>();
+        }
+    }
+    return nullptr;
+}
+
+NestedInput* NestedArtboard::input(std::string name) const { return input(name, ""); }
+
+NestedInput* NestedArtboard::input(std::string name, std::string stateMachineName) const
+{
+    if (!stateMachineName.empty())
+    {
+        auto nestedSM = stateMachine(stateMachineName);
+        if (nestedSM != nullptr)
+        {
+            return nestedSM->input(name);
+        }
+    }
+    else
+    {
+        for (auto animation : m_NestedAnimations)
+        {
+            if (animation->is<NestedStateMachine>())
+            {
+                auto input = animation->as<NestedStateMachine>()->input(name);
+                if (input != nullptr)
+                {
+                    return input;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
 bool NestedArtboard::worldToLocal(Vec2D world, Vec2D* local)
 {
     assert(local != nullptr);
@@ -180,4 +234,69 @@ bool NestedArtboard::worldToLocal(Vec2D world, Vec2D* local)
     *local = toMountedArtboard * world;
 
     return true;
+}
+
+Vec2D NestedArtboard::measureLayout(float width,
+                                    LayoutMeasureMode widthMode,
+                                    float height,
+                                    LayoutMeasureMode heightMode)
+{
+    return Vec2D(
+        std::min(widthMode == LayoutMeasureMode::undefined ? std::numeric_limits<float>::max()
+                                                           : width,
+                 m_Instance ? m_Instance->width() : 0.0f),
+        std::min(heightMode == LayoutMeasureMode::undefined ? std::numeric_limits<float>::max()
+                                                            : height,
+                 m_Instance ? m_Instance->height() : 0.0f));
+}
+
+void NestedArtboard::syncStyleChanges()
+{
+    if (m_Artboard == nullptr)
+    {
+        return;
+    }
+    m_Artboard->syncStyleChanges();
+}
+
+void NestedArtboard::controlSize(Vec2D size) {}
+
+void NestedArtboard::decodeDataBindPathIds(Span<const uint8_t> value)
+{
+    BinaryReader reader(value);
+    while (!reader.reachedEnd())
+    {
+        auto val = reader.readVarUintAs<uint32_t>();
+        m_DataBindPathIdsBuffer.push_back(val);
+    }
+}
+
+void NestedArtboard::copyDataBindPathIds(const NestedArtboardBase& object)
+{
+    m_DataBindPathIdsBuffer = object.as<NestedArtboard>()->m_DataBindPathIdsBuffer;
+}
+
+void NestedArtboard::internalDataContext(DataContext* value, DataContext* parent)
+{
+    artboardInstance()->internalDataContext(value, parent, false);
+    for (auto animation : m_NestedAnimations)
+    {
+        if (animation->is<NestedStateMachine>())
+        {
+            animation->as<NestedStateMachine>()->dataContext(value);
+        }
+    }
+}
+
+void NestedArtboard::dataContextFromInstance(ViewModelInstance* viewModelInstance,
+                                             DataContext* parent)
+{
+    artboardInstance()->dataContextFromInstance(viewModelInstance, parent, false);
+    for (auto animation : m_NestedAnimations)
+    {
+        if (animation->is<NestedStateMachine>())
+        {
+            animation->as<NestedStateMachine>()->dataContextFromInstance(viewModelInstance);
+        }
+    }
 }

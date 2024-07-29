@@ -1,9 +1,12 @@
+#include "rive/animation/animation_reset.hpp"
+#include "rive/animation/animation_reset_factory.hpp"
 #include "rive/animation/animation_state_instance.hpp"
 #include "rive/animation/animation_state.hpp"
 #include "rive/animation/any_state.hpp"
 #include "rive/animation/cubic_interpolator.hpp"
 #include "rive/animation/entry_state.hpp"
 #include "rive/animation/layer_state_flags.hpp"
+#include "rive/animation/nested_linear_animation.hpp"
 #include "rive/animation/nested_state_machine.hpp"
 #include "rive/animation/state_instance.hpp"
 #include "rive/animation/state_machine_bool.hpp"
@@ -17,7 +20,12 @@
 #include "rive/animation/state_machine.hpp"
 #include "rive/animation/state_transition.hpp"
 #include "rive/animation/transition_condition.hpp"
+#include "rive/animation/transition_comparator.hpp"
+#include "rive/animation/transition_property_viewmodel_comparator.hpp"
+#include "rive/animation/transition_viewmodel_condition.hpp"
 #include "rive/animation/state_machine_fire_event.hpp"
+#include "rive/data_bind_flags.hpp"
+#include "rive/event_report.hpp"
 #include "rive/hit_result.hpp"
 #include "rive/math/aabb.hpp"
 #include "rive/math/hit_test.hpp"
@@ -27,6 +35,7 @@
 #include "rive/math/math_types.hpp"
 #include "rive/audio_event.hpp"
 #include <unordered_map>
+#include <chrono>
 
 using namespace rive;
 namespace rive
@@ -51,6 +60,10 @@ public:
         m_anyStateInstance = layer->anyState()->makeInstance(instance).release();
         m_layer = layer;
         changeState(m_layer->entryState());
+        auto now = std::chrono::high_resolution_clock::now();
+        auto nanos =
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count();
+        srand(nanos);
     }
 
     void updateMix(float seconds)
@@ -63,6 +76,7 @@ public:
             if (m_mix == 1.0f && !m_transitionCompleted)
             {
                 m_transitionCompleted = true;
+                clearAnimationReset();
                 fireEvents(StateMachineFireOccurance::atEnd, m_transition->events());
             }
         }
@@ -249,6 +263,21 @@ public:
         return nullptr;
     }
 
+    void buildAnimationResetForTransition()
+    {
+        m_animationReset =
+            AnimationResetFactory::fromStates(m_stateFrom, m_currentState, m_artboardInstance);
+    }
+
+    void clearAnimationReset()
+    {
+        if (m_animationReset != nullptr)
+        {
+            AnimationResetFactory::release(std::move(m_animationReset));
+            m_animationReset = nullptr;
+        }
+    }
+
     bool tryChangeState(StateInstance* stateFromInstance, bool ignoreTriggers)
     {
         if (stateFromInstance == nullptr)
@@ -259,6 +288,7 @@ public:
         auto transition = findAllowedTransition(stateFromInstance, ignoreTriggers);
         if (transition != nullptr)
         {
+            clearAnimationReset();
             changeState(transition->stateTo());
             m_stateMachineChangedOnAdvance = true;
             // state actually has changed
@@ -280,6 +310,11 @@ public:
                 delete m_stateFrom;
             }
             m_stateFrom = outState;
+
+            if (!m_transitionCompleted)
+            {
+                buildAnimationResetForTransition();
+            }
 
             // If we had an exit time and wanted to pause on exit, make
             // sure to hold the exit time. Delegate this to the
@@ -320,6 +355,10 @@ public:
 
     void apply(/*Artboard* artboard*/)
     {
+        if (m_animationReset != nullptr)
+        {
+            m_animationReset->apply(m_artboardInstance);
+        }
         if (m_holdAnimation != nullptr)
         {
             m_holdAnimation->apply(m_artboardInstance, m_holdTime, m_mixFrom);
@@ -335,12 +374,12 @@ public:
         if (m_stateFrom != nullptr && m_mix < 1.0f)
         {
             auto fromMix = cubic != nullptr ? cubic->transform(m_mixFrom) : m_mixFrom;
-            m_stateFrom->apply(fromMix);
+            m_stateFrom->apply(m_artboardInstance, fromMix);
         }
         if (m_currentState != nullptr)
         {
             auto mix = cubic != nullptr ? cubic->transform(m_mix) : m_mix;
-            m_currentState->apply(mix);
+            m_currentState->apply(m_artboardInstance, mix);
         }
     }
 
@@ -371,6 +410,7 @@ private:
     StateInstance* m_stateFrom = nullptr;
 
     const StateTransition* m_transition = nullptr;
+    std::unique_ptr<AnimationReset> m_animationReset = nullptr;
     bool m_transitionCompleted = false;
 
     bool m_holdAnimationFrom = false;
@@ -385,21 +425,6 @@ private:
     float m_holdTime = 0.0f;
 };
 
-class HitComponent
-{
-public:
-    Component* component() const { return m_component; }
-    HitComponent(Component* component, StateMachineInstance* stateMachineInstance) :
-        m_component(component), m_stateMachineInstance(stateMachineInstance)
-    {}
-    virtual ~HitComponent() {}
-    virtual HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) = 0;
-
-protected:
-    Component* m_component;
-    StateMachineInstance* m_stateMachineInstance;
-};
-
 /// Representation of a Shape from the Artboard Instance and all the listeners it
 /// triggers. Allows tracking hover and performing hit detection only once on
 /// shapes that trigger multiple listeners.
@@ -408,20 +433,55 @@ class HitShape : public HitComponent
 public:
     HitShape(Component* shape, StateMachineInstance* stateMachineInstance) :
         HitComponent(shape, stateMachineInstance)
-    {}
+    {
+        if (shape->as<Shape>()->isTargetOpaque())
+        {
+            canEarlyOut = false;
+        }
+    }
     bool isHovered = false;
+    bool canEarlyOut = true;
+    bool hasDownListener = false;
+    bool hasUpListener = false;
     float hitRadius = 2;
     Vec2D previousPosition;
     std::vector<const StateMachineListener*> listeners;
-    HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) override
+
+    bool hitTest(Vec2D position) const
+#ifdef WITH_RIVE_TOOLS
+        override
+#endif
     {
         auto shape = m_component->as<Shape>();
+        auto worldBounds = shape->worldBounds();
+        if (!worldBounds.contains(position))
+        {
+            return false;
+        }
         auto hitArea = AABB(position.x - hitRadius,
                             position.y - hitRadius,
                             position.x + hitRadius,
                             position.y + hitRadius)
                            .round();
-        bool isOver = canHit ? shape->hitTest(hitArea) : false;
+        return shape->hitTest(hitArea);
+    }
+
+    HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) override
+    {
+        // If the shape doesn't have any ListenerType::move / enter / exit and the event
+        // being processed is not of the type it needs to handle. There is no need to perform
+        // a hitTest (which is relatively expensive and would be happening on every
+        // pointer move) so we early out.
+        if (canEarlyOut && (hitType != ListenerType::down || !hasDownListener) &&
+            (hitType != ListenerType::up || !hasUpListener))
+        {
+#ifdef TESTING
+            earlyOutCount++;
+#endif
+            return HitResult::none;
+        }
+        auto shape = m_component->as<Shape>();
+        bool isOver = canHit ? hitTest(position) : false;
         bool hoverChange = isHovered != isOver;
         isHovered = isOver;
         if (hoverChange && isHovered)
@@ -459,6 +519,28 @@ public:
         return isOver ? shape->isTargetOpaque() ? HitResult::hitOpaque : HitResult::hit
                       : HitResult::none;
     }
+
+    void addListener(const StateMachineListener* stateMachineListener)
+    {
+        auto listenerType = stateMachineListener->listenerType();
+        if (listenerType == ListenerType::enter || listenerType == ListenerType::exit ||
+            listenerType == ListenerType::move)
+        {
+            canEarlyOut = false;
+        }
+        else
+        {
+            if (listenerType == ListenerType::down)
+            {
+                hasDownListener = true;
+            }
+            else if (listenerType == ListenerType::up)
+            {
+                hasUpListener = true;
+            }
+        }
+        listeners.push_back(stateMachineListener);
+    }
 };
 class HitNestedArtboard : public HitComponent
 {
@@ -467,6 +549,36 @@ public:
         HitComponent(nestedArtboard, stateMachineInstance)
     {}
     ~HitNestedArtboard() override {}
+
+#ifdef WITH_RIVE_TOOLS
+    bool hitTest(Vec2D position) const override
+    {
+        auto nestedArtboard = m_component->as<NestedArtboard>();
+        if (nestedArtboard->isCollapsed())
+        {
+            return false;
+        }
+        Vec2D nestedPosition;
+        if (!nestedArtboard->worldToLocal(position, &nestedPosition))
+        {
+            // Mounted artboard isn't ready or has a 0 scale transform.
+            return false;
+        }
+
+        for (auto nestedAnimation : nestedArtboard->nestedAnimations())
+        {
+            if (nestedAnimation->is<NestedStateMachine>())
+            {
+                auto nestedStateMachine = nestedAnimation->as<NestedStateMachine>();
+                if (nestedStateMachine->hitTest(nestedPosition))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+#endif
     HitResult processEvent(Vec2D position, ListenerType hitType, bool canHit) override
     {
         auto nestedArtboard = m_component->as<NestedArtboard>();
@@ -540,7 +652,6 @@ HitResult StateMachineInstance::updateListeners(Vec2D position, ListenerType hit
     bool hitOpaque = false;
     for (const auto& hitShape : m_hitComponents)
     {
-
         // TODO: quick reject.
 
         HitResult hitResult = hitShape->processEvent(position, hitType, !hitOpaque);
@@ -555,6 +666,28 @@ HitResult StateMachineInstance::updateListeners(Vec2D position, ListenerType hit
     }
     return hitSomething ? hitOpaque ? HitResult::hitOpaque : HitResult::hit : HitResult::none;
 }
+
+#ifdef WITH_RIVE_TOOLS
+bool StateMachineInstance::hitTest(Vec2D position) const
+{
+    if (m_artboardInstance->frameOrigin())
+    {
+        position -= Vec2D(m_artboardInstance->originX() * m_artboardInstance->width(),
+                          m_artboardInstance->originY() * m_artboardInstance->height());
+    }
+
+    for (const auto& hitShape : m_hitComponents)
+    {
+        // TODO: quick reject.
+
+        if (hitShape->hitTest(position))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+#endif
 
 HitResult StateMachineInstance::pointerMove(Vec2D position)
 {
@@ -601,6 +734,13 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
                 // Sanity check.
                 break;
         }
+#ifdef WITH_RIVE_TOOLS
+        auto instance = m_inputInstances[i];
+        if (instance != nullptr)
+        {
+            instance->m_index = i;
+        }
+#endif
     }
 
     m_layerCount = machine->layerCount();
@@ -610,40 +750,71 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
         m_layers[i].init(this, machine->layer(i), m_artboardInstance);
     }
 
-    // Initialize listeners. Store a lookup table of shape id to hit shape
-    // representation (an object that stores all the listeners triggered by the
-    // shape producing a listener).
-    std::unordered_map<uint32_t, HitShape*> hitShapeLookup;
-    for (std::size_t i = 0; i < machine->listenerCount(); i++)
+    // Initialize dataBinds. All databinds are cloned for the state machine instance.
+    // That enables binding each instance to its own context without polluting the rest.
+    auto dataBindCount = machine->dataBindCount();
+    for (size_t i = 0; i < dataBindCount; i++)
     {
-        auto listener = machine->listener(i);
-
-        // Iterate actual leaf hittable shapes tied to this listener and resolve
-        // corresponding ones in the artboard instance.
-        for (auto id : listener->hitShapeIds())
+        auto dataBind = machine->dataBind(i);
+        auto dataBindClone = static_cast<DataBind*>(dataBind->clone());
+        m_dataBinds.push_back(dataBindClone);
+        if (dataBind->target()->is<BindableProperty>())
         {
-            HitShape* hitShape;
-            auto itr = hitShapeLookup.find(id);
-            if (itr == hitShapeLookup.end())
+            auto bindableProperty = dataBind->target()->as<BindableProperty>();
+            auto bindablePropertyInstance = m_bindablePropertyInstances.find(bindableProperty);
+            BindableProperty* bindablePropertyClone;
+            if (bindablePropertyInstance == m_bindablePropertyInstances.end())
             {
-                auto shape = m_artboardInstance->resolve(id);
-                if (shape != nullptr && shape->is<Shape>())
-                {
-                    auto hs = rivestd::make_unique<HitShape>(shape->as<Component>(), this);
-                    hitShapeLookup[id] = hitShape = hs.get();
-                    m_hitComponents.push_back(std::move(hs));
-                }
-                else
-                {
-                    // No object or not a shape...
-                    continue;
-                }
+                bindablePropertyClone = bindableProperty->clone()->as<BindableProperty>();
+                m_bindablePropertyInstances[bindableProperty] = bindablePropertyClone;
             }
             else
             {
-                hitShape = itr->second;
+                bindablePropertyClone = bindablePropertyInstance->second;
             }
-            hitShape->listeners.push_back(listener);
+            dataBindClone->target(bindablePropertyClone);
+            if (static_cast<DataBindFlags>(dataBindClone->flags()) == DataBindFlags::ToSource)
+            {
+                bindablePropertyClone->dataBind(dataBindClone);
+            }
+        }
+    }
+
+    // Initialize listeners. Store a lookup table of shape id to hit shape
+    // representation (an object that stores all the listeners triggered by the
+    // shape producing a listener).
+    std::unordered_map<Component*, HitShape*> hitShapeLookup;
+    for (std::size_t i = 0; i < machine->listenerCount(); i++)
+    {
+        auto listener = machine->listener(i);
+        if (listener->listenerType() == ListenerType::event)
+        {
+            continue;
+        }
+        auto target = m_artboardInstance->resolve(listener->targetId());
+        if (target != nullptr && target->is<ContainerComponent>())
+        {
+            target->as<ContainerComponent>()->forAll([&](Component* component) {
+                if (component->is<Shape>())
+                {
+                    HitShape* hitShape;
+                    auto itr = hitShapeLookup.find(component);
+                    if (itr == hitShapeLookup.end())
+                    {
+                        component->as<Shape>()->addFlags(PathFlags::neverDeferUpdate);
+                        component->as<Shape>()->addDirt(ComponentDirt::Path, true);
+                        auto hs = rivestd::make_unique<HitShape>(component, this);
+                        hitShapeLookup[component] = hitShape = hs.get();
+                        m_hitComponents.push_back(std::move(hs));
+                    }
+                    else
+                    {
+                        hitShape = itr->second;
+                    }
+                    hitShape->addListener(listener);
+                }
+                return true;
+            });
         }
     }
 
@@ -651,22 +822,23 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
     {
         if (nestedArtboard->hasNestedStateMachines())
         {
-
             auto hn =
                 rivestd::make_unique<HitNestedArtboard>(nestedArtboard->as<Component>(), this);
             m_hitComponents.push_back(std::move(hn));
-
-            for (auto animation : nestedArtboard->nestedAnimations())
+        }
+        for (auto animation : nestedArtboard->nestedAnimations())
+        {
+            if (animation->is<NestedStateMachine>())
             {
-                if (animation->is<NestedStateMachine>())
-                {
-                    animation->as<NestedStateMachine>()
-                        ->stateMachineInstance()
-                        ->setParentNestedArtboard(nestedArtboard);
-                    animation->as<NestedStateMachine>()
-                        ->stateMachineInstance()
-                        ->setParentStateMachineInstance(this);
-                }
+                auto notifier = animation->as<NestedStateMachine>()->stateMachineInstance();
+                notifier->setNestedArtboard(nestedArtboard);
+                notifier->addNestedEventListener(this);
+            }
+            else if (animation->is<NestedLinearAnimation>())
+            {
+                auto notifier = animation->as<NestedLinearAnimation>()->animationInstance();
+                notifier->setNestedArtboard(nestedArtboard);
+                notifier->addNestedEventListener(this);
             }
         }
     }
@@ -717,8 +889,22 @@ void StateMachineInstance::sortHitComponents()
     }
 }
 
+void StateMachineInstance::updateDataBinds()
+{
+    for (auto dataBind : m_dataBinds)
+    {
+        auto d = dataBind->dirt();
+        if (d != ComponentDirt::None)
+        {
+            dataBind->dirt(ComponentDirt::None);
+            dataBind->update(d);
+        }
+    }
+}
+
 bool StateMachineInstance::advance(float seconds)
 {
+    updateDataBinds();
     if (m_artboardInstance->hasChangedDrawOrderInLastUpdate())
     {
         sortHitComponents();
@@ -788,6 +974,23 @@ SMINumber* StateMachineInstance::getNumber(const std::string& name) const
 SMITrigger* StateMachineInstance::getTrigger(const std::string& name) const
 {
     return getNamedInput<StateMachineTrigger, SMITrigger>(name);
+}
+
+void StateMachineInstance::dataContextFromInstance(ViewModelInstance* viewModelInstance)
+{
+    dataContext(new DataContext(viewModelInstance));
+}
+
+void StateMachineInstance::dataContext(DataContext* dataContext)
+{
+    m_DataContext = dataContext;
+    for (auto dataBind : m_dataBinds)
+    {
+        if (dataBind->is<DataBindContext>())
+        {
+            dataBind->as<DataBindContext>()->bindFromContext(dataContext);
+        }
+    }
 }
 
 size_t StateMachineInstance::stateChangedCount() const
@@ -866,6 +1069,11 @@ const EventReport StateMachineInstance::reportedEventAt(std::size_t index) const
     return m_reportedEvents[index];
 }
 
+void StateMachineInstance::notify(const std::vector<EventReport>& events, NestedArtboard* context)
+{
+    notifyEventListeners(events, context);
+}
+
 void StateMachineInstance::notifyEventListeners(const std::vector<EventReport>& events,
                                                 NestedArtboard* source)
 {
@@ -881,7 +1089,8 @@ void StateMachineInstance::notifyEventListeners(const std::vector<EventReport>& 
             {
                 for (const auto event : events)
                 {
-                    auto sourceArtboard = source == nullptr ? artboard() : source->artboard();
+                    auto sourceArtboard =
+                        source == nullptr ? artboard() : source->artboardInstance();
 
                     // listener->eventId() can point to an id from an event in the context of this
                     // artboard or the context of a nested artboard. Because those ids belong to
@@ -906,9 +1115,9 @@ void StateMachineInstance::notifyEventListeners(const std::vector<EventReport>& 
             }
         }
         // Bubble the event up to parent artboard state machines immediately
-        if (m_parentStateMachineInstance != nullptr)
+        for (auto listener : nestedEventListeners())
         {
-            m_parentStateMachineInstance->notifyEventListeners(events, m_parentNestedArtboard);
+            listener->notify(events, nestedArtboard());
         }
 
         for (auto report : events)
@@ -920,4 +1129,14 @@ void StateMachineInstance::notifyEventListeners(const std::vector<EventReport>& 
             }
         }
     }
+}
+
+BindableProperty* StateMachineInstance::bindablePropertyInstance(BindableProperty* bindableProperty)
+{
+    auto bindablePropertyInstance = m_bindablePropertyInstances.find(bindableProperty);
+    if (bindablePropertyInstance == m_bindablePropertyInstances.end())
+    {
+        return nullptr;
+    }
+    return bindablePropertyInstance->second;
 }

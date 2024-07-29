@@ -79,29 +79,48 @@ std::unique_ptr<PLSRenderContext> PLSRenderContextD3DImpl::MakeContext(
 {
     D3DCapabilities d3dCapabilities;
     D3D11_FEATURE_DATA_D3D11_OPTIONS2 d3d11Options2;
-    if (SUCCEEDED(gpu->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS2,
-                                           &d3d11Options2,
-                                           sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS2))))
+
+    if (gpu->GetFeatureLevel() >= D3D_FEATURE_LEVEL_11_1)
     {
-        d3dCapabilities.supportsRasterizerOrderedViews = d3d11Options2.ROVsSupported;
-        if (d3d11Options2.TypedUAVLoadAdditionalFormats)
+        if (SUCCEEDED(gpu->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS2,
+                                               &d3d11Options2,
+                                               sizeof(D3D11_FEATURE_DATA_D3D11_OPTIONS2))))
         {
-            // TypedUAVLoadAdditionalFormats is true. Now check if we can both load and
-            // store all formats used by Rive (currently only RGBA8):
-            // https://learn.microsoft.com/en-us/windows/win32/direct3d11/typed-unordered-access-view-loads.
-            D3D11_FEATURE_DATA_FORMAT_SUPPORT2 d3d11Format2{};
-            d3d11Format2.InFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
-            if (SUCCEEDED(gpu->CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2,
-                                                   &d3d11Format2,
-                                                   sizeof(d3d11Format2))))
+            d3dCapabilities.supportsRasterizerOrderedViews = d3d11Options2.ROVsSupported;
+            if (d3d11Options2.TypedUAVLoadAdditionalFormats)
             {
-                constexpr UINT loadStoreFlags =
-                    D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD | D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE;
-                d3dCapabilities.supportsTypedUAVLoadStore =
-                    (d3d11Format2.OutFormatSupport2 & loadStoreFlags) == loadStoreFlags;
+                // TypedUAVLoadAdditionalFormats is true. Now check if we can both load and
+                // store all formats used by Rive (currently only RGBA8):
+                // https://learn.microsoft.com/en-us/windows/win32/direct3d11/typed-unordered-access-view-loads.
+                D3D11_FEATURE_DATA_FORMAT_SUPPORT2 d3d11Format2{};
+                d3d11Format2.InFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+                if (SUCCEEDED(gpu->CheckFeatureSupport(D3D11_FEATURE_FORMAT_SUPPORT2,
+                                                       &d3d11Format2,
+                                                       sizeof(d3d11Format2))))
+                {
+                    constexpr UINT loadStoreFlags = D3D11_FORMAT_SUPPORT2_UAV_TYPED_LOAD |
+                                                    D3D11_FORMAT_SUPPORT2_UAV_TYPED_STORE;
+                    d3dCapabilities.supportsTypedUAVLoadStore =
+                        (d3d11Format2.OutFormatSupport2 & loadStoreFlags) == loadStoreFlags;
+                }
             }
         }
+
+        // Check if we can use HLSL minimum precision types (e.g. min16int)
+        D3D11_FEATURE_DATA_SHADER_MIN_PRECISION_SUPPORT d3d11MinPrecisionSupport;
+        if (SUCCEEDED(gpu->CheckFeatureSupport(D3D11_FEATURE_SHADER_MIN_PRECISION_SUPPORT,
+                                               &d3d11MinPrecisionSupport,
+                                               sizeof(d3d11MinPrecisionSupport))))
+        {
+            const UINT allStageMinPrecision =
+                (d3d11MinPrecisionSupport.AllOtherShaderStagesMinPrecision &
+                 d3d11MinPrecisionSupport.PixelShaderMinPrecision);
+
+            d3dCapabilities.supportsMin16Precision =
+                (allStageMinPrecision & D3D11_SHADER_MIN_PRECISION_16_BIT) != 0;
+        }
     }
+
     if (contextOptions.disableRasterizerOrderedViews)
     {
         d3dCapabilities.supportsRasterizerOrderedViews = false;
@@ -110,6 +129,7 @@ std::unique_ptr<PLSRenderContext> PLSRenderContextD3DImpl::MakeContext(
     {
         d3dCapabilities.supportsTypedUAVLoadStore = false;
     }
+
     d3dCapabilities.isIntel = contextOptions.isIntel;
 
     auto plsContextImpl = std::unique_ptr<PLSRenderContextD3DImpl>(
@@ -131,10 +151,14 @@ PLSRenderContextD3DImpl::PLSRenderContextD3DImpl(ComPtr<ID3D11Device> gpu,
     rasterDesc.CullMode = D3D11_CULL_BACK;
     rasterDesc.FrontCounterClockwise = FALSE; // FrontCounterClockwise must be FALSE in order to
                                               // match the winding sense of interior triangulations.
+
     rasterDesc.DepthBias = 0;
     rasterDesc.SlopeScaledDepthBias = 0;
     rasterDesc.DepthBiasClamp = 0;
-    rasterDesc.DepthClipEnable = FALSE;
+    rasterDesc.DepthClipEnable = TRUE; // This is the default state which reset to before flushing.
+                                       // Details on default state here:
+    // https://learn.microsoft.com/en-us/windows/win32/api/d3d11/ns-d3d11-d3d11_rasterizer_desc
+
     rasterDesc.ScissorEnable = FALSE;
     rasterDesc.MultisampleEnable = FALSE;
     rasterDesc.AntialiasedLineEnable = FALSE;
@@ -762,10 +786,27 @@ ID3D11UnorderedAccessView* PLSRenderTargetD3D::targetUAV()
         if (auto* uavTexture =
                 m_targetTextureSupportsUAV ? m_targetTexture.Get() : offscreenTexture())
         {
-            m_targetUAV = make_simple_2d_uav(m_gpu.Get(),
-                                             uavTexture,
-                                             m_gpuSupportsTypedUAVLoadStore ? m_targetFormat
-                                                                            : DXGI_FORMAT_R32_UINT);
+            DXGI_FORMAT targetUavFormat;
+            if (m_gpuSupportsTypedUAVLoadStore)
+            {
+                switch (m_targetFormat)
+                {
+                    case DXGI_FORMAT_R8G8B8A8_UNORM:
+                    case DXGI_FORMAT_B8G8R8A8_UNORM:
+                        targetUavFormat = m_targetFormat;
+                        break;
+                    case DXGI_FORMAT_R8G8B8A8_TYPELESS:
+                        targetUavFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+                        break;
+                    default:
+                        RIVE_UNREACHABLE();
+                }
+            }
+            else
+            {
+                targetUavFormat = DXGI_FORMAT_R32_UINT;
+            }
+            m_targetUAV = make_simple_2d_uav(m_gpu.Get(), uavTexture, targetUavFormat);
         }
     }
     return m_targetUAV.Get();
@@ -934,6 +975,10 @@ void PLSRenderContextD3DImpl::setPipelineLayoutAndShaders(DrawType drawType,
         if (m_d3dCapabilities.supportsTypedUAVLoadStore)
         {
             s << "#define " << GLSL_ENABLE_TYPED_UAV_LOAD_STORE << '\n';
+        }
+        if (m_d3dCapabilities.supportsMin16Precision)
+        {
+            s << "#define " << GLSL_ENABLE_MIN_16_PRECISION << '\n';
         }
         if (pixelShaderMiscFlags & pls::ShaderMiscFlags::coalescedResolveAndTransfer)
         {
@@ -1145,8 +1190,7 @@ void PLSRenderContextD3DImpl::flush(const FlushDescriptor& desc)
 {
     auto renderTarget = static_cast<PLSRenderTargetD3D*>(desc.renderTarget);
 
-    m_gpuContext->RSSetState(m_backCulledRasterState[0].Get());
-    m_gpuContext->OMSetBlendState(NULL, NULL, 0xffffffff);
+    m_gpuContext->ClearState();
 
     // All programs use the same set of per-flush uniforms.
     m_gpuContext->UpdateSubresource(m_flushUniforms.Get(),

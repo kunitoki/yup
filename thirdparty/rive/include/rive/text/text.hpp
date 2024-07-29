@@ -1,6 +1,7 @@
 #ifndef _RIVE_TEXT_CORE_HPP_
 #define _RIVE_TEXT_CORE_HPP_
 #include "rive/generated/text/text_base.hpp"
+#include "rive/math/aabb.hpp"
 #include "rive/text/text_value_run.hpp"
 #include "rive/text_engine.hpp"
 #include "rive/simple_array.hpp"
@@ -170,12 +171,16 @@ public:
     Core* hitTest(HitInfo*, const Mat2D&) override;
     void addRun(TextValueRun* run);
     void addModifierGroup(TextModifierGroup* group);
-    void markShapeDirty();
+    void markShapeDirty(bool sendToLayout = true);
     void modifierShapeDirty();
     void markPaintDirty();
     void update(ComponentDirt value) override;
 
     TextSizing sizing() const { return (TextSizing)sizingValue(); }
+    TextSizing effectiveSizing() const
+    {
+        return std::isnan(m_layoutHeight) ? sizing() : TextSizing::fixed;
+    }
     TextOverflow overflow() const { return (TextOverflow)overflowValue(); }
     TextOrigin textOrigin() const { return (TextOrigin)originValue(); }
     void overflow(TextOverflow value) { return overflowValue((uint32_t)value); }
@@ -185,8 +190,19 @@ public:
     AABB localBounds() const override;
     void originXChanged() override;
     void originYChanged() override;
+
+    Vec2D measureLayout(float width,
+                        LayoutMeasureMode widthMode,
+                        float height,
+                        LayoutMeasureMode heightMode) override;
+    void controlSize(Vec2D size) override;
+    float effectiveWidth() { return std::isnan(m_layoutWidth) ? width() : m_layoutWidth; }
+    float effectiveHeight() { return std::isnan(m_layoutHeight) ? height() : m_layoutHeight; }
 #ifdef WITH_RIVE_TEXT
     const std::vector<TextValueRun*>& runs() const { return m_runs; }
+    static SimpleArray<SimpleArray<GlyphLine>> BreakLines(const SimpleArray<Paragraph>& paragraphs,
+                                                          float width,
+                                                          TextAlign align);
 #endif
 
     bool haveModifiers() const
@@ -235,6 +251,9 @@ private:
 
     GlyphLookup m_glyphLookup;
 #endif
+    float m_layoutWidth = NAN;
+    float m_layoutHeight = NAN;
+    Vec2D measure(Vec2D maxSize);
 };
 } // namespace rive
 
