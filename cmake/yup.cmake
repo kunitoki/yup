@@ -23,6 +23,43 @@
 
 #==============================================================================
 
+include (FetchContent)
+
+#==============================================================================
+
+macro (_yup_setup_platform)
+    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
+        set (yup_platform "ios")
+
+    elseif (ANDROID)
+        set (yup_platform "android")
+
+    elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
+        set (yup_platform "emscripten")
+
+    elseif (APPLE)
+        set (yup_platform "osx")
+
+    elseif (UNIX)
+        set (yup_platform "linux")
+
+    elseif (WIN32)
+        if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+            set (yup_platform "uwp")
+        else()
+            set (yup_platform "win32")
+        endif()
+
+    else()
+        set (yup_platform "unknown")
+
+    endif()
+
+    message (STATUS "YUP -- Setting up for ${yup_platform} platform")
+endmacro()
+
+#==============================================================================
+
 function (_yup_strip_list input_list output_variable)
     set (inner_list "" PARENT_SCOPE)
     foreach (item ${input_list})
@@ -69,7 +106,7 @@ function (_yup_file_to_byte_array file_path output_variable)
     string (PREPEND formatted_hex "0x")
     string (APPEND formatted_hex "")
 
-    set (${output_variable} ${formatted_hex} PARENT_SCOPE)
+    set (${output_variable} "${formatted_hex}" PARENT_SCOPE)
 endfunction()
 
 function (_yup_get_package_config_libs package_name output_variable)
@@ -92,31 +129,15 @@ function (_yup_glob_recurse folder output_variable)
     set (${output_variable} "${non_hidden_files}" PARENT_SCOPE)
 endfunction()
 
-#==============================================================================
-
-macro(_yup_setup_platform)
-    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
-        set (yup_platform "ios")
-    elseif (ANDROID)
-        set (yup_platform "android")
-    elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
-        set (yup_platform "emscripten")
-    elseif (APPLE)
-        set (yup_platform "osx")
-    elseif (UNIX)
-        set (yup_platform "linux")
-    elseif (WIN32)
-        if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-            set (yup_platform "uwp")
-        else()
-            set (yup_platform "win32")
-        endif()
-    else()
-        set (yup_platform "unknown")
-    endif()
-
-    message (STATUS "YUP -- Setting up for ${yup_platform} platform")
-endmacro()
+function (_yup_fetch_glfw3)
+    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable (glfw)
+    set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
+endfunction()
 
 #==============================================================================
 
@@ -154,7 +175,7 @@ function (_yup_module_parse_config module_header output_module_configs output_mo
     endwhile()
 
     set (${output_module_configs} "${module_configs}" PARENT_SCOPE)
-    set (${output_module_user_configs} "${module_user_configs}")
+    set (${output_module_user_configs} "${module_user_configs}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================
@@ -564,15 +585,7 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
-        include (FetchContent)
-
-        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-        set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable (glfw)
-        set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
+        _yup_fetch_glfw3()
 
         list (APPEND additional_libraries glfw)
     endif()
@@ -682,14 +695,7 @@ function (yup_audio_plugin)
     include (FetchContent)
 
     if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
-        FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
-        set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable (glfw)
-        set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
-
+        _yup_fetch_glfw3()
         list (APPEND additional_libraries glfw)
 
         # ==== Fetch plugins SDKS
