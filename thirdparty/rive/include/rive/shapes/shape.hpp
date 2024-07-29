@@ -5,6 +5,7 @@
 #include "rive/generated/shapes/shape_base.hpp"
 #include "rive/shapes/path_composer.hpp"
 #include "rive/shapes/shape_paint_container.hpp"
+#include "rive/drawable_flag.hpp"
 #include <vector>
 
 namespace rive
@@ -17,6 +18,7 @@ class Shape : public ShapeBase, public ShapePaintContainer
 private:
     PathComposer m_PathComposer;
     std::vector<Path*> m_Paths;
+    AABB m_WorldBounds;
 
     bool m_WantDifferencePath = false;
 
@@ -42,10 +44,28 @@ public:
     PathComposer* pathComposer() { return &m_PathComposer; }
 
     void pathChanged();
-    void addDefaultPathSpace(PathSpace space);
+    void addFlags(PathFlags flags);
+    bool isFlagged(PathFlags flags) const;
     StatusCode onAddedDirty(CoreContext* context) override;
     bool isEmpty();
     void pathCollapseChanged();
+
+    AABB worldBounds()
+    {
+        if ((static_cast<DrawableFlag>(drawableFlags()) & DrawableFlag::WorldBoundsClean) !=
+            DrawableFlag::WorldBoundsClean)
+        {
+            drawableFlags(drawableFlags() |
+                          static_cast<unsigned short>(DrawableFlag::WorldBoundsClean));
+            m_WorldBounds = computeWorldBounds();
+        }
+        return m_WorldBounds;
+    }
+    void markBoundsDirty()
+    {
+        drawableFlags(drawableFlags() &
+                      ~static_cast<unsigned short>(DrawableFlag::WorldBoundsClean));
+    }
 
     AABB computeWorldBounds(const Mat2D* xform = nullptr) const;
     AABB computeLocalBounds() const;

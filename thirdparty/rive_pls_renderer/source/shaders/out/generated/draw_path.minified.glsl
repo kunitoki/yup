@@ -1,248 +1,244 @@
 #ifdef VERTEX
-U0(P)
+U0(R)
 #ifdef DRAW_INTERIOR_TRIANGLES
-q0(0,H3,KB);
+v0(0,M3,LB);
 #else
-q0(0,g,UB);q0(1,g,VB);
+v0(0,g,VB);v0(1,g,WB);
 #endif
 V0
 #endif
-A1 k0 I(0,g,o0);
+D1 n0 K(0,g,q0);
 #ifndef USING_DEPTH_STENCIL
 #ifdef DRAW_INTERIOR_TRIANGLES
-OPTIONALLY_FLAT I(1,h,C1);
+OPTIONALLY_FLAT K(1,h,F1);
 #else
-k0 I(2,l0,J0);
+n0 K(2,F,N0);
 #endif
-OPTIONALLY_FLAT I(3,h,W);
+OPTIONALLY_FLAT K(3,h,Z);
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT I(4,h,G0);
+OPTIONALLY_FLAT K(4,h,K0);
 #endif
 #ifdef ENABLE_CLIP_RECT
-k0 I(5,g,i0);
+n0 K(5,g,m0);
 #endif
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-OPTIONALLY_FLAT I(6,h,x2);
+OPTIONALLY_FLAT K(6,h,z2);
 #endif
-B1
+E1
 #ifdef VERTEX
-g1(OB,P,r,j,L){
+g1(PB,R,v,k,O){
 #ifdef DRAW_INTERIOR_TRIANGLES
-v0(j,r,KB,D1);
+z0(k,v,LB,i0);
 #else
-v0(j,r,UB,g);v0(j,r,VB,g);
+z0(k,v,VB,g);z0(k,v,WB,g);
 #endif
-Q(o0,g);
-#ifndef Ua
+S(q0,g);
+#ifndef eb
 #ifdef DRAW_INTERIOR_TRIANGLES
-Q(C1,h);
+S(F1,h);
 #else
-Q(J0,l0);
+S(N0,F);
 #endif
-Q(W,h);
+S(Z,h);
 #ifdef ENABLE_CLIPPING
-Q(G0,h);
+S(K0,h);
 #endif
 #ifdef ENABLE_CLIP_RECT
-Q(i0,g);
+S(m0,g);
 #endif
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-Q(x2,h);
+S(z2,h);
 #endif
-bool B7=false;M k1;d R;
+bool J7=false;N k1;d T;
 #ifdef USING_DEPTH_STENCIL
-M C7;
+N K7;
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-R=F6(KB,k1,C1 j3);
+T=N6(LB,k1,F1 o3);
 #else
-B7=!E6(UB,VB,L,k1,R
+J7=!M6(VB,WB,O,k1,T
 #ifndef USING_DEPTH_STENCIL
-,J0
+,N0
 #else
-,C7
+,K7
 #endif
-j3);
+o3);
 #endif
-x0 E=q2(PB,k1);
+B0 G=v2(QB,k1);
 #ifndef USING_DEPTH_STENCIL
-W=F4(k1,v.v3);if((E.x&L6)!=0u)W=-W;
+Z=M4(k1,A.A3);if((G.x&T6)!=0u)Z=-Z;
 #endif
-uint H1=E.x&0xfu;
+uint J1=G.x&0xfu;
 #ifdef ENABLE_CLIPPING
-uint x9=(H1==y4?E.y:E.x)>>16;G0=F4(x9,v.v3);if(H1==y4)G0=-G0;
+uint M9=(J1==F4?G.y:G.x)>>16;K0=M4(M9,A.A3);if(J1==F4)K0=-K0;
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-x2=float((E.x>>4)&0xfu);
+z2=float((G.x>>4)&0xfu);
 #endif
-d a4=R;
-#ifdef y9
-a4.y=float(v.n9)-a4.y;
+d h4=T;
+#ifdef N9
+h4.y=float(A.F9)-h4.y;
 #endif
 #ifdef ENABLE_CLIP_RECT
-A X0=W0(z0(HB,k1*4u+2u));g i1=z0(HB,k1*4u+3u);
+B X0=W0(C0(IB,k1*4u+2u));g i1=C0(IB,k1*4u+3u);
 #ifndef USING_DEPTH_STENCIL
-i0=n4(X0,i1.xy,a4);
+m0=x4(X0,i1.xy,h4);
 #else
-i7(X0,i1.xy,a4);
+q7(X0,i1.xy,h4);
 #endif
 #endif
-if(H1==M6){i f=unpackUnorm4x8(E.y);o0=g(f);}
+if(J1==U6){j f=unpackUnorm4x8(G.y);q0=g(f);}
 #ifdef ENABLE_CLIPPING
-else if(H1==y4){h L4=F4(E.x>>16,v.v3);o0=g(L4,0,0,0);}
+else if(J1==F4){h R4=M4(G.x>>16,A.A3);q0=g(R4,0,0,0);}
 #endif
-else{A z9=W0(z0(HB,k1*4u));g M5=z0(HB,k1*4u+1u);d o2=h0(z9,a4)+M5.xy;if(H1==x4||H1==N6){o0.w=-uintBitsToFloat(E.y);if(M5.z>.9){o0.z=2.;}else{o0.z=M5.w;}if(H1==x4){o0.y=.0;o0.x=o2.x;}else{o0.z=-o0.z;o0.xy=o2.xy;}}else{float J2=uintBitsToFloat(E.y);o0=g(o2.x,o2.y,J2,-2.);}}g B;if(!B7){B=i2(R);
+else{B O9=W0(C0(IB,k1*4u));g V5=C0(IB,k1*4u+1u);d q2=l0(O9,h4)+V5.xy;if(J1==E4||J1==V6){q0.w=-uintBitsToFloat(G.y);if(V5.z>.9){q0.z=2.;}else{q0.z=V5.w;}if(J1==E4){q0.y=.0;q0.x=q2.x;}else{q0.z=-q0.z;q0.xy=q2.xy;}}else{float O2=uintBitsToFloat(G.y);q0=g(q2.x,q2.y,O2,-2.);}}g C;if(!J7){C=k2(T);
 #ifdef USING_DEPTH_STENCIL
-B.z=J5(C7);
+C.z=S5(K7);
 #endif
-}else{B=g(v.j2,v.j2,v.j2,v.j2);}S(o0);
+}else{C=g(A.l2,A.l2,A.l2,A.l2);}U(q0);
 #ifndef USING_DEPTH_STENCIL
 #ifdef DRAW_INTERIOR_TRIANGLES
-S(C1);
+U(F1);
 #else
-S(J0);
+U(N0);
 #endif
-S(W);
+U(Z);
 #ifdef ENABLE_CLIPPING
-S(G0);
+U(K0);
 #endif
 #ifdef ENABLE_CLIP_RECT
-S(i0);
+U(m0);
 #endif
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-S(x2);
+U(z2);
 #endif
-h1(B);}
+h1(C);}
 #endif
 #ifdef FRAGMENT
-F2 x1(q4,DC);x1(k3,MB);
+K2 z1(d2,A4,EC);z1(C5,p3,OB);
 #ifdef USING_DEPTH_STENCIL
 #ifdef ENABLE_ADVANCED_BLEND
-x1(z7,EC);
+z1(d2,G7,FC);
 #endif
 #endif
-G2 J3(q4,r5)l3(k3,n2)L3 O3 p i D7(g J1
+L2 O3(A4,D5)q3(p3,p2)Q3 T3 i j L7(g L1
 #ifdef TARGET_VULKAN
-,d N5,d O5
+,d W5,d X5
 #endif
-w4){if(J1.w>=.0){return M0(J1);}else if(J1.w>-1.){float t=J1.z>.0?J1.x:length(J1.xy);t=clamp(t,.0,1.);float E7=abs(J1.z);float x=E7>1.?(1.-1./K5)*t+(.5/K5):(1./K5)*t+E7;float A9=-J1.w;return M0(R3(DC,r5,d(x,A9),.0));}else{i f;
+D4){if(L1.w>=.0){return j0(L1);}else if(L1.w>-1.){float t=L1.z>.0?L1.x:length(L1.xy);t=clamp(t,.0,1.);float M7=abs(L1.z);float x=M7>1.?(1.-1./T5)*t+(.5/T5):(1./T5)*t+M7;float P9=-L1.w;return j0(W3(EC,D5,d(x,P9),.0));}else{j f;
 #ifdef TARGET_VULKAN
-f=Q3(MB,n2,J1.xy,N5,O5);
+f=V3(OB,p2,L1.xy,W5,X5);
 #else
-f=M2(MB,n2,J1.xy);
+f=R2(OB,p2,L1.xy);
 #endif
-f.w*=J1.z;return f;}}
+f.w*=L1.z;return f;}}
 #ifndef USING_DEPTH_STENCIL
-E1 C0(v5,c0);D0(w5,Q0);
+G1 F0(E5,e0);G0(F5,Y0);
 #ifdef ENABLE_CLIPPING
-D0(x5,w0);
+G0(G5,A0);
 #endif
-C0(v7,w2);F1 R1(IB){N(o0,g);
+F0(I7,y2);H1 T1(JB){P(q0,g);
 #ifdef DRAW_INTERIOR_TRIANGLES
-N(C1,h);
+P(F1,h);
 #else
-N(J0,l0);
+P(N0,F);
 #endif
-N(W,h);
+P(Z,h);
 #ifdef ENABLE_CLIPPING
-N(G0,h);
+P(K0,h);
 #endif
 #ifdef ENABLE_CLIP_RECT
-N(i0,g);
+P(m0,g);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-N(x2,h);
+P(z2,h);
 #endif
 #ifdef TARGET_VULKAN
-d N5=dFdx(o0.xy);d O5=dFdy(o0.xy);
+d W5=dFdx(q0.xy);d X5=dFdy(q0.xy);
 #endif
 #ifndef DRAW_INTERIOR_TRIANGLES
-n1;
+p1;
 #endif
-l0 F7=unpackHalf2x16(L0(Q0));h G7=F7.y;h Y0=G7==W?F7.x:E0(0);
+F N7=unpackHalf2x16(H0(Y0));h O7=N7.y;h Z0=O7==Z?N7.x:V(0);
 #ifdef DRAW_INTERIOR_TRIANGLES
-Y0+=C1;
+Z0+=F1;
 #else
-if(J0.y>=.0)Y0=max(min(J0.x,J0.y),Y0);else Y0+=J0.x;a1(Q0,packHalf2x16(Z1(Y0,W)));
+if(N0.y>=.0)Z0=max(min(N0.x,N0.y),Z0);else Z0+=N0.x;P0(Y0,packHalf2x16(l1(Z0,Z)));
 #endif
-h C=abs(Y0);
+h D=abs(Z0);
 #ifdef ENABLE_EVEN_ODD
-if(W<.0)C=1.-abs(fract(C*.5)*2.+-1.);
+if(Z<.0)D=1.-V(abs(fract(D*.5)*2.+-1.));
 #endif
-C=min(C,E0(1));
+D=min(D,V(1));
 #ifdef ENABLE_CLIPPING
-if(G0<.0){h G1=-G0;
+if(K0<.0){h I1=-K0;
 #ifdef ENABLE_NESTED_CLIPPING
-h L4=o0.x;if(L4!=.0){l0 Z0=unpackHalf2x16(L0(w0));h y3=Z0.y;h M4;if(y3!=G1){M4=y3==L4?Z0.x:.0;
+h R4=q0.x;if(R4!=.0){F a1=unpackHalf2x16(H0(A0));h D3=a1.y;h S4;if(D3!=I1){S4=D3==R4?a1.x:.0;
 #ifndef DRAW_INTERIOR_TRIANGLES
-F0(w2,M0(M4,0,0,0));
+w0(y2,j0(S4,0,0,0));
 #endif
-}else{M4=N0(w2).x;
+}else{S4=I0(y2).x;
 #ifndef DRAW_INTERIOR_TRIANGLES
-y0(w2);
+n1(y2);
 #endif
-}C=min(C,M4);}
+}D=min(D,S4);}
 #endif
-a1(w0,packHalf2x16(Z1(C,G1)));y0(c0);}else
+P0(A0,packHalf2x16(l1(D,I1)));n1(e0);}else
 #endif
 {
 #ifdef ENABLE_CLIPPING
-if(G0!=.0){l0 Z0=unpackHalf2x16(L0(w0));h y3=Z0.y;h I2=y3==G0?Z0.x:E0(0);C=min(C,I2);}y0(w0);
+if(K0!=.0){F a1=unpackHalf2x16(H0(A0));h D3=a1.y;h N2=D3==K0?a1.x:V(0);D=min(D,N2);}A1(A0);
 #endif
 #ifdef ENABLE_CLIP_RECT
-h K2=B5(M0(i0));C=clamp(K2,E0(0),C);
+h P2=K5(j0(m0));D=clamp(P2,V(0),D);
 #endif
-i f=D7(o0
+j f=L7(q0
 #ifdef TARGET_VULKAN
-,N5,O5
+,W5,X5
 #endif
-L2);f.w*=C;i y1;if(G7!=W){y1=N0(c0);
+Q2);f.w*=D;j B1;if(O7!=Z){B1=I0(e0);
 #ifndef DRAW_INTERIOR_TRIANGLES
-F0(w2,y1);
+w0(y2,B1);
 #endif
-}else{y1=N0(w2);
+}else{B1=I0(y2);
 #ifndef DRAW_INTERIOR_TRIANGLES
-y0(w2);
+n1(y2);
 #endif
 }
 #ifdef ENABLE_ADVANCED_BLEND
-if(x2!=E0(T6)){
+if(z2!=V(c7)){
 #ifdef ENABLE_HSL_BLEND_MODES
-f=E3(
+f=J3(
 #else
-f=F3(
+f=K3(
 #endif
-f,S3(y1),O0(x2));}else
+f,X3(B1),J0(z2));}else
 #endif
-{
-#ifndef PLS_IMPL_NONE
-f.xyz*=f.w;f=f+y1*(1.-f.w);
-#endif
-}F0(c0,f);}
+{f.xyz*=f.w;f=f+B1*(1.-f.w);}w0(e0,f);}
 #ifndef DRAW_INTERIOR_TRIANGLES
-o1;
+q1;
 #endif
-c2;}
+f2;}
 #else
-r2(i,IB){N(o0,g);
+w2(j,JB){P(q0,g);
 #ifdef ENABLE_ADVANCED_BLEND
-N(x2,h);
+P(z2,h);
 #endif
-i f=D7(o0);
+j f=L7(q0);
 #ifdef ENABLE_ADVANCED_BLEND
-i y1=I1(EC,m0(floor(n0.xy)));
+j B1=K1(FC,o0(floor(p0.xy)));
 #ifdef ENABLE_HSL_BLEND_MODES
-f=E3(
+f=J3(
 #else
-f=F3(
+f=K3(
 #endif
-f,S3(y1),O0(x2));
+f,X3(B1),J0(z2));
 #else
-f=p2(f);
+f=r2(f);
 #endif
-v2(f);}
+x2(f);}
 #endif
 #endif

@@ -5,7 +5,6 @@
 #include "rive/math/contour_measure.hpp"
 #include "rive/math/mat2d.hpp"
 #include "rive/math/math_types.hpp"
-#include "rive/shapes/metrics_path.hpp"
 #include "rive/shapes/path.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/transform_component.hpp"
@@ -150,11 +149,10 @@ void FollowPathConstraint::update(ComponentDirt value)
         m_contours.clear();
         for (auto path : paths)
         {
-            auto commandPath = static_cast<MetricsPath*>(path->commandPath());
-            commandPath->addToRawPath(m_rawPath, path->pathTransform());
+            m_rawPath.addPath(path->rawPath(), &path->pathTransform());
         }
 
-        auto measure = ContourMeasureIter(m_rawPath);
+        auto measure = ContourMeasureIter(&m_rawPath);
         for (auto contour = measure.next(); contour != nullptr; contour = measure.next())
         {
             m_contours.push_back(contour);
@@ -169,12 +167,12 @@ StatusCode FollowPathConstraint::onAddedClean(CoreContext* context)
         if (m_Target->is<Shape>())
         {
             Shape* shape = static_cast<Shape*>(m_Target);
-            shape->addDefaultPathSpace(PathSpace::FollowPath);
+            shape->addFlags(PathFlags::followPath);
         }
         else if (m_Target->is<Path>())
         {
             Path* path = static_cast<Path*>(m_Target);
-            path->addDefaultPathSpace(PathSpace::FollowPath);
+            path->addFlags(PathFlags::followPath);
         }
     }
     return Super::onAddedClean(context);

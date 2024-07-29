@@ -4,7 +4,9 @@
 #include "rive/renderer.hpp"
 #include "rive/shapes/paint/blend_mode.hpp"
 #include "rive/shapes/paint/shape_paint_mutator.hpp"
-#include "rive/shapes/path_space.hpp"
+#include "rive/shapes/path_flags.hpp"
+#include "rive/math/raw_path.hpp"
+
 namespace rive
 {
 class RenderPaint;
@@ -28,11 +30,20 @@ public:
     /// lifecycle of the RenderPaint.
     virtual RenderPaint* initRenderPaint(ShapePaintMutator* mutator);
 
-    virtual PathSpace pathSpace() const = 0;
+    virtual PathFlags pathFlags() const = 0;
+    bool isFlagged(PathFlags flags) const { return (int)(pathFlags() & flags) != 0x00; }
 
-    void draw(Renderer* renderer, CommandPath* path) { draw(renderer, path, renderPaint()); }
+    void draw(Renderer* renderer, CommandPath* path, const RawPath* rawPath = nullptr)
+    {
+        draw(renderer, path, rawPath, renderPaint());
+    }
 
-    virtual void draw(Renderer* renderer, CommandPath* path, RenderPaint* paint) = 0;
+    virtual void draw(Renderer* renderer,
+                      CommandPath* path,
+                      // When every CommandPath stores a RawPath we can get rid
+                      // of this argument.
+                      const RawPath* rawPath,
+                      RenderPaint* paint) = 0;
 
     RenderPaint* renderPaint() { return m_RenderPaint.get(); }
 

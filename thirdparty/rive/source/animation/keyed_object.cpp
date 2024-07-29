@@ -18,13 +18,19 @@ void KeyedObject::addKeyedProperty(std::unique_ptr<KeyedProperty> property)
 StatusCode KeyedObject::onAddedDirty(CoreContext* context)
 {
     // Make sure we're keying a valid object.
-    if (context->resolve(objectId()) == nullptr)
+    Core* coreObject = context->resolve(objectId());
+    if (coreObject == nullptr)
     {
         return StatusCode::MissingObject;
     }
 
     for (auto& property : m_keyedProperties)
     {
+        // Validate coreObject supports propertyKey
+        if (!CoreRegistry::objectSupportsProperty(coreObject, property->propertyKey()))
+        {
+            return StatusCode::InvalidObject;
+        }
         StatusCode code;
         if ((code = property->onAddedDirty(context)) != StatusCode::Ok)
         {
@@ -46,7 +52,7 @@ StatusCode KeyedObject::onAddedClean(CoreContext* context)
 void KeyedObject::reportKeyedCallbacks(KeyedCallbackReporter* reporter,
                                        float secondsFrom,
                                        float secondsTo,
-                                       int secondsFromExactOffset) const
+                                       bool isAtStartFrame) const
 {
     for (const std::unique_ptr<KeyedProperty>& property : m_keyedProperties)
     {
@@ -58,7 +64,7 @@ void KeyedObject::reportKeyedCallbacks(KeyedCallbackReporter* reporter,
                                        objectId(),
                                        secondsFrom,
                                        secondsTo,
-                                       secondsFromExactOffset);
+                                       isAtStartFrame);
     }
 }
 

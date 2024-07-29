@@ -1,35 +1,35 @@
 #ifdef VERTEX
-O1 Q2(w9,AC);P1 V1 R2(w7,B9,SB);M3(G6,X8,PB);N3(H6,Y8,HB);R2(x7,C9,FC);W1
+Q1 V2(d2,L9,BC);R1 Y1 W2(D7,Q9,TB);R3(O6,n9,QB);S3(P6,o9,IB);W2(E7,R9,GC);Z1
 #ifdef DRAW_PATH
-p m0 N4(int H7){return m0(H7&((1<<j7)-1),H7>>j7);}p float I7(A a0,d D9){d R0=h0(a0,D9);return(abs(R0.x)+abs(R0.y))*(1./dot(R0,R0));}p bool E6(g c4,g P5,int L,y2(M)S2,y2(d)E9
+i o0 T4(int P7){return o0(P7&((1<<r7)-1),P7>>r7);}i float Q7(B d0,d S9){d R0=l0(d0,S9);return(abs(R0.x)+abs(R0.y))*(1./dot(R0,R0));}i bool M6(g i4,g Y5,int O,A2(N)X2,A2(d)T9
 #ifndef USING_DEPTH_STENCIL
-,y2(l0)T2
+,A2(F)Y2
 #else
-,y2(M)F9
+,A2(N)U9
 #endif
-U2){int O4=int(c4.x);float S1=c4.y;float P4=c4.z;int J7=floatBitsToInt(c4.w)>>2;int Q5=floatBitsToInt(c4.w)&3;int R5=min(O4,J7-1);int Q4=L*J7+R5;T A3=I1(AC,N4(Q4));uint D=A3.w;T S5=z0(FC,Z6(D));d K7=uintBitsToFloat(S5.xy);S2=O0(S5.z&0xffffu);uint G9=S5.w;A a0=W0(uintBitsToFloat(z0(SB,S2*2u)));T d4=z0(SB,S2*2u+1u);d K0=uintBitsToFloat(d4.xy);float K1=uintBitsToFloat(d4.z);
+Z2){int U4=int(i4.x);float U1=i4.y;float V4=i4.z;int R7=floatBitsToInt(i4.w)>>2;int Z5=floatBitsToInt(i4.w)&3;int a6=min(U4,R7-1);int W4=O*R7+a6;W F3=K1(BC,T4(W4));uint E=F3.w;W c6=C0(GC,i7(E));d S7=uintBitsToFloat(c6.xy);X2=J0(c6.z&0xffffu);uint V9=c6.w;B d0=W0(uintBitsToFloat(C0(TB,X2*2u)));W j4=C0(TB,X2*2u+1u);d O0=uintBitsToFloat(j4.xy);float M1=uintBitsToFloat(j4.z);
 #ifdef USING_DEPTH_STENCIL
-F9=O0(d4.w);
+U9=J0(j4.w);
 #endif
-uint L7=D&I4;if(L7!=0u){O4=int(P5.x);S1=P5.y;P4=P5.z;}if(O4!=R5){Q4+=O4-R5;T M7=I1(AC,N4(Q4));if((M7.w&0xffffu)!=(D&0xffffu)){bool H9=K1==.0||K7.x!=.0;if(H9){A3=I1(AC,N4(int(G9)));}}else{A3=M7;}D=A3.w|L7;}float p1=uintBitsToFloat(A3.z);d V2=d(sin(p1),-cos(p1));d N7=uintBitsToFloat(A3.xy);d T5;if(K1!=.0){S1*=sign(determinant(a0));if((D&J4)!=0u)S1=min(S1,.0);if((D&o7)!=0u)S1=max(S1,.0);float z2=I7(a0,V2)*k2;h O7=1.;if(z2>K1){O7=E0(K1)/E0(z2);K1=z2;}d W2=h0(V2,K1+z2);
+uint T7=E&P4;if(T7!=0u){U4=int(Y5.x);U1=Y5.y;V4=Y5.z;}if(U4!=a6){W4+=U4-a6;W U7=K1(BC,T4(W4));if((U7.w&0xffffu)!=(E&0xffffu)){bool W9=M1==.0||S7.x!=.0;if(W9){F3=K1(BC,T4(int(V9)));}}else{F3=U7;}E=F3.w|T7;}float r1=uintBitsToFloat(F3.z);d a3=d(sin(r1),-cos(r1));d V7=uintBitsToFloat(F3.xy);d d6;if(M1!=.0){U1*=sign(determinant(d0));if((E&Q4)!=0u)U1=min(U1,.0);if((E&z7)!=0u)U1=max(U1,.0);float B2=Q7(d0,a3)*m2;h W7=1.;if(B2>M1){W7=V(M1)/V(B2);M1=B2;}d c3=l0(a3,M1+B2);
 #ifndef USING_DEPTH_STENCIL
-float x=S1*(K1+z2);T2=Z1((1./(z2*2.))*(d(x,-x)+K1)+.5);
+float x=U1*(M1+B2);Y2=l1((1./(B2*2.))*(d(x,-x)+M1)+.5);
 #endif
-uint U5=D&Z3;if(U5!=0u){int e4=2;if((D&L5)==0u)e4=-e4;if((D&I4)!=0u)e4=-e4;m0 I9=N4(Q4+e4);T J9=I1(AC,I9);float K9=uintBitsToFloat(J9.z);float f4=abs(K9-p1);if(f4>E4)f4=2.*E4-f4;bool R4=(D&L5)!=0u;bool L9=(D&J4)!=0u;float P7=f4*(R4==L9?-.5:.5)+p1;d S4=d(sin(P7),-cos(P7));float V5=I7(a0,S4);float g4=cos(f4*.5);float W5;if((U5==r9)||(U5==v9&&g4>=.25)){float M9=(D&H4)!=0u?1.:.25;W5=K1*(1./max(g4,M9));}else{W5=K1*g4+V5*.5;}float X5=W5+V5*k2;if((D&n7)!=0u){float Q7=K1+z2;float N9=z2*.125;if(Q7<=X5*g4+N9){float O9=Q7*(1./g4);W2=S4*O9;}else{d Y5=S4*X5;d P9=d(dot(W2,W2),dot(Y5,Y5));W2=h0(P9,inverse(A(W2,Y5)));}}d Q9=abs(S1)*W2;float R7=(X5-dot(Q9,S4))/(V5*(k2*2.));
+uint e6=E&f4;if(e6!=0u){int k4=2;if((E&U5)==0u)k4=-k4;if((E&P4)!=0u)k4=-k4;o0 X9=T4(W4+k4);W Y9=K1(BC,X9);float Z9=uintBitsToFloat(Y9.z);float l4=abs(Z9-r1);if(l4>L4)l4=2.*L4-l4;bool X4=(E&U5)!=0u;bool aa=(E&Q4)!=0u;float X7=l4*(X4==aa?-.5:.5)+r1;d Y4=d(sin(X7),-cos(X7));float f6=Q7(d0,Y4);float m4=cos(l4*.5);float g6;if((e6==J9)||(e6==K9&&m4>=.25)){float ba=(E&O4)!=0u?1.:.25;g6=M1*(1./max(m4,ba));}else{g6=M1*m4+f6*.5;}float h6=g6+f6*m2;if((E&y7)!=0u){float Y7=M1+B2;float ca=B2*.125;if(Y7<=h6*m4+ca){float da=Y7*(1./m4);c3=Y4*da;}else{d i6=Y4*h6;d ea=d(dot(c3,c3),dot(i6,i6));c3=l0(ea,inverse(B(c3,i6)));}}d fa=abs(U1)*c3;float Z7=(h6-dot(fa,Y4))/(f6*(m2*2.));
 #ifndef USING_DEPTH_STENCIL
-if((D&J4)!=0u)T2.y=E0(R7);else T2.x=E0(R7);
+if((E&Q4)!=0u)Y2.y=V(Z7);else Y2.x=V(Z7);
 #endif
 }
 #ifndef USING_DEPTH_STENCIL
-T2*=O7;T2.y=max(T2.y,E0(1e-4));
+Y2*=W7;Y2.y=max(Y2.y,V(1e-4));
 #endif
-T5=h0(a0,S1*W2);if(Q5!=p7)return false;}else{if(Q5==r7)N7=K7;T5=sign(h0(S1*V2,inverse(a0)))*k2;if((D&I4)!=0u)P4=-P4;
+d6=l0(d0,U1*c3);if(Z5!=A7)return false;}else{if(Z5==C7)V7=S7;d6=sign(l0(U1*a3,inverse(d0)))*m2;if((E&P4)!=0u)V4=-V4;
 #ifndef USING_DEPTH_STENCIL
-T2=Z1(P4,-1);
+Y2=l1(V4,-1);
 #endif
-if((D&m7)!=0u&&Q5!=q7)return false;}E9=h0(a0,N7)+T5+K0;return true;}
+if((E&x7)!=0u&&Z5!=B7)return false;}T9=l0(d0,V7)+d6+O0;return true;}
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-p d F6(D1 Z5,y2(M)S2,y2(h)R9 U2){S2=O0(floatBitsToUint(Z5.z)&0xffffu);A a0=W0(uintBitsToFloat(z0(SB,S2*2u)));T d4=z0(SB,S2*2u+1u);d K0=uintBitsToFloat(d4.xy);R9=float(floatBitsToInt(Z5.z)>>16)*sign(determinant(a0));return h0(a0,Z5.xy)+K0;}
+i d N6(i0 j6,A2(N)X2,A2(h)ga Z2){X2=J0(floatBitsToUint(j6.z)&0xffffu);B d0=W0(uintBitsToFloat(C0(TB,X2*2u)));W j4=C0(TB,X2*2u+1u);d O0=uintBitsToFloat(j4.xy);ga=V(floatBitsToInt(j6.z)>>16)*sign(determinant(d0));return l0(d0,j6.xy)+O0;}
 #endif
 #endif

@@ -47,28 +47,32 @@ StatusCode Path::onAddedClean(CoreContext* context)
     return StatusCode::MissingObject;
 }
 
-void Path::buildDependencies()
-{
-    Super::buildDependencies();
-    // Make sure this is called once the shape has all of the paints added
-    // (paints get added during the added cycle so buildDependencies is a good
-    // time to do this.)
-    m_CommandPath = m_Shape->makeCommandPath(m_DefaultPathSpace);
-}
+void Path::buildDependencies() { Super::buildDependencies(); }
 
 void Path::addVertex(PathVertex* vertex) { m_Vertices.push_back(vertex); }
 
-void Path::addDefaultPathSpace(PathSpace space) { m_DefaultPathSpace |= space; }
+void Path::addFlags(PathFlags flags) { m_pathFlags |= flags; }
+bool Path::isFlagged(PathFlags flags) const { return (int)(m_pathFlags & flags) != 0x00; }
 
 bool Path::canDeferPathUpdate()
 {
-    return ((m_DefaultPathSpace & PathSpace::Clipping) != PathSpace::Clipping) &&
-           ((m_DefaultPathSpace & PathSpace::FollowPath) != PathSpace::FollowPath);
+    if (m_Shape == nullptr)
+    {
+        return false;
+    }
+    // A path cannot defer its update if the shapes requires an update. Note the
+    // nuance here where we track that the shape may be marked for follow path
+    // (meaning all child paths need to follow path). This doesn't mean the
+    // Shape is necessarily forced to update put the paths are, which is why we
+    // explicitly also check the shape's path space.
+
+    return m_Shape->canDeferPathUpdate() && !m_Shape->isFlagged(PathFlags::followPath) &&
+           !isFlagged(PathFlags::followPath | PathFlags::clipping);
 }
 
 const Mat2D& Path::pathTransform() const { return worldTransform(); }
 
-void Path::buildPath(CommandPath& commandPath) const
+void Path::buildPath(RawPath& rawPath) const
 {
     const bool isClosed = isPathClosed();
     const std::vector<PathVertex*>& vertices = m_Vertices;
@@ -94,7 +98,7 @@ void Path::buildPath(CommandPath& commandPath) const
         startIn = cubic->renderIn();
         out = cubic->renderOut();
         start = cubic->renderTranslation();
-        commandPath.move(start);
+        rawPath.move(start);
     }
     else
     {
@@ -125,18 +129,18 @@ void Path::buildPath(CommandPath& commandPath) const
             float idealDistance = computeIdealControlPointDistance(toPrev, toNext, renderRadius);
 
             startIn = start = Vec2D::scaleAndAdd(pos, toPrev, renderRadius);
-            commandPath.move(startIn);
+            rawPath.move(startIn);
 
             Vec2D outPoint = Vec2D::scaleAndAdd(pos, toPrev, renderRadius - idealDistance);
             Vec2D inPoint = Vec2D::scaleAndAdd(pos, toNext, renderRadius - idealDistance);
             out = Vec2D::scaleAndAdd(pos, toNext, renderRadius);
-            commandPath.cubic(outPoint, inPoint, out);
+            rawPath.cubic(outPoint, inPoint, out);
             prevIsCubic = false;
         }
         else
         {
             startIn = start = out = point.renderTranslation();
-            commandPath.move(out);
+            rawPath.move(out);
         }
     }
 
@@ -150,7 +154,7 @@ void Path::buildPath(CommandPath& commandPath) const
             auto inPoint = cubic->renderIn();
             auto translation = cubic->renderTranslation();
 
-            commandPath.cubic(out, inPoint, translation);
+            rawPath.cubic(out, inPoint, translation);
 
             prevIsCubic = true;
             out = cubic->renderOut();
@@ -183,22 +187,22 @@ void Path::buildPath(CommandPath& commandPath) const
                 Vec2D translation = Vec2D::scaleAndAdd(pos, toPrev, renderRadius);
                 if (prevIsCubic)
                 {
-                    commandPath.cubic(out, translation, translation);
+                    rawPath.cubic(out, translation, translation);
                 }
                 else
                 {
-                    commandPath.line(translation);
+                    rawPath.line(translation);
                 }
 
                 Vec2D outPoint = Vec2D::scaleAndAdd(pos, toPrev, renderRadius - idealDistance);
                 Vec2D inPoint = Vec2D::scaleAndAdd(pos, toNext, renderRadius - idealDistance);
                 out = Vec2D::scaleAndAdd(pos, toNext, renderRadius);
-                commandPath.cubic(outPoint, inPoint, out);
+                rawPath.cubic(outPoint, inPoint, out);
                 prevIsCubic = false;
             }
             else if (prevIsCubic)
             {
-                commandPath.cubic(out, pos, pos);
+                rawPath.cubic(out, pos, pos);
 
                 prevIsCubic = false;
                 out = pos;
@@ -206,7 +210,7 @@ void Path::buildPath(CommandPath& commandPath) const
             else
             {
                 out = pos;
-                commandPath.line(out);
+                rawPath.line(out);
             }
         }
     }
@@ -214,13 +218,13 @@ void Path::buildPath(CommandPath& commandPath) const
     {
         if (prevIsCubic || startIsCubic)
         {
-            commandPath.cubic(out, startIn, start);
+            rawPath.cubic(out, startIn, start);
         }
         else
         {
-            commandPath.line(start);
+            rawPath.line(start);
         }
-        commandPath.close();
+        rawPath.close();
     }
 }
 
@@ -249,9 +253,9 @@ void Path::update(ComponentDirt value)
 {
     Super::update(value);
 
-    if (m_CommandPath != nullptr && hasDirt(value, ComponentDirt::Path))
+    if (hasDirt(value, ComponentDirt::Path))
     {
-        if (m_Shape->canDeferPathUpdate())
+        if (canDeferPathUpdate())
         {
             m_deferredPathDirt = true;
             return;
@@ -260,8 +264,8 @@ void Path::update(ComponentDirt value)
         // Build path doesn't explicitly rewind because we use it to concatenate
         // multiple built paths into a single command path (like the hit
         // tester).
-        m_CommandPath->rewind();
-        buildPath(*m_CommandPath);
+        m_rawPath.rewind();
+        buildPath(m_rawPath);
     }
     // if (hasDirt(value, ComponentDirt::WorldTransform) && m_Shape != nullptr)
     // {

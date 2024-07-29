@@ -35,21 +35,37 @@ public:
 
     /// Returns the start time/ end time of the animation in seconds, considering speed
     float startTime() const;
+    float startTime(float multiplier) const;
     float endTime() const;
 
     /// Convert a global clock to local seconds (takes into consideration
     /// work area start/end, speed, looping).
     float globalToLocalSeconds(float seconds) const;
 
+    const KeyedObject* getObject(size_t index) const
+    {
+        if (index < m_KeyedObjects.size())
+        {
+            return m_KeyedObjects[index].get();
+        }
+        else
+        {
+            return nullptr;
+        }
+    }
+
+    size_t numKeyedObjects() const { return m_KeyedObjects.size(); }
+
 #ifdef TESTING
-    size_t numKeyedObjects() { return m_KeyedObjects.size(); }
     // Used in testing to check how many animations gets deleted.
     static int deleteCount;
 #endif
 
     void reportKeyedCallbacks(KeyedCallbackReporter* reporter,
                               float secondsFrom,
-                              float secondsTo) const;
+                              float secondsTo,
+                              float speedDirection,
+                              bool fromPong) const;
 };
 } // namespace rive
 

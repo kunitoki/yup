@@ -1,252 +1,252 @@
 #ifdef DRAW_PATH
 #ifdef VERTEX
-U0(P)q0(0,g,UB);q0(1,g,VB);V0
+U0(R)v0(0,g,VB);v0(1,g,WB);V0
 #endif
-A1 k0 I(0,l0,J0);OPTIONALLY_FLAT I(1,M,W);B1
+D1 n0 K(0,F,N0);OPTIONALLY_FLAT K(1,N,Z);E1
 #ifdef VERTEX
-g1(OB,P,r,j,L){v0(j,r,UB,g);v0(j,r,VB,g);Q(J0,l0);Q(W,M);g B;d R;if(E6(UB,VB,L,W,R,J0 j3)){B=i2(R);}else{B=g(v.j2,v.j2,v.j2,v.j2);}S(J0);S(W);h1(B);}
+g1(PB,R,v,k,O){z0(k,v,VB,g);z0(k,v,WB,g);S(N0,F);S(Z,N);g C;d T;if(M6(VB,WB,O,Z,T,N0 o3)){C=k2(T);}else{C=g(A.l2,A.l2,A.l2,A.l2);}U(N0);U(Z);h1(C);}
 #endif
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
 #ifdef VERTEX
-U0(P)q0(0,H3,KB);V0
+U0(R)v0(0,M3,LB);V0
 #endif
-A1 OPTIONALLY_FLAT I(0,h,C1);OPTIONALLY_FLAT I(1,M,W);B1
+D1 OPTIONALLY_FLAT K(0,h,F1);OPTIONALLY_FLAT K(1,N,Z);E1
 #ifdef VERTEX
-g1(OB,P,r,j,L){v0(j,r,KB,D1);Q(C1,h);Q(W,M);d R=F6(KB,W,C1 j3);g B=i2(R);S(C1);S(W);h1(B);}
+g1(PB,R,v,k,O){z0(k,v,LB,i0);S(F1,h);S(Z,N);d T=N6(LB,Z,F1 o3);g C=k2(T);U(F1);U(Z);h1(C);}
 #endif
 #endif
 #ifdef DRAW_IMAGE
 #ifdef DRAW_IMAGE_RECT
 #ifdef VERTEX
-U0(P)q0(0,g,LB);V0
+U0(R)v0(0,g,NB);V0
 #endif
-A1 k0 I(0,d,B0);k0 I(1,h,D2);
+D1 n0 K(0,d,E0);n0 K(1,h,I2);
 #ifdef ENABLE_CLIP_RECT
-k0 I(2,g,i0);
+n0 K(2,g,m0);
 #endif
-B1
+E1
 #ifdef VERTEX
-O1 P1 V1 W1 k5(OB,P,r,j,L){v0(j,r,LB,g);Q(B0,d);Q(D2,h);
+Q1 R1 Y1 Z1 v5(PB,R,v,k,O){z0(k,v,NB,g);S(E0,d);S(I2,h);
 #ifdef ENABLE_CLIP_RECT
-Q(i0,g);
+S(m0,g);
 #endif
-bool l5=LB.z==.0||LB.w==.0;D2=l5?.0:1.;d R=LB.xy;A a0=W0(J.m5);A I3=transpose(inverse(a0));if(!l5){float n5=k2*o5(I3[1])/dot(a0[1],I3[1]);if(n5>=.5){R.x=.5;D2*=.5/n5;}else{R.x+=n5*LB.z;}float p5=k2*o5(I3[0])/dot(a0[0],I3[0]);if(p5>=.5){R.y=.5;D2*=.5/p5;}else{R.y+=p5*LB.w;}}B0=R;R=h0(a0,R)+J.K0;if(l5){d E2=h0(I3,LB.zw);E2*=o5(E2)/dot(E2,E2);R+=k2*E2;}
+bool w5=NB.z==.0||NB.w==.0;I2=w5?.0:1.;d T=NB.xy;B d0=W0(L.x5);B N3=transpose(inverse(d0));if(!w5){float y5=m2*z5(N3[1])/dot(d0[1],N3[1]);if(y5>=.5){T.x=.5;I2*=V(.5/y5);}else{T.x+=y5*NB.z;}float A5=m2*z5(N3[0])/dot(d0[0],N3[0]);if(A5>=.5){T.y=.5;I2*=V(.5/A5);}else{T.y+=A5*NB.w;}}E0=T;T=l0(d0,T)+L.O0;if(w5){d J2=l0(N3,NB.zw);J2*=z5(J2)/dot(J2,J2);T+=m2*J2;}
 #ifdef ENABLE_CLIP_RECT
-i0=n4(W0(J.X0),J.i1,R);
+m0=x4(W0(L.X0),L.i1,T);
 #endif
-g B=i2(R);S(B0);S(D2);
+g C=k2(T);U(E0);U(I2);
 #ifdef ENABLE_CLIP_RECT
-S(i0);
+U(m0);
 #endif
-h1(B);}
+h1(C);}
 #endif
 #else
 #ifdef VERTEX
-U0(X1)q0(0,d,WB);V0 U0(l2)q0(1,d,XB);V0
+U0(a2)v0(0,d,XB);V0 U0(n2)v0(1,d,YB);V0
 #endif
-A1 k0 I(0,d,B0);
+D1 n0 K(0,d,E0);
 #ifdef ENABLE_CLIP_RECT
-k0 I(1,g,i0);
+n0 K(1,g,m0);
 #endif
-B1
+E1
 #ifdef VERTEX
-o4(OB,X1,Y1,l2,m2,j){v0(j,Y1,WB,d);v0(j,m2,XB,d);Q(B0,d);
+y4(PB,a2,c2,n2,o2,k){z0(k,c2,XB,d);z0(k,o2,YB,d);S(E0,d);
 #ifdef ENABLE_CLIP_RECT
-Q(i0,g);
+S(m0,g);
 #endif
-A a0=W0(J.m5);d R=h0(a0,WB)+J.K0;B0=XB;
+B d0=W0(L.x5);d T=l0(d0,XB)+L.O0;E0=YB;
 #ifdef ENABLE_CLIP_RECT
-i0=n4(W0(J.X0),J.i1,R);
+m0=x4(W0(L.X0),L.i1,T);
 #endif
-g B=i2(R);S(B0);
+g C=k2(T);U(E0);
 #ifdef ENABLE_CLIP_RECT
-S(i0);
+U(m0);
 #endif
-h1(B);}
+h1(C);}
 #endif
 #endif
 #endif
 #ifdef DRAW_RENDER_TARGET_UPDATE_BOUNDS
 #ifdef VERTEX
-U0(P)V0
+U0(R)V0
 #endif
-A1 B1
+D1 E1
 #ifdef VERTEX
-O1 P1 V1 W1 g1(OB,P,r,j,L){m0 j1;j1.x=(j&1)==0?v.p4.x:v.p4.z;j1.y=(j&2)==0?v.p4.y:v.p4.w;g B=i2(d(j1));h1(B);}
+Q1 R1 Y1 Z1 g1(PB,R,v,k,O){o0 j1;j1.x=(k&1)==0?A.z4.x:A.z4.z;j1.y=(k&2)==0?A.z4.y:A.z4.w;g C=k2(d(j1));h1(C);}
 #endif
 #endif
 #ifdef ENABLE_BINDLESS_TEXTURES
-#define q5
+#define B5
 #endif
 #ifdef DRAW_IMAGE
-#define q5
+#define B5
 #endif
 #ifdef FRAGMENT
-F2 x1(q4,DC);
-#ifdef q5
-x1(k3,MB);
+K2 z1(d2,A4,EC);
+#ifdef B5
+z1(C5,p3,OB);
 #endif
-G2 J3(q4,r5)
-#ifdef q5
-l3(k3,n2)
+L2 O3(A4,D5)
+#ifdef B5
+q3(p3,p2)
 #endif
-E1
+G1
 #ifdef ENABLE_ADVANCED_BLEND
 #ifdef FRAMEBUFFER_PLANE_IDX_OVERRIDE
-C0(NC,c0);
+F0(PC,e0);
 #else
-C0(v5,c0);
+F0(E5,e0);
 #endif
 #endif
-K3(w5,Q0);
+P3(F5,Y0);
 #ifdef ENABLE_CLIPPING
-D0(x5,w0);
+G0(G5,A0);
 #endif
-F1 L3 M3(G6,X8,PB);N3(H6,Y8,HB);O3 uint I6(float x){return uint(x*J6+P3);}float r4(uint x){return float(x)*K6+(-P3*K6);}i v4(h Y0,x0 E,uint k1 w4 H2){h C=abs(Y0);
+H1 Q3 R3(O6,n9,QB);S3(P6,o9,IB);T3 uint Q6(float x){return uint(x*R6+U3);}h B4(uint x){return V(float(x)*S6+(-U3*S6));}j C4(h Z0,B0 G,uint k1 D4 M2){h D=abs(Z0);
 #ifdef ENABLE_EVEN_ODD
-if((E.x&L6)!=0u)C=1.-abs(fract(C*.5)*2.+-1.);
+if((G.x&T6)!=0u)D=1.-abs(fract(D*.5)*2.+-1.);
 #endif
-C=min(C,E0(1));
+D=min(D,V(1));
 #ifdef ENABLE_CLIPPING
-uint G1=E.x>>16u;if(G1!=0u){uint Z0=L0(w0);h I2=G1==(Z0>>16u)?unpackHalf2x16(Z0).x:.0;C=min(C,I2);}
+uint I1=G.x>>16u;if(I1!=0u){uint a1=H0(A0);h N2=I1==(a1>>16u)?unpackHalf2x16(a1).x:.0;D=min(D,N2);}
 #endif
-i f=M0(0,0,0,0);uint H1=E.x&0xfu;switch(H1){case M6:f=unpackUnorm4x8(E.y);
+j f=j0(0,0,0,0);uint J1=G.x&0xfu;switch(J1){case U6:f=unpackUnorm4x8(G.y);
 #ifdef ENABLE_CLIPPING
-y0(w0);
+A1(A0);
 #endif
-break;case x4:case N6:
+break;case E4:case V6:
 #ifdef ENABLE_BINDLESS_TEXTURES
-case O6:
+case W6:
 #endif
-{A a0=W0(z0(HB,k1*4u));g K0=z0(HB,k1*4u+1u);d o2=h0(a0,n0)+K0.xy;
+{B d0=W0(C0(IB,k1*4u));g O0=C0(IB,k1*4u+1u);d q2=l0(d0,p0)+O0.xy;
 #ifdef ENABLE_BINDLESS_TEXTURES
-if(H1==O6){f=Q3(sampler2D(floatBitsToUint(K0.zw)),n2,o2,a0[0],a0[1]);float J2=uintBitsToFloat(E.y);f.w*=J2;}else
+if(J1==W6){f=V3(sampler2D(floatBitsToUint(O0.zw)),p2,q2,d0[0],d0[1]);float O2=uintBitsToFloat(G.y);f.w*=O2;}else
 #endif
-{float t=H1==x4?o2.x:length(o2);t=clamp(t,.0,1.);float x=t*K0.z+K0.w;float y=uintBitsToFloat(E.y);f=M0(R3(DC,r5,d(x,y),.0));}
+{float t=J1==E4?q2.x:length(q2);t=clamp(t,.0,1.);float x=t*O0.z+O0.w;float y=uintBitsToFloat(G.y);f=j0(W3(EC,D5,d(x,y),.0));}
 #ifdef ENABLE_CLIPPING
-y0(w0);
+A1(A0);
 #endif
 break;}
 #ifdef ENABLE_CLIPPING
-case y4:a1(w0,E.y|packHalf2x16(Z1(C,0)));break;
+case F4:P0(A0,G.y|packHalf2x16(l1(D,0)));break;
 #endif
 }
 #ifdef ENABLE_CLIP_RECT
-if((E.x&Z8)!=0u){A a0=W0(z0(HB,k1*4u+2u));g K0=z0(HB,k1*4u+3u);d a9=h0(a0,n0)+K0.xy;l0 P6=Z1(abs(a9)*K0.zw-K0.zw);h K2=clamp(min(P6.x,P6.y)+.5,.0,1.);C=min(C,K2);}
+if((G.x&p9)!=0u){B d0=W0(C0(IB,k1*4u+2u));g O0=C0(IB,k1*4u+3u);d q9=l0(d0,p0)+O0.xy;F X6=l1(abs(q9)*O0.zw-O0.zw);h P2=clamp(min(X6.x,X6.y)+.5,.0,1.);D=min(D,P2);}
 #endif
-f.w*=C;return f;}i Q6(i R6,i Q1){return R6+Q1*(1.-R6.w);}
+f.w*=D;return f;}j Y6(j Z6,j S1){return Z6+S1*(1.-Z6.w);}
 #ifdef ENABLE_ADVANCED_BLEND
-i y5(i S6,i Q1,M a2){if(a2!=T6){
+j H5(j a7,j S1,N e2){if(e2!=c7){
 #ifdef ENABLE_HSL_BLEND_MODES
-return E3(
+return J3(
 #else
-return F3(
+return K3(
 #endif
-S6,S3(Q1),a2);}else{return Q6(p2(S6),Q1);}}i U6(i f,x0 E H2){i Q1=N0(c0);M a2=O0((E.x>>4)&0xfu);return y5(f,Q1,a2);}void z5(i f,x0 E H2){if(f.w!=.0){i c9=U6(f,E l1);F0(c0,c9);}else{y0(c0);}}
+a7,X3(S1),e2);}else{return Y6(r2(a7),S1);}}j d7(j f,B0 G M2){j S1=I0(e0);N e2=J0((G.x>>4)&0xfu);return H5(f,S1,e2);}void I5(j f,B0 G M2){if(f.w!=.0){j r9=d7(f,G m1);w0(e0,r9);}else{n1(e0);}}
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-#define T3 R1
-#define V6 U3
-#define m3 c2
+#define Y3 T1
+#define e7 Z3
+#define r3 f2
 #else
-#define T3 n3
-#define V6 z4
-#define m3 V3
+#define Y3 v3
+#define e7 G4
+#define r3 a4
 #endif
 #ifdef DRAW_PATH
-T3(IB){N(J0,l0);N(W,M);
+Y3(JB){P(N0,F);P(Z,N);
 #ifndef ENABLE_ADVANCED_BLEND
-P0=M0(0,0,0,0);
+Q0=j0(0,0,0,0);
 #endif
-h C=min(min(J0.x,abs(J0.y)),E0(1));uint A4=I6(C);uint A5=(W6(W)<<16)|A4;uint m1=B4(Q0,A5);M c1=O0(m1>>16);if(c1!=W){h Y0=r4(m1&0xffffu);x0 E=q2(PB,c1);i f=v4(Y0,E,c1 L2 l1);
+h D=min(min(N0.x,abs(N0.y)),V(1));uint H4=Q6(D);uint J5=(f7(Z)<<16)|H4;uint o1=I4(Y0,J5);N c1=J0(o1>>16);if(c1!=Z){h Z0=B4(o1&0xffffu);B0 G=v2(QB,c1);j f=C4(Z0,G,c1 Q2 m1);
 #ifdef ENABLE_ADVANCED_BLEND
-z5(f,E l1);
+I5(f,G m1);
 #else
-P0=p2(f);
+Q0=r2(f);
 #endif
-}else{if(J0.y<.0){if(m1<A5){A4+=m1-A5;}A4-=uint(P3);C4(Q0,A4);}discard;}m3}
+}else{if(N0.y<.0){if(o1<J5){H4+=o1-J5;}H4-=uint(U3);J4(Y0,H4);}discard;}r3}
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-T3(IB){N(C1,h);N(W,M);
+Y3(JB){P(F1,h);P(Z,N);
 #ifndef ENABLE_ADVANCED_BLEND
-P0=M0(0,0,0,0);
+Q0=j0(0,0,0,0);
 #endif
-h C=C1;uint m1=o3(Q0);M c1=O0(m1>>16);h X6=r4(m1&0xffffu);if(c1!=W){x0 E=q2(PB,c1);i f=v4(X6,E,c1 L2 l1);
+h D=F1;uint o1=w3(Y0);N c1=J0(o1>>16);h g7=B4(o1&0xffffu);if(c1!=Z){B0 G=v2(QB,c1);j f=C4(g7,G,c1 Q2 m1);
 #ifdef ENABLE_ADVANCED_BLEND
-z5(f,E l1);
+I5(f,G m1);
 #else
-P0=p2(f);
+Q0=r2(f);
 #endif
-}else{C+=X6;}p3(Q0,(W6(W)<<16)|I6(C));if(c1==W){discard;}m3}
+}else{D+=g7;}x3(Y0,(f7(Z)<<16)|Q6(D));if(c1==Z){discard;}r3}
 #endif
 #ifdef DRAW_IMAGE
-V6(IB){N(B0,d);
+e7(JB){P(E0,d);
 #ifdef DRAW_IMAGE_RECT
-N(D2,h);
+P(I2,h);
 #endif
 #ifdef ENABLE_CLIP_RECT
-N(i0,g);
+P(m0,g);
 #endif
-i q3=M2(MB,n2,B0);h N2=1.;
+j y3=j0(R2(OB,p2,E0));h S2=1.;
 #ifdef DRAW_IMAGE_RECT
-N2=min(D2,N2);
+S2=min(I2,S2);
 #endif
 #ifdef ENABLE_CLIP_RECT
-h K2=B5(M0(i0));N2=clamp(K2,E0(0),N2);
+h P2=K5(j0(m0));S2=clamp(P2,V(0),S2);
 #endif
 #ifdef DRAW_IMAGE_MESH
-n1;
+p1;
 #endif
-uint m1=o3(Q0);h Y0=r4(m1&0xffffu);M c1=O0(m1>>16);x0 Y6=q2(PB,c1);i C5=v4(Y0,Y6,c1 L2 l1);
+uint o1=w3(Y0);h Z0=B4(o1&0xffffu);N c1=J0(o1>>16);B0 h7=v2(QB,c1);j L5=C4(Z0,h7,c1 Q2 m1);
 #ifdef ENABLE_CLIPPING
-if(J.G1!=0u){D4(w0);uint Z0=L0(w0);uint G1=Z0>>16;h I2=G1==J.G1?unpackHalf2x16(Z0).x:.0;N2=min(N2,I2);}
+if(L.I1!=0u){K4(A0);uint a1=H0(A0);uint I1=a1>>16;h N2=I1==L.I1?unpackHalf2x16(a1).x:.0;S2=min(S2,N2);}
 #endif
-q3.w*=N2*J.J2;
+y3.w*=S2*V(L.O2);
 #ifdef ENABLE_ADVANCED_BLEND
-if(C5.w!=.0||q3.w!=.0){i Q1=N0(c0);M d9=O0((Y6.x>>4)&0xfu);M e9=O0(J.a2);Q1=y5(C5,Q1,d9);q3=y5(q3,Q1,e9);F0(c0,q3);}else{y0(c0);}
+if(L5.w!=.0||y3.w!=.0){j S1=I0(e0);N v9=J0((h7.x>>4)&0xfu);N w9=J0(L.e2);S1=H5(L5,S1,v9);y3=H5(y3,S1,w9);w0(e0,y3);}else{n1(e0);}
 #else
-P0=Q6(p2(q3),p2(C5));
+Q0=Y6(r2(y3),r2(L5));
 #endif
-p3(Q0,uint(P3));
+x3(Y0,uint(U3));
 #ifdef DRAW_IMAGE_MESH
-o1;
+q1;
 #endif
-m3}
+r3}
 #endif
 #ifdef INITIALIZE_PLS
-T3(IB){
+Y3(JB){
 #ifndef ENABLE_ADVANCED_BLEND
-P0=M0(0,0,0,0);
+Q0=j0(0,0,0,0);
 #endif
 #ifdef STORE_COLOR_CLEAR
-F0(c0,unpackUnorm4x8(v.f9));
+w0(e0,unpackUnorm4x8(A.x9));
 #endif
 #ifdef SWIZZLE_COLOR_BGRA_TO_RGBA
-i f=N0(c0);F0(c0,f.zyxw);
+j f=I0(e0);w0(e0,f.zyxw);
 #endif
-p3(Q0,v.g9);
+x3(Y0,A.y9);
 #ifdef ENABLE_CLIPPING
-a1(w0,0u);
+P0(A0,0u);
 #endif
-m3}
+r3}
 #endif
 #ifdef RESOLVE_PLS
 #ifdef COALESCED_PLS_RESOLVE_AND_TRANSFER
-n3(IB)
+v3(JB)
 #else
-T3(IB)
+Y3(JB)
 #endif
-{uint m1=o3(Q0);h Y0=r4(m1&0xffffu);M c1=O0(m1>>16);x0 E=q2(PB,c1);i f=v4(Y0,E,c1 L2 l1);
+{uint o1=w3(Y0);h Z0=B4(o1&0xffffu);N c1=J0(o1>>16);B0 G=v2(QB,c1);j f=C4(Z0,G,c1 Q2 m1);
 #ifdef COALESCED_PLS_RESOLVE_AND_TRANSFER
-P0=U6(f,E l1);V3
+Q0=d7(f,G m1);a4
 #else
 #ifdef ENABLE_ADVANCED_BLEND
-z5(f,E l1);
+I5(f,G m1);
 #else
-P0=p2(f);
+Q0=r2(f);
 #endif
-m3
+r3
 #endif
 }
 #endif

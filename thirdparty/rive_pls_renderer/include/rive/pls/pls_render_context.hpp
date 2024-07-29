@@ -199,7 +199,15 @@ public:
     struct FlushResources
     {
         PLSRenderTarget* renderTarget = nullptr;
-        void* externalCommandBuffer = nullptr; // Required on Metal.
+
+        // Command buffer that rendering commands will be added to.
+        //  - VkCommandBuffer on Vulkan.
+        //  - id<MTLCommandBuffer> on Metal.
+        //  - Unused otherwise.
+        void* externalCommandBuffer = nullptr;
+
+        // Fence that will be signalled once "externalCommandBuffer" finishes executing.
+        pls::CommandBufferCompletionFence* frameCompletionFence = nullptr;
     };
 
     // Submits all GPU commands that have been built up since beginFrame().
@@ -454,6 +462,7 @@ private:
             uint32_t paintAuxPaddingCount = 0;
             uint32_t contourPaddingCount = 0;
             uint32_t simpleGradCount = 0;
+            uint32_t gradSpanPaddingCount = 0;
             uint32_t maxGradTextureHeight = 0;
             uint32_t maxTessTextureHeight = 0;
         };
@@ -608,6 +617,7 @@ private:
         uint32_t m_paintPaddingCount;
         uint32_t m_paintAuxPaddingCount;
         uint32_t m_contourPaddingCount;
+        uint32_t m_gradSpanPaddingCount;
         uint32_t m_midpointFanTessEndLocation;
         uint32_t m_outerCubicTessEndLocation;
         uint32_t m_outerCubicTessVertexIdx;
