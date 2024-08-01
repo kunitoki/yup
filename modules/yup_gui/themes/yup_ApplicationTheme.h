@@ -37,7 +37,7 @@ public:
     template <class T>
     void setComponentTheme (T&& instanceTheme)
     {
-        std::get<T>(componentThemes) = std::forward<T>(instanceTheme);
+        std::get<T> (componentThemes) = std::forward<T> (instanceTheme);
     }
 
     //==============================================================================
@@ -45,8 +45,8 @@ public:
     static const T& resolveTheme (const T* instanceTheme = nullptr)
     {
         return instanceTheme != nullptr
-            ? *instanceTheme
-            : std::get<T>(getGlobalThemeInstance()->componentThemes);
+                 ? *instanceTheme
+                 : std::get<T> (getGlobalThemeInstance()->componentThemes);
     }
 
     //==============================================================================
@@ -61,8 +61,8 @@ private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
 
     std::tuple<
-        Slider::Theme
-    > componentThemes;
+        Slider::Theme>
+        componentThemes;
 
     Font defaultFont;
 

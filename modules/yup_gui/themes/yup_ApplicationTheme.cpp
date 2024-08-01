@@ -44,7 +44,7 @@ const Font& ApplicationTheme::getDefaultFont() const
 
 void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
 {
-    getGlobalThemeInstance() = std::move(s);
+    getGlobalThemeInstance() = std::move (s);
 }
 
 ApplicationTheme::ConstPtr ApplicationTheme::getGlobalTheme()

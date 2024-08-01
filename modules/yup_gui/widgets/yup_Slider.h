@@ -47,13 +47,14 @@ public:
     {
         using Ptr = ReferenceCountedObjectPtr<const Theme>;
 
-        Theme () = default;
-        Theme (std::function<void(Graphics&, const Slider&)> p)
-            : onPaint (std::move(p))
+        Theme() = default;
+
+        Theme (std::function<void (Graphics&, const Slider&)> p)
+            : onPaint (std::move (p))
         {
         }
 
-        std::function<void(Graphics&, const Slider&)> onPaint;
+        std::function<void (Graphics&, const Slider&)> onPaint;
     };
 
     void setTheme (Theme::Ptr newTheme);

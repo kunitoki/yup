@@ -24,9 +24,8 @@ namespace yup
 
 //==============================================================================
 
-const uint8_t RobotoRegularFont_data[] =
-{
-    #include "RobotoRegularFont.inc"
+const uint8_t RobotoRegularFont_data[] = {
+#include "RobotoRegularFont.inc"
 };
 
 const std::size_t RobotoRegularFont_size = sizeof (RobotoRegularFont_data);
