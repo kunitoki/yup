@@ -37,16 +37,16 @@
   ==============================================================================
 */
 
+// clang-format off
 #ifdef JUCE_AUDIO_DEVICES_H_INCLUDED
-    // clang-format off
 /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
 */
-    // clang-format on
 #error "Incorrect use of JUCE cpp file"
 #endif
+// clang-format on
 
 #define JUCE_CORE_INCLUDE_OBJC_HELPERS 1
 #define JUCE_CORE_INCLUDE_COM_SMART_PTR 1
@@ -116,8 +116,8 @@
 #include "native/juce_DirectSound_windows.cpp"
 #endif
 
+// clang-format off
 #if JUCE_USE_WINRT_MIDI && (JUCE_MSVC || JUCE_CLANG)
-    // clang-format off
 /* If you cannot find any of the header files below then you are probably
    attempting to use the Windows 10 Bluetooth Low Energy API. For this to work you
    need to install version 10.0.14393.0 of the Windows Standalone SDK and you may
@@ -127,7 +127,6 @@
    Also please note that Microsoft's Bluetooth MIDI stack has multiple issues, so
    this API is EXPERIMENTAL - use at your own risk!
 */
-    // clang-format on
 #include <windows.devices.h>
 #include <windows.devices.midi.h>
 #include <windows.devices.enumeration.h>
@@ -140,12 +139,13 @@ JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4467)
 #include <robuffer.h>
 JUCE_END_IGNORE_WARNINGS_MSVC
 #endif
+// clang-format on
 
 #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
 #include "native/juce_Midi_windows.cpp"
 
+// clang-format off
 #if JUCE_ASIO
-    // clang-format off
 /* This is very frustrating - we only need to use a handful of definitions from
    a couple of the header files in Steinberg's ASIO SDK, and it'd be easy to copy
    about 30 lines of code into this cpp file to create a fully stand-alone ASIO
@@ -165,13 +165,14 @@ JUCE_END_IGNORE_WARNINGS_MSVC
       comes with the SDK. (Only about a handful of the SDK header files are actually
       needed - so to simplify things, you could just copy these into your JUCE directory).
 */
-    // clang-format on
 #include <iasiodrv.h>
 #include "native/juce_ASIO_windows.cpp"
 #endif
+// clang-format oon
 
 //==============================================================================
 #elif JUCE_LINUX || JUCE_BSD
+// clang-format off
 #if JUCE_ALSA
 /* Got an include error here? If so, you've either not got ALSA installed, or you've
    not got your paths set up correctly to find its header files.
@@ -188,7 +189,6 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 #if JUCE_JACK
-    // clang-format off
 /* Got an include error here? If so, you've either not got jack-audio-connection-kit
    installed, or you've not got your paths set up correctly to find its header files.
 
@@ -197,21 +197,21 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
    If you don't have the jack-audio-connection-kit library and don't want to build
    JUCE with low latency audio support, just set the JUCE_JACK flag to 0.
 */
-    // clang-format on
 #include <jack/jack.h>
 #include "native/juce_JackAudio_linux.cpp"
 #endif
 
 #if (JUCE_LINUX && JUCE_BELA)
-    /* Got an include error here? If so, you've either not got the bela headers
-     installed, or you've not got your paths set up correctly to find its header
-     files.
-  */
+/* Got an include error here? If so, you've either not got the bela headers
+   installed, or you've not got your paths set up correctly to find its header
+   files.
+*/
 #include <Bela.h>
 #include <Midi.h>
 #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
 #include "native/juce_Bela_linux.cpp"
 #endif
+// clang-format on
 
 #undef SIZEOF
 
