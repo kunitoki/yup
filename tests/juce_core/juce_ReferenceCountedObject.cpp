@@ -41,139 +41,139 @@ public:
     void doSomething() const {}
 };
 
-TEST(ReferenceCountedObjectTest, IncDecReferenceCount)
+TEST (ReferenceCountedObjectTest, IncDecReferenceCount)
 {
     TestClass::Ptr obj = new TestClass();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
     obj->incReferenceCount();
-    EXPECT_EQ(obj->getReferenceCount(), 2);
+    EXPECT_EQ (obj->getReferenceCount(), 2);
 
     obj->decReferenceCount();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
     obj = nullptr; // this should decrement the count and delete the object
 }
 
-TEST(ReferenceCountedObjectTest, DecReferenceCountWithoutDeleting)
+TEST (ReferenceCountedObjectTest, DecReferenceCountWithoutDeleting)
 {
     TestClass::Ptr obj = new TestClass();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
-    EXPECT_TRUE(obj->decReferenceCountWithoutDeleting());
-    EXPECT_EQ(obj->getReferenceCount(), 0);
+    EXPECT_TRUE (obj->decReferenceCountWithoutDeleting());
+    EXPECT_EQ (obj->getReferenceCount(), 0);
 
     delete obj;
 }
 
 // SingleThreadedReferenceCountedObject tests
-TEST(SingleThreadedReferenceCountedObjectTest, IncDecReferenceCount)
+TEST (SingleThreadedReferenceCountedObjectTest, IncDecReferenceCount)
 {
     SingleThreadedTestClass::Ptr obj = new SingleThreadedTestClass();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
     obj->incReferenceCount();
-    EXPECT_EQ(obj->getReferenceCount(), 2);
+    EXPECT_EQ (obj->getReferenceCount(), 2);
 
     obj->decReferenceCount();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
     obj = nullptr; // this should decrement the count and delete the object
 }
 
-TEST(SingleThreadedReferenceCountedObjectTest, DecReferenceCountWithoutDeleting)
+TEST (SingleThreadedReferenceCountedObjectTest, DecReferenceCountWithoutDeleting)
 {
     SingleThreadedTestClass::Ptr obj = new SingleThreadedTestClass();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
-    EXPECT_TRUE(obj->decReferenceCountWithoutDeleting());
-    EXPECT_EQ(obj->getReferenceCount(), 0);
+    EXPECT_TRUE (obj->decReferenceCountWithoutDeleting());
+    EXPECT_EQ (obj->getReferenceCount(), 0);
 
     delete obj;
 }
 
 // ReferenceCountedObjectPtr tests
-TEST(ReferenceCountedObjectPtrTest, PointerAssignment)
+TEST (ReferenceCountedObjectPtrTest, PointerAssignment)
 {
     TestClass::Ptr obj1 = new TestClass();
     TestClass::Ptr obj2 = obj1;
 
-    EXPECT_EQ(obj1->getReferenceCount(), 2);
-    EXPECT_EQ(obj2->getReferenceCount(), 2);
+    EXPECT_EQ (obj1->getReferenceCount(), 2);
+    EXPECT_EQ (obj2->getReferenceCount(), 2);
 
     obj1 = nullptr;
-    EXPECT_EQ(obj2->getReferenceCount(), 1);
+    EXPECT_EQ (obj2->getReferenceCount(), 1);
     obj2 = nullptr; // this should delete the object
 }
 
-TEST(ReferenceCountedObjectPtrTest, PointerComparison)
+TEST (ReferenceCountedObjectPtrTest, PointerComparison)
 {
     TestClass::Ptr obj1 = new TestClass();
     TestClass::Ptr obj2 = obj1;
 
-    EXPECT_EQ(obj1, obj2);
-    EXPECT_NE(obj1, nullptr);
+    EXPECT_EQ (obj1, obj2);
+    EXPECT_NE (obj1, nullptr);
 
     obj1 = nullptr;
-    EXPECT_EQ(obj1, nullptr);
-    EXPECT_NE(obj2, nullptr);
+    EXPECT_EQ (obj1, nullptr);
+    EXPECT_NE (obj2, nullptr);
 }
 
-TEST(ReferenceCountedObjectPtrTest, PointerDereference)
+TEST (ReferenceCountedObjectPtrTest, PointerDereference)
 {
     TestClass::Ptr obj = new TestClass();
-    EXPECT_NO_THROW(obj->doSomething());
-    EXPECT_NO_THROW(*obj);
+    EXPECT_NO_THROW (obj->doSomething());
+    EXPECT_NO_THROW (*obj);
 }
 
-TEST(ReferenceCountedObjectPtrTest, Reset)
+TEST (ReferenceCountedObjectPtrTest, Reset)
 {
     TestClass::Ptr obj = new TestClass();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
     obj.reset();
-    EXPECT_EQ(obj, nullptr);
+    EXPECT_EQ (obj, nullptr);
 }
 
 // SingleThreadedReferenceCountedObjectPtr tests
-TEST(SingleThreadedReferenceCountedObjectPtrTest, PointerAssignment)
+TEST (SingleThreadedReferenceCountedObjectPtrTest, PointerAssignment)
 {
     SingleThreadedTestClass::Ptr obj1 = new SingleThreadedTestClass();
     SingleThreadedTestClass::Ptr obj2 = obj1;
 
-    EXPECT_EQ(obj1->getReferenceCount(), 2);
-    EXPECT_EQ(obj2->getReferenceCount(), 2);
+    EXPECT_EQ (obj1->getReferenceCount(), 2);
+    EXPECT_EQ (obj2->getReferenceCount(), 2);
 
     obj1 = nullptr;
-    EXPECT_EQ(obj2->getReferenceCount(), 1);
+    EXPECT_EQ (obj2->getReferenceCount(), 1);
     obj2 = nullptr; // this should delete the object
 }
 
-TEST(SingleThreadedReferenceCountedObjectPtrTest, PointerComparison)
+TEST (SingleThreadedReferenceCountedObjectPtrTest, PointerComparison)
 {
     SingleThreadedTestClass::Ptr obj1 = new SingleThreadedTestClass();
     SingleThreadedTestClass::Ptr obj2 = obj1;
 
-    EXPECT_EQ(obj1, obj2);
-    EXPECT_NE(obj1, nullptr);
+    EXPECT_EQ (obj1, obj2);
+    EXPECT_NE (obj1, nullptr);
 
     obj1 = nullptr;
-    EXPECT_EQ(obj1, nullptr);
-    EXPECT_NE(obj2, nullptr);
+    EXPECT_EQ (obj1, nullptr);
+    EXPECT_NE (obj2, nullptr);
 }
 
-TEST(SingleThreadedReferenceCountedObjectPtrTest, PointerDereference)
+TEST (SingleThreadedReferenceCountedObjectPtrTest, PointerDereference)
 {
     SingleThreadedTestClass::Ptr obj = new SingleThreadedTestClass();
-    EXPECT_NO_THROW(obj->doSomething());
-    EXPECT_NO_THROW(*obj);
+    EXPECT_NO_THROW (obj->doSomething());
+    EXPECT_NO_THROW (*obj);
 }
 
-TEST(SingleThreadedReferenceCountedObjectPtrTest, Reset)
+TEST (SingleThreadedReferenceCountedObjectPtrTest, Reset)
 {
     SingleThreadedTestClass::Ptr obj = new SingleThreadedTestClass();
-    EXPECT_EQ(obj->getReferenceCount(), 1);
+    EXPECT_EQ (obj->getReferenceCount(), 1);
 
     obj.reset();
-    EXPECT_EQ(obj, nullptr);
+    EXPECT_EQ (obj, nullptr);
 }
