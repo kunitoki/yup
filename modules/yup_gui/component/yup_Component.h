@@ -150,6 +150,12 @@ public:
     bool hasFocus() const;
 
     //==============================================================================
+    Color findColor (const Identifier& colorId) const;
+
+    void setColor (const Identifier& colorId, const std::optional<Color>& color);
+    std::optional<Color> getColor (const Identifier& colorId) const;
+
+    //==============================================================================
     NamedValueSet& getProperties();
     const NamedValueSet& getProperties() const;
 

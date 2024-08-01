@@ -127,7 +127,7 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
 void Slider::paint (Graphics& g)
 {
-    ApplicationTheme::resolveTheme (theme.get()).onPaint (g, *this);
+    ApplicationTheme::findTheme (theme.get()).onPaint (g, *this);
 }
 
 //==============================================================================

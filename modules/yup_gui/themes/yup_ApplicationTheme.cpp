@@ -30,18 +30,6 @@ ApplicationTheme::ApplicationTheme()
 
 //==============================================================================
 
-void ApplicationTheme::setDefaultFont (Font font)
-{
-    defaultFont = std::move (font);
-}
-
-const Font& ApplicationTheme::getDefaultFont() const
-{
-    return defaultFont;
-}
-
-//==============================================================================
-
 void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
 {
     getGlobalThemeInstance() = std::move (s);
@@ -56,6 +44,31 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
 {
     static ApplicationTheme::Ptr globalTheme;
     return globalTheme;
+}
+
+//==============================================================================
+
+Color ApplicationTheme::findColor (const Identifier& colorId)
+{
+    auto it = getGlobalThemeInstance()->defaultColors.find (colorId);
+    return it != getGlobalThemeInstance()->defaultColors.end() ? it->second : Color();
+}
+
+void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
+{
+    defaultColors.insert_or_assign (colorId, color);
+}
+
+//==============================================================================
+
+void ApplicationTheme::setDefaultFont (Font font)
+{
+    defaultFont = std::move (font);
+}
+
+const Font& ApplicationTheme::getDefaultFont() const
+{
+    return defaultFont;
 }
 
 } // namespace yup

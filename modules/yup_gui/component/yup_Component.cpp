@@ -495,6 +495,35 @@ bool Component::hasFocus() const
 
 //==============================================================================
 
+Color Component::findColor (const Identifier& colorId) const
+{
+    if (auto color = getColor (colorId))
+        return *color;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findColor (colorId);
+
+    return ApplicationTheme::findColor (colorId);
+}
+
+void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
+{
+    if (color)
+        properties.set (colorId, static_cast<int64> (color->getARGB()));
+    else
+        properties.remove (colorId);
+}
+
+std::optional<Color> Component::getColor (const Identifier& colorId) const
+{
+    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
+        return Color (static_cast<uint32> (static_cast<int64>(*color)));
+
+    return std::nullopt;
+}
+
+//==============================================================================
+
 NamedValueSet& Component::getProperties()
 {
     return properties;

@@ -148,16 +148,16 @@ private:
 
 } // namespace juce
 
-namespace std {
-
-template <>
-class hash<juce::Identifier>
+#ifndef DOXYGEN
+namespace std
 {
-public:
-    size_t operator()(const juce::Identifier& identifier) const
+template <>
+struct hash<juce::Identifier>
+{
+    size_t operator()(const juce::Identifier& identifier) const noexcept
     {
         return static_cast<size_t> (*reinterpret_cast<uintptr_t*> (identifier.getCharPointer().getAddress()));
     }
 };
-
 } // namespace std
+#endif
