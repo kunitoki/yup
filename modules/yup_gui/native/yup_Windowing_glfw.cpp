@@ -1332,6 +1332,8 @@ void initialiseYup_Windowing()
     glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 6);
 #endif
 
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+
     Desktop::getInstance()->updateDisplays();
 
     glfwSetMonitorCallback (+[] (GLFWmonitor* monitor, int event)

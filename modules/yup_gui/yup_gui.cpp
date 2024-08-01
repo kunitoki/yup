@@ -74,3 +74,8 @@
 #include "widgets/yup_Slider.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
+
+//==============================================================================
+#include "themes/yup_ApplicationTheme.cpp"
+#include "themes/theme_v1/yup_ThemeVersion1.cpp"
+#include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"

@@ -47,16 +47,16 @@ public:
             return;
         }
 
+        /*
 #if JUCE_WASM
         yup::File dataPath = yup::File ("/data");
 #else
         yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-
         yup::File fontFilePath = dataPath.getChildFile ("Roboto-Regular.ttf");
-
         if (auto result = font.loadFromFile (fontFilePath); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
+        */
 
         setTitle ("main");
 

@@ -23,60 +23,50 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API Slider : public Component
+
+class JUCE_API ApplicationTheme final : public ReferenceCountedObject
 {
 public:
-    //==============================================================================
-    Slider (StringRef componentID);
+    using Ptr = ReferenceCountedObjectPtr<ApplicationTheme>;
+    using ConstPtr = ReferenceCountedObjectPtr<const ApplicationTheme>;
 
     //==============================================================================
-    void setValue (float newValue);
-    float getValue() const;
-
-    virtual void valueChanged();
-
-    std::function<void (float)> onValueChanged;
+    ApplicationTheme();
 
     //==============================================================================
-
-    bool isMouseOver() const;
-
-    //==============================================================================
-
-    struct Theme : ReferenceCountedObject
+    template <class T>
+    void setComponentTheme (T&& instanceTheme)
     {
-        using Ptr = ReferenceCountedObjectPtr<const Theme>;
-
-        Theme () = default;
-        Theme (std::function<void(Graphics&, const Slider&)> p)
-            : onPaint (std::move(p))
-        {
-        }
-
-        std::function<void(Graphics&, const Slider&)> onPaint;
-    };
-
-    void setTheme (Theme::Ptr newTheme);
+        std::get<T>(componentThemes) = std::forward<T>(instanceTheme);
+    }
 
     //==============================================================================
-    void resized() override;
-    void paint (Graphics& g) override;
-    void mouseEnter (const MouseEvent& event) override;
-    void mouseExit (const MouseEvent& event) override;
-    void mouseDown (const MouseEvent& event) override;
-    void mouseUp (const MouseEvent& event) override;
-    void mouseDrag (const MouseEvent& event) override;
-    void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
+    template <class T>
+    static const T& resolveTheme (const T* instanceTheme = nullptr)
+    {
+        return instanceTheme != nullptr
+            ? *instanceTheme
+            : std::get<T>(getGlobalThemeInstance()->componentThemes);
+    }
+
+    //==============================================================================
+    void setDefaultFont (Font font);
+    const Font& getDefaultFont() const;
+
+    //==============================================================================
+    static void setGlobalTheme (ApplicationTheme::Ptr s);
+    static ApplicationTheme::ConstPtr getGlobalTheme();
 
 private:
-    void sendValueChanged();
+    static ApplicationTheme::Ptr& getGlobalThemeInstance();
 
-    Theme::Ptr theme;
+    std::tuple<
+        Slider::Theme
+    > componentThemes;
 
-    Point<float> origin;
-    float value = 0.0f;
-    int index = 0;
-    bool isMouseOverSlider = false;
+    Font defaultFont;
+
+    JUCE_LEAK_DETECTOR (ApplicationTheme)
 };
 
 } // namespace yup
