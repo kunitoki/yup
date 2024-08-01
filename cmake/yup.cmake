@@ -390,6 +390,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
 
     _yup_glob_recurse ("${module_path}/clap/*" all_module_files_clap)
     target_sources (${custom_target_name} PRIVATE ${all_module_files_clap})
+    source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
     set_source_files_properties (${all_module_files_clap} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 endfunction()
@@ -546,6 +547,7 @@ function (yup_add_module module_path)
 
     _yup_glob_recurse ("${module_path}/*" all_module_files)
     target_sources (${module_name} PRIVATE ${all_module_files})
+    source_group (TREE ${module_path}/ FILES ${all_module_files})
     set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 
     # ==== Setup parent scope variables
