@@ -31,8 +31,8 @@ public:
     Font() = default;
 
     //==============================================================================
-    Font (const MemoryBlock& fontBytes, rive::Factory* factory);
-    Font (const File& fontFile, rive::Factory* factory);
+    Font (const MemoryBlock& fontBytes);
+    Font (const File& fontFile);
 
     //==============================================================================
     /** Copy and move constructors and assignment operators. */
@@ -42,10 +42,10 @@ public:
     Font& operator= (Font&& other) noexcept = default;
 
     //==============================================================================
-    Result loadFromData (const MemoryBlock& fontBytes, rive::Factory* factory);
+    Result loadFromData (const MemoryBlock& fontBytes);
 
     //==============================================================================
-    Result loadFromFile (const File& fontFile, rive::Factory* factory);
+    Result loadFromFile (const File& fontFile);
 
     //==============================================================================
     rive::rcp<rive::Font> getFont() const;

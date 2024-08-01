@@ -54,6 +54,8 @@
 #include <rive/file.hpp>
 #include <rive/static_scene.hpp>
 
+#include <tuple>
+
 //==============================================================================
 
 #include "application/yup_Application.h"
@@ -70,3 +72,8 @@
 #include "widgets/yup_Slider.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
+
+//==============================================================================
+
+#include "themes/yup_ApplicationTheme.h"
+#include "themes/theme_v1/yup_ThemeVersion1.h"

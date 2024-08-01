@@ -27,7 +27,7 @@ class JUCE_API Slider : public Component
 {
 public:
     //==============================================================================
-    Slider (StringRef componentID, const Font& font);
+    Slider (StringRef componentID);
 
     //==============================================================================
     void setValue (float newValue);
@@ -36,6 +36,28 @@ public:
     virtual void valueChanged();
 
     std::function<void (float)> onValueChanged;
+
+    //==============================================================================
+
+    bool isMouseOver() const;
+
+    //==============================================================================
+
+    struct Theme : ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<const Theme>;
+
+        Theme() = default;
+
+        Theme (std::function<void (Graphics&, const Slider&)> p)
+            : onPaint (std::move (p))
+        {
+        }
+
+        std::function<void (Graphics&, const Slider&)> onPaint;
+    };
+
+    void setTheme (Theme::Ptr newTheme);
 
     //==============================================================================
     void resized() override;
@@ -48,23 +70,14 @@ public:
     void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
 
 private:
-    void updateRenderItems (bool forceAll);
     void sendValueChanged();
 
-    struct
-    {
-        Path backgroundPath;
-        Path backgroundArc;
-        Path foregroundArc;
-        Path foregroundLine;
-        StyledText text;
-    };
+    Theme::Ptr theme;
 
     Point<float> origin;
-    const Font& font;
     float value = 0.0f;
     int index = 0;
-    bool isInside = false;
+    bool isMouseOverSlider = false;
 };
 
 } // namespace yup

@@ -24,47 +24,51 @@ namespace yup
 
 //==============================================================================
 
-Font::Font (const MemoryBlock& fontBytes)
+ApplicationTheme::ApplicationTheme()
 {
-    loadFromData (fontBytes);
-}
-
-Font::Font (const File& fontFile)
-{
-    loadFromFile (fontFile);
 }
 
 //==============================================================================
 
-Result Font::loadFromData (const MemoryBlock& fontBytes)
+void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
 {
-    font = HBFont::Decode (rive::Span<const uint8_t> { static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize() });
-    return font ? Result::ok() : Result::fail ("Unable to load font");
+    getGlobalThemeInstance() = std::move (s);
 }
 
-Result Font::loadFromFile (const File& fontFile)
+ApplicationTheme::ConstPtr ApplicationTheme::getGlobalTheme()
 {
-    if (! fontFile.existsAsFile())
-        return Result::fail ("Unable to load font from non existing file");
+    return getGlobalThemeInstance();
+}
 
-    if (auto is = fontFile.createInputStream(); is != nullptr && is->openedOk())
-    {
-        yup::MemoryBlock mb;
-        is->readIntoMemoryBlock (mb);
-
-        font = HBFont::Decode (rive::Span<const uint8_t> { static_cast<const uint8_t*> (mb.getData()), mb.getSize() });
-        if (! font)
-            return Result::fail ("Unable to load font");
-    }
-
-    return Result::ok();
+ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
+{
+    static ApplicationTheme::Ptr globalTheme;
+    return globalTheme;
 }
 
 //==============================================================================
 
-rive::rcp<rive::Font> Font::getFont() const
+Color ApplicationTheme::findColor (const Identifier& colorId)
 {
-    return font;
+    auto it = getGlobalThemeInstance()->defaultColors.find (colorId);
+    return it != getGlobalThemeInstance()->defaultColors.end() ? it->second : Color();
+}
+
+void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
+{
+    defaultColors.insert_or_assign (colorId, color);
+}
+
+//==============================================================================
+
+void ApplicationTheme::setDefaultFont (Font font)
+{
+    defaultFont = std::move (font);
+}
+
+const Font& ApplicationTheme::getDefaultFont() const
+{
+    return defaultFont;
 }
 
 } // namespace yup

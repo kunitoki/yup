@@ -88,7 +88,7 @@ public:
         This is done automatically by the smart pointer, but is public just
         in case it's needed for nefarious purposes.
     */
-    void incReferenceCount() noexcept
+    void incReferenceCount() const noexcept
     {
         ++refCount;
     }
@@ -96,7 +96,7 @@ public:
     /** Decreases the object's reference count.
         If the count gets to zero, the object will be deleted.
     */
-    void decReferenceCount() noexcept
+    void decReferenceCount() const noexcept
     {
         jassert (getReferenceCount() > 0);
 
@@ -108,7 +108,7 @@ public:
         If the count gets to zero, the object will not be deleted, but this method
         will return true, allowing the caller to take care of deletion.
     */
-    bool decReferenceCountWithoutDeleting() noexcept
+    bool decReferenceCountWithoutDeleting() const noexcept
     {
         jassert (getReferenceCount() > 0);
         return --refCount == 0;
@@ -144,14 +144,14 @@ protected:
     /** Resets the reference count to zero without deleting the object.
         You should probably never need to use this!
     */
-    void resetReferenceCount() noexcept
+    void resetReferenceCount() const noexcept
     {
         refCount = 0;
     }
 
 private:
     //==============================================================================
-    Atomic<int> refCount { 0 };
+    mutable Atomic<int> refCount { 0 };
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
 };
 
@@ -177,7 +177,7 @@ public:
         This is done automatically by the smart pointer, but is public just
         in case it's needed for nefarious purposes.
     */
-    void incReferenceCount() noexcept
+    void incReferenceCount() const noexcept
     {
         ++refCount;
     }
@@ -185,7 +185,7 @@ public:
     /** Decreases the object's reference count.
         If the count gets to zero, the object will be deleted.
     */
-    void decReferenceCount() noexcept
+    void decReferenceCount() const noexcept
     {
         jassert (getReferenceCount() > 0);
 
@@ -197,7 +197,7 @@ public:
         If the count gets to zero, the object will not be deleted, but this method
         will return true, allowing the caller to take care of deletion.
     */
-    bool decReferenceCountWithoutDeleting() noexcept
+    bool decReferenceCountWithoutDeleting() const noexcept
     {
         jassert (getReferenceCount() > 0);
         return --refCount == 0;
@@ -232,7 +232,7 @@ protected:
 
 private:
     //==============================================================================
-    int refCount = 0;
+    mutable int refCount = 0;
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
 };
 
