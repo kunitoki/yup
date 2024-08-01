@@ -147,3 +147,17 @@ private:
 };
 
 } // namespace juce
+
+namespace std {
+
+template <>
+class hash<juce::Identifier>
+{
+public:
+    size_t operator()(const juce::Identifier& identifier) const
+    {
+        return static_cast<size_t> (*reinterpret_cast<uintptr_t*> (identifier.getCharPointer().getAddress()));
+    }
+};
+
+} // namespace std
