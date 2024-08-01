@@ -517,7 +517,7 @@ void Component::setColor (const Identifier& colorId, const std::optional<Color>&
 std::optional<Color> Component::getColor (const Identifier& colorId) const
 {
     if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
-        return Color (static_cast<uint32> (static_cast<int64>(*color)));
+        return Color (static_cast<uint32> (static_cast<int64> (*color)));
 
     return std::nullopt;
 }
