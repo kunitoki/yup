@@ -38,11 +38,13 @@
 */
 
 #ifdef JUCE_AUDIO_DEVICES_H_INCLUDED
-    /** When you add this cpp file to your project, you mustn't include it in a file where you've
+// clang-format off
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
 */
+// clang-format on
 #error "Incorrect use of JUCE cpp file"
 #endif
 
@@ -115,7 +117,8 @@
 #endif
 
 #if JUCE_USE_WINRT_MIDI && (JUCE_MSVC || JUCE_CLANG)
-        /* If you cannot find any of the header files below then you are probably
+// clang-format off
+/* If you cannot find any of the header files below then you are probably
    attempting to use the Windows 10 Bluetooth Low Energy API. For this to work you
    need to install version 10.0.14393.0 of the Windows Standalone SDK and you may
    need to add the path to the WinRT headers to your build system. This path should
@@ -124,6 +127,7 @@
    Also please note that Microsoft's Bluetooth MIDI stack has multiple issues, so
    this API is EXPERIMENTAL - use at your own risk!
 */
+// clang-format on
 #include <windows.devices.h>
 #include <windows.devices.midi.h>
 #include <windows.devices.enumeration.h>
@@ -141,7 +145,8 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "native/juce_Midi_windows.cpp"
 
 #if JUCE_ASIO
-        /* This is very frustrating - we only need to use a handful of definitions from
+// clang-format off
+/* This is very frustrating - we only need to use a handful of definitions from
    a couple of the header files in Steinberg's ASIO SDK, and it'd be easy to copy
    about 30 lines of code into this cpp file to create a fully stand-alone ASIO
    implementation...
@@ -160,6 +165,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
       comes with the SDK. (Only about a handful of the SDK header files are actually
       needed - so to simplify things, you could just copy these into your JUCE directory).
 */
+// clang-format on
 #include <iasiodrv.h>
 #include "native/juce_ASIO_windows.cpp"
 #endif
@@ -182,7 +188,8 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 #if JUCE_JACK
-        /* Got an include error here? If so, you've either not got jack-audio-connection-kit
+// clang-format off
+/* Got an include error here? If so, you've either not got jack-audio-connection-kit
    installed, or you've not got your paths set up correctly to find its header files.
 
    The package you need to install to get JACK support is "libjack-dev".
@@ -190,6 +197,7 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
    If you don't have the jack-audio-connection-kit library and don't want to build
    JUCE with low latency audio support, just set the JUCE_JACK flag to 0.
 */
+// clang-format on
 #include <jack/jack.h>
 #include "native/juce_JackAudio_linux.cpp"
 #endif
