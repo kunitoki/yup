@@ -55,13 +55,13 @@ public:
 
         yup::File fontFilePath = dataPath.getChildFile ("Roboto-Regular.ttf");
 
-        if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
+        if (auto result = font.loadFromFile (fontFilePath); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
         setTitle ("main");
 
         for (int i = 0; i < totalRows * totalColumns; ++i)
-            addAndMakeVisible (sliders.add (std::make_unique<yup::Slider> (yup::String (i), font)));
+            addAndMakeVisible (sliders.add (std::make_unique<yup::Slider> (yup::String (i))));
 
         //button = std::make_unique<yup::TextButton> ("xyz", font);
         //addAndMakeVisible (*button);
