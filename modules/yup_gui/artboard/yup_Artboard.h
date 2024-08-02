@@ -37,7 +37,14 @@ public:
     void setPaused (bool shouldPause);
 
     //==============================================================================
+    void setBoolInput (const String& name, bool value);
     void setNumberInput (const String& name, double value);
+    void triggerInput (const String& name);
+
+    //==============================================================================
+    var getAllInputs (int stateMachineIndex) const;
+    void setAllInputs (int stateMachineIndex, const var& value);
+    void setInput (int stateMachineIndex, const String& state, const var& value);
 
     //==============================================================================
     void addHorizontalRepeats (int repeatsToAdd);

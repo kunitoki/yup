@@ -78,12 +78,34 @@ void Artboard::setPaused (bool shouldPause)
 
 //==============================================================================
 
+void Artboard::setBoolInput (const String& name, bool value)
+{
+    for (const auto& scene : scenes)
+    {
+        if (auto boolInput = scene->getBool (name.toStdString()))
+            boolInput->value (value);
+    }
+
+    repaint();
+}
+
 void Artboard::setNumberInput (const String& name, double value)
 {
     for (const auto& scene : scenes)
     {
         if (auto numberInput = scene->getNumber (name.toStdString()))
             numberInput->value (static_cast<float> (value));
+    }
+
+    repaint();
+}
+
+void Artboard::triggerInput (const String& name)
+{
+    for (const auto& scene : scenes)
+    {
+        if (auto triggerInput = scene->getTrigger (name.toStdString()))
+            triggerInput->fire();
     }
 
     repaint();
@@ -354,6 +376,83 @@ void Artboard::pullEventsFromStateMachines()
                 eventProperties.set (eventName, newValue);
                 propertyChanged (eventName, String (child->name()), oldValue, newValue);
             }
+        }
+    }
+}
+
+//==============================================================================
+
+var Artboard::getAllInputs (int stateMachineIndex) const
+{
+    if (! isPositiveAndBelow (stateMachineIndex, static_cast<int> (stateMachines.size())))
+        return {};
+
+    const auto* stateMachine = stateMachines[static_cast<std::size_t> (stateMachineIndex)];
+
+    Array<var> stateMachineInputs;
+
+    for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
+    {
+        auto inputObject = stateMachine->input (inputIndex);
+
+        DynamicObject::Ptr object = new DynamicObject;
+        object->setProperty ("id", String (inputObject->name()));
+
+        if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        {
+            object->setProperty ("type", "trigger");
+        }
+        else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
+        {
+            object->setProperty ("type", "boolean");
+            object->setProperty ("value", boolean->value());
+        }
+        else if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
+        {
+            object->setProperty ("type", "number");
+            object->setProperty ("value", number->value());
+        }
+
+        stateMachineInputs.add (var (object.get()));
+    }
+
+    return stateMachineInputs;
+}
+
+void Artboard::setAllInputs (int stateMachineIndex, const var& value)
+{
+}
+
+//==============================================================================
+
+void Artboard::setInput (int stateMachineIndex, const String& inputName, const var& value)
+{
+    if (! isPositiveAndBelow (stateMachineIndex, static_cast<int> (stateMachines.size())))
+        return;
+
+    const auto* stateMachine = stateMachines[static_cast<std::size_t> (stateMachineIndex)];
+
+    for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
+    {
+        auto inputObject = stateMachine->input (inputIndex);
+
+        if (StringRef (inputObject->name()) != inputName)
+            continue;
+
+        if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        {
+            trigger->fire();
+            break;
+        }
+        else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
+        {
+            boolean->value (static_cast<bool> (value));
+            break;
+        }
+        else if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
+        {
+            number->value (static_cast<float> (value));
+            break;
         }
     }
 }
