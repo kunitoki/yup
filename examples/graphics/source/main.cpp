@@ -129,6 +129,10 @@ public:
 
     void mouseExit (const yup::MouseEvent& event) override
     {
+
+    void mouseDoubleClick (const yup::MouseEvent& event) override
+    {
+        DBG ("mouseDoubleClick");
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override

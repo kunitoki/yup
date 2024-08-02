@@ -403,6 +403,7 @@ private:
 
     int keyState[GLFW_KEY_LAST] = {};
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
+    Time lastButtonDownTime;
     KeyModifiers currentKeyModifiers;
 
     float desiredFrameRate = 60.0f;
@@ -1028,10 +1029,25 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     {
         lastMouseDownPosition = localPosition;
 
-        lastComponentClicked->internalMouseDown (event
-                                                     .withSourceComponent (lastComponentClicked)
-                                                 //.withSourcePosition (lastMouseDownPosition)
-        );
+        const auto currentMouseDownTime = Time::getCurrentTime();
+
+        if (lastButtonDownTime.currentTimeMillis() > 0
+            && currentMouseDownTime - lastButtonDownTime < RelativeTime::milliseconds (200))
+        {
+            lastComponentClicked->internalMouseDoubleClick (
+                event.withSourceComponent (lastComponentClicked)
+                //.withSourcePosition (lastMouseDownPosition)
+            );
+        }
+        else
+        {
+            lastComponentClicked->internalMouseDown (
+                event.withSourceComponent (lastComponentClicked)
+                //.withSourcePosition (lastMouseDownPosition)
+            );
+        }
+
+        lastButtonDownTime = currentMouseDownTime;
     }
 
     lastMouseMovePosition = localPosition;
