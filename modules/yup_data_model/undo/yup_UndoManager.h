@@ -49,10 +49,30 @@ public:
     //==============================================================================
     /**
         Creates a new UndoManager and starts the timer.
-
-        @param maxHistorySize The maximum number of items to keep in the history. Default is 100.
     */
-    UndoManager (int maxHistorySize = 100);
+    UndoManager();
+
+    /**
+        Creates a new UndoManager and starts the timer.
+
+        @param maxHistorySize The maximum number of items to keep in the history.
+    */
+    UndoManager (int maxHistorySize);
+
+    /**
+        Creates a new UndoManager and starts the timer.
+
+        @param actionGroupThreshold The time used to coalesce actions in the same transaction.
+    */
+    UndoManager (RelativeTime actionGroupThreshold);
+
+    /**
+        Creates a new UndoManager and starts the timer.
+
+        @param maxHistorySize The maximum number of items to keep in the history.
+        @param actionGroupThreshold The time used to coalesce actions in the same transaction.
+    */
+    UndoManager (int maxHistorySize, RelativeTime actionGroupThreshold);
 
     //==============================================================================
     /**
@@ -66,25 +86,6 @@ public:
 
     //==============================================================================
     /**
-        @brief A type alias for an action callback function.
-
-        This type alias represents a std::function that takes a reference to a WeakReferenceable object
-        and an UndoableActionState object as parameters, and returns a boolean value.
-
-        The callback function is used by the UndoManager to perform an undoable action on a WeakReferenceable
-        object. It should return true if the action was successfully performed, and false otherwise.
-
-        @tparam WeakReferenceable The type of the object that can be weakly referenced.
-
-        @param referenceable A reference to the WeakReferenceable object on which the action should be performed.
-        @param actionState The state of the undoable action.
-
-        @return true if the action was successfully performed, false otherwise.
-    */
-    template <class WeakReferenceable>
-    using ActionCallback = std::function<bool (WeakReferenceable&, UndoableActionState)>;
-
-    /**
         Adds a new action to the timeline and performs its `redo` method.
 
         This method allows you to create an action using a weak referenceable object and a lambda
@@ -92,24 +93,54 @@ public:
 
         @tparam T The type of the object.
 
-        @param obj The object to be used in the action.
+        @param object The object to be used in the action.
         @param f The lambda function to be performed.
 
         @return true if the action was added and performed successfully, false otherwise.
     */
-    template <class T>
-    bool perform (T& obj, const ActionCallback<T>& f)
+    template <class T, class F>
+    bool perform (T object, F&& function)
     {
-        return perform (new Item<T> (obj, f));
+        static_assert (std::is_base_of_v<ReferenceCountedObject, typename T::ReferencedType>);
+
+        return perform (new Item<typename T::ReferencedType> (object, std::forward<F> (function)));
     }
 
     //==============================================================================
+    /**
+        Begins a new transaction.
+    */
+    void beginNewTransaction();
+
+    /**
+        Begins a new transaction with a given name.
+
+        @param transactionName The name of the transaction.
+    */
+    void beginNewTransaction (StringRef transactionName);
+
+    //==============================================================================
+    /**
+        Check if undo action can be performed.
+
+        @return true if an undo action can be performed, false otherwise.
+    */
+    bool canUndo() const;
+
     /**
         Reverses the action in the current timeline position.
 
         @return true if an action was reversed, false otherwise.
     */
     bool undo();
+
+    //==============================================================================
+    /**
+        Check if redo action can be performed.
+
+        @return true if a redo action can be performed, false otherwise.
+    */
+    bool canRedo() const;
 
     /**
         Performs the action in the current timeline position.
@@ -165,6 +196,14 @@ public:
         ScopedTransaction (UndoManager& undoManager);
 
         /**
+            Constructs a ScopedTransaction object.
+
+            @param undoManager The UndoManager to be used.
+            @param transactionName The name of the transaction.
+        */
+        ScopedTransaction (UndoManager& undoManager, StringRef transactionName);
+
+        /**
             Destructs the ScopedTransaction object.
         */
         ~ScopedTransaction();
@@ -176,9 +215,11 @@ public:
 private:
     template <class T>
     struct Item : public UndoableAction
-    {
-        Item (T& obj, std::function<bool (T&, UndoableActionState)> function)
-            : object (std::addressof (object))
+	{
+        using PerformCallback = std::function<bool(typename T::Ptr, UndoableActionState)>;
+
+        Item (typename T::Ptr object, PerformCallback function)
+            : object (object)
             , function (std::move (function))
         {
             jassert (function != nullptr);
@@ -186,34 +227,44 @@ private:
 
         bool perform (UndoableActionState stateToPerform) override
         {
-            if (object.wasObjectDeleted())
+	        if (object.wasObjectDeleted())
                 return false;
 
             return function (*object, stateToPerform);
         }
 
-        bool isValid() const override
+        bool isEmpty() const override
         {
-            return ! object.wasObjectDeleted();
+	        return !object.wasObjectDeleted();
         }
 
     private:
         WeakReference<T> object;
-        std::function<bool (T&, bool)> function;
-    };
+		PerformCallback function;
+	};
 
-    struct CoalescedItem : public UndoableAction
+    struct Transaction : public UndoableAction
     {
-        using Ptr = ReferenceCountedObjectPtr<CoalescedItem>;
+        using Ptr = ReferenceCountedObjectPtr<Transaction>;
 
-        CoalescedItem() = default;
+        Transaction() = default;
+
+        explicit Transaction (StringRef name)
+            : transactionName (name)
+        {
+        }
 
         void add (UndoableAction::Ptr action);
+        int size() const;
+
+        String getTransactionName() const;
+        void setTransactionName (StringRef newName);
 
         bool perform (UndoableActionState stateToPerform) override;
-        bool isValid() const override;
+        bool isEmpty() const override;
 
     private:
+        String transactionName;
         ReferenceCountedArray<UndoableAction> childItems;
     };
 
@@ -222,16 +273,19 @@ private:
     /** @internal */
     bool internalPerform (UndoableActionState stateToPerform);
     /** @internal */
-    bool flushCurrentAction();
+    bool flushCurrentTransaction();
 
     int maxHistorySize;
+    RelativeTime actionGroupThreshold;
 
     UndoableAction::List undoHistory;
-    CoalescedItem::Ptr currentlyBuiltAction;
+    Transaction::Ptr currentTransaction;
 
     // the position in the timeline for the next actions.
     int nextUndoAction = -1;
     int nextRedoAction = -1;
+
+    bool isUndoEnabled = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoManager)
 };

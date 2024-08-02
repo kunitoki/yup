@@ -64,7 +64,7 @@ public:
 
         @return True if the action is valid, false otherwise.
     */
-    virtual bool isValid() const = 0;
+    virtual bool isEmpty() const = 0;
 
     /**
         @brief Performs the undo action.

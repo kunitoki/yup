@@ -40,7 +40,13 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 # ==== Create executable
 set (target_name yup_tests)
 set (target_version "1.0.0")
-set (target_modules juce_core juce_events juce_audio_basics juce_audio_devices)
+set (target_modules
+    juce_core
+    juce_events
+    juce_audio_basics
+    juce_audio_devices
+    yup_data_model
+    yup_graphics)
 
 enable_testing()
 

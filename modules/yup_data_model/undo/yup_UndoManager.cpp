@@ -24,13 +24,28 @@ namespace yup
 
 //==============================================================================
 
-void UndoManager::CoalescedItem::add (UndoableAction::Ptr action)
+void UndoManager::Transaction::add (UndoableAction::Ptr action)
 {
     if (action != nullptr)
         childItems.add (action);
 }
 
-bool UndoManager::CoalescedItem::perform (UndoableActionState stateToPerform)
+int UndoManager::Transaction::size() const
+{
+    return childItems.size();
+}
+
+String UndoManager::Transaction::getTransactionName() const
+{
+    return transactionName;
+}
+
+void UndoManager::Transaction::setTransactionName (StringRef newName)
+{
+    transactionName = newName;
+}
+
+bool UndoManager::Transaction::perform (UndoableActionState stateToPerform)
 {
     if (stateToPerform == UndoableActionState::Undo)
     {
@@ -49,10 +64,10 @@ bool UndoManager::CoalescedItem::perform (UndoableActionState stateToPerform)
         }
     }
 
-    return ! childItems.isEmpty();
+    return ! isEmpty();
 }
 
-bool UndoManager::CoalescedItem::isValid() const
+bool UndoManager::Transaction::isEmpty() const
 {
     return childItems.isEmpty();
 }
@@ -62,20 +77,48 @@ bool UndoManager::CoalescedItem::isValid() const
 UndoManager::ScopedTransaction::ScopedTransaction (UndoManager& undoManager)
     : undoManager (undoManager)
 {
-    undoManager.flushCurrentAction();
+    undoManager.beginNewTransaction();
+}
+
+UndoManager::ScopedTransaction::ScopedTransaction (UndoManager& undoManager, StringRef transactionName)
+    : undoManager (undoManager)
+{
+    undoManager.beginNewTransaction (transactionName);
 }
 
 UndoManager::ScopedTransaction::~ScopedTransaction()
 {
-    undoManager.flushCurrentAction();
+    undoManager.flushCurrentTransaction();
 }
 
 //==============================================================================
 
+UndoManager::UndoManager()
+    : maxHistorySize (100)
+    , actionGroupThreshold (RelativeTime::milliseconds (500))
+{
+	setEnabled (true);
+}
+
 UndoManager::UndoManager (int maxHistorySize)
     : maxHistorySize (maxHistorySize)
+    , actionGroupThreshold (RelativeTime::milliseconds (500))
 {
-    setEnabled (true);
+	setEnabled (true);
+}
+
+UndoManager::UndoManager (RelativeTime actionGroupThreshold)
+    : maxHistorySize (100)
+    , actionGroupThreshold (actionGroupThreshold)
+{
+	setEnabled (true);
+}
+
+UndoManager::UndoManager (int maxHistorySize, RelativeTime actionGroupThreshold)
+    : maxHistorySize (maxHistorySize)
+    , actionGroupThreshold (actionGroupThreshold)
+{
+	setEnabled (true);
 }
 
 //==============================================================================
@@ -84,107 +127,151 @@ bool UndoManager::perform (UndoableAction::Ptr action)
 {
     jassert (action != nullptr);
 
-    if (action->perform (UndoableActionState::Redo))
-    {
-        currentlyBuiltAction->add (action);
-        return true;
-    }
+    if (! isEnabled())
+        return false;
 
-    return false;
+	if (action->perform (UndoableActionState::Redo))
+	{
+        if (currentTransaction == nullptr)
+            beginNewTransaction();
+
+		currentTransaction->add (action);
+
+		return true;
+	}
+
+	return false;
 }
 
 //==============================================================================
 
+void UndoManager::beginNewTransaction()
+{
+    beginNewTransaction ({});
+}
+
+void UndoManager::beginNewTransaction (StringRef transactionName)
+{
+    flushCurrentTransaction();
+
+    if (currentTransaction == nullptr)
+        currentTransaction = new Transaction (transactionName);
+
+    else if (currentTransaction->isEmpty())
+        currentTransaction->setTransactionName (transactionName);
+}
+
+//==============================================================================
+
+bool UndoManager::canUndo() const
+{
+    return
+        (currentTransaction != nullptr && ! currentTransaction->isEmpty())
+        || isPositiveAndBelow (nextUndoAction, undoHistory.size());
+}
+
 bool UndoManager::undo()
 {
-    return internalPerform (UndoableActionState::Undo);
+	return internalPerform (UndoableActionState::Undo);
+}
+
+bool UndoManager::canRedo() const
+{
+    return
+        (currentTransaction != nullptr && ! currentTransaction->isEmpty())
+        || isPositiveAndBelow (nextRedoAction, undoHistory.size());
 }
 
 bool UndoManager::redo()
 {
-    return internalPerform (UndoableActionState::Redo);
+	return internalPerform (UndoableActionState::Redo);
 }
 
 //==============================================================================
 
 void UndoManager::setEnabled (bool shouldBeEnabled)
 {
-    if (isEnabled() != shouldBeEnabled)
-    {
-        if (shouldBeEnabled)
-        {
-            startTimer (500);
+	if (isEnabled() != shouldBeEnabled)
+	{
+        isUndoEnabled = shouldBeEnabled;
 
-            currentlyBuiltAction = new CoalescedItem;
-        }
-        else
-        {
-            stopTimer();
+		if (shouldBeEnabled)
+		{
+            if (actionGroupThreshold > RelativeTime())
+                startTimer (static_cast<int> (actionGroupThreshold.inMilliseconds()));
+		}
+		else
+		{
+            if (actionGroupThreshold > RelativeTime())
+                stopTimer();
 
-            currentlyBuiltAction = nullptr;
+            flushCurrentTransaction();
 
-            undoHistory.clear();
-        }
-    }
+			undoHistory.clear();
+		}
+	}
 }
 
 bool UndoManager::isEnabled() const
 {
-    return isTimerRunning();
+    return isUndoEnabled;
 }
 
 //==============================================================================
 
 void UndoManager::timerCallback()
 {
-    flushCurrentAction();
+	beginNewTransaction();
 }
 
 //==============================================================================
 
 bool UndoManager::internalPerform (UndoableActionState stateToPerform)
 {
-    flushCurrentAction();
+	flushCurrentTransaction();
 
-    auto& actionIndex = (stateToPerform == UndoableActionState::Undo) ? nextUndoAction : nextRedoAction;
+	auto actionIndex = (stateToPerform == UndoableActionState::Undo) ? nextUndoAction : nextRedoAction;
+    if (! isPositiveAndBelow(actionIndex, undoHistory.size()))
+        return false;
 
-    if (auto current = undoHistory[actionIndex])
+    auto current = undoHistory[actionIndex];
+    if (current == nullptr)
+        return false;
+
+    auto result = current->perform (stateToPerform);
+    if (result)
     {
-        current->perform (stateToPerform);
-
         const auto delta = (stateToPerform == UndoableActionState::Undo) ? -1 : 1;
         nextUndoAction += delta;
         nextRedoAction += delta;
-
-        return true;
     }
 
-    return false;
+    return result;
 }
 
 //==============================================================================
 
-bool UndoManager::flushCurrentAction()
+bool UndoManager::flushCurrentTransaction()
 {
-    if (! currentlyBuiltAction->isValid())
-        return false;
+	if (currentTransaction == nullptr || currentTransaction->isEmpty())
+		return false;
 
-    // Remove all future actions
-    if (nextRedoAction < undoHistory.size())
-        undoHistory.removeRange (nextRedoAction, undoHistory.size() - nextRedoAction);
+	// Remove all future actions
+	if (nextRedoAction < undoHistory.size())
+		undoHistory.removeRange (nextRedoAction, undoHistory.size() - nextRedoAction);
 
-    undoHistory.add (currentlyBuiltAction.get());
-    currentlyBuiltAction = new CoalescedItem;
+	undoHistory.add (currentTransaction.get());
+    currentTransaction = nullptr;
 
-    // Clean up to keep the undo history in check
-    const int numToRemove = jmax (0, undoHistory.size() - maxHistorySize);
-    if (numToRemove > 0)
-        undoHistory.removeRange (0, numToRemove);
+	// Clean up to keep the undo history in check
+	const int numToRemove = jmax (0, undoHistory.size() - maxHistorySize);
+	if (numToRemove > 0)
+		undoHistory.removeRange (0, numToRemove);
 
-    nextUndoAction = undoHistory.size() - 1;
-    nextRedoAction = undoHistory.size();
+	nextUndoAction = undoHistory.size() - 1;
+	nextRedoAction = undoHistory.size();
 
-    return true;
+	return true;
 }
 
 } // namespace yup
