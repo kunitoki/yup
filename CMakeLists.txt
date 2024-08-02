@@ -51,6 +51,7 @@ yup_add_module (modules/juce_audio_devices)
 # New yup modules
 yup_add_module (modules/yup_audio_processors)
 yup_add_module (modules/yup_audio_plugin_client)
+yup_add_module (modules/yup_data_model)
 yup_add_module (modules/yup_graphics)
 yup_add_module (modules/yup_gui)
 
