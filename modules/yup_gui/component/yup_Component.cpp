@@ -525,6 +525,8 @@ void Component::mouseDrag (const MouseEvent& event) {}
 
 void Component::mouseUp (const MouseEvent& event) {}
 
+void Component::mouseDoubleClick (const MouseEvent& event) {}
+
 void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
@@ -622,6 +624,14 @@ void Component::internalMouseUp (const MouseEvent& event)
         return;
 
     mouseUp (event);
+}
+
+void Component::internalMouseDoubleClick (const MouseEvent& event)
+{
+    if (! isVisible())
+        return;
+
+    mouseDoubleClick (event);
 }
 
 void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
