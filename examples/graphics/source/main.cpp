@@ -190,7 +190,7 @@ public:
         //renderReady.wait();
     }
 
-    void audioDeviceAboutToStart (yup::AudioIODevice * device) override
+    void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
         DBG ("audioDeviceAboutToStart");
 
