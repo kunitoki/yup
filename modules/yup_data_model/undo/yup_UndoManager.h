@@ -82,7 +82,7 @@ public:
         @return true if the action was successfully performed, false otherwise.
     */
     template <class WeakReferenceable>
-    using ActionCallback = std::function<bool(WeakReferenceable&, UndoableActionState)>;
+    using ActionCallback = std::function<bool (WeakReferenceable&, UndoableActionState)>;
 
     /**
         Adds a new action to the timeline and performs its `redo` method.
@@ -176,8 +176,8 @@ public:
 private:
     template <class T>
     struct Item : public UndoableAction
-	{
-        Item (T& obj, std::function<bool(T&, UndoableActionState)> function)
+    {
+        Item (T& obj, std::function<bool (T&, UndoableActionState)> function)
             : object (std::addressof (object))
             , function (std::move (function))
         {
@@ -186,7 +186,7 @@ private:
 
         bool perform (UndoableActionState stateToPerform) override
         {
-	        if (object.wasObjectDeleted())
+            if (object.wasObjectDeleted())
                 return false;
 
             return function (*object, stateToPerform);
@@ -194,13 +194,13 @@ private:
 
         bool isValid() const override
         {
-	        return !object.wasObjectDeleted();
+            return ! object.wasObjectDeleted();
         }
 
     private:
         WeakReference<T> object;
-		std::function<bool(T&, bool)> function;
-	};
+        std::function<bool (T&, bool)> function;
+    };
 
     struct CoalescedItem : public UndoableAction
     {
