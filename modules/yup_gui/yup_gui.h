@@ -33,7 +33,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_events
+    dependencies:       juce_events yup_data_model
     OSXFrameworks:      Metal
     iOSFrameworks:      Metal
     enableARC:          1
@@ -48,6 +48,7 @@
 
 #include <juce_events/juce_events.h>
 
+#include <yup_data_model/yup_data_model.h>
 #include <yup_graphics/yup_graphics.h>
 
 #include <rive/artboard.hpp>
