@@ -362,6 +362,7 @@ public:
     void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
+    void handleTextInput (const String& textInput);
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
@@ -379,6 +380,7 @@ public:
     static void glfwMousePress (GLFWwindow* window, int button, int action, int mods);
     static void glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset);
     static void glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void glfwTextInput (GLFWwindow* window, unsigned int codePoint);
 
 private:
     void updateComponentUnderMouse (const MouseEvent& event);
@@ -487,6 +489,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     glfwSetMouseButtonCallback (window, glfwMousePress);
     glfwSetScrollCallback (window, glfwMouseScroll);
     glfwSetKeyCallback (window, glfwKeyPress);
+    glfwSetCharCallback (window, glfwTextInput);
 
     setBounds (
         { screenBounds.getX(),
@@ -1110,6 +1113,14 @@ void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 //==============================================================================
 
+void GLFWComponentNative::handleTextInput (const String& textInput)
+{
+    if (lastComponentFocused != nullptr)
+        lastComponentFocused->internalTextInput (textInput);
+}
+
+//==============================================================================
+
 void GLFWComponentNative::handleMoved (int xpos, int ypos)
 {
     component.internalMoved (xpos, ypos, getScaleDpi());
@@ -1254,6 +1265,16 @@ void GLFWComponentNative::glfwKeyPress (GLFWwindow* window, int key, int scancod
     }
 }
 
+void GLFWComponentNative::glfwTextInput (GLFWwindow* window, unsigned int codePoint)
+{
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    auto newCodePoint = static_cast<CharPointer_UTF32::CharType> (codePoint);
+
+    CharPointer_UTF32 ptr (&newCodePoint);
+
+    nativeComponent->handleTextInput (String::createStringFromData (ptr, sizeof (newCodePoint)));
+}
 //==============================================================================
 
 void Desktop::updateDisplays()

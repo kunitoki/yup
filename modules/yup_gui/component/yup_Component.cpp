@@ -468,15 +468,19 @@ void Component::toBack()
 
 //==============================================================================
 
-void Component::setWantsKeyboardFocus (bool wantsFocus)
+void Component::setWantsKeyboardFocus (KeyboardFocusMode focusMode)
 {
-    options.wantsKeyboardFocus = wantsFocus;
+    options.wantsKeyboardFocus = focusMode != KeyboardFocusMode::wantsNoFocus;
+    options.wantsTextInput = focusMode == KeyboardFocusMode::wantsTextInputCallback;
 }
 
 void Component::takeFocus()
 {
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->setFocusedComponent (this);
+    if (options.wantsKeyboardFocus)
+    {
+	    if (auto nativeComponent = getNativeComponent())
+		    nativeComponent->setFocusedComponent (this);
+    }
 }
 
 void Component::leaveFocus()
@@ -530,6 +534,8 @@ void Component::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel
 void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
+
+void Component::textInput (const String& text) {}
 
 //==============================================================================
 
@@ -646,6 +652,14 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
         return;
 
     keyUp (keys, position);
+}
+
+void Component::internalTextInput (const String& text)
+{
+    if (! isVisible() || ! options.wantsTextInput)
+        return;
+
+    textInput (text);
 }
 
 void Component::internalResized (int width, int height, float scaleDpi)
