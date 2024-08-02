@@ -78,12 +78,34 @@ void Artboard::setPaused (bool shouldPause)
 
 //==============================================================================
 
+void Artboard::setBoolInput (const String& name, bool value)
+{
+    for (const auto& scene : scenes)
+    {
+        if (auto boolInput = scene->getBool (name.toStdString()))
+            boolInput->value (value);
+    }
+
+    repaint();
+}
+
 void Artboard::setNumberInput (const String& name, double value)
 {
     for (const auto& scene : scenes)
     {
         if (auto numberInput = scene->getNumber (name.toStdString()))
             numberInput->value (static_cast<float> (value));
+    }
+
+    repaint();
+}
+
+void Artboard::triggerInput (const String& name)
+{
+    for (const auto& scene : scenes)
+    {
+        if (auto triggerInput = scene->getTrigger (name.toStdString()))
+            triggerInput->fire();
     }
 
     repaint();

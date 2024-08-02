@@ -37,7 +37,9 @@ public:
     void setPaused (bool shouldPause);
 
     //==============================================================================
+    void setBoolInput (const String& name, bool value);
     void setNumberInput (const String& name, double value);
+    void triggerInput (const String& name);
 
     //==============================================================================
     void addHorizontalRepeats (int repeatsToAdd);
