@@ -215,8 +215,8 @@ public:
 private:
     template <class T>
     struct Item : public UndoableAction
-	{
-        using PerformCallback = std::function<bool(typename T::Ptr, UndoableActionState)>;
+    {
+        using PerformCallback = std::function<bool (typename T::Ptr, UndoableActionState)>;
 
         Item (typename T::Ptr object, PerformCallback function)
             : object (object)
@@ -227,7 +227,7 @@ private:
 
         bool perform (UndoableActionState stateToPerform) override
         {
-	        if (object.wasObjectDeleted())
+            if (object.wasObjectDeleted())
                 return false;
 
             return function (*object, stateToPerform);
@@ -235,13 +235,13 @@ private:
 
         bool isEmpty() const override
         {
-	        return !object.wasObjectDeleted();
+            return ! object.wasObjectDeleted();
         }
 
     private:
         WeakReference<T> object;
-		PerformCallback function;
-	};
+        PerformCallback function;
+    };
 
     struct Transaction : public UndoableAction
     {

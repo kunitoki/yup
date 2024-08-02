@@ -97,28 +97,28 @@ UndoManager::UndoManager()
     : maxHistorySize (100)
     , actionGroupThreshold (RelativeTime::milliseconds (500))
 {
-	setEnabled (true);
+    setEnabled (true);
 }
 
 UndoManager::UndoManager (int maxHistorySize)
     : maxHistorySize (maxHistorySize)
     , actionGroupThreshold (RelativeTime::milliseconds (500))
 {
-	setEnabled (true);
+    setEnabled (true);
 }
 
 UndoManager::UndoManager (RelativeTime actionGroupThreshold)
     : maxHistorySize (100)
     , actionGroupThreshold (actionGroupThreshold)
 {
-	setEnabled (true);
+    setEnabled (true);
 }
 
 UndoManager::UndoManager (int maxHistorySize, RelativeTime actionGroupThreshold)
     : maxHistorySize (maxHistorySize)
     , actionGroupThreshold (actionGroupThreshold)
 {
-	setEnabled (true);
+    setEnabled (true);
 }
 
 //==============================================================================
@@ -130,17 +130,17 @@ bool UndoManager::perform (UndoableAction::Ptr action)
     if (! isEnabled())
         return false;
 
-	if (action->perform (UndoableActionState::Redo))
-	{
+    if (action->perform (UndoableActionState::Redo))
+    {
         if (currentTransaction == nullptr)
             beginNewTransaction();
 
-		currentTransaction->add (action);
+        currentTransaction->add (action);
 
-		return true;
-	}
+        return true;
+    }
 
-	return false;
+    return false;
 }
 
 //==============================================================================
@@ -165,51 +165,49 @@ void UndoManager::beginNewTransaction (StringRef transactionName)
 
 bool UndoManager::canUndo() const
 {
-    return
-        (currentTransaction != nullptr && ! currentTransaction->isEmpty())
+    return (currentTransaction != nullptr && ! currentTransaction->isEmpty())
         || isPositiveAndBelow (nextUndoAction, undoHistory.size());
 }
 
 bool UndoManager::undo()
 {
-	return internalPerform (UndoableActionState::Undo);
+    return internalPerform (UndoableActionState::Undo);
 }
 
 bool UndoManager::canRedo() const
 {
-    return
-        (currentTransaction != nullptr && ! currentTransaction->isEmpty())
+    return (currentTransaction != nullptr && ! currentTransaction->isEmpty())
         || isPositiveAndBelow (nextRedoAction, undoHistory.size());
 }
 
 bool UndoManager::redo()
 {
-	return internalPerform (UndoableActionState::Redo);
+    return internalPerform (UndoableActionState::Redo);
 }
 
 //==============================================================================
 
 void UndoManager::setEnabled (bool shouldBeEnabled)
 {
-	if (isEnabled() != shouldBeEnabled)
-	{
+    if (isEnabled() != shouldBeEnabled)
+    {
         isUndoEnabled = shouldBeEnabled;
 
-		if (shouldBeEnabled)
-		{
+        if (shouldBeEnabled)
+        {
             if (actionGroupThreshold > RelativeTime())
                 startTimer (static_cast<int> (actionGroupThreshold.inMilliseconds()));
-		}
-		else
-		{
+        }
+        else
+        {
             if (actionGroupThreshold > RelativeTime())
                 stopTimer();
 
             flushCurrentTransaction();
 
-			undoHistory.clear();
-		}
-	}
+            undoHistory.clear();
+        }
+    }
 }
 
 bool UndoManager::isEnabled() const
@@ -221,17 +219,17 @@ bool UndoManager::isEnabled() const
 
 void UndoManager::timerCallback()
 {
-	beginNewTransaction();
+    beginNewTransaction();
 }
 
 //==============================================================================
 
 bool UndoManager::internalPerform (UndoableActionState stateToPerform)
 {
-	flushCurrentTransaction();
+    flushCurrentTransaction();
 
-	auto actionIndex = (stateToPerform == UndoableActionState::Undo) ? nextUndoAction : nextRedoAction;
-    if (! isPositiveAndBelow(actionIndex, undoHistory.size()))
+    auto actionIndex = (stateToPerform == UndoableActionState::Undo) ? nextUndoAction : nextRedoAction;
+    if (! isPositiveAndBelow (actionIndex, undoHistory.size()))
         return false;
 
     auto current = undoHistory[actionIndex];
@@ -253,25 +251,25 @@ bool UndoManager::internalPerform (UndoableActionState stateToPerform)
 
 bool UndoManager::flushCurrentTransaction()
 {
-	if (currentTransaction == nullptr || currentTransaction->isEmpty())
-		return false;
+    if (currentTransaction == nullptr || currentTransaction->isEmpty())
+        return false;
 
-	// Remove all future actions
-	if (nextRedoAction < undoHistory.size())
-		undoHistory.removeRange (nextRedoAction, undoHistory.size() - nextRedoAction);
+    // Remove all future actions
+    if (nextRedoAction < undoHistory.size())
+        undoHistory.removeRange (nextRedoAction, undoHistory.size() - nextRedoAction);
 
-	undoHistory.add (currentTransaction.get());
+    undoHistory.add (currentTransaction.get());
     currentTransaction = nullptr;
 
-	// Clean up to keep the undo history in check
-	const int numToRemove = jmax (0, undoHistory.size() - maxHistorySize);
-	if (numToRemove > 0)
-		undoHistory.removeRange (0, numToRemove);
+    // Clean up to keep the undo history in check
+    const int numToRemove = jmax (0, undoHistory.size() - maxHistorySize);
+    if (numToRemove > 0)
+        undoHistory.removeRange (0, numToRemove);
 
-	nextUndoAction = undoHistory.size() - 1;
-	nextRedoAction = undoHistory.size();
+    nextUndoAction = undoHistory.size() - 1;
+    nextRedoAction = undoHistory.size();
 
-	return true;
+    return true;
 }
 
 } // namespace yup

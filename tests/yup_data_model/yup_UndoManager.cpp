@@ -31,11 +31,14 @@ class TestAction : public UndoableAction
 public:
     using Ptr = ReferenceCountedObjectPtr<TestAction>;
 
-    TestAction (bool& flag) : flag (flag) {}
+    TestAction (bool& flag)
+        : flag (flag)
+    {
+    }
 
     bool perform (UndoableActionState) override
     {
-        flag = !flag;
+        flag = ! flag;
         return true;
     }
 
@@ -54,7 +57,10 @@ class ToggleAction : public UndoableAction
 public:
     using Ptr = ReferenceCountedObjectPtr<ToggleAction>;
 
-    ToggleAction (int& counter) : counter (counter) {}
+    ToggleAction (int& counter)
+        : counter (counter)
+    {
+    }
 
     bool perform (UndoableActionState state) override
     {
@@ -94,72 +100,72 @@ protected:
     std::unique_ptr<UndoManager> undoManager;
 };
 
-TEST_F(UndoManagerTest, PerformAction)
+TEST_F (UndoManagerTest, PerformAction)
 {
-    TestAction::Ptr action = new TestAction(actionFlag);
-    EXPECT_TRUE(undoManager->perform(action));
-    EXPECT_TRUE(actionFlag);
+    TestAction::Ptr action = new TestAction (actionFlag);
+    EXPECT_TRUE (undoManager->perform (action));
+    EXPECT_TRUE (actionFlag);
 }
 
-TEST_F(UndoManagerTest, UndoAction)
+TEST_F (UndoManagerTest, UndoAction)
 {
-    TestAction::Ptr action = new TestAction(actionFlag);
-    undoManager->perform(action);
-    EXPECT_TRUE(actionFlag);
+    TestAction::Ptr action = new TestAction (actionFlag);
+    undoManager->perform (action);
+    EXPECT_TRUE (actionFlag);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_FALSE(actionFlag);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_FALSE (actionFlag);
 }
 
-TEST_F(UndoManagerTest, RedoAction)
+TEST_F (UndoManagerTest, RedoAction)
 {
-    TestAction::Ptr action = new TestAction(actionFlag);
-    undoManager->perform(action);
-    EXPECT_TRUE(actionFlag);
+    TestAction::Ptr action = new TestAction (actionFlag);
+    undoManager->perform (action);
+    EXPECT_TRUE (actionFlag);
 
     undoManager->undo();
-    EXPECT_FALSE(actionFlag);
+    EXPECT_FALSE (actionFlag);
 
-    EXPECT_TRUE(undoManager->redo());
-    EXPECT_TRUE(actionFlag);
+    EXPECT_TRUE (undoManager->redo());
+    EXPECT_TRUE (actionFlag);
 }
 
-TEST_F(UndoManagerTest, SetEnabled)
+TEST_F (UndoManagerTest, SetEnabled)
 {
-    undoManager->setEnabled(false);
-    EXPECT_FALSE(undoManager->isEnabled());
+    undoManager->setEnabled (false);
+    EXPECT_FALSE (undoManager->isEnabled());
 
-    TestAction::Ptr action = new TestAction(actionFlag);
-    EXPECT_FALSE(undoManager->perform(action));
-    EXPECT_FALSE(actionFlag);
+    TestAction::Ptr action = new TestAction (actionFlag);
+    EXPECT_FALSE (undoManager->perform (action));
+    EXPECT_FALSE (actionFlag);
 
-    undoManager->setEnabled(true);
-    EXPECT_TRUE(undoManager->isEnabled());
-    EXPECT_TRUE(undoManager->perform(action));
-    EXPECT_TRUE(actionFlag);
+    undoManager->setEnabled (true);
+    EXPECT_TRUE (undoManager->isEnabled());
+    EXPECT_TRUE (undoManager->perform (action));
+    EXPECT_TRUE (actionFlag);
 }
 
-TEST_F(UndoManagerTest, ScopedTransaction)
+TEST_F (UndoManagerTest, ScopedTransaction)
 {
     actionFlag = false;
 
     {
         UndoManager::ScopedTransaction transaction (*undoManager);
 
-        TestAction::Ptr action1 = new TestAction(actionFlag);
-        undoManager->perform(action1);
-        EXPECT_TRUE(actionFlag);
+        TestAction::Ptr action1 = new TestAction (actionFlag);
+        undoManager->perform (action1);
+        EXPECT_TRUE (actionFlag);
 
-        TestAction::Ptr action2 = new TestAction(actionFlag);
-        undoManager->perform(action2);
-        EXPECT_FALSE(actionFlag);
+        TestAction::Ptr action2 = new TestAction (actionFlag);
+        undoManager->perform (action2);
+        EXPECT_FALSE (actionFlag);
     }
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_FALSE(actionFlag);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_FALSE (actionFlag);
 }
 
-TEST_F(UndoManagerTest, PerformWithLambda)
+TEST_F (UndoManagerTest, PerformWithLambda)
 {
     struct Object : ReferenceCountedObject
     {
@@ -169,160 +175,160 @@ TEST_F(UndoManagerTest, PerformWithLambda)
         int counter = 0;
 
     private:
-        JUCE_DECLARE_WEAK_REFERENCEABLE(Object)
+        JUCE_DECLARE_WEAK_REFERENCEABLE (Object)
     };
 
-    auto lambdaAction = [](Object::Ptr x, UndoableActionState s) -> bool
+    auto lambdaAction = [] (Object::Ptr x, UndoableActionState s) -> bool
     {
         x->counter = (s == UndoableActionState::Undo) ? 1 : 2;
         return true;
     };
 
     Object::Ptr x = new Object;
-    EXPECT_TRUE(undoManager->perform (x, lambdaAction));
-    EXPECT_EQ(x->counter, 2);
+    EXPECT_TRUE (undoManager->perform (x, lambdaAction));
+    EXPECT_EQ (x->counter, 2);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(x->counter, 1);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (x->counter, 1);
 
-    EXPECT_TRUE(undoManager->redo());
-    EXPECT_EQ(x->counter, 2);
+    EXPECT_TRUE (undoManager->redo());
+    EXPECT_EQ (x->counter, 2);
 }
 
-TEST_F(UndoManagerTest, ComplexPerformUndoRedo)
+TEST_F (UndoManagerTest, ComplexPerformUndoRedo)
 {
-    ToggleAction::Ptr action1 = new ToggleAction(counter);
-    ToggleAction::Ptr action2 = new ToggleAction(counter);
+    ToggleAction::Ptr action1 = new ToggleAction (counter);
+    ToggleAction::Ptr action2 = new ToggleAction (counter);
 
     undoManager->beginNewTransaction();
-    EXPECT_TRUE(undoManager->perform(action1));
-    EXPECT_EQ(counter, 1);
+    EXPECT_TRUE (undoManager->perform (action1));
+    EXPECT_EQ (counter, 1);
 
     undoManager->beginNewTransaction();
-    EXPECT_TRUE(undoManager->perform(action2));
-    EXPECT_EQ(counter, 2);
+    EXPECT_TRUE (undoManager->perform (action2));
+    EXPECT_EQ (counter, 2);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(counter, 1);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (counter, 1);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(counter, 0);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (counter, 0);
 
-    EXPECT_TRUE(undoManager->redo());
-    EXPECT_EQ(counter, 1);
+    EXPECT_TRUE (undoManager->redo());
+    EXPECT_EQ (counter, 1);
 
-    EXPECT_TRUE(undoManager->redo());
-    EXPECT_EQ(counter, 2);
+    EXPECT_TRUE (undoManager->redo());
+    EXPECT_EQ (counter, 2);
 }
 
-TEST_F(UndoManagerTest, RedoWithoutUndo)
+TEST_F (UndoManagerTest, RedoWithoutUndo)
 {
-    ToggleAction::Ptr action = new ToggleAction(counter);
-    EXPECT_TRUE(undoManager->perform(action));
-    EXPECT_EQ(counter, 1);
+    ToggleAction::Ptr action = new ToggleAction (counter);
+    EXPECT_TRUE (undoManager->perform (action));
+    EXPECT_EQ (counter, 1);
 
-    EXPECT_FALSE(undoManager->redo());
-    EXPECT_EQ(counter, 1);
+    EXPECT_FALSE (undoManager->redo());
+    EXPECT_EQ (counter, 1);
 }
 
-TEST_F(UndoManagerTest, UndoWithoutPerform)
+TEST_F (UndoManagerTest, UndoWithoutPerform)
 {
-    EXPECT_FALSE(undoManager->undo());
+    EXPECT_FALSE (undoManager->undo());
 }
 
-TEST_F(UndoManagerTest, RedoAfterDisableEnable)
+TEST_F (UndoManagerTest, RedoAfterDisableEnable)
 {
-    ToggleAction::Ptr action = new ToggleAction(counter);
-    EXPECT_TRUE(undoManager->perform(action));
-    EXPECT_EQ(counter, 1);
+    ToggleAction::Ptr action = new ToggleAction (counter);
+    EXPECT_TRUE (undoManager->perform (action));
+    EXPECT_EQ (counter, 1);
 
     undoManager->undo();
-    EXPECT_EQ(counter, 0);
+    EXPECT_EQ (counter, 0);
 
-    undoManager->setEnabled(false);
-    EXPECT_FALSE(undoManager->redo());
-    EXPECT_EQ(counter, 0);
+    undoManager->setEnabled (false);
+    EXPECT_FALSE (undoManager->redo());
+    EXPECT_EQ (counter, 0);
 
-    undoManager->setEnabled(true);
-    EXPECT_FALSE(undoManager->redo());
-    EXPECT_EQ(counter, 0);
+    undoManager->setEnabled (true);
+    EXPECT_FALSE (undoManager->redo());
+    EXPECT_EQ (counter, 0);
 }
 
-TEST_F(UndoManagerTest, MaxHistorySize)
+TEST_F (UndoManagerTest, MaxHistorySize)
 {
-    undoManager = std::make_unique<UndoManager>(2, RelativeTime::milliseconds(0));
+    undoManager = std::make_unique<UndoManager> (2, RelativeTime::milliseconds (0));
 
-    ToggleAction::Ptr action1 = new ToggleAction(counter);
-    ToggleAction::Ptr action2 = new ToggleAction(counter);
-    ToggleAction::Ptr action3 = new ToggleAction(counter);
-
-    undoManager->beginNewTransaction();
-    EXPECT_TRUE(undoManager->perform(action1));
-    EXPECT_EQ(counter, 1);
+    ToggleAction::Ptr action1 = new ToggleAction (counter);
+    ToggleAction::Ptr action2 = new ToggleAction (counter);
+    ToggleAction::Ptr action3 = new ToggleAction (counter);
 
     undoManager->beginNewTransaction();
-    EXPECT_TRUE(undoManager->perform(action2));
-    EXPECT_EQ(counter, 2);
+    EXPECT_TRUE (undoManager->perform (action1));
+    EXPECT_EQ (counter, 1);
 
     undoManager->beginNewTransaction();
-    EXPECT_TRUE(undoManager->perform(action3));
-    EXPECT_EQ(counter, 3);
+    EXPECT_TRUE (undoManager->perform (action2));
+    EXPECT_EQ (counter, 2);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(counter, 2);
+    undoManager->beginNewTransaction();
+    EXPECT_TRUE (undoManager->perform (action3));
+    EXPECT_EQ (counter, 3);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(counter, 1);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (counter, 2);
 
-    EXPECT_FALSE(undoManager->undo()); // action1 should be removed due to max history size
-    EXPECT_EQ(counter, 1);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (counter, 1);
+
+    EXPECT_FALSE (undoManager->undo()); // action1 should be removed due to max history size
+    EXPECT_EQ (counter, 1);
 }
 
-TEST_F(UndoManagerTest, ScopedTransactionGrouping)
+TEST_F (UndoManagerTest, ScopedTransactionGrouping)
 {
     {
         UndoManager::ScopedTransaction transaction (*undoManager);
 
-        ToggleAction::Ptr action1 = new ToggleAction(counter);
-        ToggleAction::Ptr action2 = new ToggleAction(counter);
-        
-        undoManager->perform(action1);
-        EXPECT_EQ(counter, 1);
-        
-        undoManager->perform(action2);
-        EXPECT_EQ(counter, 2);
+        ToggleAction::Ptr action1 = new ToggleAction (counter);
+        ToggleAction::Ptr action2 = new ToggleAction (counter);
+
+        undoManager->perform (action1);
+        EXPECT_EQ (counter, 1);
+
+        undoManager->perform (action2);
+        EXPECT_EQ (counter, 2);
     }
 
-    EXPECT_EQ(counter, 2);
+    EXPECT_EQ (counter, 2);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(counter, 0);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (counter, 0);
 }
 
-TEST_F(UndoManagerTest, DISABLED_NestedScopedTransactions)
+TEST_F (UndoManagerTest, DISABLED_NestedScopedTransactions)
 {
     {
-        UndoManager::ScopedTransaction transaction(*undoManager);
+        UndoManager::ScopedTransaction transaction (*undoManager);
 
-        ToggleAction::Ptr action1 = new ToggleAction(counter);
-        EXPECT_TRUE(undoManager->perform(action1));
-        EXPECT_EQ(counter, 1);
+        ToggleAction::Ptr action1 = new ToggleAction (counter);
+        EXPECT_TRUE (undoManager->perform (action1));
+        EXPECT_EQ (counter, 1);
 
         {
-            UndoManager::ScopedTransaction nestedTransaction(*undoManager);
+            UndoManager::ScopedTransaction nestedTransaction (*undoManager);
 
-            ToggleAction::Ptr action2 = new ToggleAction(counter);
-            EXPECT_TRUE(undoManager->perform(action2));
-            EXPECT_EQ(counter, 2);
+            ToggleAction::Ptr action2 = new ToggleAction (counter);
+            EXPECT_TRUE (undoManager->perform (action2));
+            EXPECT_EQ (counter, 2);
         }
 
-        ToggleAction::Ptr action3 = new ToggleAction(counter);
-        EXPECT_TRUE(undoManager->perform(action3));
-        EXPECT_EQ(counter, 3);
+        ToggleAction::Ptr action3 = new ToggleAction (counter);
+        EXPECT_TRUE (undoManager->perform (action3));
+        EXPECT_EQ (counter, 3);
     }
 
-    EXPECT_EQ(counter, 3);
+    EXPECT_EQ (counter, 3);
 
-    EXPECT_TRUE(undoManager->undo());
-    EXPECT_EQ(counter, 0);
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (counter, 0);
 }
