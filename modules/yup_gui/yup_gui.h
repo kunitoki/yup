@@ -59,6 +59,7 @@
 #include "application/yup_Application.h"
 #include "keyboard/yup_KeyModifiers.h"
 #include "keyboard/yup_KeyPress.h"
+#include "keyboard/yup_KeyboardFocusMode.h"
 #include "mouse/yup_MouseEvent.h"
 #include "mouse/yup_MouseWheelData.h"
 #include "desktop/yup_Display.h"
