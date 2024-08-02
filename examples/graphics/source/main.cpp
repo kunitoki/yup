@@ -127,152 +127,150 @@ public:
         takeFocus();
     }
 
-    void mouseExit (const yup::MouseEvent& event) override
+    void mouseDoubleClick (const yup::MouseEvent& event) override
     {
-        void mouseDoubleClick (const yup::MouseEvent& event) override
-        {
-            DBG ("mouseDoubleClick");
-        }
+        DBG ("mouseDoubleClick");
+    }
 
-        void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
-        {
-            switch (keys.getKey())
-            {
-                case yup::KeyPress::textQKey:
-                    std::cout << 'a';
-                    break;
-
-                case yup::KeyPress::escapeKey:
-                    userTriedToCloseWindow();
-                    break;
-
-                case yup::KeyPress::textAKey:
-                    getNativeComponent()->enableAtomicMode (! getNativeComponent()->isAtomicModeEnabled());
-                    break;
-
-                case yup::KeyPress::textWKey:
-                    getNativeComponent()->enableWireframe (! getNativeComponent()->isWireframeEnabled());
-                    break;
-
-                case yup::KeyPress::textZKey:
-                    setFullScreen (! isFullScreen());
-                    break;
-            }
-        }
-
-        void timerCallback() override
-        {
-            updateWindowTitle();
-        }
-
-        void userTriedToCloseWindow() override
-        {
-            yup::YUPApplication::getInstance()->systemRequestedQuit();
-        }
-
-        void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
-                                               int numInputChannels,
-                                               float* const* outputChannelData,
-                                               int numOutputChannels,
-                                               int numSamples,
-                                               const yup::AudioIODeviceCallbackContext& context) override
-        {
-            int copiedSamples = 0;
-            while (copiedSamples < numSamples)
-            {
-                renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples];
-
-                ++copiedSamples;
-                ++readPos;
-
-                readPos %= renderData.size();
-            }
-
-            //inputReady.signal();
-            //renderReady.wait();
-        }
-
-        void audioDeviceAboutToStart (yup::AudioIODevice * device) override
-        {
-            DBG ("audioDeviceAboutToStart");
-
-            inputData.resize (device->getDefaultBufferSize());
-            renderData.resize (device->getDefaultBufferSize());
-            readPos = 0;
-        }
-
-        void audioDeviceStopped() override
-        {
-            DBG ("audioDeviceStopped");
-        }
-
-    private:
-        void updateWindowTitle()
-        {
-            yup::String title;
-
-            title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
-            title << " | "
-                  << "YUP On Rive Renderer";
-
-            if (getNativeComponent()->isAtomicModeEnabled())
-                title << " (atomic)";
-
-            setTitle (title);
-        }
-
-        yup::AudioDeviceManager deviceManager;
-
-        std::vector<float> inputData;
-        yup::WaitableEvent inputReady;
-        std::vector<float> renderData;
-        yup::WaitableEvent renderReady;
-        int readPos = 0;
-
-        yup::OwnedArray<yup::Slider> sliders;
-        int totalRows = 4;
-        int totalColumns = 4;
-
-        std::unique_ptr<yup::TextButton> button;
-
-        yup::Font font;
-        yup::StyledText styleText;
-    };
-
-    //==============================================================================
-
-    struct Application : yup::YUPApplication
+    void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
     {
-        Application() = default;
-
-        const yup::String getApplicationName() override
+        switch (keys.getKey())
         {
-            return "yup graphics!";
+            case yup::KeyPress::textQKey:
+                std::cout << 'a';
+                break;
+
+            case yup::KeyPress::escapeKey:
+                userTriedToCloseWindow();
+                break;
+
+            case yup::KeyPress::textAKey:
+                getNativeComponent()->enableAtomicMode (! getNativeComponent()->isAtomicModeEnabled());
+                break;
+
+            case yup::KeyPress::textWKey:
+                getNativeComponent()->enableWireframe (! getNativeComponent()->isWireframeEnabled());
+                break;
+
+            case yup::KeyPress::textZKey:
+                setFullScreen (! isFullScreen());
+                break;
+        }
+    }
+
+    void timerCallback() override
+    {
+        updateWindowTitle();
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        yup::YUPApplication::getInstance()->systemRequestedQuit();
+    }
+
+    void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
+                                           int numInputChannels,
+                                           float* const* outputChannelData,
+                                           int numOutputChannels,
+                                           int numSamples,
+                                           const yup::AudioIODeviceCallbackContext& context) override
+    {
+        int copiedSamples = 0;
+        while (copiedSamples < numSamples)
+        {
+            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples];
+
+            ++copiedSamples;
+            ++readPos;
+
+            readPos %= renderData.size();
         }
 
-        const yup::String getApplicationVersion() override
-        {
-            return "1.0";
-        }
+        //inputReady.signal();
+        //renderReady.wait();
+    }
 
-        void initialise (const yup::String& commandLineParameters) override
-        {
-            yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
+    void audioDeviceAboutToStart (yup::AudioIODevice * device) override
+    {
+        DBG ("audioDeviceAboutToStart");
 
-            window = std::make_unique<CustomWindow>();
-            window->centreWithSize ({ 800, 800 });
-            window->setVisible (true);
-        }
+        inputData.resize (device->getDefaultBufferSize());
+        renderData.resize (device->getDefaultBufferSize());
+        readPos = 0;
+    }
 
-        void shutdown() override
-        {
-            yup::Logger::outputDebugString ("Shutting down");
+    void audioDeviceStopped() override
+    {
+        DBG ("audioDeviceStopped");
+    }
 
-            window.reset();
-        }
+private:
+    void updateWindowTitle()
+    {
+        yup::String title;
 
-    private:
-        std::unique_ptr<CustomWindow> window;
-    };
+        title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
+        title << " | "
+              << "YUP On Rive Renderer";
 
-    START_JUCE_APPLICATION (Application)
+        if (getNativeComponent()->isAtomicModeEnabled())
+            title << " (atomic)";
+
+        setTitle (title);
+    }
+
+    yup::AudioDeviceManager deviceManager;
+
+    std::vector<float> inputData;
+    yup::WaitableEvent inputReady;
+    std::vector<float> renderData;
+    yup::WaitableEvent renderReady;
+    int readPos = 0;
+
+    yup::OwnedArray<yup::Slider> sliders;
+    int totalRows = 4;
+    int totalColumns = 4;
+
+    std::unique_ptr<yup::TextButton> button;
+
+    yup::Font font;
+    yup::StyledText styleText;
+};
+
+//==============================================================================
+
+struct Application : yup::YUPApplication
+{
+    Application() = default;
+
+    const yup::String getApplicationName() override
+    {
+        return "yup graphics!";
+    }
+
+    const yup::String getApplicationVersion() override
+    {
+        return "1.0";
+    }
+
+    void initialise (const yup::String& commandLineParameters) override
+    {
+        yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
+
+        window = std::make_unique<CustomWindow>();
+        window->centreWithSize ({ 800, 800 });
+        window->setVisible (true);
+    }
+
+    void shutdown() override
+    {
+        yup::Logger::outputDebugString ("Shutting down");
+
+        window.reset();
+    }
+
+private:
+    std::unique_ptr<CustomWindow> window;
+};
+
+START_JUCE_APPLICATION (Application)
