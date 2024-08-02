@@ -24,6 +24,11 @@ namespace yup
 
 //==============================================================================
 
+UndoManager::Transaction::Transaction (StringRef name)
+    : transactionName (name)
+{
+}
+
 void UndoManager::Transaction::add (UndoableAction::Ptr action)
 {
     if (action != nullptr)

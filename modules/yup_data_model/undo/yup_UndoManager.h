@@ -248,11 +248,7 @@ private:
         using Ptr = ReferenceCountedObjectPtr<Transaction>;
 
         Transaction() = default;
-
-        explicit Transaction (StringRef name)
-            : transactionName (name)
-        {
-        }
+        explicit Transaction (StringRef name);
 
         void add (UndoableAction::Ptr action);
         int size() const;
