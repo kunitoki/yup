@@ -400,23 +400,23 @@ var Artboard::getAllInputs (int stateMachineIndex) const
 
         if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
         {
-            object->setProperty("type", "trigger");
+            object->setProperty ("type", "trigger");
         }
         else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
         {
-            object->setProperty("type", "boolean");
-            object->setProperty("value", boolean->value());
+            object->setProperty ("type", "boolean");
+            object->setProperty ("value", boolean->value());
         }
         else if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
         {
-            object->setProperty("type", "number");
-            object->setProperty("value", number->value());
+            object->setProperty ("type", "number");
+            object->setProperty ("value", number->value());
         }
 
         stateMachineInputs.add (var (object.get()));
     }
 
-	return stateMachineInputs;
+    return stateMachineInputs;
 }
 
 void Artboard::setAllInputs (int stateMachineIndex, const var& value)
