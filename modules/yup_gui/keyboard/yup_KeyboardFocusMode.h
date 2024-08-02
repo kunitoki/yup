@@ -30,7 +30,7 @@ namespace yup
 enum class KeyboardFocusMode
 {
     wantsNoFocus,
-	wantsKeyUpDownCallback,
+    wantsKeyUpDownCallback,
     wantsTextInputCallback
 };
 

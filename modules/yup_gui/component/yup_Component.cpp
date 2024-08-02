@@ -478,8 +478,8 @@ void Component::takeFocus()
 {
     if (options.wantsKeyboardFocus)
     {
-	    if (auto nativeComponent = getNativeComponent())
-		    nativeComponent->setFocusedComponent (this);
+        if (auto nativeComponent = getNativeComponent())
+            nativeComponent->setFocusedComponent (this);
     }
 }
 

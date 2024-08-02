@@ -1275,6 +1275,7 @@ void GLFWComponentNative::glfwTextInput (GLFWwindow* window, unsigned int codePo
 
     nativeComponent->handleTextInput (String::createStringFromData (ptr, sizeof (newCodePoint)));
 }
+
 //==============================================================================
 
 void Desktop::updateDisplays()
