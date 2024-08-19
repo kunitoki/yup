@@ -195,6 +195,36 @@ public:
     }
 
     //==============================================================================
+    /** Create an inverted transformation
+
+        Creates a new AffineTransform object that represents this transformation inverted, or the identity.
+
+        @return A new AffineTransform object representing the inverted transformation.
+    */
+    [[nodiscard]] constexpr AffineTransform inverted() const noexcept
+    {
+	    double determinant = getDeterminant();
+
+	    if (! approximatelyEqual (determinant, 0.0))
+	    {
+	        determinant = 1.0 / determinant;
+
+            auto dst00 = static_cast<float> ( m[4] * determinant);
+	        auto dst10 = static_cast<float> (-m[3] * determinant);
+	        auto dst01 = static_cast<float> (-m[1] * determinant);
+	        auto dst11 = static_cast<float> ( m[0] * determinant);
+
+	        return {
+                dst00, dst01, -m[2] * dst00 - m[5] * dst01,
+                dst10, dst11, -m[2] * dst10 - m[5] * dst11
+            };
+	    }
+
+	    // singularity..
+	    return *this;
+    }
+
+    //==============================================================================
     /** Create a translated transformation
 
         Creates a new AffineTransform object that represents this transformation translated by specified amounts in the x and y directions.
