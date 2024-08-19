@@ -49,7 +49,7 @@ enum class UndoableActionState
 class UndoableAction : public ReferenceCountedObject
 {
 public:
-    using List = ReferenceCountedArray<UndoableAction>;
+    using Array = ReferenceCountedArray<UndoableAction>;
     using Ptr = ReferenceCountedObjectPtr<UndoableAction>;
 
     /**
@@ -64,7 +64,7 @@ public:
 
         @return True if the action is valid, false otherwise.
     */
-    virtual bool isEmpty() const = 0;
+    virtual bool isValid() const = 0;
 
     /**
         @brief Performs the undo action.

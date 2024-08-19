@@ -120,6 +120,13 @@ public:
     void beginNewTransaction (StringRef transactionName);
 
     //==============================================================================
+    int getNumTransactions() const;
+    String getTransactionName (int index) const;
+
+    String getCurrentTransactionName() const;
+    void setCurrentTransactionName (StringRef newName);
+
+    //==============================================================================
     /**
         Check if undo action can be performed.
 
@@ -148,6 +155,9 @@ public:
         @return true if an action was performed, false otherwise.
     */
     bool redo();
+
+    //==============================================================================
+    void clear();
 
     //==============================================================================
     /**
@@ -233,7 +243,7 @@ private:
             return function (*object, stateToPerform);
         }
 
-        bool isEmpty() const override
+        bool isValid() const override
         {
             return ! object.wasObjectDeleted();
         }
@@ -245,6 +255,7 @@ private:
 
     struct Transaction : public UndoableAction
     {
+        using Array = ReferenceCountedArray<Transaction>;
         using Ptr = ReferenceCountedObjectPtr<Transaction>;
 
         Transaction() = default;
@@ -257,11 +268,11 @@ private:
         void setTransactionName (StringRef newName);
 
         bool perform (UndoableActionState stateToPerform) override;
-        bool isEmpty() const override;
+        bool isValid() const override;
 
     private:
         String transactionName;
-        ReferenceCountedArray<UndoableAction> childItems;
+        UndoableAction::Array childItems;
     };
 
     /** @internal */
@@ -274,7 +285,7 @@ private:
     int maxHistorySize;
     RelativeTime actionGroupThreshold;
 
-    UndoableAction::List undoHistory;
+    Transaction::Array undoHistory;
     Transaction::Ptr currentTransaction;
 
     // the position in the timeline for the next actions.

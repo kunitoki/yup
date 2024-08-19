@@ -42,7 +42,7 @@ public:
         return true;
     }
 
-    bool isEmpty() const override
+    bool isValid() const override
     {
         return true;
     }
@@ -72,7 +72,7 @@ public:
         return true;
     }
 
-    bool isEmpty() const override
+    bool isValid() const override
     {
         return true;
     }
@@ -115,6 +115,69 @@ TEST_F (UndoManagerTest, UndoAction)
 
     EXPECT_TRUE (undoManager->undo());
     EXPECT_FALSE (actionFlag);
+}
+
+TEST_F (UndoManagerTest, TransactionCount)
+{
+    actionFlag = false;
+
+    EXPECT_EQ (undoManager->getNumTransactions(), 0);
+
+    {
+        undoManager->beginNewTransaction();
+        EXPECT_EQ (undoManager->getNumTransactions(), 1);
+
+        undoManager->perform (new TestAction (actionFlag));
+        EXPECT_EQ (undoManager->getNumTransactions(), 1);
+    }
+
+    {
+        undoManager->beginNewTransaction();
+        EXPECT_EQ (undoManager->getNumTransactions(), 2);
+
+        undoManager->perform (new TestAction (actionFlag));
+        EXPECT_EQ (undoManager->getNumTransactions(), 2);
+    }
+
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (undoManager->getNumTransactions(), 2);
+
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_EQ (undoManager->getNumTransactions(), 2);
+
+    EXPECT_FALSE (undoManager->undo());
+    EXPECT_EQ (undoManager->getNumTransactions(), 2);
+
+    undoManager->clear();
+    EXPECT_EQ (undoManager->getNumTransactions(), 0);
+}
+
+TEST_F (UndoManagerTest, TransactionIteration)
+{
+    actionFlag = false;
+
+    EXPECT_EQ (undoManager->getNumTransactions(), 0);
+
+    {
+        undoManager->beginNewTransaction ("1");
+        EXPECT_EQ (undoManager->getNumTransactions(), 1);
+        undoManager->perform (new TestAction (actionFlag));
+        EXPECT_EQ (undoManager->getNumTransactions(), 1);
+        undoManager->perform (new TestAction (actionFlag));
+        EXPECT_EQ (undoManager->getNumTransactions(), 1);
+    }
+
+    {
+        undoManager->beginNewTransaction ("2");
+        EXPECT_EQ (undoManager->getNumTransactions(), 2);
+        undoManager->perform (new TestAction (actionFlag));
+        EXPECT_EQ (undoManager->getNumTransactions(), 2);
+        undoManager->perform (new TestAction (actionFlag));
+        EXPECT_EQ (undoManager->getNumTransactions(), 2);
+    }
+
+    EXPECT_EQ (juce::String ("1"), undoManager->getTransactionName (0));
+    EXPECT_EQ (juce::String ("2"), undoManager->getTransactionName (1));
 }
 
 TEST_F (UndoManagerTest, RedoAction)
@@ -163,6 +226,32 @@ TEST_F (UndoManagerTest, ScopedTransaction)
 
     EXPECT_TRUE (undoManager->undo());
     EXPECT_FALSE (actionFlag);
+}
+
+TEST_F (UndoManagerTest, ScopedTransactionWithName)
+{
+    actionFlag = false;
+
+    EXPECT_EQ (undoManager->getCurrentTransactionName(), "");
+
+    {
+        UndoManager::ScopedTransaction transaction (*undoManager, "custom name");
+
+        TestAction::Ptr action1 = new TestAction (actionFlag);
+        undoManager->perform (action1);
+        EXPECT_TRUE (actionFlag);
+
+        TestAction::Ptr action2 = new TestAction (actionFlag);
+        undoManager->perform (action2);
+        EXPECT_FALSE (actionFlag);
+
+        EXPECT_EQ (undoManager->getCurrentTransactionName(), "custom name");
+    }
+
+    EXPECT_TRUE (undoManager->undo());
+    EXPECT_FALSE (actionFlag);
+
+    EXPECT_EQ (undoManager->getCurrentTransactionName(), "");
 }
 
 TEST_F (UndoManagerTest, PerformWithLambda)
