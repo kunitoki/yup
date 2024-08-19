@@ -175,7 +175,7 @@ int UndoManager::getNumTransactions() const
 
 String UndoManager::getTransactionName (int index) const
 {
-    if (isPositiveAndBelow (index, getNumTransactions ()))
+    if (isPositiveAndBelow (index, getNumTransactions()))
     {
         if (isPositiveAndBelow (index, undoHistory.size()))
             return undoHistory.getUnchecked (index)->getTransactionName();
