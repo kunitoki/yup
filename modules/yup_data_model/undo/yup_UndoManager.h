@@ -26,7 +26,7 @@ namespace yup
 /**
     @class UndoManager
 
-    @brief Manages undo and redo functionality for a set of actions.
+    Manages undo and redo functionality for a set of actions.
 
     The UndoManager class provides a way to manage undo and redo functionality
     for a set of actions. It allows you to perform actions, undo them, redo them,
@@ -120,10 +120,34 @@ public:
     void beginNewTransaction (StringRef transactionName);
 
     //==============================================================================
+    /**
+        Returns the number of transactions in the undo manager.
+
+        @return The number of transactions.
+    */
     int getNumTransactions() const;
+
+    /** Retrieves the name of a transaction at the specified index.
+
+        @param index The index of the transaction.
+
+        @return The name of the transaction.
+    */
     String getTransactionName (int index) const;
 
+    //==============================================================================
+    /**
+        Returns the name of the current transaction.
+
+        @return The name of the current transaction as a String.
+    */
     String getCurrentTransactionName() const;
+
+    /**
+        Sets the name of the current transaction.
+
+        @param newName  the new name for the transaction
+    */
     void setCurrentTransactionName (StringRef newName);
 
     //==============================================================================
@@ -157,6 +181,11 @@ public:
     bool redo();
 
     //==============================================================================
+    /**
+        @brief Clears the undo manager.
+
+        This function clears the undo manager, removing all the stored undo/redo actions.
+    */
     void clear();
 
     //==============================================================================

@@ -187,6 +187,8 @@ String UndoManager::getTransactionName (int index) const
     return {};
 }
 
+//==============================================================================
+
 String UndoManager::getCurrentTransactionName() const
 {
     if (currentTransaction != nullptr)

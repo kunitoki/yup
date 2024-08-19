@@ -30,7 +30,7 @@ namespace yup
 
     The ActionState enum is used to indicate whether an action should be undone or redone.
 
-    @see yup_UndoManager
+    @see UndoManager
 */
 enum class UndoableActionState
 {
@@ -41,7 +41,8 @@ enum class UndoableActionState
 //==============================================================================
 /**
     @class UndoableAction
-    @brief The base class for all actions in the timeline.
+
+    The base class for all actions in the timeline.
 
     You can subclass from this class to define your actions,
     but a better way is to just use a lambda with a WeakReferenceable object.
