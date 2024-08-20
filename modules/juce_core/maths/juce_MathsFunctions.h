@@ -74,7 +74,7 @@ using uint64 = unsigned long long;
 #endif
 
 #ifndef DOXYGEN
-/** A macro for creating 64-bit literals.
+    /** A macro for creating 64-bit literals.
      Historically, this was needed to support portability with MSVC6, and is kept here
      so that old code will still compile, but nowadays every compiler will support the
      LL and ULL suffixes, so you should use those in preference to this macro.
@@ -799,7 +799,7 @@ uint32 readLittleEndianBitsInBuffer (const void* sourceBuffer, uint32 startBit, 
 
 //==============================================================================
 #if JUCE_INTEL || DOXYGEN
-/** This macro can be applied to a float variable to check whether it contains a denormalised
+    /** This macro can be applied to a float variable to check whether it contains a denormalised
      value, and to normalise it if necessary.
      On CPUs that aren't vulnerable to denormalisation problems, this will have no effect.
  */
