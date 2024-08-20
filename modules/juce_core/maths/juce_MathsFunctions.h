@@ -106,7 +106,7 @@ using ssize_t = pointer_sized_int;
 //==============================================================================
 /** Handy function for avoiding unused variables warning. */
 template <typename... Types>
-void ignoreUnused (Types&&...) noexcept
+constexpr void ignoreUnused (Types&&...) noexcept
 {
 }
 
@@ -159,7 +159,10 @@ inline float juce_hypot (float a, float b) noexcept
 template <typename Type>
 constexpr Type juce_abs (Type v) noexcept
 {
-    return v < 0 ? -v : v;
+    if (isConstantEvaluated())
+        return (v < static_cast<Type> (0)) ? -v : v;
+    else
+        return std::abs (v);
 }
 
 //==============================================================================
