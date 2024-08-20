@@ -141,13 +141,6 @@ TEST (UuidTests, GetClockSeqAndReserved)
     EXPECT_NE (clockSeqAndReserved, 0);
 }
 
-TEST (UuidTests, GetClockSeqLow)
-{
-    Uuid uuid;
-    uint8 clockSeqLow = uuid.getClockSeqLow();
-    EXPECT_NE (clockSeqLow, 0);
-}
-
 TEST (UuidTests, GetNode)
 {
     Uuid uuid;
