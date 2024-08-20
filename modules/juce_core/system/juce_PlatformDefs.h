@@ -90,42 +90,39 @@ namespace juce
 #endif
 
 //==============================================================================
+// clang-format off
 #if JUCE_IOS || JUCE_LINUX || JUCE_BSD
-    /** This will try to break into the debugger if the app is currently being debugged.
+/** This will try to break into the debugger if the app is currently being debugged.
       If called by an app that's not being debugged, the behaviour isn't defined - it may
       crash or not, depending on the platform.
       @see jassert()
-  */
-    // clang-format off
-#define JUCE_BREAK_IN_DEBUGGER { ::kill (0, SIGTRAP); }
+*/
+#define JUCE_BREAK_IN_DEBUGGER ::kill (0, SIGTRAP);
 #elif JUCE_WASM
-#define JUCE_BREAK_IN_DEBUGGER {}
+#define JUCE_BREAK_IN_DEBUGGER
 #elif JUCE_MSVC
 #ifndef __INTEL_COMPILER
 #pragma intrinsic(__debugbreak)
 #endif
-#define JUCE_BREAK_IN_DEBUGGER { __debugbreak(); }
+#define JUCE_BREAK_IN_DEBUGGER __debugbreak();
 #elif JUCE_INTEL && (JUCE_GCC || JUCE_CLANG || JUCE_MAC)
 #if JUCE_NO_INLINE_ASM
-#define JUCE_BREAK_IN_DEBUGGER {}
+#define JUCE_BREAK_IN_DEBUGGER
 #else
-#define JUCE_BREAK_IN_DEBUGGER { asm("int $3"); }
+#define JUCE_BREAK_IN_DEBUGGER asm ("int $3");
 #endif
 #elif JUCE_ARM && JUCE_MAC
-#define JUCE_BREAK_IN_DEBUGGER { __builtin_debugtrap(); }
+#define JUCE_BREAK_IN_DEBUGGER __builtin_debugtrap();
 #elif JUCE_ANDROID
-#define JUCE_BREAK_IN_DEBUGGER { __builtin_trap(); }
+#define JUCE_BREAK_IN_DEBUGGER __builtin_trap();
 #else
-#define JUCE_BREAK_IN_DEBUGGER { __asm int 3 }
+#define JUCE_BREAK_IN_DEBUGGER __asm int 3;
 #endif
 // clang-format on
 
 #if JUCE_CLANG && defined(__has_feature) && ! defined(JUCE_ANALYZER_NORETURN)
 #if __has_feature(attribute_analyzer_noreturn)
-inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn()
-{
-}
-
+inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn() {}
 #define JUCE_ANALYZER_NORETURN juce::juce_assert_noreturn();
 #endif
 #endif
@@ -186,12 +183,6 @@ inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn()
 #define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 0
 #endif
 
-#if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED || JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
-#define JUCE_HAS_IS_CONSTANT_EVALUATED 1
-#else
-#define JUCE_HAS_IS_CONSTANT_EVALUATED 0
-#endif
-
 constexpr bool isConstantEvaluated() noexcept
 {
 #if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED
@@ -241,20 +232,17 @@ constexpr bool isConstantEvaluated() noexcept
       It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
       @see jassert
   */
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    if (! juce::isConstantEvaluated())                 \
-    {                                                  \
-        JUCE_LOG_CURRENT_ASSERTION;                    \
-        if (! juce::juce_isRunningUnderDebugger())     \
-            JUCE_ANALYZER_NORETURN                     \
-        else                                           \
-            JUCE_BREAK_IN_DEBUGGER;                    \
-    }                                                  \
-    else                                               \
-    {                                                  \
-        JUCE_ANALYZER_NORETURN                         \
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (                     \
+    if (! juce::isConstantEvaluated())                                      \
+    {                                                                       \
+        JUCE_LOG_CURRENT_ASSERTION;                                         \
+        if (juce::juce_isRunningUnderDebugger()) { JUCE_BREAK_IN_DEBUGGER } \
+        else                                     { JUCE_ANALYZER_NORETURN } \
+    }                                                                       \
+    else                                                                    \
+    {                                                                       \
+        JUCE_ANALYZER_NORETURN                                              \
     })
-
 
 //==============================================================================
 /** Platform-independent assertion macro.
