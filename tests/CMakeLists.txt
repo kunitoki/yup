@@ -45,8 +45,7 @@ set (target_modules
     juce_events
     juce_audio_basics
     juce_audio_devices
-    yup_data_model
-    yup_graphics)
+    yup_data_model)
 
 enable_testing()
 

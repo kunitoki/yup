@@ -53,14 +53,6 @@
 #endif
 
 //==============================================================================
-#include <rive/layout.hpp>
-#include <rive/custom_property_number.hpp>
-#include <rive/custom_property_boolean.hpp>
-#include <rive/custom_property_string.hpp>
-#include <rive/animation/state_machine_instance.hpp>
-#include <rive/animation/state_machine_input_instance.hpp>
-
-//==============================================================================
 #include "native/yup_Windowing_glfw.cpp"
 
 //==============================================================================

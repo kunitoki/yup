@@ -50,9 +50,7 @@
 #include <juce_core/juce_core.h>
 
 #include <rive/rive.h>
-#include <rive/text/utf.hpp>
-
-#include <rive/pls/pls_render_context.hpp>
+#include <rive_pls_renderer/rive_pls_renderer.h>
 
 #include <tuple>
 

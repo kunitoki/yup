@@ -31,6 +31,7 @@
     description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
     website:            https://github.com/rive-app/rive-renderer
     license:            MIT
+    minimumCppStandard: 17
 
     dependencies:       rive glad
     OSXFrameworks:      Metal QuartzCore
@@ -46,4 +47,13 @@
 
 #pragma once
 
-// TODO - Other deps: rive-decoders rive-dependencies glad
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
+#endif
+
+#include "include/rive/pls/pls_render_context.hpp"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#endif

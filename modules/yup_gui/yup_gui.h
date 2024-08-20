@@ -51,9 +51,7 @@
 #include <yup_data_model/yup_data_model.h>
 #include <yup_graphics/yup_graphics.h>
 
-#include <rive/artboard.hpp>
-#include <rive/file.hpp>
-#include <rive/static_scene.hpp>
+#include <rive/rive.h>
 
 //==============================================================================
 
