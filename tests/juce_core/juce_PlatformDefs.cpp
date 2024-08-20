@@ -31,7 +31,7 @@ TEST (PlatformDefs, Stringify)
 {
     constexpr auto x = std::string_view (JUCE_STRINGIFY (abcdf));
 
-    static_assert(x == "abcdf");
+    static_assert (x == "abcdf");
 }
 
 TEST (PlatformDefs, IsConstantEvaluated)
@@ -44,7 +44,7 @@ TEST (PlatformDefs, IsConstantEvaluated)
             return 2;
     };
 
-    static_assert(x() == 1);
+    static_assert (x() == 1);
 
     auto y = x();
     EXPECT_EQ (y, 2);
@@ -60,5 +60,5 @@ TEST (PlatformDefs, ConstexprJassertfalse)
         return true;
     }();
 
-    static_assert(x == true);
+    static_assert (x == true);
 }

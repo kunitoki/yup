@@ -91,12 +91,12 @@ namespace juce
 
 //==============================================================================
 #if JUCE_IOS || JUCE_LINUX || JUCE_BSD
-/** This will try to break into the debugger if the app is currently being debugged.
+    /** This will try to break into the debugger if the app is currently being debugged.
       If called by an app that's not being debugged, the behaviour isn't defined - it may
       crash or not, depending on the platform.
       @see jassert()
   */
-// clang-format off
+    // clang-format off
 #define JUCE_BREAK_IN_DEBUGGER { ::kill (0, SIGTRAP); }
 #elif JUCE_WASM
 #define JUCE_BREAK_IN_DEBUGGER {}
