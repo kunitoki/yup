@@ -118,7 +118,7 @@ namespace juce
 #else
 #define JUCE_BREAK_IN_DEBUGGER { __asm int 3 }
 #endif
-// clang-format off
+// clang-format on
 
 #if JUCE_CLANG && defined(__has_feature) && ! defined(JUCE_ANALYZER_NORETURN)
 #if __has_feature(attribute_analyzer_noreturn)
@@ -196,7 +196,7 @@ constexpr bool isConstantEvaluated() noexcept
 {
 #if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED
     return std::is_constant_evaluated();
-#else if JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
+#elif JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
     return __builtin_is_constant_evaluated();
 #else
     return false;
@@ -206,10 +206,10 @@ constexpr bool isConstantEvaluated() noexcept
 //==============================================================================
 // clang-format off
 #if JUCE_MSVC && ! defined(DOXYGEN)
-#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x)      \
-    __pragma (warning (push))                    \
-    __pragma (warning (disable : 4127))          \
-    do { x } while (false)                       \
+#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
+    __pragma (warning (push))               \
+    __pragma (warning (disable : 4127))     \
+    do { x } while (false)                  \
     __pragma (warning (pop))
 #else
 /** This is the good old C++ trick for creating a macro that forces the user to put
@@ -242,13 +242,19 @@ constexpr bool isConstantEvaluated() noexcept
       @see jassert
   */
 #define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    if (! isConstantEvaluated())                       \
+    if (! juce::isConstantEvaluated())                 \
     {                                                  \
         JUCE_LOG_CURRENT_ASSERTION;                    \
-        if (juce::juce_isRunningUnderDebugger())       \
+        if (! juce::juce_isRunningUnderDebugger())     \
+            JUCE_ANALYZER_NORETURN                     \
+        else                                           \
             JUCE_BREAK_IN_DEBUGGER;                    \
     }                                                  \
-    JUCE_ANALYZER_NORETURN)
+    else                                               \
+    {                                                  \
+        JUCE_ANALYZER_NORETURN                         \
+    })
+
 
 //==============================================================================
 /** Platform-independent assertion macro.
@@ -271,7 +277,7 @@ constexpr bool isConstantEvaluated() noexcept
 // If debugging is disabled, these dummy debug and assertion macros are used..
 
 #define DBG(textToWrite)
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (JUCE_LOG_CURRENT_ASSERTION;)
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
 
 #if JUCE_LOG_ASSERTIONS
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
