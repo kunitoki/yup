@@ -43,8 +43,7 @@ namespace juce
 {
 
 //==============================================================================
-/*  This file defines miscellaneous macros for debugging, assertions, etc.
-*/
+/** This file defines miscellaneous macros for debugging, assertions, etc. */
 
 //==============================================================================
 #ifdef JUCE_FORCE_DEBUG
@@ -72,8 +71,7 @@ namespace juce
 
 /** A good old-fashioned C macro concatenation helper.
     This combines two items (which may themselves be macros) into a single string,
-    avoiding the pitfalls of the ## macro operator.
-*/
+    avoiding the pitfalls of the ## macro operator. */
 #define JUCE_JOIN_MACRO(item1, item2) JUCE_JOIN_MACRO_HELPER (item1, item2)
 
 /** A handy C macro for stringifying any symbol, rather than just a macro parameter. */
@@ -90,55 +88,37 @@ namespace juce
 #endif
 
 //==============================================================================
+// clang-format off
 #if JUCE_IOS || JUCE_LINUX || JUCE_BSD
 /** This will try to break into the debugger if the app is currently being debugged.
-      If called by an app that's not being debugged, the behaviour isn't defined - it may
-      crash or not, depending on the platform.
-      @see jassert()
-  */
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-::kill (0, SIGTRAP);           \
-}
+
+    If called by an app that's not being debugged, the behaviour isn't defined - it may
+    crash or not, depending on the platform.
+
+    @see jassert()
+*/
+#define JUCE_BREAK_IN_DEBUGGER ::kill (0, SIGTRAP);
 #elif JUCE_WASM
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-}
+#define JUCE_BREAK_IN_DEBUGGER
 #elif JUCE_MSVC
 #ifndef __INTEL_COMPILER
 #pragma intrinsic(__debugbreak)
 #endif
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__debugbreak();                \
-}
+#define JUCE_BREAK_IN_DEBUGGER __debugbreak();
 #elif JUCE_INTEL && (JUCE_GCC || JUCE_CLANG || JUCE_MAC)
 #if JUCE_NO_INLINE_ASM
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-}
+#define JUCE_BREAK_IN_DEBUGGER
 #else
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-asm("int $3");                 \
-}
+#define JUCE_BREAK_IN_DEBUGGER asm ("int $3");
 #endif
 #elif JUCE_ARM && JUCE_MAC
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__builtin_debugtrap();         \
-}
+#define JUCE_BREAK_IN_DEBUGGER __builtin_debugtrap();
 #elif JUCE_ANDROID
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__builtin_trap();              \
-}
+#define JUCE_BREAK_IN_DEBUGGER __builtin_trap();
 #else
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__asm int 3                    \
-}
+#define JUCE_BREAK_IN_DEBUGGER __asm int 3;
 #endif
+// clang-format on
 
 #if JUCE_CLANG && defined(__has_feature) && ! defined(JUCE_ANALYZER_NORETURN)
 #if __has_feature(attribute_analyzer_noreturn)
@@ -156,8 +136,7 @@ inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn()
 
 /** Used to silence Wimplicit-fallthrough on Clang and GCC where available
     as there are a few places in the codebase where we need to do this
-    deliberately and want to ignore the warning.
-*/
+    deliberately and want to ignore the warning. */
 #if JUCE_CLANG
 #if __has_cpp_attribute(clang::fallthrough)
 #define JUCE_FALLTHROUGH [[clang::fallthrough]];
@@ -175,66 +154,129 @@ inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn()
 #endif
 
 //==============================================================================
-#if JUCE_MSVC && ! defined(DOXYGEN)
-#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x)      \
-__pragma (warning (push))                        \
-    __pragma (warning (disable : 4127)) do { x } \
-while (false)                                    \
-__pragma (warning (pop))
+#if defined(__has_feature)
+#define JUCE_HAS_FEATURE(feature) __has_feature (feature)
 #else
-/** This is the good old C++ trick for creating a macro that forces the user to put
-    a semicolon after it when they use it.
- */
-#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
-do                                          \
-{                                           \
-x                                           \
-} while (false)
+#define JUCE_HAS_FEATURE(feature) 0
+#endif
+
+#if defined(__has_attribute)
+#define JUCE_HAS_ATTRIBUTE(attribute) __has_attribute (attribute)
+#else
+#define JUCE_HAS_ATTRIBUTE(attribute) 0
+#endif
+
+#if defined(__has_builtin)
+#define JUCE_HAS_BUILTIN(builtin) __has_builtin (builtin)
+#else
+#define JUCE_HAS_BUILTIN(builtin) 0
 #endif
 
 //==============================================================================
+#if __cpp_lib_is_constant_evaluated >= 201811L
+#define JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED 1
+#else
+#define JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED 0
+#endif
+
+#if defined(JUCE_MSVC) || JUCE_HAS_BUILTIN(__builtin_is_constant_evaluated)
+#define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 1
+#else
+#define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 0
+#endif
+
+constexpr bool isConstantEvaluated() noexcept
+{
+#if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED
+    return std::is_constant_evaluated();
+#elif JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
+    return __builtin_is_constant_evaluated();
+#else
+    return false;
+#endif
+}
+
+//==============================================================================
+// clang-format off
+#if JUCE_MSVC && ! defined(DOXYGEN)
+#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
+    __pragma (warning (push))               \
+    __pragma (warning (disable : 4127))     \
+    do { x } while (false)                  \
+    __pragma (warning (pop))
+#else
+/** This is the good old C++ trick for creating a macro that forces the user to put
+    a semicolon after it when they use it.
+*/
+#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
+    do { x } while (false)
+#endif
+// clang-format on
+
+//==============================================================================
+// clang-format off
 #if (JUCE_DEBUG && ! JUCE_DISABLE_ASSERTIONS) || DOXYGEN
 /** Writes a string to the standard error stream.
-      Note that as well as a single string, you can use this to write multiple items
-      as a stream, e.g.
-      @code
+
+    Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
+
+    @code
         DBG ("foo = " << foo << "bar = " << bar);
-      @endcode
-      The macro is only enabled in a debug build, so be careful not to use it with expressions
-      that have important side-effects!
-      @see Logger::outputDebugString
-  */
-#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (juce::String tempDbgBuf; tempDbgBuf << textToWrite; juce::Logger::outputDebugString (tempDbgBuf);)
+    @endcode
+
+    The macro is only enabled in a debug build, so be careful not to use it with expressions
+    that have important side-effects!
+
+    @see Logger::outputDebugString
+*/
+#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    juce::String tempDbgBuf;                               \
+    tempDbgBuf << textToWrite;                             \
+    juce::Logger::outputDebugString (tempDbgBuf);)
 
 //==============================================================================
 /** This will always cause an assertion failure.
-      It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
-      @see jassert
-  */
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (JUCE_LOG_CURRENT_ASSERTION; if (juce::juce_isRunningUnderDebugger()) JUCE_BREAK_IN_DEBUGGER; JUCE_ANALYZER_NORETURN)
+    It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
+
+    @see jassert
+*/
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    if (! juce::isConstantEvaluated())                 \
+    {                                                  \
+        JUCE_LOG_CURRENT_ASSERTION;                    \
+        if (juce::juce_isRunningUnderDebugger())       \
+            { JUCE_BREAK_IN_DEBUGGER }                 \
+        else                                           \
+            { JUCE_ANALYZER_NORETURN }                 \
+    }                                                  \
+    else                                               \
+    {                                                  \
+        JUCE_ANALYZER_NORETURN                         \
+    })
 
 //==============================================================================
 /** Platform-independent assertion macro.
 
-      This macro gets turned into a no-op when you're building with debugging turned off, so be
-      careful that the expression you pass to it doesn't perform any actions that are vital for the
-      correct behaviour of your program!
-      @see jassertfalse
-  */
+    This macro gets turned into a no-op when you're building with debugging turned off, so be
+    careful that the expression you pass to it doesn't perform any actions that are vital for the
+    correct behaviour of your program!
+
+    @see jassertfalse
+*/
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 
 /** Platform-independent assertion macro which suppresses ignored-variable
-      warnings in all build modes. You should probably use a plain jassert()
-      and [[maybe_unused]] by default.
-  */
+    warnings in all build modes. You should probably use a plain jassert()
+    and `[[maybe_unused]]` by default.
+*/
 #define jassertquiet(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 
 #else
 //==============================================================================
-// If debugging is disabled, these dummy debug and assertion macros are used..
+/** If debugging is disabled, these dummy debug and assertion macros are used. */
 
 #define DBG(textToWrite)
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (JUCE_LOG_CURRENT_ASSERTION;)
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
 
 #if JUCE_LOG_ASSERTIONS
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
@@ -245,54 +287,54 @@ x                                           \
 #endif
 
 #endif
+// clang-format on
 
 //==============================================================================
-/** This is a shorthand macro for deleting a class's copy constructor and
-    copy assignment operator.
+/** This is a shorthand macro for deleting a class's copy constructor and copy assignment operator.
 
     For example, instead of
-    @code
-    class MyClass
-    {
-        etc..
 
-    private:
-        MyClass (const MyClass&);
-        MyClass& operator= (const MyClass&);
-    };@endcode
+    @code
+        class MyClass
+        {
+            etc..
+
+        private:
+            MyClass (const MyClass&);
+            MyClass& operator= (const MyClass&);
+        };
+    @endcode
 
     ..you can just write:
 
     @code
-    class MyClass
-    {
-        etc..
+        class MyClass
+        {
+            etc..
 
-    private:
-        JUCE_DECLARE_NON_COPYABLE (MyClass)
-    };@endcode
+        private:
+            JUCE_DECLARE_NON_COPYABLE (MyClass)
+        };
+    @endcode
 */
 #define JUCE_DECLARE_NON_COPYABLE(className) \
 className (const className&) = delete;       \
 className& operator= (const className&) = delete;
 
 /** This is a shorthand macro for deleting a class's move constructor and
-    move assignment operator.
-*/
+    move assignment operator. */
 #define JUCE_DECLARE_NON_MOVEABLE(className) \
 className (className&&) = delete;            \
 className& operator= (className&&) = delete;
 
 /** This is a shorthand way of writing both a JUCE_DECLARE_NON_COPYABLE and
-    JUCE_LEAK_DETECTOR macro for a class.
-*/
+    JUCE_LEAK_DETECTOR macro for a class. */
 #define JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(className) \
 JUCE_DECLARE_NON_COPYABLE (className)                           \
 JUCE_LEAK_DETECTOR (className)
 
 /** This macro can be added to class definitions to disable the use of new/delete to
-    allocate the object on the heap, forcing it to only be used as a stack or member variable.
-*/
+    allocate the object on the heap, forcing it to only be used as a stack or member variable. */
 #define JUCE_PREVENT_HEAP_ALLOCATION         \
 private:                                     \
 static void* operator new (size_t) = delete; \
@@ -307,23 +349,27 @@ static void operator delete (void*) = delete;
 #define JUCE_WARNING_HELPER(mess) message (#mess)
 #endif
 
-/** This macro allows you to emit a custom compiler warning message.
-     Very handy for marking bits of code as "to-do" items, or for shaming
-     code written by your co-workers in a way that's hard to ignore.
+    /** This macro allows you to emit a custom compiler warning message.
 
-     GCC and Clang provide the \#warning directive, but MSVC doesn't, so this macro
-     is a cross-compiler way to get the same functionality as \#warning.
- */
+    Very handy for marking bits of code as "to-do" items, or for shaming
+    code written by your co-workers in a way that's hard to ignore.
+
+    GCC and Clang provide the \#warning directive, but MSVC doesn't, so this macro
+    is a cross-compiler way to get the same functionality as \#warning.
+*/
 #define JUCE_COMPILER_WARNING(message) _Pragma (JUCE_STRINGIFY (JUCE_WARNING_HELPER (message)))
 #endif
 
 //==============================================================================
 #if JUCE_DEBUG || DOXYGEN
-/** A platform-independent way of forcing an inline function.
-      Use the syntax: @code
+    /** A platform-independent way of forcing an inline function.
+
+    Use the syntax:
+
+    @code
       forcedinline void myfunction (int x)
-      @endcode
-  */
+    @endcode
+*/
 #define forcedinline inline
 #else
 #if JUCE_MSVC
@@ -334,8 +380,8 @@ static void operator delete (void*) = delete;
 #endif
 
 #if JUCE_MSVC || DOXYGEN
-/** This can be placed before a stack or member variable declaration to tell the compiler
-      to align it to the specified number of bytes. */
+    /** This can be placed before a stack or member variable declaration to tell the compiler
+    to align it to the specified number of bytes. */
 #define JUCE_ALIGN(bytes) __declspec(align (bytes))
 #else
 #define JUCE_ALIGN(bytes) __attribute__ ((aligned (bytes)))
@@ -345,8 +391,8 @@ static void operator delete (void*) = delete;
 #if JUCE_ANDROID && ! defined(DOXYGEN)
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #elif ! defined(JUCE_MODAL_LOOPS_PERMITTED)
-/** Some operating environments don't provide a modal loop mechanism, so this flag can be
-     used to disable any functions that try to run a modal loop. */
+    /** Some operating environments don't provide a modal loop mechanism, so this flag can be
+    used to disable any functions that try to run a modal loop. */
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #endif
 
@@ -359,8 +405,8 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_GCC || DOXYGEN
-/** This can be appended to a function declaration to tell gcc to disable associative
-     math optimisations which break some floating point algorithms. */
+    /** This can be appended to a function declaration to tell gcc to disable associative
+    math optimisations which break some floating point algorithms. */
 #define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS __attribute__ ((__optimize__ ("no-associative-math")))
 #else
 #define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS

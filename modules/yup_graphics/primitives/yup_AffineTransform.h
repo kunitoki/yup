@@ -486,7 +486,7 @@ public:
     // TODO - doxygen
     [[nodiscard]] constexpr float getScaleFactor() const noexcept
     {
-        return (std::abs (scaleX) + std::abs (scaleY)) / 2.0f;
+        return (juce_abs (scaleX) + juce_abs (scaleY)) / 2.0f;
     }
 
     //==============================================================================
