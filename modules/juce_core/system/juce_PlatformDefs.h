@@ -241,7 +241,7 @@ constexpr bool isConstantEvaluated() noexcept
     @see jassert
 */
 #define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    if (! juce::isConstantEvaluated())                 \
+    if (! juce::isConstantEvaluated())                 \
     {                                                  \
         JUCE_LOG_CURRENT_ASSERTION;                    \
         if (juce::juce_isRunningUnderDebugger())       \
