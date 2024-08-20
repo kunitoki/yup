@@ -214,8 +214,9 @@ constexpr bool isConstantEvaluated() noexcept
 // clang-format on
 
 //==============================================================================
+// clang-format off
 #if (JUCE_DEBUG && ! JUCE_DISABLE_ASSERTIONS) || DOXYGEN
-    /** Writes a string to the standard error stream.
+/** Writes a string to the standard error stream.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
 
@@ -228,33 +229,33 @@ constexpr bool isConstantEvaluated() noexcept
 
     @see Logger::outputDebugString
 */
-#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
-    juce::String tempDbgBuf;                                \
-    tempDbgBuf << textToWrite;                              \
+#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    juce::String tempDbgBuf;                               \
+    tempDbgBuf << textToWrite;                             \
     juce::Logger::outputDebugString (tempDbgBuf);)
 
-    //==============================================================================
-    /** This will always cause an assertion failure.
+//==============================================================================
+/** This will always cause an assertion failure.
     It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
 
     @see jassert
 */
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
-    if (! juce::isConstantEvaluated()) { \
-JUCE_LOG_CURRENT_ASSERTION; \
-if (juce::juce_isRunningUnderDebugger()) \
-{ \
-JUCE_BREAK_IN_DEBUGGER \
-} \
-else \
-{ \
-JUCE_ANALYZER_NORETURN \
-} \
-    } else { \
-        JUCE_ANALYZER_NORETURN })
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    if (! juce::isConstantEvaluated())                 \
+    {                                                  \
+        JUCE_LOG_CURRENT_ASSERTION;                    \
+        if (juce::juce_isRunningUnderDebugger())       \
+            { JUCE_BREAK_IN_DEBUGGER }                 \
+        else                                           \
+            { JUCE_ANALYZER_NORETURN }                 \
+    }                                                  \
+    else                                               \
+    {                                                  \
+        JUCE_ANALYZER_NORETURN                         \
+    })
 
-    //==============================================================================
-    /** Platform-independent assertion macro.
+//==============================================================================
+/** Platform-independent assertion macro.
 
     This macro gets turned into a no-op when you're building with debugging turned off, so be
     careful that the expression you pass to it doesn't perform any actions that are vital for the
@@ -264,7 +265,7 @@ JUCE_ANALYZER_NORETURN \
 */
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 
-    /** Platform-independent assertion macro which suppresses ignored-variable
+/** Platform-independent assertion macro which suppresses ignored-variable
     warnings in all build modes. You should probably use a plain jassert()
     and `[[maybe_unused]]` by default.
 */
@@ -286,6 +287,7 @@ JUCE_ANALYZER_NORETURN \
 #endif
 
 #endif
+// clang-format on
 
 //==============================================================================
 /** This is a shorthand macro for deleting a class's copy constructor and copy assignment operator.
