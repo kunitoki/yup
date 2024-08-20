@@ -96,49 +96,29 @@ namespace juce
       crash or not, depending on the platform.
       @see jassert()
   */
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-::kill (0, SIGTRAP);           \
-}
+// clang-format off
+#define JUCE_BREAK_IN_DEBUGGER { ::kill (0, SIGTRAP); }
 #elif JUCE_WASM
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-}
+#define JUCE_BREAK_IN_DEBUGGER {}
 #elif JUCE_MSVC
 #ifndef __INTEL_COMPILER
 #pragma intrinsic(__debugbreak)
 #endif
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__debugbreak();                \
-}
+#define JUCE_BREAK_IN_DEBUGGER { __debugbreak(); }
 #elif JUCE_INTEL && (JUCE_GCC || JUCE_CLANG || JUCE_MAC)
 #if JUCE_NO_INLINE_ASM
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-}
+#define JUCE_BREAK_IN_DEBUGGER {}
 #else
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-asm("int $3");                 \
-}
+#define JUCE_BREAK_IN_DEBUGGER { asm("int $3"); }
 #endif
 #elif JUCE_ARM && JUCE_MAC
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__builtin_debugtrap();         \
-}
+#define JUCE_BREAK_IN_DEBUGGER { __builtin_debugtrap(); }
 #elif JUCE_ANDROID
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__builtin_trap();              \
-}
+#define JUCE_BREAK_IN_DEBUGGER { __builtin_trap(); }
 #else
-#define JUCE_BREAK_IN_DEBUGGER \
-{                              \
-__asm int 3                    \
-}
+#define JUCE_BREAK_IN_DEBUGGER { __asm int 3 }
 #endif
+// clang-format off
 
 #if JUCE_CLANG && defined(__has_feature) && ! defined(JUCE_ANALYZER_NORETURN)
 #if __has_feature(attribute_analyzer_noreturn)
@@ -175,21 +155,68 @@ inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn()
 #endif
 
 //==============================================================================
+#if defined(__has_feature)
+#define JUCE_HAS_FEATURE(feature) __has_feature (feature)
+#else
+#define JUCE_HAS_FEATURE(feature) 0
+#endif
+
+#if defined(__has_attribute)
+#define JUCE_HAS_ATTRIBUTE(attribute) __has_attribute (attribute)
+#else
+#define JUCE_HAS_ATTRIBUTE(attribute) 0
+#endif
+
+#if defined(__has_builtin)
+#define JUCE_HAS_BUILTIN(builtin) __has_builtin (builtin)
+#else
+#define JUCE_HAS_BUILTIN(builtin) 0
+#endif
+
+//==============================================================================
+#if __cpp_lib_is_constant_evaluated >= 201811L
+#define JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED 1
+#else
+#define JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED 0
+#endif
+
+#if defined(JUCE_MSVC) || JUCE_HAS_BUILTIN(__builtin_is_constant_evaluated)
+#define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 1
+#else
+#define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 0
+#endif
+
+#if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED || JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
+#define JUCE_HAS_IS_CONSTANT_EVALUATED 1
+#else
+#define JUCE_HAS_IS_CONSTANT_EVALUATED 0
+#endif
+
+constexpr bool isConstantEvaluated() noexcept
+{
+#if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED
+    return std::is_constant_evaluated();
+#else if JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
+    return __builtin_is_constant_evaluated();
+#else
+    return false;
+#endif
+}
+
+//==============================================================================
+// clang-format off
 #if JUCE_MSVC && ! defined(DOXYGEN)
 #define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x)      \
-__pragma (warning (push))                        \
-    __pragma (warning (disable : 4127)) do { x } \
-while (false)                                    \
-__pragma (warning (pop))
+    __pragma (warning (push))                    \
+    __pragma (warning (disable : 4127))          \
+    do { x } while (false)                       \
+    __pragma (warning (pop))
 #else
 /** This is the good old C++ trick for creating a macro that forces the user to put
     a semicolon after it when they use it.
  */
 #define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
-do                                          \
-{                                           \
-x                                           \
-} while (false)
+    do { x } while (false)
 #endif
 
 //==============================================================================
@@ -204,14 +231,24 @@ x                                           \
       that have important side-effects!
       @see Logger::outputDebugString
   */
-#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (juce::String tempDbgBuf; tempDbgBuf << textToWrite; juce::Logger::outputDebugString (tempDbgBuf);)
+#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    juce::String tempDbgBuf;                               \
+    tempDbgBuf << textToWrite;                             \
+    juce::Logger::outputDebugString (tempDbgBuf);)
 
 //==============================================================================
 /** This will always cause an assertion failure.
       It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
       @see jassert
   */
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (JUCE_LOG_CURRENT_ASSERTION; if (juce::juce_isRunningUnderDebugger()) JUCE_BREAK_IN_DEBUGGER; JUCE_ANALYZER_NORETURN)
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    if (! isConstantEvaluated())                       \
+    {                                                  \
+        JUCE_LOG_CURRENT_ASSERTION;                    \
+        if (juce::juce_isRunningUnderDebugger())       \
+            JUCE_BREAK_IN_DEBUGGER;                    \
+    }                                                  \
+    JUCE_ANALYZER_NORETURN)
 
 //==============================================================================
 /** Platform-independent assertion macro.
