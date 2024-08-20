@@ -349,7 +349,7 @@ static void operator delete (void*) = delete;
 #define JUCE_WARNING_HELPER(mess) message (#mess)
 #endif
 
-    /** This macro allows you to emit a custom compiler warning message.
+/** This macro allows you to emit a custom compiler warning message.
 
     Very handy for marking bits of code as "to-do" items, or for shaming
     code written by your co-workers in a way that's hard to ignore.
@@ -362,7 +362,7 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_DEBUG || DOXYGEN
-    /** A platform-independent way of forcing an inline function.
+/** A platform-independent way of forcing an inline function.
 
     Use the syntax:
 
@@ -380,7 +380,7 @@ static void operator delete (void*) = delete;
 #endif
 
 #if JUCE_MSVC || DOXYGEN
-    /** This can be placed before a stack or member variable declaration to tell the compiler
+/** This can be placed before a stack or member variable declaration to tell the compiler
     to align it to the specified number of bytes. */
 #define JUCE_ALIGN(bytes) __declspec(align (bytes))
 #else
@@ -391,7 +391,7 @@ static void operator delete (void*) = delete;
 #if JUCE_ANDROID && ! defined(DOXYGEN)
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #elif ! defined(JUCE_MODAL_LOOPS_PERMITTED)
-    /** Some operating environments don't provide a modal loop mechanism, so this flag can be
+/** Some operating environments don't provide a modal loop mechanism, so this flag can be
     used to disable any functions that try to run a modal loop. */
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #endif
@@ -405,7 +405,7 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_GCC || DOXYGEN
-    /** This can be appended to a function declaration to tell gcc to disable associative
+/** This can be appended to a function declaration to tell gcc to disable associative
     math optimisations which break some floating point algorithms. */
 #define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS __attribute__ ((__optimize__ ("no-associative-math")))
 #else
