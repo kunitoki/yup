@@ -215,7 +215,7 @@ constexpr bool isConstantEvaluated() noexcept
 
 //==============================================================================
 #if (JUCE_DEBUG && ! JUCE_DISABLE_ASSERTIONS) || DOXYGEN
-/** Writes a string to the standard error stream.
+    /** Writes a string to the standard error stream.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
 
@@ -228,31 +228,33 @@ constexpr bool isConstantEvaluated() noexcept
 
     @see Logger::outputDebugString
 */
-#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    juce::String tempDbgBuf;                               \
-    tempDbgBuf << textToWrite;                             \
+#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
+    juce::String tempDbgBuf;                                \
+    tempDbgBuf << textToWrite;                              \
     juce::Logger::outputDebugString (tempDbgBuf);)
 
-//==============================================================================
-/** This will always cause an assertion failure.
+    //==============================================================================
+    /** This will always cause an assertion failure.
     It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
 
     @see jassert
 */
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (                     \
-    if (! juce::isConstantEvaluated())                                      \
-    {                                                                       \
-        JUCE_LOG_CURRENT_ASSERTION;                                         \
-        if (juce::juce_isRunningUnderDebugger()) { JUCE_BREAK_IN_DEBUGGER } \
-        else                                     { JUCE_ANALYZER_NORETURN } \
-    }                                                                       \
-    else                                                                    \
-    {                                                                       \
-        JUCE_ANALYZER_NORETURN                                              \
-    })
+#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
+    if (! juce::isConstantEvaluated()) { \
+JUCE_LOG_CURRENT_ASSERTION; \
+if (juce::juce_isRunningUnderDebugger()) \
+{ \
+JUCE_BREAK_IN_DEBUGGER \
+} \
+else \
+{ \
+JUCE_ANALYZER_NORETURN \
+} \
+    } else { \
+        JUCE_ANALYZER_NORETURN })
 
-//==============================================================================
-/** Platform-independent assertion macro.
+    //==============================================================================
+    /** Platform-independent assertion macro.
 
     This macro gets turned into a no-op when you're building with debugging turned off, so be
     careful that the expression you pass to it doesn't perform any actions that are vital for the
@@ -262,7 +264,7 @@ constexpr bool isConstantEvaluated() noexcept
 */
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 
-/** Platform-independent assertion macro which suppresses ignored-variable
+    /** Platform-independent assertion macro which suppresses ignored-variable
     warnings in all build modes. You should probably use a plain jassert()
     and `[[maybe_unused]]` by default.
 */
@@ -345,7 +347,7 @@ static void operator delete (void*) = delete;
 #define JUCE_WARNING_HELPER(mess) message (#mess)
 #endif
 
-/** This macro allows you to emit a custom compiler warning message.
+    /** This macro allows you to emit a custom compiler warning message.
 
     Very handy for marking bits of code as "to-do" items, or for shaming
     code written by your co-workers in a way that's hard to ignore.
@@ -358,7 +360,7 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_DEBUG || DOXYGEN
-/** A platform-independent way of forcing an inline function.
+    /** A platform-independent way of forcing an inline function.
 
     Use the syntax:
 
@@ -376,7 +378,7 @@ static void operator delete (void*) = delete;
 #endif
 
 #if JUCE_MSVC || DOXYGEN
-/** This can be placed before a stack or member variable declaration to tell the compiler
+    /** This can be placed before a stack or member variable declaration to tell the compiler
     to align it to the specified number of bytes. */
 #define JUCE_ALIGN(bytes) __declspec(align (bytes))
 #else
@@ -387,7 +389,7 @@ static void operator delete (void*) = delete;
 #if JUCE_ANDROID && ! defined(DOXYGEN)
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #elif ! defined(JUCE_MODAL_LOOPS_PERMITTED)
-/** Some operating environments don't provide a modal loop mechanism, so this flag can be
+    /** Some operating environments don't provide a modal loop mechanism, so this flag can be
     used to disable any functions that try to run a modal loop. */
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #endif
@@ -401,7 +403,7 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_GCC || DOXYGEN
-/** This can be appended to a function declaration to tell gcc to disable associative
+    /** This can be appended to a function declaration to tell gcc to disable associative
     math optimisations which break some floating point algorithms. */
 #define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS __attribute__ ((__optimize__ ("no-associative-math")))
 #else
