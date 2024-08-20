@@ -106,7 +106,7 @@ using ssize_t = pointer_sized_int;
 //==============================================================================
 /** Handy function for avoiding unused variables warning. */
 template <typename... Types>
-void ignoreUnused (Types&&...) noexcept
+constexpr void ignoreUnused (Types&&...) noexcept
 {
 }
 
@@ -150,6 +150,20 @@ inline float juce_hypot (float a, float b) noexcept
 #endif
 }
 #endif
+
+//==============================================================================
+/** Constexpr enabled abs
+
+    @tags{Core}
+*/
+template <typename Type>
+constexpr Type juce_abs (Type v) noexcept
+{
+    if (isConstantEvaluated())
+        return (v < static_cast<Type> (0)) ? -v : v;
+    else
+        return std::abs (v);
+}
 
 //==============================================================================
 /** Commonly used mathematical constants
@@ -243,7 +257,7 @@ template <typename Type>
 class Tolerance
 {
 public:
-    Tolerance() = default;
+    constexpr Tolerance() = default;
 
     /** Returns a copy of this Tolerance object with a new absolute tolerance.
 
@@ -252,9 +266,9 @@ public:
 
         @see getAbsolute, absoluteTolerance
     */
-    [[nodiscard]] Tolerance withAbsolute (Type newAbsolute)
+    [[nodiscard]] constexpr Tolerance withAbsolute (Type newAbsolute)
     {
-        return withMember (*this, &Tolerance::absolute, std::abs (newAbsolute));
+        return withMember (*this, &Tolerance::absolute, juce_abs (newAbsolute));
     }
 
     /** Returns a copy of this Tolerance object with a new relative tolerance.
@@ -264,14 +278,14 @@ public:
 
         @see getRelative, relativeTolerance
     */
-    [[nodiscard]] Tolerance withRelative (Type newRelative)
+    [[nodiscard]] constexpr Tolerance withRelative (Type newRelative)
     {
-        return withMember (*this, &Tolerance::relative, std::abs (newRelative));
+        return withMember (*this, &Tolerance::relative, juce_abs (newRelative));
     }
 
-    [[nodiscard]] Type getAbsolute() const { return absolute; }
+    [[nodiscard]] constexpr Type getAbsolute() const { return absolute; }
 
-    [[nodiscard]] Type getRelative() const { return relative; }
+    [[nodiscard]] constexpr Type getRelative() const { return relative; }
 
 private:
     Type absolute {};
@@ -283,7 +297,7 @@ private:
     @see Tolerance::withAbsolute, approximatelyEqual
  */
 template <typename Type>
-static Tolerance<Type> absoluteTolerance (Type tolerance)
+constexpr Tolerance<Type> absoluteTolerance (Type tolerance)
 {
     return Tolerance<Type> {}.withAbsolute (tolerance);
 }
@@ -293,7 +307,7 @@ static Tolerance<Type> absoluteTolerance (Type tolerance)
     @see Tolerance::withRelative, approximatelyEqual
  */
 template <typename Type>
-static Tolerance<Type> relativeTolerance (Type tolerance)
+constexpr Tolerance<Type> relativeTolerance (Type tolerance)
 {
     return Tolerance<Type> {}.withRelative (tolerance);
 }
@@ -329,10 +343,10 @@ constexpr bool approximatelyEqual (Type a, Type b, Tolerance<Type> tolerance = T
     if (! (juce_isfinite (a) && juce_isfinite (b)))
         return exactlyEqual (a, b);
 
-    const auto diff = std::abs (a - b);
+    const auto diff = juce_abs (a - b);
 
     return diff <= tolerance.getAbsolute()
-        || diff <= tolerance.getRelative() * std::max (std::abs (a), std::abs (b));
+        || diff <= tolerance.getRelative() * std::max (juce_abs (a), juce_abs (b));
 }
 
 /** Special case for non-floating-point types that returns true if both are exactly equal. */
@@ -413,7 +427,7 @@ constexpr Type jmap (Type value0To1, Type targetRangeMin, Type targetRangeMax)
 
 /** Remaps a value from a source range to a target range. */
 template <typename Type>
-Type jmap (Type sourceValue, Type sourceRangeMin, Type sourceRangeMax, Type targetRangeMin, Type targetRangeMax)
+constexpr Type jmap (Type sourceValue, Type sourceRangeMin, Type sourceRangeMax, Type targetRangeMin, Type targetRangeMax)
 {
     jassert (! approximatelyEqual (sourceRangeMax, sourceRangeMin)); // mapping from a range of zero will produce NaN!
     return targetRangeMin + ((targetRangeMax - targetRangeMin) * (sourceValue - sourceRangeMin)) / (sourceRangeMax - sourceRangeMin);
@@ -465,7 +479,7 @@ Type mapFromLog10 (Type valueInLogRange, Type logRangeMin, Type logRangeMax)
 
 /** Scans an array of values, returning the minimum value that it contains. */
 template <typename Type, typename Size>
-Type findMinimum (const Type* data, Size numValues)
+constexpr Type findMinimum (const Type* data, Size numValues)
 {
     if (numValues <= 0)
         return Type (0);
@@ -485,7 +499,7 @@ Type findMinimum (const Type* data, Size numValues)
 
 /** Scans an array of values, returning the maximum value that it contains. */
 template <typename Type, typename Size>
-Type findMaximum (const Type* values, Size numValues)
+constexpr Type findMaximum (const Type* values, Size numValues)
 {
     if (numValues <= 0)
         return Type (0);
@@ -550,9 +564,9 @@ void findMinAndMax (const Type* values, int numValues, Type& lowest, Type& highe
     @see jmin, jmax, jmap
 */
 template <typename Type>
-Type jlimit (Type lowerLimit,
-             Type upperLimit,
-             Type valueToConstrain) noexcept
+constexpr Type jlimit (Type lowerLimit,
+                       Type upperLimit,
+                       Type valueToConstrain) noexcept
 {
     jassert (lowerLimit <= upperLimit); // if these are in the wrong order, results are unpredictable..
 
@@ -567,14 +581,14 @@ Type jlimit (Type lowerLimit,
     @endcode
 */
 template <typename Type1, typename Type2>
-bool isPositiveAndBelow (Type1 valueToTest, Type2 upperLimit) noexcept
+constexpr bool isPositiveAndBelow (Type1 valueToTest, Type2 upperLimit) noexcept
 {
     jassert (Type1() <= static_cast<Type1> (upperLimit)); // makes no sense to call this if the upper limit is itself below zero..
     return Type1() <= valueToTest && valueToTest < static_cast<Type1> (upperLimit);
 }
 
 template <typename Type>
-bool isPositiveAndBelow (int valueToTest, Type upperLimit) noexcept
+constexpr bool isPositiveAndBelow (int valueToTest, Type upperLimit) noexcept
 {
     jassert (upperLimit >= 0); // makes no sense to call this if the upper limit is itself below zero..
     return static_cast<unsigned int> (valueToTest) < static_cast<unsigned int> (upperLimit);
@@ -586,14 +600,14 @@ bool isPositiveAndBelow (int valueToTest, Type upperLimit) noexcept
     @endcode
 */
 template <typename Type1, typename Type2>
-bool isPositiveAndNotGreaterThan (Type1 valueToTest, Type2 upperLimit) noexcept
+constexpr bool isPositiveAndNotGreaterThan (Type1 valueToTest, Type2 upperLimit) noexcept
 {
     jassert (Type1() <= static_cast<Type1> (upperLimit)); // makes no sense to call this if the upper limit is itself below zero..
     return Type1() <= valueToTest && valueToTest <= static_cast<Type1> (upperLimit);
 }
 
 template <typename Type>
-bool isPositiveAndNotGreaterThan (int valueToTest, Type upperLimit) noexcept
+constexpr bool isPositiveAndNotGreaterThan (int valueToTest, Type upperLimit) noexcept
 {
     jassert (upperLimit >= 0); // makes no sense to call this if the upper limit is itself below zero..
     return static_cast<unsigned int> (valueToTest) <= static_cast<unsigned int> (upperLimit);
@@ -603,9 +617,9 @@ bool isPositiveAndNotGreaterThan (int valueToTest, Type upperLimit) noexcept
     to a given tolerance, otherwise it returns false.
 */
 template <typename Type>
-bool isWithin (Type a, Type b, Type tolerance) noexcept
+constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
 {
-    return std::abs (a - b) <= tolerance;
+    return juce_abs (a - b) <= tolerance;
 }
 
 //==============================================================================
@@ -682,7 +696,7 @@ inline int roundToIntAccurate (double value) noexcept
     unsigned int.
 */
 template <typename FloatType>
-unsigned int truncatePositiveToUnsignedInt (FloatType value) noexcept
+constexpr unsigned int truncatePositiveToUnsignedInt (FloatType value) noexcept
 {
     jassert (value >= static_cast<FloatType> (0));
     jassert (static_cast<FloatType> (value)
@@ -700,7 +714,7 @@ constexpr bool isPowerOfTwo (IntegerType value)
 }
 
 /** Returns the smallest power-of-two which is equal to or greater than the given integer. */
-inline int nextPowerOfTwo (int n) noexcept
+constexpr int nextPowerOfTwo (int n) noexcept
 {
     --n;
     n |= (n >> 1);
@@ -738,7 +752,7 @@ constexpr int countNumberOfBits (uint64 n) noexcept
     The divisor must be greater than zero.
 */
 template <typename IntegerType>
-IntegerType negativeAwareModulo (IntegerType dividend, const IntegerType divisor) noexcept
+constexpr IntegerType negativeAwareModulo (IntegerType dividend, const IntegerType divisor) noexcept
 {
     jassert (divisor > 0);
     dividend %= divisor;
@@ -747,7 +761,7 @@ IntegerType negativeAwareModulo (IntegerType dividend, const IntegerType divisor
 
 /** Returns the square of its argument. */
 template <typename NumericType>
-inline constexpr NumericType square (NumericType n) noexcept
+constexpr NumericType square (NumericType n) noexcept
 {
     return n * n;
 }
