@@ -30,6 +30,8 @@ project (yup VERSION 1.0)
 
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
+option (YUP_ENABLE_PROFILING "Build the profiling" ON)
+
 option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
@@ -53,6 +55,11 @@ yup_add_module (modules/yup_audio_processors)
 yup_add_module (modules/yup_audio_plugin_client)
 yup_add_module (modules/yup_graphics)
 yup_add_module (modules/yup_gui)
+
+# Enable profiling
+if (YUP_ENABLE_PROFILING)
+    _yup_fetch_perfetto()
+endif()
 
 # Targets
 if (YUP_BUILD_EXAMPLES)

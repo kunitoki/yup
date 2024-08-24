@@ -894,6 +894,8 @@ void GLFWComponentNative::handleAsyncUpdate()
     if (! isThreadRunning() || ! isInitialised.test())
         return;
 
+    YUP_PROFILE_EVENT ("rendering", "GLFWComponentNative::renderContext");
+
     renderContext();
 
     renderEvent.signal();
