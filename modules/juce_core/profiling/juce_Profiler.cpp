@@ -85,7 +85,7 @@ void Profiler::stopTracing()
     std::vector<char> traceData (session->ReadTraceBlocking());
 
     const auto destination = File::getSpecialLocation (File::userHomeDirectory)
-        .getChildFile ("example.pftrace"); // TODO - make it configurable
+                                 .getChildFile ("example.pftrace"); // TODO - make it configurable
 
     if (auto output = destination.createOutputStream(); output != nullptr && output->openedOk())
         output->write (traceData.data(), traceData.size());

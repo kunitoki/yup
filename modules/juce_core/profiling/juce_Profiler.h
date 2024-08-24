@@ -21,10 +21,9 @@
 
 #if JUCE_ENABLE_PROFILING
 
-PERFETTO_DEFINE_CATEGORIES(
+PERFETTO_DEFINE_CATEGORIES (
     perfetto::Category ("rendering"),
-    perfetto::Category ("network")
-);
+    perfetto::Category ("network"));
 
 namespace juce
 {
