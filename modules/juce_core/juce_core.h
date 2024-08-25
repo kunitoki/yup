@@ -71,7 +71,7 @@
 //==============================================================================
 #ifdef _MSC_VER
 #pragma warning(push)
-    // Disable warnings for long class names, padding, and undefined preprocessor definitions.
+// Disable warnings for long class names, padding, and undefined preprocessor definitions.
 #pragma warning(disable : 4251 4786 4668 4820)
 #ifdef __INTEL_COMPILER
 #pragma warning(disable : 1125)
@@ -414,7 +414,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #ifndef DOXYGEN
 namespace juce
 {
-    /*
+/*
     As the very long class names here try to explain, the purpose of this code is to cause
     a linker error if not all of your compile units are consistent in the options that they
     enable before including JUCE headers. The reason this is important is that if you have
