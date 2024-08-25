@@ -348,6 +348,10 @@ function (_yup_module_setup_target module_name
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
     endif()
 
+    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
+        target_compile_definitions (${module_name} PUBLIC NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
+    endif()
+
     target_compile_definitions (${module_name} INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
         JUCE_MODULE_AVAILABLE_${module_name}=1
