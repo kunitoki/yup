@@ -169,7 +169,7 @@ function (_yup_fetch_perfetto)
         POSITION_INDEPENDENT_CODE TRUE
         FOLDER "Thirdparty")
 
-    if ("${yup_platform}" MATCHES "^(win32)$")
+    if (WIN32)
         target_compile_definitions (perfetto PUBLIC NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
         if (MSVC)
             target_compile_options (perfetto PRIVATE /bigobj PUBLIC /Zc:__cplusplus /permissive-)
