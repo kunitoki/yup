@@ -395,7 +395,9 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #endif
 
 #if JUCE_ENABLE_PROFILING
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4267)
 #include <perfetto.h>
+JUCE_END_IGNORE_WARNINGS_MSVC
 #endif
 
 #include "profiling/juce_Profiler.h"
