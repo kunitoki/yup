@@ -149,7 +149,7 @@ endfunction()
 function (_yup_fetch_perfetto)
     FetchContent_Declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
-        GIT_TAG v47.0
+        GIT_TAG v42.0
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
@@ -159,11 +159,8 @@ function (_yup_fetch_perfetto)
     target_compile_features (perfetto PUBLIC cxx_std_17)
 
     target_sources (perfetto
-        PRIVATE
-            "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.cc>"
-        PUBLIC
-            "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.h>"
-        )
+        PRIVATE "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.cc>"
+        PUBLIC "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.h>")
 
     target_include_directories (perfetto PUBLIC
         "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk>")
@@ -174,14 +171,12 @@ function (_yup_fetch_perfetto)
 
     if ("${yup_platform}" MATCHES "^(win32)$")
         target_compile_definitions (perfetto PUBLIC NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
-
         if (MSVC)
             target_compile_options (perfetto PRIVATE /bigobj PUBLIC /Zc:__cplusplus /permissive-)
         endif()
     endif()
 
     add_library (perfetto::perfetto ALIAS perfetto)
-
 endfunction()
 
 #==============================================================================
