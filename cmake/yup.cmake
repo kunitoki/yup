@@ -635,7 +635,7 @@ function (yup_standalone_app)
     endif()
 
     # ==== Enable profiling
-    if (YUP_ENABLE_PROFILING)
+    if (YUP_ENABLE_PROFILING AND NOT "${target_name}" STREQUAL "yup_tests")
         list (APPEND additional_definitions JUCE_ENABLE_PROFILING=1 YUP_ENABLE_PROFILING=1)
         list (APPEND additional_libraries perfetto::perfetto)
     endif()
