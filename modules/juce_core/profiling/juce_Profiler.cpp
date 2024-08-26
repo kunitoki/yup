@@ -28,32 +28,21 @@ namespace juce
 
 //==============================================================================
 
-template <size_t sizeResult, size_t sizeTest>
+template <std::size_t sizeResult, std::size_t sizeTest>
 constexpr bool stringsEqual (const std::array<char, sizeResult>& result, const char (&test)[sizeTest])
 {
     static_assert (sizeTest > 1);
     static_assert (sizeResult + 1 >= sizeTest);
 
-    std::string_view resultView (result.data(), sizeTest);
-    std::string_view testView (test, sizeTest);
-    return testView == resultView;
+    return std::string_view (test, sizeTest) == std::string_view (result.data(), sizeTest);
 }
 
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([]
-                                                                    {
-                                                                        return "int main";
-                                                                    }),
-                             "main"));
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([]
-                                                                    {
-                                                                        return "void AudioProcessor::processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const";
-                                                                    }),
-                             "AudioProcessor::processBlock"));
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([]
-                                                                    {
-                                                                        return "void __cdecl AudioProcessor::processBlock::<lambda_1>::operator";
-                                                                    }),
-                             "AudioProcessor::processBlock"));
+// clang-format off
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "int main"; }), "main"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void AudioProcessor::processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const"; }), "AudioProcessor::processBlock"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void __cdecl AudioProcessor::processBlock::<lambda_1>::operator"; }), "AudioProcessor::processBlock"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void __fastcall AudioProcessor::processBlock::<lambda_1>::operator"; }), "AudioProcessor::processBlock"));
+// clang-format on
 
 //==============================================================================
 
