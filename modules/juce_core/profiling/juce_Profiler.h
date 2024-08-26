@@ -30,16 +30,52 @@ namespace juce
 
 //==============================================================================
 
+/** A singleton class that handles performance tracing using Perfetto.
+
+    The `Profiler` class allows you to start and stop performance tracing, with options for custom buffer sizes.
+    It is implemented as a singleton and cannot be copied or moved. This class leverages Perfetto for tracing sessions.
+
+    @tags{Profiling}
+*/
 class JUCE_API Profiler
 {
 public:
-    void startTracing();
-    void startTracing (uint32 sizeInKilobytes);
-    void startTracing (StringRef traceName);
-    void startTracing (uint32 sizeInKilobytes, StringRef traceName);
+    /** Starts a tracing session with the default buffer size.
 
+        This method starts the tracing process using a default buffer size. The tracing session is managed internally
+        and will continue until `stopTracing()` is called.
+    */
+    void startTracing();
+
+    /** Starts a tracing session with a custom buffer size.
+
+        This method allows you to specify the buffer size used for tracing. The buffer size is defined in kilobytes.
+
+        @param sizeInKilobytes The size of the tracing buffer in kilobytes.
+    */
+    void startTracing (uint32 sizeInKilobytes);
+
+    /** Stops the current tracing session.
+
+        This method stops the tracing process and finalizes the trace data.
+        Once tracing is stopped, the data can be retrieved and analyzed.
+    */
     void stopTracing();
 
+    /** A constexpr function that prettifies a function name at compile time.
+
+        This template function accepts a function name and formats it in a  more readable manner at compile time.
+
+        @tparam F A function name type.
+
+        @param funcName The function name to prettify.
+
+        @returns The prettified function name.
+    */
+    template <typename F>
+    static constexpr auto compileTimePrettierFunction (F funcName);
+
+    /** Singleton declaration for the Profiler class. */
     JUCE_DECLARE_SINGLETON (Profiler, false)
 
 protected:
@@ -50,13 +86,92 @@ protected:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Profiler);
 };
 
+template <typename F>
+constexpr auto Profiler::compileTimePrettierFunction (F func)
+{
+    if (! isConstantEvaluated())
+        jassertfalse;
+
+    constexpr auto source = func();
+    constexpr auto sourceSize = std::string_view (source).size();
+    std::array<char, sourceSize> result {};
+
+    // loop through the source, building a new truncated array
+    // see: https://stackoverflow.com/a/72627251
+    for (std::size_t i = 0; i < sourceSize; ++i)
+    {
+        // wait until after the return type (first space in the string)
+        if (source[i] != ' ')
+            continue;
+
+        ++i; // skip the space
+
+        // MSVC has an additional identifier after the return type: __cdecl, __fastcall, ...
+        if (source[i] == '_')
+        {
+            while (source[i] != ' ')
+                ++i;
+
+            ++i;
+        }
+
+        std::size_t j = 0;
+
+        // build result, stop when we hit the arguments
+        // clang and gcc use (, MSVC uses <
+        while ((source[i] != '(' && source[i] != '<') && i < sourceSize && j < sourceSize)
+            result[j++] = source[i++];
+
+        // really ugly clean up after msvc, remove the extra :: before <lambda_1>
+        if (source[i] == '<')
+            result[j - 2] = '\0';
+        else
+            result[j] = '\0';
+
+        return result;
+    }
+
+    return result;
+}
 } // namespace juce
 
+/**
+   Starts profiling/tracing with the given arguments.
+
+   This macro is used to start a profiling session using the JUCE Profiler.
+   It passes the provided arguments to the `startTracing` function of the `Profiler` singleton.
+
+   @param ... Arguments to be passed to `juce::Profiler::startTracing`.
+*/
 #define YUP_PROFILE_START(...) ::juce::Profiler::getInstance()->startTracing (__VA_ARGS__)
+
+/** Stops the profiling/tracing session.
+
+    This macro stops the current profiling session using the JUCE Profiler.
+    It calls the `stopTracing` function of the `Profiler` singleton.
+*/
 #define YUP_PROFILE_STOP(...) ::juce::Profiler::getInstance()->stopTracing()
-#define YUP_PROFILE_EVENT(...) TRACE_EVENT (__VA_ARGS__)
+
+/** Records a profiling trace event.
+
+    This macro is used to trace events for profiling purposes.
+    If tracing is enabled, it generates a trace event with the specified category and optional additional arguments.
+    When tracing is disabled, it will do nothing.
+
+    @param category The category for the trace event.
+    @param ... Optional additional arguments for the trace event.
+*/
+#if ! YUP_PROFILE_DISABLE_TRACE
+    #define YUP_PROFILE_TRACE(category, ...)                                                                                                                       \
+        constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
+        TRACE_EVENT (category, ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
+#else
+    #define YUP_PROFILE_TRACE(category, ...)
+#endif
+
 #else
 #define YUP_PROFILE_START(...)
 #define YUP_PROFILE_STOP(...)
-#define YUP_PROFILE_EVENT(...)
+#define YUP_PROFILE_TRACE(category, ...)
+
 #endif

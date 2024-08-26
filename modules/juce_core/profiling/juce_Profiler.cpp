@@ -28,6 +28,23 @@ namespace juce
 
 //==============================================================================
 
+template <size_t sizeResult, size_t sizeTest>
+constexpr bool stringsEqual (const std::array<char, sizeResult>& result, const char (&test)[sizeTest])
+{
+    static_assert (sizeTest > 1);
+    static_assert (sizeResult + 1 >= sizeTest);
+
+    std::string_view resultView (result.data(), sizeTest);
+    std::string_view testView (test, sizeTest);
+    return testView == resultView;
+}
+
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "int main"; }), "main"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void AudioProcessor::processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const"; }), "AudioProcessor::processBlock"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void __cdecl AudioProcessor::processBlock::<lambda_1>::operator"; }), "AudioProcessor::processBlock"));
+
+//==============================================================================
+
 JUCE_IMPLEMENT_SINGLETON (Profiler)
 
 //==============================================================================
@@ -47,25 +64,15 @@ Profiler::Profiler()
 
 void Profiler::startTracing()
 {
-    startTracing (1024 * 128, "YupApp");
+    startTracing (1024 * 128);
 }
 
 void Profiler::startTracing (uint32 sizeInKilobytes)
 {
-    startTracing (sizeInKilobytes, "YupApp");
-}
-
-void Profiler::startTracing (StringRef traceName)
-{
-    startTracing (1024 * 128, traceName);
-}
-
-void Profiler::startTracing (uint32 sizeInKilobytes, StringRef traceName)
-{
     perfetto::TraceConfig traceConfig;
     traceConfig.add_buffers()->set_size_kb (sizeInKilobytes);
     auto dataSourceConfig = traceConfig.add_data_sources()->mutable_config();
-    dataSourceConfig->set_name (String (traceName).toStdString());
+    dataSourceConfig->set_name ("track_event");
 
     session = perfetto::Tracing::NewTrace();
     session->Setup (traceConfig);
@@ -84,18 +91,40 @@ void Profiler::stopTracing()
     session->StopBlocking();
     std::vector<char> traceData (session->ReadTraceBlocking());
 
-    const auto destination = File::getSpecialLocation (File::userHomeDirectory)
-                                 .getChildFile ("example.pftrace"); // TODO - make it configurable
+    String fileName;
+    fileName
+        << "yup-profile"
+#if JUCE_DEBUG
+        << "-DEBUG-"
+#else
+        << "-RELEASE-"
+#endif
+        << Time::getCurrentTime().formatted ("%Y-%m-%d_%H%M%S")
+        << ".pftrace";
+
+    const auto destination = File::getSpecialLocation (File::userHomeDirectory) // TODO - make it configurable
+                                 .getChildFile (fileName);
+
+    if (destination.existsAsFile())
+        destination.deleteFile();
 
     if (auto output = destination.createOutputStream(); output != nullptr && output->openedOk())
+    {
         output->write (traceData.data(), traceData.size());
 
-    String message;
-    message
-        << "Trace written in " << destination.getFullPathName() << ". "
-        << "To read this trace in text form, `./tools/traceconv text " << destination.getFullPathName() << "`";
+        String message;
+        message
+            << "Trace written in " << destination.getFullPathName() << ". "
+            << "To read this trace in text form, `./tools/traceconv text " << destination.getFullPathName() << "`";
 
-    PERFETTO_LOG ("%s", message.toRawUTF8());
+        DBG (message);
+    }
+    else
+    {
+        DBG ("Failed to write trace file. Check for missing permissions.");
+
+        jassertfalse;
+    }
 
     Profiler::deleteInstance();
 }
