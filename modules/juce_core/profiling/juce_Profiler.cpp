@@ -39,9 +39,21 @@ constexpr bool stringsEqual (const std::array<char, sizeResult>& result, const c
     return testView == resultView;
 }
 
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "int main"; }), "main"));
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void AudioProcessor::processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const"; }), "AudioProcessor::processBlock"));
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void __cdecl AudioProcessor::processBlock::<lambda_1>::operator"; }), "AudioProcessor::processBlock"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([]
+                                                                    {
+                                                                        return "int main";
+                                                                    }),
+                             "main"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([]
+                                                                    {
+                                                                        return "void AudioProcessor::processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const";
+                                                                    }),
+                             "AudioProcessor::processBlock"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([]
+                                                                    {
+                                                                        return "void __cdecl AudioProcessor::processBlock::<lambda_1>::operator";
+                                                                    }),
+                             "AudioProcessor::processBlock"));
 
 //==============================================================================
 
