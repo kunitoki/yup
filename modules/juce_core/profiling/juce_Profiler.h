@@ -40,6 +40,8 @@ namespace juce
 class JUCE_API Profiler
 {
 public:
+    ~Profiler();
+
     /** Starts a tracing session with the default buffer size.
 
         This method starts the tracing process using a default buffer size. The tracing session is managed internally

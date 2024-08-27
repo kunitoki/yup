@@ -61,6 +61,11 @@ Profiler::Profiler()
     perfetto::ConsoleInterceptor::Register();
 }
 
+Profiler::~Profiler()
+{
+    clearSingletonInstance();
+}
+
 //==============================================================================
 
 void Profiler::startTracing()

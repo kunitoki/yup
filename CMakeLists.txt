@@ -30,8 +30,8 @@ project (yup VERSION 1.0)
 
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
-option (YUP_ENABLE_PROFILING "Build the profiling" ON)
-
+# Options
+option (YUP_ENABLE_PROFILING "Build the profiling" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
