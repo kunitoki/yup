@@ -96,10 +96,8 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 
     constexpr auto source = func();
     constexpr auto sourceSize = std::string_view (source).size();
-    std::array<char, sourceSize> result {};
+    std::array<char, sourceSize + 1> result {};
 
-    // loop through the source, building a new truncated array
-    // see: https://stackoverflow.com/a/72627251
     for (std::size_t i = 0; i < sourceSize; ++i)
     {
         // wait until after the return type (first space in the string)

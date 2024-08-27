@@ -58,6 +58,7 @@ yup_add_module (modules/yup_gui)
 
 # Enable profiling
 if (YUP_ENABLE_PROFILING)
+    message (STATUS "YUP -- Enabling profiling")
     _yup_fetch_perfetto()
 endif()
 
