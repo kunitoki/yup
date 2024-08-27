@@ -137,7 +137,7 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 }
 } // namespace juce
 
-// clang-format off
+    // clang-format off
 /**
    Starts profiling/tracing with the given arguments.
 
