@@ -130,13 +130,53 @@ function (_yup_glob_recurse folder output_variable)
 endfunction()
 
 function (_yup_fetch_glfw3)
-    FetchContent_Declare(glfw GIT_REPOSITORY https://github.com/glfw/glfw.git GIT_TAG master)
+    FetchContent_Declare (glfw
+        GIT_REPOSITORY https://github.com/glfw/glfw.git
+        GIT_TAG master
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+
     set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
     set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+
     FetchContent_MakeAvailable (glfw)
+
     set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
+endfunction()
+
+function (_yup_fetch_perfetto)
+    FetchContent_Declare (Perfetto
+        GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
+        GIT_TAG v42.0
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+
+    FetchContent_MakeAvailable (Perfetto)
+
+    add_library (perfetto STATIC)
+    target_compile_features (perfetto PUBLIC cxx_std_17)
+
+    target_sources (perfetto
+        PRIVATE "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.cc>"
+        PUBLIC "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk/perfetto.h>")
+
+    target_include_directories (perfetto PUBLIC
+        "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk>")
+
+    set_target_properties (perfetto PROPERTIES
+        POSITION_INDEPENDENT_CODE TRUE
+        FOLDER "Thirdparty")
+
+    if (WIN32)
+        target_compile_definitions (perfetto PUBLIC NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
+        if (MSVC)
+            target_compile_options (perfetto PRIVATE /bigobj PUBLIC /Zc:__cplusplus /permissive-)
+        endif()
+    endif()
+
+    add_library (perfetto::perfetto ALIAS perfetto)
 endfunction()
 
 #==============================================================================
@@ -306,6 +346,10 @@ function (_yup_module_setup_target module_name
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
         set_target_properties (${module_name} PROPERTIES
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
+    endif()
+
+    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
+        list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
     endif()
 
     target_compile_definitions (${module_name} INTERFACE
@@ -588,6 +632,12 @@ function (yup_standalone_app)
         _yup_fetch_glfw3()
 
         list (APPEND additional_libraries glfw)
+    endif()
+
+    # ==== Enable profiling
+    if (YUP_ENABLE_PROFILING AND NOT "${target_name}" STREQUAL "yup_tests")
+        list (APPEND additional_definitions JUCE_ENABLE_PROFILING=1 YUP_ENABLE_PROFILING=1)
+        list (APPEND additional_libraries perfetto::perfetto)
     endif()
 
     # ==== Prepare executable

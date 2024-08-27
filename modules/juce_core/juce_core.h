@@ -394,6 +394,14 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "unit_tests/juce_UnitTestCategories.h"
 #endif
 
+#if JUCE_ENABLE_PROFILING
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4267)
+#include <perfetto.h>
+JUCE_END_IGNORE_WARNINGS_MSVC
+#endif
+
+#include "profiling/juce_Profiler.h"
+
 #ifndef DOXYGEN
 namespace juce
 {
