@@ -632,8 +632,8 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
         glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
     glfwSetWindowSize (window,
-                       jmax (0, newBounds.getWidth() - leftMargin - rightMargin),
-                       jmax (0, newBounds.getHeight() - topMargin - bottomMargin));
+                       jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
+                       jmax (1, newBounds.getHeight() - topMargin - bottomMargin));
 
 #endif
 
