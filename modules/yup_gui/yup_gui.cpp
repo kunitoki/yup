@@ -40,6 +40,20 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#elif JUCE_LINUX
+#define GLFW_INCLUDE_NONE
+#define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_GLX
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
+#elif JUCE_WINDOWS
+#define GLFW_INCLUDE_NONE
+#define GLFW_EXPOSE_NATIVE_WGL
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
 #else
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
