@@ -38,7 +38,10 @@ public:
 
         Creates a color with all components set to zero, which is fully transparent black.
     */
-    constexpr Color() noexcept = default;
+    constexpr Color() noexcept
+        : data (0xff000000)
+    {
+    }
 
     /** Constructs a color from a 32-bit integer.
 
@@ -684,12 +687,12 @@ private:
 
     union
     {
+        uint32 data = 0xff000000;
+
         struct
         {
             uint8 b, g, r, a;
         };
-
-        uint32 data = 0xff000000;
     };
 };
 
