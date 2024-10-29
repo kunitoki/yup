@@ -48,7 +48,12 @@ jobs:
 
     - name: Build Debug
       working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config Debug --parallel 4 --target yup_tests
+      run: |
+        cmake --build . --config Debug --parallel 4 --target yup_tests
+        cmake --build . --config Debug --parallel 4 --target example_console
+        cmake --build . --config Debug --parallel 4 --target example_app
+        cmake --build . --config Debug --parallel 4 --target example_graphics
+        cmake --build . --config Debug --parallel 4 --target example_render
 
     - name: Test Debug
       working-directory: ${{runner.workspace}}/build/tests/Debug
@@ -56,7 +61,12 @@ jobs:
 
     - name: Build Release
       working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config Release --parallel 4 --target yup_tests
+      run: |
+        cmake --build . --config Release --parallel 4 --target yup_tests
+        cmake --build . --config Release --parallel 4 --target example_console
+        cmake --build . --config Release --parallel 4 --target example_app
+        cmake --build . --config Release --parallel 4 --target example_graphics
+        cmake --build . --config Release --parallel 4 --target example_render
 
     - name: Test Release
       working-directory: ${{runner.workspace}}/build/tests/Release
