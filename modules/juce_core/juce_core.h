@@ -164,7 +164,7 @@
     you are not using WebInputStream or the URL classes.
 */
 #ifndef JUCE_LOAD_CURL_SYMBOLS_LAZILY
-#define JUCE_LOAD_CURL_SYMBOLS_LAZILY 0
+#define JUCE_LOAD_CURL_SYMBOLS_LAZILY 1
 #endif
 
 /** Config: JUCE_CATCH_UNHANDLED_EXCEPTIONS
