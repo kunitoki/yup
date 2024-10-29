@@ -33,7 +33,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_core rive rive_pls_renderer
+    dependencies:       juce_core rive rive_renderer
     OSXFrameworks:      Metal
     iOSFrameworks:      Metal
     searchpaths:        native
@@ -52,7 +52,8 @@
 #include <rive/rive.h>
 #include <rive/text/utf.hpp>
 
-#include <rive/pls/pls_render_context.hpp>
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/render_context_impl.hpp>
 
 #include <tuple>
 

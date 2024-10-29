@@ -7,6 +7,9 @@
 #include "rive/assets/file_asset.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/data_bind/converters/data_converter.hpp"
+#include "rive/data_bind/converters/data_converter_group_item.hpp"
+#include "rive/data_bind/data_bind.hpp"
 #include <unordered_set>
 
 using namespace rive;
@@ -85,6 +88,39 @@ StatusCode BackboardImporter::resolve()
         auto asset = m_FileAssets[index];
         referencer->setAsset(asset);
     }
-
+    for (auto referencer : m_DataConverterReferencers)
+    {
+        auto index = (size_t)referencer->converterId();
+        if (index >= m_DataConverters.size() || index < 0)
+        {
+            continue;
+        }
+        referencer->converter(m_DataConverters[index]);
+    }
+    for (auto referencer : m_DataConverterGroupItemReferencers)
+    {
+        auto index = (size_t)referencer->converterId();
+        if (index >= m_DataConverters.size() || index < 0)
+        {
+            continue;
+        }
+        referencer->converter(m_DataConverters[index]);
+    }
     return StatusCode::Ok;
+}
+
+void BackboardImporter::addDataConverter(DataConverter* dataConverter)
+{
+    m_DataConverters.push_back(dataConverter);
+}
+
+void BackboardImporter::addDataConverterReferencer(DataBind* dataBind)
+{
+    m_DataConverterReferencers.push_back(dataBind);
+}
+
+void BackboardImporter::addDataConverterGroupItemReferencer(
+    DataConverterGroupItem* dataBind)
+{
+    m_DataConverterGroupItemReferencers.push_back(dataBind);
 }

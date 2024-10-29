@@ -32,12 +32,13 @@ void PointsPath::update(ComponentDirt value)
     {
         // Path tracks re-adding ComponentDirt::Path if we deferred due to to
         // shape being invisible.
-        skin()->deform(Span<Vertex*>((Vertex**)m_Vertices.data(), m_Vertices.size()));
+        skin()->deform(
+            Span<Vertex*>((Vertex**)m_Vertices.data(), m_Vertices.size()));
     }
     Super::update(value);
 }
 
-void PointsPath::markPathDirty()
+void PointsPath::markPathDirty(bool sendToLayout)
 {
     if (skin() != nullptr)
     {

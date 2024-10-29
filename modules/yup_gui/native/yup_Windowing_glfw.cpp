@@ -936,8 +936,8 @@ void GLFWComponentNative::renderContext()
         return;
 
     const auto loadAction = renderContinuous
-                              ? rive::pls::LoadAction::clear
-                              : rive::pls::LoadAction::preserveRenderTarget;
+                              ? rive::gpu::LoadAction::clear
+                              : rive::gpu::LoadAction::preserveRenderTarget;
 
     // Begin context drawing
     context->begin (

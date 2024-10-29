@@ -1,5 +1,6 @@
 #include "rive/constraints/constraint.hpp"
 #include "rive/hittest_command_path.hpp"
+#include "rive/layout/n_sliced_node.hpp"
 #include "rive/shapes/path.hpp"
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
@@ -13,6 +14,16 @@
 
 using namespace rive;
 
+ShapeDeformer* ShapeDeformer::from(Component* component)
+{
+    switch (component->coreType())
+    {
+        case NSlicedNode::typeKey:
+            return component->as<NSlicedNode>();
+    }
+    return nullptr;
+}
+
 Shape::Shape() : m_PathComposer(this) {}
 
 void Shape::addPath(Path* path)
@@ -23,12 +34,16 @@ void Shape::addPath(Path* path)
 }
 
 void Shape::addFlags(PathFlags flags) { m_pathFlags |= flags; }
-bool Shape::isFlagged(PathFlags flags) const { return (int)(pathFlags() & flags) != 0x00; }
+bool Shape::isFlagged(PathFlags flags) const
+{
+    return (int)(pathFlags() & flags) != 0x00;
+}
 
 bool Shape::canDeferPathUpdate()
 {
     auto canDefer =
-        renderOpacity() == 0 && !isFlagged(PathFlags::clipping | PathFlags::neverDeferUpdate);
+        renderOpacity() == 0 &&
+        !isFlagged(PathFlags::clipping | PathFlags::neverDeferUpdate);
     if (canDefer)
     {
         // If we have a dependent Skin, don't defer the update
@@ -107,10 +122,11 @@ void Shape::draw(Renderer* renderer)
             {
                 renderer->transform(worldTransform());
             }
-            shapePaint->draw(
-                renderer,
-                paintsInLocal ? m_PathComposer.localPath() : m_PathComposer.worldPath(),
-                paintsInLocal ? &m_PathComposer.localRawPath() : &m_PathComposer.worldRawPath());
+            shapePaint->draw(renderer,
+                             paintsInLocal ? m_PathComposer.localPath()
+                                           : m_PathComposer.worldPath(),
+                             paintsInLocal ? &m_PathComposer.localRawPath()
+                                           : &m_PathComposer.worldRawPath());
             renderer->restore();
         }
     }
@@ -217,6 +233,30 @@ StatusCode Shape::onAddedDirty(CoreContext* context)
     return m_PathComposer.onAddedDirty(context);
 }
 
+StatusCode Shape::onAddedClean(CoreContext* context)
+{
+    StatusCode code = Super::onAddedClean(context);
+    if (code != StatusCode::Ok)
+    {
+        return code;
+    }
+
+    // Find the deformer, if any.
+    m_deformer = nullptr;
+    for (auto currentParent = parent(); currentParent != nullptr;
+         currentParent = currentParent->parent())
+    {
+        ShapeDeformer* deformer = ShapeDeformer::from(currentParent);
+        if (deformer)
+        {
+            m_deformer = deformer;
+            return StatusCode::Ok;
+        }
+    }
+
+    return StatusCode::Ok;
+}
+
 bool Shape::isEmpty()
 {
     for (auto path : m_Paths)
@@ -229,7 +269,8 @@ bool Shape::isEmpty()
     return true;
 }
 
-// Do constraints need to be marked as dirty too? From tests it doesn't seem they do.
+// Do constraints need to be marked as dirty too? From tests it doesn't seem
+// they do.
 void Shape::pathCollapseChanged() { m_PathComposer.pathCollapseChanged(); }
 
 class ComputeBoundsCommandPath : public CommandPath
@@ -245,11 +286,15 @@ public:
 
     void rewind() override { m_rawPath.rewind(); }
     void fillRule(FillRule value) override {}
-    void addPath(CommandPath* path, const Mat2D& transform) override { assert(false); }
+    void addPath(CommandPath* path, const Mat2D& transform) override
+    {
+        assert(false);
+    }
 
     void moveTo(float x, float y) override { m_rawPath.moveTo(x, y); }
     void lineTo(float x, float y) override { m_rawPath.lineTo(x, y); }
-    void cubicTo(float ox, float oy, float ix, float iy, float x, float y) override
+    void cubicTo(float ox, float oy, float ix, float iy, float x, float y)
+        override
     {
         m_rawPath.cubicTo(ox, oy, ix, iy, x, y);
     }
@@ -279,8 +324,9 @@ AABB Shape::computeWorldBounds(const Mat2D* xform) const
         }
         path->rawPath().addTo(&boundsCalculator);
 
-        AABB aabb = boundsCalculator.bounds(xform == nullptr ? path->pathTransform()
-                                                             : path->pathTransform() * *xform);
+        AABB aabb = boundsCalculator.bounds(
+            xform == nullptr ? path->pathTransform()
+                             : path->pathTransform() * *xform);
 
         if (first)
         {
@@ -302,4 +348,20 @@ AABB Shape::computeLocalBounds() const
     const Mat2D& world = worldTransform();
     Mat2D inverseWorld = world.invertOrIdentity();
     return computeWorldBounds(&inverseWorld);
+}
+
+Vec2D Shape::measureLayout(float width,
+                           LayoutMeasureMode widthMode,
+                           float height,
+                           LayoutMeasureMode heightMode)
+{
+    Vec2D size = Vec2D();
+    for (auto path : m_Paths)
+    {
+        Vec2D measured =
+            path->measureLayout(width, widthMode, height, heightMode);
+        size =
+            Vec2D(std::max(size.x, measured.x), std::max(size.y, measured.y));
+    }
+    return size;
 }

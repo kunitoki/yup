@@ -12,8 +12,8 @@ protected:
 public:
     static const uint16_t typeKey = 79;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -30,7 +30,7 @@ public:
 
     static const uint16_t strengthPropertyKey = 172;
 
-private:
+protected:
     float m_Strength = 1.0f;
 
 public:

@@ -33,7 +33,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_events
+    dependencies:       juce_events yup_graphics rive
     OSXFrameworks:      Metal
     iOSFrameworks:      Metal
     enableARC:          1

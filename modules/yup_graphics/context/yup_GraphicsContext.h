@@ -91,13 +91,13 @@ public:
 
         @return Pointer to a rive::pls::PLSRenderContext, or nullptr if not available.
     */
-    virtual rive::pls::PLSRenderContext* plsContextOrNull() = 0;
+    virtual rive::gpu::RenderContext* plsContextOrNull() = 0;
 
     /** Gets the PLS render target, if available.
 
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
-    virtual rive::pls::PLSRenderTarget* plsRenderTargetOrNull() = 0;
+    virtual rive::gpu::RenderTarget* plsRenderTargetOrNull() = 0;
 
     /** Creates a renderer suitable for the specified dimensions.
 
@@ -123,7 +123,7 @@ public:
 
         @param descriptor The frame descriptor that contains frame-specific data.
     */
-    virtual void begin (const rive::pls::PLSRenderContext::FrameDescriptor&) = 0;
+    virtual void begin (const rive::gpu::RenderContext::FrameDescriptor&) = 0;
 
     /** Ends a rendering frame.
 

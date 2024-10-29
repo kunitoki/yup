@@ -40,8 +40,9 @@ yup_add_module (thirdparty/zlib)
 yup_add_module (thirdparty/glad)
 yup_add_module (thirdparty/harfbuzz)
 yup_add_module (thirdparty/sheenbidi)
+yup_add_module (thirdparty/yoga_library)
 yup_add_module (thirdparty/rive)
-yup_add_module (thirdparty/rive_pls_renderer)
+yup_add_module (thirdparty/rive_renderer)
 yup_add_module (thirdparty/oboe)
 
 # Original juce modules

@@ -18,7 +18,9 @@ StatusCode TransitionComparator::import(ImportStack& importStack)
     return Super::import(importStack);
 }
 
-bool TransitionComparator::compareNumbers(float left, float right, TransitionConditionOp op)
+bool TransitionComparator::compareNumbers(float left,
+                                          float right,
+                                          TransitionConditionOp op)
 {
     switch (op)
     {
@@ -54,7 +56,9 @@ bool TransitionComparator::compareStrings(std::string left,
     }
 }
 
-bool TransitionComparator::compareBooleans(bool left, bool right, TransitionConditionOp op)
+bool TransitionComparator::compareBooleans(bool left,
+                                           bool right,
+                                           TransitionConditionOp op)
 {
     switch (op)
     {
@@ -67,7 +71,9 @@ bool TransitionComparator::compareBooleans(bool left, bool right, TransitionCond
     }
 }
 
-bool TransitionComparator::compareEnums(uint16_t left, uint16_t right, TransitionConditionOp op)
+bool TransitionComparator::compareEnums(uint16_t left,
+                                        uint16_t right,
+                                        TransitionConditionOp op)
 {
     switch (op)
     {
@@ -80,7 +86,32 @@ bool TransitionComparator::compareEnums(uint16_t left, uint16_t right, Transitio
     }
 }
 
-bool TransitionComparator::compareColors(int left, int right, TransitionConditionOp op)
+bool TransitionComparator::compareTriggers(uint32_t left,
+                                           uint32_t right,
+                                           TransitionConditionOp op)
+{
+    switch (op)
+    {
+        case TransitionConditionOp::equal:
+            return left == right;
+        case TransitionConditionOp::notEqual:
+            return left != right;
+        case TransitionConditionOp::lessThanOrEqual:
+            return left <= right;
+        case TransitionConditionOp::lessThan:
+            return left < right;
+        case TransitionConditionOp::greaterThanOrEqual:
+            return left >= right;
+        case TransitionConditionOp::greaterThan:
+            return left > right;
+        default:
+            return false;
+    }
+}
+
+bool TransitionComparator::compareColors(int left,
+                                         int right,
+                                         TransitionConditionOp op)
 {
     switch (op)
     {
@@ -93,9 +124,10 @@ bool TransitionComparator::compareColors(int left, int right, TransitionConditio
     }
 }
 
-bool TransitionComparator::compare(TransitionComparator* comparand,
-                                   TransitionConditionOp operation,
-                                   StateMachineInstance* stateMachineInstance)
+bool TransitionComparator::compare(
+    TransitionComparator* comparand,
+    TransitionConditionOp operation,
+    const StateMachineInstance* stateMachineInstance)
 {
     return false;
 }
