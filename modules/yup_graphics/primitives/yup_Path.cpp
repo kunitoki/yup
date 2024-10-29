@@ -803,8 +803,8 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             const float dy = (currentY - y) / 2.0f;
 
             // Apply the rotation to the midpoint
-            float cosAngle = std::cosf (angleRad);
-            float sinAngle = std::sinf (angleRad);
+            float cosAngle = std::cos (angleRad);
+            float sinAngle = std::sin (angleRad);
             float x1Prime = cosAngle * dx + sinAngle * dy;
             float y1Prime = -sinAngle * dx + cosAngle * dy;
 
@@ -818,7 +818,7 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             float radiiScale = x1PrimeSq / rxSq + y1PrimeSq / rySq;
             if (radiiScale > 1)
             {
-                float scale = std::sqrtf (radiiScale);
+                float scale = std::sqrt (radiiScale);
                 rx *= scale;
                 ry *= scale;
                 rxSq = rx * rx;
@@ -827,7 +827,7 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
 
             // Calculate the center point (cx, cy)
             float sign = (largeArc != sweep) ? 1.0f : -1.0f;
-            float sqrtFactor = std::sqrtf ((rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq) / (rxSq * y1PrimeSq + rySq * x1PrimeSq));
+            float sqrtFactor = std::sqrt ((rxSq * rySq - rxSq * y1PrimeSq - rySq * x1PrimeSq) / (rxSq * y1PrimeSq + rySq * x1PrimeSq));
             float cxPrime = sign * sqrtFactor * (rx * y1Prime / ry);
             float cyPrime = sign * sqrtFactor * (-ry * x1Prime / rx);
 
@@ -841,8 +841,8 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             float vx = (-x1Prime - cxPrime) / rx;
             float vy = (-y1Prime - cyPrime) / ry;
 
-            float startAngle = std::atan2f (uy, ux);
-            float deltaAngle = std::atan2f (ux * vy - uy * vx, ux * vx + uy * vy);
+            float startAngle = std::atan2 (uy, ux);
+            float deltaAngle = std::atan2 (ux * vy - uy * vx, ux * vx + uy * vy);
 
             if (! sweep && deltaAngle > 0)
             {
@@ -854,7 +854,7 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
             }
 
             // Ensure the delta angle is within the range [-2π, 2π]
-            deltaAngle = std::fmodf (deltaAngle, MathConstants<float>::twoPi);
+            deltaAngle = std::fmod (deltaAngle, MathConstants<float>::twoPi);
 
             // Add the arc to the path
             path.addCenteredArc (centreX, centreY, rx, ry, xAxisRotation, startAngle, startAngle + deltaAngle, true);
