@@ -891,7 +891,7 @@ void GLFWComponentNative::run()
 
 void GLFWComponentNative::handleAsyncUpdate()
 {
-    if (! isThreadRunning() || ! isInitialised.test())
+    if (! isThreadRunning() || ! isInitialised.test_and_set())
         return;
 
     renderContext();
