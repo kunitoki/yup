@@ -34,8 +34,8 @@
     minimumCppStandard: 17
 
     dependencies:       juce_core rive rive_renderer
-    OSXFrameworks:      Metal
-    iOSFrameworks:      Metal
+    osxFrameworks:      Metal
+    iosFrameworks:      Metal
     searchpaths:        native
     enableARC:          1
 

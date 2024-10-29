@@ -33,9 +33,10 @@
     license:            MIT
 
     dependencies:       rive glad
-    OSXFrameworks:      Metal QuartzCore
+    osxFrameworks:      Metal QuartzCore
     defines:            WITH_RIVE_TEXT=1
-    WASMDefines:        RIVE_WEBGL=1
+    linuxDefines:       RIVE_DESKTOP_GL=1
+    wasmDefines:        RIVE_WEBGL=1
     searchpaths:        include source
     enableARC:          1
 
