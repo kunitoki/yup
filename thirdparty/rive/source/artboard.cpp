@@ -33,9 +33,16 @@
 
 #include <unordered_map>
 
-using namespace rive;
+namespace rive {
 
-Artboard::Artboard() {}
+Artboard::Artboard()
+{
+    // Artboards need to override default clip value to true.
+    m_Clip = true;
+#ifdef WITH_RIVE_TOOLS
+    callbackUserData = this;
+#endif
+}
 
 Artboard::~Artboard()
 {
@@ -59,6 +66,11 @@ Artboard::~Artboard()
             continue;
         }
         delete object;
+    }
+
+    for (auto dataBind : m_DataBinds)
+    {
+        delete dataBind;
     }
 
     // Instances reference back to the original artboard's animations and state
@@ -91,8 +103,7 @@ StatusCode Artboard::initialize()
     // these will be re-built in update() -- are they needed here?
     m_backgroundPath = factory()->makeEmptyRenderPath();
     m_clipPath = factory()->makeEmptyRenderPath();
-    m_layoutSizeWidth = width();
-    m_layoutSizeHeight = height();
+    m_layout = Layout(0.0f, 0.0f, width(), height());
 
 #ifdef WITH_RIVE_LAYOUT
     markLayoutDirty(this);
@@ -114,10 +125,11 @@ StatusCode Artboard::initialize()
     }
 
     // Animations and StateMachines initialize only once on the source/origin
-    // Artboard. Instances will hold references to the original Animations and StateMachines, so
-    // running this code for instances will effectively initialize them twice. This can lead to
-    // unpredictable behaviour. One such example was that resolved objects like listener inputs were
-    // being added to lists twice.
+    // Artboard. Instances will hold references to the original Animations and
+    // StateMachines, so running this code for instances will effectively
+    // initialize them twice. This can lead to unpredictable behaviour. One such
+    // example was that resolved objects like listener inputs were being added
+    // to lists twice.
     if (!isInstance())
     {
         for (auto object : m_Animations)
@@ -247,31 +259,32 @@ StatusCode Artboard::initialize()
     for (int i = 0; i < m_Drawables.size(); i++)
     {
         auto drawable = m_Drawables[i];
-        LayoutComponent* currentLayout;
+        LayoutComponent* currentLayout = nullptr;
         bool isInCurrentLayout = true;
         if (!layouts.empty())
         {
             currentLayout = layouts.back();
-            isInCurrentLayout = false;
+            isInCurrentLayout = drawable->isChildOfLayout(currentLayout);
         }
-        for (ContainerComponent* parent = drawable; parent != nullptr; parent = parent->parent())
-        {
-            if (parent == currentLayout)
-            {
-                isInCurrentLayout = true;
-                break;
-            }
-        }
-        // We inject a DrawableProxy after all of the children of a LayoutComponent
-        // so that we can draw a stroke above and background below the children
-        // This also allows us to clip the children
+        // We inject a DrawableProxy after all of the children of a
+        // LayoutComponent so that we can draw a stroke above and background
+        // below the children This also allows us to clip the children
         if (currentLayout != nullptr && !isInCurrentLayout)
         {
-            // This is the first item in the list of drawables that isn't a child
-            // of the layout, so we insert a proxy before it
-            m_Drawables.insert(m_Drawables.begin() + i, currentLayout->proxy());
-            layouts.pop_back();
-            i += 1;
+            // This is the first item in the list of drawables that isn't a
+            // child of the layout, so we insert a proxy before it
+            do
+            {
+                m_Drawables.insert(m_Drawables.begin() + i,
+                                   currentLayout->proxy());
+                layouts.pop_back();
+                if (!layouts.empty())
+                {
+                    currentLayout = layouts.back();
+                }
+                i += 1;
+            } while (!layouts.empty() &&
+                     !drawable->isChildOfLayout(currentLayout));
         }
         if (drawable->is<LayoutComponent>())
         {
@@ -341,11 +354,6 @@ StatusCode Artboard::initialize()
     {
         m_DrawTargets.push_back(static_cast<DrawTarget*>(*itr++));
     }
-
-    // Some default layout dimensions.
-    m_layoutSizeWidth = width();
-    m_layoutSizeHeight = height();
-
     return StatusCode::Ok;
 }
 
@@ -454,9 +462,15 @@ void Artboard::sortDependencies()
 
 void Artboard::addObject(Core* object) { m_Objects.push_back(object); }
 
-void Artboard::addAnimation(LinearAnimation* object) { m_Animations.push_back(object); }
+void Artboard::addAnimation(LinearAnimation* object)
+{
+    m_Animations.push_back(object);
+}
 
-void Artboard::addStateMachine(StateMachine* object) { m_StateMachines.push_back(object); }
+void Artboard::addStateMachine(StateMachine* object)
+{
+    m_StateMachines.push_back(object);
+}
 
 Core* Artboard::resolve(uint32_t id) const
 {
@@ -494,7 +508,10 @@ void Artboard::onComponentDirty(Component* component)
     }
 }
 
-void Artboard::onDirty(ComponentDirt dirt) { m_Dirt |= ComponentDirt::Components; }
+void Artboard::onDirty(ComponentDirt dirt)
+{
+    m_Dirt |= ComponentDirt::Components;
+}
 
 #ifdef WITH_RIVE_LAYOUT
 void Artboard::propagateSize()
@@ -507,7 +524,7 @@ void Artboard::propagateSize()
 #ifdef WITH_RIVE_TOOLS
     if (m_layoutChangedCallback != nullptr)
     {
-        m_layoutChangedCallback(this);
+        m_layoutChangedCallback(callbackUserData);
     }
 #endif
 }
@@ -548,7 +565,7 @@ Artboard* Artboard::parentArtboard() const
 float Artboard::layoutWidth() const
 {
 #ifdef WITH_RIVE_LAYOUT
-    return m_layoutSizeWidth;
+    return m_layout.width();
 #else
     return width();
 #endif
@@ -557,7 +574,7 @@ float Artboard::layoutWidth() const
 float Artboard::layoutHeight() const
 {
 #ifdef WITH_RIVE_LAYOUT
-    return m_layoutSizeHeight;
+    return m_layout.height();
 #else
     return height();
 #endif
@@ -566,7 +583,7 @@ float Artboard::layoutHeight() const
 float Artboard::layoutX() const
 {
 #ifdef WITH_RIVE_LAYOUT
-    return m_layoutLocationX;
+    return m_layout.left();
 #else
     return 0.0f;
 #endif
@@ -575,7 +592,7 @@ float Artboard::layoutX() const
 float Artboard::layoutY() const
 {
 #ifdef WITH_RIVE_LAYOUT
-    return m_layoutLocationY;
+    return m_layout.top();
 #else
     return 0.0f;
 #endif
@@ -610,6 +627,14 @@ void Artboard::update(ComponentDirt value)
     {
         sortDrawOrder();
     }
+#ifdef WITH_RIVE_LAYOUT
+    if (hasDirt(value, ComponentDirt::LayoutStyle))
+    {
+        cascadeAnimationStyle(interpolation(),
+                              interpolator(),
+                              interpolationTime());
+    }
+#endif
 }
 
 void Artboard::updateDataBinds()
@@ -683,7 +708,7 @@ void Artboard::markLayoutDirty(LayoutComponent* layoutComponent)
 #ifdef WITH_RIVE_TOOLS
     if (m_dirtyLayout.empty() && m_layoutDirtyCallback != nullptr)
     {
-        m_layoutDirtyCallback(this);
+        m_layoutDirtyCallback(callbackUserData);
     }
 #endif
     m_dirtyLayout.insert(layoutComponent);
@@ -730,32 +755,26 @@ bool Artboard::syncStyleChanges()
     return updated;
 }
 
-bool Artboard::advanceInternal(double elapsedSeconds, bool isRoot, bool nested)
+bool Artboard::advanceInternal(float elapsedSeconds,
+                               bool isRoot,
+                               bool nested,
+                               bool animate)
 {
     bool didUpdate = false;
     m_HasChangedDrawOrderInLastUpdate = false;
 #ifdef WITH_RIVE_LAYOUT
-    if (hasDirt(ComponentDirt::LayoutStyle))
-    {
-        cascadeAnimationStyle(interpolation(), interpolator(), interpolationTime());
-    }
-
     if (syncStyleChanges() && m_updatesOwnLayout)
     {
         calculateLayout();
+        updateLayoutBounds(animate);
     }
 
     for (auto dep : m_DependencyOrder)
     {
-        if (dep->is<LayoutComponent>())
+        auto adv = AdvancingComponent::from(dep);
+        if (adv != nullptr && adv->advanceComponent(elapsedSeconds, animate))
         {
-            auto layout = dep->as<LayoutComponent>();
-            layout->updateLayoutBounds();
-            if ((dep == this && Super::advance(elapsedSeconds)) ||
-                (dep != this && layout->advance(elapsedSeconds)))
-            {
-                didUpdate = true;
-            }
+            didUpdate = true;
         }
     }
 
@@ -805,7 +824,7 @@ bool Artboard::advanceInternal(double elapsedSeconds, bool isRoot, bool nested)
     {
         for (auto nestedArtboard : m_NestedArtboards)
         {
-            if (nestedArtboard->advance((float)elapsedSeconds))
+            if (nestedArtboard->advance(elapsedSeconds))
             {
                 didUpdate = true;
             }
@@ -814,9 +833,9 @@ bool Artboard::advanceInternal(double elapsedSeconds, bool isRoot, bool nested)
     return didUpdate;
 }
 
-bool Artboard::advance(double elapsedSeconds, bool nested)
+bool Artboard::advance(float elapsedSeconds, bool nested, bool animate)
 {
-    return advanceInternal(elapsedSeconds, true, nested);
+    return advanceInternal(elapsedSeconds, true, nested, animate);
 }
 
 Core* Artboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
@@ -829,7 +848,8 @@ Core* Artboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
     auto mx = xform;
     if (m_FrameOrigin)
     {
-        mx *= Mat2D::fromTranslate(layoutWidth() * originX(), layoutHeight() * originY());
+        mx *= Mat2D::fromTranslate(layoutWidth() * originX(),
+                                   layoutHeight() * originY());
     }
 
     Drawable* last = m_FirstDrawable;
@@ -880,13 +900,16 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
     {
         for (auto shapePaint : m_ShapePaints)
         {
-            shapePaint->draw(renderer, m_backgroundPath.get(), &m_backgroundRawPath);
+            shapePaint->draw(renderer,
+                             m_backgroundPath.get(),
+                             &m_backgroundRawPath);
         }
     }
 
     if (option != DrawOption::kHideFG)
     {
-        for (auto drawable = m_FirstDrawable; drawable != nullptr; drawable = drawable->prev)
+        for (auto drawable = m_FirstDrawable; drawable != nullptr;
+             drawable = drawable->prev)
         {
             if (drawable->isHidden())
             {
@@ -901,7 +924,8 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
 
 void Artboard::addToRenderPath(RenderPath* path, const Mat2D& transform)
 {
-    for (auto drawable = m_FirstDrawable; drawable != nullptr; drawable = drawable->prev)
+    for (auto drawable = m_FirstDrawable; drawable != nullptr;
+         drawable = drawable->prev)
     {
         if (drawable->isHidden() || !drawable->is<Shape>())
         {
@@ -914,8 +938,9 @@ void Artboard::addToRenderPath(RenderPath* path, const Mat2D& transform)
 
 Vec2D Artboard::origin() const
 {
-    return m_FrameOrigin ? Vec2D(0.0f, 0.0f)
-                         : Vec2D(-layoutWidth() * originX(), -layoutHeight() * originY());
+    return m_FrameOrigin
+               ? Vec2D(0.0f, 0.0f)
+               : Vec2D(-layoutWidth() * originX(), -layoutHeight() * originY());
 }
 
 AABB Artboard::bounds() const
@@ -1062,12 +1087,15 @@ NestedArtboard* Artboard::nestedArtboard(const std::string& name) const
 
 NestedArtboard* Artboard::nestedArtboardAtPath(const std::string& path) const
 {
-    // name parameter can be a name or a path to recursively find a nested artboard
+    // name parameter can be a name or a path to recursively find a nested
+    // artboard
     std::string delimiter = "/";
     size_t firstDelim = path.find(delimiter);
-    std::string artboardName = firstDelim == std::string::npos ? path : path.substr(0, firstDelim);
-    std::string restOfPath =
-        firstDelim == std::string::npos ? "" : path.substr(firstDelim + 1, path.size());
+    std::string artboardName =
+        firstDelim == std::string::npos ? path : path.substr(0, firstDelim);
+    std::string restOfPath = firstDelim == std::string::npos
+                                 ? ""
+                                 : path.substr(firstDelim + 1, path.size());
 
     // Find the nested artboard at this level
     if (!artboardName.empty())
@@ -1108,7 +1136,8 @@ NestedArtboard* Artboard::nestedArtboardAtPath(const std::string& path) const
 //         while (++itr != m_Objects.end())
 //         {
 //             auto object = *itr;
-//             cloneObjects.push_back(object == nullptr ? nullptr : object->clone());
+//             cloneObjects.push_back(object == nullptr ? nullptr :
+//             object->clone());
 //         }
 //     }
 
@@ -1142,7 +1171,8 @@ void Artboard::frameOrigin(bool value)
 
 StatusCode Artboard::import(ImportStack& importStack)
 {
-    auto backboardImporter = importStack.latest<BackboardImporter>(Backboard::typeKey);
+    auto backboardImporter =
+        importStack.latest<BackboardImporter>(Backboard::typeKey);
     if (backboardImporter == nullptr)
     {
         return StatusCode::MissingObject;
@@ -1160,24 +1190,24 @@ StatusCode Artboard::import(ImportStack& importStack)
     return result;
 }
 
-void Artboard::internalDataContext(DataContext* value, DataContext* parent, bool isRoot)
+void Artboard::internalDataContext(DataContext* value, bool isRoot)
 {
     m_DataContext = value;
-    m_DataContext->parent(parent);
     for (auto nestedArtboard : m_NestedArtboards)
     {
         if (nestedArtboard->artboardInstance() == nullptr)
         {
             continue;
         }
-        auto value = m_DataContext->getViewModelInstance(nestedArtboard->dataBindPathIds());
+        auto value = m_DataContext->getViewModelInstance(
+            nestedArtboard->dataBindPathIds());
         if (value != nullptr && value->is<ViewModelInstance>())
         {
-            nestedArtboard->dataContextFromInstance(value, m_DataContext);
+            nestedArtboard->setDataContextFromInstance(value, m_DataContext);
         }
         else
         {
-            nestedArtboard->internalDataContext(m_DataContext, m_DataContext->parent());
+            nestedArtboard->internalDataContext(m_DataContext);
         }
     }
     for (auto dataBind : m_DataBinds)
@@ -1189,16 +1219,29 @@ void Artboard::internalDataContext(DataContext* value, DataContext* parent, bool
     }
     if (isRoot)
     {
-        std::vector<DataBind*> dataBinds;
-        populateDataBinds(&dataBinds);
-        sortDataBinds(dataBinds);
+        collectDataBinds();
+    }
+}
+
+void Artboard::clearDataContext()
+{
+    m_DataContext = nullptr;
+    for (auto nestedArtboard : m_NestedArtboards)
+    {
+        if (nestedArtboard->artboardInstance() == nullptr)
+        {
+            continue;
+        }
+        nestedArtboard->clearDataContext();
+    }
+    for (auto dataBind : m_DataBinds)
+    {
+        dataBind->unbind();
     }
 }
 
 void Artboard::sortDataBinds(std::vector<DataBind*> dataBinds)
 {
-    // TODO: @hernan review this. Should not need to push to a component list to sort.
-
     for (auto dataBind : dataBinds)
     {
         m_AllDataBinds.push_back(dataBind->as<DataBind>());
@@ -1234,26 +1277,38 @@ void Artboard::populateDataBinds(std::vector<DataBind*>* dataBinds)
     }
 }
 
-void Artboard::addDataBind(DataBind* dataBind) { m_DataBinds.push_back(dataBind); }
-
-void Artboard::dataContext(DataContext* value, DataContext* parent)
+void Artboard::collectDataBinds()
 {
-    internalDataContext(value, parent, true);
+    m_AllDataBinds.clear();
+    std::vector<DataBind*> dataBinds;
+    populateDataBinds(&dataBinds);
+    sortDataBinds(dataBinds);
 }
 
-void Artboard::dataContextFromInstance(ViewModelInstance* viewModelInstance)
+void Artboard::addDataBind(DataBind* dataBind)
 {
-    dataContextFromInstance(viewModelInstance, nullptr, true);
+    m_DataBinds.push_back(dataBind);
 }
 
-void Artboard::dataContextFromInstance(ViewModelInstance* viewModelInstance, DataContext* parent)
+void Artboard::dataContext(DataContext* value)
 {
-    dataContextFromInstance(viewModelInstance, parent, true);
+    internalDataContext(value, true);
 }
 
-void Artboard::dataContextFromInstance(ViewModelInstance* viewModelInstance,
-                                       DataContext* parent,
-                                       bool isRoot)
+void Artboard::setDataContextFromInstance(ViewModelInstance* viewModelInstance)
+{
+    setDataContextFromInstance(viewModelInstance, nullptr, true);
+}
+
+void Artboard::setDataContextFromInstance(ViewModelInstance* viewModelInstance,
+                                          DataContext* parent)
+{
+    setDataContextFromInstance(viewModelInstance, parent, true);
+}
+
+void Artboard::setDataContextFromInstance(ViewModelInstance* viewModelInstance,
+                                          DataContext* parent,
+                                          bool isRoot)
 {
     if (viewModelInstance == nullptr)
     {
@@ -1263,37 +1318,49 @@ void Artboard::dataContextFromInstance(ViewModelInstance* viewModelInstance,
     {
         viewModelInstance->setAsRoot();
     }
-    internalDataContext(new DataContext(viewModelInstance), parent, isRoot);
+    auto dataContext = new DataContext(viewModelInstance);
+    dataContext->parent(parent);
+    internalDataContext(dataContext, isRoot);
 }
+
+} // namespace rive
 
 ////////// ArtboardInstance
 
 #include "rive/animation/linear_animation_instance.hpp"
 #include "rive/animation/state_machine_instance.hpp"
 
+namespace rive {
+
 ArtboardInstance::ArtboardInstance() {}
 
 ArtboardInstance::~ArtboardInstance() {}
 
-std::unique_ptr<LinearAnimationInstance> ArtboardInstance::animationAt(size_t index)
+std::unique_ptr<LinearAnimationInstance> ArtboardInstance::animationAt(
+    size_t index)
 {
     auto la = this->animation(index);
-    return la ? rivestd::make_unique<LinearAnimationInstance>(la, this) : nullptr;
+    return la ? rivestd::make_unique<LinearAnimationInstance>(la, this)
+              : nullptr;
 }
 
-std::unique_ptr<LinearAnimationInstance> ArtboardInstance::animationNamed(const std::string& name)
+std::unique_ptr<LinearAnimationInstance> ArtboardInstance::animationNamed(
+    const std::string& name)
 {
     auto la = this->animation(name);
-    return la ? rivestd::make_unique<LinearAnimationInstance>(la, this) : nullptr;
+    return la ? rivestd::make_unique<LinearAnimationInstance>(la, this)
+              : nullptr;
 }
 
-std::unique_ptr<StateMachineInstance> ArtboardInstance::stateMachineAt(size_t index)
+std::unique_ptr<StateMachineInstance> ArtboardInstance::stateMachineAt(
+    size_t index)
 {
     auto sm = this->stateMachine(index);
     return sm ? rivestd::make_unique<StateMachineInstance>(sm, this) : nullptr;
 }
 
-std::unique_ptr<StateMachineInstance> ArtboardInstance::stateMachineNamed(const std::string& name)
+std::unique_ptr<StateMachineInstance> ArtboardInstance::stateMachineNamed(
+    const std::string& name)
 {
     auto sm = this->stateMachine(name);
     return sm ? rivestd::make_unique<StateMachineInstance>(sm, this) : nullptr;
@@ -1319,13 +1386,15 @@ std::unique_ptr<Scene> ArtboardInstance::defaultScene()
     return scene;
 }
 
-SMIInput* ArtboardInstance::input(const std::string& name, const std::string& path)
+SMIInput* ArtboardInstance::input(const std::string& name,
+                                  const std::string& path)
 {
     return getNamedInput<SMIInput>(name, path);
 }
 
 template <typename InstType>
-InstType* ArtboardInstance::getNamedInput(const std::string& name, const std::string& path)
+InstType* ArtboardInstance::getNamedInput(const std::string& name,
+                                          const std::string& path)
 {
     if (!path.empty())
     {
@@ -1342,18 +1411,44 @@ InstType* ArtboardInstance::getNamedInput(const std::string& name, const std::st
     return nullptr;
 }
 
-SMIBool* ArtboardInstance::getBool(const std::string& name, const std::string& path)
+SMIBool* ArtboardInstance::getBool(const std::string& name,
+                                   const std::string& path)
 {
     return getNamedInput<SMIBool>(name, path);
 }
 
-SMINumber* ArtboardInstance::getNumber(const std::string& name, const std::string& path)
+SMINumber* ArtboardInstance::getNumber(const std::string& name,
+                                       const std::string& path)
 {
     return getNamedInput<SMINumber>(name, path);
 }
-SMITrigger* ArtboardInstance::getTrigger(const std::string& name, const std::string& path)
+SMITrigger* ArtboardInstance::getTrigger(const std::string& name,
+                                         const std::string& path)
 {
     return getNamedInput<SMITrigger>(name, path);
+}
+
+TextValueRun* ArtboardInstance::getTextRun(const std::string& name,
+                                           const std::string& path)
+{
+    if (path.empty())
+    {
+        return nullptr;
+    }
+
+    auto nestedArtboard = nestedArtboardAtPath(path);
+    if (nestedArtboard == nullptr)
+    {
+        return nullptr;
+    }
+
+    auto artboardInstance = nestedArtboard->artboardInstance();
+    if (artboardInstance == nullptr)
+    {
+        return nullptr;
+    }
+
+    return artboardInstance->find<TextValueRun>(name);
 }
 
 #ifdef EXTERNAL_RIVE_AUDIO_ENGINE
@@ -1371,3 +1466,5 @@ void Artboard::audioEngine(rcp<AudioEngine> audioEngine)
     }
 }
 #endif
+
+} // namespace rive

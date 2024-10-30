@@ -4,7 +4,7 @@
 #include "rive/importers/backboard_importer.hpp"
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/image_asset.hpp"
-#include "rive/shapes/mesh.hpp"
+#include "rive/shapes/mesh_drawable.hpp"
 #include "rive/artboard.hpp"
 #include "rive/clip_result.hpp"
 
@@ -91,7 +91,8 @@ StatusCode Image::import(ImportStack& importStack)
 }
 
 // Question: thoughts on this? it looks a bit odd to me,
-// maybe there's a trick i'm missing here .. (could also implement getAssetId...)
+// maybe there's a trick i'm missing here .. (could also implement
+// getAssetId...)
 uint32_t Image::assetId() { return ImageBase::assetId(); }
 
 void Image::setAsset(FileAsset* asset)
@@ -104,8 +105,10 @@ void Image::setAsset(FileAsset* asset)
         // the mesh buffers.
         if (m_Mesh != nullptr && !artboard()->isInstance())
         {
-            m_Mesh->initializeSharedBuffers(imageAsset()->renderImage());
+            m_Mesh->onAssetLoaded(imageAsset()->renderImage());
         }
+        asset->as<ImageAsset>()->onImageReady([&]() { updateImageScale(); });
+        updateImageScale();
     }
 }
 
@@ -119,8 +122,7 @@ Core* Image::clone() const
     return twin;
 }
 
-void Image::setMesh(Mesh* mesh) { m_Mesh = mesh; }
-Mesh* Image::mesh() const { return m_Mesh; }
+void Image::setMesh(MeshDrawable* mesh) { m_Mesh = mesh; }
 
 float Image::width() const
 {
@@ -189,13 +191,35 @@ Vec2D Image::measureLayout(float width,
 
 void Image::controlSize(Vec2D size)
 {
-    auto renderImage = imageAsset()->renderImage();
-    auto newScaleX = size.x / renderImage->width();
-    auto newScaleY = size.y / renderImage->height();
-    if (newScaleX != scaleX() || newScaleY != scaleY())
+    // We store layout width/height because the image asset may not be available
+    // yet (referenced images) and we have defer controlling its size
+    if (m_layoutWidth != size.x || m_layoutHeight != size.y)
     {
-        scaleX(newScaleX);
-        scaleY(newScaleY);
-        addDirt(ComponentDirt::WorldTransform, false);
+        m_layoutWidth = size.x;
+        m_layoutHeight = size.y;
+
+        updateImageScale();
     }
 }
+
+void Image::updateImageScale()
+{
+    if (imageAsset() != nullptr && imageAsset()->renderImage() != nullptr &&
+        !std::isnan(m_layoutWidth) && !std::isnan(m_layoutHeight))
+    {
+        auto renderImage = imageAsset()->renderImage();
+        auto newScaleX = m_layoutWidth / renderImage->width();
+        auto newScaleY = m_layoutHeight / renderImage->height();
+        if (newScaleX != scaleX() || newScaleY != scaleY())
+        {
+            scaleX(newScaleX);
+            scaleY(newScaleY);
+            addDirt(ComponentDirt::WorldTransform, false);
+        }
+    }
+}
+
+#ifdef TESTING
+#include "rive/shapes/mesh.hpp"
+Mesh* Image::mesh() const { return static_cast<Mesh*>(m_Mesh); };
+#endif

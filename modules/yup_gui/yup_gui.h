@@ -33,9 +33,9 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_events
-    OSXFrameworks:      Metal
-    iOSFrameworks:      Metal
+    dependencies:       juce_events yup_graphics rive
+    osxFrameworks:      Metal
+    iosFrameworks:      Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
@@ -49,6 +49,8 @@
 #include <juce_events/juce_events.h>
 
 #include <yup_graphics/yup_graphics.h>
+
+//==============================================================================
 
 #include <rive/artboard.hpp>
 #include <rive/file.hpp>

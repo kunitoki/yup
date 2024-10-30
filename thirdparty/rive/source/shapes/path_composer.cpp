@@ -7,7 +7,9 @@
 
 using namespace rive;
 
-PathComposer::PathComposer(Shape* shape) : m_shape(shape), m_deferredPathDirt(false) {}
+PathComposer::PathComposer(Shape* shape) :
+    m_shape(shape), m_deferredPathDirt(false)
+{}
 
 void PathComposer::buildDependencies()
 {
@@ -59,9 +61,17 @@ void PathComposer::update(ComponentDirt value)
             {
                 if (!path->isHidden() && !path->isCollapsed())
                 {
-                    const auto localTransform = inverseWorld * path->pathTransform();
+                    const auto localTransform =
+                        inverseWorld * path->pathTransform();
                     m_localRawPath.addPath(path->rawPath(), &localTransform);
                 }
+            }
+
+            if (const ShapeDeformer* deformer = m_shape->deformer())
+            {
+                deformer->deformLocalRenderPath(m_localRawPath,
+                                                world,
+                                                inverseWorld);
             }
 
             // TODO: add a CommandPath::copy(RawPath)
@@ -86,6 +96,12 @@ void PathComposer::update(ComponentDirt value)
                     m_worldRawPath.addPath(path->rawPath(), &transform);
                 }
             }
+
+            if (const ShapeDeformer* deformer = m_shape->deformer())
+            {
+                deformer->deformWorldRenderPath(m_worldRawPath);
+            }
+
             // TODO: add a CommandPath::copy(RawPath)
             m_worldRawPath.addTo(m_worldPath.get());
         }
@@ -93,14 +109,14 @@ void PathComposer::update(ComponentDirt value)
     }
 }
 
-// Instead of adding dirt and rely on the recursive behavior of the addDirt method,
-// we need to explicitly add dirt to the dependents. The reason is that a collapsed
-// shape will not clear its dirty path flag in the current frame since it is collapsed.
-// So in a future frame if it is uncollapsed, we mark its path flag as dirty again,
-// but since it was already dirty, the recursive part will not kick in and the dependents
-// won't update.
-// This scenario is not common, but it can happen when a solo toggles between an empty
-// group and a path for example.
+// Instead of adding dirt and rely on the recursive behavior of the addDirt
+// method, we need to explicitly add dirt to the dependents. The reason is that
+// a collapsed shape will not clear its dirty path flag in the current frame
+// since it is collapsed. So in a future frame if it is uncollapsed, we mark its
+// path flag as dirty again, but since it was already dirty, the recursive part
+// will not kick in and the dependents won't update. This scenario is not
+// common, but it can happen when a solo toggles between an empty group and a
+// path for example.
 void PathComposer::pathCollapseChanged()
 {
     addDirt(ComponentDirt::Path);

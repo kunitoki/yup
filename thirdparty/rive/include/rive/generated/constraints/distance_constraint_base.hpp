@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 82;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -34,7 +34,7 @@ public:
     static const uint16_t distancePropertyKey = 177;
     static const uint16_t modeValuePropertyKey = 178;
 
-private:
+protected:
     float m_Distance = 100.0f;
     uint32_t m_ModeValue = 0;
 

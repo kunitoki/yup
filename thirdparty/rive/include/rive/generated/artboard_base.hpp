@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 1;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -40,7 +40,7 @@ public:
     static const uint16_t defaultStateMachineIdPropertyKey = 236;
     static const uint16_t viewModelIdPropertyKey = 583;
 
-private:
+protected:
     float m_OriginX = 0.0f;
     float m_OriginY = 0.0f;
     uint32_t m_DefaultStateMachineId = -1;
@@ -69,7 +69,10 @@ public:
         originYChanged();
     }
 
-    inline uint32_t defaultStateMachineId() const { return m_DefaultStateMachineId; }
+    inline uint32_t defaultStateMachineId() const
+    {
+        return m_DefaultStateMachineId;
+    }
     void defaultStateMachineId(uint32_t value)
     {
         if (m_DefaultStateMachineId == value)

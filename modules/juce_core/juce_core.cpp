@@ -151,6 +151,9 @@ extern char** environ;
 #undef check
 
 //==============================================================================
+#include "profiling/juce_Profiler.cpp"
+
+//==============================================================================
 #include "containers/juce_AbstractFifo.cpp"
 #include "containers/juce_ArrayBase.cpp"
 #include "containers/juce_NamedValueSet.cpp"

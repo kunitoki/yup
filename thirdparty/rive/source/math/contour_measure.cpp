@@ -8,6 +8,7 @@
 #include "rive/math/math_types.hpp"
 #include "rive/math/wangs_formula.hpp"
 #include <cmath>
+#include <limits>
 
 using namespace rive;
 
@@ -27,7 +28,10 @@ ContourMeasure::ContourMeasure(std::vector<Segment>&& segs,
                                std::vector<Vec2D>&& pts,
                                float length,
                                bool isClosed) :
-    m_segments(std::move(segs)), m_points(std::move(pts)), m_length(length), m_isClosed(isClosed)
+    m_segments(std::move(segs)),
+    m_points(std::move(pts)),
+    m_length(length),
+    m_isClosed(isClosed)
 {}
 
 // Return index of the segment that contains distance,
@@ -41,6 +45,10 @@ size_t ContourMeasure::findSegment(float distance) const
 
     const Segment seg = {distance, 0, 0, 0};
     auto iter = std::lower_bound(m_segments.begin(), m_segments.end(), seg);
+    while (iter->m_distance == 0.0f && iter != m_segments.end())
+    {
+        iter = std::next(iter);
+    }
     assert(iter != m_segments.end());
     assert(iter->m_distance >= distance);
     assert(iter->m_ptIndex < m_points.size());
@@ -66,7 +74,8 @@ static ContourMeasure::PosTan eval_quad(const Vec2D pts[], float t)
 static ContourMeasure::PosTan eval_cubic(const Vec2D pts[], float t)
 {
     assert(t >= 0 && t <= 1);
-    // When t==0 and t==1, the most accurate way to find tangents is by differencing.
+    // When t==0 and t==1, the most accurate way to find tangents is by
+    // differencing.
     if (t == 0 || t == 1)
     {
         if (t == 0)
@@ -220,7 +229,8 @@ ContourMeasure::PosTan ContourMeasure::getPosTan(float distance) const
     }
 }
 
-static const ContourMeasure::Segment* next_segment_beginning(const ContourMeasure::Segment* seg)
+static const ContourMeasure::Segment* next_segment_beginning(
+    const ContourMeasure::Segment* seg)
 {
     auto startingPtIndex = seg->m_ptIndex;
     do
@@ -231,7 +241,9 @@ static const ContourMeasure::Segment* next_segment_beginning(const ContourMeasur
 }
 
 // Compute the (interpolated) t for a distance within the index'th segment
-static float compute_t(Span<const ContourMeasure::Segment> segs, size_t index, float distance)
+static float compute_t(Span<const ContourMeasure::Segment> segs,
+                       size_t index,
+                       float distance)
 {
     const auto seg = segs[index];
     assert(distance <= seg.m_distance);
@@ -300,7 +312,10 @@ void ContourMeasure::getSegment(float startDist,
 
 void ContourMeasure::dump() const
 {
-    printf("length %g pts %zu segs %zu\n", m_length, m_points.size(), m_segments.size());
+    printf("length %g pts %zu segs %zu\n",
+           m_length,
+           m_points.size(),
+           m_segments.size());
     for (const auto& s : m_segments)
     {
         printf(" %g %d %g %d\n", s.m_distance, s.m_ptIndex, s.getT(), s.m_type);
@@ -317,9 +332,9 @@ static inline unsigned toDot30(float x)
     return (unsigned)(x * (1 << 30));
 }
 
-// These add[SegmentType]Segs routines append intermediate segments for the curve.
-// They assume the caller has set the initial segment (with t == 0), so they only
-// add intermediates.
+// These add[SegmentType]Segs routines append intermediate segments for the
+// curve. They assume the caller has set the initial segment (with t == 0), so
+// they only add intermediates.
 
 float ContourMeasureIter::addQuadSegs(ContourMeasure::Segment* segs,
                                       const Vec2D pts[],
@@ -425,24 +440,30 @@ rcp<ContourMeasure> ContourMeasureIter::tryNext()
                 endOfContour = it; // This move belongs to the next contour.
                 break;
             case PathVerb::line:
-                ++lineCount;
+                if (Vec2D::distanceSquared(it.linePts()[1], it.linePts()[0]) >
+                    0.0f)
+                {
+                    ++lineCount;
+                }
                 continue;
             case PathVerb::quad:
             {
-                assert(nextSegCount < m_segmentCounts.data() + m_segmentCounts.size());
-                uint32_t segmentCount = static_cast<uint32_t>(
-                    ceilf(wangs_formula::quadratic(it.quadPts(), m_invTolerance)));
-                segmentCount = std::max(1u, std::min(segmentCount, kMaxSegments));
+                assert(nextSegCount <
+                       m_segmentCounts.data() + m_segmentCounts.size());
+                uint32_t segmentCount = static_cast<uint32_t>(ceilf(
+                    wangs_formula::quadratic(it.quadPts(), m_invTolerance)));
+                segmentCount = std::min(segmentCount, kMaxSegments);
                 segmentCountInCurves += segmentCount;
                 *nextSegCount++ = segmentCount;
                 continue;
             }
             case PathVerb::cubic:
             {
-                assert(nextSegCount < m_segmentCounts.data() + m_segmentCounts.size());
-                uint32_t segmentCount = static_cast<uint32_t>(
-                    ceilf(ceilf(wangs_formula::cubic(it.cubicPts(), m_invTolerance))));
-                segmentCount = std::max(1u, std::min(segmentCount, kMaxSegments));
+                assert(nextSegCount <
+                       m_segmentCounts.data() + m_segmentCounts.size());
+                uint32_t segmentCount = static_cast<uint32_t>(ceilf(ceilf(
+                    wangs_formula::cubic(it.cubicPts(), m_invTolerance))));
+                segmentCount = std::min(segmentCount, kMaxSegments);
                 segmentCountInCurves += segmentCount;
                 *nextSegCount++ = segmentCount;
                 continue;
@@ -473,14 +494,28 @@ rcp<ContourMeasure> ContourMeasureIter::tryNext()
             case PathVerb::move:
                 RIVE_UNREACHABLE();
             case PathVerb::line:
-                distance += (it.linePts()[1] - it.linePts()[0]).length();
-                *nextSeg++ = {distance, ptIndex, kMaxDot30, SegmentType::kLine};
+                if (Vec2D::distanceSquared(it.linePts()[1], it.linePts()[0]) >
+                    0.0f)
+                {
+                    distance += (it.linePts()[1] - it.linePts()[0]).length();
+                    *nextSeg++ = {distance,
+                                  ptIndex,
+                                  kMaxDot30,
+                                  SegmentType::kLine};
+                }
                 ++ptIndex;
                 break;
             case PathVerb::quad:
             {
                 const uint32_t n = *nextSegCount++;
-                distance = addQuadSegs(nextSeg, it.quadPts(), n, ptIndex, distance);
+                if (n > 0)
+                {
+                    distance = addQuadSegs(nextSeg,
+                                           it.quadPts(),
+                                           n,
+                                           ptIndex,
+                                           distance);
+                }
                 nextSeg += n;
                 ptIndex += 2;
                 break;
@@ -488,7 +523,14 @@ rcp<ContourMeasure> ContourMeasureIter::tryNext()
             case PathVerb::cubic:
             {
                 const uint32_t n = *nextSegCount++;
-                distance = addCubicSegs(nextSeg, it.cubicPts(), n, ptIndex, distance);
+                if (n > 0)
+                {
+                    distance = addCubicSegs(nextSeg,
+                                            it.cubicPts(),
+                                            n,
+                                            ptIndex,
+                                            distance);
+                }
                 nextSeg += n;
                 ptIndex += 3;
                 break;
@@ -497,7 +539,10 @@ rcp<ContourMeasure> ContourMeasureIter::tryNext()
                 if (it.ptBeforeClose() != p0)
                 {
                     distance += (p0 - it.ptBeforeClose()).length();
-                    *nextSeg++ = {distance, ptIndex, kMaxDot30, SegmentType::kLine};
+                    *nextSeg++ = {distance,
+                                  ptIndex,
+                                  kMaxDot30,
+                                  SegmentType::kLine};
                     ++ptIndex;
                     duplicateP0 = true;
                 }
@@ -521,8 +566,10 @@ rcp<ContourMeasure> ContourMeasureIter::tryNext()
     if (distance > 0 && pts.size() >= 2)
     {
         assert(!std::isnan(distance));
-        return rcp<ContourMeasure>(
-            new ContourMeasure(std::move(segs), std::move(pts), distance, isClosed));
+        return rcp<ContourMeasure>(new ContourMeasure(std::move(segs),
+                                                      std::move(pts),
+                                                      distance,
+                                                      isClosed));
     }
 
     assert(distance == 0 || std::isnan(distance));

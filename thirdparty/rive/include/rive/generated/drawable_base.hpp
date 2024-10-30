@@ -12,8 +12,8 @@ protected:
 public:
     static const uint16_t typeKey = 13;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -35,7 +35,7 @@ public:
     static const uint16_t blendModeValuePropertyKey = 23;
     static const uint16_t drawableFlagsPropertyKey = 129;
 
-private:
+protected:
     uint32_t m_BlendModeValue = 3;
     uint32_t m_DrawableFlags = 0;
 
