@@ -14,8 +14,8 @@ protected:
 public:
     static const uint16_t typeKey = 420;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -56,6 +56,7 @@ public:
     static const uint16_t flexGrowPropertyKey = 521;
     static const uint16_t flexShrinkPropertyKey = 522;
     static const uint16_t flexBasisPropertyKey = 523;
+    static const uint16_t flexBasisUnitsValuePropertyKey = 705;
     static const uint16_t aspectRatioPropertyKey = 524;
     static const uint16_t layoutWidthScaleTypePropertyKey = 655;
     static const uint16_t layoutHeightScaleTypePropertyKey = 656;
@@ -105,7 +106,7 @@ public:
     static const uint16_t cornerRadiusBLPropertyKey = 642;
     static const uint16_t cornerRadiusBRPropertyKey = 643;
 
-private:
+protected:
     float m_GapHorizontal = 0.0f;
     float m_GapVertical = 0.0f;
     float m_MaxWidth = 0.0f;
@@ -131,7 +132,8 @@ private:
     float m_Flex = 0.0f;
     float m_FlexGrow = 0.0f;
     float m_FlexShrink = 1.0f;
-    float m_FlexBasis = 1.0f;
+    float m_FlexBasis = 0.0f;
+    uint32_t m_FlexBasisUnitsValue = 3;
     float m_AspectRatio = 0.0f;
     uint32_t m_LayoutWidthScaleType = 0;
     uint32_t m_LayoutHeightScaleType = 0;
@@ -468,6 +470,20 @@ public:
         flexBasisChanged();
     }
 
+    inline uint32_t flexBasisUnitsValue() const
+    {
+        return m_FlexBasisUnitsValue;
+    }
+    void flexBasisUnitsValue(uint32_t value)
+    {
+        if (m_FlexBasisUnitsValue == value)
+        {
+            return;
+        }
+        m_FlexBasisUnitsValue = value;
+        flexBasisUnitsValueChanged();
+    }
+
     inline float aspectRatio() const { return m_AspectRatio; }
     void aspectRatio(float value)
     {
@@ -479,7 +495,10 @@ public:
         aspectRatioChanged();
     }
 
-    inline uint32_t layoutWidthScaleType() const { return m_LayoutWidthScaleType; }
+    inline uint32_t layoutWidthScaleType() const
+    {
+        return m_LayoutWidthScaleType;
+    }
     void layoutWidthScaleType(uint32_t value)
     {
         if (m_LayoutWidthScaleType == value)
@@ -490,7 +509,10 @@ public:
         layoutWidthScaleTypeChanged();
     }
 
-    inline uint32_t layoutHeightScaleType() const { return m_LayoutHeightScaleType; }
+    inline uint32_t layoutHeightScaleType() const
+    {
+        return m_LayoutHeightScaleType;
+    }
     void layoutHeightScaleType(uint32_t value)
     {
         if (m_LayoutHeightScaleType == value)
@@ -501,7 +523,10 @@ public:
         layoutHeightScaleTypeChanged();
     }
 
-    inline uint32_t layoutAlignmentType() const { return m_LayoutAlignmentType; }
+    inline uint32_t layoutAlignmentType() const
+    {
+        return m_LayoutAlignmentType;
+    }
     void layoutAlignmentType(uint32_t value)
     {
         if (m_LayoutAlignmentType == value)
@@ -633,7 +658,10 @@ public:
         alignSelfValueChanged();
     }
 
-    inline uint32_t justifyContentValue() const { return m_JustifyContentValue; }
+    inline uint32_t justifyContentValue() const
+    {
+        return m_JustifyContentValue;
+    }
     void justifyContentValue(uint32_t value)
     {
         if (m_JustifyContentValue == value)
@@ -666,7 +694,10 @@ public:
         overflowValueChanged();
     }
 
-    inline bool intrinsicallySizedValue() const { return m_IntrinsicallySizedValue; }
+    inline bool intrinsicallySizedValue() const
+    {
+        return m_IntrinsicallySizedValue;
+    }
     void intrinsicallySizedValue(bool value)
     {
         if (m_IntrinsicallySizedValue == value)
@@ -699,7 +730,10 @@ public:
         heightUnitsValueChanged();
     }
 
-    inline uint32_t borderLeftUnitsValue() const { return m_BorderLeftUnitsValue; }
+    inline uint32_t borderLeftUnitsValue() const
+    {
+        return m_BorderLeftUnitsValue;
+    }
     void borderLeftUnitsValue(uint32_t value)
     {
         if (m_BorderLeftUnitsValue == value)
@@ -710,7 +744,10 @@ public:
         borderLeftUnitsValueChanged();
     }
 
-    inline uint32_t borderRightUnitsValue() const { return m_BorderRightUnitsValue; }
+    inline uint32_t borderRightUnitsValue() const
+    {
+        return m_BorderRightUnitsValue;
+    }
     void borderRightUnitsValue(uint32_t value)
     {
         if (m_BorderRightUnitsValue == value)
@@ -721,7 +758,10 @@ public:
         borderRightUnitsValueChanged();
     }
 
-    inline uint32_t borderTopUnitsValue() const { return m_BorderTopUnitsValue; }
+    inline uint32_t borderTopUnitsValue() const
+    {
+        return m_BorderTopUnitsValue;
+    }
     void borderTopUnitsValue(uint32_t value)
     {
         if (m_BorderTopUnitsValue == value)
@@ -732,7 +772,10 @@ public:
         borderTopUnitsValueChanged();
     }
 
-    inline uint32_t borderBottomUnitsValue() const { return m_BorderBottomUnitsValue; }
+    inline uint32_t borderBottomUnitsValue() const
+    {
+        return m_BorderBottomUnitsValue;
+    }
     void borderBottomUnitsValue(uint32_t value)
     {
         if (m_BorderBottomUnitsValue == value)
@@ -743,7 +786,10 @@ public:
         borderBottomUnitsValueChanged();
     }
 
-    inline uint32_t marginLeftUnitsValue() const { return m_MarginLeftUnitsValue; }
+    inline uint32_t marginLeftUnitsValue() const
+    {
+        return m_MarginLeftUnitsValue;
+    }
     void marginLeftUnitsValue(uint32_t value)
     {
         if (m_MarginLeftUnitsValue == value)
@@ -754,7 +800,10 @@ public:
         marginLeftUnitsValueChanged();
     }
 
-    inline uint32_t marginRightUnitsValue() const { return m_MarginRightUnitsValue; }
+    inline uint32_t marginRightUnitsValue() const
+    {
+        return m_MarginRightUnitsValue;
+    }
     void marginRightUnitsValue(uint32_t value)
     {
         if (m_MarginRightUnitsValue == value)
@@ -765,7 +814,10 @@ public:
         marginRightUnitsValueChanged();
     }
 
-    inline uint32_t marginTopUnitsValue() const { return m_MarginTopUnitsValue; }
+    inline uint32_t marginTopUnitsValue() const
+    {
+        return m_MarginTopUnitsValue;
+    }
     void marginTopUnitsValue(uint32_t value)
     {
         if (m_MarginTopUnitsValue == value)
@@ -776,7 +828,10 @@ public:
         marginTopUnitsValueChanged();
     }
 
-    inline uint32_t marginBottomUnitsValue() const { return m_MarginBottomUnitsValue; }
+    inline uint32_t marginBottomUnitsValue() const
+    {
+        return m_MarginBottomUnitsValue;
+    }
     void marginBottomUnitsValue(uint32_t value)
     {
         if (m_MarginBottomUnitsValue == value)
@@ -787,7 +842,10 @@ public:
         marginBottomUnitsValueChanged();
     }
 
-    inline uint32_t paddingLeftUnitsValue() const { return m_PaddingLeftUnitsValue; }
+    inline uint32_t paddingLeftUnitsValue() const
+    {
+        return m_PaddingLeftUnitsValue;
+    }
     void paddingLeftUnitsValue(uint32_t value)
     {
         if (m_PaddingLeftUnitsValue == value)
@@ -798,7 +856,10 @@ public:
         paddingLeftUnitsValueChanged();
     }
 
-    inline uint32_t paddingRightUnitsValue() const { return m_PaddingRightUnitsValue; }
+    inline uint32_t paddingRightUnitsValue() const
+    {
+        return m_PaddingRightUnitsValue;
+    }
     void paddingRightUnitsValue(uint32_t value)
     {
         if (m_PaddingRightUnitsValue == value)
@@ -809,7 +870,10 @@ public:
         paddingRightUnitsValueChanged();
     }
 
-    inline uint32_t paddingTopUnitsValue() const { return m_PaddingTopUnitsValue; }
+    inline uint32_t paddingTopUnitsValue() const
+    {
+        return m_PaddingTopUnitsValue;
+    }
     void paddingTopUnitsValue(uint32_t value)
     {
         if (m_PaddingTopUnitsValue == value)
@@ -820,7 +884,10 @@ public:
         paddingTopUnitsValueChanged();
     }
 
-    inline uint32_t paddingBottomUnitsValue() const { return m_PaddingBottomUnitsValue; }
+    inline uint32_t paddingBottomUnitsValue() const
+    {
+        return m_PaddingBottomUnitsValue;
+    }
     void paddingBottomUnitsValue(uint32_t value)
     {
         if (m_PaddingBottomUnitsValue == value)
@@ -831,7 +898,10 @@ public:
         paddingBottomUnitsValueChanged();
     }
 
-    inline uint32_t positionLeftUnitsValue() const { return m_PositionLeftUnitsValue; }
+    inline uint32_t positionLeftUnitsValue() const
+    {
+        return m_PositionLeftUnitsValue;
+    }
     void positionLeftUnitsValue(uint32_t value)
     {
         if (m_PositionLeftUnitsValue == value)
@@ -842,7 +912,10 @@ public:
         positionLeftUnitsValueChanged();
     }
 
-    inline uint32_t positionRightUnitsValue() const { return m_PositionRightUnitsValue; }
+    inline uint32_t positionRightUnitsValue() const
+    {
+        return m_PositionRightUnitsValue;
+    }
     void positionRightUnitsValue(uint32_t value)
     {
         if (m_PositionRightUnitsValue == value)
@@ -853,7 +926,10 @@ public:
         positionRightUnitsValueChanged();
     }
 
-    inline uint32_t positionTopUnitsValue() const { return m_PositionTopUnitsValue; }
+    inline uint32_t positionTopUnitsValue() const
+    {
+        return m_PositionTopUnitsValue;
+    }
     void positionTopUnitsValue(uint32_t value)
     {
         if (m_PositionTopUnitsValue == value)
@@ -864,7 +940,10 @@ public:
         positionTopUnitsValueChanged();
     }
 
-    inline uint32_t positionBottomUnitsValue() const { return m_PositionBottomUnitsValue; }
+    inline uint32_t positionBottomUnitsValue() const
+    {
+        return m_PositionBottomUnitsValue;
+    }
     void positionBottomUnitsValue(uint32_t value)
     {
         if (m_PositionBottomUnitsValue == value)
@@ -875,7 +954,10 @@ public:
         positionBottomUnitsValueChanged();
     }
 
-    inline uint32_t gapHorizontalUnitsValue() const { return m_GapHorizontalUnitsValue; }
+    inline uint32_t gapHorizontalUnitsValue() const
+    {
+        return m_GapHorizontalUnitsValue;
+    }
     void gapHorizontalUnitsValue(uint32_t value)
     {
         if (m_GapHorizontalUnitsValue == value)
@@ -886,7 +968,10 @@ public:
         gapHorizontalUnitsValueChanged();
     }
 
-    inline uint32_t gapVerticalUnitsValue() const { return m_GapVerticalUnitsValue; }
+    inline uint32_t gapVerticalUnitsValue() const
+    {
+        return m_GapVerticalUnitsValue;
+    }
     void gapVerticalUnitsValue(uint32_t value)
     {
         if (m_GapVerticalUnitsValue == value)
@@ -908,7 +993,10 @@ public:
         minWidthUnitsValueChanged();
     }
 
-    inline uint32_t minHeightUnitsValue() const { return m_MinHeightUnitsValue; }
+    inline uint32_t minHeightUnitsValue() const
+    {
+        return m_MinHeightUnitsValue;
+    }
     void minHeightUnitsValue(uint32_t value)
     {
         if (m_MinHeightUnitsValue == value)
@@ -930,7 +1018,10 @@ public:
         maxWidthUnitsValueChanged();
     }
 
-    inline uint32_t maxHeightUnitsValue() const { return m_MaxHeightUnitsValue; }
+    inline uint32_t maxHeightUnitsValue() const
+    {
+        return m_MaxHeightUnitsValue;
+    }
     void maxHeightUnitsValue(uint32_t value)
     {
         if (m_MaxHeightUnitsValue == value)
@@ -1025,6 +1116,7 @@ public:
         m_FlexGrow = object.m_FlexGrow;
         m_FlexShrink = object.m_FlexShrink;
         m_FlexBasis = object.m_FlexBasis;
+        m_FlexBasisUnitsValue = object.m_FlexBasisUnitsValue;
         m_AspectRatio = object.m_AspectRatio;
         m_LayoutWidthScaleType = object.m_LayoutWidthScaleType;
         m_LayoutHeightScaleType = object.m_LayoutHeightScaleType;
@@ -1157,6 +1249,9 @@ public:
                 return true;
             case flexBasisPropertyKey:
                 m_FlexBasis = CoreDoubleType::deserialize(reader);
+                return true;
+            case flexBasisUnitsValuePropertyKey:
+                m_FlexBasisUnitsValue = CoreUintType::deserialize(reader);
                 return true;
             case aspectRatioPropertyKey:
                 m_AspectRatio = CoreDoubleType::deserialize(reader);
@@ -1333,6 +1428,7 @@ protected:
     virtual void flexGrowChanged() {}
     virtual void flexShrinkChanged() {}
     virtual void flexBasisChanged() {}
+    virtual void flexBasisUnitsValueChanged() {}
     virtual void aspectRatioChanged() {}
     virtual void layoutWidthScaleTypeChanged() {}
     virtual void layoutHeightScaleTypeChanged() {}

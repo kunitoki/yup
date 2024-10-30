@@ -5,9 +5,15 @@
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
 #include "rive/data_bind/context/context_value.hpp"
 #include "rive/data_bind/data_context.hpp"
+#include "rive/data_bind/converters/data_converter.hpp"
+#include "rive/data_bind/data_values/data_type.hpp"
 #include <stdio.h>
 namespace rive
 {
+#ifdef WITH_RIVE_TOOLS
+class DataBind;
+typedef void (*DataBindChanged)();
+#endif
 class DataBind : public DataBindBase
 {
 public:
@@ -18,15 +24,25 @@ public:
     Core* target() const { return m_target; };
     void target(Core* value) { m_target = value; };
     virtual void bind();
+    virtual void unbind();
     ComponentDirt dirt() { return m_Dirt; };
     void dirt(ComponentDirt value) { m_Dirt = value; };
     bool addDirt(ComponentDirt value, bool recurse);
+    DataConverter* converter() const { return m_dataConverter; };
+    void converter(DataConverter* value) { m_dataConverter = value; };
 
 protected:
     ComponentDirt m_Dirt = ComponentDirt::Filthy;
     Core* m_target;
     ViewModelInstanceValue* m_Source;
     std::unique_ptr<DataBindContextValue> m_ContextValue;
+    DataConverter* m_dataConverter;
+    DataType outputType();
+#ifdef WITH_RIVE_TOOLS
+public:
+    void onChanged(DataBindChanged callback) { m_changedCallback = callback; }
+    DataBindChanged m_changedCallback = nullptr;
+#endif
 };
 } // namespace rive
 

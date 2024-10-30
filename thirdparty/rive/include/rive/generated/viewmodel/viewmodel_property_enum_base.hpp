@@ -12,8 +12,8 @@ protected:
 public:
     static const uint16_t typeKey = 439;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -31,7 +31,7 @@ public:
 
     static const uint16_t enumIdPropertyKey = 574;
 
-private:
+protected:
     uint32_t m_EnumId = -1;
 
 public:

@@ -244,13 +244,11 @@ struct MyPlugin : public yup::AudioProcessor
                 // If this is a note on event, create a new voice and add it to our array.
                 if (message.isNoteOn())
                 {
-                    Voice voice = {
-                        .held = true,
-                        .channel = static_cast<int16_t> (message.getChannel()),
-                        .key = static_cast<int16_t> (message.getNoteNumber()),
-                        .phase = 0.0f,
-                    };
-
+                    Voice voice;
+                    voice.held = true;
+                    voice.channel = static_cast<int16_t> (message.getChannel());
+                    voice.key = static_cast<int16_t> (message.getNoteNumber());
+                    voice.phase = 0.0f;
                     voices.Add (voice);
                 }
 
@@ -284,10 +282,10 @@ struct MyPlugin : public yup::AudioProcessor
                         continue;
 
                     float volume = yup::jlimit (0.0f, 1.0f, getParameter (P_VOLUME).getValue() + 0.0f); // parameterOffsets[P_VOLUME]);
-                    sum += std::sinf (voice->phase * 2.0f * 3.14159f) * 0.2f * volume;
+                    sum += std::sin (voice->phase * 2.0f * 3.14159f) * 0.2f * volume;
 
-                    voice->phase += 440.0f * std::exp2f ((voice->key - 57.0f) / 12.0f) / sampleRate;
-                    voice->phase -= std::floorf (voice->phase);
+                    voice->phase += 440.0f * std::exp2 ((voice->key - 57.0f) / 12.0f) / sampleRate;
+                    voice->phase -= std::floor (voice->phase);
                 }
 
                 *outputL++ = sum;

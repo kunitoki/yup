@@ -257,8 +257,8 @@ function (_yup_module_collect_sources folder output_variable)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
+        if (NOT "${yup_platform}" MATCHES "^(linux)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_linux${extension}")
         endif()
 
         if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
@@ -271,6 +271,10 @@ function (_yup_module_collect_sources folder output_variable)
 
         if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_emscripten${extension}")
+        endif()
+
+        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
 
         foreach (source ${found_source_files})
@@ -324,6 +328,7 @@ endfunction()
 function (_yup_module_setup_target module_name
                                    module_cpp_standard
                                    module_include_paths
+                                   module_options
                                    module_defines
                                    module_sources
                                    module_libs
@@ -351,6 +356,9 @@ function (_yup_module_setup_target module_name
     if ("${yup_platform}" MATCHES "^(win32|uwp)$")
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
     endif()
+
+    target_compile_options (${module_name} INTERFACE
+        ${module_options})
 
     target_compile_definitions (${module_name} INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
@@ -392,6 +400,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     get_target_property (module_cpp_standard ${plugin_client_target} YUP_MODULE_CPP_STANDARD)
     get_target_property (module_include_paths ${plugin_client_target} YUP_MODULE_INCLUDE_PATHS)
     get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
+    get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
     get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
@@ -424,6 +433,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     _yup_module_setup_target (${custom_target_name}
                               "${module_cpp_standard}"
                               "${module_include_paths}"
+                              "${module_options}"
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
@@ -467,6 +477,7 @@ function (yup_add_module module_path)
     set (module_cpp_standard "")
     set (module_dependencies "")
     set (module_include_paths "")
+    set (module_options "")
     set (module_defines "")
     set (module_wasm_defines "")
     set (module_searchpaths "")
@@ -479,9 +490,13 @@ function (yup_add_module module_path)
     set (module_ios_libs "")
     set (module_linux_libs "")
     set (module_linux_packages "")
+    set (module_linux_defines "")
     set (module_windows_libs "")
+    set (module_windows_defines "")
+    set (module_windows_options "")
     set (module_mingw_libs "")
     set (module_wasm_libs "")
+    set (module_wasm_defines "")
     set (module_arc_enabled OFF)
 
     set (parsed_dependencies "")
@@ -495,32 +510,44 @@ function (yup_add_module module_path)
             _yup_comma_or_space_separated_list (${module_config_value} module_dependencies)
         elseif (${module_config_key} STREQUAL "defines")
             _yup_comma_or_space_separated_list (${module_config_value} module_defines)
-        elseif (${module_config_key} STREQUAL "WASMDefines")
-            _yup_comma_or_space_separated_list (${module_config_value} module_wasm_defines)
         elseif (${module_config_key} STREQUAL "searchpaths")
             _yup_comma_or_space_separated_list (${module_config_value} module_searchpaths)
-        elseif (${module_config_key} STREQUAL "OSXFrameworks")
+
+        elseif (${module_config_key} STREQUAL "osxFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_osx_frameworks)
-        elseif (${module_config_key} STREQUAL "WeakOSXFrameworks")
+        elseif (${module_config_key} STREQUAL "osxWeakFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_osx_weak_frameworks)
-        elseif (${module_config_key} STREQUAL "OSXLibs")
+        elseif (${module_config_key} STREQUAL "osxLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_osx_libs)
-        elseif (${module_config_key} STREQUAL "iOSFrameworks")
+
+        elseif (${module_config_key} STREQUAL "iosFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_ios_frameworks)
-        elseif (${module_config_key} STREQUAL "WeakiOSFrameworks")
+        elseif (${module_config_key} STREQUAL "iosWeakFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_ios_weak_frameworks)
-        elseif (${module_config_key} STREQUAL "iOSLibs")
+        elseif (${module_config_key} STREQUAL "iosLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_ios_libs)
+
         elseif (${module_config_key} STREQUAL "linuxLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_linux_libs)
         elseif (${module_config_key} STREQUAL "linuxPackages")
             _yup_comma_or_space_separated_list (${module_config_value} module_linux_packages)
+        elseif (${module_config_key} STREQUAL "linuxDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_linux_defines)
+
         elseif (${module_config_key} STREQUAL "windowsLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_windows_libs)
+        elseif (${module_config_key} STREQUAL "windowsDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_windows_defines)
+        elseif (${module_config_key} STREQUAL "windowsOptions")
+            _yup_comma_or_space_separated_list (${module_config_value} module_windows_options)
         elseif (${module_config_key} STREQUAL "mingwLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_mingw_libs)
+
         elseif (${module_config_key} STREQUAL "wasmLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_wasm_libs)
+        elseif (${module_config_key} STREQUAL "wasmDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_wasm_defines)
+
         elseif (${module_config_key} STREQUAL "enableARC")
             _yup_boolean_property (${module_config_value} module_arc_enabled)
         endif()
@@ -569,15 +596,20 @@ function (yup_add_module module_path)
         endif()
     endforeach()
 
-    # ==== Prepare defines
+    # ==== Prepare defines and options
     if ("${yup_platform}" MATCHES "^(emscripten)$")
         list (APPEND module_defines ${module_wasm_defines})
+    elseif ("${yup_platform}" MATCHES "^(linux)$")
+        list (APPEND module_defines ${module_linux_defines})
+    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
+        list (APPEND module_options ${module_windows_options})
     endif()
 
     # ==== Setup module sources and properties
     _yup_module_setup_target (${module_name}
                               "${module_cpp_standard}"
                               "${module_include_paths}"
+                              "${module_options}"
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
@@ -599,6 +631,7 @@ function (yup_add_module module_path)
         YUP_MODULE_HEADER "${module_header}"
         YUP_MODULE_CPP_STANDARD "${module_cpp_standard}"
         YUP_MODULE_INCLUDE_PATHS "${module_include_paths}"
+        YUP_MODULE_OPTIONS "${module_options}"
         YUP_MODULE_DEFINES "${module_defines}"
         YUP_MODULE_SOURCES "${module_sources}"
         YUP_MODULE_LIBS "${module_libs}"
@@ -641,7 +674,12 @@ function (yup_standalone_app)
     endif()
 
     # ==== Prepare executable
-    add_executable (${target_name})
+    set (executable_options "")
+    if (NOT YUP_ARG_CONSOLE AND "${yup_platform}" MATCHES "^(win32)$")
+        set (executable_options "WIN32")
+    endif()
+
+    add_executable (${target_name} ${executable_options})
     target_compile_features (${target_name} PRIVATE cxx_std_17)
 
     # ==== Per platform configuration

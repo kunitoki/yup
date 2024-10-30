@@ -47,6 +47,8 @@ enable_testing()
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
+    TARGET_IDE_GROUP "Tests"
+    CONSOLE
     DEFINITIONS
         JUCE_USE_CURL=0
     MODULES
@@ -62,4 +64,3 @@ file (GLOB_RECURSE sources
       "${CMAKE_CURRENT_LIST_DIR}/*.mm")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})
-set_target_properties (${target_name} PROPERTIES FOLDER "Tests")

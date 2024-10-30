@@ -12,12 +12,12 @@ StatusCode SolidColor::onAddedDirty(CoreContext* context)
     {
         return code;
     }
-    if (!initPaintMutator(this))
+    if ((code = initPaintMutator(this)) == StatusCode::Ok)
     {
-        return StatusCode::MissingObject;
+        renderOpacityChanged();
     }
-    renderOpacityChanged();
-    return StatusCode::Ok;
+
+    return code;
 }
 
 void SolidColor::renderOpacityChanged()
@@ -31,9 +31,13 @@ void SolidColor::renderOpacityChanged()
 
 void SolidColor::applyTo(RenderPaint* renderPaint, float opacityModifier) const
 {
-    renderPaint->color(colorModulateOpacity(colorValue(), renderOpacity() * opacityModifier));
+    renderPaint->color(
+        colorModulateOpacity(colorValue(), renderOpacity() * opacityModifier));
 }
 
 void SolidColor::colorValueChanged() { renderOpacityChanged(); }
 
-bool SolidColor::internalIsTranslucent() const { return colorAlpha(colorValue()) != 0xFF; }
+bool SolidColor::internalIsTranslucent() const
+{
+    return colorAlpha(colorValue()) != 0xFF;
+}
