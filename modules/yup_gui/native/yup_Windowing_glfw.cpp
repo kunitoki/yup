@@ -824,7 +824,7 @@ void* GLFWComponentNative::getNativeHandle() const
     return glfwGetWin32Window (window);
 
 #elif JUCE_LINUX
-    return glfwGetX11Window (window);
+    return reinterpret_cast<void*> (glfwGetX11Window (window));
 
 #else
     return nullptr;
@@ -839,12 +839,12 @@ void GLFWComponentNative::run()
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    double fpsMeasureStartTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+    double fpsMeasureStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
     uint64_t frameCounter = 0;
 
     while (! threadShouldExit())
     {
-        double frameStartTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+        double frameStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 
         // Trigger and wait for rendering
         renderEvent.reset();
@@ -859,7 +859,7 @@ void GLFWComponentNative::run()
         }
 
         // Measure spent time and cap the framerate
-        double currentTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+        double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
@@ -867,10 +867,10 @@ void GLFWComponentNative::run()
         {
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
-            while (Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
+            while (juce::Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
                 Thread::sleep (1);
 
-            while (Time::getMillisecondCounterHiRes() < waitUntilMs)
+            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
                 Thread::sleep (0);
         }
 
