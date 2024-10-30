@@ -2035,7 +2035,7 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
                                    MakePLSImplFramebufferFetch(capabilities));
             }
         }
-#else
+#elif defined(RIVE_WEBGL)
         if (capabilities.ANGLE_shader_pixel_local_storage_coherent)
         {
             // EXT_shader_framebuffer_fetch is costly on Qualcomm, with or
