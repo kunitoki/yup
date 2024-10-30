@@ -24,7 +24,8 @@ namespace rive
 {
 class Vec2D;
 
-// Helper that computes a matrix to "align" content (source) to fit inside frame (destination).
+// Helper that computes a matrix to "align" content (source) to fit inside frame
+// (destination).
 Mat2D computeAlignment(Fit, Alignment, const AABB& frame, const AABB& content);
 
 enum class RenderBufferType
@@ -36,12 +37,14 @@ enum class RenderBufferType
 enum class RenderBufferFlags
 {
     none = 0,
-    mappedOnceAtInitialization = 1 << 0, // The client will map the buffer exactly one time, before
-                                         // rendering, and will never update it again.
+    mappedOnceAtInitialization =
+        1 << 0, // The client will map the buffer exactly one time, before
+                // rendering, and will never update it again.
 };
 RIVE_MAKE_ENUM_BITSET(RenderBufferFlags)
 
-class RenderBuffer : public RefCnt<RenderBuffer>, public enable_lite_rtti<RenderBuffer>
+class RenderBuffer : public RefCnt<RenderBuffer>,
+                     public ENABLE_LITE_RTTI(RenderBuffer)
 {
 public:
     RenderBuffer(RenderBufferType, RenderBufferFlags, size_t sizeInBytes);
@@ -58,10 +61,23 @@ protected:
     virtual void* onMap() = 0;
     virtual void onUnmap() = 0;
 
+    // Unset the dirty flag, and return whether it had been set.
+    bool checkAndResetDirty()
+    {
+        assert(m_mapCount == m_unmapCount); // Don't call this while mapped.
+        if (m_dirty)
+        {
+            m_dirty = false;
+            return true;
+        }
+        return false;
+    }
+
 private:
     const RenderBufferType m_type;
     const RenderBufferFlags m_flags;
     const size_t m_sizeInBytes;
+    bool m_dirty = false;
     RIVE_DEBUG_CODE(size_t m_mapCount = 0;)
     RIVE_DEBUG_CODE(size_t m_unmapCount = 0;)
 };
@@ -78,16 +94,19 @@ enum class RenderPaintStyle
  *  Shaders are immutable, and sharable between multiple paints, etc.
  *
  *  It is common that a shader may be created with a 'localMatrix'. If this is
- *  not null, then it is applied to the shader's domain before the Renderer's CTM.
+ *  not null, then it is applied to the shader's domain before the Renderer's
+ * CTM.
  */
-class RenderShader : public RefCnt<RenderShader>, public enable_lite_rtti<RenderShader>
+class RenderShader : public RefCnt<RenderShader>,
+                     public ENABLE_LITE_RTTI(RenderShader)
 {
 public:
     RenderShader();
     virtual ~RenderShader();
 };
 
-class RenderPaint : public RefCnt<RenderPaint>, public enable_lite_rtti<RenderPaint>
+class RenderPaint : public RefCnt<RenderPaint>,
+                    public ENABLE_LITE_RTTI(RenderPaint)
 {
 public:
     RenderPaint();
@@ -103,7 +122,8 @@ public:
     virtual void invalidateStroke() = 0;
 };
 
-class RenderImage : public RefCnt<RenderImage>, public enable_lite_rtti<RenderImage>
+class RenderImage : public RefCnt<RenderImage>,
+                    public ENABLE_LITE_RTTI(RenderImage)
 {
 protected:
     int m_Width = 0;
@@ -120,7 +140,7 @@ public:
     const Mat2D& uvTransform() const { return m_uvTransform; }
 };
 
-class RenderPath : public CommandPath, public enable_lite_rtti<RenderPath>
+class RenderPath : public CommandPath, public ENABLE_LITE_RTTI(RenderPath)
 {
 public:
     RenderPath();
@@ -160,7 +180,10 @@ public:
     void scale(float sx, float sy);
     void rotate(float radians);
 
-    void align(Fit fit, Alignment alignment, const AABB& frame, const AABB& content)
+    void align(Fit fit,
+               Alignment alignment,
+               const AABB& frame,
+               const AABB& content)
     {
         transform(computeAlignment(fit, alignment, frame, content));
     }

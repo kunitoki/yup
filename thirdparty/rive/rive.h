@@ -29,13 +29,14 @@
     version:            1.0
     name:               Rive C++ is a runtime library for Rive.
     description:        Rive C++ is a runtime library for Rive, a real-time interactive design and animation tool.
-    website:            https://github.com/rive-app/rive-cpp
+    website:            https://github.com/rive-app/rive-runtime
     license:            MIT
     minimumCppStandard: 17
 
-    dependencies:       harfbuzz sheenbidi
-    defines:            WITH_RIVE_TEXT=1
+    dependencies:       harfbuzz sheenbidi yoga_library
+    defines:            WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1
     searchpaths:        include
+
 
   END_JUCE_MODULE_DECLARATION
 

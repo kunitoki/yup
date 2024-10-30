@@ -30,6 +30,8 @@ project (yup VERSION 1.0)
 
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
+# Options
+option (YUP_ENABLE_PROFILING "Build the profiling" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
@@ -38,8 +40,9 @@ yup_add_module (thirdparty/zlib)
 yup_add_module (thirdparty/glad)
 yup_add_module (thirdparty/harfbuzz)
 yup_add_module (thirdparty/sheenbidi)
+yup_add_module (thirdparty/yoga_library)
 yup_add_module (thirdparty/rive)
-yup_add_module (thirdparty/rive_pls_renderer)
+yup_add_module (thirdparty/rive_renderer)
 yup_add_module (thirdparty/oboe)
 
 # Original juce modules
@@ -54,6 +57,12 @@ yup_add_module (modules/yup_audio_plugin_client)
 yup_add_module (modules/yup_data_model)
 yup_add_module (modules/yup_graphics)
 yup_add_module (modules/yup_gui)
+
+# Enable profiling
+if (YUP_ENABLE_PROFILING)
+    message (STATUS "YUP -- Enabling profiling")
+    _yup_fetch_perfetto()
+endif()
 
 # Targets
 if (YUP_BUILD_EXAMPLES)

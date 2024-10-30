@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 427;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -33,7 +33,7 @@ public:
     static const uint16_t viewModelInstanceIdPropertyKey = 550;
     static const uint16_t artboardIdPropertyKey = 551;
 
-private:
+protected:
     bool m_UseLinkedArtboard = true;
     uint32_t m_ViewModelId = -1;
     uint32_t m_ViewModelInstanceId = -1;
@@ -62,7 +62,10 @@ public:
         viewModelIdChanged();
     }
 
-    inline uint32_t viewModelInstanceId() const { return m_ViewModelInstanceId; }
+    inline uint32_t viewModelInstanceId() const
+    {
+        return m_ViewModelInstanceId;
+    }
     void viewModelInstanceId(uint32_t value)
     {
         if (m_ViewModelInstanceId == value)

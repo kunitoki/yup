@@ -19,10 +19,11 @@
   ==============================================================================
 */
 
-#include "rive/pls/gl/gles3.hpp"
-#include "rive/pls/pls_renderer.hpp"
-#include "rive/pls/gl/pls_render_context_gl_impl.hpp"
-#include "rive/pls/gl/pls_render_target_gl.hpp"
+#include "rive/renderer/rive_renderer.hpp"
+#include "rive/renderer/gl/gles3.hpp"
+#include "rive/renderer/gl/render_buffer_gl_impl.hpp"
+#include "rive/renderer/gl/render_context_gl_impl.hpp"
+#include "rive/renderer/gl/render_target_gl.hpp"
 
 #if RIVE_DESKTOP_GL
 #define GLFW_INCLUDE_NONE
@@ -31,9 +32,6 @@
 
 namespace yup
 {
-
-using namespace rive;
-using namespace rive::pls;
 
 #if RIVE_DESKTOP_GL && DEBUG
 static void GLAPIENTRY err_msg_callback (GLenum source,
@@ -72,14 +70,14 @@ static void GLAPIENTRY err_msg_callback (GLenum source,
 }
 #endif
 
-class LowLevelRenderContextGLPLS : public GraphicsContext
+class LowLevelRenderContextGL : public GraphicsContext
 {
 public:
-    LowLevelRenderContextGLPLS()
+    LowLevelRenderContextGL()
     {
         if (! m_plsContext)
         {
-            fprintf (stderr, "Failed to create a PLS renderer.\n");
+            fprintf (stderr, "Failed to create a renderer.\n");
             exit (-1);
         }
 
@@ -128,23 +126,23 @@ public:
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
-    rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* plsContextOrNull() override { return m_plsContext.get(); }
 
-    rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-        m_renderTarget = make_rcp<FramebufferRenderTargetGL> (width, height, 0, sampleCount);
+        m_renderTarget = rive::make_rcp<rive::gpu::FramebufferRenderTargetGL> (width, height, 0, sampleCount);
     }
 
-    std::unique_ptr<Renderer> makeRenderer (int width, int height) override
+    std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer> (m_plsContext.get());
+        return std::make_unique<rive::RiveRenderer> (m_plsContext.get());
     }
 
-    void begin (const PLSRenderContext::FrameDescriptor& frameDescriptor) override
+    void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
-        m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->invalidateGLState();
+        m_plsContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
         m_plsContext->beginFrame (frameDescriptor);
     }
 
@@ -152,19 +150,19 @@ public:
     {
         m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
 
-        m_plsContext->static_impl_cast<PLSRenderContextGLImpl>()->unbindGLInternalResources();
+        m_plsContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
     }
 
 private:
-    std::unique_ptr<PLSRenderContext> m_plsContext =
-        PLSRenderContextGLImpl::MakeContext (PLSRenderContextGLImpl::ContextOptions());
+    std::unique_ptr<rive::gpu::RenderContext> m_plsContext =
+        rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
 
-    rcp<PLSRenderTargetGL> m_renderTarget;
+    rive::rcp<rive::gpu::RenderTargetGL> m_renderTarget;
 };
 
 std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsContext::Options)
 {
-    return std::make_unique<LowLevelRenderContextGLPLS>();
+    return std::make_unique<LowLevelRenderContextGL>();
 }
 
 } // namespace yup

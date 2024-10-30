@@ -14,17 +14,6 @@
 
 using namespace rive;
 
-static float positiveMod(float value, float range)
-{
-    assert(range > 0.0f);
-    float v = fmodf(value, range);
-    if (v < 0.0f)
-    {
-        v += range;
-    }
-    return v;
-}
-
 void FollowPathConstraint::distanceChanged() { markConstraintDirty(); }
 void FollowPathConstraint::orientChanged() { markConstraintDirty(); }
 
@@ -32,43 +21,22 @@ const Mat2D FollowPathConstraint::targetTransform() const
 {
     if (m_Target->is<Shape>() || m_Target->is<Path>())
     {
-        float totalLength = 0.0f;
-        for (auto contour : m_contours)
-        {
-            totalLength += contour->length();
-        }
-
-        float actualDistance = positiveMod(distance(), 1.0f);
-        if (distance() != 0 && actualDistance == 0)
-        {
-            actualDistance = 1;
-        }
-        float distanceUnits = totalLength * std::min(1.0f, std::max(0.0f, actualDistance));
-        float runningLength = 0;
-        ContourMeasure::PosTan posTan = ContourMeasure::PosTan();
-        for (auto contour : m_contours)
-        {
-            float pathLength = contour->length();
-            if (distanceUnits <= pathLength + runningLength)
-            {
-                posTan = contour->getPosTan(distanceUnits - runningLength);
-                break;
-            }
-            runningLength += pathLength;
-        }
-        Vec2D position = Vec2D(posTan.pos.x, posTan.pos.y);
+        auto result = m_pathMeasure.atPercentage(distance());
+        Vec2D position = result.pos;
         Mat2D transformB = Mat2D(m_Target->worldTransform());
 
         if (orient())
         {
-            transformB = Mat2D::fromRotation(std::atan2(posTan.tan.y, posTan.tan.x));
+            transformB =
+                Mat2D::fromRotation(std::atan2(result.tan.y, result.tan.x));
         }
         Vec2D offsetPosition = Vec2D();
         if (offset())
         {
             if (parent()->is<TransformComponent>())
             {
-                Mat2D components = parent()->as<TransformComponent>()->transform();
+                Mat2D components =
+                    parent()->as<TransformComponent>()->transform();
                 offsetPosition.x = components[4];
                 offsetPosition.y = components[5];
             }
@@ -146,17 +114,12 @@ void FollowPathConstraint::update(ComponentDirt value)
     if (paths.size() > 0)
     {
         m_rawPath.rewind();
-        m_contours.clear();
         for (auto path : paths)
         {
             m_rawPath.addPath(path->rawPath(), &path->pathTransform());
         }
 
-        auto measure = ContourMeasureIter(&m_rawPath);
-        for (auto contour = measure.next(); contour != nullptr; contour = measure.next())
-        {
-            m_contours.push_back(contour);
-        }
+        m_pathMeasure = PathMeasure(&m_rawPath);
     }
 }
 
@@ -181,14 +144,17 @@ StatusCode FollowPathConstraint::onAddedClean(CoreContext* context)
 void FollowPathConstraint::buildDependencies()
 {
 
-    if (m_Target != nullptr && m_Target->is<Shape>()) // which should never happen
+    if (m_Target != nullptr &&
+        m_Target->is<Shape>()) // which should never happen
     {
         // Follow path should update after the target's path composer
         Shape* shape = static_cast<Shape*>(m_Target);
         shape->pathComposer()->addDependent(this);
     }
-    // ok this appears to be enough to get the inital layout & animations to be working.
-    else if (m_Target != nullptr && m_Target->is<Path>()) // which should never happen
+    // ok this appears to be enough to get the inital layout & animations to be
+    // working.
+    else if (m_Target != nullptr &&
+             m_Target->is<Path>()) // which should never happen
     {
         // or do we need to be dependent on the shape still???
         Path* path = static_cast<Path*>(m_Target);

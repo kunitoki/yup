@@ -237,8 +237,8 @@ public:
         if (angleInRadians == 0.0f)
             return identity();
 
-        const float cosTheta = std::cosf (angleInRadians);
-        const float sinTheta = std::sinf (angleInRadians);
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
 
         return {
             cosTheta * scaleX - sinTheta * shearY,
@@ -278,8 +278,8 @@ public:
         if (angleInRadians == 0.0f)
             return identity();
 
-        const float cosTheta = std::cosf (angleInRadians);
-        const float sinTheta = std::sinf (angleInRadians);
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
 
         return AffineTransform (cosTheta, -sinTheta, 0.0f, sinTheta, cosTheta, 0.0f);
     }
@@ -299,8 +299,8 @@ public:
         if (angleInRadians == 0.0f)
             return identity();
 
-        const float cosTheta = std::cosf (angleInRadians);
-        const float sinTheta = std::sinf (angleInRadians);
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
 
         return AffineTransform (
             cosTheta,

@@ -1,6 +1,8 @@
 #ifndef _RIVE_SHAPE_PAINT_MUTATOR_HPP_
 #define _RIVE_SHAPE_PAINT_MUTATOR_HPP_
 
+#include "rive/status_code.hpp"
+
 namespace rive
 {
 class Component;
@@ -16,7 +18,7 @@ private:
 protected:
     /// Hook up this paint mutator as the mutator for the shape paint
     /// expected to be the parent.
-    bool initPaintMutator(Component* component);
+    StatusCode initPaintMutator(Component* component);
     virtual void renderOpacityChanged() = 0;
 
     RenderPaint* renderPaint() const { return m_RenderPaint; }
@@ -31,9 +33,13 @@ public:
 
     Component* component() const { return m_Component; }
 
-    bool isTranslucent() const { return m_RenderOpacity < 1 || this->internalIsTranslucent(); }
+    bool isTranslucent() const
+    {
+        return m_RenderOpacity < 1 || this->internalIsTranslucent();
+    }
 
-    virtual void applyTo(RenderPaint* renderPaint, float opacityModifier) const = 0;
+    virtual void applyTo(RenderPaint* renderPaint,
+                         float opacityModifier) const = 0;
 };
 } // namespace rive
 #endif

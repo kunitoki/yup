@@ -33,9 +33,9 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_events yup_data_model
-    OSXFrameworks:      Metal
-    iOSFrameworks:      Metal
+    dependencies:       juce_events yup_data_model yup_graphics rive
+    osxFrameworks:      Metal
+    iosFrameworks:      Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
@@ -50,6 +50,8 @@
 
 #include <yup_data_model/yup_data_model.h>
 #include <yup_graphics/yup_graphics.h>
+
+//==============================================================================
 
 #include <rive/rive.h>
 
