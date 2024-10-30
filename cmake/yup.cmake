@@ -631,6 +631,7 @@ function (yup_add_module module_path)
         YUP_MODULE_HEADER "${module_header}"
         YUP_MODULE_CPP_STANDARD "${module_cpp_standard}"
         YUP_MODULE_INCLUDE_PATHS "${module_include_paths}"
+        YUP_MODULE_OPTIONS "${module_options}"
         YUP_MODULE_DEFINES "${module_defines}"
         YUP_MODULE_SOURCES "${module_sources}"
         YUP_MODULE_LIBS "${module_libs}"
