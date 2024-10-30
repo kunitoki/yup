@@ -730,6 +730,11 @@ function (yup_standalone_app)
             -sNODERAWFS=0
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
 
+    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
+        if (NOT YUP_ARG_CONSOLE)
+            list (APPEND additional_options "/SUBSYSTEM:WINDOWS")
+        endif()
+
     endif()
 
     if (YUP_ARG_TARGET_IDE_GROUP)
