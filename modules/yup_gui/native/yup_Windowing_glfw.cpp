@@ -432,7 +432,7 @@ private:
 
 //==============================================================================
 
-std::atomic_flag GLFWComponentNative::isInitialised = false;
+std::atomic_flag GLFWComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
 
@@ -635,8 +635,8 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
         glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
     glfwSetWindowSize (window,
-                       jmax (0, newBounds.getWidth() - leftMargin - rightMargin),
-                       jmax (0, newBounds.getHeight() - topMargin - bottomMargin));
+                       jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
+                       jmax (1, newBounds.getHeight() - topMargin - bottomMargin));
 
 #endif
 
@@ -827,7 +827,7 @@ void* GLFWComponentNative::getNativeHandle() const
     return glfwGetWin32Window (window);
 
 #elif JUCE_LINUX
-    return glfwGetX11Window (window);
+    return reinterpret_cast<void*> (glfwGetX11Window (window));
 
 #else
     return nullptr;
@@ -842,12 +842,12 @@ void GLFWComponentNative::run()
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    double fpsMeasureStartTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+    double fpsMeasureStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
     uint64_t frameCounter = 0;
 
     while (! threadShouldExit())
     {
-        double frameStartTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+        double frameStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
 
         // Trigger and wait for rendering
         renderEvent.reset();
@@ -862,7 +862,7 @@ void GLFWComponentNative::run()
         }
 
         // Measure spent time and cap the framerate
-        double currentTimeSeconds = Time::getMillisecondCounterHiRes() / 1000.0;
+        double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
@@ -870,10 +870,10 @@ void GLFWComponentNative::run()
         {
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
-            while (Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
+            while (juce::Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
                 Thread::sleep (1);
 
-            while (Time::getMillisecondCounterHiRes() < waitUntilMs)
+            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
                 Thread::sleep (0);
         }
 
@@ -894,7 +894,7 @@ void GLFWComponentNative::run()
 
 void GLFWComponentNative::handleAsyncUpdate()
 {
-    if (! isThreadRunning() || ! isInitialised.test())
+    if (! isThreadRunning() || ! isInitialised.test_and_set())
         return;
 
     renderContext();
@@ -939,22 +939,21 @@ void GLFWComponentNative::renderContext()
         return;
 
     const auto loadAction = renderContinuous
-                              ? rive::pls::LoadAction::clear
-                              : rive::pls::LoadAction::preserveRenderTarget;
+                              ? rive::gpu::LoadAction::clear
+                              : rive::gpu::LoadAction::preserveRenderTarget;
 
     // Begin context drawing
-    context->begin (
-        {
-            .renderTargetWidth = static_cast<uint32_t> (contentWidth),
-            .renderTargetHeight = static_cast<uint32_t> (contentHeight),
-            .loadAction = loadAction,
-            .clearColor = 0xff000000,
-            .msaaSampleCount = 0,
-            .disableRasterOrdering = renderAtomicMode,
-            .wireframe = renderWireframe,
-            .fillsDisabled = false,
-            .strokesDisabled = false,
-        });
+    rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
+    frameDescriptor.renderTargetWidth = static_cast<uint32_t> (contentWidth);
+    frameDescriptor.renderTargetHeight = static_cast<uint32_t> (contentHeight);
+    frameDescriptor.loadAction = loadAction;
+    frameDescriptor.clearColor = 0xff000000;
+    frameDescriptor.msaaSampleCount = 0;
+    frameDescriptor.disableRasterOrdering = renderAtomicMode;
+    frameDescriptor.wireframe = renderWireframe;
+    frameDescriptor.fillsDisabled = false;
+    frameDescriptor.strokesDisabled = false;
+    context->begin (frameDescriptor);
 
     // Repaint components hierarchy
     Graphics g (*context, *renderer);

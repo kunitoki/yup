@@ -192,19 +192,27 @@ Possible values:
   - (Optional) A space-separated list of internal include paths, relative to the module's
     parent folder, which need to be added to a project's header search path.
 
-- OSXFrameworks
+- osxFrameworks
   - (Optional) A list (space or comma-separated) of OSX frameworks that are needed by this module.
 
-- WeakOSXFrameworks
+- osxWeakFrameworks
   - (Optional) A list (space or comma-separated) of weak linked OSX frameworks that are needed
     by this module.
 
-- iOSFrameworks
+- osxLibs
+  - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in an
+    OS X build (these are passed to the linker via the -l flag).
+
+- iosFrameworks
   - (Optional) A list (space or comma-separated) of iOS frameworks that are needed by this module.
 
-- WeakiOSFrameworks
+- iosWeakFrameworks
   - (Optional) A list (space or comma-separated) of weak linked iOS frameworks that are needed
     by this module.
+
+- iosLibs
+  - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in an
+    iOS build (these are passed to the linker via the -l flag).
 
 - linuxPackages
   - (Optional) A list (space or comma-separated) pkg-config packages that should be used to pass
@@ -214,21 +222,19 @@ Possible values:
   - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in a
     linux build (these are passed to the linker via the -l flag).
 
+- linuxDefines
+  - (Optional) A list (space or comma-separated) of macro defines needed by this module in a linux build.
+
 - mingwLibs
   - (Optional) A list (space or comma-separated) of static libs that should be linked in a
     win32 mingw build (these are passed to the linker via the -l flag).
 
-- OSXLibs
-  - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in an
-    OS X build (these are passed to the linker via the -l flag).
-
-- iOSLibs
-  - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in an
-    iOS build (these are passed to the linker via the -l flag).
-
 - windowsLibs
   - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in a
     Visual Studio build (without the .lib suffixes).
+
+- windowsDefines
+  - (Optional) A list (space or comma-separated) of macro defines needed by this module in a windows build.
 
 Here's an example block:
 
@@ -243,8 +249,8 @@ Here's an example block:
      license:          ISC
 
      dependencies:     juce_audio_basics juce_audio_formats juce_events
-     OSXFrameworks:    CoreAudio CoreMIDI DiscRecording
-     iOSFrameworks:    CoreAudio CoreMIDI AudioToolbox AVFoundation
+     osxFrameworks:    CoreAudio CoreMIDI DiscRecording
+     iosFrameworks:    CoreAudio CoreMIDI AudioToolbox AVFoundation
      linuxLibs:        asound
      mingwLibs:        winmm
 

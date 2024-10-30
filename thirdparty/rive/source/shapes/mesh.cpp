@@ -89,27 +89,31 @@ Core* Mesh::clone() const
     auto factory = artboard()->factory();
     auto clone = static_cast<Mesh*>(MeshBase::clone());
     clone->m_VertexRenderBufferDirty = true;
-    clone->m_VertexRenderBuffer = factory->makeRenderBuffer(RenderBufferType::vertex,
-                                                            RenderBufferFlags::none,
-                                                            m_Vertices.size() * sizeof(Vec2D));
+    clone->m_VertexRenderBuffer =
+        factory->makeRenderBuffer(RenderBufferType::vertex,
+                                  RenderBufferFlags::none,
+                                  m_Vertices.size() * sizeof(Vec2D));
     clone->m_UVRenderBuffer = m_UVRenderBuffer;
     clone->m_IndexRenderBuffer = m_IndexRenderBuffer;
     return clone;
 }
 
-void Mesh::initializeSharedBuffers(RenderImage* renderImage)
+void Mesh::onAssetLoaded(RenderImage* renderImage)
 {
-    Mat2D uvTransform = renderImage != nullptr ? renderImage->uvTransform() : Mat2D();
+    Mat2D uvTransform =
+        renderImage != nullptr ? renderImage->uvTransform() : Mat2D();
 
     auto factory = artboard()->factory();
     m_VertexRenderBufferDirty = true;
-    m_VertexRenderBuffer = factory->makeRenderBuffer(RenderBufferType::vertex,
-                                                     RenderBufferFlags::none,
-                                                     m_Vertices.size() * sizeof(Vec2D));
+    m_VertexRenderBuffer =
+        factory->makeRenderBuffer(RenderBufferType::vertex,
+                                  RenderBufferFlags::none,
+                                  m_Vertices.size() * sizeof(Vec2D));
 
-    m_UVRenderBuffer = factory->makeRenderBuffer(RenderBufferType::vertex,
-                                                 RenderBufferFlags::mappedOnceAtInitialization,
-                                                 m_Vertices.size() * sizeof(Vec2D));
+    m_UVRenderBuffer =
+        factory->makeRenderBuffer(RenderBufferType::vertex,
+                                  RenderBufferFlags::mappedOnceAtInitialization,
+                                  m_Vertices.size() * sizeof(Vec2D));
     if (m_UVRenderBuffer)
     {
         float* uv = static_cast<float*>(m_UVRenderBuffer->map());
@@ -122,14 +126,20 @@ void Mesh::initializeSharedBuffers(RenderImage* renderImage)
         m_UVRenderBuffer->unmap();
     }
 
-    m_IndexRenderBuffer = factory->makeRenderBuffer(RenderBufferType::index,
-                                                    RenderBufferFlags::mappedOnceAtInitialization,
-                                                    m_IndexBuffer->size() * sizeof(uint16_t));
-    if (m_IndexRenderBuffer)
+    if (m_IndexBuffer != nullptr)
     {
-        void* indexData = m_IndexRenderBuffer->map();
-        memcpy(indexData, m_IndexBuffer->data(), m_IndexRenderBuffer->sizeInBytes());
-        m_IndexRenderBuffer->unmap();
+        m_IndexRenderBuffer = factory->makeRenderBuffer(
+            RenderBufferType::index,
+            RenderBufferFlags::mappedOnceAtInitialization,
+            m_IndexBuffer->size() * sizeof(uint16_t));
+        if (m_IndexRenderBuffer)
+        {
+            void* indexData = m_IndexRenderBuffer->map();
+            memcpy(indexData,
+                   m_IndexBuffer->data(),
+                   m_IndexRenderBuffer->sizeInBytes());
+            m_IndexRenderBuffer->unmap();
+        }
     }
 }
 
@@ -156,11 +166,15 @@ void Mesh::update(ComponentDirt value)
     Super::update(value);
 }
 
-void Mesh::draw(Renderer* renderer, const RenderImage* image, BlendMode blendMode, float opacity)
+void Mesh::draw(Renderer* renderer,
+                const RenderImage* image,
+                BlendMode blendMode,
+                float opacity)
 {
     if (m_VertexRenderBufferDirty && m_VertexRenderBuffer != nullptr)
     {
-        Vec2D* mappedVertices = reinterpret_cast<Vec2D*>(m_VertexRenderBuffer->map());
+        Vec2D* mappedVertices =
+            reinterpret_cast<Vec2D*>(m_VertexRenderBuffer->map());
         for (auto vertex : m_Vertices)
         {
             *mappedVertices++ = vertex->renderTranslation();
@@ -171,7 +185,8 @@ void Mesh::draw(Renderer* renderer, const RenderImage* image, BlendMode blendMod
 
     if (skin() == nullptr)
     {
-        renderer->transform(parent()->as<WorldTransformComponent>()->worldTransform());
+        renderer->transform(
+            parent()->as<WorldTransformComponent>()->worldTransform());
     }
     renderer->drawImageMesh(image,
                             m_VertexRenderBuffer,

@@ -1,0 +1,96 @@
+#define VERTEX
+#define ENABLE_ADVANCED_BLEND 1
+#define DRAW_INTERIOR_TRIANGLES 1
+#define ENABLE_CLIPPING 1
+#define ENABLE_CLIP_RECT 1
+namespace p1111000
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_ADVANCED_BLEND
+#undef DRAW_INTERIOR_TRIANGLES
+#undef ENABLE_CLIPPING
+#undef ENABLE_CLIP_RECT
+#undef VERTEX
+
+#define FRAGMENT
+#define ENABLE_NESTED_CLIPPING 1
+#define DRAW_INTERIOR_TRIANGLES 1
+#define ENABLE_EVEN_ODD 1
+#define ENABLE_HSL_BLEND_MODES 1
+#define ENABLE_CLIP_RECT 1
+#define ENABLE_CLIPPING 1
+#define ENABLE_ADVANCED_BLEND 1
+namespace p1111111
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_NESTED_CLIPPING
+#undef DRAW_INTERIOR_TRIANGLES
+#undef ENABLE_EVEN_ODD
+#undef ENABLE_HSL_BLEND_MODES
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef FRAGMENT
+
+#define VERTEX
+#define ENABLE_CLIPPING 1
+#define ENABLE_ADVANCED_BLEND 1
+#define ENABLE_CLIP_RECT 1
+namespace p0111000
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef ENABLE_CLIP_RECT
+#undef VERTEX
+
+#define FRAGMENT
+#define ENABLE_NESTED_CLIPPING 1
+#define ENABLE_ADVANCED_BLEND 1
+#define ENABLE_HSL_BLEND_MODES 1
+#define ENABLE_CLIPPING 1
+#define ENABLE_CLIP_RECT 1
+#define ENABLE_EVEN_ODD 1
+namespace p0111111
+{
+#include "draw_path.minified.glsl"
+}
+#undef ENABLE_NESTED_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef ENABLE_HSL_BLEND_MODES
+#undef ENABLE_CLIPPING
+#undef ENABLE_CLIP_RECT
+#undef ENABLE_EVEN_ODD
+#undef FRAGMENT
+
+#define VERTEX
+#define ENABLE_CLIPPING 1
+#define ENABLE_ADVANCED_BLEND 1
+#define ENABLE_CLIP_RECT 1
+namespace m0111000
+{
+#include "draw_image_mesh.minified.glsl"
+}
+#undef ENABLE_CLIPPING
+#undef ENABLE_ADVANCED_BLEND
+#undef ENABLE_CLIP_RECT
+#undef VERTEX
+
+#define FRAGMENT
+#define ENABLE_ADVANCED_BLEND 1
+#define ENABLE_HSL_BLEND_MODES 1
+#define ENABLE_CLIPPING 1
+#define ENABLE_CLIP_RECT 1
+namespace m0111001
+{
+#include "draw_image_mesh.minified.glsl"
+}
+#undef ENABLE_ADVANCED_BLEND
+#undef ENABLE_HSL_BLEND_MODES
+#undef ENABLE_CLIPPING
+#undef ENABLE_CLIP_RECT
+#undef FRAGMENT
+

@@ -21,7 +21,9 @@ private:
     };
     std::vector<BoneChainLink> m_FkChain;
     void solve1(BoneChainLink* fk1, const Vec2D& worldTargetTranslation);
-    void solve2(BoneChainLink* fk1, BoneChainLink* fk2, const Vec2D& worldTargetTranslation);
+    void solve2(BoneChainLink* fk1,
+                BoneChainLink* fk2,
+                const Vec2D& worldTargetTranslation);
     void constrainRotation(BoneChainLink& fk, float rotation);
 
 public:
@@ -29,6 +31,7 @@ public:
     StatusCode onAddedClean(CoreContext* context) override;
     void constrain(TransformComponent* component) override;
     void buildDependencies() override;
+    void invertDirectionChanged() override;
 };
 } // namespace rive
 

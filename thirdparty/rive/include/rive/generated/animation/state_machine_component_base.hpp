@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 54;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -30,7 +30,7 @@ public:
 
     static const uint16_t namePropertyKey = 138;
 
-private:
+protected:
     std::string m_Name = "";
 
 public:
@@ -45,7 +45,10 @@ public:
         nameChanged();
     }
 
-    void copy(const StateMachineComponentBase& object) { m_Name = object.m_Name; }
+    void copy(const StateMachineComponentBase& object)
+    {
+        m_Name = object.m_Name;
+    }
 
     bool deserialize(uint16_t propertyKey, BinaryReader& reader) override
     {

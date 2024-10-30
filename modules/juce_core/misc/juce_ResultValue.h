@@ -72,7 +72,7 @@ public:
     */
     static ResultValue fail (StringRef errorMessage) noexcept
     {
-        return ResultValue (errorMessage.isEmpty() ? "Unknown Error" : errorMessage, ErrorTag {});
+        return ResultValue (errorMessage.isEmpty() ? StringRef ("Unknown Error") : errorMessage, ErrorTag {});
     }
 
     //==============================================================================

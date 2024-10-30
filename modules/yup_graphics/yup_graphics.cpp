@@ -20,7 +20,7 @@
 */
 
 #ifdef YUP_GRAPHICS_H_INCLUDED
-    /* When you add this cpp file to your project, you mustn't include it in a file where you've
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
@@ -46,7 +46,6 @@
 #include "native/yup_GraphicsContext_metal.cpp"
 
 #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
-
 #if JUCE_EMSCRIPTEN && RIVE_WEBGL
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>

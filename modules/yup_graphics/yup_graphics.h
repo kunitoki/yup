@@ -33,9 +33,9 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_core rive rive_pls_renderer
-    OSXFrameworks:      Metal
-    iOSFrameworks:      Metal
+    dependencies:       juce_core rive rive_renderer
+    osxFrameworks:      Metal
+    iosFrameworks:      Metal
     searchpaths:        native
     enableARC:          1
 
@@ -49,10 +49,17 @@
 
 #include <juce_core/juce_core.h>
 
+//==============================================================================
+
 #include <rive/rive.h>
 #include <rive/text/utf.hpp>
 
-#include <rive/pls/pls_render_context.hpp>
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/render_context_impl.hpp>
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+
+//==============================================================================
 
 #include <tuple>
 

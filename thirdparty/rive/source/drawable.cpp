@@ -1,5 +1,6 @@
 #include "rive/drawable.hpp"
 #include "rive/artboard.hpp"
+#include "rive/layout_component.hpp"
 #include "rive/shapes/clipping_shape.hpp"
 #include "rive/shapes/path_composer.hpp"
 #include "rive/shapes/shape.hpp"
@@ -38,7 +39,10 @@ StatusCode Drawable::onAddedDirty(CoreContext* context)
     return StatusCode::InvalidObject;
 }
 
-void Drawable::addClippingShape(ClippingShape* shape) { m_ClippingShapes.push_back(shape); }
+void Drawable::addClippingShape(ClippingShape* shape)
+{
+    m_ClippingShapes.push_back(shape);
+}
 
 ClipResult Drawable::applyClip(Renderer* renderer) const
 {
@@ -64,10 +68,25 @@ ClipResult Drawable::applyClip(Renderer* renderer) const
         }
         else
         {
-            // If one renderPath is null we exit early because we are treating it
-            // as an empty path and its intersection will always be an empty path
+            // If one renderPath is null we exit early because we are treating
+            // it as an empty path and its intersection will always be an empty
+            // path
             return ClipResult::emptyClip;
         }
     }
     return ClipResult::clip;
+}
+
+bool Drawable::isChildOfLayout(LayoutComponent* layout)
+{
+    for (ContainerComponent* parent = this; parent != nullptr;
+         parent = parent->parent())
+    {
+        if (parent->is<LayoutComponent>() &&
+            parent->as<LayoutComponent>() == layout)
+        {
+            return true;
+        }
+    }
+    return false;
 }

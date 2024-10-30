@@ -44,7 +44,7 @@ yup_standalone_app (
         harfbuzz
         sheenbidi
         rive
-        rive_pls_renderer
+        rive_renderer
 )
 
 # ==== Prepare sources
