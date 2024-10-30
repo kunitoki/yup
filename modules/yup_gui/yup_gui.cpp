@@ -31,6 +31,26 @@
 #include "yup_gui.h"
 
 //==============================================================================
+#include <rive/layout.hpp>
+#include <rive/custom_property_number.hpp>
+#include <rive/custom_property_boolean.hpp>
+#include <rive/custom_property_string.hpp>
+#include <rive/animation/state_machine_instance.hpp>
+#include <rive/animation/state_machine_input_instance.hpp>
+
+//==============================================================================
+#include "application/yup_Application.cpp"
+#include "desktop/yup_Desktop.cpp"
+#include "mouse/yup_MouseEvent.cpp"
+#include "component/yup_ComponentNative.cpp"
+#include "component/yup_Component.cpp"
+#include "widgets/yup_Button.cpp"
+#include "widgets/yup_TextButton.cpp"
+#include "widgets/yup_Slider.cpp"
+#include "artboard/yup_Artboard.cpp"
+#include "windowing/yup_DocumentWindow.cpp"
+
+//==============================================================================
 #if JUCE_MAC
 #define GLFW_INCLUDE_NONE
 #define GLFW_EXPOSE_NATIVE_COCOA
@@ -39,6 +59,23 @@
 
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
+
+#elif JUCE_LINUX
+#define GLFW_INCLUDE_NONE
+#define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_GLX
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+#undef None
+#undef KeyPress
+#undef SIZEOF
+
+#elif JUCE_WINDOWS
+#define GLFW_INCLUDE_NONE
+#define GLFW_EXPOSE_NATIVE_WGL
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
 #else
 #define GLFW_INCLUDE_NONE
@@ -53,24 +90,4 @@
 #endif
 
 //==============================================================================
-#include <rive/layout.hpp>
-#include <rive/custom_property_number.hpp>
-#include <rive/custom_property_boolean.hpp>
-#include <rive/custom_property_string.hpp>
-#include <rive/animation/state_machine_instance.hpp>
-#include <rive/animation/state_machine_input_instance.hpp>
-
-//==============================================================================
 #include "native/yup_Windowing_glfw.cpp"
-
-//==============================================================================
-#include "application/yup_Application.cpp"
-#include "desktop/yup_Desktop.cpp"
-#include "mouse/yup_MouseEvent.cpp"
-#include "component/yup_ComponentNative.cpp"
-#include "component/yup_Component.cpp"
-#include "widgets/yup_Button.cpp"
-#include "widgets/yup_TextButton.cpp"
-#include "widgets/yup_Slider.cpp"
-#include "artboard/yup_Artboard.cpp"
-#include "windowing/yup_DocumentWindow.cpp"

@@ -4,7 +4,7 @@ default:
 
 update:
   mkdir -p build
-  cmake -G Xcode -B build
+  cmake -G Xcode -B build -DYUP_ENABLE_PROFILING=ON
 
 ios:
   mkdir -p build

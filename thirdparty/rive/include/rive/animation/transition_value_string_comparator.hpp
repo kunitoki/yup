@@ -4,12 +4,13 @@
 #include <stdio.h>
 namespace rive
 {
-class TransitionValueStringComparator : public TransitionValueStringComparatorBase
+class TransitionValueStringComparator
+    : public TransitionValueStringComparatorBase
 {
 public:
     bool compare(TransitionComparator* comparand,
                  TransitionConditionOp operation,
-                 StateMachineInstance* stateMachineInstance) override;
+                 const StateMachineInstance* stateMachineInstance) override;
 };
 } // namespace rive
 

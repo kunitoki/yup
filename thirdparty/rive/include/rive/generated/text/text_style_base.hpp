@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 137;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -35,7 +35,7 @@ public:
     static const uint16_t letterSpacingPropertyKey = 390;
     static const uint16_t fontAssetIdPropertyKey = 279;
 
-private:
+protected:
     float m_FontSize = 12.0f;
     float m_LineHeight = -1.0f;
     float m_LetterSpacing = 0.0f;

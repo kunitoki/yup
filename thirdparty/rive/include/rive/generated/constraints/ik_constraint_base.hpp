@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 81;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -34,7 +34,7 @@ public:
     static const uint16_t invertDirectionPropertyKey = 174;
     static const uint16_t parentBoneCountPropertyKey = 175;
 
-private:
+protected:
     bool m_InvertDirection = false;
     uint32_t m_ParentBoneCount = 0;
 

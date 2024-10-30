@@ -56,8 +56,8 @@
   minimumCppStandard: 17
 
   dependencies:       juce_audio_basics, juce_events, oboe
-  OSXFrameworks:      CoreAudio CoreMIDI AudioToolbox
-  iOSFrameworks:      CoreAudio CoreMIDI AudioToolbox AVFoundation
+  osxFrameworks:      CoreAudio CoreMIDI AudioToolbox
+  iosFrameworks:      CoreAudio CoreMIDI AudioToolbox AVFoundation
   linuxPackages:      alsa
   mingwLibs:          winmm
 

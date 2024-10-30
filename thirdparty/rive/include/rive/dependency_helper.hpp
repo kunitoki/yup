@@ -24,11 +24,18 @@ public:
     void addDependent(U* component)
     {
         // Make it's not already a dependent.
-        if (std::find(m_Dependents.begin(), m_Dependents.end(), component) != m_Dependents.end())
+        if (std::find(m_Dependents.begin(), m_Dependents.end(), component) !=
+            m_Dependents.end())
         {
             return;
         }
         m_Dependents.push_back(component);
+    }
+    void removeDependent(U* component)
+    {
+        m_Dependents.erase(
+            std::remove(m_Dependents.begin(), m_Dependents.end(), component),
+            m_Dependents.end());
     }
     void addDirt(ComponentDirt value)
     {
@@ -38,7 +45,10 @@ public:
         }
     }
 
-    void onComponentDirty(U* component) { m_dependecyRoot->onComponentDirty(component); }
+    void onComponentDirty(U* component)
+    {
+        m_dependecyRoot->onComponentDirty(component);
+    }
 
     const std::vector<U*>& dependents() const { return m_Dependents; }
 };

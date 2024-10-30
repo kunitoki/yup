@@ -56,8 +56,8 @@
   minimumCppStandard: 17
 
   dependencies:       juce_core
-  OSXFrameworks:      Accelerate
-  iOSFrameworks:      Accelerate
+  osxFrameworks:      Accelerate
+  iosFrameworks:      Accelerate
 
  END_JUCE_MODULE_DECLARATION
 

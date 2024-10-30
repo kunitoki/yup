@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 148;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -42,7 +42,7 @@ public:
     static const uint16_t joystickFlagsPropertyKey = 312;
     static const uint16_t handleSourceIdPropertyKey = 313;
 
-private:
+protected:
     float m_X = 0.0f;
     float m_Y = 0.0f;
     float m_PosX = 0.0f;
