@@ -21,4 +21,6 @@
 
 #include "rive_renderer.h"
 
+#pragma comment (lib, "d3d11.lib")
+
 #include "source/d3d/render_context_d3d_impl.cpp"
