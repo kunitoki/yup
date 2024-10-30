@@ -116,7 +116,7 @@
 #include "native/juce_DirectSound_windows.cpp"
 #endif
 
-// clang-format off
+    // clang-format off
 #if JUCE_USE_WINRT_MIDI && (JUCE_MSVC || JUCE_CLANG)
 /* If you cannot find any of the header files below then you are probably
    attempting to use the Windows 10 Bluetooth Low Energy API. For this to work you
@@ -144,7 +144,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
 #include "native/juce_Midi_windows.cpp"
 
-// clang-format off
+    // clang-format off
 #if JUCE_ASIO
 /* This is very frustrating - we only need to use a handful of definitions from
    a couple of the header files in Steinberg's ASIO SDK, and it'd be easy to copy
