@@ -244,13 +244,11 @@ struct MyPlugin : public yup::AudioProcessor
                 // If this is a note on event, create a new voice and add it to our array.
                 if (message.isNoteOn())
                 {
-                    Voice voice = {
-                        .held = true,
-                        .channel = static_cast<int16_t> (message.getChannel()),
-                        .key = static_cast<int16_t> (message.getNoteNumber()),
-                        .phase = 0.0f,
-                    };
-
+                    Voice voice;
+                    voice.held = true;
+                    voice.channel = static_cast<int16_t> (message.getChannel());
+                    voice.key = static_cast<int16_t> (message.getNoteNumber());
+                    voice.phase = 0.0f;
                     voices.Add (voice);
                 }
 
