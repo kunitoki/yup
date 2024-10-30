@@ -43,7 +43,6 @@ jobs:
         cmake --build . --config Debug --parallel 4 --target example_render
         cmake --build . --config Debug --parallel 4 --target example_plugin
 
-
     - name: Test Debug
       working-directory: ${{runner.workspace}}/build/tests/Debug
       run: ./yup_tests
