@@ -1,6 +1,7 @@
 #include "rive/animation/keyed_property.hpp"
 #include "rive/animation/keyed_object.hpp"
 #include "rive/animation/keyframe.hpp"
+#include "rive/animation/keyframe_interpolator.hpp"
 #include "rive/animation/interpolating_keyframe.hpp"
 #include "rive/animation/keyed_callback_reporter.hpp"
 #include "rive/importers/import_stack.hpp"
@@ -89,7 +90,9 @@ void KeyedProperty::reportKeyedCallbacks(KeyedCallbackReporter* reporter,
     while (idxTo > idx)
     {
         const std::unique_ptr<KeyFrame>& frame = m_keyFrames[idx];
-        reporter->reportKeyedCallback(objectId, propertyKey(), secondsTo - frame->seconds());
+        reporter->reportKeyedCallback(objectId,
+                                      propertyKey(),
+                                      secondsTo - frame->seconds());
         idx++;
     }
 }
@@ -98,12 +101,21 @@ void KeyedProperty::apply(Core* object, float seconds, float mix)
 {
     assert(!m_keyFrames.empty());
 
+    auto interpolatorHost = InterpolatorHost::from(object);
+    auto actualMix = mix;
+    if (interpolatorHost != nullptr &&
+        interpolatorHost->overridesKeyedInterpolation(propertyKey()))
+    {
+        actualMix = 1.0f;
+    }
+
     int idx = closestFrameIndex(seconds);
     int pk = propertyKey();
 
     if (idx == 0)
     {
-        static_cast<InterpolatingKeyFrame*>(m_keyFrames[0].get())->apply(object, pk, mix);
+        static_cast<InterpolatingKeyFrame*>(m_keyFrames[0].get())
+            ->apply(object, pk, actualMix);
     }
     else
     {
@@ -115,23 +127,28 @@ void KeyedProperty::apply(Core* object, float seconds, float mix)
                 static_cast<InterpolatingKeyFrame*>(m_keyFrames[idx].get());
             if (seconds == toFrame->seconds())
             {
-                toFrame->apply(object, pk, mix);
+                toFrame->apply(object, pk, actualMix);
             }
             else
             {
                 if (fromFrame->interpolationType() == 0)
                 {
-                    fromFrame->apply(object, pk, mix);
+                    fromFrame->apply(object, pk, actualMix);
                 }
                 else
                 {
-                    fromFrame->applyInterpolation(object, pk, seconds, toFrame, mix);
+                    fromFrame->applyInterpolation(object,
+                                                  pk,
+                                                  seconds,
+                                                  toFrame,
+                                                  actualMix);
                 }
             }
         }
         else
         {
-            static_cast<InterpolatingKeyFrame*>(m_keyFrames[idx - 1].get())->apply(object, pk, mix);
+            static_cast<InterpolatingKeyFrame*>(m_keyFrames[idx - 1].get())
+                ->apply(object, pk, actualMix);
         }
     }
 }
@@ -164,7 +181,8 @@ StatusCode KeyedProperty::onAddedClean(CoreContext* context)
 
 StatusCode KeyedProperty::import(ImportStack& importStack)
 {
-    auto importer = importStack.latest<KeyedObjectImporter>(KeyedObjectBase::typeKey);
+    auto importer =
+        importStack.latest<KeyedObjectImporter>(KeyedObjectBase::typeKey);
     if (importer == nullptr)
     {
         return StatusCode::MissingObject;

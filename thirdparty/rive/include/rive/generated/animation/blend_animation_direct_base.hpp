@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 77;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -33,7 +33,7 @@ public:
     static const uint16_t mixValuePropertyKey = 297;
     static const uint16_t blendSourcePropertyKey = 298;
 
-private:
+protected:
     uint32_t m_InputId = -1;
     float m_MixValue = 100.0f;
     uint32_t m_BlendSource = 0;

@@ -3,12 +3,13 @@
 #include "rive/generated/core_registry.hpp"
 #include "rive/node.hpp"
 
-using namespace rive;
+namespace rive {
 
-DataBindContextValueList::DataBindContextValueList(ViewModelInstanceValue* value)
-{
-    m_Source = value;
-}
+DataBindContextValueList::DataBindContextValueList(
+    ViewModelInstanceValue* source,
+    DataConverter* converter) :
+    DataBindContextValue(source, converter)
+{}
 
 std::unique_ptr<ArtboardInstance> DataBindContextValueList::createArtboard(
     Component* target,
@@ -22,14 +23,16 @@ std::unique_ptr<ArtboardInstance> DataBindContextValueList::createArtboard(
         auto dataContext = mainArtboard->dataContext();
         auto artboardCopy = artboard->instance();
         artboardCopy->advanceInternal(0.0f, false);
-        artboardCopy->dataContextFromInstance(listItem->viewModelInstance(), dataContext, false);
+        artboardCopy->setDataContextFromInstance(listItem->viewModelInstance(),
+                                                 dataContext,
+                                                 false);
         return artboardCopy;
     }
     return nullptr;
 }
 
-std::unique_ptr<StateMachineInstance> DataBindContextValueList::createStateMachineInstance(
-    ArtboardInstance* artboard)
+std::unique_ptr<StateMachineInstance> DataBindContextValueList::
+    createStateMachineInstance(ArtboardInstance* artboard)
 {
     if (artboard != nullptr)
     {
@@ -45,34 +48,41 @@ void DataBindContextValueList::insertItem(Core* target,
                                           int index)
 {
     auto artboard = listItem->artboard();
-    auto artboardCopy = createArtboard(target->as<Component>(), artboard, listItem);
+    auto artboardCopy =
+        createArtboard(target->as<Component>(), artboard, listItem);
     auto stateMachineInstance = createStateMachineInstance(artboardCopy.get());
     std::unique_ptr<DataBindContextValueListItem> cacheListItem =
-        rivestd::make_unique<DataBindContextValueListItem>(std::move(artboardCopy),
-                                                           std::move(stateMachineInstance),
-                                                           listItem);
+        rivestd::make_unique<DataBindContextValueListItem>(
+            std::move(artboardCopy),
+            std::move(stateMachineInstance),
+            listItem);
     if (index == -1)
     {
         m_ListItemsCache.push_back(std::move(cacheListItem));
     }
     else
     {
-        m_ListItemsCache.insert(m_ListItemsCache.begin() + index, std::move(cacheListItem));
+        m_ListItemsCache.insert(m_ListItemsCache.begin() + index,
+                                std::move(cacheListItem));
     }
 }
 
 void DataBindContextValueList::swapItems(Core* target, int index1, int index2)
 {
-    std::iter_swap(m_ListItemsCache.begin() + index1, m_ListItemsCache.begin() + index2);
+    std::iter_swap(m_ListItemsCache.begin() + index1,
+                   m_ListItemsCache.begin() + index2);
 }
 
-void DataBindContextValueList::popItem(Core* target) { m_ListItemsCache.pop_back(); }
+void DataBindContextValueList::popItem(Core* target)
+{
+    m_ListItemsCache.pop_back();
+}
 
 void DataBindContextValueList::update(Core* target)
 {
     if (target != nullptr)
     {
-        auto sourceList = m_Source->as<ViewModelInstanceList>();
+        auto sourceList = m_source->as<ViewModelInstanceList>();
         auto listItems = sourceList->listItems();
 
         int listIndex = 0;
@@ -91,7 +101,8 @@ void DataBindContextValueList::update(Core* target)
                     bool found = false;
                     while (cacheIndex < m_ListItemsCache.size())
                     {
-                        if (m_ListItemsCache[cacheIndex]->listItem() == listItem)
+                        if (m_ListItemsCache[cacheIndex]->listItem() ==
+                            listItem)
                         {
                             // swap cache position with new item
                             swapItems(target, listIndex, cacheIndex);
@@ -125,9 +136,16 @@ void DataBindContextValueList::update(Core* target)
     }
 }
 
-void DataBindContextValueList::apply(Core* target, uint32_t propertyKey) {}
+void DataBindContextValueList::apply(Core* target,
+                                     uint32_t propertyKey,
+                                     bool isMainDirection)
+{}
 
-void DataBindContextValueList::applyToSource(Core* target, uint32_t propertyKey)
+void DataBindContextValueList::applyToSource(Core* target,
+                                             uint32_t propertyKey,
+                                             bool isMainDirection)
 {
     // TODO: @hernan does applyToSource make sense? Should we block it somehow?
 }
+
+} // namespace rive

@@ -44,7 +44,7 @@ class SMINumber;
 class SMITrigger;
 
 #ifdef WITH_RIVE_TOOLS
-typedef void (*ArtboardCallback)(Artboard*);
+typedef void (*ArtboardCallback)(void*);
 #endif
 
 class Artboard : public ArtboardBase, public CoreContext
@@ -99,7 +99,7 @@ public:
 private:
 #ifdef TESTING
 public:
-    Artboard(Factory* factory) : m_Factory(factory) {}
+    Artboard(Factory* factory) : m_Factory(factory) { m_Clip = true; }
 #endif
     void addObject(Core* object);
     void addAnimation(LinearAnimation* object);
@@ -112,8 +112,8 @@ public:
 
     Core* resolve(uint32_t id) const override;
 
-    /// Find the id of a component in the artboard the object in the artboard. The artboard
-    /// itself has id 0 so we use that as a flag for not found.
+    /// Find the id of a component in the artboard the object in the artboard.
+    /// The artboard itself has id 0 so we use that as a flag for not found.
     uint32_t idOf(Core* object) const;
 
     Factory* factory() const { return m_Factory; }
@@ -138,10 +138,17 @@ public:
 
     void* takeLayoutNode();
     bool syncStyleChanges();
+    bool canHaveOverrides() override { return true; }
 
-    bool advance(double elapsedSeconds, bool nested = true);
-    bool advanceInternal(double elapsedSeconds, bool isRoot, bool nested = true);
-    bool hasChangedDrawOrderInLastUpdate() { return m_HasChangedDrawOrderInLastUpdate; };
+    bool advance(float elapsedSeconds, bool nested = true, bool animate = true);
+    bool advanceInternal(float elapsedSeconds,
+                         bool isRoot,
+                         bool nested = true,
+                         bool animate = true);
+    bool hasChangedDrawOrderInLastUpdate()
+    {
+        return m_HasChangedDrawOrderInLastUpdate;
+    };
     Drawable* firstDrawable() { return m_FirstDrawable; };
 
     enum class DrawOption
@@ -160,8 +167,12 @@ public:
 #endif
 
     const std::vector<Core*>& objects() const { return m_Objects; }
-    const std::vector<NestedArtboard*> nestedArtboards() const { return m_NestedArtboards; }
+    const std::vector<NestedArtboard*> nestedArtboards() const
+    {
+        return m_NestedArtboards;
+    }
     const std::vector<DataBind*> dataBinds() const { return m_DataBinds; }
+    const std::vector<DataBind*> allDataBinds() const { return m_AllDataBinds; }
     DataContext* dataContext() { return m_DataContext; }
     NestedArtboard* nestedArtboard(const std::string& name) const;
     NestedArtboard* nestedArtboardAtPath(const std::string& path) const;
@@ -179,23 +190,28 @@ public:
     bool isTranslucent() const;
     bool isTranslucent(const LinearAnimation*) const;
     bool isTranslucent(const LinearAnimationInstance*) const;
-    void dataContext(DataContext* dataContext, DataContext* parent);
-    void internalDataContext(DataContext* dataContext, DataContext* parent, bool isRoot);
-    void dataContextFromInstance(ViewModelInstance* viewModelInstance, DataContext* parent);
-    void dataContextFromInstance(ViewModelInstance* viewModelInstance,
-                                 DataContext* parent,
-                                 bool isRoot);
-    void dataContextFromInstance(ViewModelInstance* viewModelInstance);
+    void dataContext(DataContext* dataContext);
+    void internalDataContext(DataContext* dataContext, bool isRoot);
+    void clearDataContext();
+    void setDataContextFromInstance(ViewModelInstance* viewModelInstance,
+                                    DataContext* parent);
+    void setDataContextFromInstance(ViewModelInstance* viewModelInstance,
+                                    DataContext* parent,
+                                    bool isRoot);
+    void setDataContextFromInstance(ViewModelInstance* viewModelInstance);
     void addDataBind(DataBind* dataBind);
     void populateDataBinds(std::vector<DataBind*>* dataBinds);
     void sortDataBinds(std::vector<DataBind*> dataBinds);
+    void collectDataBinds();
+
     bool hasAudio() const;
 
     template <typename T = Component> T* find(const std::string& name)
     {
         for (auto object : m_Objects)
         {
-            if (object != nullptr && object->is<T>() && object->as<T>()->name() == name)
+            if (object != nullptr && object->is<T>() &&
+                object->as<T>()->name() == name)
             {
                 return static_cast<T*>(object);
             }
@@ -287,14 +303,18 @@ public:
             while (++itr != m_Objects.end())
             {
                 auto object = *itr;
-                cloneObjects.push_back(object == nullptr ? nullptr : object->clone());
-                // For each object, clone its data bind objects and target their clones
+                cloneObjects.push_back(object == nullptr ? nullptr
+                                                         : object->clone());
+                // For each object, clone its data bind objects and target their
+                // clones
                 for (auto dataBind : m_DataBinds)
                 {
                     if (dataBind->target() == object)
                     {
-                        auto dataBindClone = static_cast<DataBind*>(dataBind->clone());
+                        auto dataBindClone =
+                            static_cast<DataBind*>(dataBind->clone());
                         dataBindClone->target(cloneObjects.back());
+                        dataBindClone->converter(dataBind->converter());
                         artboardClone->m_DataBinds.push_back(dataBindClone);
                     }
                 }
@@ -371,8 +391,15 @@ private:
     ArtboardCallback m_layoutDirtyCallback = nullptr;
 
 public:
-    void onLayoutChanged(ArtboardCallback callback) { m_layoutChangedCallback = callback; }
-    void onLayoutDirty(ArtboardCallback callback) { m_layoutDirtyCallback = callback; }
+    void* callbackUserData;
+    void onLayoutChanged(ArtboardCallback callback)
+    {
+        m_layoutChangedCallback = callback;
+    }
+    void onLayoutDirty(ArtboardCallback callback)
+    {
+        m_layoutDirtyCallback = callback;
+    }
 #endif
 };
 
@@ -383,10 +410,12 @@ public:
     ~ArtboardInstance() override;
 
     std::unique_ptr<LinearAnimationInstance> animationAt(size_t index);
-    std::unique_ptr<LinearAnimationInstance> animationNamed(const std::string& name);
+    std::unique_ptr<LinearAnimationInstance> animationNamed(
+        const std::string& name);
 
     std::unique_ptr<StateMachineInstance> stateMachineAt(size_t index);
-    std::unique_ptr<StateMachineInstance> stateMachineNamed(const std::string& name);
+    std::unique_ptr<StateMachineInstance> stateMachineNamed(
+        const std::string& name);
 
     /// When provided, the designer has specified that this artboard should
     /// always autoplay this StateMachine instance. If it was not specified,
@@ -406,6 +435,7 @@ public:
     SMIBool* getBool(const std::string& name, const std::string& path);
     SMINumber* getNumber(const std::string& name, const std::string& path);
     SMITrigger* getTrigger(const std::string& name, const std::string& path);
+    TextValueRun* getTextRun(const std::string& name, const std::string& path);
 };
 } // namespace rive
 
