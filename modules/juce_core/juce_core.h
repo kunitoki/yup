@@ -56,8 +56,8 @@
   minimumCppStandard: 17
 
   dependencies:       zlib
-  OSXFrameworks:      Cocoa Foundation IOKit Security
-  iOSFrameworks:      Foundation
+  osxFrameworks:      Cocoa Foundation IOKit Security
+  iosFrameworks:      Foundation
   linuxLibs:          rt dl pthread
   mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm
 
@@ -71,7 +71,7 @@
 //==============================================================================
 #ifdef _MSC_VER
 #pragma warning(push)
-    // Disable warnings for long class names, padding, and undefined preprocessor definitions.
+// Disable warnings for long class names, padding, and undefined preprocessor definitions.
 #pragma warning(disable : 4251 4786 4668 4820)
 #ifdef __INTEL_COMPILER
 #pragma warning(disable : 1125)
@@ -164,7 +164,7 @@
     you are not using WebInputStream or the URL classes.
 */
 #ifndef JUCE_LOAD_CURL_SYMBOLS_LAZILY
-#define JUCE_LOAD_CURL_SYMBOLS_LAZILY 0
+#define JUCE_LOAD_CURL_SYMBOLS_LAZILY 1
 #endif
 
 /** Config: JUCE_CATCH_UNHANDLED_EXCEPTIONS
@@ -394,10 +394,18 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "unit_tests/juce_UnitTestCategories.h"
 #endif
 
+#if JUCE_ENABLE_PROFILING
+JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4267)
+#include <perfetto.h>
+JUCE_END_IGNORE_WARNINGS_MSVC
+#endif
+
+#include "profiling/juce_Profiler.h"
+
 #ifndef DOXYGEN
 namespace juce
 {
-    /*
+/*
     As the very long class names here try to explain, the purpose of this code is to cause
     a linker error if not all of your compile units are consistent in the options that they
     enable before including JUCE headers. The reason this is important is that if you have

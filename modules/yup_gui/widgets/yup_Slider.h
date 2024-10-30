@@ -51,14 +51,11 @@ private:
     void updateRenderItems (bool forceAll);
     void sendValueChanged();
 
-    struct
-    {
-        Path backgroundPath;
-        Path backgroundArc;
-        Path foregroundArc;
-        Path foregroundLine;
-        StyledText text;
-    };
+    Path backgroundPath;
+    Path backgroundArc;
+    Path foregroundArc;
+    Path foregroundLine;
+    StyledText text;
 
     Point<float> origin;
     const Font& font;

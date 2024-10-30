@@ -13,8 +13,8 @@ protected:
 public:
     static const uint16_t typeKey = 86;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -40,7 +40,7 @@ public:
     static const uint16_t minYPropertyKey = 193;
     static const uint16_t maxYPropertyKey = 194;
 
-private:
+protected:
     float m_CopyFactorY = 1.0f;
     float m_MinValueY = 0.0f;
     float m_MaxValueY = 0.0f;

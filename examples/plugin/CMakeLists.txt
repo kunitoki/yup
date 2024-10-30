@@ -58,7 +58,7 @@ yup_audio_plugin (
         harfbuzz
         sheenbidi
         rive
-        rive_pls_renderer
+        rive_renderer
         BinaryData
 )
 

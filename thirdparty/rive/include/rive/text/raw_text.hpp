@@ -47,7 +47,8 @@ public:
     /// How text aligns within the bounds.
     void align(TextAlign value);
 
-    /// The width at which the text will wrap when using any sizing but TextSizing::auto.
+    /// The width at which the text will wrap when using any sizing but
+    /// TextSizing::auto.
     void maxWidth(float value);
 
     /// The height at which the text will overflow when using TextSizing::fixed.
@@ -82,6 +83,7 @@ private:
     TextSizing m_sizing = TextSizing::autoWidth;
     TextOverflow m_overflow = TextOverflow::visible;
     TextAlign m_align = TextAlign::left;
+    TextWrap m_wrap = TextWrap::wrap;
     float m_maxWidth = 0.0f;
     float m_maxHeight = 0.0f;
     std::vector<OrderedLine> m_orderedLines;

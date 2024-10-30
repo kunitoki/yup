@@ -4,9 +4,7 @@
 #include "rive/container_component.hpp"
 
 using namespace rive;
-namespace rive {
 class StateMachineInstance;
-} // namespace rive
 
 void NestedTrigger::fire(const CallbackData& value) { this->applyValue(); }
 

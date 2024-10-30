@@ -14,8 +14,8 @@ protected:
 public:
     static const uint16_t typeKey = 31;
 
-    /// Helper to quickly determine if a core object extends another without RTTI
-    /// at runtime.
+    /// Helper to quickly determine if a core object extends another without
+    /// RTTI at runtime.
     bool isTypeOf(uint16_t typeKey) const override
     {
         switch (typeKey)
@@ -39,7 +39,7 @@ public:
     static const uint16_t enableWorkAreaPropertyKey = 62;
     static const uint16_t quantizePropertyKey = 376;
 
-private:
+protected:
     uint32_t m_Fps = 60;
     uint32_t m_Duration = 60;
     float m_Speed = 1.0f;

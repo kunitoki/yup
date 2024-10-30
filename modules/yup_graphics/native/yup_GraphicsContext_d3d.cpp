@@ -19,27 +19,24 @@
   ==============================================================================
 */
 
-#include "rive/pls/pls_renderer.hpp"
-#include "rive/pls/d3d/pls_render_context_d3d_impl.hpp"
-#include "rive/pls/d3d/d3d11.hpp"
+#include "rive/renderer/rive_renderer.hpp"
+#include "rive/renderer/d3d/render_context_d3d_impl.hpp"
+#include "rive/renderer/d3d/d3d11.hpp"
 
 namespace yup
 {
 
-using namespace rive;
-using namespace rive::pls;
-
-class LowLevelRenderContextD3DPLS : public GraphicsContext
+class LowLevelRenderContextD3D : public GraphicsContext
 {
 public:
-    LowLevelRenderContextD3DPLS (ComPtr<IDXGIFactory2> d3dFactory,
-                                 ComPtr<ID3D11Device> gpu,
-                                 ComPtr<ID3D11DeviceContext> gpuContext,
-                                 const PLSRenderContextD3DImpl::ContextOptions& contextOptions)
+    LowLevelRenderContextD3D (ComPtr<IDXGIFactory2> d3dFactory,
+                              ComPtr<ID3D11Device> gpu,
+                              ComPtr<ID3D11DeviceContext> gpuContext,
+                              const rive::gpu::RenderContextD3DImpl::ContextOptions& contextOptions)
         : m_d3dFactory (std::move (d3dFactory))
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
-        , m_plsContext (PLSRenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
+        , m_plsContext (rive::gpu::RenderContextD3DImpl::MakeContext (m_gpu, m_gpuContext, contextOptions))
     {
     }
 
@@ -47,9 +44,9 @@ public:
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
-    rive::pls::PLSRenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* plsContextOrNull() override { return m_plsContext.get(); }
 
-    rive::pls::PLSRenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
@@ -71,17 +68,17 @@ public:
                                                          nullptr,
                                                          m_swapchain.ReleaseAndGetAddressOf()));
 
-        auto plsContextImpl = m_plsContext->static_impl_cast<PLSRenderContextD3DImpl>();
+        auto plsContextImpl = m_plsContext->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
         m_renderTarget = plsContextImpl->makeRenderTarget (width, height);
         m_readbackTexture = nullptr;
     }
 
-    std::unique_ptr<Renderer> makeRenderer (int width, int height) override
+    std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<PLSRenderer> (m_plsContext.get());
+        return std::make_unique<rive::RiveRenderer> (m_plsContext.get());
     }
 
-    void begin (const rive::pls::PLSRenderContext::FrameDescriptor& frameDescriptor) override
+    void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_plsContext->beginFrame (frameDescriptor);
     }
@@ -98,7 +95,9 @@ public:
             m_renderTarget->setTargetTexture (backbuffer);
         }
 
-        m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
+        rive::gpu::RenderContext::FlushResources flushDesc;
+        flushDesc.renderTarget = m_renderTarget.get();
+        m_plsContext->flush (flushDesc);
 
         m_swapchain->Present (0, 0);
 
@@ -111,11 +110,11 @@ private:
     ComPtr<ID3D11DeviceContext> m_gpuContext;
     ComPtr<IDXGISwapChain1> m_swapchain;
     ComPtr<ID3D11Texture2D> m_readbackTexture;
-    std::unique_ptr<PLSRenderContext> m_plsContext;
-    rcp<PLSRenderTargetD3D> m_renderTarget;
+    std::unique_ptr<rive::gpu::RenderContext> m_plsContext;
+    rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options fiddleOptions)
+std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;
@@ -123,7 +122,7 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options 
 
     ComPtr<IDXGIAdapter> adapter;
     DXGI_ADAPTER_DESC adapterDesc {};
-    PLSRenderContextD3DImpl::ContextOptions contextOptions;
+    rive::gpu::RenderContextD3DImpl::ContextOptions contextOptions;
 
     if (fiddleOptions.disableRasterOrdering)
     {
@@ -164,7 +163,7 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options 
 
     printf ("D3D device: %S\n", adapterDesc.Description);
 
-    return std::make_unique<LowLevelRenderContextD3DPLS> (
+    return std::make_unique<LowLevelRenderContextD3D> (
         std::move (factory),
         std::move (gpu),
         std::move (gpuContext),

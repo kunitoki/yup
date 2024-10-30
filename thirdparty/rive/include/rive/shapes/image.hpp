@@ -8,15 +8,22 @@
 namespace rive
 {
 class ImageAsset;
+class MeshDrawable;
+#ifdef TESTING
 class Mesh;
+#endif
 class Image : public ImageBase, public FileAssetReferencer
 {
 private:
-    Mesh* m_Mesh = nullptr;
+    MeshDrawable* m_Mesh = nullptr;
+    // Since layouts only pass down width/height we store those
+    // and use the image width/height to compute the proper scale
+    float m_layoutWidth = NAN;
+    float m_layoutHeight = NAN;
+    void updateImageScale();
 
 public:
-    Mesh* mesh() const;
-    void setMesh(Mesh* mesh);
+    void setMesh(MeshDrawable* mesh);
     ImageAsset* imageAsset() const { return (ImageAsset*)m_fileAsset; }
     void draw(Renderer* renderer) override;
     Core* hitTest(HitInfo*, const Mat2D&) override;
@@ -31,6 +38,10 @@ public:
     void controlSize(Vec2D size) override;
     float width() const;
     float height() const;
+
+#ifdef TESTING
+    Mesh* mesh() const;
+#endif
 };
 } // namespace rive
 
