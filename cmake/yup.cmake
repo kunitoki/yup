@@ -400,6 +400,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     get_target_property (module_cpp_standard ${plugin_client_target} YUP_MODULE_CPP_STANDARD)
     get_target_property (module_include_paths ${plugin_client_target} YUP_MODULE_INCLUDE_PATHS)
     get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
+    get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
     get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
