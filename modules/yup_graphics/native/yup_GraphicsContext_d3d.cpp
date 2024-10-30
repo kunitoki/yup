@@ -95,7 +95,7 @@ public:
             m_renderTarget->setTargetTexture (backbuffer);
         }
 
-        rive::gpu::FlushDescriptor flushDesc;
+        rive::gpu::RenderContext::FlushResources flushDesc;
         flushDesc.renderTarget = m_renderTarget.get();
         m_plsContext->flush (flushDesc);
 

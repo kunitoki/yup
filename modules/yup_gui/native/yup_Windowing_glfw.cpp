@@ -430,7 +430,7 @@ private:
 
 //==============================================================================
 
-std::atomic_flag GLFWComponentNative::isInitialised = false;
+std::atomic_flag GLFWComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
 
@@ -940,18 +940,17 @@ void GLFWComponentNative::renderContext()
                               : rive::gpu::LoadAction::preserveRenderTarget;
 
     // Begin context drawing
-    context->begin (
-        {
-            .renderTargetWidth = static_cast<uint32_t> (contentWidth),
-            .renderTargetHeight = static_cast<uint32_t> (contentHeight),
-            .loadAction = loadAction,
-            .clearColor = 0xff000000,
-            .msaaSampleCount = 0,
-            .disableRasterOrdering = renderAtomicMode,
-            .wireframe = renderWireframe,
-            .fillsDisabled = false,
-            .strokesDisabled = false,
-        });
+    rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
+    frameDescriptor.renderTargetWidth = static_cast<uint32_t> (contentWidth);
+    frameDescriptor.renderTargetHeight = static_cast<uint32_t> (contentHeight);
+    frameDescriptor.loadAction = loadAction;
+    frameDescriptor.clearColor = 0xff000000;
+    frameDescriptor.msaaSampleCount = 0;
+    frameDescriptor.disableRasterOrdering = renderAtomicMode;
+    frameDescriptor.wireframe = renderWireframe;
+    frameDescriptor.fillsDisabled = false;
+    frameDescriptor.strokesDisabled = false;
+    context->begin (frameDescriptor);
 
     // Repaint components hierarchy
     Graphics g (*context, *renderer);

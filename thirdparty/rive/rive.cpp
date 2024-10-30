@@ -24,6 +24,9 @@
 #if __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#elif _MSC_VER
+ #pragma warning (push)
+ #pragma warning (disable : 4244)
 #endif
 
 #include "source/generated/nested_artboard_layout_base.cpp"
@@ -454,4 +457,6 @@
 
 #if __clang__
  #pragma clang diagnostic pop
+#elif _MSC_VER
+ #pragma warning (pop)
 #endif
