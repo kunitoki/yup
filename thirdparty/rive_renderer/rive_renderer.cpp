@@ -24,6 +24,7 @@
 #if __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wattributes"
 #endif
 
 #include "source/draw.cpp"
