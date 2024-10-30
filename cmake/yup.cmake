@@ -674,7 +674,12 @@ function (yup_standalone_app)
     endif()
 
     # ==== Prepare executable
-    add_executable (${target_name})
+    set (executable_options "")
+    if (NOT YUP_ARG_CONSOLE AND "${yup_platform}" MATCHES "^(win32)$")
+        set (executable_options "WIN32")
+    endif()
+
+    add_executable (${target_name} ${executable_options})
     target_compile_features (${target_name} PRIVATE cxx_std_17)
 
     # ==== Per platform configuration
@@ -729,11 +734,6 @@ function (yup_standalone_app)
             -sALLOW_MEMORY_GROWTH=1
             -sNODERAWFS=0
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
-
-    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
-        if (NOT YUP_ARG_CONSOLE)
-            list (APPEND additional_options "/SUBSYSTEM:WINDOWS")
-        endif()
 
     endif()
 
