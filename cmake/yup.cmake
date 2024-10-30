@@ -257,8 +257,8 @@ function (_yup_module_collect_sources folder output_variable)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
+        if (NOT "${yup_platform}" MATCHES "^(linux)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_linux${extension}")
         endif()
 
         if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
@@ -271,6 +271,10 @@ function (_yup_module_collect_sources folder output_variable)
 
         if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_emscripten${extension}")
+        endif()
+
+        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
 
         foreach (source ${found_source_files})
