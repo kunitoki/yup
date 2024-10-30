@@ -46,7 +46,6 @@
 #include "native/yup_GraphicsContext_metal.cpp"
 
 #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
-
 #if JUCE_EMSCRIPTEN && RIVE_WEBGL
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>

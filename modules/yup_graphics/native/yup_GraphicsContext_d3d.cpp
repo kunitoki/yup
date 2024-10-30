@@ -95,7 +95,9 @@ public:
             m_renderTarget->setTargetTexture (backbuffer);
         }
 
-        m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
+        rive::gpu::FlushDescriptor flushDesc;
+        flushDesc.renderTarget = m_renderTarget.get();
+        m_plsContext->flush (flushDesc);
 
         m_swapchain->Present (0, 0);
 
@@ -112,7 +114,7 @@ private:
     rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Options fiddleOptions)
+std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;

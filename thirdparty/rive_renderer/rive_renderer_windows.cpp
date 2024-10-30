@@ -21,4 +21,4 @@
 
 #include "rive_renderer.h"
 
-#include "source/d3d/pls_render_context_d3d_impl.cpp"
+#include "source/d3d/render_context_d3d_impl.cpp"
