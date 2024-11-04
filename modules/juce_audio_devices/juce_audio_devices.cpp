@@ -262,6 +262,13 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 #endif
 
 #elif JUCE_WASM
+#if JUCE_EMSCRIPTEN
+#include <emscripten/webaudio.h>
+#include <emscripten/em_math.h>
+
+#include "native/juce_AudioWorklet_emscripten.cpp"
+#endif
+
 #include "native/juce_Midi_wasm.cpp"
 
 #endif

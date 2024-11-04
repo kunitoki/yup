@@ -721,12 +721,16 @@ function (yup_standalone_app)
 
         list (APPEND additional_options
             -fexceptions
-            -sDISABLE_EXCEPTION_CATCHING=0)
+            -sDISABLE_EXCEPTION_CATCHING=0
+            -sUSE_PTHREADS=1)
 
         list (APPEND additional_link_options
             $<$<CONFIG:DEBUG>:-gsource-map>
             -fexceptions
+            -sUSE_PTHREADS=1
             -sWASM=1
+            -sWASM_WORKERS=1
+            -sAUDIO_WORKLET=1
             -sASSERTIONS=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
