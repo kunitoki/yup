@@ -24,30 +24,28 @@ namespace yup
 
 //==============================================================================
 
-TextButton::TextButton (StringRef componentID, const Font& font)
+TextButton::TextButton (StringRef componentID)
     : Button (componentID)
-    , font (font)
 {
 }
 
+//==============================================================================
+
+void TextButton::setStyle (Style::Ptr newStyle)
+{
+    style = newStyle;
+}
+
+TextButton::Style::Ptr TextButton::getStyle() const
+{
+    return style;
+}
+
+//==============================================================================
+
 void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 {
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
-    const auto center = bounds.getCenter();
-
-    Path backgroundPath;
-    //backgroundPath.clear();
-    backgroundPath.addRoundedRectangle (bounds.reduced (proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
-    g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
-    g.fillPath (backgroundPath);
-
-    StyledText text;
-    //text.clear();
-    text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, getComponentID().toRawUTF8());
-    text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
-
-    g.setStrokeColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
-    g.strokeFittedText (text, {});
+    ApplicationTheme::findComponentStyle (style.get()).onPaint (g, *this, isButtonOver, isButtonDown);
 }
 
 } // namespace yup

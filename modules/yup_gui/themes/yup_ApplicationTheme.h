@@ -61,27 +61,27 @@ public:
 
         This method retrieves the global instance of the ApplicationTheme.
 
-        @returns  A reference-counted pointer to the global ApplicationTheme.
+        @returns A reference-counted pointer to the global ApplicationTheme.
     */
     static ApplicationTheme::ConstPtr getGlobalTheme();
 
     //==============================================================================
     /**
-        Resolves the theme for a specific component type.
+        Resolves the style for a specific component type.
 
-        This template method returns the theme for the specified component type. If a theme
-        is provided as an argument, it will be returned; otherwise, the global theme will be used.
+        This template method returns the style for the specified component type. If a style is provided as an argument,
+        it will be returned; otherwise, the global style will be used.
 
-        @param instanceTheme  An optional theme to use instead of the global theme.
+        @param instanceStyle  An optional style to use instead of the global style.
 
-        @returns              The resolved theme for the component type.
+        @returns The resolved style for the component type.
     */
     template <class T>
-    static const T& findTheme (const T* instanceTheme = nullptr)
+    static const T& findComponentStyle (const T* instanceStyle = nullptr)
     {
-        return instanceTheme != nullptr
-                 ? *instanceTheme
-                 : std::get<T> (getGlobalThemeInstance()->componentThemes);
+        return instanceStyle != nullptr
+                 ? *instanceStyle
+                 : std::get<T> (getGlobalThemeInstance()->componentStyles);
     }
 
     //==============================================================================
@@ -108,24 +108,26 @@ public:
 
     //==============================================================================
     /**
-        Sets the theme for a specific component type.
+        Sets the style for a specific component type.
 
-        This template method allows setting the theme for a specific type of component.
-        The component type must be part of the componentThemes tuple.
+        This template method allows setting the style for a specific type of component. The component type must be
+        part of the `componentStyles` tuple.
 
-        @param instanceTheme  The theme to set for the component type.
+        @param instanceStyle  The style to set for the component type.
     */
     template <class T>
-    void setComponentTheme (T&& instanceTheme)
+    void setComponentStyle (T&& instanceStyle)
     {
-        std::get<T> (componentThemes) = std::forward<T> (instanceTheme);
+        std::get<T> (componentStyles) = std::forward<T> (instanceStyle);
     }
 
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
 
     //==============================================================================
-    std::tuple<Slider::Theme> componentThemes;
+    std::tuple<
+        Slider::Style,
+        TextButton::Style> componentStyles;
 
     Font defaultFont;
     std::unordered_map<Identifier, Color> defaultColors;

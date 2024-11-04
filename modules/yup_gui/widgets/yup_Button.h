@@ -28,7 +28,6 @@ class JUCE_API Button : public Component
 public:
     //==============================================================================
     Button (StringRef componentID);
-    Button (StringRef componentID, const Font& font);
 
     //==============================================================================
     virtual void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) = 0;
@@ -41,7 +40,6 @@ public:
     void mouseUp (const MouseEvent& event) override;
 
 private:
-    Font font;
     bool isButtonCurrentlyOver = false;
     bool isButtonCurrentlyDown = false;
 };

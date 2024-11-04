@@ -27,13 +27,31 @@ class JUCE_API TextButton : public Button
 {
 public:
     //==============================================================================
-    TextButton (StringRef componentID, const Font& font);
+    TextButton (StringRef componentID);
+
+    //==============================================================================
+    struct Style : ReferenceCountedObject
+    {
+        using Ptr = ReferenceCountedObjectPtr<const Style>;
+
+        Style() = default;
+
+        Style (std::function<void (Graphics&, const TextButton&, bool, bool)> p)
+            : onPaint (std::move (p))
+        {
+        }
+
+        std::function<void (Graphics&, const TextButton&, bool, bool)> onPaint;
+    };
+
+    void setStyle (Style::Ptr newStyle);
+    Style::Ptr getStyle() const;
 
     //==============================================================================
     void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) override;
 
 private:
-    const Font& font;
+    Style::Ptr style;
 };
 
 } // namespace yup

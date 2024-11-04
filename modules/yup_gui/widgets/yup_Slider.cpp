@@ -57,9 +57,14 @@ bool Slider::isMouseOver() const
 
 //==============================================================================
 
-void Slider::setTheme (Theme::Ptr newTheme)
+void Slider::setStyle (Style::Ptr newStyle)
 {
-    theme = newTheme;
+    style = newStyle;
+}
+
+Slider::Style::Ptr Slider::getStyle() const
+{
+    return style;
 }
 
 //==============================================================================
@@ -127,7 +132,7 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
 void Slider::paint (Graphics& g)
 {
-    ApplicationTheme::findTheme (theme.get()).onPaint (g, *this);
+    ApplicationTheme::findComponentStyle (style.get()).onPaint (g, *this);
 }
 
 //==============================================================================

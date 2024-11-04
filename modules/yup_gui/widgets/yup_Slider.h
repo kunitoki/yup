@@ -43,13 +43,13 @@ public:
 
     //==============================================================================
 
-    struct Theme : ReferenceCountedObject
+    struct Style : ReferenceCountedObject
     {
-        using Ptr = ReferenceCountedObjectPtr<const Theme>;
+        using Ptr = ReferenceCountedObjectPtr<const Style>;
 
-        Theme() = default;
+        Style() = default;
 
-        Theme (std::function<void (Graphics&, const Slider&)> p)
+        Style (std::function<void (Graphics&, const Slider&)> p)
             : onPaint (std::move (p))
         {
         }
@@ -57,7 +57,8 @@ public:
         std::function<void (Graphics&, const Slider&)> onPaint;
     };
 
-    void setTheme (Theme::Ptr newTheme);
+    void setStyle (Style::Ptr newStyle);
+    Style::Ptr getStyle() const;
 
     //==============================================================================
     void resized() override;
@@ -72,7 +73,7 @@ public:
 private:
     void sendValueChanged();
 
-    Theme::Ptr theme;
+    Style::Ptr style;
 
     Point<float> origin;
     float value = 0.0f;

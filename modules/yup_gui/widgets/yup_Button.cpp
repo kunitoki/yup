@@ -29,12 +29,6 @@ Button::Button (StringRef componentID)
 {
 }
 
-Button::Button (StringRef componentID, const Font& font)
-    : Component (componentID)
-    , font (font)
-{
-}
-
 //==============================================================================
 
 void Button::paint (Graphics& g)
