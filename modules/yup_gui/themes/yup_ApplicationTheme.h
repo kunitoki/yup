@@ -127,7 +127,8 @@ private:
     //==============================================================================
     std::tuple<
         Slider::Style,
-        TextButton::Style> componentStyles;
+        TextButton::Style>
+        componentStyles;
 
     Font defaultFont;
     std::unordered_map<Identifier, Color> defaultColors;
