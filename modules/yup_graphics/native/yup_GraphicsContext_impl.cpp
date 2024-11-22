@@ -24,14 +24,26 @@ namespace yup
 
 std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Options options)
 {
-#if JUCE_MAC || JUCE_IOS
+#if (JUCE_MAC || JUCE_IOS)
+#if YUP_RIVE_USE_METAL
     return createContext (Api::Metal, options);
+#else
+    return createContext (Api::OpenGL, options);
+#endif
+
 #elif JUCE_WINDOWS
+#if YUP_RIVE_USE_D3D
     return createContext (Api::Direct3D, options);
+#else
+    return createContext (Api::OpenGL, options);
+#endif
+
 #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
     return createContext (Api::OpenGL, options);
+
 #else
     return nullptr;
+
 #endif
 }
 
