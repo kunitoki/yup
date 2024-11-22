@@ -52,9 +52,9 @@ public:
             return *this;
         }
 
-        Options& withForcedApi(std::optional<GraphicsContext::Api> newForceContextApi) noexcept
+        Options& withGraphicsApi(std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
         {
-            forceContextApi = newForceContextApi;
+            graphicsApi = newGraphicsApi;
             return *this;
         }
 
@@ -64,9 +64,9 @@ public:
             return *this;
         }
 
-        Flags flags = defaultFlags;                          ///<
-        std::optional<GraphicsContext::Api> forceContextApi; ///<
-        std::optional<float> framerateRedraw;                ///<
+        Flags flags = defaultFlags;                      ///<
+        std::optional<GraphicsContext::Api> graphicsApi; ///<
+        std::optional<float> framerateRedraw;            ///<
     };
 
     //==============================================================================

@@ -35,7 +35,8 @@ class CustomWindow
 public:
     CustomWindow()
         // Fluid and continuous animations needs continuous repainting
-        : yup::DocumentWindow (yup::ComponentNative::Options().withFlags(yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous), {})
+        : yup::DocumentWindow (yup::ComponentNative::Options()
+            .withFlags(yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous), {})
     {
         // Set title
         setTitle ("main");

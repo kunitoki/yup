@@ -21,6 +21,12 @@
 
 #include "rive_renderer.h"
 
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wattributes"
+#endif
+
 #if RIVE_WEBGPU
 #include "source/webgpu/em_js_handle.cpp"
 #include "source/webgpu/render_context_webgpu_impl.cpp"
@@ -39,4 +45,8 @@
 #else
 #error "No renderer backend defined"
 
+#endif
+
+#if __clang__
+ #pragma clang diagnostic pop
 #endif

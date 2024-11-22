@@ -510,7 +510,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
 #endif
 
     // Setup window hints
-    auto desiredApi = getGraphicsContextApi (options.forceContextApi);
+    auto desiredApi = getGraphicsContextApi (options.graphicsApi);
     setContextWindowHints (desiredApi);
 
     glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
