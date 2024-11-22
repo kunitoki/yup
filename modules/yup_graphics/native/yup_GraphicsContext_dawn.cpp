@@ -280,17 +280,4 @@ std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsCont
 }
 
 } // namespace yup
-
-#else
-
-namespace yup
-{
-
-std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsContext::Options options)
-{
-    return nullptr;
-}
-
-} // namespace yup
-
 #endif

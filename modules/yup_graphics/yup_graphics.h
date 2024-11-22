@@ -49,6 +49,8 @@
 
 #include <juce_core/juce_core.h>
 
+#include <rive_renderer/rive_renderer.h>
+
 //==============================================================================
 
 #include <rive/rive.h>

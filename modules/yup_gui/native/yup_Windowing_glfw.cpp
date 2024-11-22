@@ -468,14 +468,14 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     nswindow.contentView.wantsLayer = YES;
 #endif
 
-    context = GraphicsContext::createContext (GraphicsContext::Options {});
-    if (context == nullptr)
-        return;
-
-#if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if RIVE_DESKTOP_GL || (JUCE_EMSCRIPTEN && RIVE_WEBGL)
     glfwMakeContextCurrent (window);
     //glfwSwapInterval (0);
 #endif
+
+    context = GraphicsContext::createContext (GraphicsContext::Options {});
+    if (context == nullptr)
+        return;
 
     glfwSetWindowUserPointer (window, this);
 
@@ -1316,9 +1316,11 @@ void initialiseYup_Windowing()
 
     glfwInit();
 
-#if JUCE_MAC || JUCE_WINDOWS
+#if (JUCE_MAC && !YUP_RIVE_USE_OPENGL)
     glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
     glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+#elif (JUCE_WINDOWS && !YUP_RIVE_USE_OPENGL)
+    glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
 #elif defined(ANGLE)
     glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
     glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
@@ -1327,8 +1329,8 @@ void initialiseYup_Windowing()
     glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 #else
     glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, YUP_RIVE_OPENGL_MAJOR);
+    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, YUP_RIVE_OPENGL_MINOR);
 #endif
 
     Desktop::getInstance()->updateDisplays();

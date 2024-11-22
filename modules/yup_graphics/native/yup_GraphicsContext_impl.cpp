@@ -39,22 +39,29 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
 {
     switch (graphicsApi)
     {
-#if JUCE_MAC || JUCE_IOS
-        case Api::Metal:
-            return juce_constructMetalGraphicsContext (options);
-#elif JUCE_WINDOWS
-        case Api::Direct3D:
-            return juce_constructDirect3DGraphicsContext (options);
-#elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
-        case Api::OpenGL:
-            return juce_constructOpenGLGraphicsContext (options);
+#if YUP_RIVE_USE_METAL && (JUCE_MAC || JUCE_IOS)
+    case Api::Metal:
+        return juce_constructMetalGraphicsContext (options);
 #endif
-        case Api::Dawn:
-            return juce_constructDawnGraphicsContext (options);
 
-        default:
-            Logger::outputDebugString ("Invalid API requested for current platform");
-            return nullptr;
+#if YUP_RIVE_USE_D3D && JUCE_WINDOWS
+    case Api::Direct3D:
+        return juce_constructDirect3DGraphicsContext (options);
+#endif
+
+#if YUP_RIVE_USE_OPENGL || JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
+    case Api::OpenGL:
+        return juce_constructOpenGLGraphicsContext (options);
+#endif
+
+#if YUP_RIVE_USE_DAWN
+    case Api::Dawn:
+        return juce_constructDawnGraphicsContext (options);
+#endif
+
+    default:
+        Logger::outputDebugString ("Invalid API requested for current platform");
+        return nullptr;
     }
 
     Logger::outputDebugString ("Failed to create the graphics context");
