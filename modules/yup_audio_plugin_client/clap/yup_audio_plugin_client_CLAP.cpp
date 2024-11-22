@@ -706,7 +706,9 @@ bool AudioPluginWrapperCLAP::initialise()
         if (wrapper->audioProcessorEditor->shouldRenderContinuous())
             flags.set (yup::ComponentNative::renderContinuous);
 
-        wrapper->audioProcessorEditor->addToDesktop (flags, window->cocoa);
+        yup::ComponentNative::Options options;
+        options.flags = flags;
+        wrapper->audioProcessorEditor->addToDesktop (options, window->cocoa);
         wrapper->audioProcessorEditor->attachedToNative();
 
         return true;

@@ -268,6 +268,60 @@ void setNativeParent (void* nativeDisplay, void* nativeWindow, GLFWwindow* windo
 
 //==============================================================================
 
+GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext::Api>& forceContextApi)
+{
+    GraphicsContext::Api desiredApi;
+
+#if JUCE_MAC
+#if YUP_RIVE_USE_METAL
+    desiredApi = forceContextApi.value_or(GraphicsContext::Metal);
+#elif YUP_RIVE_USE_OPENGL
+    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+#endif
+#endif
+
+#if JUCE_WINDOWS
+#if YUP_RIVE_USE_D3D
+    desiredApi = forceContextApi.value_or(GraphicsContext::Direct3D);
+#elif YUP_RIVE_USE_OPENGL
+    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+#endif
+#endif
+
+    return desiredApi;
+}
+
+void setContextWindowHints (GraphicsContext::Api desiredApi)
+{
+    if (desiredApi == GraphicsContext::Metal)
+    {
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+    }
+
+    if (desiredApi == GraphicsContext::Direct3D)
+    {
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+    }
+
+    if (desiredApi == GraphicsContext::OpenGL)
+    {
+#if defined(ANGLE)
+        glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
+        glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#else
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, YUP_RIVE_OPENGL_MAJOR);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, YUP_RIVE_OPENGL_MINOR);
+#endif
+    }
+}
+
+//==============================================================================
+
 class GLFWComponentNative final
     : public ComponentNative
     , public Timer
@@ -279,7 +333,10 @@ public:
 
     //==============================================================================
 
-    GLFWComponentNative (Component& component, const Flags& flags, void* parent, std::optional<float> framerateRedraw);
+    GLFWComponentNative (Component& component,
+                         const Options& options,
+                         void* parent);
+
     ~GLFWComponentNative() override;
 
     //==============================================================================
@@ -434,13 +491,15 @@ std::atomic_flag GLFWComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
 
-GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& flags, void* parent, std::optional<float> framerateRedraw)
-    : ComponentNative (component, flags)
+GLFWComponentNative::GLFWComponentNative (Component& component,
+                                          const Options& options,
+                                          void* parent)
+    : ComponentNative (component, options.flags)
     , Thread ("YUP Render Thread")
     , parentWindow (parent)
     , screenBounds (component.getBounds().to<int>())
-    , desiredFrameRate (framerateRedraw.value_or (60.0f))
-    , shouldRenderContinuous (flags.test (renderContinuous))
+    , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
+    , shouldRenderContinuous (options.flags.test (renderContinuous))
 {
 #if JUCE_MAC
     gpu = MTLCreateSystemDefaultDevice();
@@ -450,11 +509,15 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     swapchain.opaque = YES;
 #endif
 
+    // Setup window hints
+    auto desiredApi = getGraphicsContextApi (options.forceContextApi);
+    setContextWindowHints (desiredApi);
+
     glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
-    glfwWindowHint (GLFW_DECORATED, flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
+    glfwWindowHint (GLFW_DECORATED, options.flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
 
+    // Create the window and parent it
     auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
-
     window = glfwCreateWindow (1, 1, component.getTitle().toRawUTF8(), monitor, nullptr);
     if (window == nullptr)
         return;
@@ -468,17 +531,18 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     nswindow.contentView.wantsLayer = YES;
 #endif
 
+    // Create the rendering context
 #if RIVE_DESKTOP_GL || (JUCE_EMSCRIPTEN && RIVE_WEBGL)
     glfwMakeContextCurrent (window);
     //glfwSwapInterval (0);
 #endif
 
-    context = GraphicsContext::createContext (GraphicsContext::Options {});
+    context = GraphicsContext::createContext (desiredApi, GraphicsContext::Options {});
     if (context == nullptr)
         return;
 
+    // Setup callbacks
     glfwSetWindowUserPointer (window, this);
-
     glfwSetWindowCloseCallback (window, glfwWindowClose);
     glfwSetWindowSizeCallback (window, glfwWindowSize);
     glfwSetWindowPosCallback (window, glfwWindowPos);
@@ -488,12 +552,14 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     glfwSetScrollCallback (window, glfwMouseScroll);
     glfwSetKeyCallback (window, glfwKeyPress);
 
+    // Resize after callbacks are in place
     setBounds (
         { screenBounds.getX(),
           screenBounds.getY(),
           jmax (1, screenBounds.getWidth()),
           jmax (1, screenBounds.getHeight()) });
 
+    // Start the rendering
 #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     startTimerHz (desiredFrameRate);
 #else
@@ -1166,11 +1232,10 @@ void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 //==============================================================================
 
 std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component,
-                                                             const Flags& flags,
-                                                             void* parent,
-                                                             std::optional<float> framerateRedraw)
+                                                             const Options& options,
+                                                             void* parent)
 {
-    return std::make_unique<GLFWComponentNative> (component, flags, parent, framerateRedraw);
+    return std::make_unique<GLFWComponentNative> (component, options, parent);
 }
 
 //==============================================================================
@@ -1315,23 +1380,6 @@ void initialiseYup_Windowing()
                           });
 
     glfwInit();
-
-#if (JUCE_MAC && !YUP_RIVE_USE_OPENGL)
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
-#elif (JUCE_WINDOWS && !YUP_RIVE_USE_OPENGL)
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
-#elif defined(ANGLE)
-    glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#else
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, YUP_RIVE_OPENGL_MAJOR);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, YUP_RIVE_OPENGL_MINOR);
-#endif
 
     Desktop::getInstance()->updateDisplays();
 
