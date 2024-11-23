@@ -36,7 +36,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : yup::DocumentWindow (yup::ComponentNative::defaultFlags, yup::Color (0xff404040))
+        : yup::DocumentWindow ({}, yup::Color (0xff404040))
     {
         rive::Factory* factory = getNativeComponent()->getFactory();
         if (factory == nullptr)

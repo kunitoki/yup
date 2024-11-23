@@ -329,7 +329,7 @@ bool Component::isOnDesktop() const
     return options.onDesktop;
 }
 
-void Component::addToDesktop (ComponentNative::Flags flags, void* parent, std::optional<float> framerateRedraw)
+void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
     if (options.onDesktop)
         removeFromDesktop();
@@ -342,7 +342,7 @@ void Component::addToDesktop (ComponentNative::Flags flags, void* parent, std::o
 
     options.onDesktop = true;
 
-    native = ComponentNative::createFor (*this, flags, parent, framerateRedraw);
+    native = ComponentNative::createFor (*this, nativeOptions, parent);
 
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }

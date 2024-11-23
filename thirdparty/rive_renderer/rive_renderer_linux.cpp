@@ -21,6 +21,12 @@
 
 #include "rive_renderer.h"
 
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wattributes"
+#endif
+
 #include "source/gl/gl_state.cpp"
 #include "source/gl/gl_utils.cpp"
 #include "source/gl/load_gles_extensions.cpp"
@@ -31,3 +37,7 @@
 #include "source/gl/render_buffer_gl_impl.cpp"
 #include "source/gl/render_context_gl_impl.cpp"
 #include "source/gl/render_target_gl.cpp"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#endif
