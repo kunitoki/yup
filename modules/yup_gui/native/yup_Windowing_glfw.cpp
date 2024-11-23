@@ -987,7 +987,7 @@ void GLFWComponentNative::renderContext()
     auto [contentWidth, contentHeight] = getContentSize();
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
 
-    if (forceSizeChange || currentContentWidth != contentWidth || currentContentHeight != contentHeight)
+    if (forceSizeChange || currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
