@@ -10,8 +10,6 @@ Example rive animations ([source code](./examples/render/source/main.cpp)):
 
 [Renderer Youtube Video](https://youtube.com/shorts/3XC4hyDlrVs)
 
-## Disclaimer: The Project Is Still In Embryonic Stage
-
 [![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
 [![Build And Test Windows](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_windows.yml)
 [![Build And Test Linux](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_linux.yml)
@@ -19,6 +17,9 @@ Example rive animations ([source code](./examples/render/source/main.cpp)):
 
 ## Introduction
 YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
+
+> [!CAUTION]
+> The project is still in embryonic stage, use it at your own risk!
 
 ## Features
 YUP brings a suite of powerful features, including:
@@ -28,6 +29,22 @@ YUP brings a suite of powerful features, including:
 - **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux (with Wasm, iOS and Android in the pipe).
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
+
+## Supported Rendering Backends
+|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**<sup>(1)</sup> | **iOS**<sup>(1)</sup> |
+|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
+| **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    | :white_check_mark:        |                       |
+| **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: |                           |                       |
+| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
+| **Vulkan**<sup>(2)</sup> |                    |                    |                    |                    |                           |                       |
+
+1. Platforms not fully supported by the windowing system
+2. Renderer currently work in progress
+
+## Development
+> [!IMPORTANT]
+> We are looking for collaborators to bring forward the framework!
 
 ## Getting Started
 To begin using YUP, follow these detailed steps to set up the environment and run a simple example application:
