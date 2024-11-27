@@ -278,14 +278,20 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 #elif YUP_RIVE_USE_OPENGL
     desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
 #endif
-#endif
 
-#if JUCE_WINDOWS
+#elif JUCE_WINDOWS
 #if YUP_RIVE_USE_D3D
     desiredApi = forceContextApi.value_or(GraphicsContext::Direct3D);
 #elif YUP_RIVE_USE_OPENGL
     desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
 #endif
+
+#elif JUCE_LINUX
+    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+
+#else
+    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+
 #endif
 
     return desiredApi;
