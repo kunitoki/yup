@@ -721,23 +721,25 @@ function (yup_standalone_app)
 
         list (APPEND additional_options
             -fexceptions
-            -sDISABLE_EXCEPTION_CATCHING=0
-            -sUSE_PTHREADS=1)
+            -pthread
+            -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
             $<$<CONFIG:DEBUG>:-gsource-map>
             -fexceptions
-            -sUSE_PTHREADS=1
+            -pthread
             -sWASM=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
+            -sSHARED_MEMORY=1
+            -sALLOW_MEMORY_GROWTH=0
             -sASSERTIONS=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sDEMANGLE_SUPPORT=1
             -sSTACK_OVERFLOW_CHECK=2
+            -sPTHREAD_POOL_SIZE=8
             -sFORCE_FILESYSTEM=1
-            -sALLOW_MEMORY_GROWTH=1
             -sNODERAWFS=0
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")

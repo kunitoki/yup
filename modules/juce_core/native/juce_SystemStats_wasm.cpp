@@ -42,7 +42,11 @@ namespace juce
 
 void Logger::outputDebugString (const String& text)
 {
+#if JUCE_EMSCRIPTEN
+    EM_ASM({ console.log(UTF8ToString($0)); }, text.toRawUTF8());
+#else
     std::printf ("%.*s", text.length(), text.toRawUTF8());
+#endif
 }
 
 //==============================================================================
