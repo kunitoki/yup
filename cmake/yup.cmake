@@ -735,7 +735,8 @@ function (yup_standalone_app)
             -sFORCE_FILESYSTEM=1
             -sALLOW_MEMORY_GROWTH=1
             -sNODERAWFS=0
-            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall')
+            -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
+            --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
 
     endif()
 

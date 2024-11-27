@@ -555,7 +555,9 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
     if (currentGraphicsApi == GraphicsContext::OpenGL)
     {
         glfwMakeContextCurrent (window);
+#if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
         glfwSwapInterval (0);
+#endif
     }
 
     context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
