@@ -42,11 +42,7 @@ namespace juce
 
 void Logger::outputDebugString (const String& text)
 {
-#if JUCE_EMSCRIPTEN
-    EM_ASM({ console.log(UTF8ToString($0)); }, text.toRawUTF8());
-#else
-    std::printf ("%.*s", text.length(), text.toRawUTF8());
-#endif
+    std::fprintf (stderr, "%.*s", text.length(), text.toRawUTF8());
 }
 
 //==============================================================================
@@ -62,17 +58,22 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 String SystemStats::getOperatingSystemName()
 {
 #if JUCE_EMSCRIPTEN
-    auto navigator = emscripten::val::global("navigator");
+    char* platform = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = navigator.platform || "unknown";
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
 
-    String platform{ navigator["platform"].as<std::string>().c_str() };
+    String platformString (platform ? platform : "unknown");
+    free (platform);
 
-    if (platform.isEmpty())
-        platform = "unknown";
-
-    return platform;
+    return platformString;
 #else
     return "WASM";
 #endif
+
 }
 
 bool SystemStats::isOperatingSystem64Bit()
@@ -80,11 +81,45 @@ bool SystemStats::isOperatingSystem64Bit()
     return sizeof(void*) == 8;
 }
 
+String SystemStats::getUniqueDeviceID()
+{
+#if JUCE_EMSCRIPTEN
+    char* deviceInfo = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var info = navigator.userAgent || "";
+        info += navigator.platform || "";
+        info += navigator.language || "";
+
+        var lengthBytes = lengthBytesUTF8 (info) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (info, ptr, lengthBytes);
+        return ptr;
+    }));
+
+    String infoString (deviceInfo ? deviceInfo : "");
+    free (deviceInfo);
+
+    return String (static_cast<uint64_t> (infoString.hashCode64()));
+#else
+    return {};
+#endif
+}
+
 String SystemStats::getDeviceDescription()
 {
 #if JUCE_EMSCRIPTEN
-    auto navigator = emscripten::val::global("navigator");
-    return { navigator["userAgent"].as<std::string>().c_str() };
+    char* userAgent = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = navigator.userAgent || "unknown";
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
+
+    String userAgentString (userAgent ? userAgent : "unknown");
+
+    free (userAgent);
+
+    return userAgentString;
 #else
     return "WASM VM";
 #endif
@@ -101,12 +136,13 @@ int SystemStats::getCpuSpeedInMegahertz() { return 0; }
 int SystemStats::getMemorySizeInMegabytes()
 {
 #if JUCE_EMSCRIPTEN
-    auto navigator = emscripten::val::global("navigator");
-    if (! navigator.hasOwnProperty("deviceMemory"))
+    int memoryMB = EM_ASM_INT ({
+        if ("deviceMemory" in navigator)
+            return navigator.deviceMemory * 1024;
         return 0;
+    });
 
-    double deviceMemoryGB = navigator["deviceMemory"].as<double>();
-    return static_cast<int>(deviceMemoryGB * 1024); // Convert GB to MB
+    return memoryMB * 1024; // Convert GB to MB
 #else
     return 0;
 #endif
@@ -126,11 +162,18 @@ String SystemStats::getComputerName() { return {}; }
 String SystemStats::getUserLanguage()
 {
 #if JUCE_EMSCRIPTEN
-    auto navigator = emscripten::val::global("navigator");
-    if (! navigator.hasOwnProperty("language"))
-        return {};
+    char* language = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = navigator.language || "";
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
 
-    return { navigator["language"].as<std::string>().c_str() };
+    String languageString (language ? language : "");
+    free (language);
+
+    return languageString;
 #else
     return {};
 #endif
@@ -139,14 +182,25 @@ String SystemStats::getUserLanguage()
 String SystemStats::getUserRegion()
 {
 #if JUCE_EMSCRIPTEN
-    auto intl = emscripten::val::global("Intl");
-    if (intl.hasOwnProperty("DateTimeFormat"))
-    {
-        auto localeOptions = intl.call<emscripten::val>("DateTimeFormat").call<emscripten::val>("resolvedOptions");
-        if (localeOptions.hasOwnProperty("locale"))
-            return { localeOptions["locale"].as<std::string>().c_str() };
-    }
-    return {};
+    char* locale = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = "";
+        if (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
+        {
+            var options = Intl.DateTimeFormat().resolvedOptions();
+            if (options.locale)
+                str = options.locale;
+        }
+
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
+
+    String localeString (locale ? locale : "");
+    free (locale);
+
+    return localeString;
 #else
     return {};
 #endif
@@ -161,28 +215,62 @@ String SystemStats::getDisplayLanguage()
 void CPUInformation::initialise() noexcept
 {
 #if JUCE_EMSCRIPTEN
-    auto navigator = emscripten::val::global("navigator");
-    if (navigator.hasOwnProperty("hardwareConcurrency"))
-    {
-        numLogicalCPUs = navigator["hardwareConcurrency"].as<int>();
-        numPhysicalCPUs = numLogicalCPUs; // Physical core info isn't available
-        return;
-    }
-#endif
+    int hwConcurrency = EM_ASM_INT ({
+        if ("hardwareConcurrency" in navigator)
+            return navigator.hardwareConcurrency;
+        return 1;
+    });
 
+    numLogicalCPUs = hwConcurrency > 0 ? hwConcurrency : 1;
+    numPhysicalCPUs = numLogicalCPUs; // Physical core info isn't available
+#else
     numLogicalCPUs = 1;
     numPhysicalCPUs = 1;
+#endif
 }
 
 //==============================================================================
+namespace {
+std::chrono::steady_clock::time_point getTimeSinceStartupFallback() noexcept
+{
+    static const auto timeSinceStartup = std::chrono::steady_clock::now();
+    return timeSinceStartup;
+}
+
+bool isRunningUnderBrowser()
+{
+    static bool isRunningUnderBrowser = []
+    {
+        return EM_ASM_INT({
+            return typeof window !== "undefined" ? 1 : 0;
+        });
+    }();
+
+    return isRunningUnderBrowser;
+}
+} // namespace
+
 uint32 juce_millisecondsSinceStartup() noexcept
 {
-    return static_cast<uint32> (emscripten_get_now());
+#if JUCE_EMSCRIPTEN
+    if (isRunningUnderBrowser())
+        return static_cast<uint32> (emscripten_get_now());
+#endif
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
+        (std::chrono::steady_clock::now() - getTimeSinceStartupFallback());
+
+    return static_cast<uint32>(elapsed.count());
 }
 
 int64 Time::getHighResolutionTicks() noexcept
 {
-    return static_cast<int64> (emscripten_get_now() * 1000.0);
+#if JUCE_EMSCRIPTEN
+    if (isRunningUnderBrowser())
+        return static_cast<int64> (emscripten_get_now() * 1000.0);
+#endif
+
+    return static_cast<int64> (juce_millisecondsSinceStartup() * 1000.0);
 }
 
 int64 Time::getHighResolutionTicksPerSecond() noexcept
@@ -192,7 +280,12 @@ int64 Time::getHighResolutionTicksPerSecond() noexcept
 
 double Time::getMillisecondCounterHiRes() noexcept
 {
-    return emscripten_get_now();
+#if JUCE_EMSCRIPTEN
+    if (isRunningUnderBrowser())
+        return emscripten_get_now();
+#endif
+
+    return static_cast<double> (juce_millisecondsSinceStartup());
 }
 
 bool Time::setSystemTimeToThisTime() const

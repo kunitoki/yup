@@ -19,10 +19,10 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-#if ("${yup_platform}" MATCHES "^(emscripten)$")
-#    add_definitions (-DTEST_HAS_PTHREAD=0)
-#    set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
-#endif()
+if ("${yup_platform}" MATCHES "^(emscripten)$")
+    add_definitions (-DTEST_HAS_PTHREAD=0)
+    set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+endif()
 
 # ==== Setup googletests
 include (FetchContent)

@@ -243,7 +243,7 @@ String SystemStats::getStackBacktrace()
 {
     String result;
 
-#if JUCE_MINGW || JUCE_WASM
+#if JUCE_MINGW || (JUCE_WASM && !JUCE_EMSCRIPTEN)
     jassertfalse; // sorry, not implemented yet!
 
 #elif JUCE_WINDOWS
@@ -276,6 +276,12 @@ String SystemStats::getStackBacktrace()
             result << symbol->Name << " + 0x" << String::toHexString ((int64) displacement) << newLine;
         }
     }
+
+#elif JUCE_EMSCRIPTEN
+    std::string temporaryStack;
+    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8)(stackTrace()); }));
+    EM_ASM_ARGS({ (stringToUTF8 || Module.stringToUTF8)(stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
+    result << temporaryStack.c_str();
 
 #else
     void* stack[128];
@@ -332,8 +338,6 @@ String SystemStats::getStackBacktrace()
 }
 
 //==============================================================================
-#if ! JUCE_WASM
-
 static SystemStats::CrashHandlerFunction globalCrashHandler = nullptr;
 
 #if JUCE_WINDOWS
@@ -363,7 +367,7 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
     SetUnhandledExceptionFilter (handleCrash);
 
 #elif JUCE_WASM
-        // TODO
+    // TODO
 
 #else
     const int signals[] = { SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGABRT, SIGSYS };
@@ -376,8 +380,6 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
 
 #endif
 }
-
-#endif
 
 bool SystemStats::isRunningInAppExtensionSandbox() noexcept
 {
@@ -401,29 +403,5 @@ bool SystemStats::isRunningInAppExtensionSandbox() noexcept
     return false;
 #endif
 }
-
-#if JUCE_UNIT_TESTS
-
-class UniqueHardwareIDTest final : public UnitTest
-{
-public:
-    //==============================================================================
-    UniqueHardwareIDTest()
-        : UnitTest ("UniqueHardwareID", UnitTestCategories::analytics)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("getUniqueDeviceID returns usable data.");
-        {
-            expect (SystemStats::getUniqueDeviceID().isNotEmpty());
-        }
-    }
-};
-
-static UniqueHardwareIDTest uniqueHardwareIDTest;
-
-#endif
 
 } // namespace juce

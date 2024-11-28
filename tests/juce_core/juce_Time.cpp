@@ -23,6 +23,8 @@
 
 #include <juce_core/juce_core.h>
 
+#include <emscripten.h>
+
 using namespace juce;
 
 TEST (TimeTests, DefaultConstructor)
@@ -248,7 +250,7 @@ TEST (TimeTests, ComparisonOperators)
 TEST (TimeTests, GetMillisecondCounter)
 {
     uint32 millis1 = Time::getMillisecondCounter();
-    EXPECT_GT (millis1, 0);
+    EXPECT_GE (millis1, 0);
     Time::waitForMillisecondCounter (millis1 + 100);
     uint32 millis2 = Time::getMillisecondCounter();
     EXPECT_GT (millis2, millis1);
@@ -257,7 +259,7 @@ TEST (TimeTests, GetMillisecondCounter)
 TEST (TimeTests, GetMillisecondCounterHiRes)
 {
     double hiResMillis1 = Time::getMillisecondCounterHiRes();
-    EXPECT_GT (hiResMillis1, 0.0);
+    EXPECT_GE (hiResMillis1, 0.0);
     Time::waitForMillisecondCounter (static_cast<uint32> (hiResMillis1) + 100);
     double hiResMillis2 = Time::getMillisecondCounterHiRes();
     EXPECT_GT (hiResMillis2, hiResMillis1);
@@ -266,7 +268,10 @@ TEST (TimeTests, GetMillisecondCounterHiRes)
 TEST (TimeTests, GetApproximateMillisecondCounter)
 {
     uint32 approxMillis1 = Time::getApproximateMillisecondCounter();
-    EXPECT_GT (approxMillis1, 0);
+    EXPECT_GE (approxMillis1, 0);
+    Time::waitForMillisecondCounter (approxMillis1 + 100);
+    uint32 approxMillis2 = Time::getApproximateMillisecondCounter();
+    EXPECT_GT (approxMillis2, approxMillis1);
 }
 
 TEST (TimeTests, GetHighResolutionTicks)

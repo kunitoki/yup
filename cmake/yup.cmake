@@ -741,6 +741,7 @@ function (yup_standalone_app)
             -sPTHREAD_POOL_SIZE=8
             -sFORCE_FILESYSTEM=1
             -sNODERAWFS=0
+            -sFETCH=1
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
 
