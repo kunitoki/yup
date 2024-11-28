@@ -174,16 +174,23 @@ public:
                                            int numSamples,
                                            const yup::AudioIODeviceCallbackContext& context) override
     {
+        /*
         int copiedSamples = 0;
         while (copiedSamples < numSamples)
         {
-            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples]
-                + yup::Random::getSystemRandom().nextFloat() * 0.1f - 0.05f;
+            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples];
 
             ++copiedSamples;
             ++readPos;
 
             readPos %= renderData.size();
+        }
+        */
+
+        for (int channel = 0; channel < numOutputChannels; ++channel)
+        {
+            for (int sample = 0; sample < numSamples; ++sample)
+                outputChannelData[channel][sample] = yup::Random::getSystemRandom().nextFloat() * 0.2f - 0.1f;
         }
 
         //inputReady.signal();

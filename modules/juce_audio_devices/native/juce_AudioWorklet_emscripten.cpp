@@ -30,11 +30,14 @@ public:
         : AudioIODevice (AudioWorkletAudioIODevice::audioWorkletTypeName,
                          AudioWorkletAudioIODevice::audioWorkletTypeName)
     {
+        context = emscripten_create_audio_context (0);
     }
 
     ~AudioWorkletAudioIODevice()
     {
         close();
+
+        emscripten_destroy_audio_context (context);
     }
 
     //==============================================================================
@@ -60,7 +63,19 @@ public:
 
     Array<double> getAvailableSampleRates() override
     {
-        return { 44100.0 };
+        return { getDefaultSampleRate() };
+    }
+
+    double getDefaultSampleRate()
+    {
+        int outputSampleRate = EM_ASM_INT ({
+            return emscriptenGetAudioObject ($0).sampleRate;
+        }, context);
+
+        if (outputSampleRate == 0)
+            outputSampleRate = 44100;
+
+        return static_cast<double> (outputSampleRate);
     }
 
     Array<int> getAvailableBufferSizes() override
@@ -79,9 +94,9 @@ public:
                  double sampleRate,
                  int bufferSizeSamples) override
     {
-        yup::Logger::outputDebugString (String("open ") + String(sampleRate) + " " + String(bufferSizeSamples));
+        yup::Logger::outputDebugString ("open");
 
-        if (sampleRate != 44100.0 && sampleRate != 0.0)
+        if (sampleRate != getDefaultSampleRate())
         {
             lastError = "Browser audio outputs only support 44.1 kHz sample rate";
             return lastError;
@@ -89,20 +104,18 @@ public:
 
         auto numIns = getNumContiguousSetBits (inputChannels);
         auto numOuts = getNumContiguousSetBits (outputChannels);
-        actualNumberOfInputs = jmax (numIns, 2);
-        actualNumberOfOutputs = jmax (numOuts, 2);
+        actualNumberOfInputs = jmax (numIns, 1);
+        actualNumberOfOutputs = jmax (numOuts, 1);
         actualSampleRate = sampleRate;
         actualBufferSize = (uint32) bufferSizeSamples;
 
         channelInBuffer.calloc (actualNumberOfInputs);
         channelOutBuffer.calloc (actualNumberOfOutputs);
 
-        isDeviceOpen = false;
+        isDeviceOpen = true;
         isRunning = false;
         callback = nullptr;
         underruns = 0;
-
-        context = emscripten_create_audio_context (0);
 
         emscripten_start_wasm_audio_worklet_thread_async (
             context, audioThreadStack, sizeof (audioThreadStack), &audioThreadInitializedCallback, this);
@@ -118,7 +131,10 @@ public:
 
         if (isDeviceOpen)
         {
-            emscripten_destroy_audio_context (context);
+            EM_ASM ({
+                emscriptenGetAudioObject ($0).disconnect();
+            }, audioWorkletNode);
+            audioWorkletNode = {};
 
             isDeviceOpen = false;
             callback = nullptr;
@@ -128,7 +144,7 @@ public:
             actualNumberOfInputs = 0;
             actualNumberOfOutputs = 0;
             actualSampleRate = 44100.0;
-            actualBufferSize = (uint32) 128;
+            actualBufferSize = 128u;
 
             channelInBuffer.free();
             channelOutBuffer.free();
@@ -139,11 +155,17 @@ public:
 
     void start (AudioIODeviceCallback* newCallback) override
     {
+        yup::Logger::outputDebugString ("start 1");
+
         if (! isDeviceOpen)
             return;
 
+        yup::Logger::outputDebugString ("start 2");
+
         if (isRunning)
         {
+            yup::Logger::outputDebugString ("start 3");
+
             if (newCallback != callback)
             {
                 if (newCallback != nullptr)
@@ -160,26 +182,40 @@ public:
         }
         else
         {
+            yup::Logger::outputDebugString ("start 4");
+
             callback = newCallback;
-            isRunning = (/*Bela_startAudio()*/0 == 0);
+            isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
+
+            if (! isRunning && hasBeenActivatedAlreadyByUser)
+            {
+                yup::Logger::outputDebugString ("start 5");
+
+                emscripten_resume_audio_context_sync (context);
+                isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
+            }
+
+            firstCallback = true;
+
+            yup::Logger::outputDebugString ("start 6");
 
             if (callback != nullptr)
             {
                 if (isRunning)
                 {
+                    yup::Logger::outputDebugString ("start 7");
                     callback->audioDeviceAboutToStart (this);
                 }
-                else
-                {
-                    lastError = "Bela_StartAudio failed";
-                    callback->audioDeviceError (lastError);
-                }
             }
+
+            yup::Logger::outputDebugString ("start 8");
         }
     }
 
     void stop() override
     {
+        yup::Logger::outputDebugString ("stop");
+
         AudioIODeviceCallback* oldCallback = nullptr;
 
         if (callback != nullptr)
@@ -190,7 +226,9 @@ public:
 
         isRunning = false;
 
-        // Bela_stopAudio();
+        EM_ASM ({
+            emscriptenGetAudioObject ($0).suspend();
+        }, context);
 
         if (oldCallback != nullptr)
             oldCallback->audioDeviceStopped();
@@ -238,103 +276,6 @@ public:
 
 private:
     //==============================================================================
-    /*
-    bool setup (BelaContext& context)
-    {
-        actualBufferSize = context.audioFrames;
-        actualNumberOfInputs = (int) (context.audioInChannels + context.analogInChannels);
-        actualNumberOfOutputs = (int) (context.audioOutChannels + context.analogOutChannels);
-        isBelaOpen = true;
-        firstCallback = true;
-
-        ScopedLock lock (callbackLock);
-
-        if (callback != nullptr)
-            callback->audioDeviceAboutToStart (this);
-
-        return true;
-    }
-
-    void render (BelaContext& context)
-    {
-        // check for xruns
-        calculateXruns (context.audioFramesElapsed, context.audioFrames);
-
-        ScopedLock lock (callbackLock);
-
-        // Check for and process and midi
-        for (auto midiInput : MidiInput::Pimpl::midiInputs)
-            midiInput->poll();
-
-        if (callback != nullptr)
-        {
-            jassert (context.audioFrames <= actualBufferSize);
-            jassert ((context.flags & BELA_FLAG_INTERLEAVED) == 0);
-
-            using Frames = decltype (context.audioFrames);
-
-            // Setup channelInBuffers
-            for (int ch = 0; ch < actualNumberOfInputs; ++ch)
-            {
-                if (ch < analogChannelStart)
-                    channelInBuffer[ch] = &context.audioIn[(Frames) ch * context.audioFrames];
-                else
-                    channelInBuffer[ch] = &context.analogIn[(Frames) (ch - analogChannelStart) * context.analogFrames];
-            }
-
-            // Setup channelOutBuffers
-            for (int ch = 0; ch < actualNumberOfOutputs; ++ch)
-            {
-                if (ch < analogChannelStart)
-                    channelOutBuffer[ch] = &context.audioOut[(Frames) ch * context.audioFrames];
-                else
-                    channelOutBuffer[ch] = &context.analogOut[(Frames) (ch - analogChannelStart) * context.audioFrames];
-            }
-
-            callback->audioDeviceIOCallbackWithContext (channelInBuffer.getData(),
-                                                        actualNumberOfInputs,
-                                                        channelOutBuffer.getData(),
-                                                        actualNumberOfOutputs,
-                                                        (int) context.audioFrames,
-                                                        {});
-        }
-    }
-
-    void cleanup (BelaContext&)
-    {
-        ScopedLock lock (callbackLock);
-
-        if (callback != nullptr)
-            callback->audioDeviceStopped();
-    }
-    */
-
-    //==============================================================================
-    uint64_t expectedElapsedAudioSamples = 0;
-    int underruns = 0;
-    bool firstCallback = false;
-
-    void calculateXruns (uint64_t audioFramesElapsed, uint32_t numSamples)
-    {
-        if (audioFramesElapsed > expectedElapsedAudioSamples && ! firstCallback)
-            ++underruns;
-
-        firstCallback = false;
-        expectedElapsedAudioSamples = audioFramesElapsed + numSamples;
-    }
-
-    //==============================================================================
-    static int getNumContiguousSetBits (const BigInteger& value) noexcept
-    {
-        int bit = 0;
-
-        while (value[bit])
-            ++bit;
-
-        return bit;
-    }
-
-    //==============================================================================
 
     void audioThreadInitialized()
     {
@@ -342,7 +283,7 @@ private:
 
         WebAudioWorkletProcessorCreateOptions opts =
         {
-            .name = audioWorkletTypeName,
+            .name = audioWorkletTypeName
         };
 
         emscripten_create_wasm_audio_worklet_processor_async (
@@ -362,14 +303,14 @@ private:
         };
 
         // Create node
-        EMSCRIPTEN_AUDIO_WORKLET_NODE_T wasmAudioWorklet = emscripten_create_wasm_audio_worklet_node (
+        audioWorkletNode = emscripten_create_wasm_audio_worklet_node (
             context, audioWorkletTypeName, &options, renderAudioCallback, this);
 
         // Connect it to audio context destination
-        //emscripten_audio_node_connect(wasmAudioWorklet, audioContext, 0, 0);
-        EM_ASM({
-            emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination)
-        }, wasmAudioWorklet, context);
+        //emscripten_audio_node_connect (audioWorkletNode, context, 0, 0);
+        EM_ASM ({
+            emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination);
+        }, audioWorkletNode, context);
 
         emscripten_set_click_callback ("canvas", reinterpret_cast<void*> (this), 0, canvasClickCallback);
     }
@@ -378,22 +319,22 @@ private:
                          int numOutputs, AudioSampleFrame* outputs,
                          int numParams, const AudioParamFrame* params)
     {
+        const int audioFrames = 128;
+
         // check for xruns
-        //calculateXruns (context.audioFramesElapsed, context.audioFrames);
+        calculateXruns (audioFrames);
 
         ScopedLock lock (callbackLock);
 
         if (callback != nullptr)
         {
-            int audioFrames = 128;
-
             // Setup channelInBuffers
             for (int ch = 0; ch < actualNumberOfInputs; ++ch)
-                channelInBuffer[ch] = &inputs[ch].data[0];
+                channelInBuffer[ch] = &(inputs[ch].data[0]);
 
             // Setup channelOutBuffers (assume a single worklet output)
             for (int ch = 0; ch < actualNumberOfOutputs; ++ch)
-                channelOutBuffer[ch] = &outputs[0].data[ch * 128]; // outputs[0].samplesPerChannel / outputs[0].quantumSize
+                channelOutBuffer[ch] = &(outputs[0].data[ch * 128]); // outputs[0].samplesPerChannel / outputs[0].quantumSize
 
             callback->audioDeviceIOCallbackWithContext (channelInBuffer.getData(),
                                                         actualNumberOfInputs,
@@ -403,13 +344,27 @@ private:
                                                         {});
         }
 
+        audioFramesElapsed += audioFrames;
+
         return EM_TRUE; // keep going !
     }
 
     void canvasClick()
     {
         if (emscripten_audio_context_state (context) != AUDIO_CONTEXT_STATE_RUNNING)
+        {
+            yup::Logger::outputDebugString ("canvasClick");
+
             emscripten_resume_audio_context_sync (context);
+
+            isRunning = true;
+            hasBeenActivatedAlreadyByUser = true;
+
+            ScopedLock lock (callbackLock);
+
+            if (callback != nullptr)
+                callback->audioDeviceAboutToStart (this);
+        }
     }
 
     //==============================================================================
@@ -444,22 +399,51 @@ private:
     }
 
     //==============================================================================
-    EMSCRIPTEN_WEBAUDIO_T context{};
+    uint64_t expectedElapsedAudioSamples = 0;
+    uint64_t audioFramesElapsed = 0;
+    int underruns = 0;
+    bool firstCallback = false;
 
-    bool isDeviceOpen = false, isRunning = false;
+    void calculateXruns (uint32_t numSamples)
+    {
+        if (audioFramesElapsed > expectedElapsedAudioSamples && ! firstCallback)
+            ++underruns;
+
+        firstCallback = false;
+        expectedElapsedAudioSamples = audioFramesElapsed + numSamples;
+    }
+
+    //==============================================================================
+    static int getNumContiguousSetBits (const BigInteger& value) noexcept
+    {
+        int bit = 0;
+
+        while (value[bit])
+            ++bit;
+
+        return bit;
+    }
+
+    //==============================================================================
+    EMSCRIPTEN_WEBAUDIO_T context{};
+    EMSCRIPTEN_AUDIO_WORKLET_NODE_T audioWorkletNode{};
+
+    bool isDeviceOpen = false;
+    bool isRunning = false;
+    bool hasBeenActivatedAlreadyByUser = false;
 
     CriticalSection callbackLock;
     AudioIODeviceCallback* callback = nullptr;
 
     String lastError;
-    uint32_t actualBufferSize = 0;
+    uint32 actualBufferSize = 0;
     int actualNumberOfInputs = 0, actualNumberOfOutputs = 0;
     double actualSampleRate = 44100.0;
 
     HeapBlock<const float*> channelInBuffer;
     HeapBlock<float*> channelOutBuffer;
 
-    alignas(16) uint8_t audioThreadStack[4096] = {};
+    alignas(16) uint8 audioThreadStack[4096] = {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioWorkletAudioIODevice)
 };
