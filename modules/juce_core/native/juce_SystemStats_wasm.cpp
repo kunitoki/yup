@@ -67,7 +67,7 @@ String SystemStats::getOperatingSystemName()
 {
 #if JUCE_EMSCRIPTEN
     char* platform = reinterpret_cast<char*> (EM_ASM_PTR ({
-        var str = navigator.platform || "unknown";
+        var str = (typeof navigator !== 'undefined') ? (navigator.platform || "unknown") : "unknown";
         var lengthBytes = lengthBytesUTF8 (str) + 1;
         var ptr = _malloc (lengthBytes);
         stringToUTF8 (str, ptr, lengthBytes);
@@ -93,9 +93,13 @@ String SystemStats::getUniqueDeviceID()
 {
 #if JUCE_EMSCRIPTEN
     char* deviceInfo = reinterpret_cast<char*> (EM_ASM_PTR ({
-        var info = navigator.userAgent || "";
-        info += navigator.platform || "";
-        info += navigator.language || "";
+        var info = "";
+        if (typeof navigator !== 'undefined')
+        {
+            info += navigator.userAgent || "";
+            info += navigator.platform || "";
+            info += navigator.language || "";
+        }
 
         var lengthBytes = lengthBytesUTF8 (info) + 1;
         var ptr = _malloc (lengthBytes);
@@ -116,7 +120,7 @@ String SystemStats::getDeviceDescription()
 {
 #if JUCE_EMSCRIPTEN
     char* userAgent = reinterpret_cast<char*> (EM_ASM_PTR ({
-        var str = navigator.userAgent || "unknown";
+        var str = (typeof navigator !== 'undefined') ? (navigator.userAgent || "unknown") : "unknown";
         var lengthBytes = lengthBytesUTF8 (str) + 1;
         var ptr = _malloc (lengthBytes);
         stringToUTF8 (str, ptr, lengthBytes);
@@ -145,7 +149,7 @@ int SystemStats::getMemorySizeInMegabytes()
 {
 #if JUCE_EMSCRIPTEN
     int memoryMB = EM_ASM_INT ({
-        if ("deviceMemory" in navigator)
+        if ((typeof navigator !== 'undefined') && "deviceMemory" in navigator)
             return navigator.deviceMemory * 1024;
         return 0;
     });
@@ -171,7 +175,7 @@ String SystemStats::getUserLanguage()
 {
 #if JUCE_EMSCRIPTEN
     char* language = reinterpret_cast<char*> (EM_ASM_PTR ({
-        var str = navigator.language || "";
+        var str = (typeof navigator !== 'undefined') ? (navigator.language || "") : "";
         var lengthBytes = lengthBytesUTF8 (str) + 1;
         var ptr = _malloc (lengthBytes);
         stringToUTF8 (str, ptr, lengthBytes);
@@ -195,7 +199,7 @@ String SystemStats::getUserRegion()
         if (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
         {
             var options = Intl.DateTimeFormat().resolvedOptions();
-            if (options.locale)
+            if (options && options.locale)
                 str = options.locale;
         }
 
@@ -224,7 +228,7 @@ void CPUInformation::initialise() noexcept
 {
 #if JUCE_EMSCRIPTEN
     int hwConcurrency = EM_ASM_INT ({
-        if ("hardwareConcurrency" in navigator)
+        if (typeof navigator !== 'undefined' && "hardwareConcurrency" in navigator)
             return navigator.hardwareConcurrency;
         return 1;
     });

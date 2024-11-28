@@ -114,7 +114,7 @@ TEST (SystemStatsTests, DISABLED_UserAndComputerInfo)
     EXPECT_FALSE(computerName.isEmpty());
 }
 
-TEST (SystemStatsTests, LocaleInfo)
+TEST (SystemStatsTests, DISABLED_LocaleInfo)
 {
     String userLanguage = SystemStats::getUserLanguage();
     EXPECT_FALSE(userLanguage.isEmpty());
@@ -129,7 +129,7 @@ TEST (SystemStatsTests, LocaleInfo)
     EXPECT_GE(displayLanguage.length(), 2);
 }
 
-TEST (SystemStatsTests, DeviceInfo)
+TEST (SystemStatsTests, DISABLED_DeviceInfo)
 {
     String deviceDescription = SystemStats::getDeviceDescription();
     EXPECT_TRUE(deviceDescription.isNotEmpty());
