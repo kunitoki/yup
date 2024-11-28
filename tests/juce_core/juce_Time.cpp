@@ -181,11 +181,13 @@ TEST (TimeTests, ToString)
     EXPECT_FALSE (time.toString (true, true).isEmpty());
 }
 
-TEST (TimeTests, DISABLED_Formatted)
+/*
+TEST (TimeTests, DISABLED_Formatted) // undefined symbol: wcsftime
 {
     Time time(1625000000000);
     EXPECT_EQ(time.formatted("%Y-%m-%d %H:%M:%S"), "2021-06-29 22:53:20");
 }
+*/
 
 TEST (TimeTests, ToISO8601)
 {
