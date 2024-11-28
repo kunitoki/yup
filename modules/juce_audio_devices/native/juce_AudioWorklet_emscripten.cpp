@@ -22,70 +22,6 @@
 namespace juce
 {
 
-uint8_t audioThreadStack[4096] = {};
-
-EM_BOOL onCanvasClick(int eventType, const EmscriptenMouseEvent* mouseEvent, void* userData)
-{
-    EMSCRIPTEN_WEBAUDIO_T audioContext = reinterpret_cast<EMSCRIPTEN_WEBAUDIO_T>(userData);
-
-    if (emscripten_audio_context_state(audioContext) != AUDIO_CONTEXT_STATE_RUNNING)
-        emscripten_resume_audio_context_sync(audioContext);
-
-    return EM_FALSE;
-}
-
-EM_BOOL generateNoise(int numInputs, const AudioSampleFrame *inputs,
-                      int numOutputs, AudioSampleFrame *outputs,
-                      int numParams, const AudioParamFrame *params,
-                      void* userData)
-{
-    for(int i = 0; i < numOutputs; ++i)
-        for(int j = 0; j < outputs[i].numberOfChannels * 128; ++j)
-        // for(int j = 0; j < outputs[i].quantumSize * outputs[i].numberOfChannels; ++j)
-        // for(int j = 0; j < outputs[i].samplesPerChannel * outputs[i].numberOfChannels; ++j)
-            outputs[i].data[j] = emscripten_random() * 0.2 - 0.1;
-
-    return EM_TRUE; // keep going !
-}
-
-void audioWorkletProcessorCreated(EMSCRIPTEN_WEBAUDIO_T audioContext, EM_BOOL success, void* userData)
-{
-    if (!success) return; // Check browser console in a debug build for detailed errors
-
-    int outputChannelCounts[1] = { 1 };
-    EmscriptenAudioWorkletNodeCreateOptions options =
-    {
-        .numberOfInputs = 0,
-        .numberOfOutputs = 1,
-        .outputChannelCounts = outputChannelCounts
-    };
-
-    // Create node
-    EMSCRIPTEN_AUDIO_WORKLET_NODE_T wasmAudioWorklet = emscripten_create_wasm_audio_worklet_node (
-        audioContext, "yup-processor", &options, &generateNoise, 0);
-
-    // Connect it to audio context destination
-    //emscripten_audio_node_connect(wasmAudioWorklet, audioContext, 0, 0);
-    EM_ASM({
-        emscriptenGetAudioObject($0).connect(emscriptenGetAudioObject($1).destination)
-    }, wasmAudioWorklet, audioContext);
-
-    // Resume context on mouse click
-    emscripten_set_click_callback("canvas", reinterpret_cast<void*>(audioContext), 0, onCanvasClick);
-}
-
-void audioThreadInitialized(EMSCRIPTEN_WEBAUDIO_T audioContext, EM_BOOL success, void* userData)
-{
-    if (!success) return; // Check browser console in a debug build for detailed errors
-
-    WebAudioWorkletProcessorCreateOptions opts =
-    {
-        .name = "yup-processor",
-    };
-
-    emscripten_create_wasm_audio_worklet_processor_async(audioContext, &opts, &audioWorkletProcessorCreated, 0);
-}
-
 //==============================================================================
 class AudioWorkletAudioIODevice final : public AudioIODevice
 {
@@ -94,14 +30,11 @@ public:
         : AudioIODevice (AudioWorkletAudioIODevice::audioWorkletTypeName,
                          AudioWorkletAudioIODevice::audioWorkletTypeName)
     {
-        context = emscripten_create_audio_context(0);
-
-        emscripten_start_wasm_audio_worklet_thread_async (context, audioThreadStack, sizeof(audioThreadStack), &audioThreadInitialized, 0);
     }
 
     ~AudioWorkletAudioIODevice()
     {
-        //close();
+        close();
     }
 
     //==============================================================================
@@ -125,14 +58,20 @@ public:
         return result;
     }
 
-    Array<double> getAvailableSampleRates() override { return { 44100.0 }; }
+    Array<double> getAvailableSampleRates() override
+    {
+        return { 44100.0 };
+    }
 
     Array<int> getAvailableBufferSizes() override
-    { /* TODO: */
+    {
         return { getDefaultBufferSize() };
     }
 
-    int getDefaultBufferSize() override { return 256; /*defaultSettings.periodSize;*/ }
+    int getDefaultBufferSize() override
+    {
+        return 128;
+    }
 
     //==============================================================================
     String open (const BigInteger& inputChannels,
@@ -140,93 +79,67 @@ public:
                  double sampleRate,
                  int bufferSizeSamples) override
     {
-        /*
+        yup::Logger::outputDebugString (String("open ") + String(sampleRate) + " " + String(bufferSizeSamples));
+
         if (sampleRate != 44100.0 && sampleRate != 0.0)
         {
-            lastError = "Bela audio outputs only support 44.1 kHz sample rate";
+            lastError = "Browser audio outputs only support 44.1 kHz sample rate";
             return lastError;
         }
 
-        settings = defaultSettings;
-
         auto numIns = getNumContiguousSetBits (inputChannels);
         auto numOuts = getNumContiguousSetBits (outputChannels);
+        actualNumberOfInputs = jmax (numIns, 2);
+        actualNumberOfOutputs = jmax (numOuts, 2);
+        actualSampleRate = sampleRate;
+        actualBufferSize = (uint32) bufferSizeSamples;
 
-        // Input and Output channels are numbered as follows
-        //
-        // 0  .. 1  - audio
-        // 2  .. 9  - analog
+        channelInBuffer.calloc (actualNumberOfInputs);
+        channelOutBuffer.calloc (actualNumberOfOutputs);
 
-        if (numIns > 2 || numOuts > 2)
-        {
-            settings.useAnalog = true;
-            settings.numAnalogInChannels = std::max (numIns - 2, 8);
-            settings.numAnalogOutChannels = std::max (numOuts - 2, 8);
-            settings.uniformSampleRate = true;
-        }
-
-        settings.numAudioInChannels = std::max (numIns, 2);
-        settings.numAudioOutChannels = std::max (numOuts, 2);
-
-        settings.detectUnderruns = 1;
-        settings.setup = setupCallback;
-        settings.render = renderCallback;
-        settings.cleanup = cleanupCallback;
-        settings.interleave = 0;
-
-        if (bufferSizeSamples > 0)
-            settings.periodSize = bufferSizeSamples;
-
-        isBelaOpen = false;
+        isDeviceOpen = false;
         isRunning = false;
         callback = nullptr;
         underruns = 0;
 
-        if (Bela_initAudio (&settings, this) != 0 || ! isBelaOpen)
-        {
-            lastError = "Bela_initAutio failed";
-            return lastError;
-        }
+        context = emscripten_create_audio_context (0);
 
-        actualNumberOfInputs = jmin (numIns, actualNumberOfInputs);
-        actualNumberOfOutputs = jmin (numOuts, actualNumberOfOutputs);
-
-        channelInBuffer.calloc (actualNumberOfInputs);
-        channelOutBuffer.calloc (actualNumberOfOutputs);
-        */
+        emscripten_start_wasm_audio_worklet_thread_async (
+            context, audioThreadStack, sizeof (audioThreadStack), &audioThreadInitializedCallback, this);
 
         return {};
     }
 
     void close() override
     {
-        /*
+        yup::Logger::outputDebugString ("close");
+
         stop();
 
-        if (isBelaOpen)
+        if (isDeviceOpen)
         {
-            Bela_cleanupAudio();
+            emscripten_destroy_audio_context (context);
 
-            isBelaOpen = false;
+            isDeviceOpen = false;
             callback = nullptr;
             underruns = 0;
 
             actualBufferSize = 0;
             actualNumberOfInputs = 0;
             actualNumberOfOutputs = 0;
+            actualSampleRate = 44100.0;
+            actualBufferSize = (uint32) 128;
 
             channelInBuffer.free();
             channelOutBuffer.free();
         }
-        */
     }
 
-    bool isOpen() override { return isBelaOpen; }
+    bool isOpen() override { return isDeviceOpen; }
 
     void start (AudioIODeviceCallback* newCallback) override
     {
-        /*
-        if (! isBelaOpen)
+        if (! isDeviceOpen)
             return;
 
         if (isRunning)
@@ -248,7 +161,7 @@ public:
         else
         {
             callback = newCallback;
-            isRunning = (Bela_startAudio() == 0);
+            isRunning = (/*Bela_startAudio()*/0 == 0);
 
             if (callback != nullptr)
             {
@@ -263,12 +176,10 @@ public:
                 }
             }
         }
-        */
     }
 
     void stop() override
     {
-        /*
         AudioIODeviceCallback* oldCallback = nullptr;
 
         if (callback != nullptr)
@@ -278,11 +189,11 @@ public:
         }
 
         isRunning = false;
-        Bela_stopAudio();
+
+        // Bela_stopAudio();
 
         if (oldCallback != nullptr)
             oldCallback->audioDeviceStopped();
-        */
     }
 
     bool isPlaying() override { return isRunning; }
@@ -292,7 +203,7 @@ public:
     //==============================================================================
     int getCurrentBufferSizeSamples() override { return (int) actualBufferSize; }
 
-    double getCurrentSampleRate() override { return 44100.0; }
+    double getCurrentSampleRate() override { return actualSampleRate; }
 
     int getCurrentBitDepth() override { return 16; }
 
@@ -398,8 +309,6 @@ private:
     }
     */
 
-    const int analogChannelStart = 2;
-
     //==============================================================================
     uint64_t expectedElapsedAudioSamples = 0;
     int underruns = 0;
@@ -426,19 +335,118 @@ private:
     }
 
     //==============================================================================
-    /*
-    static bool setupCallback (BelaContext* context, void* userData) noexcept { return static_cast<BelaAudioIODevice*> (userData)->setup (*context); }
 
-    static void renderCallback (BelaContext* context, void* userData) noexcept { static_cast<BelaAudioIODevice*> (userData)->render (*context); }
+    void audioThreadInitialized()
+    {
+        yup::Logger::outputDebugString ("audioThreadInitialized");
 
-    static void cleanupCallback (BelaContext* context, void* userData) noexcept { static_cast<BelaAudioIODevice*> (userData)->cleanup (*context); }
-    */
+        WebAudioWorkletProcessorCreateOptions opts =
+        {
+            .name = audioWorkletTypeName,
+        };
+
+        emscripten_create_wasm_audio_worklet_processor_async (
+            context, &opts, &audioWorkletProcessorCreatedCallback, this);
+    }
+
+    void audioWorkletProcessorCreated()
+    {
+        yup::Logger::outputDebugString ("audioWorkletProcessorCreated");
+
+        int outputChannelCounts[1] = { actualNumberOfOutputs };
+        EmscriptenAudioWorkletNodeCreateOptions options =
+        {
+            .numberOfInputs = actualNumberOfInputs,
+            .numberOfOutputs = 1,
+            .outputChannelCounts = outputChannelCounts
+        };
+
+        // Create node
+        EMSCRIPTEN_AUDIO_WORKLET_NODE_T wasmAudioWorklet = emscripten_create_wasm_audio_worklet_node (
+            context, audioWorkletTypeName, &options, renderAudioCallback, this);
+
+        // Connect it to audio context destination
+        //emscripten_audio_node_connect(wasmAudioWorklet, audioContext, 0, 0);
+        EM_ASM({
+            emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination)
+        }, wasmAudioWorklet, context);
+
+        emscripten_set_click_callback ("canvas", reinterpret_cast<void*> (this), 0, canvasClickCallback);
+    }
+
+    EM_BOOL renderAudio (int numInputs, const AudioSampleFrame* inputs,
+                         int numOutputs, AudioSampleFrame* outputs,
+                         int numParams, const AudioParamFrame* params)
+    {
+        // check for xruns
+        //calculateXruns (context.audioFramesElapsed, context.audioFrames);
+
+        ScopedLock lock (callbackLock);
+
+        if (callback != nullptr)
+        {
+            int audioFrames = 128;
+
+            // Setup channelInBuffers
+            for (int ch = 0; ch < actualNumberOfInputs; ++ch)
+                channelInBuffer[ch] = &inputs[ch].data[0];
+
+            // Setup channelOutBuffers (assume a single worklet output)
+            for (int ch = 0; ch < actualNumberOfOutputs; ++ch)
+                channelOutBuffer[ch] = &outputs[0].data[ch * 128]; // outputs[0].samplesPerChannel / outputs[0].quantumSize
+
+            callback->audioDeviceIOCallbackWithContext (channelInBuffer.getData(),
+                                                        actualNumberOfInputs,
+                                                        channelOutBuffer.getData(),
+                                                        actualNumberOfOutputs,
+                                                        audioFrames,
+                                                        {});
+        }
+
+        return EM_TRUE; // keep going !
+    }
+
+    void canvasClick()
+    {
+        if (emscripten_audio_context_state (context) != AUDIO_CONTEXT_STATE_RUNNING)
+            emscripten_resume_audio_context_sync (context);
+    }
+
+    //==============================================================================
+
+    static void audioThreadInitializedCallback (EMSCRIPTEN_WEBAUDIO_T audioContext, EM_BOOL success, void* userData)
+    {
+        if (! success) return; // Check browser console in a debug build for detailed errors
+
+        static_cast<AudioWorkletAudioIODevice*> (userData)->audioThreadInitialized();
+    }
+
+    static void audioWorkletProcessorCreatedCallback (EMSCRIPTEN_WEBAUDIO_T audioContext, EM_BOOL success, void* userData)
+    {
+        if (! success) return; // Check browser console in a debug build for detailed errors
+
+        static_cast<AudioWorkletAudioIODevice*> (userData)->audioWorkletProcessorCreated();
+    }
+
+    static EM_BOOL renderAudioCallback (int numInputs, const AudioSampleFrame* inputs,
+                                        int numOutputs, AudioSampleFrame* outputs,
+                                        int numParams, const AudioParamFrame* params,
+                                        void* userData)
+    {
+        return static_cast<AudioWorkletAudioIODevice*> (userData)->renderAudio (numInputs, inputs, numOutputs, outputs, numParams, params);
+    }
+
+    static EM_BOOL canvasClickCallback (int eventType, const EmscriptenMouseEvent* mouseEvent, void* userData)
+    {
+        static_cast<AudioWorkletAudioIODevice*> (userData)->canvasClick();
+
+        return EM_FALSE;
+    }
 
     //==============================================================================
     EMSCRIPTEN_WEBAUDIO_T context{};
 
-    //BelaInitSettings defaultSettings, settings;
-    bool isBelaOpen = false, isRunning = false;
+    bool isDeviceOpen = false, isRunning = false;
 
     CriticalSection callbackLock;
     AudioIODeviceCallback* callback = nullptr;
@@ -446,11 +454,12 @@ private:
     String lastError;
     uint32_t actualBufferSize = 0;
     int actualNumberOfInputs = 0, actualNumberOfOutputs = 0;
+    double actualSampleRate = 44100.0;
 
     HeapBlock<const float*> channelInBuffer;
     HeapBlock<float*> channelOutBuffer;
 
-    bool includeAnalogSupport;
+    alignas(16) uint8_t audioThreadStack[4096] = {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioWorkletAudioIODevice)
 };
@@ -477,7 +486,6 @@ struct AudioWorkletAudioIODeviceType final : public AudioIODeviceType
 
     AudioIODevice* createDevice (const String& outputName, const String& inputName) override
     {
-        // TODO: switching whether to support analog/digital with possible multiple Bela device types?
         if (outputName == AudioWorkletAudioIODevice::audioWorkletTypeName || inputName == AudioWorkletAudioIODevice::audioWorkletTypeName)
             return new AudioWorkletAudioIODevice();
 

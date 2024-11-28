@@ -291,6 +291,7 @@ extern char** environ;
 
 //==============================================================================
 #elif JUCE_WASM
+#include "native/juce_WebAssemblyHelpers.h"
 #include "native/juce_SystemStats_wasm.cpp"
 #include "native/juce_Files_wasm.cpp"
 #include "native/juce_Network_wasm.cpp"

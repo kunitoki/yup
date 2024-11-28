@@ -63,8 +63,8 @@ public:
         for (int i = 0; i < totalRows * totalColumns; ++i)
             addAndMakeVisible (sliders.add (std::make_unique<yup::Slider> (yup::String (i), font)));
 
-        //button = std::make_unique<yup::TextButton> ("xyz", font);
-        //addAndMakeVisible (*button);
+        button = std::make_unique<yup::TextButton> ("xyz", font);
+        addAndMakeVisible (*button);
 
         deviceManager.addAudioCallback (this);
         deviceManager.initialiseWithDefaultDevices (1, 0);
@@ -177,7 +177,8 @@ public:
         int copiedSamples = 0;
         while (copiedSamples < numSamples)
         {
-            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples];
+            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples]
+                + yup::Random::getSystemRandom().nextFloat() * 0.1f - 0.05f;
 
             ++copiedSamples;
             ++readPos;
@@ -191,7 +192,7 @@ public:
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
-        DBG ("audioDeviceAboutToStart");
+        yup::Logger::outputDebugString ("audioDeviceAboutToStart");
 
         inputData.resize (device->getDefaultBufferSize());
         renderData.resize (device->getDefaultBufferSize());
@@ -200,7 +201,7 @@ public:
 
     void audioDeviceStopped() override
     {
-        DBG ("audioDeviceStopped");
+        yup::Logger::outputDebugString ("audioDeviceStopped");
     }
 
 private:
@@ -244,7 +245,7 @@ struct Application : yup::YUPApplication
 
     const yup::String getApplicationName() override
     {
-        return "yup graphics!";
+        return "yup! graphics";
     }
 
     const yup::String getApplicationVersion() override

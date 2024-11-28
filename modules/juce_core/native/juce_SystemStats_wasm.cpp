@@ -42,6 +42,14 @@ namespace juce
 
 void Logger::outputDebugString (const String& text)
 {
+#if JUCE_EMSCRIPTEN
+    if (juce_isRunningUnderBrowser())
+    {
+        EM_ASM ({ console.log (UTF8ToString ($0)); }, text.toRawUTF8());
+        return;
+    }
+#endif
+
     std::fprintf (stderr, "%.*s", text.length(), text.toRawUTF8());
 }
 
@@ -230,35 +238,15 @@ void CPUInformation::initialise() noexcept
 }
 
 //==============================================================================
-namespace {
-std::chrono::steady_clock::time_point getTimeSinceStartupFallback() noexcept
-{
-    static const auto timeSinceStartup = std::chrono::steady_clock::now();
-    return timeSinceStartup;
-}
-
-bool isRunningUnderBrowser()
-{
-    static bool isRunningUnderBrowser = []
-    {
-        return EM_ASM_INT({
-            return typeof window !== "undefined" ? 1 : 0;
-        });
-    }();
-
-    return isRunningUnderBrowser;
-}
-} // namespace
-
 uint32 juce_millisecondsSinceStartup() noexcept
 {
 #if JUCE_EMSCRIPTEN
-    if (isRunningUnderBrowser())
+    if (juce_isRunningUnderBrowser())
         return static_cast<uint32> (emscripten_get_now());
 #endif
 
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
-        (std::chrono::steady_clock::now() - getTimeSinceStartupFallback());
+        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
     return static_cast<uint32>(elapsed.count());
 }
@@ -266,7 +254,7 @@ uint32 juce_millisecondsSinceStartup() noexcept
 int64 Time::getHighResolutionTicks() noexcept
 {
 #if JUCE_EMSCRIPTEN
-    if (isRunningUnderBrowser())
+    if (juce_isRunningUnderBrowser())
         return static_cast<int64> (emscripten_get_now() * 1000.0);
 #endif
 
@@ -281,7 +269,7 @@ int64 Time::getHighResolutionTicksPerSecond() noexcept
 double Time::getMillisecondCounterHiRes() noexcept
 {
 #if JUCE_EMSCRIPTEN
-    if (isRunningUnderBrowser())
+    if (juce_isRunningUnderBrowser())
         return emscripten_get_now();
 #endif
 
