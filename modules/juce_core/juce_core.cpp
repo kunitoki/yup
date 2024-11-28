@@ -102,6 +102,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 
 #if JUCE_EMSCRIPTEN
 #include <emscripten.h>
+#include <emscripten/val.h>
 #endif
 
 #if JUCE_LINUX || JUCE_BSD
