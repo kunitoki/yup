@@ -252,18 +252,16 @@ void MessageManager::deregisterBroadcastListener (ActionListener* const listener
 //==============================================================================
 bool MessageManager::isThisTheMessageThread() const noexcept
 {
-    const std::lock_guard<std::mutex> lock { messageThreadIdMutex };
-
-    return Thread::getCurrentThreadId() == messageThreadId;
+    return Thread::getCurrentThreadId() == messageThreadId.get();
 }
 
 void MessageManager::setCurrentThreadAsMessageThread()
 {
     auto thisThread = Thread::getCurrentThreadId();
 
-    const std::lock_guard<std::mutex> lock { messageThreadIdMutex };
+    messageThreadId.exchange(thisThread);
 
-    if (std::exchange (messageThreadId, thisThread) != thisThread)
+    if (messageThreadId.get() != thisThread)
     {
 #if JUCE_WINDOWS
         // This is needed on windows to make sure the message window is created by this thread
@@ -276,7 +274,7 @@ void MessageManager::setCurrentThreadAsMessageThread()
 bool MessageManager::currentThreadHasLockedMessageManager() const noexcept
 {
     auto thisThread = Thread::getCurrentThreadId();
-    return thisThread == messageThreadId || thisThread == threadWithLock.get();
+    return thisThread == messageThreadId.get() || thisThread == threadWithLock.get();
 }
 
 bool MessageManager::existsAndIsLockedByCurrentThread() noexcept

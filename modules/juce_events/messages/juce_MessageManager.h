@@ -147,7 +147,7 @@ public:
         (Best to ignore this method unless you really know what you're doing..)
         @see setCurrentThreadAsMessageThread
     */
-    Thread::ThreadID getCurrentMessageThread() const noexcept { return messageThreadId; }
+    Thread::ThreadID getCurrentMessageThread() const noexcept { return messageThreadId.get(); }
 
     /** Returns true if the caller thread has currently got the message manager locked.
 
@@ -352,9 +352,8 @@ private:
 
     std::unique_ptr<ActionBroadcaster> broadcaster;
     Atomic<int> quitMessagePosted { 0 }, quitMessageReceived { 0 };
-    Thread::ThreadID messageThreadId;
+    Atomic<Thread::ThreadID> messageThreadId;
     Atomic<Thread::ThreadID> threadWithLock;
-    mutable std::mutex messageThreadIdMutex;
 
     static bool postMessageToSystemQueue (MessageBase*);
     static void* exitModalLoopCallback (void*);
