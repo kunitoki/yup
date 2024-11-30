@@ -23,6 +23,8 @@
 
 #include <juce_core/juce_core.h>
 
+#include <unordered_map>
+
 using namespace juce;
 
 TEST (Identifier, DefaultConstructorCreatesNullIdentifier)
@@ -109,4 +111,14 @@ TEST (Identifier, ConversionToCharPointer)
     Identifier id ("pointer");
     auto ptr = id.getCharPointer();
     EXPECT_STREQ (ptr.getAddress(), "pointer");
+}
+
+TEST (Identifier, UseInAssociativeContainers)
+{
+    std::unordered_map<Identifier, Identifier> ids;
+    ids[Identifier("test1")] = Identifier("test2");
+
+    ASSERT_TRUE(ids.find(Identifier("test1")) != ids.end());
+    EXPECT_EQ(ids.find(Identifier("test1"))->first, Identifier("test1"));
+    EXPECT_EQ(ids.find(Identifier("test1"))->second, Identifier("test2"));
 }

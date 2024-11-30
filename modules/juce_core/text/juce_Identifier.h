@@ -147,3 +147,19 @@ private:
 };
 
 } // namespace juce
+
+#ifndef DOXYGEN
+namespace std
+{
+
+template <>
+struct hash<juce::Identifier>
+{
+    size_t operator() (const juce::Identifier& identifier) const noexcept
+    {
+        return static_cast<size_t> (*reinterpret_cast<uintptr_t*> (identifier.getCharPointer().getAddress()));
+    }
+};
+
+} // namespace std
+#endif
