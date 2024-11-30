@@ -182,7 +182,7 @@ TEST (TimeTests, ToString)
 }
 
 /*
-TEST (TimeTests, DISABLED_Formatted) // undefined symbol: wcsftime
+TEST (TimeTests, DISABLED_Formatted) // WASM undefined symbol: wcsftime
 {
     Time time(1625000000000);
     EXPECT_EQ(time.formatted("%Y-%m-%d %H:%M:%S"), "2021-06-29 22:53:20");
