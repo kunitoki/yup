@@ -244,7 +244,7 @@ TEST_F (ZipFileTests, CreateStreamForEntryByName)
     ZipFile zip (zipFile);
 
     const ZipFile::ZipEntry* entry = zip.getEntry ("nonexistent.txt");
-    EXPECT_EQ (zip.createStreamForEntry (*entry), nullptr); // Assumes the test.zip does not contain this file
+    ASSERT_EQ (nullptr, entry);
 }
 
 TEST_F (ZipFileTests, UncompressTo)
