@@ -26,6 +26,51 @@
 #include <yup_gui/yup_gui.h>
 
 #include <memory>
+#include <cmath> // For sine wave generation
+
+//==============================================================================
+
+class SineWaveGenerator
+{
+public:
+    SineWaveGenerator()
+        : sampleRate (44100.0)
+        , currentAngle (0.0)
+        , angleDelta (0.0)
+        , amplitude (0.0)
+    {
+    }
+
+    void setFrequency (double frequency, double newSampleRate)
+    {
+        sampleRate = newSampleRate;
+        angleDelta = (juce::MathConstants<double>::twoPi * frequency) / sampleRate;
+
+        amplitude.reset (sampleRate, 0.1);
+    }
+
+    void setAmplitude (float newAmplitude)
+    {
+        amplitude.setTargetValue (newAmplitude);
+    }
+
+    float getNextSample()
+    {
+        auto sample = std::sin (currentAngle) * amplitude.getNextValue();
+
+        currentAngle += angleDelta;
+        if (currentAngle >= juce::MathConstants<double>::twoPi)
+            currentAngle -= juce::MathConstants<double>::twoPi;
+
+        return static_cast<float> (sample);
+    }
+
+private:
+    double sampleRate;
+    double currentAngle;
+    double angleDelta;
+    yup::SmoothedValue<float> amplitude;
+};
 
 //==============================================================================
 
@@ -47,28 +92,51 @@ public:
             return;
         }
 
-#if JUCE_WASM
-        yup::File dataPath = yup::File ("/data");
-#else
-        yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
-#endif
+        setTitle ("main");
 
-        yup::File fontFilePath = dataPath.getChildFile ("Roboto-Regular.ttf");
+        // Load the font
+        yup::File fontFilePath =
+#if JUCE_WASM
+            yup::File ("/data")
+#else
+            yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
+#endif
+            .getChildFile ("Roboto-Regular.ttf");
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 
-        setTitle ("main");
-
-        for (int i = 0; i < totalRows * totalColumns; ++i)
-            addAndMakeVisible (sliders.add (std::make_unique<yup::Slider> (yup::String (i), font)));
-
-        button = std::make_unique<yup::TextButton> ("xyz", font);
-        addAndMakeVisible (*button);
-
+        // Initialize the audio device
         deviceManager.addAudioCallback (this);
         deviceManager.initialiseWithDefaultDevices (1, 0);
 
+        // Initialize sine wave generators
+        double sampleRate = deviceManager.getAudioDeviceSetup().sampleRate;
+        sineWaveGenerators.resize (totalRows * totalColumns);
+        for (size_t i = 0; i < sineWaveGenerators.size(); ++i)
+        {
+            sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
+
+            sineWaveGenerators[i]->setFrequency(440.0 * std::pow(1.1, i), sampleRate);
+        }
+
+        // Add sliders and buttons
+        for (int i = 0; i < totalRows * totalColumns; ++i)
+        {
+            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i), font));
+
+            slider->onValueChanged = [this, i](float value)
+            {
+                sineWaveGenerators[i]->setAmplitude (value);
+            };
+
+            addAndMakeVisible (slider);
+        }
+
+        //button = std::make_unique<yup::TextButton> ("Randomize", font);
+        //addAndMakeVisible (*button);
+
+        // Start the timer
         startTimerHz (1);
     }
 
@@ -187,10 +255,16 @@ public:
         }
         */
 
-        for (int channel = 0; channel < numOutputChannels; ++channel)
+        for (int sample = 0; sample < numSamples; ++sample)
         {
-            for (int sample = 0; sample < numSamples; ++sample)
-                outputChannelData[channel][sample] = yup::Random::getSystemRandom().nextFloat() * 0.2f - 0.1f;
+            float mixedSample = 0.0f;
+
+            for (int i = 0; i < sineWaveGenerators.size(); ++i)
+                mixedSample += sineWaveGenerators[i]->getNextSample();
+
+            for (int channel = 0; channel < numOutputChannels; ++channel)
+                outputChannelData[channel][sample] =
+                    mixedSample / static_cast<float> (sineWaveGenerators.size());
         }
 
         //inputReady.signal();
@@ -239,6 +313,8 @@ private:
     int totalColumns = 4;
 
     std::unique_ptr<yup::TextButton> button;
+
+    std::vector<std::unique_ptr<SineWaveGenerator>> sineWaveGenerators;
 
     yup::Font font;
     yup::StyledText styleText;

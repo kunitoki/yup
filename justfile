@@ -31,7 +31,7 @@ ios:
 emscripten:
   emcc -v
   emcmake cmake -G "Ninja Multi-Config" -B build
-  cmake --build build
+  cmake --build build --config Debug
   python3 -m http.server -d .
   #python3 serve.py -p 8000 -d .
 

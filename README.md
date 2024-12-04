@@ -3,11 +3,14 @@
 UI courtesy from https://www.drywestdesign.com/:
 ![SeaSynth](./images/seasynth_prototype.png)
 
-Example rive animations ([source code](./examples/render/source/main.cpp)):
-[![Web Render Example 1](./images/web_render_1.png)](https://kunitoki.github.io/yup/demos/web_render_1/)
-[![Web Render Example 2](./images/web_render_2.png)](https://kunitoki.github.io/yup/demos/web_render_2/)
-[![Web Render Example 3](./images/web_render_3.png)](https://kunitoki.github.io/yup/demos/web_render_3/)
+<p float="left">
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" width="25%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" width="25%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" width="25%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" width="25%" /></a>
+</p>
 
+Example Rive animation display ([source code](./examples/render/source/main.cpp)):
 [Renderer Youtube Video](https://youtube.com/shorts/3XC4hyDlrVs)
 
 [![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
