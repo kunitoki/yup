@@ -57,7 +57,7 @@ YUP brings a suite of powerful features, including:
 | **JACK**                 |                    |                    | :white_check_mark: |                    |                           |                       |
 | **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
-| **AudioWorklet**         |                    |                    |                    | :construction:     |                           |                       |
+| **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
 
 ## Development
 > [!IMPORTANT]
