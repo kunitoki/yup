@@ -36,14 +36,28 @@ YUP brings a suite of powerful features, including:
 ## Supported Rendering Backends
 |                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**<sup>(1)</sup> | **iOS**<sup>(1)</sup> |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
-| **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    | :white_check_mark:        |                       |
-| **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: |                           |                       |
-| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    |                           |                       |
+| **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: | :construction:            |                       |
+| **OpenGL ES3.0**         |                    |                    |                    |                    | :construction:            |                       |
+| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :construction:        |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
-| **Vulkan**<sup>(2)</sup> |                    |                    |                    |                    |                           |                       |
+| **Vulkan**               | :construction:     | :construction:     | :construction:     |                    | :construction:            |                       |
+| **WebGPU**               |                    |                    |                    |                    |                           |                       |
 
 1. Platforms not fully supported by the windowing system
-2. Renderer currently work in progress
+
+## Supported Audio Backends
+|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**<sup>(1)</sup> | **iOS**<sup>(1)</sup> |
+|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
+| **CoreAudio**            |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **ASIO**                 | :white_check_mark: |                    |                    |                    |                           |                       |
+| **DirectSound**          | :white_check_mark: |                    |                    |                    |                           |                       |
+| **WASAPI**               | :white_check_mark: |                    |                    |                    |                           |                       |
+| **ALSA**                 |                    |                    | :white_check_mark: |                    |                           |                       |
+| **JACK**                 |                    |                    | :white_check_mark: |                    |                           |                       |
+| **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **AudioWorklet**         |                    |                    |                    | :construction:     |                           |                       |
 
 ## Development
 > [!IMPORTANT]
