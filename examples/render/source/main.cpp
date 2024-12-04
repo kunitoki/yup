@@ -188,7 +188,7 @@ struct Application : yup::YUPApplication
 
     const yup::String getApplicationName() override
     {
-        return "yup!";
+        return "yup! render";
     }
 
     const yup::String getApplicationVersion() override
@@ -198,6 +198,8 @@ struct Application : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
+        YUP_PROFILE_START();
+
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
@@ -210,6 +212,8 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Shutting down");
 
         window.reset();
+
+        YUP_PROFILE_STOP();
     }
 
 private:

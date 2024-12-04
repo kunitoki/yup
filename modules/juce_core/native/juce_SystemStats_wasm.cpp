@@ -42,17 +42,100 @@ namespace juce
 
 void Logger::outputDebugString (const String& text)
 {
-    std::printf ("%.*s", text.length(), text.toRawUTF8());
+#if JUCE_EMSCRIPTEN
+    if (juce_isRunningUnderBrowser())
+    {
+        EM_ASM ({ console.log (UTF8ToString ($0)); }, text.toRawUTF8());
+        return;
+    }
+#endif
+
+    std::fprintf (stderr, "%.*s", text.length(), text.toRawUTF8());
 }
 
 //==============================================================================
-SystemStats::OperatingSystemType SystemStats::getOperatingSystemType() { return WASM; }
+SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
+{
+#if JUCE_EMSCRIPTEN
+    return WebBrowser;
+#else
+    return WASM;
+#endif
+}
 
-String SystemStats::getOperatingSystemName() { return "WASM"; }
+String SystemStats::getOperatingSystemName()
+{
+#if JUCE_EMSCRIPTEN
+    char* platform = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = (typeof navigator !== 'undefined') ? (navigator.platform || "unknown") : "unknown";
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
 
-bool SystemStats::isOperatingSystem64Bit() { return true; }
+    String platformString (platform ? platform : "unknown");
+    free (platform);
 
-String SystemStats::getDeviceDescription() { return "Web-browser"; }
+    return platformString;
+#else
+    return "WASM";
+#endif
+
+}
+
+bool SystemStats::isOperatingSystem64Bit()
+{
+    return sizeof(void*) == 8;
+}
+
+String SystemStats::getUniqueDeviceID()
+{
+#if JUCE_EMSCRIPTEN
+    char* deviceInfo = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var info = "";
+        if (typeof navigator !== 'undefined')
+        {
+            info += navigator.userAgent || "";
+            info += navigator.platform || "";
+            info += navigator.language || "";
+        }
+
+        var lengthBytes = lengthBytesUTF8 (info) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (info, ptr, lengthBytes);
+        return ptr;
+    }));
+
+    String infoString (deviceInfo ? deviceInfo : "");
+    free (deviceInfo);
+
+    return String (static_cast<uint64_t> (infoString.hashCode64()));
+#else
+    return {};
+#endif
+}
+
+String SystemStats::getDeviceDescription()
+{
+#if JUCE_EMSCRIPTEN
+    char* userAgent = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = (typeof navigator !== 'undefined') ? (navigator.userAgent || "unknown") : "unknown";
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
+
+    String userAgentString (userAgent ? userAgent : "unknown");
+
+    free (userAgent);
+
+    return userAgentString;
+#else
+    return "WASM VM";
+#endif
+}
 
 String SystemStats::getDeviceManufacturer() { return {}; }
 
@@ -62,9 +145,25 @@ String SystemStats::getCpuModel() { return {}; }
 
 int SystemStats::getCpuSpeedInMegahertz() { return 0; }
 
-int SystemStats::getMemorySizeInMegabytes() { return 0; }
+int SystemStats::getMemorySizeInMegabytes()
+{
+#if JUCE_EMSCRIPTEN
+    int memoryMB = EM_ASM_INT ({
+        if ((typeof navigator !== 'undefined') && "deviceMemory" in navigator)
+            return navigator.deviceMemory * 1024;
+        return 0;
+    });
 
-int SystemStats::getPageSize() { return 0; }
+    return memoryMB * 1024; // Convert GB to MB
+#else
+    return 0;
+#endif
+}
+
+int SystemStats::getPageSize()
+{
+    return 65536;
+}
 
 String SystemStats::getLogonName() { return {}; }
 
@@ -72,28 +171,98 @@ String SystemStats::getFullUserName() { return {}; }
 
 String SystemStats::getComputerName() { return {}; }
 
-String SystemStats::getUserLanguage() { return {}; }
+String SystemStats::getUserLanguage()
+{
+#if JUCE_EMSCRIPTEN
+    char* language = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = (typeof navigator !== 'undefined') ? (navigator.language || "") : "";
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
 
-String SystemStats::getUserRegion() { return {}; }
+    String languageString (language ? language : "");
+    free (language);
 
-String SystemStats::getDisplayLanguage() { return {}; }
+    return languageString;
+#else
+    return {};
+#endif
+}
+
+String SystemStats::getUserRegion()
+{
+#if JUCE_EMSCRIPTEN
+    char* locale = reinterpret_cast<char*> (EM_ASM_PTR ({
+        var str = "";
+        if (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
+        {
+            var options = Intl.DateTimeFormat().resolvedOptions();
+            if (options && options.locale)
+                str = options.locale;
+        }
+
+        var lengthBytes = lengthBytesUTF8 (str) + 1;
+        var ptr = _malloc (lengthBytes);
+        stringToUTF8 (str, ptr, lengthBytes);
+        return ptr;
+    }));
+
+    String localeString (locale ? locale : "");
+    free (locale);
+
+    return localeString;
+#else
+    return {};
+#endif
+}
+
+String SystemStats::getDisplayLanguage()
+{
+    return getUserLanguage();
+}
 
 //==============================================================================
 void CPUInformation::initialise() noexcept
 {
+#if JUCE_EMSCRIPTEN
+    int hwConcurrency = EM_ASM_INT ({
+        if (typeof navigator !== 'undefined' && "hardwareConcurrency" in navigator)
+            return navigator.hardwareConcurrency;
+        return 1;
+    });
+
+    numLogicalCPUs = hwConcurrency > 0 ? hwConcurrency : 1;
+    numPhysicalCPUs = numLogicalCPUs; // Physical core info isn't available
+#else
     numLogicalCPUs = 1;
     numPhysicalCPUs = 1;
+#endif
 }
 
 //==============================================================================
 uint32 juce_millisecondsSinceStartup() noexcept
 {
-    return static_cast<uint32> (emscripten_get_now());
+#if JUCE_EMSCRIPTEN
+    if (juce_isRunningUnderBrowser())
+        return static_cast<uint32> (emscripten_get_now());
+#endif
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
+        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
+
+    return static_cast<uint32>(elapsed.count());
 }
 
 int64 Time::getHighResolutionTicks() noexcept
 {
-    return static_cast<int64> (emscripten_get_now() * 1000.0);
+#if JUCE_EMSCRIPTEN
+    if (juce_isRunningUnderBrowser())
+        return static_cast<int64> (emscripten_get_now() * 1000.0);
+#endif
+
+    return static_cast<int64> (juce_millisecondsSinceStartup() * 1000.0);
 }
 
 int64 Time::getHighResolutionTicksPerSecond() noexcept
@@ -103,7 +272,12 @@ int64 Time::getHighResolutionTicksPerSecond() noexcept
 
 double Time::getMillisecondCounterHiRes() noexcept
 {
-    return emscripten_get_now();
+#if JUCE_EMSCRIPTEN
+    if (juce_isRunningUnderBrowser())
+        return emscripten_get_now();
+#endif
+
+    return static_cast<double> (juce_millisecondsSinceStartup());
 }
 
 bool Time::setSystemTimeToThisTime() const

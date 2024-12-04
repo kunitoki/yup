@@ -28,10 +28,10 @@ include (FetchContent)
 #==============================================================================
 
 macro (_yup_setup_platform)
-    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
+    if (IOS OR CMAKE_SYSTEM_NAME MATCHES "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
         set (yup_platform "ios")
 
-    elseif (ANDROID)
+    elseif (ANDROID OR YUP_TARGET_ANDROID)
         set (yup_platform "android")
 
     elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
@@ -44,7 +44,7 @@ macro (_yup_setup_platform)
         set (yup_platform "linux")
 
     elseif (WIN32)
-        if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+        if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")
             set (yup_platform "uwp")
         else()
             set (yup_platform "win32")
@@ -721,22 +721,36 @@ function (yup_standalone_app)
 
         list (APPEND additional_options
             -fexceptions
+            -pthread
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
             $<$<CONFIG:DEBUG>:-gsource-map>
             -fexceptions
+            -pthread
             -sWASM=1
+            -sWASM_WORKERS=1
+            -sAUDIO_WORKLET=1
+            -sSHARED_MEMORY=1
+            -sALLOW_MEMORY_GROWTH=0
             -sASSERTIONS=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sDEMANGLE_SUPPORT=1
             -sSTACK_OVERFLOW_CHECK=2
+            -sPTHREAD_POOL_SIZE=8
             -sFORCE_FILESYSTEM=1
-            -sALLOW_MEMORY_GROWTH=1
             -sNODERAWFS=0
+            -sFETCH=1
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
+
+        set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
+        add_custom_command(
+            TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/mini-coi.js"
+                "${target_copy_dest}/mini-coi.js")
 
     endif()
 

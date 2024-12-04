@@ -1071,7 +1071,7 @@ void GLFWComponentNative::triggerRenderingUpdate()
 
 void GLFWComponentNative::startRendering()
 {
-#if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && !defined(__EMSCRIPTEN_PTHREADS__)
     startTimerHz (desiredFrameRate);
 #else
     startThread (Priority::high);
@@ -1080,7 +1080,7 @@ void GLFWComponentNative::startRendering()
 
 void GLFWComponentNative::stopRendering()
 {
-#if JUCE_EMSCRIPTEN && RIVE_WEBGL
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && !defined(__EMSCRIPTEN_PTHREADS__)
     stopTimer();
 #else
     signalThreadShouldExit();

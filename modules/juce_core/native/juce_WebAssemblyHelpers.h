@@ -19,30 +19,30 @@
   ==============================================================================
 */
 
-#include "rive_renderer.h"
+namespace juce {
+namespace {
 
-#if __clang__
- #pragma clang diagnostic push
- #pragma clang diagnostic ignored "-Wshorten-64-to-32"
- #pragma clang diagnostic ignored "-Wattributes"
-#elif __GNUC__
- #pragma GCC diagnostic push
- #pragma GCC diagnostic ignored "-Wattributes"
+std::chrono::steady_clock::time_point juce_getTimeSinceStartupFallback() noexcept
+{
+    static const auto timeSinceStartup = std::chrono::steady_clock::now();
+    return timeSinceStartup;
+}
+
+bool juce_isRunningUnderBrowser()
+{
+#if JUCE_EMSCRIPTEN
+    static bool hasBrowserWindowObject = []
+    {
+        return EM_ASM_INT({
+            return typeof window !== "undefined" ? 1 : 0;
+        });
+    }();
+
+    return hasBrowserWindowObject;
+#else
+    return false;
 #endif
+}
 
-#include "source/gl/gl_state.cpp"
-#include "source/gl/gl_utils.cpp"
-#include "source/gl/load_gles_extensions.cpp"
-#include "source/gl/load_store_actions_ext.cpp"
-#include "source/gl/pls_impl_ext_native.cpp"
-#include "source/gl/pls_impl_framebuffer_fetch.cpp"
-#include "source/gl/pls_impl_rw_texture.cpp"
-#include "source/gl/render_buffer_gl_impl.cpp"
-#include "source/gl/render_context_gl_impl.cpp"
-#include "source/gl/render_target_gl.cpp"
-
-#if __clang__
- #pragma clang diagnostic pop
-#elif __GNUC__
- #pragma GCC diagnostic pop
-#endif
+} // namespace
+} // namespace juce

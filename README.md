@@ -3,11 +3,14 @@
 UI courtesy from https://www.drywestdesign.com/:
 ![SeaSynth](./images/seasynth_prototype.png)
 
-Example rive animations ([source code](./examples/render/source/main.cpp)):
-[![Web Render Example 1](./images/web_render_1.png)](https://kunitoki.github.io/yup/demos/web_render_1/)
-[![Web Render Example 2](./images/web_render_2.png)](https://kunitoki.github.io/yup/demos/web_render_2/)
-[![Web Render Example 3](./images/web_render_3.png)](https://kunitoki.github.io/yup/demos/web_render_3/)
+<p float="left">
+  <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" width="24%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_2/"><img src="./docs/demos/web_render_2.png" width="24%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_3/"><img src="./docs/demos/web_render_3.png" width="24%" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_4/"><img src="./docs/demos/web_render_4.png" width="24%" /></a>
+</p>
 
+Example Rive animation display ([source code](./examples/render/source/main.cpp)):
 [Renderer Youtube Video](https://youtube.com/shorts/3XC4hyDlrVs)
 
 [![Build And Test MacOS](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_macos.yml)
@@ -33,14 +36,28 @@ YUP brings a suite of powerful features, including:
 ## Supported Rendering Backends
 |                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**<sup>(1)</sup> | **iOS**<sup>(1)</sup> |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
-| **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    | :white_check_mark:        |                       |
-| **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: |                           |                       |
-| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    |                           |                       |
+| **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: | :construction:            |                       |
+| **OpenGL ES3.0**         |                    |                    |                    |                    | :construction:            |                       |
+| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :construction:        |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
-| **Vulkan**<sup>(2)</sup> |                    |                    |                    |                    |                           |                       |
+| **Vulkan**               | :construction:     | :construction:     | :construction:     |                    | :construction:            |                       |
+| **WebGPU**               |                    |                    |                    |                    |                           |                       |
 
 1. Platforms not fully supported by the windowing system
-2. Renderer currently work in progress
+
+## Supported Audio Backends
+|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
+|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
+| **CoreAudio**            |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
+| **ASIO**                 | :white_check_mark: |                    |                    |                    |                           |                       |
+| **DirectSound**          | :white_check_mark: |                    |                    |                    |                           |                       |
+| **WASAPI**               | :white_check_mark: |                    |                    |                    |                           |                       |
+| **ALSA**                 |                    |                    | :white_check_mark: |                    |                           |                       |
+| **JACK**                 |                    |                    | :white_check_mark: |                    |                           |                       |
+| **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
 
 ## Development
 > [!IMPORTANT]

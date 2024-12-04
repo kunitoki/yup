@@ -28,7 +28,7 @@
 
 using namespace juce;
 
-class StringPoolTest : public ::testing::Test
+class StringPoolTests : public ::testing::Test
 {
 protected:
     StringPool pool;
@@ -40,7 +40,7 @@ protected:
     }
 };
 
-TEST_F (StringPoolTest, ReturnsSameInstanceForDuplicateString)
+TEST_F (StringPoolTests, ReturnsSameInstanceForDuplicateString)
 {
     String str = "testString";
     auto pooled1 = pool.getPooledString (str);
@@ -50,7 +50,7 @@ TEST_F (StringPoolTest, ReturnsSameInstanceForDuplicateString)
     EXPECT_EQ (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
 
-TEST_F (StringPoolTest, ReturnsSameInstanceForDifferentInputTypes)
+TEST_F (StringPoolTests, ReturnsSameInstanceForDifferentInputTypes)
 {
     const char* cstr = "anotherTest";
     String str (cstr);
@@ -64,7 +64,7 @@ TEST_F (StringPoolTest, ReturnsSameInstanceForDifferentInputTypes)
     EXPECT_EQ (pooled1.getCharPointer().getAddress(), pooled3.getCharPointer().getAddress());
 }
 
-TEST_F (StringPoolTest, DifferentStringsDifferentInstances)
+TEST_F (StringPoolTests, DifferentStringsDifferentInstances)
 {
     auto pooled1 = pool.getPooledString ("stringOne");
     auto pooled2 = pool.getPooledString ("stringTwo");
@@ -73,7 +73,7 @@ TEST_F (StringPoolTest, DifferentStringsDifferentInstances)
 }
 
 /*
-TEST_F (StringPoolTest, GarbageCollectFreesUnreferencedStrings)
+TEST_F (StringPoolTests, GarbageCollectFreesUnreferencedStrings)
 {
     std::string b{ "temp2" }, c{ "temp3" };
 
@@ -99,7 +99,7 @@ TEST_F (StringPoolTest, GarbageCollectFreesUnreferencedStrings)
 }
 */
 
-TEST_F (StringPoolTest, DifferentPoolDifferentStrings)
+TEST_F (StringPoolTests, DifferentPoolDifferentStrings)
 {
     StringPool pool1, pool2;
 
@@ -109,7 +109,7 @@ TEST_F (StringPoolTest, DifferentPoolDifferentStrings)
     EXPECT_NE (pooled1.getCharPointer().getAddress(), pooled2.getCharPointer().getAddress());
 }
 
-TEST_F (StringPoolTest, GlobalPoolSingletonInstance)
+TEST_F (StringPoolTests, GlobalPoolSingletonInstance)
 {
     auto& globalPool1 = StringPool::getGlobalPool();
     auto& globalPool2 = StringPool::getGlobalPool();
