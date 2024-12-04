@@ -42,13 +42,13 @@ _yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
 
 # Enable profiling
 if (YUP_ENABLE_PROFILING)
-    message (STATUS "YUP -- Enabling profiling")
+    _yup_message (STATUS "Enabling profiling")
     _yup_fetch_perfetto()
 endif()
 
 # Targets
 if (YUP_BUILD_EXAMPLES)
-    message (STATUS "YUP -- Building examples")
+    _yup_message (STATUS "Building examples")
     add_subdirectory (examples/app)
     add_subdirectory (examples/console)
     add_subdirectory (examples/graphics)
@@ -59,6 +59,6 @@ if (YUP_BUILD_EXAMPLES)
 endif()
 
 if (YUP_BUILD_TESTS AND NOT YUP_TARGET_ANDROID)
-    message (STATUS "YUP -- Building tests")
+    _yup_message (STATUS "Building tests")
     add_subdirectory (tests)
 endif()
