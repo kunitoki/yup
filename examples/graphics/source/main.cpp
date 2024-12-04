@@ -159,7 +159,6 @@ public:
         for (size_t i = 0; i < sineWaveGenerators.size(); ++i)
         {
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
-
             sineWaveGenerators[i]->setFrequency(440.0 * std::pow(1.1, i), sampleRate);
         }
 
@@ -177,6 +176,11 @@ public:
         }
 
         button = std::make_unique<yup::TextButton> ("Randomize", font);
+        button->onClick = [this]
+        {
+            for (int i = 0; i < sliders.size(); ++i)
+                sliders[i]->setValue (juce::Random::getSystemRandom().nextFloat());
+        };
         addAndMakeVisible (*button);
 
         addAndMakeVisible (oscilloscope);
