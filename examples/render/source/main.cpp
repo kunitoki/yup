@@ -46,7 +46,7 @@ public:
 #else
         yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-        riveFilePath = riveFilePath.getChildFile ("alien.riv");
+        riveFilePath = riveFilePath.getChildFile ("artboard.riv");
 
         // Setup artboards
         for (int i = 0; i < totalRows * totalColumns; ++i)
@@ -54,7 +54,7 @@ public:
             auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
             addAndMakeVisible (art);
 
-            art->loadFromFile (riveFilePath, 0, false);
+            art->loadFromFile (riveFilePath, 0, true);
         }
 
         // Grab focus

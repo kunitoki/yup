@@ -17,22 +17,21 @@
 #
 # ==============================================================================
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required (VERSION 3.28)
 
 # ==== Prepare target
 set (target_name example_render)
 set (target_version "1.0.0")
 
-set (link_options "")
-if ("${yup_platform}" MATCHES "^(emscripten)$")
-    set (link_options --preload-file ${CMAKE_CURRENT_LIST_DIR}/data/alien.riv@data/alien.riv)
-endif()
+set (rive_file "data/seasynth.riv")
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
     LINK_OPTIONS ${link_options}
+    PRELOAD_FILES
+        "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"
     MODULES
         juce_core
         juce_events

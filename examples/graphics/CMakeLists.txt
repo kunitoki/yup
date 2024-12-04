@@ -23,16 +23,12 @@ cmake_minimum_required(VERSION 3.28)
 set (target_name example_graphics)
 set (target_version "1.0.0")
 
-set (link_options "")
-if ("${yup_platform}" MATCHES "^(emscripten)$")
-    set (link_options --preload-file ${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf@data/Roboto-Regular.ttf)
-endif()
-
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
-    LINK_OPTIONS ${link_options}
+    PRELOAD_FILES
+        "${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf@data/Roboto-Regular.ttf"
     MODULES
         juce_core
         juce_events

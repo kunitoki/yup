@@ -649,7 +649,7 @@ function (yup_standalone_app)
     # ==== Fetch options
     set (options CONSOLE)
     set (one_value_args TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP)
-    set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
+    set (multi_value_args DEFINITIONS MODULES PRELOAD_FILES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
@@ -720,12 +720,14 @@ function (yup_standalone_app)
         endif()
 
         list (APPEND additional_options
+            $<$<CONFIG:DEBUG>:-O0 -g>
+            $<$<CONFIG:RELEASE>:-O3>
             -fexceptions
             -pthread
             -sDISABLE_EXCEPTION_CATCHING=0)
 
         list (APPEND additional_link_options
-            $<$<CONFIG:DEBUG>:-gsource-map>
+            $<$<CONFIG:DEBUG>:-gsource-map -g>
             -fexceptions
             -pthread
             -sWASM=1
@@ -744,6 +746,10 @@ function (yup_standalone_app)
             -sFETCH=1
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
+
+        foreach (preload_file ${YUP_ARG_PRELOAD_FILES})
+            list (APPEND additional_link_options --preload-file ${preload_file})
+        endforeach()
 
         set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
         add_custom_command(

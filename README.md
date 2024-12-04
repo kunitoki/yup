@@ -1,7 +1,8 @@
 # YUP: Cross-Platform Application And Plugin Development Library
 
-UI courtesy from https://www.drywestdesign.com/:
-![SeaSynth](./images/seasynth_prototype.png)
+<p float="left">
+  <a href="https://kunitoki.github.io/yup/demos/web_render_0/"><img src="./docs/demos/web_render_0.png" width="99%" title="UI courtesy from https://www.drywestdesign.com/" /></a>
+<p>
 
 <p float="left">
   <a href="https://kunitoki.github.io/yup/demos/web_render_1/"><img src="./docs/demos/web_render_1.png" width="24%" /></a>
@@ -26,10 +27,10 @@ YUP is an open-source library dedicated to empowering developers with advanced t
 
 ## Features
 YUP brings a suite of powerful features, including:
-- **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source [Rive](https://rive.app/) Renderer, backed by Metal, Direct3D, OpenGL and WebGPU.
+- **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source [Rive](https://rive.app/) Renderer, backed by Metal, Direct3D, OpenGL, Vulkan and WebGPU.
 - **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more. Based on the JUCE7 module for audio/midi input and output.
 - **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://cleveraudio.org/) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
-- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux (with Wasm, iOS and Android in the pipe).
+- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux, Wasm (iOS and Android are in the pipe).
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
 
@@ -38,7 +39,7 @@ YUP brings a suite of powerful features, including:
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
 | **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    |                           |                       |
 | **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: | :construction:            |                       |
-| **OpenGL ES3.0**         |                    |                    |                    |                    | :construction:            |                       |
+| **OpenGL ES3.0**         |                    |                    |                    | :white_check_mark: | :construction:            |                       |
 | **Metal**                |                    | :white_check_mark: |                    |                    |                           | :construction:        |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **Vulkan**               | :construction:     | :construction:     | :construction:     |                    | :construction:            |                       |
@@ -58,10 +59,6 @@ YUP brings a suite of powerful features, including:
 | **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
-
-## Development
-> [!IMPORTANT]
-> We are looking for collaborators to bring forward the framework!
 
 ## Getting Started
 To begin using YUP, follow these detailed steps to set up the environment and run a simple example application:
@@ -102,6 +99,9 @@ For full documentation, including more detailed tutorials and comprehensive API 
 ## Community Engagement
 Join our growing community and contribute to the YUP project. Connect with us and other YUP developers:
 - **GitHub:** [YUP Repository](https://github.com/kunitoki/yup)
+
+> [!IMPORTANT]
+> We are looking for collaborators to bring forward the framework!
 
 ## Contributing
 Interested in contributing? Here's how you can help:

@@ -95,6 +95,7 @@ public:
         setTitle ("main");
 
         // Load the font
+        /*
         yup::File fontFilePath =
 #if JUCE_WASM
             yup::File ("/data")
@@ -105,6 +106,7 @@ public:
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
+        */
 
         // Initialize the audio device
         deviceManager.addAudioCallback (this);
@@ -262,9 +264,10 @@ public:
             for (int i = 0; i < sineWaveGenerators.size(); ++i)
                 mixedSample += sineWaveGenerators[i]->getNextSample();
 
+            mixedSample /= static_cast<float> (sineWaveGenerators.size());
+
             for (int channel = 0; channel < numOutputChannels; ++channel)
-                outputChannelData[channel][sample] =
-                    mixedSample / static_cast<float> (sineWaveGenerators.size());
+                outputChannelData[channel][sample] = mixedSample;
         }
 
         //inputReady.signal();
@@ -273,7 +276,7 @@ public:
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
-        yup::Logger::outputDebugString ("audioDeviceAboutToStart");
+        //yup::Logger::outputDebugString ("audioDeviceAboutToStart");
 
         inputData.resize (device->getDefaultBufferSize());
         renderData.resize (device->getDefaultBufferSize());
@@ -282,7 +285,7 @@ public:
 
     void audioDeviceStopped() override
     {
-        yup::Logger::outputDebugString ("audioDeviceStopped");
+        //yup::Logger::outputDebugString ("audioDeviceStopped");
     }
 
 private:
