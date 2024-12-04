@@ -47,7 +47,7 @@ YUP brings a suite of powerful features, including:
 1. Platforms not fully supported by the windowing system
 
 ## Supported Audio Backends
-|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**<sup>(1)</sup> | **iOS**<sup>(1)</sup> |
+|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
 | **CoreAudio**            |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **ASIO**                 | :white_check_mark: |                    |                    |                    |                           |                       |
