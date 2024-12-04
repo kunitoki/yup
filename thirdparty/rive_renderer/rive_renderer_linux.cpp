@@ -27,7 +27,6 @@
  #pragma clang diagnostic ignored "-Wattributes"
 #elif __GNUC__
  #pragma GCC diagnostic push
- #pragma GCC diagnostic ignored "-Wshorten-64-to-32"
  #pragma GCC diagnostic ignored "-Wattributes"
 #endif
 
