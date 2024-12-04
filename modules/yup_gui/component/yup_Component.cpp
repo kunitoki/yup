@@ -148,10 +148,15 @@ void Component::moved()
 
 void Component::setSize (const Size<float>& newSize)
 {
-    boundsInParent = boundsInParent.withSize (newSize);
-
     if (options.onDesktop)
-        native->setSize (newSize.to<int>());
+    {
+        native->setSize(newSize.to<int>());
+        boundsInParent = Rectangle<float>(0.0f, 0.0f, native->getSize().to<float>());
+    }
+    else
+    {
+        boundsInParent = boundsInParent.withSize (newSize);
+    }
 
     resized();
 }
@@ -184,10 +189,15 @@ float Component::getHeight() const
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
-    boundsInParent = newBounds;
-
     if (options.onDesktop)
-        native->setBounds (newBounds.to<int>());
+    {
+        native->setBounds(newBounds.to<int>());
+        boundsInParent = native->getBounds().to<float>();
+    }
+    else
+    {
+        boundsInParent = newBounds;
+    }
 
     resized();
 }

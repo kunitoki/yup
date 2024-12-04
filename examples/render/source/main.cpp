@@ -26,6 +26,10 @@
 
 #include <memory>
 
+#if JUCE_ANDROID
+#include <BinaryData.h>
+#endif
+
 //==============================================================================
 
 class CustomWindow
@@ -54,7 +58,12 @@ public:
             auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
             addAndMakeVisible (art);
 
+#if JUCE_ANDROID
+            yup::MemoryInputStream is(yup::RiveFile_data, yup::RiveFile_size, false);
+            art->loadFromStream (is, 0, true);
+#else
             art->loadFromFile (riveFilePath, 0, true);
+#endif
         }
 
         // Grab focus

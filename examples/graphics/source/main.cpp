@@ -162,7 +162,7 @@ public:
             sineWaveGenerators[i]->setFrequency(440.0 * std::pow(1.1, i), sampleRate);
         }
 
-        // Add sliders and buttons
+        // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i), font));
@@ -175,6 +175,7 @@ public:
             addAndMakeVisible (slider);
         }
 
+        // Add buttons
         button = std::make_unique<yup::TextButton> ("Randomize", font);
         button->onClick = [this]
         {
@@ -183,6 +184,7 @@ public:
         };
         addAndMakeVisible (*button);
 
+        // Add the oscilloscope
         addAndMakeVisible (oscilloscope);
 
         // Start the timer
@@ -216,10 +218,6 @@ public:
         oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
     }
 
-    void paint (yup::Graphics& g) override
-    {
-        yup::DocumentWindow::paint (g);
-    }
 
     void mouseDown (const yup::MouseEvent& event) override
     {
@@ -302,8 +300,6 @@ public:
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
-        //yup::Logger::outputDebugString ("audioDeviceAboutToStart");
-
         const yup::CriticalSection::ScopedLockType sl (renderMutex);
 
         inputData.resize (device->getDefaultBufferSize());
@@ -313,7 +309,6 @@ public:
 
     void audioDeviceStopped() override
     {
-        //yup::Logger::outputDebugString ("audioDeviceStopped");
     }
 
 private:
@@ -393,3 +388,4 @@ private:
 };
 
 START_JUCE_APPLICATION (Application)
+

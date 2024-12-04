@@ -27,6 +27,12 @@ include (FetchContent)
 
 #==============================================================================
 
+function (_yup_message type message)
+    message (${type} "YUP -- ${message}")
+endfunction()
+
+#==============================================================================
+
 macro (_yup_setup_platform)
     if (IOS OR CMAKE_SYSTEM_NAME MATCHES "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
         set (yup_platform "ios")
@@ -55,7 +61,8 @@ macro (_yup_setup_platform)
 
     endif()
 
-    message (STATUS "YUP -- Setting up for ${yup_platform} platform")
+    _yup_message (STATUS "Setting up for ${yup_platform} platform")
+    _yup_message (STATUS "Running on cmake ${CMAKE_VERSION}")
 endmacro()
 
 #==============================================================================
@@ -96,6 +103,31 @@ function (_yup_boolean_property input_bool output_variable)
     else()
         set (${output_variable} OFF PARENT_SCOPE)
     endif()
+endfunction()
+
+function (_yup_version_string_to_version_code version_string output_variable)
+    string (REPLACE "." ";" version_parts ${version_string})
+    list (LENGTH version_parts num_parts)
+    set (major_version 0)
+    set (minor_version 0)
+    set (patch_version 0)
+
+    if (${num_parts} GREATER 0)
+        list (GET version_parts 0 major_version)
+    endif()
+    if (${num_parts} GREATER 1)
+        list (GET version_parts 1 minor_version)
+    endif()
+    if (${num_parts} GREATER 2)
+        list (GET version_parts 2 patch_version)
+    endif()
+
+    math (EXPR major_version_number "${major_version}")
+    math (EXPR minor_version_number "${minor_version}")
+    math (EXPR patch_version_number "${patch_version}")
+
+    math (EXPR version_code "${major_version_number} * 100000 + ${minor_version_number} * 1000 + ${patch_version}")
+    set (${output_variable} ${version_code} PARENT_SCOPE)
 endfunction()
 
 function (_yup_file_to_byte_array file_path output_variable)
@@ -156,8 +188,8 @@ endfunction()
 
 function (_yup_fetch_glfw3)
     FetchContent_Declare (glfw
-        GIT_REPOSITORY https://github.com/glfw/glfw.git
-        GIT_TAG master
+        GIT_REPOSITORY https://github.com/kunitoki/glfw.git
+        GIT_TAG dev/android_support
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
@@ -165,6 +197,7 @@ function (_yup_fetch_glfw3)
     set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
     set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
     set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
+    set (GLFW_INSTALL OFF CACHE STRING "" FORCE)
 
     FetchContent_MakeAvailable (glfw)
 
@@ -350,6 +383,98 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_prepare_gradle_android)
+    set (options "")
+    set (one_value_args
+        MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
+        TARGET_NAME ABI TOOLCHAIN PLATFORM STL CPP_VERSION
+        APPLICATION_ID APPLICATION_NAMESPACE APPLICATION_CMAKELISTS_PATH APPLICATION_VERSION)
+    set (multi_value_args "")
+
+    cmake_parse_arguments (YUP_ANDROID "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
+
+    # Prepare variables
+    if (NOT DEFINED YUP_ANDROID_MIN_SDK_VERSION)
+        set (YUP_ANDROID_MIN_SDK_VERSION "19")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_COMPILE_SDK_VERSION)
+        set (YUP_ANDROID_COMPILE_SDK_VERSION "34")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_TARGET_SDK_VERSION)
+        set (YUP_ANDROID_TARGET_SDK_VERSION "${YUP_ANDROID_COMPILE_SDK_VERSION}")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_TARGET_NAME)
+        set (YUP_ANDROID_TARGET_NAME "default_app")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_ABI)
+        set (YUP_ANDROID_ABI "arm64-v8a")
+    endif()
+
+    set (separator "")
+    foreach (abi ${YUP_ANDROID_ABI})
+        set (result_abi "${result_abi}${separator}abiFilters += \"${abi}\"")
+        set (separator "\n            ")
+    endforeach()
+    set (YUP_ANDROID_ABI "${result_abi}")
+
+    if (NOT DEFINED YUP_ANDROID_TOOLCHAIN)
+        set (YUP_ANDROID_TOOLCHAIN "clang")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_PLATFORM)
+        set (YUP_ANDROID_PLATFORM "android-${YUP_ANDROID_MIN_SDK_VERSION}")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_STL)
+        set (YUP_ANDROID_STL "c++_shared")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_CPP_VERSION)
+        set (YUP_ANDROID_CPP_VERSION "17")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_APPLICATION_ID)
+        set (YUP_ANDROID_APPLICATION_ID "com.yup.default_app")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_APPLICATION_NAMESPACE)
+        set (YUP_ANDROID_APPLICATION_NAMESPACE "${YUP_ANDROID_APPLICATION_ID}")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_APPLICATION_VERSION)
+        set (YUP_ANDROID_APPLICATION_VERSION "1.0")
+    endif()
+
+    if (NOT DEFINED YUP_ANDROID_APPLICATION_PATH)
+        set (YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+    endif()
+
+    set (YUP_ANDROID_CMAKE_VERSION ${CMAKE_VERSION})
+    _yup_version_string_to_version_code (${YUP_ANDROID_APPLICATION_VERSION} YUP_ANDROID_APPLICATION_VERSION_CODE)
+    file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH
+        "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
+
+    # Prepare files
+    set (BASE_FILES_PATH "${CMAKE_SOURCE_DIR}/cmake/platforms/android")
+    configure_file (${BASE_FILES_PATH}/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/build.gradle.kts)
+    configure_file (${BASE_FILES_PATH}/settings.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/settings.gradle.kts)
+    configure_file (${BASE_FILES_PATH}/app/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/app/build.gradle.kts)
+    configure_file (${BASE_FILES_PATH}/app/proguard-rules.pro.in ${CMAKE_CURRENT_BINARY_DIR}/app/proguard-rules.pro)
+    configure_file (${BASE_FILES_PATH}/app/src/main/AndroidManifest.xml.in ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/AndroidManifest.xml)
+    configure_file (${BASE_FILES_PATH}/gradle/libs.versions.toml.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/libs.versions.toml COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradle/wrapper/gradle-wrapper.jar.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/wrapper/gradle-wrapper.jar COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradle/wrapper/gradle-wrapper.properties.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/wrapper/gradle-wrapper.properties COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradlew.in ${CMAKE_CURRENT_BINARY_DIR}/gradlew COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradlew.bat.in ${CMAKE_CURRENT_BINARY_DIR}/gradlew.bat COPYONLY)
+    configure_file (${BASE_FILES_PATH}/gradle.properties.in ${CMAKE_CURRENT_BINARY_DIR}/gradle.properties COPYONLY)
+endfunction()
+
+#==============================================================================
+
 function (_yup_module_setup_target module_name
                                    module_cpp_standard
                                    module_include_paths
@@ -360,12 +485,23 @@ function (_yup_module_setup_target module_name
                                    module_frameworks
                                    module_dependencies
                                    module_arc_enabled)
+    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
+        list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
+    endif()
+
+    if ("${yup_platform}" MATCHES "^(android)$")
+        list (APPEND module_include_paths
+            "${ANDROID_NDK}/sources/android/cpufeatures")
+        list (APPEND module_sources
+            "${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c")
+    endif()
+
     target_sources (${module_name} INTERFACE ${module_sources})
 
     if (module_cpp_standard)
         target_compile_features (${module_name} INTERFACE cxx_std_${module_cpp_standard})
     else()
-        target_compile_features (${module_name} INTERFACE cxx_std_11)
+        target_compile_features (${module_name} INTERFACE cxx_std_17)
     endif()
 
     set_target_properties (${module_name} PROPERTIES
@@ -376,10 +512,6 @@ function (_yup_module_setup_target module_name
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
         set_target_properties (${module_name} PROPERTIES
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
-    endif()
-
-    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
-        list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
     endif()
 
     target_compile_options (${module_name} INTERFACE
@@ -401,12 +533,14 @@ function (_yup_module_setup_target module_name
     target_link_libraries (${module_name} INTERFACE
         ${module_dependencies})
 
+    #add_library("yup::${module_name}" ALIAS ${module_name})
+
 endfunction()
 
 #==============================================================================
 
 function (_yup_module_setup_plugin_client_clap target_name plugin_client_target folder_name)
-    if ("${yup_platform}" MATCHES "^(emscripten)$")
+    if (NOT "${yup_platform}" MATCHES "^(osx|linux|win32)$")
         return()
     endif()
 
@@ -470,6 +604,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     _yup_glob_recurse ("${module_path}/clap/*" all_module_files_clap)
     target_sources (${custom_target_name} PRIVATE ${all_module_files_clap})
     source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
+    list (REMOVE_ITEM all_module_files_clap ${module_sources})
     set_source_files_properties (${all_module_files_clap} PROPERTIES HEADER_FILE_ONLY TRUE)
 
 endfunction()
@@ -505,25 +640,40 @@ function (yup_add_module module_path)
     set (module_include_paths "")
     set (module_options "")
     set (module_defines "")
-    set (module_wasm_defines "")
     set (module_searchpaths "")
     set (module_searchpaths_private "")
+    set (module_arc_enabled OFF)
+
+    set (module_osx_dependencies "")
     set (module_osx_frameworks "")
     set (module_osx_weak_frameworks "")
     set (module_osx_libs "")
+    set (module_osx_defines "")
+
+    set (module_ios_dependencies "")
     set (module_ios_frameworks "")
     set (module_ios_weak_frameworks "")
     set (module_ios_libs "")
+    set (module_ios_defines "")
+
+    set (module_linux_dependencies "")
     set (module_linux_libs "")
     set (module_linux_packages "")
     set (module_linux_defines "")
+
+    set (module_windows_dependencies "")
     set (module_windows_libs "")
     set (module_windows_defines "")
     set (module_windows_options "")
     set (module_mingw_libs "")
+
+    set (module_wasm_dependencies "")
     set (module_wasm_libs "")
     set (module_wasm_defines "")
-    set (module_arc_enabled OFF)
+
+    set (module_android_dependencies "")
+    set (module_android_libs "")
+    set (module_android_defines "")
 
     set (parsed_dependencies "")
     foreach (module_config ${module_configs})
@@ -539,20 +689,30 @@ function (yup_add_module module_path)
         elseif (${module_config_key} STREQUAL "searchpaths")
             _yup_comma_or_space_separated_list (${module_config_value} module_searchpaths)
 
+        elseif (${module_config_key} STREQUAL "osxDeps")
+            _yup_comma_or_space_separated_list (${module_config_value} module_osx_dependencies)
         elseif (${module_config_key} STREQUAL "osxFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_osx_frameworks)
         elseif (${module_config_key} STREQUAL "osxWeakFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_osx_weak_frameworks)
         elseif (${module_config_key} STREQUAL "osxLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_osx_libs)
+        elseif (${module_config_key} STREQUAL "osxDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_osx_defines)
 
+        elseif (${module_config_key} STREQUAL "iosDeps")
+            _yup_comma_or_space_separated_list (${module_config_value} module_ios_dependencies)
         elseif (${module_config_key} STREQUAL "iosFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_ios_frameworks)
         elseif (${module_config_key} STREQUAL "iosWeakFrameworks")
             _yup_comma_or_space_separated_list (${module_config_value} module_ios_weak_frameworks)
         elseif (${module_config_key} STREQUAL "iosLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_ios_libs)
+        elseif (${module_config_key} STREQUAL "iosDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_ios_defines)
 
+        elseif (${module_config_key} STREQUAL "linuxDeps")
+            _yup_comma_or_space_separated_list (${module_config_value} module_linux_dependencies)
         elseif (${module_config_key} STREQUAL "linuxLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_linux_libs)
         elseif (${module_config_key} STREQUAL "linuxPackages")
@@ -560,6 +720,8 @@ function (yup_add_module module_path)
         elseif (${module_config_key} STREQUAL "linuxDefines")
             _yup_comma_or_space_separated_list (${module_config_value} module_linux_defines)
 
+        elseif (${module_config_key} STREQUAL "windowsDeps")
+            _yup_comma_or_space_separated_list (${module_config_value} module_windows_dependencies)
         elseif (${module_config_key} STREQUAL "windowsLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_windows_libs)
         elseif (${module_config_key} STREQUAL "windowsDefines")
@@ -569,13 +731,23 @@ function (yup_add_module module_path)
         elseif (${module_config_key} STREQUAL "mingwLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_mingw_libs)
 
+        elseif (${module_config_key} STREQUAL "wasmDeps")
+            _yup_comma_or_space_separated_list (${module_config_value} module_wasm_dependencies)
         elseif (${module_config_key} STREQUAL "wasmLibs")
             _yup_comma_or_space_separated_list (${module_config_value} module_wasm_libs)
         elseif (${module_config_key} STREQUAL "wasmDefines")
             _yup_comma_or_space_separated_list (${module_config_value} module_wasm_defines)
 
+        elseif (${module_config_key} STREQUAL "androidDeps")
+            _yup_comma_or_space_separated_list (${module_config_value} module_android_dependencies)
+        elseif (${module_config_key} STREQUAL "androidLibs")
+            _yup_comma_or_space_separated_list (${module_config_value} module_android_libs)
+        elseif (${module_config_key} STREQUAL "androidDefines")
+            _yup_comma_or_space_separated_list (${module_config_value} module_android_defines)
+
         elseif (${module_config_key} STREQUAL "enableARC")
             _yup_boolean_property (${module_config_value} module_arc_enabled)
+
         endif()
     endforeach()
 
@@ -586,31 +758,47 @@ function (yup_add_module module_path)
     set (module_frameworks "")
     set (module_libs "")
     if ("${yup_platform}" MATCHES "^(ios)$")
-        set (module_libs "${module_ios_libs}")
+        list (APPEND module_dependencies ${module_ios_dependencies})
+        list (APPEND module_libs ${module_ios_libs})
+        list (APPEND module_defines ${module_ios_defines})
         _yup_module_prepare_frameworks ("${module_ios_frameworks}" "${module_ios_weak_frameworks}" module_frameworks)
     elseif ("${yup_platform}" MATCHES "^(osx)$")
-        set (module_libs "${module_osx_libs}")
+        list (APPEND module_dependencies ${module_osx_dependencies})
+        list (APPEND module_libs ${module_osx_libs})
+        list (APPEND module_defines ${module_osx_defines})
         _yup_module_prepare_frameworks ("${module_osx_frameworks}" "${module_osx_weak_frameworks}" module_frameworks)
     elseif ("${yup_platform}" MATCHES "^(linux)$")
-        set (module_libs "${module_linux_libs}")
+        list (APPEND module_dependencies ${module_linux_dependencies})
+        list (APPEND module_libs ${module_linux_libs})
+        list (APPEND module_defines ${module_linux_defines})
         foreach (package ${module_linux_packages})
             _yup_get_package_config_libs ("${package}" package_libs)
-            list (APPEND module_libs "${package_libs}")
+            list (APPEND module_libs ${package_libs})
         endforeach()
     elseif ("${yup_platform}" MATCHES "^(emscripten)$")
-        set (module_libs "${module_wasm_libs}")
-    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$" AND NOT)
+        list (APPEND module_dependencies ${module_wasm_dependencies})
+        list (APPEND module_libs ${module_wasm_libs})
+        list (APPEND module_defines ${module_wasm_defines})
+    elseif ("${yup_platform}" MATCHES "^(android)$")
+        list (APPEND module_dependencies ${module_android_dependencies})
+        list (APPEND module_libs ${module_android_libs})
+        list (APPEND module_defines ${module_android_defines})
+        list (APPEND module_include_paths "${ANDROID_NDK}/sources/android/native_app_glue")
+    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
+        list (APPEND module_dependencies ${module_windows_dependencies})
+        list (APPEND module_defines ${module_windows_defines})
+        list (APPEND module_options ${module_windows_options})
         if (MINGW)
-            set (module_libs "${module_mingw_libs}")
+            list (APPEND module_libs ${module_mingw_libs})
         else()
-            set (module_libs "${module_windows_libs}")
+            list (APPEND module_libs ${module_windows_libs})
         endif()
     endif()
 
-    if (("${module_name}" STREQUAL "juce_audio_devices") AND ("${yup_platform}" MATCHES "^(android)$"))
-        add_subdirectory("${module_path}/native/oboe")
-        list (APPEND module_libs oboe)
-    endif()
+    #if (("${module_name}" STREQUAL "juce_audio_devices") AND ("${yup_platform}" MATCHES "^(android)$"))
+    #    add_subdirectory("${module_path}/native/oboe")
+    #    list (APPEND module_libs oboe)
+    #endif()
 
     # ==== Prepare include paths
     get_filename_component (module_include_path ${module_path} DIRECTORY)
@@ -621,15 +809,6 @@ function (yup_add_module module_path)
             list (APPEND module_include_paths "${module_path}/${searchpath}")
         endif()
     endforeach()
-
-    # ==== Prepare defines and options
-    if ("${yup_platform}" MATCHES "^(emscripten)$")
-        list (APPEND module_defines ${module_wasm_defines})
-    elseif ("${yup_platform}" MATCHES "^(linux)$")
-        list (APPEND module_defines ${module_linux_defines})
-    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
-        list (APPEND module_options ${module_windows_options})
-    endif()
 
     # ==== Setup module sources and properties
     _yup_module_setup_target (${module_name}
@@ -649,6 +828,7 @@ function (yup_add_module module_path)
     _yup_glob_recurse ("${module_path}/*" all_module_files)
     target_sources (${module_name} PRIVATE ${all_module_files})
     source_group (TREE ${module_path}/ FILES ${all_module_files})
+    list (REMOVE_ITEM all_module_files ${module_sources})
     set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 
     # ==== Setup parent scope variables
@@ -673,13 +853,18 @@ endfunction()
 function (yup_standalone_app)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP CUSTOM_PLIST CUSTOM_SHELL)
-    set (multi_value_args DEFINITIONS MODULES PRELOAD_FILES LINK_OPTIONS)
+    set (one_value_args
+        TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE
+        CUSTOM_PLIST CUSTOM_SHELL)
+    set (multi_value_args
+        DEFINITIONS MODULES PRELOAD_FILES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
+    set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
+    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (additional_definitions "")
     set (additional_options "")
     set (additional_libraries "")
@@ -687,10 +872,19 @@ function (yup_standalone_app)
 
     _yup_make_short_version ("${target_version}" target_version_short)
 
+    # ==== Setup Android platform, build gradle stage
+    if (YUP_TARGET_ANDROID)
+        _yup_prepare_gradle_android(
+            TARGET_NAME ${target_name}
+            APPLICATION_ID ${target_app_id}
+            APPLICATION_NAMESPACE ${target_app_namespace}
+            APPLICATION_VERSION ${target_version})
+        return()
+    endif()
+
     # ==== Find dependencies
     if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
         _yup_fetch_glfw3()
-
         list (APPEND additional_libraries glfw)
     endif()
 
@@ -706,7 +900,12 @@ function (yup_standalone_app)
         set (executable_options "WIN32")
     endif()
 
-    add_executable (${target_name} ${executable_options})
+    if ("${yup_platform}" MATCHES "^(android)$")
+        add_library (${target_name} SHARED)
+    else()
+        add_executable (${target_name} ${executable_options})
+    endif()
+
     target_compile_features (${target_name} PRIVATE cxx_std_17)
 
     # ==== Per platform configuration
@@ -930,6 +1129,7 @@ function (yup_add_embedded_binary_resources library_name)
 
     set (binary_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
     set (binary_header_path "${binary_path}/${YUP_ARG_HEADER}")
+    set (binary_sources "")
 
     add_library (${library_name} OBJECT)
 
@@ -958,7 +1158,7 @@ function (yup_add_embedded_binary_resources library_name)
 
         # Add symbol to header
         file (APPEND "${binary_header_path}"
-            "extern const uint8_t ${resource_name}[];\n"
+            "extern const uint8_t ${resource_name}_data[];\n"
             "extern const std::size_t ${resource_name}_size;\n"
             "\n")
 
@@ -991,11 +1191,10 @@ function (yup_add_embedded_binary_resources library_name)
                 "} // namespace ${YUP_ARG_NAMESPACE}\n")
         endif()
 
-        target_sources (${library_name} PRIVATE "${full_resource_unit_path}")
-
         _yup_file_to_byte_array (${resource} resource_byte_array)
         file (WRITE "${full_resource_hex_path}" "${resource_byte_array}")
 
+        list (APPEND binary_sources "${full_resource_unit_path}")
         list (APPEND resources_hex_files "${full_resource_hex_path}")
     endforeach()
 
@@ -1004,10 +1203,38 @@ function (yup_add_embedded_binary_resources library_name)
             "} // namespace ${YUP_ARG_NAMESPACE}\n")
     endif()
 
-    target_sources (${library_name} PUBLIC "${binary_header_path}")
+    target_sources (${library_name}
+        PUBLIC "${binary_header_path}"
+        PRIVATE "${binary_sources}")
+
     target_include_directories (${library_name} PUBLIC "${binary_path}")
 
     add_custom_target ("${library_name}_content" DEPENDS "${resources_hex_files}")
     add_dependencies (${library_name} "${library_name}_content")
 
+endfunction()
+
+#==============================================================================
+
+function (_yup_add_default_modules modules_path)
+    yup_add_module (${modules_path}/thirdparty/zlib)
+    yup_add_module (${modules_path}/thirdparty/glad)
+    yup_add_module (${modules_path}/thirdparty/harfbuzz)
+    yup_add_module (${modules_path}/thirdparty/sheenbidi)
+    yup_add_module (${modules_path}/thirdparty/yoga_library)
+    yup_add_module (${modules_path}/thirdparty/rive)
+    yup_add_module (${modules_path}/thirdparty/rive_renderer)
+    yup_add_module (${modules_path}/thirdparty/oboe)
+
+    # Original juce modules
+    yup_add_module (${modules_path}/modules/juce_core)
+    yup_add_module (${modules_path}/modules/juce_events)
+    yup_add_module (${modules_path}/modules/juce_audio_basics)
+    yup_add_module (${modules_path}/modules/juce_audio_devices)
+
+    # New yup modules
+    yup_add_module (${modules_path}/modules/yup_audio_processors)
+    yup_add_module (${modules_path}/modules/yup_audio_plugin_client)
+    yup_add_module (${modules_path}/modules/yup_graphics)
+    yup_add_module (${modules_path}/modules/yup_gui)
 endfunction()

@@ -33,11 +33,13 @@
     license:            MIT
 
     dependencies:       rive glad
+    searchpaths:        include source
     osxFrameworks:      Metal QuartzCore
     defines:            WITH_RIVE_TEXT=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
-    searchpaths:        include source
+    androidDefines:     RIVE_ANDROID=1
+    androidLibs:        EGL GLESv3
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION

@@ -219,6 +219,12 @@ bool SystemStats::hasNeon() noexcept { return getCPUInformation().hasNeon; }
 #if JUCE_ANDROID
 struct BacktraceState
 {
+    BacktraceState (void** current, void** end)
+        : current (current)
+        , end (end)
+    {
+    }
+
     void** current;
     void** end;
 };
@@ -287,7 +293,7 @@ String SystemStats::getStackBacktrace()
     void* stack[128];
 
 #if JUCE_ANDROID && __ANDROID_API__ < 33
-    BacktraceState currentState (stack, stack + numElementsInArray (stack));
+    BacktraceState state (stack, stack + numElementsInArray (stack));
     _Unwind_Backtrace (unwindCallback, &state);
 
     auto frames = static_cast<size_t> (state.current - &stack[0]);
@@ -296,11 +302,14 @@ String SystemStats::getStackBacktrace()
         Dl_info info;
         if (dladdr (stack[i], &info))
         {
+            int status = 0;
+            std::unique_ptr<char, decltype (::free)*> demangled (abi::__cxa_demangle (info.dli_sname, nullptr, 0, &status), ::free);
+
             result
                 << juce::String (i).paddedRight (' ', 3)
                 << " " << juce::File (juce::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
                 << " 0x" << juce::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
-                << " " << info.dli_sname
+                << " " << demangled.get()
                 << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
         }
     }
@@ -350,6 +359,7 @@ static LONG WINAPI handleCrash (LPEXCEPTION_POINTERS ep)
 static void handleCrash (int signum)
 {
     globalCrashHandler ((void*) (pointer_sized_int) signum);
+
 #if ! JUCE_WASM
     ::kill (getpid(), SIGKILL);
 #endif

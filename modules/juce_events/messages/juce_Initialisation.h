@@ -158,7 +158,12 @@ class JUCE_API ScopedJuceInitialiser_GUI final
         return new AppClass();                                     \
     }
 
-#define JUCE_MAIN_FUNCTION_DEFINITION
+#define JUCE_MAIN_FUNCTION_DEFINITION                                        \
+    int main()                                                               \
+    {                                                                        \
+        juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
+        return juce::JUCEApplicationBase::main(0, nullptr);                  \
+    }
 
 #else
 

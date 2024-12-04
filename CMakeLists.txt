@@ -22,7 +22,7 @@ cmake_minimum_required (VERSION 3.28)
 include (cmake/yup.cmake)
 _yup_setup_platform()
 
-if ("${yup_platform}" MATCHES "^(osx)$")
+if ("${yup_platform}" MATCHES "^(osx)$" AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
 endif()
 
@@ -31,31 +31,14 @@ project (yup VERSION 1.0)
 set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 
 # Options
-option (YUP_ENABLE_PROFILING "Build the profiling" OFF)
+option (YUP_TARGET_ANDROID "Target Android project" OFF)
+option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
+option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)
 
 # Dependencies modules
-yup_add_module (thirdparty/zlib)
-yup_add_module (thirdparty/glad)
-yup_add_module (thirdparty/harfbuzz)
-yup_add_module (thirdparty/sheenbidi)
-yup_add_module (thirdparty/yoga_library)
-yup_add_module (thirdparty/rive)
-yup_add_module (thirdparty/rive_renderer)
-yup_add_module (thirdparty/oboe)
-
-# Original juce modules
-yup_add_module (modules/juce_core)
-yup_add_module (modules/juce_events)
-yup_add_module (modules/juce_audio_basics)
-yup_add_module (modules/juce_audio_devices)
-
-# New yup modules
-yup_add_module (modules/yup_audio_processors)
-yup_add_module (modules/yup_audio_plugin_client)
-yup_add_module (modules/yup_graphics)
-yup_add_module (modules/yup_gui)
+_yup_add_default_modules (${CMAKE_CURRENT_LIST_DIR})
 
 # Enable profiling
 if (YUP_ENABLE_PROFILING)
@@ -70,12 +53,12 @@ if (YUP_BUILD_EXAMPLES)
     add_subdirectory (examples/console)
     add_subdirectory (examples/graphics)
     add_subdirectory (examples/render)
-    if (NOT "${yup_platform}" STREQUAL "emscripten")
+    if (NOT "${yup_platform}" MATCHES "^(emscripten|android)$" AND NOT YUP_TARGET_ANDROID)
         add_subdirectory (examples/plugin)
     endif()
 endif()
 
-if (YUP_BUILD_TESTS)
+if (YUP_BUILD_TESTS AND NOT YUP_TARGET_ANDROID)
     message (STATUS "YUP -- Building tests")
     add_subdirectory (tests)
 endif()

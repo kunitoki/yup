@@ -26,7 +26,7 @@
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 
-#if RIVE_DESKTOP_GL
+#if RIVE_DESKTOP_GL || JUCE_ANDROID
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #endif
@@ -100,7 +100,7 @@ public:
         printf ("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n", GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 #endif
 
-#if DEBUG
+#if DEBUG && !RIVE_ANDROID
         int n;
         glGetIntegerv (GL_NUM_EXTENSIONS, &n);
         for (size_t i = 0; i < n; ++i)

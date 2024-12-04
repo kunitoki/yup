@@ -21,9 +21,8 @@
 
 #include "oboe.h"
 
-#if __ANDROID__
-#include "upstream/src/aaudio/AAudioLoader.cpp"
-#include "upstream/src/aaudio/AudioStreamAAudio.cpp"
+#if defined(ANDROID) || defined(__ANDROID__)
+#include "upstream/src/common/Utilities.cpp"
 #include "upstream/src/common/AdpfWrapper.cpp"
 #include "upstream/src/common/AudioSourceCaller.cpp"
 #include "upstream/src/common/AudioStream.cpp"
@@ -39,8 +38,10 @@
 #include "upstream/src/common/SourceI16Caller.cpp"
 #include "upstream/src/common/SourceI24Caller.cpp"
 #include "upstream/src/common/SourceI32Caller.cpp"
-#include "upstream/src/common/Utilities.cpp"
 #include "upstream/src/common/QuirksManager.cpp"
+#include "upstream/src/common/StabilizedCallback.cpp"
+#include "upstream/src/common/Trace.cpp"
+#include "upstream/src/common/Version.cpp"
 #include "upstream/src/fifo/FifoBuffer.cpp"
 #include "upstream/src/fifo/FifoController.cpp"
 #include "upstream/src/fifo/FifoControllerBase.cpp"
@@ -72,6 +73,8 @@
 #include "upstream/src/flowgraph/resampler/PolyphaseResamplerStereo.cpp"
 #include "upstream/src/flowgraph/resampler/SincResampler.cpp"
 #include "upstream/src/flowgraph/resampler/SincResamplerStereo.cpp"
+#include "upstream/src/aaudio/AAudioLoader.cpp"
+#include "upstream/src/aaudio/AudioStreamAAudio.cpp"
 #include "upstream/src/opensles/AudioInputStreamOpenSLES.cpp"
 #include "upstream/src/opensles/AudioOutputStreamOpenSLES.cpp"
 #include "upstream/src/opensles/AudioStreamBuffered.cpp"
@@ -79,7 +82,4 @@
 #include "upstream/src/opensles/EngineOpenSLES.cpp"
 #include "upstream/src/opensles/OpenSLESUtilities.cpp"
 #include "upstream/src/opensles/OutputMixerOpenSLES.cpp"
-#include "upstream/src/common/StabilizedCallback.cpp"
-#include "upstream/src/common/Trace.cpp"
-#include "upstream/src/common/Version.cpp"
 #endif
