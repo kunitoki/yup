@@ -312,7 +312,7 @@ void setContextWindowHints (GraphicsContext::Api desiredApi)
 
     if (desiredApi == GraphicsContext::OpenGL)
     {
-#if defined(ANGLE)
+#if defined(ANGLE) || defined(JUCE_ANDROID)
         glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
         glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
         glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -641,9 +641,7 @@ void GLFWComponentNative::setVisible (bool shouldBeVisible)
 
 bool GLFWComponentNative::isVisible() const
 {
-    jassert (window != nullptr);
-
-    return false;
+    return window != nullptr && glfwGetWindowAttrib (window, GLFW_VISIBLE) != 0;
 }
 
 //==============================================================================
@@ -695,6 +693,10 @@ Rectangle<int> GLFWComponentNative::getBounds() const
 
 void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 {
+#if JUCE_ANDROID
+    screenBounds = Rectangle<int>(0, 0, getSize());
+
+#else
     jassert (window != nullptr);
 
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
@@ -723,6 +725,8 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
     glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
 
     screenBounds = newBounds;
+
+#endif
 }
 
 //==============================================================================
@@ -908,6 +912,9 @@ void* GLFWComponentNative::getNativeHandle() const
 #elif JUCE_LINUX
     return reinterpret_cast<void*> (glfwGetX11Window (window));
 
+#elif JUCE_ANDROID
+    return reinterpret_cast<void*> (glfwGetAndroidApp (window)->window);
+
 #else
     return nullptr;
 
@@ -993,6 +1000,9 @@ void GLFWComponentNative::renderContext()
     jassert (context != nullptr);
 
     auto [contentWidth, contentHeight] = getContentSize();
+    if (contentWidth == 0 || contentHeight == 0)
+        return;
+
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
 
     if (forceSizeChange || currentContentWidth != contentWidth || currentContentHeight != contentHeight)

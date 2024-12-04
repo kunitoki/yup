@@ -19,30 +19,25 @@
   ==============================================================================
 */
 
-/*
-  ==============================================================================
+#include "rive_renderer.h"
 
-  BEGIN_JUCE_MODULE_DECLARATION
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wshorten-64-to-32"
+ #pragma clang diagnostic ignored "-Wattributes"
+#endif
 
-    ID:               oboe
-    vendor:           oboe
-    version:          1.8.0
-    name:             Android low level audio library
-    description:      Oboe is an open-source C++ library designed to help build high-performance audio apps on Android.
-    website:          https://developer.android.com/games/sdk/oboe
-    license:          Apache-2.0
+#include "source/gl/gl_state.cpp"
+#include "source/gl/gl_utils.cpp"
+#include "source/gl/load_gles_extensions.cpp"
+#include "source/gl/load_store_actions_ext.cpp"
+#include "source/gl/pls_impl_ext_native.cpp"
+#include "source/gl/pls_impl_framebuffer_fetch.cpp"
+#include "source/gl/pls_impl_rw_texture.cpp"
+#include "source/gl/render_buffer_gl_impl.cpp"
+#include "source/gl/render_context_gl_impl.cpp"
+#include "source/gl/render_target_gl.cpp"
 
-    dependencies:
-    searchpaths:      upstream/include upstream/src
-    androidLibs:      OpenSLES
-
-  END_JUCE_MODULE_DECLARATION
-
-  ==============================================================================
-*/
-
-#pragma once
-
-#if defined(ANDROID) || defined(__ANDROID__)
-#include "upstream/include/oboe/Oboe.h"
+#if __clang__
+ #pragma clang diagnostic pop
 #endif

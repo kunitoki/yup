@@ -24,7 +24,7 @@ set (target_name example_plugin)
 set (target_version "1.0.0")
 
 yup_add_embedded_binary_resources (
-    BinaryData
+    "${target_name}_binary_data"
     OUT_DIR BinaryData
     HEADER BinaryData.h
     NAMESPACE yup
@@ -35,18 +35,21 @@ yup_add_embedded_binary_resources (
 )
 
 yup_audio_plugin (
-    TARGET_NAME                 ${target_name}
-    TARGET_IDE_GROUP            "Examples"
-    PLUGIN_ID                   "kunitoki.YupCLAP"
-    PLUGIN_NAME                 "YupCLAPPZ"
-    PLUGIN_VENDOR               "kunitoki"
-    PLUGIN_VERSION              "${target_version}"
-    PLUGIN_DESCRIPTION          "The best audio plugin ever."
-    PLUGIN_URL                  "https://github.com/kunitoki/yup"
-    PLUGING_IS_SYNTH            ON
-    PLUGIN_IS_MONO              OFF
-    PLUGIN_CREATE_CLAP          ON
-    PLUGIN_CREATE_STANDALONE    OFF
+    TARGET_NAME ${target_name}
+    TARGET_VERSION ${target_version}
+    TARGET_IDE_GROUP "Examples"
+    TARGET_APP_ID "org.yup.${target_name}"
+    TARGET_APP_NAMESPACE "org.yup.${target_name}"
+    PLUGIN_ID "org.yup.YupCLAP"
+    PLUGIN_NAME "YupCLAPPZ"
+    PLUGIN_VENDOR "org.yup"
+    PLUGIN_VERSION "${target_version}"
+    PLUGIN_DESCRIPTION "The best audio plugin ever."
+    PLUGIN_URL "https://github.com/kunitoki/yup"
+    PLUGING_IS_SYNTH ON
+    PLUGIN_IS_MONO OFF
+    PLUGIN_CREATE_CLAP ON
+    PLUGIN_CREATE_STANDALONE OFF
     MODULES
         juce_core
         juce_events
@@ -59,7 +62,7 @@ yup_audio_plugin (
         sheenbidi
         rive
         rive_renderer
-        BinaryData
+        "${target_name}_binary_data"
 )
 
 # ==== Prepare sources

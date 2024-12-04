@@ -142,18 +142,7 @@ bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 
 //==============================================================================
 
-static const clap_plugin_descriptor_t pluginDescriptor = {
-    .clap_version = CLAP_VERSION_INIT,
-    .id = YupPlugin_Id,
-    .name = YupPlugin_Name,
-    .vendor = YupPlugin_Vendor,
-    .url = YupPlugin_URL,
-    .manual_url = YupPlugin_URL,
-    .support_url = YupPlugin_URL,
-    .version = YupPlugin_Version,
-    .description = YupPlugin_Description,
-
-    .features = (const char*[]) {
+static const char* pluginFeatures[] = {
 #if YupPlugin_IsSynth
         CLAP_PLUGIN_FEATURE_INSTRUMENT,
         CLAP_PLUGIN_FEATURE_SYNTHESIZER,
@@ -167,8 +156,20 @@ static const clap_plugin_descriptor_t pluginDescriptor = {
         CLAP_PLUGIN_FEATURE_STEREO,
 #endif
 
-        nullptr,
-    },
+        nullptr
+};
+
+static const clap_plugin_descriptor_t pluginDescriptor = {
+    .clap_version = CLAP_VERSION_INIT,
+    .id = YupPlugin_Id,
+    .name = YupPlugin_Name,
+    .vendor = YupPlugin_Vendor,
+    .url = YupPlugin_URL,
+    .manual_url = YupPlugin_URL,
+    .support_url = YupPlugin_URL,
+    .version = YupPlugin_Version,
+    .description = YupPlugin_Description,
+    .features = pluginFeatures,
 };
 
 #if JUCE_MAC
