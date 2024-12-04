@@ -129,6 +129,31 @@ function (_yup_glob_recurse folder output_variable)
     set (${output_variable} "${non_hidden_files}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_convert_png_to_icns png_path icons_path output_variable)
+    set (temp_iconset_path "${icons_path}.iconset")
+    set (output_iconset_path "${icons_path}.icns")
+
+    # TODO - check png has png extension
+
+    add_custom_command(
+        OUTPUT "${output_iconset_path}"
+        COMMAND mkdir -p "${temp_iconset_name}"
+        COMMAND sips -z 16 16     -s format png "${png_path}" --out "${temp_iconset_path}/icon_16x16.png"
+        COMMAND sips -z 32 32     -s format png "${png_path}" --out "${temp_iconset_path}/icon_32x32.png"
+        COMMAND sips -z 32 32     -s format png "${png_path}" --out "${temp_iconset_path}/icon_16x16@2x.png"
+        COMMAND sips -z 64 64     -s format png "${png_path}" --out "${temp_iconset_path}/icon_32x32@2x.png"
+        COMMAND sips -z 128 128   -s format png "${png_path}" --out "${temp_iconset_path}/icon_128x128.png"
+        COMMAND sips -z 256 256   -s format png "${png_path}" --out "${temp_iconset_path}/icon_128x128@2x.png"
+        COMMAND sips -z 256 256   -s format png "${png_path}" --out "${temp_iconset_path}/icon_256x256.png"
+        COMMAND sips -z 512 512   -s format png "${png_path}" --out "${temp_iconset_path}/icon_256x256@2x.png"
+        COMMAND sips -z 512 512   -s format png "${png_path}" --out "${temp_iconset_path}/icon_512x512.png"
+        COMMAND sips -z 1024 1024 -s format png "${png_path}" --out "${temp_iconset_path}/icon_512x512@2x.png"
+        COMMAND iconutil -c icns "${temp_iconset_path}"
+        COMMAND rm -R "${temp_iconset_path}")
+
+    set (${output_variable} "${output_iconset_path}" PARENT_SCOPE)
+endfunction()
+
 function (_yup_fetch_glfw3)
     FetchContent_Declare (glfw
         GIT_REPOSITORY https://github.com/glfw/glfw.git
@@ -648,7 +673,7 @@ endfunction()
 function (yup_standalone_app)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP)
+    set (one_value_args TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args DEFINITIONS MODULES PRELOAD_FILES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -687,7 +712,9 @@ function (yup_standalone_app)
     # ==== Per platform configuration
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
         if (NOT YUP_ARG_CONSOLE)
-            get_filename_component (plist_path "cmake/platforms/${yup_platform}/Info.plist" REALPATH BASE_DIR "${CMAKE_SOURCE_DIR}")
+            if (NOT DEFINED YUP_ARG_CUSTOM_PLIST)
+                set (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist")
+            endif()
 
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
@@ -699,7 +726,7 @@ function (yup_standalone_app)
                 MACOSX_BUNDLE_LONG_VERSION_STRING              "${target_version}"
                 MACOSX_BUNDLE_SHORT_VERSION_STRING             "${target_version_short}"
                 MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-                MACOSX_BUNDLE_INFO_PLIST                       "${plist_path}"
+                MACOSX_BUNDLE_INFO_PLIST                       "${YUP_ARG_CUSTOM_PLIST}"
                 #RESOURCE                                       "${RESOURCE_FILES}"
                 #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
                 XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
@@ -717,6 +744,10 @@ function (yup_standalone_app)
 
             list (APPEND additional_definitions RIVE_WEBGL=1)
             list (APPEND additional_link_options -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2)
+        endif()
+
+        if (NOT DEFINED YUP_ARG_CUSTOM_SHELL)
+            set (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
         endif()
 
         list (APPEND additional_options
@@ -745,7 +776,7 @@ function (yup_standalone_app)
             -sNODERAWFS=0
             -sFETCH=1
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
-            --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
+            --shell-file "${YUP_ARG_CUSTOM_SHELL}")
 
         foreach (preload_file ${YUP_ARG_PRELOAD_FILES})
             list (APPEND additional_link_options --preload-file ${preload_file})

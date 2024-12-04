@@ -86,7 +86,7 @@ String SystemStats::getOperatingSystemName()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-    return sizeof(void*) == 8;
+    return sizeof (void*) == 8;
 }
 
 String SystemStats::getUniqueDeviceID()
@@ -244,25 +244,18 @@ void CPUInformation::initialise() noexcept
 //==============================================================================
 uint32 juce_millisecondsSinceStartup() noexcept
 {
-#if JUCE_EMSCRIPTEN
-    if (juce_isRunningUnderBrowser())
-        return static_cast<uint32> (emscripten_get_now());
-#endif
-
-    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>
+    const auto elapsed = std::chrono::duration<double>
         (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
-    return static_cast<uint32>(elapsed.count());
+    return static_cast<uint32>(elapsed.count() * 1000.0);
 }
 
 int64 Time::getHighResolutionTicks() noexcept
 {
-#if JUCE_EMSCRIPTEN
-    if (juce_isRunningUnderBrowser())
-        return static_cast<int64> (emscripten_get_now() * 1000.0);
-#endif
+    const auto elapsed = std::chrono::duration<double>
+        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
-    return static_cast<int64> (juce_millisecondsSinceStartup() * 1000.0);
+    return static_cast<int64> (elapsed.count() * double (getHighResolutionTicksPerSecond()));
 }
 
 int64 Time::getHighResolutionTicksPerSecond() noexcept
@@ -272,12 +265,10 @@ int64 Time::getHighResolutionTicksPerSecond() noexcept
 
 double Time::getMillisecondCounterHiRes() noexcept
 {
-#if JUCE_EMSCRIPTEN
-    if (juce_isRunningUnderBrowser())
-        return emscripten_get_now();
-#endif
+    const auto elapsed = std::chrono::duration<double>
+        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
-    return static_cast<double> (juce_millisecondsSinceStartup());
+    return static_cast<double> (elapsed.count() * 1000.0);
 }
 
 bool Time::setSystemTimeToThisTime() const

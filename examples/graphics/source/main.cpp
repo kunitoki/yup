@@ -74,6 +74,49 @@ private:
 
 //==============================================================================
 
+class Oscilloscope : public yup::Component
+{
+public:
+    Oscilloscope ()
+        : Component ("Oscilloscope")
+    {
+    }
+
+    void setRenderData (const std::vector<float>& data)
+    {
+        renderData.resize (data.size());
+
+        for (std::size_t i = 0; i < data.size(); ++i)
+            renderData[i] = data[i];
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (0xff101010);
+        g.fillAll();
+
+        if (renderData.empty())
+            return;
+
+        float xSize = getWidth() / float (renderData.size());
+
+        yup::Path path;
+        path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
+
+        for (size_t i = 1; i < renderData.size(); ++i)
+            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
+
+        g.setStrokeColor (0xff4b4bff);
+        g.setStrokeWidth (2.0f);
+        g.strokePath (path);
+    }
+
+private:
+    std::vector<float> renderData;
+};
+
+//==============================================================================
+
 class CustomWindow
     : public yup::DocumentWindow
     , public yup::Timer
@@ -95,7 +138,6 @@ public:
         setTitle ("main");
 
         // Load the font
-        /*
         yup::File fontFilePath =
 #if JUCE_WASM
             yup::File ("/data")
@@ -106,7 +148,6 @@ public:
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
-        */
 
         // Initialize the audio device
         deviceManager.addAudioCallback (this);
@@ -135,18 +176,17 @@ public:
             addAndMakeVisible (slider);
         }
 
-        //button = std::make_unique<yup::TextButton> ("Randomize", font);
-        //addAndMakeVisible (*button);
+        button = std::make_unique<yup::TextButton> ("Randomize", font);
+        addAndMakeVisible (*button);
+
+        addAndMakeVisible (oscilloscope);
 
         // Start the timer
-        startTimerHz (1);
+        startTimerHz (60);
     }
 
     ~CustomWindow() override
     {
-        inputReady.signal();
-        renderReady.signal();
-
         deviceManager.closeAudioDevice();
     }
 
@@ -168,28 +208,13 @@ public:
 
         if (button != nullptr)
             button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth (0.4f), 0.0f));
+
+        oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
     }
 
     void paint (yup::Graphics& g) override
     {
         yup::DocumentWindow::paint (g);
-
-        /*
-        //inputReady.wait();
-        //std::swap (inputData, renderData);
-        //renderReady.signal();
-
-        float xSize = getWidth() / float (renderData.size());
-
-        yup::Path path;
-        path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
-
-        for (size_t i = 1; i < renderData.size(); ++i)
-            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
-
-        g.setColor (0xff4b4bff);
-        g.drawPath (path, 5.0f);
-        */
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -230,6 +255,13 @@ public:
     void timerCallback() override
     {
         updateWindowTitle();
+
+        {
+            const yup::CriticalSection::ScopedLockType sl (renderMutex);
+            oscilloscope.setRenderData (renderData);
+        }
+
+        oscilloscope.repaint();
     }
 
     void userTriedToCloseWindow() override
@@ -244,19 +276,6 @@ public:
                                            int numSamples,
                                            const yup::AudioIODeviceCallbackContext& context) override
     {
-        /*
-        int copiedSamples = 0;
-        while (copiedSamples < numSamples)
-        {
-            renderData[readPos % renderData.size()] = inputChannelData[0][copiedSamples];
-
-            ++copiedSamples;
-            ++readPos;
-
-            readPos %= renderData.size();
-        }
-        */
-
         for (int sample = 0; sample < numSamples; ++sample)
         {
             float mixedSample = 0.0f;
@@ -268,15 +287,20 @@ public:
 
             for (int channel = 0; channel < numOutputChannels; ++channel)
                 outputChannelData[channel][sample] = mixedSample;
+
+            inputData[readPos++] = mixedSample;
+            readPos %= inputData.size();
         }
 
-        //inputReady.signal();
-        //renderReady.wait();
+        const yup::CriticalSection::ScopedLockType sl (renderMutex);
+        std::swap (inputData, renderData);
     }
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
         //yup::Logger::outputDebugString ("audioDeviceAboutToStart");
+
+        const yup::CriticalSection::ScopedLockType sl (renderMutex);
 
         inputData.resize (device->getDefaultBufferSize());
         renderData.resize (device->getDefaultBufferSize());
@@ -291,6 +315,7 @@ public:
 private:
     void updateWindowTitle()
     {
+        /*
         yup::String title;
 
         title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
@@ -301,14 +326,15 @@ private:
             title << " (atomic)";
 
         setTitle (title);
+        */
     }
 
     yup::AudioDeviceManager deviceManager;
+    std::vector<std::unique_ptr<SineWaveGenerator>> sineWaveGenerators;
 
-    std::vector<float> inputData;
-    yup::WaitableEvent inputReady;
     std::vector<float> renderData;
-    yup::WaitableEvent renderReady;
+    std::vector<float> inputData;
+    yup::CriticalSection renderMutex;
     int readPos = 0;
 
     yup::OwnedArray<yup::Slider> sliders;
@@ -316,8 +342,7 @@ private:
     int totalColumns = 4;
 
     std::unique_ptr<yup::TextButton> button;
-
-    std::vector<std::unique_ptr<SineWaveGenerator>> sineWaveGenerators;
+    Oscilloscope oscilloscope;
 
     yup::Font font;
     yup::StyledText styleText;
