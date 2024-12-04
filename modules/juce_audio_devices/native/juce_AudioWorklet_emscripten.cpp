@@ -22,6 +22,23 @@
 namespace juce
 {
 
+namespace
+{
+
+template <class T>
+using hasAudioSampleFrameSamplesPerChannel = decltype(T::samplesPerChannel);
+
+template <class T>
+int getNumSamplesPerChannel (const T& frame)
+{
+    if constexpr (isDetected<hasAudioSampleFrameSamplesPerChannel, T>)
+        return frame.samplesPerChannel;
+    else
+        return 128;
+}
+
+} // namespace
+
 //==============================================================================
 class AudioWorkletAudioIODevice final : public AudioIODevice
 {
@@ -94,11 +111,9 @@ public:
                  double sampleRate,
                  int bufferSizeSamples) override
     {
-        yup::Logger::outputDebugString ("open");
-
-        if (sampleRate != getDefaultSampleRate())
+        if (sampleRate != getDefaultSampleRate() || bufferSizeSamples != getDefaultBufferSize())
         {
-            lastError = "Browser audio outputs only support 44.1 kHz sample rate";
+            lastError = "Browser audio outputs only support 44.1 kHz sample rate and 128 samples buffer size.";
             return lastError;
         }
 
@@ -125,8 +140,6 @@ public:
 
     void close() override
     {
-        yup::Logger::outputDebugString ("close");
-
         stop();
 
         if (isDeviceOpen)
@@ -155,17 +168,11 @@ public:
 
     void start (AudioIODeviceCallback* newCallback) override
     {
-        yup::Logger::outputDebugString ("start 1");
-
         if (! isDeviceOpen)
             return;
 
-        yup::Logger::outputDebugString ("start 2");
-
         if (isRunning)
         {
-            yup::Logger::outputDebugString ("start 3");
-
             if (newCallback != callback)
             {
                 if (newCallback != nullptr)
@@ -182,40 +189,27 @@ public:
         }
         else
         {
-            yup::Logger::outputDebugString ("start 4");
-
             callback = newCallback;
             isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
 
             if (! isRunning && hasBeenActivatedAlreadyByUser)
             {
-                yup::Logger::outputDebugString ("start 5");
-
                 emscripten_resume_audio_context_sync (context);
                 isRunning = emscripten_audio_context_state (context) == AUDIO_CONTEXT_STATE_RUNNING;
             }
 
             firstCallback = true;
 
-            yup::Logger::outputDebugString ("start 6");
-
             if (callback != nullptr)
             {
                 if (isRunning)
-                {
-                    yup::Logger::outputDebugString ("start 7");
                     callback->audioDeviceAboutToStart (this);
-                }
             }
-
-            yup::Logger::outputDebugString ("start 8");
         }
     }
 
     void stop() override
     {
-        yup::Logger::outputDebugString ("stop");
-
         AudioIODeviceCallback* oldCallback = nullptr;
 
         if (callback != nullptr)
@@ -260,12 +254,12 @@ public:
     }
 
     int getOutputLatencyInSamples() override
-    { /* TODO */
+    {
         return 0;
     }
 
     int getInputLatencyInSamples() override
-    { /* TODO */
+    {
         return 0;
     }
 
@@ -279,8 +273,6 @@ private:
 
     void audioThreadInitialized()
     {
-        yup::Logger::outputDebugString ("audioThreadInitialized");
-
         WebAudioWorkletProcessorCreateOptions opts =
         {
             .name = audioWorkletTypeName
@@ -292,8 +284,6 @@ private:
 
     void audioWorkletProcessorCreated()
     {
-        yup::Logger::outputDebugString ("audioWorkletProcessorCreated");
-
         int outputChannelCounts[1] = { actualNumberOfOutputs };
         EmscriptenAudioWorkletNodeCreateOptions options =
         {
@@ -307,7 +297,7 @@ private:
             context, audioWorkletTypeName, &options, renderAudioCallback, this);
 
         // Connect it to audio context destination
-        //emscripten_audio_node_connect (audioWorkletNode, context, 0, 0);
+        // emscripten_audio_node_connect (audioWorkletNode, context, 0, 0);
         EM_ASM ({
             emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination);
         }, audioWorkletNode, context);
@@ -319,10 +309,19 @@ private:
                          int numOutputs, AudioSampleFrame* outputs,
                          int numParams, const AudioParamFrame* params)
     {
-        const int audioFrames = 128;
+        const int samplesPerChannel = [&]
+        {
+            if (numOutputs > 0)
+                return getNumSamplesPerChannel (outputs[0]);
+
+            else if (numInputs > 0)
+                return getNumSamplesPerChannel (inputs[0]);
+
+            return 128;
+        }();
 
         // check for xruns
-        calculateXruns (audioFrames);
+        calculateXruns (samplesPerChannel);
 
         ScopedLock lock (callbackLock);
 
@@ -334,17 +333,17 @@ private:
 
             // Setup channelOutBuffers (assume a single worklet output)
             for (int ch = 0; ch < actualNumberOfOutputs; ++ch)
-                channelOutBuffer[ch] = &(outputs[0].data[ch * 128]); // outputs[0].samplesPerChannel / outputs[0].quantumSize
+                channelOutBuffer[ch] = &(outputs[0].data[ch * samplesPerChannel]);
 
             callback->audioDeviceIOCallbackWithContext (channelInBuffer.getData(),
                                                         actualNumberOfInputs,
                                                         channelOutBuffer.getData(),
                                                         actualNumberOfOutputs,
-                                                        audioFrames,
+                                                        samplesPerChannel,
                                                         {});
-        }
 
-        audioFramesElapsed += audioFrames;
+            audioFramesElapsed += samplesPerChannel;
+        }
 
         return EM_TRUE; // keep going !
     }
@@ -353,8 +352,6 @@ private:
     {
         if (emscripten_audio_context_state (context) != AUDIO_CONTEXT_STATE_RUNNING)
         {
-            yup::Logger::outputDebugString ("canvasClick");
-
             emscripten_resume_audio_context_sync (context);
 
             isRunning = true;
