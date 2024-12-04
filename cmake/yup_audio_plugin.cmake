@@ -42,7 +42,7 @@ function (yup_audio_plugin)
 
         # ==== Fetch plugins SDKS
         if (YUP_ARG_PLUGIN_CREATE_CLAP)
-            FetchContent_Declare(clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
+            FetchContent_Declare (clap GIT_REPOSITORY https://github.com/free-audio/clap.git GIT_TAG main)
             FetchContent_MakeAvailable (clap)
             set_target_properties (clap-tests PROPERTIES FOLDER "Tests")
 
