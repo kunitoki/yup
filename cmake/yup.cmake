@@ -28,10 +28,10 @@ include (FetchContent)
 #==============================================================================
 
 macro (_yup_setup_platform)
-    if (IOS OR CMAKE_SYSTEM_NAME STREQUAL "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
+    if (IOS OR CMAKE_SYSTEM_NAME MATCHES "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
         set (yup_platform "ios")
 
-    elseif (ANDROID)
+    elseif (ANDROID OR YUP_TARGET_ANDROID)
         set (yup_platform "android")
 
     elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
@@ -44,7 +44,7 @@ macro (_yup_setup_platform)
         set (yup_platform "linux")
 
     elseif (WIN32)
-        if (CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+        if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")
             set (yup_platform "uwp")
         else()
             set (yup_platform "win32")
@@ -744,6 +744,13 @@ function (yup_standalone_app)
             -sFETCH=1
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
+
+        set (target_copy_dest "$<TARGET_FILE_DIR:${target_name}>")
+        add_custom_command(
+            TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy
+                "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/mini-coi.js"
+                "${target_copy_dest}/mini-coi.js")
 
     endif()
 

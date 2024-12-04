@@ -32,7 +32,8 @@ emscripten:
   emcc -v
   emcmake cmake -G "Ninja Multi-Config" -B build
   cmake --build build
-  python3 serve.py -p 8000 -d .
+  python3 -m http.server -d .
+  #python3 serve.py -p 8000 -d .
 
 #run:
 #  @just make
