@@ -46,11 +46,14 @@ public:
         setTitle ("main");
 
 #if JUCE_WASM
-        yup::File riveFilePath = yup::File ("/data");
+        yup::File riveFilePath = yup::File ("/data")
+            .getChildFile ("artboard.riv");
 #else
-        yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
+        yup::File riveFilePath = yup::File (__FILE__)
+            .getParentDirectory()
+            .getSiblingFile ("data")
+            .getChildFile ("alien.riv");
 #endif
-        riveFilePath = riveFilePath.getChildFile ("artboard.riv");
 
         // Setup artboards
         for (int i = 0; i < totalRows * totalColumns; ++i)
