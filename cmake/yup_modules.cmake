@@ -346,6 +346,9 @@ function (yup_add_module module_path)
         endif()
     endforeach()
 
+    _yup_set_default (module_cpp_standard "17")
+    _yup_set_default (module_arc_enabled OFF)
+
     # ==== Setup Platform-Specific Configurations
     if ("${yup_platform}" MATCHES "^(ios)$")
         list (APPEND module_dependencies ${module_iosDeps})
