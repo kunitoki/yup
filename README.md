@@ -1,7 +1,8 @@
 # YUP: Cross-Platform Application And Plugin Development Library
 
 <p float="left">
-  <a href="https://kunitoki.github.io/yup/demos/web_render_0/"><img src="./docs/demos/web_render_0.png" width="99%" title="UI courtesy from https://www.drywestdesign.com/" /></a>
+  <a href="https://kunitoki.github.io/yup/demos/web_render_0/" title="UI courtesy from https://www.drywestdesign.com/">
+    <img src="./docs/demos/web_render_0.png" width="99%" /></a>
 <p>
 
 <p float="left">
