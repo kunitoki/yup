@@ -219,6 +219,12 @@ bool SystemStats::hasNeon() noexcept { return getCPUInformation().hasNeon; }
 #if JUCE_ANDROID
 struct BacktraceState
 {
+    BacktraceState (void** current, void** end)
+        : current (current)
+        , end (end)
+    {
+    }
+
     void** current;
     void** end;
 };
@@ -243,7 +249,7 @@ String SystemStats::getStackBacktrace()
 {
     String result;
 
-#if JUCE_MINGW || JUCE_WASM
+#if JUCE_MINGW || (JUCE_WASM && !JUCE_EMSCRIPTEN)
     jassertfalse; // sorry, not implemented yet!
 
 #elif JUCE_WINDOWS
@@ -277,11 +283,17 @@ String SystemStats::getStackBacktrace()
         }
     }
 
+#elif JUCE_EMSCRIPTEN
+    std::string temporaryStack;
+    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8)(stackTrace()); }));
+    EM_ASM_ARGS({ (stringToUTF8 || Module.stringToUTF8)(stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
+    result << temporaryStack.c_str();
+
 #else
     void* stack[128];
 
 #if JUCE_ANDROID && __ANDROID_API__ < 33
-    BacktraceState currentState (stack, stack + numElementsInArray (stack));
+    BacktraceState state (stack, stack + numElementsInArray (stack));
     _Unwind_Backtrace (unwindCallback, &state);
 
     auto frames = static_cast<size_t> (state.current - &stack[0]);
@@ -290,11 +302,14 @@ String SystemStats::getStackBacktrace()
         Dl_info info;
         if (dladdr (stack[i], &info))
         {
+            int status = 0;
+            std::unique_ptr<char, decltype (::free)*> demangled (abi::__cxa_demangle (info.dli_sname, nullptr, 0, &status), ::free);
+
             result
                 << juce::String (i).paddedRight (' ', 3)
                 << " " << juce::File (juce::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
                 << " 0x" << juce::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
-                << " " << info.dli_sname
+                << " " << demangled.get()
                 << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
         }
     }
@@ -332,8 +347,6 @@ String SystemStats::getStackBacktrace()
 }
 
 //==============================================================================
-#if ! JUCE_WASM
-
 static SystemStats::CrashHandlerFunction globalCrashHandler = nullptr;
 
 #if JUCE_WINDOWS
@@ -346,6 +359,7 @@ static LONG WINAPI handleCrash (LPEXCEPTION_POINTERS ep)
 static void handleCrash (int signum)
 {
     globalCrashHandler ((void*) (pointer_sized_int) signum);
+
 #if ! JUCE_WASM
     ::kill (getpid(), SIGKILL);
 #endif
@@ -363,7 +377,7 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
     SetUnhandledExceptionFilter (handleCrash);
 
 #elif JUCE_WASM
-        // TODO
+    // TODO
 
 #else
     const int signals[] = { SIGFPE, SIGILL, SIGSEGV, SIGBUS, SIGABRT, SIGSYS };
@@ -376,8 +390,6 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
 
 #endif
 }
-
-#endif
 
 bool SystemStats::isRunningInAppExtensionSandbox() noexcept
 {
@@ -401,29 +413,5 @@ bool SystemStats::isRunningInAppExtensionSandbox() noexcept
     return false;
 #endif
 }
-
-#if JUCE_UNIT_TESTS
-
-class UniqueHardwareIDTest final : public UnitTest
-{
-public:
-    //==============================================================================
-    UniqueHardwareIDTest()
-        : UnitTest ("UniqueHardwareID", UnitTestCategories::analytics)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("getUniqueDeviceID returns usable data.");
-        {
-            expect (SystemStats::getUniqueDeviceID().isNotEmpty());
-        }
-    }
-};
-
-static UniqueHardwareIDTest uniqueHardwareIDTest;
-
-#endif
 
 } // namespace juce

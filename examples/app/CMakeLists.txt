@@ -17,16 +17,27 @@
 #
 # ==============================================================================
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required (VERSION 3.28)
 
-# ==== Prepare target
+# ==== Set target name and version
 set (target_name example_app)
 set (target_version "1.0.0")
 
+# ==== Prepare Android build
+if (ANDROID)
+    # project (${target_name} VERSION ${target_version})
+    include (../../cmake/yup.cmake)
+    _yup_setup_platform()
+    _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
+endif()
+
+# ==== Prepare target
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
+    TARGET_APP_ID "org.yup.${target_name}"
+    TARGET_APP_NAMESPACE "org.yup.${target_name}"
     MODULES
         juce_core
         juce_events
@@ -42,6 +53,8 @@ yup_standalone_app (
 )
 
 # ==== Prepare sources
-file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
-source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name} PRIVATE ${sources})
+if (NOT YUP_TARGET_ANDROID)
+    file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
+    source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
+    target_sources (${target_name} PRIVATE ${sources})
+endif()

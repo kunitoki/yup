@@ -31,14 +31,8 @@ Artboard::Artboard (StringRef componentID)
 
 //==============================================================================
 
-Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex, bool shouldUseStateMachines)
+Result Artboard::loadFromFile (const File& file, int defaultArtboardIndex, bool shouldUseStateMachines)
 {
-    jassert (getNativeComponent() != nullptr); // Must be added to a NativeComponent !
-
-    rive::Factory* factory = getNativeComponent()->getFactory();
-    if (factory == nullptr)
-        return Result::fail ("Failed to create a graphics context");
-
     if (! file.existsAsFile())
         return Result::fail ("Failed to find file to load");
 
@@ -46,8 +40,19 @@ Result Artboard::loadFromFile (const juce::File& file, int defaultArtboardIndex,
     if (is == nullptr || ! is->openedOk())
         return Result::fail ("Failed to open file for reading");
 
+    return loadFromStream (*is, defaultArtboardIndex, shouldUseStateMachines);
+}
+
+Result Artboard::loadFromStream (InputStream& is, int defaultArtboardIndex, bool shouldUseStateMachines)
+{
+    jassert (getNativeComponent() != nullptr); // Must be added to a NativeComponent !
+
+    rive::Factory* factory = getNativeComponent()->getFactory();
+    if (factory == nullptr)
+        return Result::fail ("Failed to create a graphics context");
+
     yup::MemoryBlock mb;
-    is->readIntoMemoryBlock (mb);
+    is.readIntoMemoryBlock (mb);
 
     rivFile = rive::File::import ({ static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
     artboardIndex = jlimit (-1, static_cast<int> (rivFile->artboardCount()) - 1, defaultArtboardIndex);

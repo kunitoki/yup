@@ -268,6 +268,66 @@ void setNativeParent (void* nativeDisplay, void* nativeWindow, GLFWwindow* windo
 
 //==============================================================================
 
+GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext::Api>& forceContextApi)
+{
+    GraphicsContext::Api desiredApi;
+
+#if JUCE_MAC
+#if YUP_RIVE_USE_METAL
+    desiredApi = forceContextApi.value_or (GraphicsContext::Metal);
+#elif YUP_RIVE_USE_OPENGL
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+#endif
+
+#elif JUCE_WINDOWS
+#if YUP_RIVE_USE_D3D
+    desiredApi = forceContextApi.value_or (GraphicsContext::Direct3D);
+#elif YUP_RIVE_USE_OPENGL
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+#endif
+
+#elif JUCE_LINUX
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+
+#else
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
+
+#endif
+
+    return desiredApi;
+}
+
+void setContextWindowHints (GraphicsContext::Api desiredApi)
+{
+    if (desiredApi == GraphicsContext::Metal)
+    {
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+    }
+
+    if (desiredApi == GraphicsContext::Direct3D)
+    {
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+    }
+
+    if (desiredApi == GraphicsContext::OpenGL)
+    {
+#if defined(ANGLE) || defined(JUCE_ANDROID)
+        glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
+        glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+#else
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, YUP_RIVE_OPENGL_MAJOR);
+        glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, YUP_RIVE_OPENGL_MINOR);
+#endif
+    }
+}
+
+//==============================================================================
+
 class GLFWComponentNative final
     : public ComponentNative
     , public Timer
@@ -279,7 +339,10 @@ public:
 
     //==============================================================================
 
-    GLFWComponentNative (Component& component, const Flags& flags, void* parent, std::optional<float> framerateRedraw);
+    GLFWComponentNative (Component& component,
+                         const Options& options,
+                         void* parent);
+
     ~GLFWComponentNative() override;
 
     //==============================================================================
@@ -365,12 +428,14 @@ public:
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
+    void handleContentScaleChanged (float xscale, float yscale);
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
     Point<float> getScaledCursorPosition() const;
 
     //==============================================================================
+    static void glfwWindowContentScale (GLFWwindow* window, float xscale, float yscale);
     static void glfwWindowClose (GLFWwindow* window);
     static void glfwWindowPos (GLFWwindow* window, int xpos, int ypos);
     static void glfwWindowSize (GLFWwindow* window, int width, int height);
@@ -385,9 +450,14 @@ private:
     void triggerRenderingUpdate();
     void renderContext();
 
+    void startRendering();
+    void stopRendering();
+
     GLFWwindow* window = nullptr;
     void* parentWindow = nullptr;
     String windowTitle;
+
+    GraphicsContext::Api currentGraphicsApi;
 
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
@@ -416,6 +486,7 @@ private:
     std::atomic<bool> shouldRenderContinuous = false;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
+    bool forceSizeChange = false;
     int forcedRedraws = 0;
     static constexpr int defaultForcedRedraws = 3;
 
@@ -434,27 +505,36 @@ std::atomic_flag GLFWComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
 
-GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& flags, void* parent, std::optional<float> framerateRedraw)
-    : ComponentNative (component, flags)
+GLFWComponentNative::GLFWComponentNative (Component& component,
+                                          const Options& options,
+                                          void* parent)
+    : ComponentNative (component, options.flags)
     , Thread ("YUP Render Thread")
     , parentWindow (parent)
+    , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
     , screenBounds (component.getBounds().to<int>())
-    , desiredFrameRate (framerateRedraw.value_or (60.0f))
-    , shouldRenderContinuous (flags.test (renderContinuous))
+    , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
+    , shouldRenderContinuous (options.flags.test (renderContinuous))
 {
 #if JUCE_MAC
-    gpu = MTLCreateSystemDefaultDevice();
-    queue = [gpu newCommandQueue];
-    swapchain = [CAMetalLayer layer];
-    swapchain.device = gpu;
-    swapchain.opaque = YES;
+    if (currentGraphicsApi == GraphicsContext::Metal)
+    {
+        gpu = MTLCreateSystemDefaultDevice();
+        queue = [gpu newCommandQueue];
+        swapchain = [CAMetalLayer layer];
+        swapchain.device = gpu;
+        swapchain.opaque = YES;
+    }
 #endif
 
+    // Setup window hints
+    setContextWindowHints (currentGraphicsApi);
+
     glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
-    glfwWindowHint (GLFW_DECORATED, flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
+    glfwWindowHint (GLFW_DECORATED, options.flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
 
+    // Create the window and parent it
     auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
-
     window = glfwCreateWindow (1, 1, component.getTitle().toRawUTF8(), monitor, nullptr);
     if (window == nullptr)
         return;
@@ -463,22 +543,30 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
         setNativeParent (nullptr, parent, window);
 
 #if JUCE_MAC
-    NSWindow* nswindow = glfwGetCocoaWindow (window);
-    nswindow.contentView.layer = swapchain;
-    nswindow.contentView.wantsLayer = YES;
+    if (currentGraphicsApi == GraphicsContext::Metal)
+    {
+        NSWindow* nswindow = glfwGetCocoaWindow (window);
+        nswindow.contentView.layer = swapchain;
+        nswindow.contentView.wantsLayer = YES;
+    }
 #endif
 
-    context = GraphicsContext::createContext (GraphicsContext::Options {});
+    // Create the rendering context
+    if (currentGraphicsApi == GraphicsContext::OpenGL)
+    {
+        glfwMakeContextCurrent (window);
+#if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
+        glfwSwapInterval (0);
+#endif
+    }
+
+    context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
     if (context == nullptr)
         return;
 
-#if JUCE_EMSCRIPTEN && RIVE_WEBGL
-    glfwMakeContextCurrent (window);
-    //glfwSwapInterval (0);
-#endif
-
+    // Setup callbacks
     glfwSetWindowUserPointer (window, this);
-
+    glfwSetWindowContentScaleCallback (window, glfwWindowContentScale);
     glfwSetWindowCloseCallback (window, glfwWindowClose);
     glfwSetWindowSizeCallback (window, glfwWindowSize);
     glfwSetWindowPosCallback (window, glfwWindowPos);
@@ -488,35 +576,29 @@ GLFWComponentNative::GLFWComponentNative (Component& component, const Flags& fla
     glfwSetScrollCallback (window, glfwMouseScroll);
     glfwSetKeyCallback (window, glfwKeyPress);
 
+    // Resize after callbacks are in place
     setBounds (
         { screenBounds.getX(),
           screenBounds.getY(),
           jmax (1, screenBounds.getWidth()),
           jmax (1, screenBounds.getHeight()) });
 
-#if JUCE_EMSCRIPTEN && RIVE_WEBGL
-    startTimerHz (desiredFrameRate);
-#else
-    startThread (Priority::high);
-#endif
+    // Start the rendering
+    startRendering();
 }
 
 GLFWComponentNative::~GLFWComponentNative()
 {
-    jassert (window != nullptr);
+    // Stop the rendering
+    stopRendering();
 
-#if JUCE_EMSCRIPTEN && RIVE_WEBGL
-    stopTimer();
-#else
-    signalThreadShouldExit();
-    renderEvent.signal();
-    commandEvent.signal();
-    stopThread (-1);
-#endif
-
-    glfwSetWindowUserPointer (window, nullptr);
-    glfwDestroyWindow (window);
-    window = nullptr;
+    // Destroy the window
+    if (window != nullptr)
+    {
+        glfwSetWindowUserPointer (window, nullptr);
+        glfwDestroyWindow (window);
+        window = nullptr;
+    }
 }
 
 //==============================================================================
@@ -559,9 +641,7 @@ void GLFWComponentNative::setVisible (bool shouldBeVisible)
 
 bool GLFWComponentNative::isVisible() const
 {
-    jassert (window != nullptr);
-
-    return false;
+    return window != nullptr && glfwGetWindowAttrib (window, GLFW_VISIBLE) != 0;
 }
 
 //==============================================================================
@@ -613,6 +693,10 @@ Rectangle<int> GLFWComponentNative::getBounds() const
 
 void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 {
+#if JUCE_ANDROID
+    screenBounds = Rectangle<int> (0, 0, getSize());
+
+#else
     jassert (window != nullptr);
 
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
@@ -641,6 +725,8 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
     glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
 
     screenBounds = newBounds;
+
+#endif
 }
 
 //==============================================================================
@@ -826,6 +912,9 @@ void* GLFWComponentNative::getNativeHandle() const
 #elif JUCE_LINUX
     return reinterpret_cast<void*> (glfwGetX11Window (window));
 
+#elif JUCE_ANDROID
+    return reinterpret_cast<void*> (glfwGetAndroidApp()->window);
+
 #else
     return nullptr;
 
@@ -908,10 +997,15 @@ void GLFWComponentNative::timerCallback()
 
 void GLFWComponentNative::renderContext()
 {
+    jassert (context != nullptr);
+
     auto [contentWidth, contentHeight] = getContentSize();
+    if (contentWidth == 0 || contentHeight == 0)
+        return;
+
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
 
-    if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
+    if (forceSizeChange || currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
@@ -928,9 +1022,6 @@ void GLFWComponentNative::renderContext()
         auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
         setPosition (nativeWindowPos.getTopLeft());
     }
-
-    jassert (context != nullptr);
-    jassert (renderer != nullptr);
 
     if (! renderContinuous && currentRepaintArea.isEmpty())
         return;
@@ -953,12 +1044,18 @@ void GLFWComponentNative::renderContext()
     context->begin (frameDescriptor);
 
     // Repaint components hierarchy
+    jassert (renderer != nullptr);
+
     Graphics g (*context, *renderer);
     component.internalPaint (g, desiredFrameRate);
 
     // Finish context drawing
     context->end (getNativeHandle());
     context->tick();
+
+    // Swap buffers
+    if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
+        glfwSwapBuffers (window);
 
     if (! renderContinuous)
     {
@@ -978,6 +1075,29 @@ void GLFWComponentNative::triggerRenderingUpdate()
 
     forcedRedraws = defaultForcedRedraws;
     commandEvent.signal();
+}
+
+//==============================================================================
+
+void GLFWComponentNative::startRendering()
+{
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    startTimerHz (desiredFrameRate);
+#else
+    startThread (Priority::high);
+#endif
+}
+
+void GLFWComponentNative::stopRendering()
+{
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    stopTimer();
+#else
+    signalThreadShouldExit();
+    renderEvent.signal();
+    commandEvent.signal();
+    stopThread (-1);
+#endif
 }
 
 //==============================================================================
@@ -1130,6 +1250,16 @@ void GLFWComponentNative::handleFocusChanged (bool gotFocus)
     //DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
 }
 
+void GLFWComponentNative::handleContentScaleChanged (float xscale, float yscale)
+{
+    int width, height;
+    glfwGetWindowSize (window, &width, &height);
+
+    forceSizeChange = true;
+
+    handleResized (width, height);
+}
+
 void GLFWComponentNative::handleUserTriedToCloseWindow()
 {
     component.internalUserTriedToCloseWindow();
@@ -1166,14 +1296,20 @@ void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 //==============================================================================
 
 std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component,
-                                                             const Flags& flags,
-                                                             void* parent,
-                                                             std::optional<float> framerateRedraw)
+                                                             const Options& options,
+                                                             void* parent)
 {
-    return std::make_unique<GLFWComponentNative> (component, flags, parent, framerateRedraw);
+    return std::make_unique<GLFWComponentNative> (component, options, parent);
 }
 
 //==============================================================================
+
+void GLFWComponentNative::glfwWindowContentScale (GLFWwindow* window, float xscale, float yscale)
+{
+    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
+
+    nativeComponent->handleContentScaleChanged (xscale, yscale);
+}
 
 void GLFWComponentNative::glfwWindowClose (GLFWwindow* window)
 {
@@ -1309,43 +1445,39 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    glfwSetErrorCallback (+[] (int code, const char* message)
-                          {
-                              DBG ("GLFW Error: " << code << " - " << message);
-                          });
+    // Setup error callback
+    {
+        auto errorCallback = +[] (int code, const char* message)
+        {
+            DBG ("GLFW Error: " << code << " - " << message);
+        };
 
+        glfwSetErrorCallback (errorCallback);
+    }
+
+    // Initialise glfw
     glfwInit();
 
-#if JUCE_MAC || JUCE_WINDOWS
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
-#elif defined(ANGLE)
-    glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#else
-    glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 6);
-#endif
+    // Setup monitor callback
+    {
+        Desktop::getInstance()->updateDisplays();
 
-    Desktop::getInstance()->updateDisplays();
+        auto monitorCallback = +[] (GLFWmonitor* monitor, int event)
+        {
+            auto desktop = Desktop::getInstance();
 
-    glfwSetMonitorCallback (+[] (GLFWmonitor* monitor, int event)
-                            {
-                                auto desktop = Desktop::getInstance();
+            if (event == GLFW_CONNECTED)
+            {
+            }
+            else if (event == GLFW_DISCONNECTED)
+            {
+            }
 
-                                if (event == GLFW_CONNECTED)
-                                {
-                                }
-                                else if (event == GLFW_DISCONNECTED)
-                                {
-                                }
+            desktop->updateDisplays();
+        };
 
-                                desktop->updateDisplays();
-                            });
+        glfwSetMonitorCallback (monitorCallback);
+    }
 
     GLFWComponentNative::isInitialised.test_and_set();
 }

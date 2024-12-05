@@ -19,4 +19,8 @@
   ==============================================================================
 */
 
+#include "rive_renderer.h"
+
+#if YUP_RIVE_USE_METAL
 #include "source/generated/shaders/rive_pls_macosx.metallib.c"
+#endif

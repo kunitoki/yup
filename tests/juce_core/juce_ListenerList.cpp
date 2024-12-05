@@ -48,241 +48,6 @@ public:
     MOCK_METHOD (void, myCallbackMethod, (int, bool) );
 };
 
-TEST (ListenerList, Add_Remove_Contains)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_TRUE (listeners.contains (&listener1));
-    EXPECT_TRUE (listeners.contains (&listener2));
-
-    listeners.remove (&listener1);
-    EXPECT_FALSE (listeners.contains (&listener1));
-    EXPECT_TRUE (listeners.contains (&listener2));
-
-    listeners.clear();
-    EXPECT_FALSE (listeners.contains (&listener2));
-}
-
-TEST (ListenerList, Call)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
-
-    listeners.call (&MockListener::myCallbackMethod, 1234, true);
-}
-
-TEST (ListenerList, Call_Excluding)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
-
-    listeners.callExcluding (&listener2, &MockListener::myCallbackMethod, 1234, true);
-}
-
-TEST (ListenerList, Call_Checked)
-{
-    struct BailOutChecker
-    {
-        int callCount = 0;
-
-        bool shouldBailOut() const { return callCount > 0; }
-    };
-
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-    BailOutChecker checker;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
-
-    listeners.callChecked (checker, &MockListener::myCallbackMethod, 1234, true);
-    checker.callCount++;
-    listeners.callChecked (checker, &MockListener::myCallbackMethod, 1234, true);
-}
-
-TEST (ListenerList, Call_Checked_Excluding)
-{
-    struct BailOutChecker
-    {
-        int callCount = 0;
-
-        bool shouldBailOut() const { return callCount > 0; }
-    };
-
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-    BailOutChecker checker;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
-
-    listeners.callCheckedExcluding (&listener2, checker, &MockListener::myCallbackMethod, 1234, true);
-    checker.callCount++;
-    listeners.callCheckedExcluding (&listener2, checker, &MockListener::myCallbackMethod, 1234, true);
-}
-
-TEST (ListenerList, Add_Scoped)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1;
-
-    {
-        auto guard = listeners.addScoped (listener1);
-        EXPECT_TRUE (listeners.contains (&listener1));
-    }
-
-    EXPECT_FALSE (listeners.contains (&listener1));
-}
-
-TEST (ListenerList, Size_Is_Empty)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    EXPECT_TRUE (listeners.isEmpty());
-    EXPECT_EQ (listeners.size(), 0);
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_FALSE (listeners.isEmpty());
-    EXPECT_EQ (listeners.size(), 2);
-
-    listeners.remove (&listener1);
-    EXPECT_EQ (listeners.size(), 1);
-
-    listeners.clear();
-    EXPECT_EQ (listeners.size(), 0);
-}
-
-/*
-TEST (ListenerList, Null_Pointer_Handling)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener* nullListener = nullptr;
-
-    listeners.add (nullListener);
-    EXPECT_FALSE (listeners.contains (nullListener));
-
-    listeners.remove (nullListener);
-    EXPECT_FALSE (listeners.contains (nullListener));
-}
-*/
-
-TEST (ListenerList, Multiple_Add_Remove)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1;
-
-    listeners.add (&listener1);
-    listeners.add (&listener1);
-
-    EXPECT_EQ (listeners.size(), 1);
-
-    listeners.remove (&listener1);
-    EXPECT_FALSE (listeners.contains (&listener1));
-    EXPECT_EQ (listeners.size(), 0);
-}
-
-TEST (ListenerList, Call_During_Callback)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true))
-        .WillOnce (testing::Invoke ([&] (int, bool)
-                                    {
-                                        listeners.add (&listener1);
-                                    }));
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
-
-    listeners.call (&MockListener::myCallbackMethod, 1234, true);
-    EXPECT_EQ (listeners.size(), 2);
-}
-
-TEST (ListenerList, Remove_During_Callback)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true))
-        .WillOnce (testing::Invoke ([&] (int, bool)
-                                    {
-                                        listeners.remove (&listener2);
-                                    }));
-
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
-
-    listeners.call (&MockListener::myCallbackMethod, 1234, true);
-    EXPECT_EQ (listeners.size(), 1);
-    EXPECT_FALSE (listeners.contains (&listener2));
-}
-
-TEST (ListenerList, Clear_During_Callback)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1).WillOnce (testing::Invoke ([&] (int, bool)
-                                                                                                {
-                                                                                                    listeners.clear();
-                                                                                                }));
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
-
-    listeners.call (&MockListener::myCallbackMethod, 1234, true);
-    EXPECT_EQ (listeners.size(), 0);
-}
-
-TEST (ListenerList, Nested_Call)
-{
-    juce::ListenerList<MockListener> listeners;
-    MockListener listener1, listener2;
-
-    listeners.add (&listener1);
-    listeners.add (&listener2);
-
-    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1).WillOnce (testing::Invoke ([&] (int, bool)
-                                                                                                {
-                                                                                                    listeners.call (&MockListener::myCallbackMethod, 5678, false);
-                                                                                                }));
-    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
-    EXPECT_CALL (listener1, myCallbackMethod (5678, false)).Times (1);
-    EXPECT_CALL (listener2, myCallbackMethod (5678, false)).Times (1);
-
-    listeners.call (&MockListener::myCallbackMethod, 1234, true);
-}
-
 class ListenerListTests : public ::testing::Test
 {
 protected:
@@ -356,6 +121,241 @@ protected:
         return result;
     }
 };
+
+TEST_F (ListenerListTests, Add_Remove_Contains)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_TRUE (listeners.contains (&listener1));
+    EXPECT_TRUE (listeners.contains (&listener2));
+
+    listeners.remove (&listener1);
+    EXPECT_FALSE (listeners.contains (&listener1));
+    EXPECT_TRUE (listeners.contains (&listener2));
+
+    listeners.clear();
+    EXPECT_FALSE (listeners.contains (&listener2));
+}
+
+TEST_F (ListenerListTests, Call)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
+
+    listeners.call (&MockListener::myCallbackMethod, 1234, true);
+}
+
+TEST_F (ListenerListTests, Call_Excluding)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
+
+    listeners.callExcluding (&listener2, &MockListener::myCallbackMethod, 1234, true);
+}
+
+TEST_F (ListenerListTests, Call_Checked)
+{
+    struct BailOutChecker
+    {
+        int callCount = 0;
+
+        bool shouldBailOut() const { return callCount > 0; }
+    };
+
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+    BailOutChecker checker;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
+
+    listeners.callChecked (checker, &MockListener::myCallbackMethod, 1234, true);
+    checker.callCount++;
+    listeners.callChecked (checker, &MockListener::myCallbackMethod, 1234, true);
+}
+
+TEST_F (ListenerListTests, Call_Checked_Excluding)
+{
+    struct BailOutChecker
+    {
+        int callCount = 0;
+
+        bool shouldBailOut() const { return callCount > 0; }
+    };
+
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+    BailOutChecker checker;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1);
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
+
+    listeners.callCheckedExcluding (&listener2, checker, &MockListener::myCallbackMethod, 1234, true);
+    checker.callCount++;
+    listeners.callCheckedExcluding (&listener2, checker, &MockListener::myCallbackMethod, 1234, true);
+}
+
+TEST_F (ListenerListTests, Add_Scoped)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1;
+
+    {
+        auto guard = listeners.addScoped (listener1);
+        EXPECT_TRUE (listeners.contains (&listener1));
+    }
+
+    EXPECT_FALSE (listeners.contains (&listener1));
+}
+
+TEST_F (ListenerListTests, Size_Is_Empty)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    EXPECT_TRUE (listeners.isEmpty());
+    EXPECT_EQ (listeners.size(), 0);
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_FALSE (listeners.isEmpty());
+    EXPECT_EQ (listeners.size(), 2);
+
+    listeners.remove (&listener1);
+    EXPECT_EQ (listeners.size(), 1);
+
+    listeners.clear();
+    EXPECT_EQ (listeners.size(), 0);
+}
+
+/*
+TEST_F (ListenerListTests, Null_Pointer_Handling)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener* nullListener = nullptr;
+
+    listeners.add (nullListener);
+    EXPECT_FALSE (listeners.contains (nullListener));
+
+    listeners.remove (nullListener);
+    EXPECT_FALSE (listeners.contains (nullListener));
+}
+*/
+
+TEST_F (ListenerListTests, Multiple_Add_Remove)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1;
+
+    listeners.add (&listener1);
+    listeners.add (&listener1);
+
+    EXPECT_EQ (listeners.size(), 1);
+
+    listeners.remove (&listener1);
+    EXPECT_FALSE (listeners.contains (&listener1));
+    EXPECT_EQ (listeners.size(), 0);
+}
+
+TEST_F (ListenerListTests, Call_During_Callback)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true))
+        .WillOnce (testing::Invoke ([&] (int, bool)
+                                    {
+                                        listeners.add (&listener1);
+                                    }));
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
+
+    listeners.call (&MockListener::myCallbackMethod, 1234, true);
+    EXPECT_EQ (listeners.size(), 2);
+}
+
+TEST_F (ListenerListTests, Remove_During_Callback)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true))
+        .WillOnce (testing::Invoke ([&] (int, bool)
+                                    {
+                                        listeners.remove (&listener2);
+                                    }));
+
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
+
+    listeners.call (&MockListener::myCallbackMethod, 1234, true);
+    EXPECT_EQ (listeners.size(), 1);
+    EXPECT_FALSE (listeners.contains (&listener2));
+}
+
+TEST_F (ListenerListTests, Clear_During_Callback)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1).WillOnce (testing::Invoke ([&] (int, bool)
+                                                                                                {
+                                                                                                    listeners.clear();
+                                                                                                }));
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (0);
+
+    listeners.call (&MockListener::myCallbackMethod, 1234, true);
+    EXPECT_EQ (listeners.size(), 0);
+}
+
+TEST_F (ListenerListTests, Nested_Call)
+{
+    juce::ListenerList<MockListener> listeners;
+    MockListener listener1, listener2;
+
+    listeners.add (&listener1);
+    listeners.add (&listener2);
+
+    EXPECT_CALL (listener1, myCallbackMethod (1234, true)).Times (1).WillOnce (testing::Invoke ([&] (int, bool)
+                                                                                                {
+                                                                                                    listeners.call (&MockListener::myCallbackMethod, 5678, false);
+                                                                                                }));
+    EXPECT_CALL (listener2, myCallbackMethod (1234, true)).Times (1);
+    EXPECT_CALL (listener1, myCallbackMethod (5678, false)).Times (1);
+    EXPECT_CALL (listener2, myCallbackMethod (5678, false)).Times (1);
+
+    listeners.call (&MockListener::myCallbackMethod, 1234, true);
+}
 
 TEST_F (ListenerListTests, RemovingAlreadyCalledListener)
 {

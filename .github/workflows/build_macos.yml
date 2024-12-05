@@ -5,6 +5,7 @@ on:
     paths:
       - "**/workflows/build_macos.yml"
       - "**/cmake/**"
+      - "**/examples/**"
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"

@@ -57,8 +57,9 @@
 
   dependencies:       zlib
   osxFrameworks:      Cocoa Foundation IOKit Security
-  iosFrameworks:      Foundation
+  iosFrameworks:      Foundation UIKit
   linuxLibs:          rt dl pthread
+  androidLibs:        log android
   mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm
 
  END_JUCE_MODULE_DECLARATION
