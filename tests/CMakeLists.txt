@@ -53,7 +53,7 @@ yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
-    CONSOLE
+    TARGET_CONSOLE ON
     DEFINITIONS
         JUCE_USE_CURL=0
     MODULES

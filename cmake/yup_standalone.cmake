@@ -21,9 +21,9 @@
 
 function (yup_standalone_app)
     # ==== Fetch options
-    set (options CONSOLE)
+    set (options "")
     set (one_value_args
-        TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE
+        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE
         CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
         DEFINITIONS MODULES PRELOAD_FILES LINK_OPTIONS)
@@ -32,6 +32,7 @@ function (yup_standalone_app)
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
+    set (target_console "${YUP_ARG_TARGET_CONSOLE}")
     set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (additional_definitions "")
@@ -39,6 +40,7 @@ function (yup_standalone_app)
     set (additional_libraries "")
     set (additional_link_options "")
 
+    _yup_set_default (target_console OFF)
     _yup_make_short_version ("${target_version}" target_version_short)
 
     # ==== Setup Android platform, build gradle stage
@@ -65,8 +67,12 @@ function (yup_standalone_app)
 
     # ==== Prepare executable
     set (executable_options "")
-    if (NOT YUP_ARG_CONSOLE AND "${yup_platform}" MATCHES "^(win32)$")
-        set (executable_options "WIN32")
+    if (NOT "${target_console}")
+        if ("${yup_platform}" MATCHES "^(win32)$")
+            set (executable_options "WIN32")
+        elseif ("${yup_platform}" MATCHES "^(osx)$")
+            set (executable_options "MACOSX_BUNDLE")
+        endif()
     endif()
 
     if ("${yup_platform}" MATCHES "^(android)$")
@@ -79,10 +85,8 @@ function (yup_standalone_app)
 
     # ==== Per platform configuration
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
-        if (NOT YUP_ARG_CONSOLE)
-            if (NOT DEFINED YUP_ARG_CUSTOM_PLIST)
-                set (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist")
-            endif()
+        if (NOT "${target_console}")
+            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist")
 
             set_target_properties (${target_name} PROPERTIES
                 BUNDLE                                         ON
@@ -93,7 +97,7 @@ function (yup_standalone_app)
                 MACOSX_BUNDLE_BUNDLE_VERSION                   "${target_version}"
                 MACOSX_BUNDLE_LONG_VERSION_STRING              "${target_version}"
                 MACOSX_BUNDLE_SHORT_VERSION_STRING             "${target_version_short}"
-                MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
+                #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
                 MACOSX_BUNDLE_INFO_PLIST                       "${YUP_ARG_CUSTOM_PLIST}"
                 #RESOURCE                                       "${RESOURCE_FILES}"
                 #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
@@ -107,7 +111,7 @@ function (yup_standalone_app)
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF)
 
     elseif ("${yup_platform}" MATCHES "^(emscripten)$")
-        if (NOT YUP_ARG_CONSOLE)
+        if (NOT "${target_console}")
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
 
             list (APPEND additional_definitions RIVE_WEBGL=1)
