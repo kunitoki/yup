@@ -3,13 +3,20 @@ name: Mingw
 on:
   push:
     paths:
+      - "CMakeLists.txt"
       - "**/workflows/build_mingw.yml"
       - "**/cmake/**"
       - "**/examples/**"
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"
-      - "CMakeLists.txt"
+      - "!**/native/*_android.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_linux.*"
+      - "!**/native/*_ios.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_posix.*"
+      - "!**/native/*_wasm.*"
   pull_request:
     branches:
       - "**"

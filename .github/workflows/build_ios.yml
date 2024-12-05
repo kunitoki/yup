@@ -3,12 +3,18 @@ name: iOS
 on:
   push:
     paths:
+      - "CMakeLists.txt"
       - "**/workflows/build_ios.yml"
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"
-      - "CMakeLists.txt"
+      - "!**/native/*_android.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_linux.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
   pull_request:
     branches:
       - "**"
