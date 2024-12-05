@@ -22,7 +22,7 @@ cmake_minimum_required (VERSION 3.28)
 include (cmake/yup.cmake)
 _yup_setup_platform()
 
-if ("${yup_platform}" MATCHES "^(osx)$" AND NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET)
+if ("${yup_platform}" MATCHES "^(osx)$")
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
 endif()
 
