@@ -1,4 +1,5 @@
 ---
+Language: Cpp
 AccessModifierOffset: -4
 AlignAfterOpenBracket: Align
 AlignConsecutiveAssignments: false
@@ -42,7 +43,6 @@ IndentWrappedFunctionNames: true
 IndentPPDirectives: BeforeHash
 KeepEmptyLinesAtTheStartOfBlocks: false
 LambdaBodyIndentation: Signature
-Language: Cpp
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 PackConstructorInitializers: Never
@@ -70,6 +70,7 @@ SpacesInSquareBrackets: false
 Standard: "c++17"
 TabWidth: 4
 UseTab: Never
+WhitespaceSensitiveMacros: ['EM_ASM', 'EM_JS', 'EM_ASM_INT', 'EM_ASM_DOUBLE', 'EM_ASM_PTR', 'MAIN_THREAD_EM_ASM', 'MAIN_THREAD_EM_ASM_INT', 'MAIN_THREAD_EM_ASM_DOUBLE', 'MAIN_THREAD_EM_ASM_DOUBLE', 'MAIN_THREAD_ASYNC_EM_ASM']
 ---
 Language: ObjC
 BasedOnStyle: Chromium
@@ -82,5 +83,12 @@ ObjCSpaceAfterProperty: true
 ObjCSpaceBeforeProtocolList: true
 PointerAlignment: Left
 SpacesBeforeTrailingComments: 1
+TabWidth: 4
+UseTab: Never
+---
+Language: JavaScript
+BasedOnStyle: Chromium
+ColumnLimit: 0
+IndentWidth: 4
 TabWidth: 4
 UseTab: Never

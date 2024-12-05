@@ -219,4 +219,16 @@ AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Oboe()
 }
 #endif
 
+#if JUCE_EMSCRIPTEN
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_AudioWorklet()
+{
+    return new AudioWorkletAudioIODeviceType();
+}
+#else
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_AudioWorklet()
+{
+    return nullptr;
+}
+#endif
+
 } // namespace juce

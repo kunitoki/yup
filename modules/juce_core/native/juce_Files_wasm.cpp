@@ -226,8 +226,7 @@ bool Process::openDocument (const String& fileName, const String& parameters)
         document.body.appendChild (elem);
         elem.click();
         document.body.removeChild (elem);
-    },
-                        cmdString.toRawUTF8());
+    }, cmdString.toRawUTF8());
 
     return true;
 }

@@ -36,7 +36,7 @@ struct IntComparator
     }
 };
 
-TEST (SortFunctionConverterTest, SortFunctionConverterWorks)
+TEST (SortFunctionConverterTests, SortFunctionConverterWorks)
 {
     std::vector<int> vec { 5, 2, 9, 1, 5, 6 };
 

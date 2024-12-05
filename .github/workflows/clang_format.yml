@@ -1,13 +1,16 @@
 name: Clang Format
 
 on:
-  pull_request:
-    types:
-      - closed
+  push:
+    paths:
+      - "**/examples/**"
+      - "**/modules/**"
+      - "**/tests/**"
+    branches:
+      - "!main"
 
 jobs:
   format:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     permissions:
@@ -36,6 +39,7 @@ jobs:
             **/*.h
             **/*.hpp
             **/*.mm
+            **/*.m
             !**/thirdparty/**
 
       - name: Run clang-format

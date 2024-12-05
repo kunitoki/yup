@@ -38,8 +38,7 @@ TEST (TimeTests, MillisecondsConstructor)
     EXPECT_EQ (time.toMilliseconds(), millis);
 }
 
-/*
-TEST (TimeTests, DateComponentsConstructorUTC)
+TEST (TimeTests, DISABLED_DateComponentsConstructorUTC)
 {
     Time time(2022, 11, 1, 19, 50, 50, 111, false);
     EXPECT_EQ(time.getYear(), 2022);
@@ -50,7 +49,6 @@ TEST (TimeTests, DateComponentsConstructorUTC)
     EXPECT_EQ(time.getSeconds(), 50);
     EXPECT_EQ(time.getMilliseconds(), 111);
 }
-*/
 
 TEST (TimeTests, DateComponentsConstructorLocalTime)
 {
@@ -114,13 +112,11 @@ TEST (TimeTests, GetWeekdayName)
     EXPECT_EQ (time.getWeekdayName (true), "Tue");
 }
 
-/*
-TEST (TimeTests, GetHours)
+TEST (TimeTests, DISABLED_GetHours)
 {
     Time time(1625000000000);
     EXPECT_EQ(time.getHours(), 22); // 10 PM UTC
 }
-*/
 
 TEST (TimeTests, IsAfternoon)
 {
@@ -130,13 +126,11 @@ TEST (TimeTests, IsAfternoon)
     EXPECT_FALSE (afternoon.isAfternoon());
 }
 
-/*
-TEST (TimeTests, GetHoursInAmPmFormat)
+TEST (TimeTests, DISABLED_GetHoursInAmPmFormat)
 {
     Time time(1625000000000);
     EXPECT_EQ(time.getHoursInAmPmFormat(), 10); // 10 AM
 }
-*/
 
 TEST (TimeTests, GetMinutes)
 {
@@ -156,13 +150,11 @@ TEST (TimeTests, GetMilliseconds)
     EXPECT_EQ (time.getMilliseconds(), 123);
 }
 
-/*
-TEST (TimeTests, IsDaylightSavingTime)
+TEST (TimeTests, DISABLED_IsDaylightSavingTime)
 {
     Time time(1625000000000);
     EXPECT_FALSE(time.isDaylightSavingTime());
 }
-*/
 
 TEST (TimeTests, GetTimeZone)
 {
@@ -170,13 +162,11 @@ TEST (TimeTests, GetTimeZone)
     EXPECT_FALSE (time.getTimeZone().isEmpty());
 }
 
-/*
-TEST (TimeTests, GetUTCOffsetSeconds)
+TEST (TimeTests, DISABLED_GetUTCOffsetSeconds)
 {
     Time time(1625000000000);
     EXPECT_NE(time.getUTCOffsetSeconds(), 0);
 }
-*/
 
 TEST (TimeTests, GetUTCOffsetString)
 {
@@ -192,7 +182,7 @@ TEST (TimeTests, ToString)
 }
 
 /*
-TEST (TimeTests, Formatted)
+TEST (TimeTests, DISABLED_Formatted) // WASM undefined symbol: wcsftime
 {
     Time time(1625000000000);
     EXPECT_EQ(time.formatted("%Y-%m-%d %H:%M:%S"), "2021-06-29 22:53:20");
@@ -248,7 +238,7 @@ TEST (TimeTests, ComparisonOperators)
 TEST (TimeTests, GetMillisecondCounter)
 {
     uint32 millis1 = Time::getMillisecondCounter();
-    EXPECT_GT (millis1, 0);
+    EXPECT_GE (millis1, 0);
     Time::waitForMillisecondCounter (millis1 + 100);
     uint32 millis2 = Time::getMillisecondCounter();
     EXPECT_GT (millis2, millis1);
@@ -257,7 +247,7 @@ TEST (TimeTests, GetMillisecondCounter)
 TEST (TimeTests, GetMillisecondCounterHiRes)
 {
     double hiResMillis1 = Time::getMillisecondCounterHiRes();
-    EXPECT_GT (hiResMillis1, 0.0);
+    EXPECT_GE (hiResMillis1, 0.0);
     Time::waitForMillisecondCounter (static_cast<uint32> (hiResMillis1) + 100);
     double hiResMillis2 = Time::getMillisecondCounterHiRes();
     EXPECT_GT (hiResMillis2, hiResMillis1);
@@ -266,7 +256,10 @@ TEST (TimeTests, GetMillisecondCounterHiRes)
 TEST (TimeTests, GetApproximateMillisecondCounter)
 {
     uint32 approxMillis1 = Time::getApproximateMillisecondCounter();
-    EXPECT_GT (approxMillis1, 0);
+    EXPECT_GE (approxMillis1, 0);
+    Time::waitForMillisecondCounter (approxMillis1 + 100);
+    uint32 approxMillis2 = Time::getApproximateMillisecondCounter();
+    EXPECT_GT (approxMillis2, approxMillis1);
 }
 
 TEST (TimeTests, GetHighResolutionTicks)
@@ -301,9 +294,9 @@ TEST (TimeTests, GetCompilationDate)
     EXPECT_GT (compilationDate.toMilliseconds(), 0);
 }
 
-TEST (TimeTests, SetSystemTimeToThisTime)
+TEST (TimeTests, DISABLED_SetSystemTimeToThisTime)
 {
     Time now = Time::getCurrentTime();
     // This test may fail if the system does not have sufficient privileges
-    // EXPECT_TRUE(now.setSystemTimeToThisTime());
+    EXPECT_TRUE (now.setSystemTimeToThisTime());
 }

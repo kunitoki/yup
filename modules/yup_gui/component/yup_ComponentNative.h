@@ -40,6 +40,36 @@ public:
     static inline constexpr Flags defaultFlags = decoratedWindow;
 
     //==============================================================================
+    /** Configuration options for creating a native component. */
+    struct Options
+    {
+        /** Default constructor, initializes the options with default values. */
+        constexpr Options() noexcept = default;
+
+        Options& withFlags(Flags newFlags) noexcept
+        {
+            flags = newFlags;
+            return *this;
+        }
+
+        Options& withGraphicsApi(std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
+        {
+            graphicsApi = newGraphicsApi;
+            return *this;
+        }
+
+        Options& withFramerateRedraw(std::optional<float> newFramerateRedraw) noexcept
+        {
+            framerateRedraw = newFramerateRedraw;
+            return *this;
+        }
+
+        Flags flags = defaultFlags;                      ///<
+        std::optional<GraphicsContext::Api> graphicsApi; ///<
+        std::optional<float> framerateRedraw;            ///<
+    };
+
+    //==============================================================================
     ComponentNative (Component& newComponent, const Flags& newFlags);
     virtual ~ComponentNative();
 
@@ -104,9 +134,8 @@ public:
 
     //==============================================================================
     static std::unique_ptr<ComponentNative> createFor (Component& component,
-                                                       const Flags& flags,
-                                                       void* parent,
-                                                       std::optional<float> framerateRedraw);
+                                                       const Options& options,
+                                                       void* parent);
 
 protected:
     Component& component;

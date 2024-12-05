@@ -43,7 +43,7 @@ void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 
     StyledText text;
     //text.clear();
-    text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, getComponentID().toRawUTF8());
+    text.appendText (font, bounds.getHeight() * 0.25f, bounds.getHeight(), getComponentID().toRawUTF8());
     text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
 
     g.setStrokeColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));

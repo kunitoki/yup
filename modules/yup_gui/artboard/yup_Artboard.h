@@ -30,7 +30,8 @@ public:
     Artboard (StringRef componentID);
 
     //==============================================================================
-    Result loadFromFile (const juce::File& file, int defaultArtboardIndex = -1, bool shouldUseStateMachines = true);
+    Result loadFromFile (const File& file, int defaultArtboardIndex = -1, bool shouldUseStateMachines = true);
+    Result loadFromStream (InputStream& is, int defaultArtboardIndex = -1, bool shouldUseStateMachines = true);
 
     //==============================================================================
     bool isPaused() const;
