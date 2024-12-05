@@ -23,6 +23,8 @@ cmake_minimum_required (VERSION 3.28)
 set (target_name example_graphics)
 set (target_version "1.0.0")
 
+project (${target_name} VERSION ${target_version})
+
 # ==== Prepare Android build
 if (ANDROID)
     # project (${target_name} VERSION ${target_version})

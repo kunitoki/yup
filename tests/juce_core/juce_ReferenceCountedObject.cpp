@@ -49,7 +49,7 @@ TEST (ReferenceCountedObjectTests, IncDecReferenceCount)
     obj->decReferenceCount();
     EXPECT_EQ (obj->getReferenceCount(), 1);
 
-    obj = nullptr; // this should decrement the count and delete the object
+    obj = nullptr;
 }
 
 TEST (ReferenceCountedObjectTests, IncDecConstReferenceCount)
@@ -63,7 +63,7 @@ TEST (ReferenceCountedObjectTests, IncDecConstReferenceCount)
     obj->decReferenceCount();
     EXPECT_EQ (obj->getReferenceCount(), 1);
 
-    obj = nullptr; // this should decrement the count and delete the object
+    obj = nullptr;
 }
 
 TEST (ReferenceCountedObjectTests, DecReferenceCountWithoutDeleting)
@@ -74,7 +74,8 @@ TEST (ReferenceCountedObjectTests, DecReferenceCountWithoutDeleting)
     EXPECT_TRUE (obj->decReferenceCountWithoutDeleting());
     EXPECT_EQ (obj->getReferenceCount(), 0);
 
-    delete obj;
+    obj->incReferenceCount();
+    obj = nullptr;
 }
 
 TEST (ReferenceCountedObjectTests, DecConstReferenceCountWithoutDeleting)
@@ -85,7 +86,8 @@ TEST (ReferenceCountedObjectTests, DecConstReferenceCountWithoutDeleting)
     EXPECT_TRUE (obj->decReferenceCountWithoutDeleting());
     EXPECT_EQ (obj->getReferenceCount(), 0);
 
-    delete obj;
+    obj->incReferenceCount();
+    obj = nullptr;
 }
 
 // SingleThreadedReferenceCountedObject tests
@@ -100,7 +102,7 @@ TEST (SingleThreadedReferenceCountedObjectTests, IncDecReferenceCount)
     obj->decReferenceCount();
     EXPECT_EQ (obj->getReferenceCount(), 1);
 
-    obj = nullptr; // this should decrement the count and delete the object
+    obj = nullptr;
 }
 
 TEST (SingleThreadedReferenceCountedObjectTests, IncDecConstReferenceCount)
@@ -114,7 +116,7 @@ TEST (SingleThreadedReferenceCountedObjectTests, IncDecConstReferenceCount)
     obj->decReferenceCount();
     EXPECT_EQ (obj->getReferenceCount(), 1);
 
-    obj = nullptr; // this should decrement the count and delete the object
+    obj = nullptr;
 }
 
 TEST (SingleThreadedReferenceCountedObjectTests, DecReferenceCountWithoutDeleting)
@@ -125,7 +127,8 @@ TEST (SingleThreadedReferenceCountedObjectTests, DecReferenceCountWithoutDeletin
     EXPECT_TRUE (obj->decReferenceCountWithoutDeleting());
     EXPECT_EQ (obj->getReferenceCount(), 0);
 
-    delete obj;
+    obj->incReferenceCount();
+    obj = nullptr;
 }
 
 TEST (SingleThreadedReferenceCountedObjectTests, DecConstReferenceCountWithoutDeleting)
@@ -136,7 +139,8 @@ TEST (SingleThreadedReferenceCountedObjectTests, DecConstReferenceCountWithoutDe
     EXPECT_TRUE (obj->decReferenceCountWithoutDeleting());
     EXPECT_EQ (obj->getReferenceCount(), 0);
 
-    delete obj;
+    obj->incReferenceCount();
+    obj = nullptr;
 }
 
 // ReferenceCountedObjectPtr tests

@@ -8,7 +8,7 @@ clean:
   rm -Rf build/*
 
 osx:
-  cmake -G Xcode -B build -DYUP_ENABLE_PROFILING=ON
+  cmake -G Xcode -B build -DYUP_ENABLE_PROFILING=OFF
   -open build/yup.xcodeproj
 
 ios:
