@@ -24,8 +24,8 @@
 
   BEGIN_JUCE_MODULE_DECLARATION
 
-    ID:               oboe
-    vendor:           oboe
+    ID:               oboe_library
+    vendor:           google
     version:          1.8.0
     name:             Android low level audio library
     description:      Oboe is an open-source C++ library designed to help build high-performance audio apps on Android.
@@ -33,7 +33,8 @@
     license:          Apache-2.0
 
     dependencies:
-    searchpaths:      upstream/include
+    searchpaths:      upstream/include upstream/src
+    androidLibs:      OpenSLES
 
   END_JUCE_MODULE_DECLARATION
 
@@ -42,6 +43,6 @@
 
 #pragma once
 
-#if __ANDROID__
-#include "upstream/include/Oboe.h"
+#if defined(ANDROID) || defined(__ANDROID__)
+#include "upstream/include/oboe/Oboe.h"
 #endif

@@ -55,10 +55,11 @@
   license:            ISC
   minimumCppStandard: 17
 
-  dependencies:       juce_audio_basics, juce_events, oboe
+  dependencies:       juce_audio_basics juce_events
   osxFrameworks:      CoreAudio CoreMIDI AudioToolbox
   iosFrameworks:      CoreAudio CoreMIDI AudioToolbox AVFoundation
   linuxPackages:      alsa
+  androidDeps:        oboe_library
   mingwLibs:          winmm
 
  END_JUCE_MODULE_DECLARATION

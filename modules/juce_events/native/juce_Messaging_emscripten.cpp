@@ -22,28 +22,15 @@
 namespace juce
 {
 
-class JUCE_API EmscriptenEventMessage : public Message
+namespace
 {
-};
-
-static void createDirIfNotExists (File::SpecialLocationType type)
+void createDirIfNotExists (File::SpecialLocationType type)
 {
     File dir = File::getSpecialLocation (type);
     if (! dir.exists())
         dir.createDirectory();
 }
-
-Thread::ThreadID messageThreadID = nullptr; // JUCE message thread
-Thread::ThreadID mainThreadID = nullptr;    // Javascript main thread
-std::vector<std::function<void()>> preDispatchLoopFuncs;
-std::vector<std::function<void()>> mainThreadLoopFuncs;
-double timeDispatchBeginMS = 0.0;
-
-extern bool isMessageThreadProxied();
-extern void registerCallbackToMainThread (std::function<void()> f);
-
-int juce_animationFrameCallback (double timestamp);
-void juce_dispatchLoop();
+} // namespace
 
 class InternalMessageQueue
 {
@@ -61,23 +48,6 @@ public:
         createDirIfNotExists (File::commonApplicationDataDirectory);
         createDirIfNotExists (File::globalApplicationsDirectory);
         createDirIfNotExists (File::tempDirectory);
-
-        messageThreadID = Thread::getCurrentThreadId();
-
-        MAIN_THREAD_EM_ASM ({
-            if (window.juce_animationFrameCallback)
-                return;
-
-            window.juce_animationFrameCallback = function (timestamp)
-            {
-                dynCall ("ii", $0, [timestamp]);
-
-                window.requestAnimationFrame (window.juce_animationFrameCallback);
-            };
-
-            window.requestAnimationFrame (window.juce_animationFrameCallback);
-        },
-                            juce_animationFrameCallback);
     }
 
     ~InternalMessageQueue()
@@ -86,89 +56,43 @@ public:
     }
 
     //==============================================================================
-    void postMessage (MessageManager::MessageBase* const msg) noexcept
+    bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
-            const ScopedLock sl (lock);
+           const ScopedLock sl (lock);
 
-            if (dynamic_cast<EmscriptenEventMessage* const> (msg))
-                eventQueue.add (msg);
-            else
-                messageQueue.add (msg);
+            eventQueue.add (msg);
         }
+
+        return true;
     }
 
     //==============================================================================
-    void dispatchLoop()
-    {
-        if (quitReceived.load())
-        {
-            emscripten_cancel_main_loop();
-
-            //auto* app = JUCEApplicationBase::getInstance();
-            //app->shutdownApp();
-
-            return;
-        }
-
-        timeDispatchBeginMS = Time::getMillisecondCounterHiRes();
-
-        Timer::callPendingTimersSynchronously();
-
-        dispatchEvents();
-
-        for (auto f : preDispatchLoopFuncs)
-            f();
-
-        ReferenceCountedArray<MessageManager::MessageBase> currentMessages;
-
-        {
-            const ScopedLock sl (lock);
-
-            currentMessages = std::move (messageQueue);
-            messageQueue.clear();
-        }
-
-        while (! currentMessages.isEmpty())
-        {
-            if (auto message = currentMessages.removeAndReturn (0))
-                message->messageCallback();
-        }
-    }
-
     void runDispatchLoop()
     {
         constexpr int framesPerSeconds = 0;
         constexpr int simulateInfiniteLoop = 1;
-        emscripten_set_main_loop (juce_dispatchLoop, framesPerSeconds, simulateInfiniteLoop);
+        emscripten_set_main_loop (dispatchLoopInternal, framesPerSeconds, simulateInfiniteLoop);
     }
 
     void stopDispatchLoop()
     {
-        (new QuitCallback (*this))->post();
+        emscripten_cancel_main_loop();
     }
 
     //==============================================================================
     JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
 
 private:
-    struct QuitCallback : public CallbackMessage
+    static void dispatchLoopInternal()
     {
-        InternalMessageQueue& parent;
+        InternalMessageQueue::getInstance()->dispatchLoop();
+    }
 
-        QuitCallback (InternalMessageQueue& newParent)
-            : parent (newParent)
-        {
-        }
-
-        void messageCallback() override
-        {
-            parent.quitReceived = true;
-        }
-    };
-
-    void dispatchEvents()
+    void dispatchLoop()
     {
+        Timer::callPendingTimersSynchronously();
+
         ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
         {
@@ -186,52 +110,10 @@ private:
     }
 
     CriticalSection lock;
-    ReferenceCountedArray<MessageManager::MessageBase> messageQueue;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
-    std::atomic<bool> quitReceived = false;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
-
-bool isMessageThreadProxied()
-{
-    return messageThreadID != mainThreadID;
-}
-
-void registerCallbackToMainThread (std::function<void()> f)
-{
-    if (mainThreadID == messageThreadID)
-        preDispatchLoopFuncs.push_back (std::move (f));
-    else
-        mainThreadLoopFuncs.push_back (std::move (f));
-}
-
-void juce_dispatchLoop()
-{
-    InternalMessageQueue::getInstance()->dispatchLoop();
-}
-
-int juce_animationFrameCallback (double timestamp)
-{
-    // If timestamp < 0, this callback tests if the calling thread (main thread) is
-    //   different from the message thread and return the result.
-    // If timestamp >= 0, it always returns 0.
-    if (timestamp < 0)
-    {
-        mainThreadID = Thread::getCurrentThreadId();
-        return mainThreadID != messageThreadID;
-    }
-
-    //static double prevTimestamp = 0;
-    //if (timestamp - prevTimestamp > 20)
-    //    Logger::outputDebugString ("juce_animationFrameCallback " + std::to_string (timestamp - prevTimestamp));
-    //prevTimestamp = timestamp;
-
-    for (auto f : mainThreadLoopFuncs)
-        f();
-
-    return 0;
-}
 
 void MessageManager::doPlatformSpecificInitialisation()
 {
@@ -254,20 +136,9 @@ namespace detail
     }
 } // namespace detail
 
-double getTimeSpentInCurrentDispatchCycle()
-{
-    double currentTimeMS = Time::getMillisecondCounterHiRes();
-
-    // DBG("getTimeSpentInCurrentDispatchCycle: " << currentTimeMS - timeDispatchBeginMS);
-
-    return (currentTimeMS - timeDispatchBeginMS) / 1000.0;
-}
-
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
-    InternalMessageQueue::getInstance()->postMessage (message);
-
-    return true;
+    return InternalMessageQueue::getInstance()->postMessage (message);
 }
 
 void MessageManager::broadcastMessage (const String&)

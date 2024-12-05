@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#if YUP_RIVE_USE_METAL
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/metal/render_context_metal_impl.h"
 
@@ -122,3 +123,4 @@ std::unique_ptr<GraphicsContext> juce_constructMetalGraphicsContext (GraphicsCon
 }
 
 } // namespace yup
+#endif

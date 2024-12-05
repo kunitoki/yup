@@ -162,17 +162,6 @@ struct JUCEApplicationBase::MultipleInstanceHandler
 #endif
 
 //==============================================================================
-#if JUCE_ANDROID
-
-StringArray JUCEApplicationBase::getCommandLineParameterArray()
-{
-    return {};
-}
-
-String JUCEApplicationBase::getCommandLineParameters() { return {}; }
-
-#else
-
 #if JUCE_WINDOWS && ! defined(_CONSOLE)
 
 String JUCE_CALLTYPE JUCEApplicationBase::getCommandLineParameters()
@@ -211,7 +200,7 @@ extern void initialiseNSApplication();
 extern "C" int juce_gtkWebkitMain (int argc, const char* const* argv);
 #endif
 
-#if JUCE_WINDOWS
+#if JUCE_WINDOWS || JUCE_ANDROID
 const char* const* juce_argv = nullptr;
 int juce_argc = 0;
 #else
@@ -292,8 +281,6 @@ int JUCEApplicationBase::main()
 
     return app->shutdownApp();
 }
-
-#endif
 
 //==============================================================================
 bool JUCEApplicationBase::initialiseApp()

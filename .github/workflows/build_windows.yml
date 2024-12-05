@@ -5,6 +5,7 @@ on:
     paths:
       - "**/workflows/build_windows.yml"
       - "**/cmake/**"
+      - "**/examples/**"
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"

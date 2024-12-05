@@ -146,29 +146,25 @@ TEST_F (ZipFileTests, CreateFromFile)
     File zipFile = getNonExistingZipFile();
     ZipFile zip (zipFile);
 
-    EXPECT_EQ (zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.getNumEntries(), 0);
 }
 
-TEST_F (ZipFileTests, CreateFromInputStream)
+TEST_F (ZipFileTests, DISABLED_CreateFromInputStream)
 {
-    /*
     File zipFile = getNonExistingZipFile();
-    FileInputStream fileStream(zipFile);
-    ZipFile zip(&fileStream, false);
+    FileInputStream fileStream (zipFile);
+    ZipFile zip (&fileStream, false);
 
-    EXPECT_EQ(zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
-    */
+    EXPECT_EQ (zip.getNumEntries(), 0);
 }
 
-TEST_F (ZipFileTests, CreateFromInputStreamNoOwnership)
+TEST_F (ZipFileTests, DISABLED_CreateFromInputStreamNoOwnership)
 {
-    /*
     File zipFile = getNonExistingZipFile();
-    FileInputStream fileStream(zipFile);
-    ZipFile zip(fileStream);
+    FileInputStream fileStream (zipFile);
+    ZipFile zip (fileStream);
 
-    EXPECT_EQ(zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
-    */
+    EXPECT_EQ (zip.getNumEntries(), 0);
 }
 
 TEST_F (ZipFileTests, CreateFromInputSource)
@@ -186,7 +182,7 @@ TEST_F (ZipFileTests, CreateFromInputSource)
     auto* inputSource = new TestInputSource;
     ZipFile zip (inputSource);
 
-    EXPECT_EQ (zip.getNumEntries(), 0); // Assumes the TestInputSource returns null streams
+    EXPECT_EQ (zip.getNumEntries(), 0);
 }
 
 TEST_F (ZipFileTests, GetNumEntries)
@@ -194,7 +190,7 @@ TEST_F (ZipFileTests, GetNumEntries)
     File zipFile = getNonExistingZipFile();
     ZipFile zip (zipFile);
 
-    EXPECT_EQ (zip.getNumEntries(), 0); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.getNumEntries(), 0);
 }
 
 TEST_F (ZipFileTests, GetEntryByIndex)
@@ -202,7 +198,7 @@ TEST_F (ZipFileTests, GetEntryByIndex)
     File zipFile = getNonExistingZipFile();
     ZipFile zip (zipFile);
 
-    EXPECT_EQ (zip.getEntry (0), nullptr); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.getEntry (0), nullptr);
 }
 
 TEST_F (ZipFileTests, GetEntryByName)
@@ -210,7 +206,7 @@ TEST_F (ZipFileTests, GetEntryByName)
     File zipFile = getNonExistingZipFile();
     ZipFile zip (zipFile);
 
-    EXPECT_EQ (zip.getEntry ("nonexistent.txt"), nullptr); // Assumes the test.zip does not contain this file
+    EXPECT_EQ (zip.getEntry ("nonexistent.txt"), nullptr);
 }
 
 TEST_F (ZipFileTests, GetIndexOfFileName)
@@ -218,7 +214,7 @@ TEST_F (ZipFileTests, GetIndexOfFileName)
     File zipFile = getNonExistingZipFile();
     ZipFile zip (zipFile);
 
-    EXPECT_EQ (zip.getIndexOfFileName ("nonexistent.txt"), -1); // Assumes the test.zip does not contain this file
+    EXPECT_EQ (zip.getIndexOfFileName ("nonexistent.txt"), -1);
 }
 
 TEST_F (ZipFileTests, SortEntriesByFilename)
@@ -235,7 +231,7 @@ TEST_F (ZipFileTests, CreateStreamForEntryByIndex)
     File zipFile = getNonExistingZipFile();
     ZipFile zip (zipFile);
 
-    EXPECT_EQ (zip.createStreamForEntry (0), nullptr); // Assumes the test.zip is empty or non-existent
+    EXPECT_EQ (zip.createStreamForEntry (0), nullptr);
 }
 
 TEST_F (ZipFileTests, CreateStreamForEntryByName)
@@ -244,31 +240,27 @@ TEST_F (ZipFileTests, CreateStreamForEntryByName)
     ZipFile zip (zipFile);
 
     const ZipFile::ZipEntry* entry = zip.getEntry ("nonexistent.txt");
-    EXPECT_EQ (zip.createStreamForEntry (*entry), nullptr); // Assumes the test.zip does not contain this file
+    EXPECT_EQ (nullptr, entry);
 }
 
-TEST_F (ZipFileTests, UncompressTo)
+TEST_F (ZipFileTests, DISABLED_UncompressTo)
 {
-    /*
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
-    File targetDirectory(File::getCurrentWorkingDirectory().getChildFile("unzip_test"));
+    ZipFile zip (zipFile);
+    File targetDirectory (File::getCurrentWorkingDirectory().getChildFile ("unzip_test"));
 
-    Result result = zip.uncompressTo(targetDirectory, true);
-    EXPECT_FALSE(result.wasOk()); // Assumes the test.zip is empty or non-existent
-    */
+    Result result = zip.uncompressTo (targetDirectory, true);
+    EXPECT_FALSE (result.wasOk());
 }
 
-TEST_F (ZipFileTests, UncompressEntry)
+TEST_F (ZipFileTests, DISABLED_UncompressEntry)
 {
-    /*
     File zipFile = getNonExistingZipFile();
-    ZipFile zip(zipFile);
-    File targetDirectory(File::getCurrentWorkingDirectory().getChildFile("unzip_test"));
+    ZipFile zip (zipFile);
+    File targetDirectory (File::getCurrentWorkingDirectory().getChildFile ("unzip_test"));
 
-    Result result = zip.uncompressEntry(0, targetDirectory, true);
-    EXPECT_FALSE(result.wasOk()); // Assumes the test.zip is empty or non-existent
-    */
+    Result result = zip.uncompressEntry (0, targetDirectory, true);
+    EXPECT_FALSE (result.wasOk());
 }
 
 TEST_F (ZipFileTests, BuilderAddFile)
@@ -293,5 +285,5 @@ TEST_F (ZipFileTests, BuilderWriteToStream)
     MemoryOutputStream outputStream;
 
     bool result = builder.writeToStream (outputStream, nullptr);
-    EXPECT_TRUE (result); // Expecting true even if the builder is empty
+    EXPECT_TRUE (result);
 }

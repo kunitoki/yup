@@ -23,23 +23,25 @@
 
 #include <juce_core/juce_core.h>
 
+#include <unordered_map>
+
 using namespace juce;
 
-TEST (Identifier, DefaultConstructorCreatesNullIdentifier)
+TEST (IdentifierTests, DefaultConstructorCreatesNullIdentifier)
 {
     Identifier id;
     EXPECT_TRUE (id.isNull());
     EXPECT_FALSE (id.isValid());
 }
 
-TEST (Identifier, ConstructFromStringLiteral)
+TEST (IdentifierTests, ConstructFromStringLiteral)
 {
     Identifier id ("test");
     EXPECT_EQ (id.toString(), "test");
     EXPECT_TRUE (id.isValid());
 }
 
-TEST (Identifier, ConstructFromStringObject)
+TEST (IdentifierTests, ConstructFromStringObject)
 {
     String name = "example";
     Identifier id (name);
@@ -47,28 +49,28 @@ TEST (Identifier, ConstructFromStringObject)
     EXPECT_TRUE (id.isValid());
 }
 
-TEST (Identifier, CopyConstructor)
+TEST (IdentifierTests, CopyConstructor)
 {
     Identifier original ("copyTest");
     Identifier copy = original;
     EXPECT_EQ (copy, original);
 }
 
-TEST (Identifier, MoveConstructor)
+TEST (IdentifierTests, MoveConstructor)
 {
     Identifier original ("moveTest");
     Identifier moved = std::move (original);
     EXPECT_EQ (moved.toString(), "moveTest");
 }
 
-TEST (Identifier, AssignmentOperator)
+TEST (IdentifierTests, AssignmentOperator)
 {
     Identifier id1 ("first");
     Identifier id2 = id1;
     EXPECT_EQ (id2, id1);
 }
 
-TEST (Identifier, MoveAssignmentOperator)
+TEST (IdentifierTests, MoveAssignmentOperator)
 {
     Identifier id1 ("first");
     Identifier id2 ("second");
@@ -76,7 +78,7 @@ TEST (Identifier, MoveAssignmentOperator)
     EXPECT_EQ (id2.toString(), "first");
 }
 
-TEST (Identifier, ComparisonOperators)
+TEST (IdentifierTests, ComparisonOperators)
 {
     Identifier id1 ("same");
     Identifier id2 ("same");
@@ -88,7 +90,7 @@ TEST (Identifier, ComparisonOperators)
     EXPECT_FALSE (id1 != id2);
 }
 
-TEST (Identifier, IsValidIdentifier)
+TEST (IdentifierTests, IsValidIdentifier)
 {
     EXPECT_TRUE (Identifier::isValidIdentifier ("valid_name"));
     EXPECT_FALSE (Identifier::isValidIdentifier ("invalid name"));
@@ -97,16 +99,26 @@ TEST (Identifier, IsValidIdentifier)
     EXPECT_FALSE (Identifier::isValidIdentifier ("_1 23"));
 }
 
-TEST (Identifier, ConversionToStringRef)
+TEST (IdentifierTests, ConversionToStringRef)
 {
     Identifier id ("conversion");
     StringRef ref = id;
     EXPECT_EQ (ref, StringRef ("conversion"));
 }
 
-TEST (Identifier, ConversionToCharPointer)
+TEST (IdentifierTests, ConversionToCharPointer)
 {
     Identifier id ("pointer");
     auto ptr = id.getCharPointer();
     EXPECT_STREQ (ptr.getAddress(), "pointer");
+}
+
+TEST (Identifier, UseInAssociativeContainers)
+{
+    std::unordered_map<Identifier, Identifier> ids;
+    ids[Identifier("test1")] = Identifier("test2");
+
+    ASSERT_TRUE(ids.find(Identifier("test1")) != ids.end());
+    EXPECT_EQ(ids.find(Identifier("test1"))->first, Identifier("test1"));
+    EXPECT_EQ(ids.find(Identifier("test1"))->second, Identifier("test2"));
 }
