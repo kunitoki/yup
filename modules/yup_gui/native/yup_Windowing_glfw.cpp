@@ -274,23 +274,23 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 
 #if JUCE_MAC
 #if YUP_RIVE_USE_METAL
-    desiredApi = forceContextApi.value_or(GraphicsContext::Metal);
+    desiredApi = forceContextApi.value_or (GraphicsContext::Metal);
 #elif YUP_RIVE_USE_OPENGL
-    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 #endif
 
 #elif JUCE_WINDOWS
 #if YUP_RIVE_USE_D3D
-    desiredApi = forceContextApi.value_or(GraphicsContext::Direct3D);
+    desiredApi = forceContextApi.value_or (GraphicsContext::Direct3D);
 #elif YUP_RIVE_USE_OPENGL
-    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 #endif
 
 #elif JUCE_LINUX
-    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 
 #else
-    desiredApi = forceContextApi.value_or(GraphicsContext::OpenGL);
+    desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 
 #endif
 
@@ -694,7 +694,7 @@ Rectangle<int> GLFWComponentNative::getBounds() const
 void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 {
 #if JUCE_ANDROID
-    screenBounds = Rectangle<int>(0, 0, getSize());
+    screenBounds = Rectangle<int> (0, 0, getSize());
 
 #else
     jassert (window != nullptr);
@@ -1081,7 +1081,7 @@ void GLFWComponentNative::triggerRenderingUpdate()
 
 void GLFWComponentNative::startRendering()
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && !defined(__EMSCRIPTEN_PTHREADS__)
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     startTimerHz (desiredFrameRate);
 #else
     startThread (Priority::high);
@@ -1090,7 +1090,7 @@ void GLFWComponentNative::startRendering()
 
 void GLFWComponentNative::stopRendering()
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && !defined(__EMSCRIPTEN_PTHREADS__)
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     stopTimer();
 #else
     signalThreadShouldExit();
@@ -1257,7 +1257,7 @@ void GLFWComponentNative::handleContentScaleChanged (float xscale, float yscale)
 
     forceSizeChange = true;
 
-    handleResized(width, height);
+    handleResized (width, height);
 }
 
 void GLFWComponentNative::handleUserTriedToCloseWindow()
@@ -1447,7 +1447,7 @@ void initialiseYup_Windowing()
 {
     // Setup error callback
     {
-        auto errorCallback = +[](int code, const char* message)
+        auto errorCallback = +[] (int code, const char* message)
         {
             DBG ("GLFW Error: " << code << " - " << message);
         };
