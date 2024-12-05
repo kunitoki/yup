@@ -23,10 +23,15 @@ function (yup_standalone_app)
     # ==== Fetch options
     set (options "")
     set (one_value_args
+        # Globals
         TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE
-        CUSTOM_PLIST CUSTOM_SHELL)
+        # Emscripten
+        INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
-        DEFINITIONS MODULES PRELOAD_FILES LINK_OPTIONS)
+        # Globals
+        DEFINITIONS MODULES LINK_OPTIONS
+        # Emscripten
+        PRELOAD_FILES)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
@@ -118,9 +123,9 @@ function (yup_standalone_app)
             list (APPEND additional_link_options -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2)
         endif()
 
-        if (NOT DEFINED YUP_ARG_CUSTOM_SHELL)
-            set (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
-        endif()
+        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
+        _yup_set_default (YUP_ARG_INITIAL_MEMORY 33554432) # 32mb
+        _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
 
         list (APPEND additional_options
             $<$<CONFIG:DEBUG>:-O0 -g>
@@ -136,19 +141,23 @@ function (yup_standalone_app)
             -sWASM=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
+            -sPTHREAD_POOL_SIZE=${YUP_ARG_PTHREAD_POOL_SIZE}
             -sSHARED_MEMORY=1
-            -sALLOW_MEMORY_GROWTH=0
+            -sALLOW_MEMORY_GROWTH=1
+            -sINITIAL_MEMORY=${YUP_ARG_INITIAL_MEMORY}
             -sASSERTIONS=1
             -sDISABLE_EXCEPTION_CATCHING=0
             -sERROR_ON_UNDEFINED_SYMBOLS=1
             -sDEMANGLE_SUPPORT=1
             -sSTACK_OVERFLOW_CHECK=2
-            -sPTHREAD_POOL_SIZE=8
             -sFORCE_FILESYSTEM=1
             -sNODERAWFS=0
             -sFETCH=1
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${YUP_ARG_CUSTOM_SHELL}")
+
+        list (APPEND additional_link_options
+            -Wno-pthreads-mem-growth)
 
         foreach (preload_file ${YUP_ARG_PRELOAD_FILES})
             list (APPEND additional_link_options --preload-file ${preload_file})

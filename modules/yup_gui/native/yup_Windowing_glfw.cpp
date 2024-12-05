@@ -737,6 +737,9 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
 
     if (shouldBeFullScreen)
     {
+#if JUCE_EMSCRIPTEN
+        emscripten_request_fullscreen("#canvas", false);
+#else
         lastScreenBounds = screenBounds;
 
         auto monitor = glfwGetPrimaryMonitor();
@@ -749,9 +752,13 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
                               mode->width,
                               mode->height,
                               mode->refreshRate);
+#endif
     }
     else
     {
+#if JUCE_EMSCRIPTEN
+        emscripten_exit_fullscreen();
+#else
         glfwSetWindowMonitor (window,
                               nullptr,
                               component.getX(),
@@ -761,6 +768,7 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
                               GLFW_DONT_CARE);
 
         setBounds (lastScreenBounds);
+#endif
     }
 }
 

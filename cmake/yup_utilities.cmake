@@ -19,16 +19,16 @@
 
 #==============================================================================
 
-function (_yup_set_default VAR VALUE)
-    if (NOT DEFINED ${VAR})
-        set (${VAR} "${VALUE}" PARENT_SCOPE)
+function (_yup_set_default var value)
+    if (NOT DEFINED ${var})
+        set (${var} "${value}" PARENT_SCOPE)
     endif()
 endfunction()
 
 #==============================================================================
 
 function (_yup_strip_list input_list output_variable)
-    set (inner_list "" PARENT_SCOPE)
+    set (inner_list "")
     foreach (item ${input_list})
         string (STRIP ${item} stripped_item)
         if (${stripped_item} STREQUAL "")
@@ -40,9 +40,15 @@ function (_yup_strip_list input_list output_variable)
 endfunction()
 
 function (_yup_comma_or_space_separated_list input_list output_variable)
-    string (REPLACE "," " " temp1_list ${input_list})
-    string (REPLACE " " ";" temp2_list ${temp1_list})
-    _yup_strip_list ("${temp2_list}" final_list)
+    set (final_list "")
+    list (LENGTH input_list input_list_len)
+    if (${input_list_len} GREATER 1)
+        string (REPLACE "," " " input_list ${input_list})
+    endif()
+    if (${input_list_len} GREATER 0)
+        string (REPLACE " " ";" input_list ${input_list})
+        _yup_strip_list ("${input_list}" final_list)
+    endif()
     set (${output_variable} "${final_list}" PARENT_SCOPE)
 endfunction()
 

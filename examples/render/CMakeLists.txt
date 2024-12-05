@@ -23,13 +23,13 @@ cmake_minimum_required (VERSION 3.28)
 set (target_name example_render)
 set (target_version "1.0.0")
 
-set (rive_file "data/seasynth.riv")
+project (${target_name} VERSION ${target_version})
 
+set (rive_file "data/seasynth.riv")
 
 # ==== Prepare Android build
 set (link_libraries "")
 if (ANDROID)
-    # project (${target_name} VERSION ${target_version})
     include (../../cmake/yup.cmake)
     _yup_setup_platform()
     _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
@@ -55,6 +55,7 @@ yup_standalone_app (
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup.${target_name}"
     LINK_OPTIONS ${link_options}
+    INITIAL_MEMORY 268435456
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"
     MODULES
