@@ -1058,7 +1058,10 @@ static void* makeThreadHandle (PosixThreadAttribute& attr, void* userData, void*
     if (status != 0)
         return nullptr;
 
+//#if !JUCE_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
     pthread_detach (handle);
+//#endif
+
     return (void*) handle;
 }
 

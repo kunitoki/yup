@@ -82,6 +82,12 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#elif JUCE_ANDROID
+#define GLFW_INCLUDE_NONE
+#define GLFW_EXPOSE_NATIVE_ANDROID
+#include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
 #else
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>

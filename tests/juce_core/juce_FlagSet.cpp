@@ -37,35 +37,35 @@ static inline constexpr LogOption verboseLog = LogOption::declareValue<Detail::v
 static inline constexpr LogOption noErrorLog = LogOption::declareValue<Detail::noErrorLog>();
 } // namespace
 
-TEST (FlagSet, Default_Constructed)
+TEST (FlagSetTests, Default_Constructed)
 {
     LogOption option;
     EXPECT_FALSE (option.test (verboseLog));
     EXPECT_FALSE (option.test (noErrorLog));
 }
 
-TEST (FlagSet, Default_Constructed_From_Default)
+TEST (FlagSetTests, Default_Constructed_From_Default)
 {
     LogOption option = defaultLog;
     EXPECT_FALSE (option.test (verboseLog));
     EXPECT_FALSE (option.test (noErrorLog));
 }
 
-TEST (FlagSet, Default_Constructed_From_Value)
+TEST (FlagSetTests, Default_Constructed_From_Value)
 {
     LogOption option = verboseLog;
     EXPECT_TRUE (option.test (verboseLog));
     EXPECT_FALSE (option.test (noErrorLog));
 }
 
-TEST (FlagSet, Default_Constructed_From_Values)
+TEST (FlagSetTests, Default_Constructed_From_Values)
 {
     LogOption option = verboseLog | noErrorLog;
     EXPECT_TRUE (option.test (verboseLog));
     EXPECT_TRUE (option.test (noErrorLog));
 }
 
-TEST (FlagSet, To_String)
+TEST (FlagSetTests, To_String)
 {
     EXPECT_EQ (juce::String ("00"), defaultLog.toString());
     EXPECT_EQ (juce::String ("10"), verboseLog.toString());
@@ -75,7 +75,7 @@ TEST (FlagSet, To_String)
     EXPECT_EQ (juce::String ("11"), option.toString());
 }
 
-TEST (FlagSet, From_String)
+TEST (FlagSetTests, From_String)
 {
     EXPECT_EQ (defaultLog, LogOption::fromString ("00"));
     EXPECT_EQ (verboseLog, LogOption::fromString ("10"));

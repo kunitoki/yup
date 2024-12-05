@@ -49,12 +49,13 @@
 
 #include <juce_core/juce_core.h>
 
+#include <rive_renderer/rive_renderer.h>
+
 //==============================================================================
 
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
 #include <rive/rive.h>
 #include <rive/text/utf.hpp>
-
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
 #include <rive/renderer/render_context.hpp>
 #include <rive/renderer/render_context_impl.hpp>
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE

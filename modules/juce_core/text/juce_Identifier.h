@@ -151,6 +151,7 @@ private:
 #ifndef DOXYGEN
 namespace std
 {
+
 template <>
 struct hash<juce::Identifier>
 {
@@ -159,5 +160,6 @@ struct hash<juce::Identifier>
         return static_cast<size_t> (*reinterpret_cast<uintptr_t*> (identifier.getCharPointer().getAddress()));
     }
 };
+
 } // namespace std
 #endif

@@ -39,7 +39,7 @@
 
 // clang-format off
 #ifdef JUCE_AUDIO_DEVICES_H_INCLUDED
-/* When you add this cpp file to your project, you mustn't include it in a file where you've
+    /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
@@ -118,7 +118,7 @@
 
     // clang-format off
 #if JUCE_USE_WINRT_MIDI && (JUCE_MSVC || JUCE_CLANG)
-/* If you cannot find any of the header files below then you are probably
+        /* If you cannot find any of the header files below then you are probably
    attempting to use the Windows 10 Bluetooth Low Energy API. For this to work you
    need to install version 10.0.14393.0 of the Windows Standalone SDK and you may
    need to add the path to the WinRT headers to your build system. This path should
@@ -146,7 +146,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 
     // clang-format off
 #if JUCE_ASIO
-/* This is very frustrating - we only need to use a handful of definitions from
+        /* This is very frustrating - we only need to use a handful of definitions from
    a couple of the header files in Steinberg's ASIO SDK, and it'd be easy to copy
    about 30 lines of code into this cpp file to create a fully stand-alone ASIO
    implementation...
@@ -189,7 +189,7 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 #if JUCE_JACK
-/* Got an include error here? If so, you've either not got jack-audio-connection-kit
+        /* Got an include error here? If so, you've either not got jack-audio-connection-kit
    installed, or you've not got your paths set up correctly to find its header files.
 
    The package you need to install to get JACK support is "libjack-dev".
@@ -256,7 +256,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wunused-parameter",
                                      "-Wshadow-field",
                                      "-Wsign-conversion",
                                      "-Wswitch-enum")
-#include "oboe.h"
+#include <oboe_library/oboe_library.h>
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 #include "native/juce_Oboe_android.cpp"
@@ -270,6 +270,13 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 #endif
 
 #elif JUCE_WASM
+#if JUCE_EMSCRIPTEN
+#include <emscripten/webaudio.h>
+#include <emscripten/em_math.h>
+
+#include "native/juce_AudioWorklet_emscripten.cpp"
+#endif
+
 #include "native/juce_Midi_wasm.cpp"
 
 #endif

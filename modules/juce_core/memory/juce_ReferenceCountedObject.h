@@ -152,6 +152,7 @@ protected:
 private:
     //==============================================================================
     mutable Atomic<int> refCount { 0 };
+
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
 };
 
@@ -233,6 +234,7 @@ protected:
 private:
     //==============================================================================
     mutable int refCount = 0;
+
     friend struct ContainerDeletePolicy<ReferenceCountedObject>;
 };
 

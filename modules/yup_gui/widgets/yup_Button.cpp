@@ -56,6 +56,9 @@ void Button::mouseDown (const MouseEvent& event)
 {
     isButtonCurrentlyDown = true;
 
+    if (onClick)
+        onClick();
+
     takeFocus();
 
     repaint();

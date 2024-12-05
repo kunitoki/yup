@@ -112,7 +112,7 @@ public:
         auto now = Time::getMillisecondCounter();
         auto timeout = now + maxTimeoutMilliseconds;
 
-#if JUCE_WASM
+#if JUCE_EMSCRIPTEN && !defined(__EMSCRIPTEN_PTHREADS__)
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
                                                   : (std::numeric_limits<uint32>::max() - (lastCallTime - now)));
         lastCallTime = now;

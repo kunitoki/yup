@@ -36,13 +36,13 @@ struct TestObject
     }
 };
 
-TEST (LinkedListPointer, DefaultConstructor)
+TEST (LinkedListPointerTests, DefaultConstructor)
 {
     LinkedListPointer<TestObject> list;
     EXPECT_EQ (list.get(), nullptr);
 }
 
-TEST (LinkedListPointer, ConstructorWithHeadItem)
+TEST (LinkedListPointerTests, ConstructorWithHeadItem)
 {
     auto* obj = new TestObject (1);
     LinkedListPointer<TestObject> list (obj);
@@ -50,7 +50,7 @@ TEST (LinkedListPointer, ConstructorWithHeadItem)
     delete obj;
 }
 
-TEST (LinkedListPointer, AssignmentOperator)
+TEST (LinkedListPointerTests, AssignmentOperator)
 {
     auto* obj = new TestObject (1);
     LinkedListPointer<TestObject> list;
@@ -59,7 +59,7 @@ TEST (LinkedListPointer, AssignmentOperator)
     delete obj;
 }
 
-TEST (LinkedListPointer, MoveConstructor)
+TEST (LinkedListPointerTests, MoveConstructor)
 {
     auto* obj = new TestObject (1);
     LinkedListPointer<TestObject> list1 (obj);
@@ -69,7 +69,7 @@ TEST (LinkedListPointer, MoveConstructor)
     delete obj;
 }
 
-TEST (LinkedListPointer, MoveAssignmentOperator)
+TEST (LinkedListPointerTests, MoveAssignmentOperator)
 {
     auto* obj = new TestObject (1);
     LinkedListPointer<TestObject> list1 (obj);
@@ -81,7 +81,7 @@ TEST (LinkedListPointer, MoveAssignmentOperator)
 }
 
 /*
-TEST (LinkedListPointer, GetLast)
+TEST (LinkedListPointerTests, GetLast)
 {
     auto* obj1 = new TestObject(1);
     auto* obj2 = new TestObject(2);
@@ -93,7 +93,7 @@ TEST (LinkedListPointer, GetLast)
 }
 */
 
-TEST (LinkedListPointer, Size)
+TEST (LinkedListPointerTests, Size)
 {
     LinkedListPointer<TestObject> list;
     EXPECT_EQ (list.size(), 0);
@@ -108,7 +108,7 @@ TEST (LinkedListPointer, Size)
     delete obj2;
 }
 
-TEST (LinkedListPointer, Contains)
+TEST (LinkedListPointerTests, Contains)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -121,7 +121,7 @@ TEST (LinkedListPointer, Contains)
     delete obj2;
 }
 
-TEST (LinkedListPointer, InsertNext)
+TEST (LinkedListPointerTests, InsertNext)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -134,7 +134,7 @@ TEST (LinkedListPointer, InsertNext)
     delete obj2;
 }
 
-TEST (LinkedListPointer, InsertAtIndex)
+TEST (LinkedListPointerTests, InsertAtIndex)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -151,7 +151,7 @@ TEST (LinkedListPointer, InsertAtIndex)
     delete obj3;
 }
 
-TEST (LinkedListPointer, ReplaceNext)
+TEST (LinkedListPointerTests, ReplaceNext)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -163,7 +163,7 @@ TEST (LinkedListPointer, ReplaceNext)
     delete obj2;
 }
 
-TEST (LinkedListPointer, RemoveNext)
+TEST (LinkedListPointerTests, RemoveNext)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -176,7 +176,7 @@ TEST (LinkedListPointer, RemoveNext)
     delete obj2;
 }
 
-TEST (LinkedListPointer, Remove)
+TEST (LinkedListPointerTests, Remove)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -189,7 +189,7 @@ TEST (LinkedListPointer, Remove)
     delete obj2;
 }
 
-TEST (LinkedListPointer, DeleteAll)
+TEST (LinkedListPointerTests, DeleteAll)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -199,7 +199,7 @@ TEST (LinkedListPointer, DeleteAll)
     EXPECT_EQ (list.get(), nullptr);
 }
 
-TEST (LinkedListPointer, CopyToArray)
+TEST (LinkedListPointerTests, CopyToArray)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -213,7 +213,7 @@ TEST (LinkedListPointer, CopyToArray)
     delete obj2;
 }
 
-TEST (LinkedListPointer, SwapWith)
+TEST (LinkedListPointerTests, SwapWith)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -226,7 +226,7 @@ TEST (LinkedListPointer, SwapWith)
     delete obj2;
 }
 
-TEST (LinkedListPointer, Appender)
+TEST (LinkedListPointerTests, Appender)
 {
     LinkedListPointer<TestObject> list;
     LinkedListPointer<TestObject>::Appender appender (list);
@@ -240,7 +240,7 @@ TEST (LinkedListPointer, Appender)
     delete obj2;
 }
 
-TEST (LinkedListPointer, FindPointerTo)
+TEST (LinkedListPointerTests, FindPointerTo)
 {
     auto* obj1 = new TestObject (1);
     auto* obj2 = new TestObject (2);
@@ -258,7 +258,7 @@ TEST (LinkedListPointer, FindPointerTo)
 }
 
 /*
-TEST (LinkedListPointer, AddCopyOfList)
+TEST (LinkedListPointerTests, AddCopyOfList)
 {
     auto* obj1 = new TestObject(1);
     auto* obj2 = new TestObject(2);

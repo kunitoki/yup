@@ -26,6 +26,10 @@
 
 #include <memory>
 
+#if JUCE_ANDROID
+#include <BinaryData.h>
+#endif
+
 //==============================================================================
 
 class CustomWindow
@@ -35,17 +39,21 @@ class CustomWindow
 public:
     CustomWindow()
         // Fluid and continuous animations needs continuous repainting
-        : yup::DocumentWindow (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous, {}, 60.0f)
+        : yup::DocumentWindow (yup::ComponentNative::Options()
+            .withFlags(yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous), {})
     {
         // Set title
         setTitle ("main");
 
 #if JUCE_WASM
-        yup::File riveFilePath = yup::File ("/data");
+        yup::File riveFilePath = yup::File ("/data")
+            .getChildFile ("artboard.riv");
 #else
-        yup::File riveFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
+        yup::File riveFilePath = yup::File (__FILE__)
+            .getParentDirectory()
+            .getSiblingFile ("data")
+            .getChildFile ("alien.riv");
 #endif
-        riveFilePath = riveFilePath.getChildFile ("alien.riv");
 
         // Setup artboards
         for (int i = 0; i < totalRows * totalColumns; ++i)
@@ -53,7 +61,12 @@ public:
             auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
             addAndMakeVisible (art);
 
-            art->loadFromFile (riveFilePath, 0, false);
+#if JUCE_ANDROID
+            yup::MemoryInputStream is(yup::RiveFile_data, yup::RiveFile_size, false);
+            art->loadFromStream (is, 0, true);
+#else
+            art->loadFromFile (riveFilePath, 0, true);
+#endif
         }
 
         // Grab focus
@@ -187,7 +200,7 @@ struct Application : yup::YUPApplication
 
     const yup::String getApplicationName() override
     {
-        return "yup!";
+        return "yup! render";
     }
 
     const yup::String getApplicationVersion() override
@@ -197,6 +210,8 @@ struct Application : yup::YUPApplication
 
     void initialise (const yup::String& commandLineParameters) override
     {
+        YUP_PROFILE_START();
+
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
@@ -209,6 +224,8 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Shutting down");
 
         window.reset();
+
+        YUP_PROFILE_STOP();
     }
 
 private:

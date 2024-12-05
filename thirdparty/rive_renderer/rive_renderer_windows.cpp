@@ -21,8 +21,25 @@
 
 #include "rive_renderer.h"
 
+#if YUP_RIVE_USE_D3D
 #pragma comment (lib, "d3d11.lib")
 #pragma comment (lib, "d3dcompiler.lib")
 #pragma comment (lib, "dxgi.lib")
 
 #include "source/d3d/render_context_d3d_impl.cpp"
+#endif
+
+#if YUP_RIVE_USE_OPENGL
+#pragma comment (lib, "opengl32.lib")
+
+#include "source/gl/gl_state.cpp"
+#include "source/gl/gl_utils.cpp"
+#include "source/gl/load_gles_extensions.cpp"
+#include "source/gl/load_store_actions_ext.cpp"
+#include "source/gl/pls_impl_ext_native.cpp"
+#include "source/gl/pls_impl_framebuffer_fetch.cpp"
+#include "source/gl/pls_impl_rw_texture.cpp"
+#include "source/gl/render_buffer_gl_impl.cpp"
+#include "source/gl/render_context_gl_impl.cpp"
+#include "source/gl/render_target_gl.cpp"
+#endif
