@@ -19,6 +19,14 @@
 
 #==============================================================================
 
+function (_yup_set_default VAR VALUE)
+    if (NOT DEFINED ${VAR})
+        set (${VAR} "${VALUE}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_strip_list input_list output_variable)
     set (inner_list "" PARENT_SCOPE)
     foreach (item ${input_list})
@@ -31,6 +39,25 @@ function (_yup_strip_list input_list output_variable)
     set (${output_variable} "${inner_list}" PARENT_SCOPE)
 endfunction()
 
+function (_yup_comma_or_space_separated_list input_list output_variable)
+    string (REPLACE "," " " temp1_list ${input_list})
+    string (REPLACE " " ";" temp2_list ${temp1_list})
+    _yup_strip_list ("${temp2_list}" final_list)
+    set (${output_variable} "${final_list}" PARENT_SCOPE)
+endfunction()
+
+function (_yup_join_list_with_separator input_list separator prefix suffix output_variable)
+    set (result_string "")
+    set (local_separator "")
+
+    foreach (item ${input_list})
+        string (APPEND result_string "${local_separator}${prefix}${item}${suffix}")
+        set (local_separator "${separator}")
+    endforeach()
+
+    set (${output_variable} "${result_string}" PARENT_SCOPE)
+endfunction()
+
 #==============================================================================
 
 function (_yup_make_short_version version output_variable)
@@ -40,15 +67,6 @@ function (_yup_make_short_version version output_variable)
     list (REMOVE_AT version_list ${version_list_last_index})
     string (JOIN "." version_short ${version_list})
     set (${output_variable} "${version_short}" PARENT_SCOPE)
-endfunction()
-
-#==============================================================================
-
-function (_yup_comma_or_space_separated_list input_list output_variable)
-    string (REPLACE "," " " temp1_list ${input_list})
-    string (REPLACE " " ";" temp2_list ${temp1_list})
-    _yup_strip_list ("${temp2_list}" final_list)
-    set (${output_variable} "${final_list}" PARENT_SCOPE)
 endfunction()
 
 #==============================================================================

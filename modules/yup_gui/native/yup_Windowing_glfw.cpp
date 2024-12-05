@@ -913,7 +913,7 @@ void* GLFWComponentNative::getNativeHandle() const
     return reinterpret_cast<void*> (glfwGetX11Window (window));
 
 #elif JUCE_ANDROID
-    return reinterpret_cast<void*> (glfwGetAndroidApp (window)->window);
+    return reinterpret_cast<void*> (glfwGetAndroidApp()->window);
 
 #else
     return nullptr;

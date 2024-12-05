@@ -23,76 +23,31 @@ function (_yup_prepare_gradle_android)
     set (options "")
     set (one_value_args
         MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
-        TARGET_NAME ABI TOOLCHAIN PLATFORM STL CPP_VERSION
+        TARGET_NAME ABI TOOLCHAIN PLATFORM STL CPP_VERSION CMAKE_VERSION
         APPLICATION_ID APPLICATION_NAMESPACE APPLICATION_CMAKELISTS_PATH APPLICATION_VERSION)
     set (multi_value_args "")
 
     cmake_parse_arguments (YUP_ANDROID "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     # Prepare variables
-    if (NOT DEFINED YUP_ANDROID_MIN_SDK_VERSION)
-        set (YUP_ANDROID_MIN_SDK_VERSION "19")
-    endif()
+    _yup_set_default (YUP_ANDROID_MIN_SDK_VERSION "21")
+    _yup_set_default (YUP_ANDROID_COMPILE_SDK_VERSION "34")
+    _yup_set_default (YUP_ANDROID_TARGET_SDK_VERSION "${YUP_ANDROID_COMPILE_SDK_VERSION}")
+    _yup_set_default (YUP_ANDROID_TARGET_NAME "default_app")
+    _yup_set_default (YUP_ANDROID_TOOLCHAIN "clang")
+    _yup_set_default (YUP_ANDROID_PLATFORM "android-${YUP_ANDROID_MIN_SDK_VERSION}")
+    _yup_set_default (YUP_ANDROID_STL "c++_shared")
+    _yup_set_default (YUP_ANDROID_CPP_VERSION "17")
+    _yup_set_default (YUP_ANDROID_APPLICATION_ID "com.yup.default_app")
+    _yup_set_default (YUP_ANDROID_APPLICATION_NAMESPACE "${YUP_ANDROID_APPLICATION_ID}")
+    _yup_set_default (YUP_ANDROID_APPLICATION_VERSION "1.0")
+    _yup_set_default (YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
+    _yup_set_default (YUP_ANDROID_ABI "arm64-v8a")
+    _yup_set_default (YUP_ANDROID_CMAKE_VERSION "${CMAKE_VERSION}")
 
-    if (NOT DEFINED YUP_ANDROID_COMPILE_SDK_VERSION)
-        set (YUP_ANDROID_COMPILE_SDK_VERSION "34")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_TARGET_SDK_VERSION)
-        set (YUP_ANDROID_TARGET_SDK_VERSION "${YUP_ANDROID_COMPILE_SDK_VERSION}")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_TARGET_NAME)
-        set (YUP_ANDROID_TARGET_NAME "default_app")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_ABI)
-        set (YUP_ANDROID_ABI "arm64-v8a")
-    endif()
-
-    set (separator "")
-    foreach (abi ${YUP_ANDROID_ABI})
-        set (result_abi "${result_abi}${separator}abiFilters += \"${abi}\"")
-        set (separator "\n            ")
-    endforeach()
-    set (YUP_ANDROID_ABI "${result_abi}")
-
-    if (NOT DEFINED YUP_ANDROID_TOOLCHAIN)
-        set (YUP_ANDROID_TOOLCHAIN "clang")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_PLATFORM)
-        set (YUP_ANDROID_PLATFORM "android-${YUP_ANDROID_MIN_SDK_VERSION}")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_STL)
-        set (YUP_ANDROID_STL "c++_shared")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_CPP_VERSION)
-        set (YUP_ANDROID_CPP_VERSION "17")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_APPLICATION_ID)
-        set (YUP_ANDROID_APPLICATION_ID "com.yup.default_app")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_APPLICATION_NAMESPACE)
-        set (YUP_ANDROID_APPLICATION_NAMESPACE "${YUP_ANDROID_APPLICATION_ID}")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_APPLICATION_VERSION)
-        set (YUP_ANDROID_APPLICATION_VERSION "1.0")
-    endif()
-
-    if (NOT DEFINED YUP_ANDROID_APPLICATION_PATH)
-        set (YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_SOURCE_DIR}")
-    endif()
-
-    set (YUP_ANDROID_CMAKE_VERSION ${CMAKE_VERSION})
+    _yup_join_list_with_separator ("${YUP_ANDROID_ABI}" "\n            " "abiFilters += \"" "\"" YUP_ANDROID_ABI)
     _yup_version_string_to_version_code (${YUP_ANDROID_APPLICATION_VERSION} YUP_ANDROID_APPLICATION_VERSION_CODE)
-    file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH
-        "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
+    file (RELATIVE_PATH YUP_ANDROID_APPLICATION_PATH "${CMAKE_CURRENT_BINARY_DIR}/app" "${YUP_ANDROID_APPLICATION_PATH}")
 
     # Prepare files
     set (BASE_FILES_PATH "${CMAKE_SOURCE_DIR}/cmake/platforms/android")

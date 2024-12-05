@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include "oboe.h"
+#include "oboe_library.h"
 
 #if defined(ANDROID) || defined(__ANDROID__)
 #include "upstream/src/common/Utilities.cpp"

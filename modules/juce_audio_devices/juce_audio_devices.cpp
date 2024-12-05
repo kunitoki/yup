@@ -248,7 +248,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wunused-parameter",
                                      "-Wshadow-field",
                                      "-Wsign-conversion",
                                      "-Wswitch-enum")
-#include "oboe/oboe.h"
+#include <oboe_library/oboe_library.h>
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 #include "native/juce_Oboe_android.cpp"
