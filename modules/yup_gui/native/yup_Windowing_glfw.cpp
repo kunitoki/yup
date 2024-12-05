@@ -1148,7 +1148,7 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     {
         lastMouseDownPosition = localPosition;
 
-        const auto currentMouseDownTime = Time::getCurrentTime();
+        const auto currentMouseDownTime = juce::Time::getCurrentTime();
 
         if (lastButtonDownTime.currentTimeMillis() > 0
             && currentMouseDownTime - lastButtonDownTime < RelativeTime::milliseconds (200))
