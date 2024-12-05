@@ -473,7 +473,7 @@ private:
 
     int keyState[GLFW_KEY_LAST] = {};
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
-    Time lastButtonDownTime;
+    juce::Time lastButtonDownTime;
     KeyModifiers currentKeyModifiers;
 
     float desiredFrameRate = 60.0f;
