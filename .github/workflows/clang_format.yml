@@ -2,6 +2,10 @@ name: Clang Format
 
 on:
   push:
+    paths:
+      - "**/examples/**"
+      - "**/modules/**"
+      - "**/tests/**"
     branches:
       - main
 
