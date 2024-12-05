@@ -76,8 +76,7 @@
 //==============================================================================
 #if defined(_WIN32) || defined(_WIN64)
 #define JUCE_WINDOWS 1
-#elif defined(JUCE_ANDROID)
-#undef JUCE_ANDROID
+#elif defined(ANDROID) || defined(__ANDROID__)
 #define JUCE_ANDROID 1
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #define JUCE_BSD 1

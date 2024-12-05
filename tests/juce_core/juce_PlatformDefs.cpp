@@ -27,14 +27,14 @@
 
 using namespace juce;
 
-TEST (PlatformDefs, Stringify)
+TEST (PlatformDefsTests, Stringify)
 {
     constexpr auto x = std::string_view (JUCE_STRINGIFY (abcdf));
 
     static_assert (x == "abcdf");
 }
 
-TEST (PlatformDefs, IsConstantEvaluated)
+TEST (PlatformDefsTests, IsConstantEvaluated)
 {
     constexpr auto x = []
     {
@@ -50,7 +50,7 @@ TEST (PlatformDefs, IsConstantEvaluated)
     EXPECT_EQ (y, 2);
 }
 
-TEST (PlatformDefs, ConstexprJassertfalse)
+TEST (PlatformDefsTests, ConstexprJassertfalse)
 {
     constexpr auto x = []
     {

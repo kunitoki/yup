@@ -35,6 +35,15 @@ class JUCE_API GraphicsContext
 {
 public:
     //==============================================================================
+    /** Enumerates supported graphics APIs. */
+    enum Api
+    {
+        OpenGL,   ///< Specifies the use of OpenGL for rendering.
+        Direct3D, ///< Specifies the use of Direct3D for rendering.
+        Metal,    ///< Specifies the use of Metal for rendering.
+        Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
+    };
+
     /** Configuration options for creating a graphics context. */
     struct Options
     {
@@ -46,15 +55,6 @@ public:
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
-    };
-
-    /** Enumerates supported graphics APIs. */
-    enum Api
-    {
-        OpenGL,   ///< Specifies the use of OpenGL for rendering.
-        Direct3D, ///< Specifies the use of Direct3D for rendering.
-        Metal,    ///< Specifies the use of Metal for rendering.
-        Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
     };
 
     //==============================================================================

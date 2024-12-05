@@ -19,13 +19,14 @@
   ==============================================================================
 */
 
+#if YUP_RIVE_USE_OPENGL || JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/gl/gles3.hpp"
 #include "rive/renderer/gl/render_buffer_gl_impl.hpp"
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 
-#if RIVE_DESKTOP_GL
+#if RIVE_DESKTOP_GL || JUCE_ANDROID
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #endif
@@ -75,12 +76,6 @@ class LowLevelRenderContextGL : public GraphicsContext
 public:
     LowLevelRenderContextGL()
     {
-        if (! m_plsContext)
-        {
-            fprintf (stderr, "Failed to create a renderer.\n");
-            exit (-1);
-        }
-
 #if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
         if (! gladLoadCustomLoader ((GLADloadproc) glfwGetProcAddress))
@@ -90,6 +85,13 @@ public:
         }
 #endif
 
+        m_plsContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
+        if (! m_plsContext)
+        {
+            fprintf (stderr, "Failed to create a renderer.\n");
+            exit (-1);
+        }
+
         printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
         printf ("GL_RENDERER: %s\n", glGetString (GL_RENDERER));
         printf ("GL_VERSION:  %s\n", glGetString (GL_VERSION));
@@ -98,7 +100,7 @@ public:
         printf ("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n", GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 #endif
 
-#if DEBUG
+#if DEBUG && !RIVE_ANDROID
         int n;
         glGetIntegerv (GL_NUM_EXTENSIONS, &n);
         for (size_t i = 0; i < n; ++i)
@@ -148,15 +150,13 @@ public:
 
     void end (void*) override
     {
-        m_plsContext->flush ({ .renderTarget = m_renderTarget.get() });
+        m_plsContext->flush ({ m_renderTarget.get() });
 
         m_plsContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
     }
 
 private:
-    std::unique_ptr<rive::gpu::RenderContext> m_plsContext =
-        rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
-
+    std::unique_ptr<rive::gpu::RenderContext> m_plsContext;
     rive::rcp<rive::gpu::RenderTargetGL> m_renderTarget;
 };
 
@@ -166,3 +166,4 @@ std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsCo
 }
 
 } // namespace yup
+#endif

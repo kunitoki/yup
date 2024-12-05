@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-TEST (Enumerate, Works_With_Bidirectional_Iterators)
+TEST (EnumerateTests, Works_With_Bidirectional_Iterators)
 {
     const std::list<int> elements { 10, 20, 30, 40, 50 };
     std::vector<int> counts;
@@ -52,7 +52,7 @@ TEST (Enumerate, Works_With_Bidirectional_Iterators)
     EXPECT_EQ (counts, (std::vector<int> { 0, 1, 2, 3, 4 }));
 }
 
-TEST (Enumerate, Works_With_Random_Access_Iterators)
+TEST (EnumerateTests, Works_With_Random_Access_Iterators)
 {
     const std::vector<std::string> strings { "a", "bb", "ccc", "dddd", "eeeee" };
 
@@ -64,7 +64,7 @@ TEST (Enumerate, Works_With_Random_Access_Iterators)
     EXPECT_EQ (counts, (std::vector<int> { 1, 3, 5, 7, 9 }));
 }
 
-TEST (Enumerate, Works_With_Mutable_Ranges)
+TEST (EnumerateTests, Works_With_Mutable_Ranges)
 {
     std::vector<std::string> strings { "", "", "", "", "" };
 
@@ -74,7 +74,7 @@ TEST (Enumerate, Works_With_Mutable_Ranges)
     EXPECT_EQ (strings, (std::vector<std::string> { "0", "1", "2", "3", "4" }));
 }
 
-TEST (Enumerate, Iterator_Can_Be_Incremented_By_More_Than_One)
+TEST (EnumerateTests, Iterator_Can_Be_Incremented_By_More_Than_One)
 {
     std::vector<int> ints (6);
 
@@ -88,7 +88,7 @@ TEST (Enumerate, Iterator_Can_Be_Incremented_By_More_Than_One)
     EXPECT_EQ (counts, (std::vector<int> { 0, 2, 4 }));
 }
 
-TEST (Enumerate, Iterator_Can_Be_Started_At_Non_Zero_Value)
+TEST (EnumerateTests, Iterator_Can_Be_Started_At_Non_Zero_Value)
 {
     const std::vector<int> ints (6);
 
@@ -100,14 +100,14 @@ TEST (Enumerate, Iterator_Can_Be_Started_At_Non_Zero_Value)
     EXPECT_EQ (counts, (std::vector<int> { 5, 6, 7, 8, 9, 10 }));
 }
 
-TEST (Enumerate, Subtracting_Two_Iterators_Returns_The_Difference_Between_The_Base_Iterators)
+TEST (EnumerateTests, Subtracting_Two_Iterators_Returns_The_Difference_Between_The_Base_Iterators)
 {
     const std::vector<int> ints (6);
     const auto enumerated = juce::enumerate (ints);
     EXPECT_EQ ((int) (enumerated.end() - enumerated.begin()), (int) ints.size());
 }
 
-TEST (Enumerate, EnumerateIterator_Can_Be_Decremented)
+TEST (EnumerateTests, EnumerateIterator_Can_Be_Decremented)
 {
     const std::vector<int> ints (5);
     std::vector<int> counts;
@@ -120,7 +120,7 @@ TEST (Enumerate, EnumerateIterator_Can_Be_Decremented)
     EXPECT_EQ (counts, (std::vector<int> { -1, -2, -3, -4, -5 }));
 }
 
-TEST (Enumerate, EnumerateIterator_Can_Be_Compared)
+TEST (EnumerateTests, EnumerateIterator_Can_Be_Compared)
 {
     const std::vector<int> ints (6);
     const auto enumerated = juce::enumerate (ints);

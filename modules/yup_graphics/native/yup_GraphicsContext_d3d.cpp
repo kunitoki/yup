@@ -19,6 +19,7 @@
   ==============================================================================
 */
 
+#if YUP_RIVE_USE_D3D
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/d3d/render_context_d3d_impl.hpp"
 #include "rive/renderer/d3d/d3d11.hpp"
@@ -171,3 +172,4 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Graphics
 }
 
 } // namespace yup
+#endif

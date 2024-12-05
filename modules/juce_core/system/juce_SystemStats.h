@@ -70,6 +70,8 @@ public:
         iOS = 0x1000,
         WASM = 0x2000,
 
+        WebBrowser = WASM | 0x0100,
+
         MacOSX_10_7 = MacOSX | 7,
         MacOSX_10_8 = MacOSX | 8,
         MacOSX_10_9 = MacOSX | 9,

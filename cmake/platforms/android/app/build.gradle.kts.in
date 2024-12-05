@@ -1,0 +1,95 @@
+plugins {
+    alias(libs.plugins.androidApplication)
+}
+
+android {
+    namespace = "@YUP_ANDROID_APPLICATION_NAMESPACE@"
+    compileSdk = @YUP_ANDROID_COMPILE_SDK_VERSION@
+
+    defaultConfig {
+        applicationId = "@YUP_ANDROID_APPLICATION_ID@"
+        versionCode = @YUP_ANDROID_APPLICATION_VERSION_CODE@
+        versionName = "@YUP_ANDROID_APPLICATION_VERSION@"
+        minSdk = @YUP_ANDROID_MIN_SDK_VERSION@
+        targetSdk = @YUP_ANDROID_TARGET_SDK_VERSION@
+
+        ndk {
+            @YUP_ANDROID_ABI@
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++@YUP_ANDROID_CPP_VERSION@"
+                arguments += "-DCMAKE_VERBOSE_MAKEFILE=ON"
+                arguments += "-DANDROID_TOOLCHAIN=@YUP_ANDROID_TOOLCHAIN@"
+                arguments += "-DANDROID_PLATFORM=@YUP_ANDROID_PLATFORM@"
+                arguments += "-DANDROID_STL=@YUP_ANDROID_STL@"
+                arguments += "-DANDROID_CPP_FEATURES=rtti exceptions"
+                arguments += "-DANDROID_ALLOW_UNDEFINED_SYMBOLS=FALSE"
+                arguments += "-DANDROID_PIE=ON"
+            }
+        }
+    }
+
+    /*signingConfigs {
+        create("release") {
+            storeFile = file("certs/app.keystore")
+            storePassword = "app"
+            keyAlias = "app"
+            keyPassword = "app"
+        }
+    }*/
+
+    buildTypes {
+        getByName("debug") {
+            isDebuggable = true
+            isMinifyEnabled = false
+        }
+
+        getByName("release") {
+            /*signingConfig = signingConfigs.getByName("release")*/
+            isDebuggable = true
+            isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("@YUP_ANDROID_APPLICATION_PATH@/CMakeLists.txt")
+            version = "@YUP_ANDROID_CMAKE_VERSION@"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds = true
+        abortOnError = false
+    }
+
+    packaging {
+        jniLibs {
+            keepDebugSymbols += "*/*/*.so"
+        }
+    }
+
+    buildFeatures {
+        viewBinding = true
+    }
+}
+
+dependencies {
+    /*implementation(libs.appcompat)
+    implementation(libs.material)
+    implementation(libs.constraintlayout)
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.ext.junit)
+    androidTestImplementation(libs.espresso.core)*/
+}

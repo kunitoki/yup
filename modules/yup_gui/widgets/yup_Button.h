@@ -34,6 +34,9 @@ public:
     virtual void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) = 0;
 
     //==============================================================================
+    std::function<void ()> onClick;
+
+    //==============================================================================
     void paint (Graphics& g) override;
     void mouseEnter (const MouseEvent& event) override;
     void mouseExit (const MouseEvent& event) override;

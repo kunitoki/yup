@@ -143,7 +143,7 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 #define JUCE_MAIN_FUNCTION_DEFINITION                                                    \
-    extern "C" JUCE_MAIN_FUNCTION                                                        \
+    JUCE_MAIN_FUNCTION                                                                   \
     {                                                                                    \
         juce::JUCEApplicationBase::createInstance = &juce_CreateApplication;             \
         juce::JUCEApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
@@ -158,7 +158,12 @@ class JUCE_API ScopedJuceInitialiser_GUI final
         return new AppClass();                                     \
     }
 
-#define JUCE_MAIN_FUNCTION_DEFINITION
+#define JUCE_MAIN_FUNCTION_DEFINITION                                        \
+    int main()                                                               \
+    {                                                                        \
+        juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
+        return juce::JUCEApplicationBase::main(0, nullptr);                  \
+    }
 
 #else
 
@@ -170,7 +175,7 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     }
 
 #define JUCE_MAIN_FUNCTION_DEFINITION                                        \
-    extern "C" JUCE_MAIN_FUNCTION                                            \
+    JUCE_MAIN_FUNCTION                                                       \
     {                                                                        \
         juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
         return juce::JUCEApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);     \

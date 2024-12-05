@@ -102,6 +102,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 
 #if JUCE_EMSCRIPTEN
 #include <emscripten.h>
+#include <emscripten/fetch.h>
 #endif
 
 #if JUCE_LINUX || JUCE_BSD
@@ -290,8 +291,10 @@ extern char** environ;
 
 //==============================================================================
 #elif JUCE_WASM
+#include "native/juce_WebAssemblyHelpers.h"
 #include "native/juce_SystemStats_wasm.cpp"
 #include "native/juce_Files_wasm.cpp"
+#include "native/juce_Network_wasm.cpp"
 #include "native/juce_Threads_wasm.cpp"
 #include "native/juce_PlatformTimer_generic.cpp"
 #endif

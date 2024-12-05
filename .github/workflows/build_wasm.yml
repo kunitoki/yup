@@ -5,6 +5,7 @@ on:
     paths:
       - "**/workflows/build_wasm.yml"
       - "**/cmake/**"
+      - "**/examples/**"
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"

@@ -17,16 +17,43 @@
 #
 # ==============================================================================
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required (VERSION 3.28)
 
-# ==== Prepare target
+# ==== Set target name and version
 set (target_name example_graphics)
 set (target_version "1.0.0")
 
+project (${target_name} VERSION ${target_version})
+
+# ==== Prepare Android build
+if (ANDROID)
+    # project (${target_name} VERSION ${target_version})
+    include (../../cmake/yup.cmake)
+    _yup_setup_platform()
+    _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
+endif()
+
+# ==== Prepare Android build
+yup_add_embedded_binary_resources (
+    "${target_name}_binary_data"
+    OUT_DIR BinaryData
+    HEADER BinaryData.h
+    NAMESPACE yup
+    RESOURCE_NAMES
+        RobotoRegularFont
+    RESOURCES
+        ${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf
+)
+
+# ==== Prepare target
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
+    TARGET_APP_ID "org.yup.${target_name}"
+    TARGET_APP_NAMESPACE "org.yup.${target_name}"
+    PRELOAD_FILES
+        "${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf@data/Roboto-Regular.ttf"
     MODULES
         juce_core
         juce_events
@@ -39,9 +66,12 @@ yup_standalone_app (
         sheenbidi
         rive
         rive_renderer
+        "${target_name}_binary_data"
 )
 
 # ==== Prepare sources
-file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
-source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name} PRIVATE ${sources})
+if (NOT YUP_TARGET_ANDROID)
+    file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
+    source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
+    target_sources (${target_name} PRIVATE ${sources})
+endif()

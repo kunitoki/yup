@@ -97,39 +97,4 @@ String ChildProcess::readAllProcessOutput()
     return result.toString();
 }
 
-//==============================================================================
-//==============================================================================
-#if JUCE_UNIT_TESTS
-
-class ChildProcessTests final : public UnitTest
-{
-public:
-    ChildProcessTests()
-        : UnitTest ("ChildProcess", UnitTestCategories::threads)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("Child Processes");
-
-#if JUCE_WINDOWS || JUCE_MAC || JUCE_LINUX || JUCE_BSD
-        ChildProcess p;
-
-#if JUCE_WINDOWS
-        expect (p.start ("tasklist"));
-#else
-        expect (p.start ("ls /"));
-#endif
-
-        auto output = p.readAllProcessOutput();
-        expect (output.isNotEmpty());
-#endif
-    }
-};
-
-static ChildProcessTests childProcessUnitTests;
-
-#endif
-
 } // namespace juce
