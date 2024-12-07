@@ -43,15 +43,16 @@
 
 using namespace juce;
 
-namespace {
+namespace
+{
 struct ThrowOnMoveOrSwap
 {
     ThrowOnMoveOrSwap() = default;
 
-    ThrowOnMoveOrSwap(ThrowOnMoveOrSwap&&) { throw std::bad_alloc(); }
+    ThrowOnMoveOrSwap (ThrowOnMoveOrSwap&&) { throw std::bad_alloc(); }
 };
 
-void swap(ThrowOnMoveOrSwap&, ThrowOnMoveOrSwap&) { throw std::bad_alloc(); }
+void swap (ThrowOnMoveOrSwap&, ThrowOnMoveOrSwap&) { throw std::bad_alloc(); }
 
 struct ThrowOnCopy
 {
@@ -83,106 +84,121 @@ struct ThrowOnCopy
 TEST (OptionalTests, DefaultConstructedOptionalIsInvalid)
 {
     Optional<int> o;
-    EXPECT_FALSE(o.hasValue());
+    EXPECT_FALSE (o.hasValue());
 }
 
 TEST (OptionalTests, ConstructingFromNulloptIsInvalid)
 {
-    Optional<int> o(nullopt);
-    EXPECT_FALSE(o.hasValue());
+    Optional<int> o (nullopt);
+    EXPECT_FALSE (o.hasValue());
 }
 
 TEST (OptionalTests, OptionalConstructedFromValueIsValid)
 {
     Optional<int> o = 5;
-    EXPECT_TRUE(o.hasValue());
-    EXPECT_EQ(*o, 5);
+    EXPECT_TRUE (o.hasValue());
+    EXPECT_EQ (*o, 5);
 }
 
 TEST (OptionalTests, ConstructingFromMovedOptionalCallsAppropriateMemberFunctions)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto ptr = makePtr();
-    Optional<Ptr> original(ptr);
-    EXPECT_EQ(ptr.use_count(), 2);
+    Optional<Ptr> original (ptr);
+    EXPECT_EQ (ptr.use_count(), 2);
 
-    auto other = std::move(original);
-    EXPECT_TRUE(original.hasValue());
-    EXPECT_TRUE(other.hasValue());
-    EXPECT_EQ(ptr.use_count(), 2);
+    auto other = std::move (original);
+    EXPECT_TRUE (original.hasValue());
+    EXPECT_TRUE (other.hasValue());
+    EXPECT_EQ (ptr.use_count(), 2);
 }
 
 TEST (OptionalTests, MovingEmptyOptionalToPopulatedOneDestroysInstance)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto ptr = makePtr();
-    Optional<Ptr> original(ptr);
-    EXPECT_EQ(ptr.use_count(), 2);
+    Optional<Ptr> original (ptr);
+    EXPECT_EQ (ptr.use_count(), 2);
 
     original = Optional<Ptr>();
-    EXPECT_EQ(ptr.use_count(), 1);
+    EXPECT_EQ (ptr.use_count(), 1);
 }
 
 TEST (OptionalTests, CopyingEmptyOptionalToPopulatedOneDestroysInstance)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto ptr = makePtr();
-    Optional<Ptr> original(ptr);
-    EXPECT_EQ(ptr.use_count(), 2);
+    Optional<Ptr> original (ptr);
+    EXPECT_EQ (ptr.use_count(), 2);
 
     Optional<Ptr> empty;
     original = empty;
-    EXPECT_EQ(ptr.use_count(), 1);
+    EXPECT_EQ (ptr.use_count(), 1);
 }
 
 TEST (OptionalTests, MovingPopulatedOptionalCallsAppropriateMemberFunctions)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto a = makePtr();
     auto b = makePtr();
 
-    Optional<Ptr> aOpt(a);
-    Optional<Ptr> bOpt(b);
+    Optional<Ptr> aOpt (a);
+    Optional<Ptr> bOpt (b);
 
-    EXPECT_EQ(a.use_count(), 2);
-    EXPECT_EQ(b.use_count(), 2);
+    EXPECT_EQ (a.use_count(), 2);
+    EXPECT_EQ (b.use_count(), 2);
 
-    aOpt = std::move(bOpt);
+    aOpt = std::move (bOpt);
 
-    EXPECT_TRUE(aOpt.hasValue());
-    EXPECT_TRUE(bOpt.hasValue());
-    EXPECT_EQ(a.use_count(), 1);
-    EXPECT_EQ(b.use_count(), 2);
+    EXPECT_TRUE (aOpt.hasValue());
+    EXPECT_TRUE (bOpt.hasValue());
+    EXPECT_EQ (a.use_count(), 1);
+    EXPECT_EQ (b.use_count(), 2);
 }
 
 TEST (OptionalTests, CopyingPopulatedOptionalCallsAppropriateMemberFunctions)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto a = makePtr();
     auto b = makePtr();
 
-    Optional<Ptr> aOpt(a);
-    Optional<Ptr> bOpt(b);
+    Optional<Ptr> aOpt (a);
+    Optional<Ptr> bOpt (b);
 
-    EXPECT_EQ(a.use_count(), 2);
-    EXPECT_EQ(b.use_count(), 2);
+    EXPECT_EQ (a.use_count(), 2);
+    EXPECT_EQ (b.use_count(), 2);
 
     aOpt = bOpt;
 
-    EXPECT_TRUE(aOpt.hasValue());
-    EXPECT_TRUE(bOpt.hasValue());
-    EXPECT_EQ(a.use_count(), 1);
-    EXPECT_EQ(b.use_count(), 3);
+    EXPECT_TRUE (aOpt.hasValue());
+    EXPECT_TRUE (bOpt.hasValue());
+    EXPECT_EQ (a.use_count(), 1);
+    EXPECT_EQ (b.use_count(), 3);
 }
 
 TEST (OptionalTests, StrongExceptionSafetyWhenForwardingOverEmptyObject)
@@ -200,8 +216,8 @@ TEST (OptionalTests, StrongExceptionSafetyWhenForwardingOverEmptyObject)
         threw = true;
     }
 
-    EXPECT_TRUE(threw);
-    EXPECT_FALSE(a.hasValue());
+    EXPECT_TRUE (threw);
+    EXPECT_FALSE (a.hasValue());
 }
 
 TEST (OptionalTests, WeakExceptionSafetyWhenForwardingOverPopulatedObject)
@@ -220,9 +236,9 @@ TEST (OptionalTests, WeakExceptionSafetyWhenForwardingOverPopulatedObject)
         threw = true;
     }
 
-    EXPECT_TRUE(threw);
-    EXPECT_TRUE(a.hasValue());
-    EXPECT_EQ(a->value, -100);
+    EXPECT_TRUE (threw);
+    EXPECT_TRUE (a.hasValue());
+    EXPECT_EQ (a->value, -100);
 }
 
 TEST (OptionalTests, StrongExceptionSafetyWhenCopyingOverEmptyObject)
@@ -240,8 +256,8 @@ TEST (OptionalTests, StrongExceptionSafetyWhenCopyingOverEmptyObject)
         threw = true;
     }
 
-    EXPECT_TRUE(threw);
-    EXPECT_FALSE(a.hasValue());
+    EXPECT_TRUE (threw);
+    EXPECT_FALSE (a.hasValue());
 }
 
 TEST (OptionalTests, WeakExceptionSafetyWhenCopyingOverPopulatedObject)
@@ -260,22 +276,25 @@ TEST (OptionalTests, WeakExceptionSafetyWhenCopyingOverPopulatedObject)
         threw = true;
     }
 
-    EXPECT_TRUE(threw);
-    EXPECT_TRUE(a.hasValue());
-    EXPECT_EQ(a->value, -100);
+    EXPECT_TRUE (threw);
+    EXPECT_TRUE (a.hasValue());
+    EXPECT_EQ (a->value, -100);
 }
 
 TEST (OptionalTests, AssigningFromNulloptClearsInstance)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto ptr = makePtr();
-    Optional<Ptr> a(ptr);
-    EXPECT_EQ(ptr.use_count(), 2);
+    Optional<Ptr> a (ptr);
+    EXPECT_EQ (ptr.use_count(), 2);
 
     a = nullopt;
-    EXPECT_EQ(ptr.use_count(), 1);
+    EXPECT_EQ (ptr.use_count(), 1);
 }
 
 TEST (OptionalTests, CanBeConstructedAndAssignedAndCopiedAndMovedFromCompatibleType)
@@ -358,20 +377,23 @@ TEST (OptionalTests, SwapDoesNothingToTwoEmptyOptionals)
 TEST (OptionalTests, SwapTransfersOwnershipIfOneOptionalContainsAValue)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     {
         Ptr ptr = makePtr();
         Optional<Ptr> a, b = ptr;
-        EXPECT_FALSE(a.hasValue());
-        EXPECT_TRUE(b.hasValue());
-        EXPECT_EQ(ptr.use_count(), 2);
+        EXPECT_FALSE (a.hasValue());
+        EXPECT_TRUE (b.hasValue());
+        EXPECT_EQ (ptr.use_count(), 2);
 
-        a.swap(b);
+        a.swap (b);
 
-        EXPECT_TRUE(a.hasValue());
-        EXPECT_FALSE(b.hasValue());
-        EXPECT_EQ(ptr.use_count(), 2);
+        EXPECT_TRUE (a.hasValue());
+        EXPECT_FALSE (b.hasValue());
+        EXPECT_EQ (ptr.use_count(), 2);
     }
 
     {
@@ -392,7 +414,10 @@ TEST (OptionalTests, SwapTransfersOwnershipIfOneOptionalContainsAValue)
 TEST (OptionalTests, SwapCallsStdSwapToSwapTwoPopulatedOptionals)
 {
     using Ptr = std::shared_ptr<int>;
-    auto makePtr = [] { return std::make_shared<int>(); };
+    auto makePtr = []
+    {
+        return std::make_shared<int>();
+    };
 
     auto x = makePtr();
     auto y = makePtr();
@@ -400,19 +425,19 @@ TEST (OptionalTests, SwapCallsStdSwapToSwapTwoPopulatedOptionals)
     Optional<Ptr> a = x;
     Optional<Ptr> b = y;
 
-    EXPECT_TRUE(a.hasValue());
-    EXPECT_TRUE(b.hasValue());
-    EXPECT_EQ(x.use_count(), 2);
-    EXPECT_EQ(y.use_count(), 2);
+    EXPECT_TRUE (a.hasValue());
+    EXPECT_TRUE (b.hasValue());
+    EXPECT_EQ (x.use_count(), 2);
+    EXPECT_EQ (y.use_count(), 2);
 
-    a.swap(b);
+    a.swap (b);
 
-    EXPECT_TRUE(a.hasValue());
-    EXPECT_TRUE(b.hasValue());
-    EXPECT_EQ(x.use_count(), 2);
-    EXPECT_EQ(y.use_count(), 2);
-    EXPECT_EQ(*a, y);
-    EXPECT_EQ(*b, x);
+    EXPECT_TRUE (a.hasValue());
+    EXPECT_TRUE (b.hasValue());
+    EXPECT_EQ (x.use_count(), 2);
+    EXPECT_EQ (y.use_count(), 2);
+    EXPECT_EQ (*a, y);
+    EXPECT_EQ (*b, x);
 }
 
 TEST (OptionalTests, ExceptionThrownDuringSwapLeavesObjectsIntact)
