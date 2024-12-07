@@ -55,7 +55,7 @@ TEST (BigIntegerTests, BasicTests)
         return b;
     };
 
-    Random r = getRandom();
+    Random r = Random::getSystemRandom();
 
     EXPECT_TRUE (BigInteger().isZero());
     EXPECT_TRUE (BigInteger (1).isOne());
@@ -87,7 +87,7 @@ TEST (BigIntegerTests, BasicTests)
 
 TEST (BigIntegerTests, BitSetting)
 {
-    Random r = getRandom();
+    Random r = Random::getSystemRandom();
     static uint8 test[2048];
 
     for (int j = 100000; --j >= 0;)

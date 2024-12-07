@@ -45,7 +45,7 @@ using namespace juce;
 
 TEST (RandomTests, RandomNumbers)
 {
-    Random r = getRandom();
+    Random r = Random::getSystemRandom();
 
     for (int i = 2000; --i >= 0;)
     {
