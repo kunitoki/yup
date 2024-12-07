@@ -40,14 +40,14 @@ TEST (TimeTests, MillisecondsConstructor)
 
 TEST (TimeTests, DISABLED_DateComponentsConstructorUTC)
 {
-    Time time(2022, 11, 1, 19, 50, 50, 111, false);
-    EXPECT_EQ(time.getYear(), 2022);
-    EXPECT_EQ(time.getMonth(), 11);
-    EXPECT_EQ(time.getDayOfMonth(), 1);
-    EXPECT_EQ(time.getHours(), 20);
-    EXPECT_EQ(time.getMinutes(), 50);
-    EXPECT_EQ(time.getSeconds(), 50);
-    EXPECT_EQ(time.getMilliseconds(), 111);
+    Time time (2022, 11, 1, 19, 50, 50, 111, false);
+    EXPECT_EQ (time.getYear(), 2022);
+    EXPECT_EQ (time.getMonth(), 11);
+    EXPECT_EQ (time.getDayOfMonth(), 1);
+    EXPECT_EQ (time.getHours(), 20);
+    EXPECT_EQ (time.getMinutes(), 50);
+    EXPECT_EQ (time.getSeconds(), 50);
+    EXPECT_EQ (time.getMilliseconds(), 111);
 }
 
 TEST (TimeTests, DateComponentsConstructorLocalTime)
@@ -114,8 +114,8 @@ TEST (TimeTests, GetWeekdayName)
 
 TEST (TimeTests, DISABLED_GetHours)
 {
-    Time time(1625000000000);
-    EXPECT_EQ(time.getHours(), 22); // 10 PM UTC
+    Time time (1625000000000);
+    EXPECT_EQ (time.getHours(), 22); // 10 PM UTC
 }
 
 TEST (TimeTests, IsAfternoon)
@@ -128,8 +128,8 @@ TEST (TimeTests, IsAfternoon)
 
 TEST (TimeTests, DISABLED_GetHoursInAmPmFormat)
 {
-    Time time(1625000000000);
-    EXPECT_EQ(time.getHoursInAmPmFormat(), 10); // 10 AM
+    Time time (1625000000000);
+    EXPECT_EQ (time.getHoursInAmPmFormat(), 10); // 10 AM
 }
 
 TEST (TimeTests, GetMinutes)
@@ -152,8 +152,8 @@ TEST (TimeTests, GetMilliseconds)
 
 TEST (TimeTests, DISABLED_IsDaylightSavingTime)
 {
-    Time time(1625000000000);
-    EXPECT_FALSE(time.isDaylightSavingTime());
+    Time time (1625000000000);
+    EXPECT_FALSE (time.isDaylightSavingTime());
 }
 
 TEST (TimeTests, GetTimeZone)
@@ -164,8 +164,8 @@ TEST (TimeTests, GetTimeZone)
 
 TEST (TimeTests, DISABLED_GetUTCOffsetSeconds)
 {
-    Time time(1625000000000);
-    EXPECT_NE(time.getUTCOffsetSeconds(), 0);
+    Time time (1625000000000);
+    EXPECT_NE (time.getUTCOffsetSeconds(), 0);
 }
 
 TEST (TimeTests, GetUTCOffsetString)

@@ -624,7 +624,7 @@ bool operator== (Time time1, Time time2) noexcept { return time1.toMilliseconds(
 
 bool operator!= (Time time1, Time time2) noexcept { return time1.toMilliseconds() != time2.toMilliseconds(); }
 
-bool operator<(Time time1, Time time2) noexcept { return time1.toMilliseconds() < time2.toMilliseconds(); }
+bool operator< (Time time1, Time time2) noexcept { return time1.toMilliseconds() < time2.toMilliseconds(); }
 
 bool operator> (Time time1, Time time2) noexcept { return time1.toMilliseconds() > time2.toMilliseconds(); }
 
