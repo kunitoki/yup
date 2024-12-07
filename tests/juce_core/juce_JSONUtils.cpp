@@ -48,57 +48,57 @@ using namespace juce;
 class JSONUtilsTests : public ::testing::Test
 {
 protected:
-    void expectDeepEqual(const std::optional<var>& a, const std::optional<var>& b)
+    void expectDeepEqual (const std::optional<var>& a, const std::optional<var>& b)
     {
         const auto text = a.has_value() && b.has_value()
-                            ? JSON::toString(*a) + " != " + JSON::toString(*b)
+                            ? JSON::toString (*a) + " != " + JSON::toString (*b)
                             : String();
-        EXPECT_TRUE(deepEqual(a, b)) << text;
+        EXPECT_TRUE (deepEqual (a, b)) << text;
     }
 
-    static bool deepEqual(const std::optional<var>& a, const std::optional<var>& b)
+    static bool deepEqual (const std::optional<var>& a, const std::optional<var>& b)
     {
         if (a.has_value() && b.has_value())
-            return JSONUtils::deepEqual(*a, *b);
+            return JSONUtils::deepEqual (*a, *b);
 
         return a == b;
     }
 };
 
-TEST_F(JSONUtilsTests, JSONPointers)
+TEST_F (JSONUtilsTests, JSONPointers)
 {
-    const auto obj = JSON::parse(R"({ "name":           "PIANO 4"
+    const auto obj = JSON::parse (R"({ "name":           "PIANO 4"
                                      , "lfoSpeed":       30
                                      , "lfoWaveform":    "triangle"
                                      , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [50,50,50,50] }
                                      })");
 
-    expectDeepEqual(JSONUtils::setPointer(obj, "", "hello world"), var("hello world"));
-    expectDeepEqual(JSONUtils::setPointer(obj, "/lfoWaveform/foobar", "str"), std::nullopt);
-    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"foo":0,"bar":1})"), "/foo", 2), JSON::parse(R"({"foo":2,"bar":1})"));
-    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"foo":0,"bar":1})"), "/baz", 2), JSON::parse(R"({"foo":0,"bar":1,"baz":2})"));
-    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"foo":{},"bar":{}})"), "/foo/bar", 2), JSON::parse(R"({"foo":{"bar":2},"bar":{}})"));
-    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/rates/01", "str"), std::nullopt);
-    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/rates/10", "str"), std::nullopt);
-    expectDeepEqual(JSONUtils::setPointer(obj, "/lfoSpeed", 10), JSON::parse(R"({ "name":           "PIANO 4"
+    expectDeepEqual (JSONUtils::setPointer (obj, "", "hello world"), var ("hello world"));
+    expectDeepEqual (JSONUtils::setPointer (obj, "/lfoWaveform/foobar", "str"), std::nullopt);
+    expectDeepEqual (JSONUtils::setPointer (JSON::parse (R"({"foo":0,"bar":1})"), "/foo", 2), JSON::parse (R"({"foo":2,"bar":1})"));
+    expectDeepEqual (JSONUtils::setPointer (JSON::parse (R"({"foo":0,"bar":1})"), "/baz", 2), JSON::parse (R"({"foo":0,"bar":1,"baz":2})"));
+    expectDeepEqual (JSONUtils::setPointer (JSON::parse (R"({"foo":{},"bar":{}})"), "/foo/bar", 2), JSON::parse (R"({"foo":{"bar":2},"bar":{}})"));
+    expectDeepEqual (JSONUtils::setPointer (obj, "/pitchEnvelope/rates/01", "str"), std::nullopt);
+    expectDeepEqual (JSONUtils::setPointer (obj, "/pitchEnvelope/rates/10", "str"), std::nullopt);
+    expectDeepEqual (JSONUtils::setPointer (obj, "/lfoSpeed", 10), JSON::parse (R"({ "name":           "PIANO 4"
                                                                                 , "lfoSpeed":       10
                                                                                 , "lfoWaveform":    "triangle"
                                                                                 , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [50,50,50,50] }
                                                                                 })"));
-    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"([0,1,2])"), "/0", "bang"), JSON::parse(R"(["bang",1,2])"));
-    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"/":"fizz"})"), "/~1", "buzz"), JSON::parse(R"({"/":"buzz"})"));
-    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"~":"fizz"})"), "/~0", "buzz"), JSON::parse(R"({"~":"buzz"})"));
-    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/rates/0", 80), JSON::parse(R"({ "name":           "PIANO 4"
+    expectDeepEqual (JSONUtils::setPointer (JSON::parse (R"([0,1,2])"), "/0", "bang"), JSON::parse (R"(["bang",1,2])"));
+    expectDeepEqual (JSONUtils::setPointer (JSON::parse (R"({"/":"fizz"})"), "/~1", "buzz"), JSON::parse (R"({"/":"buzz"})"));
+    expectDeepEqual (JSONUtils::setPointer (JSON::parse (R"({"~":"fizz"})"), "/~0", "buzz"), JSON::parse (R"({"~":"buzz"})"));
+    expectDeepEqual (JSONUtils::setPointer (obj, "/pitchEnvelope/rates/0", 80), JSON::parse (R"({ "name":           "PIANO 4"
                                                                                               , "lfoSpeed":       30
                                                                                               , "lfoWaveform":    "triangle"
                                                                                               , "pitchEnvelope":  { "rates": [80,67,95,60], "levels": [50,50,50,50] }
                                                                                               })"));
-    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/levels/0", 80), JSON::parse(R"({ "name":           "PIANO 4"
+    expectDeepEqual (JSONUtils::setPointer (obj, "/pitchEnvelope/levels/0", 80), JSON::parse (R"({ "name":           "PIANO 4"
                                                                                                , "lfoSpeed":       30
                                                                                                , "lfoWaveform":    "triangle"
                                                                                                , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [80,50,50,50] }
                                                                                                })"));
-    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/levels/-", 100), JSON::parse(R"({ "name":           "PIANO 4"
+    expectDeepEqual (JSONUtils::setPointer (obj, "/pitchEnvelope/levels/-", 100), JSON::parse (R"({ "name":           "PIANO 4"
                                                                                                 , "lfoSpeed":       30
                                                                                                 , "lfoWaveform":    "triangle"
                                                                                                 , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [50,50,50,50,100] }

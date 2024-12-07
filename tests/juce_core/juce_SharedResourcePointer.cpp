@@ -55,7 +55,7 @@ protected:
     }
 };
 
-TEST_F(SharedResourcePointerTests, OnlyOneInstanceIsCreated)
+TEST_F (SharedResourcePointerTests, OnlyOneInstanceIsCreated)
 {
     static int count = 0;
 
@@ -64,55 +64,56 @@ TEST_F(SharedResourcePointerTests, OnlyOneInstanceIsCreated)
         CountIncrementer() { ++count; }
     };
 
-    EXPECT_EQ(count, 0);
+    EXPECT_EQ (count, 0);
 
     const SharedResourcePointer<CountIncrementer> instance1;
-    EXPECT_EQ(count, 1);
+    EXPECT_EQ (count, 1);
 
     const SharedResourcePointer<CountIncrementer> instance2;
-    EXPECT_EQ(count, 1);
+    EXPECT_EQ (count, 1);
 
-    EXPECT_EQ(&instance1.get(), &instance2.get());
+    EXPECT_EQ (&instance1.get(), &instance2.get());
 }
 
-TEST_F(SharedResourcePointerTests, SharedObjectDestroyedWhenReferenceCountReachesZero)
+TEST_F (SharedResourcePointerTests, SharedObjectDestroyedWhenReferenceCountReachesZero)
 {
     static int count = 0;
 
     struct ReferenceCounter
     {
         ReferenceCounter() { ++count; }
+
         ~ReferenceCounter() { --count; }
     };
 
-    EXPECT_EQ(count, 0);
+    EXPECT_EQ (count, 0);
 
     {
         const SharedResourcePointer<ReferenceCounter> instance1;
         const SharedResourcePointer<ReferenceCounter> instance2;
-        EXPECT_EQ(count, 1);
+        EXPECT_EQ (count, 1);
     }
 
-    EXPECT_EQ(count, 0);
+    EXPECT_EQ (count, 0);
 }
 
-TEST_F(SharedResourcePointerTests, GetInstanceWithoutCreating)
+TEST_F (SharedResourcePointerTests, GetInstanceWithoutCreating)
 {
     struct Object
     {
     };
 
-    EXPECT_EQ(getSharedObjectWithoutCreating<Object>(), std::nullopt);
+    EXPECT_EQ (getSharedObjectWithoutCreating<Object>(), std::nullopt);
 
     {
         const SharedResourcePointer<Object> instance;
-        EXPECT_EQ(&getSharedObjectWithoutCreating<Object>()->get(), &instance.get());
+        EXPECT_EQ (&getSharedObjectWithoutCreating<Object>()->get(), &instance.get());
     }
 
-    EXPECT_EQ(getSharedObjectWithoutCreating<Object>(), std::nullopt);
+    EXPECT_EQ (getSharedObjectWithoutCreating<Object>(), std::nullopt);
 }
 
-TEST_F(SharedResourcePointerTests, CreateObjectsWithPrivateConstructors)
+TEST_F (SharedResourcePointerTests, CreateObjectsWithPrivateConstructors)
 {
     class ObjectWithPrivateConstructor
     {
