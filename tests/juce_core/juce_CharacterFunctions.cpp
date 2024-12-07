@@ -58,7 +58,7 @@ using namespace juce;
 namespace
 {
 
-template <typename CharPointerType>
+template <class CharPointerType>
 MemoryBlock memoryBlockFromCharPtr (const typename CharPointerType::CharType* charPtr)
 {
     using CharType = typename CharPointerType::CharType;
@@ -72,7 +72,7 @@ MemoryBlock memoryBlockFromCharPtr (const typename CharPointerType::CharType* ch
     return result;
 }
 
-template <typename FromCharPointerType, typename ToCharPointerType>
+template <class FromCharPointerType, class ToCharPointerType>
 MemoryBlock convert (const MemoryBlock& source, bool removeNullTerminator = false)
 {
     using ToCharType = typename ToCharPointerType ::CharType;
@@ -112,7 +112,7 @@ struct SeparatorStrings
     std::vector<MemoryBlock> terminals, nulls;
 };
 
-template <typename CharPointerType>
+template <class CharPointerType>
 SeparatorStrings getSeparators()
 {
     jassertfalse;
@@ -164,7 +164,7 @@ SeparatorStrings getSeparators<CharPointer_UTF8>()
     return result;
 }
 
-template <typename CharPointerType, typename StorageType>
+template <class CharPointerType, class StorageType>
 SeparatorStrings prefixWithAsciiSeparators (const std::vector<std::vector<StorageType>>& terminalCharPtrs)
 {
     auto asciiSeparators = getSeparators<CharPointer_ASCII>();
@@ -217,7 +217,7 @@ SeparatorStrings getSeparators<CharPointer_UTF32>()
     return prefixWithAsciiSeparators<CharPointer_UTF32> (terminalCharPtrs);
 }
 
-template <typename TestFunction>
+template <class TestFunction>
 void withAllPrefixesAndSuffixes (const std::vector<MemoryBlock>& prefixes,
                                  const std::vector<MemoryBlock>& suffixes,
                                  const std::vector<MemoryBlock>& testValues,
@@ -245,7 +245,7 @@ void withAllPrefixesAndSuffixes (const std::vector<MemoryBlock>& prefixes,
 
 // Specialized versions for UTF8, UTF16, and UTF32 are implemented similarly...
 
-template <typename CharPointerType>
+template <class CharPointerType>
 class CharacterFunctionsTests : public ::testing::Test
 {
 protected:

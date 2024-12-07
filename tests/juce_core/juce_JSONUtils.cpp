@@ -41,138 +41,66 @@
 
 #include <juce_core/juce_core.h>
 
-#include <map>
+#include <optional>
 
 using namespace juce;
 
-class JSONTests : public ::testing::Test
+class JSONUtilsTests : public ::testing::Test
 {
 protected:
-    Random random;
-
-    String createRandomWideCharString()
+    void expectDeepEqual(const std::optional<var>& a, const std::optional<var>& b)
     {
-        juce_wchar buffer[40] = { 0 };
-
-        for (int i = 0; i < numElementsInArray(buffer) - 1; ++i)
-        {
-            if (random.nextBool())
-            {
-                do
-                {
-                    buffer[i] = static_cast<juce_wchar>(1 + random.nextInt(0x10ffff - 1));
-                } while (!CharPointer_UTF16::canRepresent(buffer[i]));
-            }
-            else
-            {
-                buffer[i] = static_cast<juce_wchar>(1 + random.nextInt(0xff));
-            }
-        }
-
-        return CharPointer_UTF32(buffer);
+        const auto text = a.has_value() && b.has_value()
+                            ? JSON::toString(*a) + " != " + JSON::toString(*b)
+                            : String();
+        EXPECT_TRUE(deepEqual(a, b)) << text;
     }
 
-    String createRandomIdentifier()
+    static bool deepEqual(const std::optional<var>& a, const std::optional<var>& b)
     {
-        char buffer[30] = { 0 };
+        if (a.has_value() && b.has_value())
+            return JSONUtils::deepEqual(*a, *b);
 
-        for (int i = 0; i < numElementsInArray(buffer) - 1; ++i)
-        {
-            static const char chars[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:";
-            buffer[i] = chars[random.nextInt(sizeof(chars) - 1)];
-        }
-
-        return CharPointer_ASCII(buffer);
-    }
-
-    var createRandomDouble()
-    {
-        return var((random.nextDouble() * 1000.0) + 0.1);
-    }
-
-    var createRandomVar(int depth)
-    {
-        switch (random.nextInt(depth > 3 ? 6 : 8))
-        {
-            case 0: return {};
-            case 1: return random.nextInt();
-            case 2: return random.nextInt64();
-            case 3: return random.nextBool();
-            case 4: return createRandomDouble();
-            case 5: return createRandomWideCharString();
-
-            case 6:
-            {
-                var v(createRandomVar(depth + 1));
-
-                for (int i = 1 + random.nextInt(30); --i >= 0;)
-                    v.append(createRandomVar(depth + 1));
-
-                return v;
-            }
-
-            case 7:
-            {
-                auto o = new DynamicObject();
-
-                for (int i = random.nextInt(30); --i >= 0;)
-                    o->setProperty(createRandomIdentifier(), createRandomVar(depth + 1));
-
-                return o;
-            }
-
-            default: return {};
-        }
+        return a == b;
     }
 };
 
-TEST_F(JSONTests, ParseAndGenerate)
+TEST_F(JSONUtilsTests, JSONPointers)
 {
-    EXPECT_EQ(JSON::parse(String()), var());
-    EXPECT_TRUE(JSON::parse("{}").isObject());
-    EXPECT_TRUE(JSON::parse("[]").isArray());
-    EXPECT_TRUE(JSON::parse("[ 1234 ]")[0].isInt());
-    EXPECT_TRUE(JSON::parse("[ 12345678901234 ]")[0].isInt64());
-    EXPECT_TRUE(JSON::parse("[ 1.123e3 ]")[0].isDouble());
-    EXPECT_TRUE(JSON::parse("[ -1234]")[0].isInt());
-    EXPECT_TRUE(JSON::parse("[-12345678901234]")[0].isInt64());
-    EXPECT_TRUE(JSON::parse("[-1.123e3]")[0].isDouble());
+    const auto obj = JSON::parse(R"({ "name":           "PIANO 4"
+                                     , "lfoSpeed":       30
+                                     , "lfoWaveform":    "triangle"
+                                     , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [50,50,50,50] }
+                                     })");
 
-    for (int i = 100; --i >= 0;)
-    {
-        var v = i > 0 ? createRandomVar(0) : var();
-        bool oneLine = random.nextBool();
-
-        String asString = JSON::toString(v, oneLine);
-        var parsed = JSON::parse("[" + asString + "]")[0];
-        String parsedString = JSON::toString(parsed, oneLine);
-
-        EXPECT_FALSE(asString.isEmpty());
-        EXPECT_EQ(parsedString, asString);
-    }
-}
-
-TEST_F(JSONTests, FloatFormatting)
-{
-    std::map<double, String> tests{
-        {1, "1.0"},
-        {1.1, "1.1"},
-        {1.01, "1.01"},
-        {0.76378, "0.76378"},
-        {-10, "-10.0"},
-        {10.01, "10.01"},
-        {0.0123, "0.0123"},
-        {-3.7e-27, "-3.7e-27"},
-        {1e+40, "1.0e40"},
-        {-12345678901234567.0, "-1.234567890123457e16"},
-        {192000, "192000.0"},
-        {1234567, "1.234567e6"},
-        {0.00006, "0.00006"},
-        {0.000006, "6.0e-6"}
-    };
-
-    for (const auto& [value, expected] : tests)
-    {
-        EXPECT_EQ(JSON::toString(value), expected);
-    }
+    expectDeepEqual(JSONUtils::setPointer(obj, "", "hello world"), var("hello world"));
+    expectDeepEqual(JSONUtils::setPointer(obj, "/lfoWaveform/foobar", "str"), std::nullopt);
+    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"foo":0,"bar":1})"), "/foo", 2), JSON::parse(R"({"foo":2,"bar":1})"));
+    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"foo":0,"bar":1})"), "/baz", 2), JSON::parse(R"({"foo":0,"bar":1,"baz":2})"));
+    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"foo":{},"bar":{}})"), "/foo/bar", 2), JSON::parse(R"({"foo":{"bar":2},"bar":{}})"));
+    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/rates/01", "str"), std::nullopt);
+    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/rates/10", "str"), std::nullopt);
+    expectDeepEqual(JSONUtils::setPointer(obj, "/lfoSpeed", 10), JSON::parse(R"({ "name":           "PIANO 4"
+                                                                                , "lfoSpeed":       10
+                                                                                , "lfoWaveform":    "triangle"
+                                                                                , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [50,50,50,50] }
+                                                                                })"));
+    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"([0,1,2])"), "/0", "bang"), JSON::parse(R"(["bang",1,2])"));
+    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"/":"fizz"})"), "/~1", "buzz"), JSON::parse(R"({"/":"buzz"})"));
+    expectDeepEqual(JSONUtils::setPointer(JSON::parse(R"({"~":"fizz"})"), "/~0", "buzz"), JSON::parse(R"({"~":"buzz"})"));
+    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/rates/0", 80), JSON::parse(R"({ "name":           "PIANO 4"
+                                                                                              , "lfoSpeed":       30
+                                                                                              , "lfoWaveform":    "triangle"
+                                                                                              , "pitchEnvelope":  { "rates": [80,67,95,60], "levels": [50,50,50,50] }
+                                                                                              })"));
+    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/levels/0", 80), JSON::parse(R"({ "name":           "PIANO 4"
+                                                                                               , "lfoSpeed":       30
+                                                                                               , "lfoWaveform":    "triangle"
+                                                                                               , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [80,50,50,50] }
+                                                                                               })"));
+    expectDeepEqual(JSONUtils::setPointer(obj, "/pitchEnvelope/levels/-", 100), JSON::parse(R"({ "name":           "PIANO 4"
+                                                                                                , "lfoSpeed":       30
+                                                                                                , "lfoWaveform":    "triangle"
+                                                                                                , "pitchEnvelope":  { "rates": [94,67,95,60], "levels": [50,50,50,50,100] }
+                                                                                                })"));
 }

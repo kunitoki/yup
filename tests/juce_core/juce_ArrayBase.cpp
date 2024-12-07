@@ -128,7 +128,7 @@ bool operator== (const NonTriviallyCopyableType& ntct, const TriviallyCopyableTy
 using CopyableType = ArrayBaseTestsHelpers::TriviallyCopyableType;
 using NoncopyableType = ArrayBaseTestsHelpers::NonTriviallyCopyableType;
 
-template <typename A, typename B>
+template <class A, class B>
 void checkEqual (const ArrayBase<A, DummyCriticalSection>& a,
                  const ArrayBase<B, DummyCriticalSection>& b)
 {
@@ -137,7 +137,7 @@ void checkEqual (const ArrayBase<A, DummyCriticalSection>& a,
         EXPECT_EQ (a[i], b[i]);
 }
 
-template <typename A, typename B>
+template <class A, class B>
 void checkEqual (const ArrayBase<A, DummyCriticalSection>& a,
                  const std::vector<B>& b)
 {
@@ -146,7 +146,7 @@ void checkEqual (const ArrayBase<A, DummyCriticalSection>& a,
         EXPECT_EQ (a[i], b[size_t (i)]);
 }
 
-template <typename A, typename B, typename C>
+template <class A, class B, class C>
 void checkEqual (const ArrayBase<A, DummyCriticalSection>& a,
                  const ArrayBase<B, DummyCriticalSection>& b,
                  const std::vector<C>& c)
