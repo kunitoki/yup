@@ -88,9 +88,11 @@ TEST_F (LocalisedStringsTests, AddStringsMergesTranslations)
 
 TEST_F (LocalisedStringsTests, DISABLED_AddStringsWithConflictingLanguageThrows)
 {
+    /*
     LocalisedStrings translations1 ("language: English\n\"hello\" = \"hi\"\n", false);
     LocalisedStrings translations2 ("language: French\n\"bonjour\" = \"hello\"\n", false);
     EXPECT_DEATH (translations1.addStrings (translations2), ".*");
+    */
 }
 
 TEST_F (LocalisedStringsTests, SetAndGetCurrentMappings)
