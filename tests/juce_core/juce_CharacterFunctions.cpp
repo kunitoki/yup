@@ -47,13 +47,13 @@ using namespace juce;
 #define STR(value) QUOTE (value)
 #define ASYM_CHARPTR_DOUBLE_PAIR(str, value) std::pair<const char*, double> (STR (str), value)
 #define CHARPTR_DOUBLE_PAIR(value) ASYM_CHARPTR_DOUBLE_PAIR (value, value)
-#define CHARPTR_DOUBLE_PAIR_COMBOS(value)            \
-CHARPTR_DOUBLE_PAIR (value),                         \
-    CHARPTR_DOUBLE_PAIR (-value),                    \
-    ASYM_CHARPTR_DOUBLE_PAIR (+value, value),        \
-    ASYM_CHARPTR_DOUBLE_PAIR (000000##value, value), \
-    ASYM_CHARPTR_DOUBLE_PAIR (+000##value, value),   \
-    ASYM_CHARPTR_DOUBLE_PAIR (-0##value, -value)
+#define CHARPTR_DOUBLE_PAIR_COMBOS(value)                \
+    CHARPTR_DOUBLE_PAIR (value),                         \
+        CHARPTR_DOUBLE_PAIR (-value),                    \
+        ASYM_CHARPTR_DOUBLE_PAIR (+value, value),        \
+        ASYM_CHARPTR_DOUBLE_PAIR (000000##value, value), \
+        ASYM_CHARPTR_DOUBLE_PAIR (+000##value, value),   \
+        ASYM_CHARPTR_DOUBLE_PAIR (-0##value, -value)
 
 namespace
 {
@@ -260,8 +260,7 @@ protected:
 
     void testReadDoubleValue()
     {
-        const std::pair<const char*, double> trials[] =
-        {
+        const std::pair<const char*, double> trials[] = {
             // Integers
             CHARPTR_DOUBLE_PAIR_COMBOS (0),
             CHARPTR_DOUBLE_PAIR_COMBOS (3),
@@ -409,9 +408,9 @@ SeparatorStrings CharacterFunctionsTests<CharPointerType>::separators = Characte
 
 // Register tests for all character pointer types
 using CharacterPointerTypes = ::testing::Types<juce::CharPointer_ASCII, juce::CharPointer_UTF8, juce::CharPointer_UTF16, juce::CharPointer_UTF32>;
-TYPED_TEST_SUITE(CharacterFunctionsTests, CharacterPointerTypes);
+TYPED_TEST_SUITE (CharacterFunctionsTests, CharacterPointerTypes);
 
-TYPED_TEST(CharacterFunctionsTests, ReadDoubleValue)
+TYPED_TEST (CharacterFunctionsTests, ReadDoubleValue)
 {
     this->testReadDoubleValue();
 }

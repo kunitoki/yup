@@ -50,20 +50,23 @@ struct OwnedArrayTests : public ::testing::Test
         Base() = default;
         virtual ~Base() = default;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Base)
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Base)
     };
 
     struct Derived final : public Base
     {
         Derived() = default;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Derived)
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Derived)
     };
 
     struct DestructorObj
     {
-        DestructorObj(OwnedArrayTests& p, OwnedArray<DestructorObj>& arr)
-            : parent(p), objectArray(arr) {}
+        DestructorObj (OwnedArrayTests& p, OwnedArray<DestructorObj>& arr)
+            : parent (p)
+            , objectArray (arr)
+        {
+        }
 
         ~DestructorObj()
         {
@@ -76,68 +79,68 @@ struct OwnedArrayTests : public ::testing::Test
         OwnedArray<DestructorObj>& objectArray;
         int data = 956;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(DestructorObj)
+        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DestructorObj)
     };
 
-    void testDestruction(DestructorObj* self, const OwnedArray<DestructorObj>& objectArray)
+    void testDestruction (DestructorObj* self, const OwnedArray<DestructorObj>& objectArray)
     {
         for (auto* o : objectArray)
         {
-            ASSERT_NE(o, nullptr);
-            ASSERT_NE(o, self);
+            ASSERT_NE (o, nullptr);
+            ASSERT_NE (o, self);
 
             if (o != nullptr)
-                EXPECT_EQ(o->data, 956);
+                EXPECT_EQ (o->data, 956);
         }
     }
 };
 
-TEST_F(OwnedArrayTests, MoveConstructionTransfersOwnership)
+TEST_F (OwnedArrayTests, MoveConstructionTransfersOwnership)
 {
     OwnedArray<Derived> derived;
-    derived.add(new Derived());
-    derived.add(new Derived());
-    derived.add(new Derived());
+    derived.add (new Derived());
+    derived.add (new Derived());
+    derived.add (new Derived());
 
-    OwnedArray<Base> base(std::move(derived));
+    OwnedArray<Base> base (std::move (derived));
 
-    EXPECT_EQ(base.size(), 3);
-    EXPECT_EQ(derived.size(), 0);
+    EXPECT_EQ (base.size(), 3);
+    EXPECT_EQ (derived.size(), 0);
 }
 
-TEST_F(OwnedArrayTests, MoveAssignmentTransfersOwnership)
+TEST_F (OwnedArrayTests, MoveAssignmentTransfersOwnership)
 {
     OwnedArray<Base> base;
 
-    base = OwnedArray<Derived>{new Derived(), new Derived(), new Derived()};
+    base = OwnedArray<Derived> { new Derived(), new Derived(), new Derived() };
 
-    EXPECT_EQ(base.size(), 3);
+    EXPECT_EQ (base.size(), 3);
 }
 
-TEST_F(OwnedArrayTests, IterateInDestructor)
+TEST_F (OwnedArrayTests, IterateInDestructor)
 {
     {
         OwnedArray<DestructorObj> arr;
 
         for (int i = 0; i < 2; ++i)
-            arr.add(new DestructorObj(*this, arr));
+            arr.add (new DestructorObj (*this, arr));
     }
 
     OwnedArray<DestructorObj> arr;
 
     for (int i = 0; i < 1025; ++i)
-        arr.add(new DestructorObj(*this, arr));
+        arr.add (new DestructorObj (*this, arr));
 
-    while (!arr.isEmpty())
-        arr.remove(0);
-
-    for (int i = 0; i < 1025; ++i)
-        arr.add(new DestructorObj(*this, arr));
-
-    arr.removeRange(1, arr.size() - 3);
+    while (! arr.isEmpty())
+        arr.remove (0);
 
     for (int i = 0; i < 1025; ++i)
-        arr.add(new DestructorObj(*this, arr));
+        arr.add (new DestructorObj (*this, arr));
 
-    arr.set(500, new DestructorObj(*this, arr));
+    arr.removeRange (1, arr.size() - 3);
+
+    for (int i = 0; i < 1025; ++i)
+        arr.add (new DestructorObj (*this, arr));
+
+    arr.set (500, new DestructorObj (*this, arr));
 }

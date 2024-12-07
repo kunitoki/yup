@@ -51,8 +51,8 @@ TEST (Base64Tests, Base64EncodingDecoding)
     {
         MemoryOutputStream m;
 
-        for (int i = random.nextInt(400); --i >= 0;)
-            m.writeByte(static_cast<char>(random.nextInt(256)));
+        for (int i = random.nextInt (400); --i >= 0;)
+            m.writeByte (static_cast<char> (random.nextInt (256)));
 
         return m.getMemoryBlock();
     };
@@ -60,12 +60,12 @@ TEST (Base64Tests, Base64EncodingDecoding)
     for (int i = 1000; --i >= 0;)
     {
         auto original = createRandomData();
-        auto asBase64 = Base64::toBase64(original.getData(), original.getSize());
+        auto asBase64 = Base64::toBase64 (original.getData(), original.getSize());
 
         MemoryOutputStream out;
-        EXPECT_TRUE(Base64::convertFromBase64(out, asBase64));
+        EXPECT_TRUE (Base64::convertFromBase64 (out, asBase64));
 
         auto result = out.getMemoryBlock();
-        EXPECT_EQ(result, original);
+        EXPECT_EQ (result, original);
     }
 }
