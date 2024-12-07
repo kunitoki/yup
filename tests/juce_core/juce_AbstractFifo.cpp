@@ -43,6 +43,83 @@
 
 using namespace juce;
 
+namespace {
+
+struct WriteThread : public Thread
+{
+    WriteThread(AbstractFifo& fifo, int* buffer, Random rng)
+        : Thread("fifo writer")
+        , fifo(fifo)
+        , buffer(buffer)
+        , random(rng)
+    {
+        startThread();
+    }
+
+    ~WriteThread() override
+    {
+        stopThread(5000);
+    }
+
+    void run() override
+    {
+        int n = 0;
+
+        while (!threadShouldExit())
+        {
+            int num = random.nextInt(2000) + 1;
+
+            auto writer = fifo.write(num);
+
+            ASSERT_TRUE(writer.blockSize1 >= 0 && writer.blockSize2 >= 0);
+            ASSERT_TRUE(writer.blockSize1 == 0
+                        || (writer.startIndex1 >= 0 && writer.startIndex1 < fifo.getTotalSize()));
+            ASSERT_TRUE(writer.blockSize2 == 0
+                        || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
+
+            writer.forEach([this, &n](int index) { this->buffer[index] = n++; });
+        }
+    }
+
+    AbstractFifo& fifo;
+    int* buffer;
+    Random random;
+};
+
+}  // namespace
+
+TEST(AbstractFifoTests, BasicFunctionality)
+{
+    int buffer[5000];
+    AbstractFifo fifo(numElementsInArray(buffer));
+
+    WriteThread writer(fifo, buffer, Random::getSystemRandom());
+
+    int n = 0;
+    Random r;
+    r.combineSeed(12345);
+
+    for (int count = 100000; --count >= 0;)
+    {
+        int num = r.nextInt(6000) + 1;
+
+        auto reader = fifo.read(num);
+
+        ASSERT_TRUE(reader.blockSize1 >= 0 && reader.blockSize2 >= 0);
+        ASSERT_TRUE(reader.blockSize1 == 0
+                    || (reader.startIndex1 >= 0 && reader.startIndex1 < fifo.getTotalSize()));
+        ASSERT_TRUE(reader.blockSize2 == 0
+                    || (reader.startIndex2 >= 0 && reader.startIndex2 < fifo.getTotalSize()));
+
+        bool failed = false;
+
+        reader.forEach([&failed, &buffer, &n](int index)
+                       { failed = (buffer[index] != n++) || failed; });
+
+        ASSERT_FALSE(failed) << "Read values were incorrect";
+    }
+}
+
 TEST (AbstractFifoTests, Constructor)
 {
     AbstractFifo fifo (10);
