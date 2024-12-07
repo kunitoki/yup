@@ -312,7 +312,6 @@ extern char** environ;
 
 //==============================================================================
 #if JUCE_UNIT_TESTS
-#include "containers/juce_Optional_test.cpp"
 #include "maths/juce_MathsFunctions_test.cpp"
 #if JUCE_MAC || JUCE_IOS
 #include "native/juce_ObjCHelpers_mac_test.mm"
