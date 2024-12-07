@@ -49,7 +49,7 @@
 
 using namespace juce;
 
-TEST (ObjCHelpers, Range)
+TEST(ObjCHelpers, Range)
 {
     constexpr auto start = 10;
     constexpr auto length = 20;
@@ -57,21 +57,21 @@ TEST (ObjCHelpers, Range)
     const auto juceRange = Range<int>::withStartAndLength(start, length);
     const auto nsRange = NSMakeRange(start, length);
 
-    EXPECT_TRUE (nsRangeToJuce(nsRange) == juceRange);
-    EXPECT_TRUE (NSEqualRanges(nsRange, juceRangeToNS(juceRange)));
+    EXPECT_TRUE(nsRangeToJuce(nsRange) == juceRange);
+    EXPECT_TRUE(NSEqualRanges(nsRange, juceRangeToNS(juceRange)));
 }
 
-TEST (ObjCHelpers, String)
+TEST(ObjCHelpers, String)
 {
     String juceString{"Hello world!"};
     NSString* nsString{@"Hello world!"};
 
-    EXPECT_TRUE (nsStringToJuce(nsString) == juceString);
-    EXPECT_TRUE ([nsString isEqualToString:juceStringToNS(juceString)]);
-    EXPECT_TRUE ([nsString isEqualToString:nsStringLiteral("Hello world!")]);
+    EXPECT_TRUE(nsStringToJuce(nsString) == juceString);
+    EXPECT_TRUE([nsString isEqualToString:juceStringToNS(juceString)]);
+    EXPECT_TRUE([nsString isEqualToString:nsStringLiteral("Hello world!")]);
 }
 
-TEST (ObjCHelpers, StringArray)
+TEST(ObjCHelpers, StringArray)
 {
     const StringArray stringArray{"Hello world!", "this", "is", "a", "test"};
     NSArray* nsArray
@@ -79,10 +79,10 @@ TEST (ObjCHelpers, StringArray)
         @[ @"Hello world!", @"this", @"is", @"a", @"test" ]
     };
 
-    EXPECT_TRUE ([nsArray isEqualToArray:createNSArrayFromStringArray(stringArray)]);
+    EXPECT_TRUE([nsArray isEqualToArray:createNSArrayFromStringArray(stringArray)]);
 }
 
-TEST (ObjCHelpers, Dictionary)
+TEST(ObjCHelpers, Dictionary)
 {
     DynamicObject::Ptr data{new DynamicObject()};
     data->setProperty("integer", 1);
@@ -94,32 +94,32 @@ TEST (ObjCHelpers, Dictionary)
     data->setProperty("array", array);
 
     const auto* nsDictionary = varToNSDictionary(data.get());
-    EXPECT_TRUE (nsDictionary != nullptr);
+    EXPECT_TRUE(nsDictionary != nullptr);
 
     const auto clone = nsDictionaryToVar(nsDictionary);
-    EXPECT_TRUE (clone.isObject());
+    EXPECT_TRUE(clone.isObject());
 
-    EXPECT_TRUE (clone.getProperty("integer", {}).isInt());
-    EXPECT_TRUE (clone.getProperty("double", {}).isDouble());
-    EXPECT_TRUE (clone.getProperty("boolean", {}).isBool());
-    EXPECT_TRUE (clone.getProperty("string", {}).isString());
-    EXPECT_TRUE (clone.getProperty("array", {}).isArray());
+    EXPECT_TRUE(clone.getProperty("integer", {}).isInt());
+    EXPECT_TRUE(clone.getProperty("double", {}).isDouble());
+    EXPECT_TRUE(clone.getProperty("boolean", {}).isBool());
+    EXPECT_TRUE(clone.getProperty("string", {}).isString());
+    EXPECT_TRUE(clone.getProperty("array", {}).isArray());
 
-    EXPECT_TRUE (clone.getProperty("integer", {}) == var{1});
-    EXPECT_TRUE (clone.getProperty("double", {}) == var{2.3});
-    EXPECT_TRUE (clone.getProperty("boolean", {}) == var{true});
-    EXPECT_TRUE (clone.getProperty("string", {}) == var{"Hello world!"});
-    EXPECT_TRUE (clone.getProperty("array", {}) == var{array});
+    EXPECT_TRUE(clone.getProperty("integer", {}) == var{1});
+    EXPECT_TRUE(clone.getProperty("double", {}) == var{2.3});
+    EXPECT_TRUE(clone.getProperty("boolean", {}) == var{true});
+    EXPECT_TRUE(clone.getProperty("string", {}) == var{"Hello world!"});
+    EXPECT_TRUE(clone.getProperty("array", {}) == var{array});
 }
 
-TEST (ObjCHelpers, VarToNSDictionaryConvertVoidVariantToEmptyDictionary)
+TEST(ObjCHelpers, VarToNSDictionaryConvertVoidVariantToEmptyDictionary)
 {
     var voidVariant;
 
     const auto* nsDictionary = varToNSDictionary(voidVariant);
-    EXPECT_TRUE (nsDictionary != nullptr);
+    EXPECT_TRUE(nsDictionary != nullptr);
 
     const auto result = nsDictionaryToVar(nsDictionary);
-    EXPECT_TRUE (result.isObject());
-    EXPECT_TRUE (result.getDynamicObject()->getProperties().isEmpty());
+    EXPECT_TRUE(result.isObject());
+    EXPECT_TRUE(result.getDynamicObject()->getProperties().isEmpty());
 }

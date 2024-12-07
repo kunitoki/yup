@@ -874,7 +874,7 @@ bool BigInteger::operator== (const BigInteger& other) const noexcept { return co
 
 bool BigInteger::operator!= (const BigInteger& other) const noexcept { return compare (other) != 0; }
 
-bool BigInteger::operator<(const BigInteger& other) const noexcept { return compare (other) < 0; }
+bool BigInteger::operator< (const BigInteger& other) const noexcept { return compare (other) < 0; }
 
 bool BigInteger::operator<= (const BigInteger& other) const noexcept { return compare (other) <= 0; }
 

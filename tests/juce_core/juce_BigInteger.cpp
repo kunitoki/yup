@@ -45,7 +45,7 @@ using namespace juce;
 
 TEST (BigIntegerTests, BasicTests)
 {
-    auto getBigRandom = [](Random& r)
+    auto getBigRandom = [] (Random& r)
     {
         BigInteger b;
 
