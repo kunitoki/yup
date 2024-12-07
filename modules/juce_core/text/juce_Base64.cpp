@@ -146,48 +146,4 @@ String Base64::toBase64 (const String& text)
     return toBase64 (text.toRawUTF8(), strlen (text.toRawUTF8()));
 }
 
-//==============================================================================
-//==============================================================================
-#if JUCE_UNIT_TESTS
-
-class Base64Tests final : public UnitTest
-{
-public:
-    Base64Tests()
-        : UnitTest ("Base64 class", UnitTestCategories::text)
-    {
-    }
-
-    static MemoryBlock createRandomData (Random& r)
-    {
-        MemoryOutputStream m;
-
-        for (int i = r.nextInt (400); --i >= 0;)
-            m.writeByte ((char) r.nextInt (256));
-
-        return m.getMemoryBlock();
-    }
-
-    void runTest() override
-    {
-        beginTest ("Base64");
-
-        auto r = getRandom();
-
-        for (int i = 1000; --i >= 0;)
-        {
-            auto original = createRandomData (r);
-            auto asBase64 = Base64::toBase64 (original.getData(), original.getSize());
-            MemoryOutputStream out;
-            expect (Base64::convertFromBase64 (out, asBase64));
-            auto result = out.getMemoryBlock();
-            expect (result == original);
-        }
-    }
-};
-
-static Base64Tests base64Tests;
-
-#endif
-
 } // namespace juce

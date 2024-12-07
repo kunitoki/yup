@@ -155,7 +155,6 @@ extern char** environ;
 //==============================================================================
 #include "containers/juce_AbstractFifo.cpp"
 #include "containers/juce_NamedValueSet.cpp"
-#include "containers/juce_OwnedArray.cpp"
 #include "containers/juce_PropertySet.cpp"
 #include "containers/juce_ReferenceCountedArray.cpp"
 #include "containers/juce_SparseSet.cpp"
