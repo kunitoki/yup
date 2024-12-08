@@ -41,6 +41,7 @@ public:
         OpenGL,   ///< Specifies the use of OpenGL for rendering.
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.
+        Vulkan,   ///< Specifies the use of Vulkan for rendering.
         Dawn      ///< Specifies the use of Dawn, a Vulkan-like API.
     };
 
@@ -135,14 +136,6 @@ public:
     virtual void tick() {}
 
     //==============================================================================
-    /** Static factory method to create a graphics context with specific options.
-
-        @param options Configuration options for the graphics context.
-
-        @return A unique pointer to a GraphicsContext, configured according to the specified options.
-    */
-    static std::unique_ptr<GraphicsContext> createContext (Options options);
-
     /** Static factory method to create a graphics context using a specific graphics API.
 
         @param graphicsApi The graphics API to use.

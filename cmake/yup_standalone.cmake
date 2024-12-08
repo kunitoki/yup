@@ -72,6 +72,7 @@ function (yup_standalone_app)
 
     # ==== Enable Vulkan
     if (YUP_ENABLE_VULKAN)
+        list (APPEND YUP_ARG_MODULES vk_bootstrap)
         list (APPEND additional_libraries Vulkan::Vulkan)
     endif()
 

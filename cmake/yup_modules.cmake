@@ -470,6 +470,7 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/rive)
     yup_add_module (${modules_path}/thirdparty/rive_renderer)
     yup_add_module (${modules_path}/thirdparty/oboe_library)
+    yup_add_module (${modules_path}/thirdparty/vk_bootstrap)
 
     # Original juce modules
     yup_add_module (${modules_path}/modules/juce_core)

@@ -61,6 +61,11 @@
 #include "native/yup_GraphicsContext_gl.cpp"
 #endif
 
+#if YUP_RIVE_USE_VULKAN
+#include "native/yup_GraphicsContext_vulkan.cpp"
+#include "native/yup_BootstrapVulkan.cpp"
+#endif
+
 //==============================================================================
 
 #elif JUCE_LINUX || JUCE_WASM || JUCE_ANDROID

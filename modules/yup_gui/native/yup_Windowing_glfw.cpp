@@ -275,6 +275,8 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 #if JUCE_MAC
 #if YUP_RIVE_USE_METAL
     desiredApi = forceContextApi.value_or (GraphicsContext::Metal);
+#elif YUP_RIVE_USE_VULKAN
+    desiredApi = forceContextApi.value_or (GraphicsContext::Vulkan);
 #elif YUP_RIVE_USE_OPENGL
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 #endif
@@ -306,6 +308,11 @@ void setContextWindowHints (GraphicsContext::Api desiredApi)
     }
 
     if (desiredApi == GraphicsContext::Direct3D)
+    {
+        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+    }
+
+    if (desiredApi == GraphicsContext::Vulkan)
     {
         glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
     }
