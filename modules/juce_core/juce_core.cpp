@@ -154,12 +154,8 @@ extern char** environ;
 
 //==============================================================================
 #include "containers/juce_AbstractFifo.cpp"
-#include "containers/juce_ArrayBase.cpp"
 #include "containers/juce_NamedValueSet.cpp"
-#include "containers/juce_OwnedArray.cpp"
 #include "containers/juce_PropertySet.cpp"
-#include "containers/juce_ReferenceCountedArray.cpp"
-#include "containers/juce_SparseSet.cpp"
 #include "files/juce_DirectoryIterator.cpp"
 #include "files/juce_RangedDirectoryIterator.cpp"
 #include "files/juce_File.cpp"
@@ -314,17 +310,7 @@ extern char** environ;
 
 //==============================================================================
 #if JUCE_UNIT_TESTS
-#include "containers/juce_HashMap_test.cpp"
-#include "containers/juce_Optional_test.cpp"
-#include "containers/juce_Enumerate_test.cpp"
 #include "maths/juce_MathsFunctions_test.cpp"
-#include "misc/juce_EnumHelpers_test.cpp"
-#include "containers/juce_FixedSizeFunction_test.cpp"
-#include "javascript/juce_JSONSerialisation_test.cpp"
-#include "memory/juce_SharedResourcePointer_test.cpp"
-#if JUCE_MAC || JUCE_IOS
-#include "native/juce_ObjCHelpers_mac_test.mm"
-#endif
 #endif
 
 //==============================================================================

@@ -186,12 +186,9 @@ private:
 
             if (obj == nullptr)
             {
-                // Serialisation failure! This may be caused by archiving a primitive or
-                // SerialisationSize, and then attempting to archive a named pair to the same
-                // archive instance.
-                // When using named pairs, *all* items serialised with a particular archiver must be
-                // named pairs.
-                jassertfalse;
+                // Serialisation failure! This may be caused by archiving a primitive or SerialisationSize, and
+                // then attempting to archive a named pair to the same archive instance.
+                // When using named pairs, *all* items serialised with a particular archiver must be named pairs.
 
                 value.reset();
                 return;
@@ -246,7 +243,7 @@ private:
         {
             if (const auto converted = convert (n.value))
             {
-                obj.setProperty (Identifier (std::string (n.name)), *converted);
+                obj.setProperty (Identifier (String (n.name)), *converted);
                 return true;
             }
 
