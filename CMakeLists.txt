@@ -33,6 +33,7 @@ set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 # Options
 option (YUP_TARGET_ANDROID "Target Android project" OFF)
 option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
+option (YUP_ENABLE_VULKAN "Enable the vulkan renderer on platforms that support it" ON)
 option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ON)
 option (YUP_BUILD_TESTS "Build the tests" ON)

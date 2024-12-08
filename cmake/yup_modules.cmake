@@ -323,7 +323,7 @@ function (yup_add_module module_path)
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
 
     # ==== Assign Configurations Dynamically
-    set (global_properties "dependencies|defines|include_paths|options|searchpaths")
+    set (global_properties "dependencies|defines|options|searchpaths")
     set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)Packages$")
 
     set (parsed_config "")
@@ -408,6 +408,11 @@ function (yup_add_module module_path)
         endif()
     endforeach()
 
+    # ==== Additional include paths
+    if (YUP_ENABLE_VULKAN)
+        list (APPEND module_include_paths "${Vulkan_INCLUDE_DIR}" "${Vulkan_INCLUDE_DIR}/vma")
+    endif()
+
     # ==== Scan sources to include
     _yup_module_collect_sources ("${module_path}" module_sources)
 
@@ -452,6 +457,11 @@ endfunction()
 #==============================================================================
 
 function (_yup_add_default_modules modules_path)
+    # Setup vulkan
+    if (YUP_ENABLE_VULKAN AND NOT "${yup_platform}" MATCHES "^(emscripten)$")
+        find_package (Vulkan REQUIRED)
+    endif()
+
     yup_add_module (${modules_path}/thirdparty/zlib)
     yup_add_module (${modules_path}/thirdparty/glad)
     yup_add_module (${modules_path}/thirdparty/harfbuzz)

@@ -38,3 +38,20 @@
 #include "source/gl/render_context_gl_impl.cpp"
 #include "source/gl/render_target_gl.cpp"
 #endif
+
+#if YUP_RIVE_USE_VULKAN
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wnullability-completeness"
+#endif
+
+#include "source/vulkan/render_context_vulkan_impl.cpp"
+#include "source/vulkan/vkutil.cpp"
+#include "source/vulkan/vkutil_resource_pool.cpp"
+#include "source/vulkan/vulkan_context.cpp"
+#include "source/vulkan/vulkan_memory_allocator.cpp"
+
+#if __clang__
+ #pragma clang diagnostic pop
+#endif
+#endif

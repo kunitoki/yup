@@ -75,6 +75,13 @@
 #define YUP_RIVE_USE_OPENGL 0
 #endif
 
+/** Config: YUP_RIVE_USE_VULKAN
+    Enables the use of the Vulkan renderer on platform that support it.
+*/
+#ifndef YUP_RIVE_USE_VULKAN
+#define YUP_RIVE_USE_VULKAN 0
+#endif
+
 /** Config: YUP_RIVE_USE_DAWN
     Enables the use of the Dawn renderer on platform that support it.
 */

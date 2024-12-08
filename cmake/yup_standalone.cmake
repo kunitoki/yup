@@ -70,6 +70,11 @@ function (yup_standalone_app)
         list (APPEND additional_libraries perfetto::perfetto)
     endif()
 
+    # ==== Enable Vulkan
+    if (YUP_ENABLE_VULKAN)
+        list (APPEND additional_libraries Vulkan::Vulkan)
+    endif()
+
     # ==== Prepare executable
     set (executable_options "")
     if (NOT "${target_console}")
