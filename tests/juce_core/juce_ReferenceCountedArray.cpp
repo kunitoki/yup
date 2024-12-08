@@ -45,7 +45,8 @@
 
 using namespace juce;
 
-namespace {
+namespace
+{
 struct TestBaseObj : public ReferenceCountedObject
 {
     using Ptr = ReferenceCountedObjectPtr<TestBaseObj>;

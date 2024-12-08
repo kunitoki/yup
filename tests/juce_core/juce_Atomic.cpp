@@ -43,7 +43,8 @@
 
 using namespace juce;
 
-namespace {
+namespace
+{
 
 template <class Type>
 class AtomicTester
@@ -115,7 +116,7 @@ TEST (AtomicTests, Misc)
     EXPECT_TRUE (ByteOrder::swap ((uint64) 0x1122334455667788ULL) == (uint64) 0x8877665544332211LL);
 
     AtomicTester<int>::testInteger();
-    AtomicTester<unsigned int>::testInteger ();
+    AtomicTester<unsigned int>::testInteger();
     AtomicTester<int32>::testInteger();
     AtomicTester<uint32>::testInteger();
     AtomicTester<long>::testInteger();
