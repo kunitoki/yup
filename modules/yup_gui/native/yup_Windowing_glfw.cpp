@@ -951,7 +951,7 @@ void GLFWComponentNative::run()
         // Wait for any repaint command
         if (! shouldRenderContinuous)
         {
-            while (! commandEvent.wait (1000.0f))
+            while (! commandEvent.wait (10.0f))
                 currentFrameRate.store (0.0f, std::memory_order_relaxed);
         }
 
@@ -964,7 +964,7 @@ void GLFWComponentNative::run()
         {
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
-            while (juce::Time::getMillisecondCounterHiRes() + 2.0 < waitUntilMs)
+            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
                 Thread::sleep (1);
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
@@ -1053,10 +1053,11 @@ void GLFWComponentNative::renderContext()
     context->begin (frameDescriptor);
 
     // Repaint components hierarchy
-    jassert (renderer != nullptr);
-
-    Graphics g (*context, *renderer);
-    component.internalPaint (g, desiredFrameRate);
+    if (renderer != nullptr)
+    {
+        Graphics g (*context, *renderer);
+        component.internalPaint (g, desiredFrameRate);
+    }
 
     // Finish context drawing
     context->end (getNativeHandle());
