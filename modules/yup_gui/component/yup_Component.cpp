@@ -151,7 +151,7 @@ void Component::setSize (const Size<float>& newSize)
     boundsInParent = boundsInParent.withSize (newSize);
 
     if (options.onDesktop)
-        native->setSize(newSize.to<int>());
+        native->setSize (newSize.to<int>());
 
     resized();
 }
@@ -187,7 +187,7 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     boundsInParent = newBounds;
 
     if (options.onDesktop)
-        native->setBounds(newBounds.to<int>());
+        native->setBounds (newBounds.to<int>());
 
     resized();
 }
