@@ -67,7 +67,7 @@ public:
         m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
-        m_swapchain.displaySyncEnabled = NO;
+        m_swapchain.displaySyncEnabled = YES;
         m_swapchain.maximumDrawableCount = 2;
         view.layer = m_swapchain;
 

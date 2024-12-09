@@ -135,14 +135,6 @@ public:
     virtual void tick() {}
 
     //==============================================================================
-    /** Static factory method to create a graphics context with specific options.
-
-        @param options Configuration options for the graphics context.
-
-        @return A unique pointer to a GraphicsContext, configured according to the specified options.
-    */
-    static std::unique_ptr<GraphicsContext> createContext (Options options);
-
     /** Static factory method to create a graphics context using a specific graphics API.
 
         @param graphicsApi The graphics API to use.
