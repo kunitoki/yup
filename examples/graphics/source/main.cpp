@@ -151,7 +151,7 @@ public:
 
         // Initialize the audio device
         deviceManager.addAudioCallback (this);
-        deviceManager.initialiseWithDefaultDevices (1, 0);
+        deviceManager.initialiseWithDefaultDevices (0, 2);
 
         // Initialize sine wave generators
         double sampleRate = deviceManager.getAudioDeviceSetup().sampleRate;
