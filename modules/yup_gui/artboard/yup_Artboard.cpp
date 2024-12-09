@@ -138,7 +138,7 @@ void Artboard::resized()
     if (artboard != nullptr)
         artboardBounds = artboard->bounds();
 
-    viewTransform = rive::computeAlignment(
+    viewTransform = rive::computeAlignment (
         rive::Fit::contain,
         rive::Alignment::center,
         frameBounds,
@@ -172,7 +172,7 @@ void Artboard::mouseDown (const MouseEvent& event)
 
 void Artboard::mouseUp (const MouseEvent& event)
 {
-    if (scene == nullptr )
+    if (scene == nullptr)
         return;
 
     auto [x, y] = event.getPosition();
@@ -185,7 +185,7 @@ void Artboard::mouseUp (const MouseEvent& event)
 
 void Artboard::mouseMove (const MouseEvent& event)
 {
-    if (scene == nullptr )
+    if (scene == nullptr)
         return;
 
     auto [x, y] = event.getPosition();
@@ -198,7 +198,7 @@ void Artboard::mouseMove (const MouseEvent& event)
 
 void Artboard::mouseDrag (const MouseEvent& event)
 {
-    if (scene == nullptr  || ! event.isLeftButtoDown())
+    if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
     auto [x, y] = event.getPosition();
@@ -230,8 +230,8 @@ void Artboard::updateSceneFromFile()
     eventProperties.clear();
 
     auto currentArtboard = (artboardIndex == -1)
-         ? rivFile->artboardDefault()
-         : rivFile->artboard (artboardIndex)->instance();
+                             ? rivFile->artboardDefault()
+                             : rivFile->artboard (artboardIndex)->instance();
 
     std::unique_ptr<rive::Scene> currentScene;
     rive::StateMachineInstance* currentStateMachine = nullptr;

@@ -40,19 +40,20 @@ public:
     CustomWindow()
         // Fluid and continuous animations needs continuous repainting
         : yup::DocumentWindow (yup::ComponentNative::Options()
-            .withFlags(yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous), {})
+                                   .withFlags (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous),
+                               {})
     {
         // Set title
         setTitle ("main");
 
 #if JUCE_WASM
         yup::File riveFilePath = yup::File ("/data")
-            .getChildFile ("artboard.riv");
+                                     .getChildFile ("artboard.riv");
 #else
         yup::File riveFilePath = yup::File (__FILE__)
-            .getParentDirectory()
-            .getSiblingFile ("data")
-            .getChildFile ("alien.riv");
+                                     .getParentDirectory()
+                                     .getSiblingFile ("data")
+                                     .getChildFile ("alien.riv");
 #endif
 
         // Setup artboards
@@ -62,7 +63,7 @@ public:
             addAndMakeVisible (art);
 
 #if JUCE_ANDROID
-            yup::MemoryInputStream is(yup::RiveFile_data, yup::RiveFile_size, false);
+            yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
             art->loadFromStream (is, 0, true);
 #else
             art->loadFromFile (riveFilePath, 0, true);

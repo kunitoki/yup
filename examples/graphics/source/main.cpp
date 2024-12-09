@@ -77,7 +77,7 @@ private:
 class Oscilloscope : public yup::Component
 {
 public:
-    Oscilloscope ()
+    Oscilloscope()
         : Component ("Oscilloscope")
     {
     }
@@ -144,7 +144,7 @@ public:
 #else
             yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
 #endif
-            .getChildFile ("Roboto-Regular.ttf");
+                .getChildFile ("Roboto-Regular.ttf");
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
@@ -159,7 +159,7 @@ public:
         for (size_t i = 0; i < sineWaveGenerators.size(); ++i)
         {
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
-            sineWaveGenerators[i]->setFrequency(440.0 * std::pow(1.1, i), sampleRate);
+            sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), sampleRate);
         }
 
         // Add sliders
@@ -167,7 +167,7 @@ public:
         {
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i), font));
 
-            slider->onValueChanged = [this, i](float value)
+            slider->onValueChanged = [this, i] (float value)
             {
                 sineWaveGenerators[i]->setAmplitude (value);
             };
@@ -217,7 +217,6 @@ public:
 
         oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
     }
-
 
     void mouseDown (const yup::MouseEvent& event) override
     {
@@ -388,4 +387,3 @@ private:
 };
 
 START_JUCE_APPLICATION (Application)
-
