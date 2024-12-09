@@ -433,7 +433,6 @@ public:
 
     //==============================================================================
     Point<float> getCursorPosition() const;
-    Point<float> getScaledCursorPosition() const;
 
     //==============================================================================
     static void glfwWindowContentScale (GLFWwindow* window, float xscale, float yscale);
@@ -539,7 +538,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
     auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
     window = glfwCreateWindow (1, 1, component.getTitle().toRawUTF8(), monitor, nullptr);
     if (window == nullptr)
-        return;
+        return; // TODO - raise something ?
 
     if (parent != nullptr)
         setNativeParent (nullptr, parent, window);
@@ -564,7 +563,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
 
     context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
     if (context == nullptr)
-        return;
+        return; // TODO - raise something ?
 
     // Setup callbacks
     glfwSetWindowUserPointer (window, this);
@@ -599,28 +598,29 @@ GLFWComponentNative::~GLFWComponentNative()
     {
         glfwSetWindowUserPointer (window, nullptr);
         glfwDestroyWindow (window);
-        window = nullptr;
     }
+
+    window = nullptr;
 }
 
 //==============================================================================
 
 void GLFWComponentNative::setTitle (const String& title)
 {
-    jassert (window != nullptr);
+    if (windowTitle == title)
+        return;
 
-    if (windowTitle != title)
-    {
+    if (window != nullptr)
         glfwSetWindowTitle (window, title.toRawUTF8());
 
-        windowTitle = title;
-    }
+    windowTitle = title;
 }
 
 String GLFWComponentNative::getTitle() const
 {
 #if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
-    jassert (window != nullptr);
+    if (window == nullptr)
+        return {};
 
     if (auto title = glfwGetWindowTitle (window))
         return String::fromUTF8 (title);
@@ -633,7 +633,8 @@ String GLFWComponentNative::getTitle() const
 
 void GLFWComponentNative::setVisible (bool shouldBeVisible)
 {
-    jassert (window != nullptr);
+    if (window == nullptr)
+        return;
 
     if (shouldBeVisible)
         glfwShowWindow (window);
@@ -655,19 +656,21 @@ void GLFWComponentNative::setSize (const Size<int>& size)
 
 Size<int> GLFWComponentNative::getSize() const
 {
-    jassert (window != nullptr);
-
     int width = 0, height = 0;
-    glfwGetWindowSize (window, &width, &height);
+
+    if (window != nullptr)
+        glfwGetWindowSize (window, &width, &height);
+
     return { width, height };
 }
 
 Size<int> GLFWComponentNative::getContentSize() const
 {
-    jassert (window != nullptr);
-
     int width = 0, height = 0;
-    glfwGetFramebufferSize (window, &width, &height);
+
+    if (window != nullptr)
+        glfwGetFramebufferSize (window, &width, &height);
+
     return { width, height };
 }
 
@@ -678,9 +681,7 @@ Point<int> GLFWComponentNative::getPosition() const
 
 void GLFWComponentNative::setPosition (const Point<int>& newPosition)
 {
-    jassert (window != nullptr);
-
-    if (screenBounds.getPosition() == newPosition)
+    if (window == nullptr || screenBounds.getPosition() == newPosition)
         return;
 
     glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
@@ -699,7 +700,8 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
     screenBounds = Rectangle<int> (0, 0, getSize());
 
 #else
-    jassert (window != nullptr);
+    if (window == nullptr)
+        return;
 
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
@@ -735,7 +737,8 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 
 void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
 {
-    jassert (window != nullptr);
+    if (window == nullptr)
+        return;
 
     if (shouldBeFullScreen)
     {
@@ -790,14 +793,13 @@ bool GLFWComponentNative::isDecorated() const
 
 void GLFWComponentNative::setOpacity (float opacity)
 {
-    jassert (window != nullptr);
-
-    glfwSetWindowOpacity (window, jlimit (0.0f, 1.0f, opacity));
+    if (window != nullptr)
+        glfwSetWindowOpacity (window, jlimit (0.0f, 1.0f, opacity));
 }
 
 float GLFWComponentNative::getOpacity() const
 {
-    return window ? glfwGetWindowOpacity (window) : 1.0f;
+    return window != nullptr ? glfwGetWindowOpacity (window) : 1.0f;
 }
 
 //==============================================================================
@@ -872,7 +874,7 @@ Rectangle<float> GLFWComponentNative::getRepaintArea() const
 
 float GLFWComponentNative::getScaleDpi() const
 {
-    return context->dpiScale (getNativeHandle());
+    return context != nullptr ? context->dpiScale (getNativeHandle()) : 1.0f;
 }
 
 float GLFWComponentNative::getCurrentFrameRate() const
@@ -889,8 +891,10 @@ float GLFWComponentNative::getDesiredFrameRate() const
 
 Point<float> GLFWComponentNative::getCursorPosition() const
 {
-    double x, y;
-    glfwGetCursorPos (window, &x, &y);
+    double x = 0.0, y = 0.0;
+
+    if (window != nullptr)
+        glfwGetCursorPos (window, &x, &y);
 
     return {
         static_cast<float> (x),
@@ -898,23 +902,19 @@ Point<float> GLFWComponentNative::getCursorPosition() const
     };
 }
 
-Point<float> GLFWComponentNative::getScaledCursorPosition() const
-{
-    return getCursorPosition().scaled (currentScaleDpi);
-}
-
 //==============================================================================
 
 rive::Factory* GLFWComponentNative::getFactory()
 {
-    return context->factory();
+    return context ? context->factory() : nullptr;
 }
 
 //==============================================================================
 
 void* GLFWComponentNative::getNativeHandle() const
 {
-    jassert (window != nullptr);
+    if (window == nullptr)
+        return nullptr;
 
 #if JUCE_MAC
     return (__bridge void*) glfwGetCocoaWindow (window);
@@ -1010,10 +1010,8 @@ void GLFWComponentNative::timerCallback()
 
 void GLFWComponentNative::renderContext()
 {
-    jassert (context != nullptr);
-
     auto [contentWidth, contentHeight] = getContentSize();
-    if (contentWidth == 0 || contentHeight == 0)
+    if (context == nullptr || contentWidth == 0 || contentHeight == 0)
         return;
 
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
@@ -1257,6 +1255,7 @@ void GLFWComponentNative::handleResized (int width, int height)
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
+    currentScaleDpi = getScaleDpi();
 
     triggerRenderingUpdate();
 }
@@ -1268,11 +1267,13 @@ void GLFWComponentNative::handleFocusChanged (bool gotFocus)
 
 void GLFWComponentNative::handleContentScaleChanged (float xscale, float yscale)
 {
-    int width, height;
-    glfwGetWindowSize (window, &width, &height);
+    int width = screenBounds.getWidth();
+    int height = screenBounds.getHeight();
 
-    currentScaleDpi = getScaleDpi();
-    forceSizeChange = true;
+    if (window != nullptr)
+        glfwGetWindowSize (window, &width, &height);
+
+    // forceSizeChange = true;
 
     handleResized (width, height);
 }
