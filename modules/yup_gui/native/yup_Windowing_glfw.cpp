@@ -432,6 +432,7 @@ public:
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
+    Point<float> getCursorPosition() const;
     Point<float> getScaledCursorPosition() const;
 
     //==============================================================================
@@ -462,6 +463,7 @@ private:
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
 
+    float currentScaleDpi = 1.0f;
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
@@ -885,17 +887,20 @@ float GLFWComponentNative::getDesiredFrameRate() const
 
 //==============================================================================
 
-Point<float> GLFWComponentNative::getScaledCursorPosition() const
+Point<float> GLFWComponentNative::getCursorPosition() const
 {
     double x, y;
     glfwGetCursorPos (window, &x, &y);
 
-    const float dpiScale = getScaleDpi();
-
     return {
-        static_cast<float> (x * dpiScale),
-        static_cast<float> (y * dpiScale)
+        static_cast<float> (x),
+        static_cast<float> (y)
     };
+}
+
+Point<float> GLFWComponentNative::getScaledCursorPosition() const
+{
+    return getCursorPosition().scaled (currentScaleDpi);
 }
 
 //==============================================================================
@@ -1055,7 +1060,7 @@ void GLFWComponentNative::renderContext()
     // Repaint components hierarchy
     if (renderer != nullptr)
     {
-        Graphics g (*context, *renderer);
+        Graphics g (*context, *renderer, currentScaleDpi);
         component.internalPaint (g, desiredFrameRate);
     }
 
@@ -1104,6 +1109,7 @@ void GLFWComponentNative::stopRendering()
     stopTimer();
 #else
     signalThreadShouldExit();
+    notify();
     renderEvent.signal();
     commandEvent.signal();
     stopThread (-1);
@@ -1241,14 +1247,14 @@ void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 void GLFWComponentNative::handleMoved (int xpos, int ypos)
 {
-    component.internalMoved (xpos, ypos, getScaleDpi());
+    component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
 }
 
 void GLFWComponentNative::handleResized (int width, int height)
 {
-    component.internalResized (width, height, getScaleDpi());
+    component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
 
@@ -1265,6 +1271,7 @@ void GLFWComponentNative::handleContentScaleChanged (float xscale, float yscale)
     int width, height;
     glfwGetWindowSize (window, &width, &height);
 
+    currentScaleDpi = getScaleDpi();
     forceSizeChange = true;
 
     handleResized (width, height);
@@ -1353,10 +1360,6 @@ void GLFWComponentNative::glfwMouseMove (GLFWwindow* window, double x, double y)
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    float dpiScale = nativeComponent->getScaleDpi();
-    x *= dpiScale;
-    y *= dpiScale;
-
     nativeComponent->handleMouseMoveOrDrag ({ static_cast<float> (x), static_cast<float> (y) });
 }
 
@@ -1364,7 +1367,7 @@ void GLFWComponentNative::glfwMousePress (GLFWwindow* window, int button, int ac
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    auto cursorPosition = nativeComponent->getScaledCursorPosition();
+    auto cursorPosition = nativeComponent->getCursorPosition();
 
     if (action == GLFW_PRESS)
         nativeComponent->handleMouseDown (cursorPosition, toMouseButton (button), toKeyModifiers (mods));
@@ -1376,7 +1379,7 @@ void GLFWComponentNative::glfwMouseScroll (GLFWwindow* window, double xoffset, d
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    auto cursorPosition = nativeComponent->getScaledCursorPosition();
+    auto cursorPosition = nativeComponent->getCursorPosition();
 
     nativeComponent->handleMouseWheel (cursorPosition, { static_cast<float> (xoffset), static_cast<float> (yoffset) });
 }
@@ -1385,7 +1388,7 @@ void GLFWComponentNative::glfwKeyPress (GLFWwindow* window, int key, int scancod
 {
     auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
 
-    auto cursorPosition = nativeComponent->getScaledCursorPosition();
+    auto cursorPosition = nativeComponent->getCursorPosition();
 
     if (action == GLFW_PRESS)
     {

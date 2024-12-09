@@ -424,7 +424,7 @@ public:
         @return A new Point object with the scaled coordinates.
     */
     template <class T>
-    [[nodiscard]] constexpr auto scaled (float factor) const noexcept
+    [[nodiscard]] constexpr auto scaled (T factor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
         Point result (*this);
@@ -445,7 +445,7 @@ public:
         @return A new Point object with the scaled coordinates.
     */
     template <class T>
-    [[nodiscard]] constexpr auto scaled (float factorX, float factorY) const noexcept
+    [[nodiscard]] constexpr auto scaled (T factorX, T factorY) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point>
     {
         Point result (*this);

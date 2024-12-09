@@ -648,16 +648,16 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
     keyUp (keys, position);
 }
 
-void Component::internalResized (int width, int height, float scaleDpi)
+void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<float> (width, height) * scaleDpi);
+    boundsInParent = boundsInParent.withSize (Size<float> (width, height));
 
     resized();
 }
 
-void Component::internalMoved (int xpos, int ypos, float scaleDpi)
+void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos) * scaleDpi);
+    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos));
 
     moved();
 }

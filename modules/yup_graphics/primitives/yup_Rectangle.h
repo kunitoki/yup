@@ -674,58 +674,59 @@ public:
     //==============================================================================
     /** Scales the size of the rectangle uniformly by a given factor.
 
-        This method multiplies both the width and height of the rectangle by the specified factor. The position
-        of the top-left corner remains unchanged.
+        This method multiplies both the x, y, width and height of the rectangle by the specified factor.
 
-        @param factor The scaling factor to apply to both the width and height of the rectangle.
+        @param factor The scaling factor to apply to both the x, y, width and height of the rectangle.
 
         @return A reference to this rectangle to allow method chaining.
     */
     constexpr Rectangle& scale (float factor) noexcept
     {
+        xy.scale (factor);
         size.scale (factor);
         return *this;
     }
 
     /** Scales the size of the rectangle by the specified x and y factors.
 
-        This method adjusts the size of the rectangle by multiplying its width and height by the given factors.
+        This method adjusts the size of the rectangle by multiplying its x, width and y, height by the given factors.
 
-        @param factorX The factor to multiply the width by.
-        @param factorY The factor to multiply the height by.
+        @param factorX The factor to multiply the x and width by.
+        @param factorY The factor to multiply the y and height by.
 
         @return A reference to this rectangle to allow method chaining.
     */
     constexpr Rectangle& scale (float factorX, float factorY) noexcept
     {
+        xy.scale (factorX, factorY);
         size.scale (factorX, factorY);
         return *this;
     }
 
     /** Returns a new rectangle with its size scaled uniformly by the specified factor.
 
-        This method creates a new rectangle with the same position but with both the width and height scaled by the given factor.
+        This method creates a new rectangle with the same position but with both the x, width and y, height scaled by the given factor.
 
-        @param factor The scaling factor to apply to both the width and height of the rectangle.
+        @param factor The scaling factor to apply to both the x, width and y, height of the rectangle.
 
         @return A new rectangle with the scaled size.
     */
     [[nodiscard]] constexpr Rectangle scaled (float factor) const noexcept
     {
-        return { xy, size.scaled (factor) };
+        return { xy.scaled (factor), size.scaled (factor) };
     }
 
     /** Returns a new rectangle with its size scaled by the specified x and y factors.
 
-        This method creates a new rectangle with the same position but its width and height adjusted by the given factors.
+        This method creates a new rectangle with the same position but its x, width and y, height adjusted by the given factors.
 
-        @param factorX The factor to multiply the width by.
-        @param factorY The factor to multiply the height by.
+        @param factorX The factor to multiply the x and width by.
+        @param factorY The factor to multiply the y and height by.
         @return A new rectangle with the scaled size.
     */
     [[nodiscard]] constexpr Rectangle scaled (float factorX, float factorY) const noexcept
     {
-        return { xy, size.scaled (factorX, factorY) };
+        return { xy.scaled (factorX, factorY), size.scaled (factorX, factorY) };
     }
 
     //==============================================================================
