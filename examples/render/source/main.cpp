@@ -67,6 +67,8 @@ public:
 #else
             art->loadFromFile (riveFilePath, 0, true);
 #endif
+
+            art->advanceAndApply (i * 1.0f);
         }
 
         // Grab focus
@@ -78,10 +80,9 @@ public:
 
     void resized() override
     {
-        for (int i = 0; i < totalRows * totalColumns; ++i)
-            artboards.getUnchecked (i)->setBounds (getLocalBounds());
+        //for (int i = 0; i < totalRows * totalColumns; ++i)
+        //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
 
-        /*
         auto bounds = getLocalBounds().reduced (100);
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
@@ -95,7 +96,6 @@ public:
                 artboards.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
             }
         }
-        */
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -121,36 +121,18 @@ public:
                     artboards[i]->setPaused (! artboards[i]->isPaused());
                 break;
 
-            case yup::KeyPress::textHKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->addHorizontalRepeats (shift ? -1 : 1);
-                break;
-
-            case yup::KeyPress::textJKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->addVerticalRepeats (shift ? -1 : 1);
-                break;
-
             case yup::KeyPress::textZKey:
                 setFullScreen (! isFullScreen());
-                break;
-
-            case yup::KeyPress::upKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->multiplyScale (1.25);
-                break;
-
-            case yup::KeyPress::downKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->multiplyScale (1.0 / 1.25);
                 break;
         }
     }
 
     void paint (yup::Graphics& g) override
     {
-        //g.setFillColor (0xffffffff);
-        //g.fillAll();
+        //g.setStrokeColor (0xffffffff);
+
+        //for (const auto& artboard : artboards)
+        //    g.strokeRect (artboard->getBounds());
     }
 
     void userTriedToCloseWindow() override
@@ -171,10 +153,7 @@ private:
         auto currentFps = getNativeComponent()->getCurrentFrameRate();
         title << "[" << yup::String (currentFps, 1) << " FPS]";
 
-        int instances = 0;
-        for (int i = 0; i < totalRows * totalColumns; ++i)
-            instances += artboards[i]->getNumInstances();
-        title << " (x" << instances << " instances)";
+        title << " (x" << (totalRows * totalColumns) << " instances)";
         title << " | "
               << "YUP Renderer";
 
@@ -188,8 +167,8 @@ private:
     }
 
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 1;
-    int totalColumns = 1;
+    int totalRows = 2;
+    int totalColumns = 2;
 };
 
 //==============================================================================
