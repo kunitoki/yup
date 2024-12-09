@@ -38,6 +38,7 @@ public:
     void setPaused (bool shouldPause);
 
     void advanceAndApply (float elapsedSeconds);
+    float durationSeconds() const;
 
     //==============================================================================
     void setNumberInput (const String& name, double value);

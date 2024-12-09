@@ -87,6 +87,14 @@ void Artboard::advanceAndApply (float elapsedSeconds)
     scene->advanceAndApply (elapsedSeconds);
 }
 
+float Artboard::durationSeconds() const
+{
+    if (scene == nullptr)
+        return 0.0f;
+
+    return scene->durationSeconds();
+}
+
 //==============================================================================
 
 void Artboard::setNumberInput (const String& name, double value)

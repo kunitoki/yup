@@ -69,7 +69,7 @@ public:
             art->loadFromFile (riveFilePath, 0, true);
 #endif
 
-            art->advanceAndApply (i * 1.0f);
+            art->advanceAndApply (i * art->durationSeconds());
         }
 
         // Grab focus
@@ -84,7 +84,7 @@ public:
         //for (int i = 0; i < totalRows * totalColumns; ++i)
         //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
 
-        auto bounds = getLocalBounds().reduced (100);
+        auto bounds = getLocalBounds().reduced (50);
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
@@ -168,8 +168,8 @@ private:
     }
 
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 2;
-    int totalColumns = 2;
+    int totalRows = 4;
+    int totalColumns = 4;
 };
 
 //==============================================================================
