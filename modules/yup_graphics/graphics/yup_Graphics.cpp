@@ -127,29 +127,32 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
     newInput.addTo (output);
 }
 
-rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient)
+rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient, const AffineTransform& transform)
 {
     const uint32 colors[] = { gradient.getStartColor(), gradient.getFinishColor() };
-    const float stops[] = { gradient.getStartDelta(), gradient.getFinishDelta() };
+
+    float stops[] = { gradient.getStartDelta(), gradient.getFinishDelta() };
+    transform.transformPoints (stops[0], stops[1]);
 
     if (gradient.getType() == ColorGradient::Linear)
     {
-        return factory.makeLinearGradient (gradient.getStartX(),
-                                           gradient.getStartY(),
-                                           gradient.getFinishX(),
-                                           gradient.getFinishY(),
-                                           colors,
-                                           stops,
-                                           2);
+        float x1 = gradient.getStartX();
+        float y1 = gradient.getStartY();
+        float x2 = gradient.getFinishX();
+        float y2 = gradient.getFinishY();
+        transform.transformPoints (x1, y1, x2, y2);
+
+        return factory.makeLinearGradient (x1, y1, x2, y2, colors, stops, sizeof (colors));
     }
     else
     {
-        return factory.makeRadialGradient (gradient.getStartX(),
-                                           gradient.getStartY(),
-                                           gradient.getRadius(),
-                                           colors,
-                                           stops,
-                                           2);
+        float x1 = gradient.getStartX();
+        float y1 = gradient.getStartY();
+        float radiusX = gradient.getRadius();
+        [[maybe_unused]] float radiusY = gradient.getRadius();
+        transform.transformPoints (x1, y1, radiusX, radiusY);
+
+        return factory.makeRadialGradient (x1, y1, radiusX, colors, stops, sizeof (colors));
     }
 }
 
@@ -179,12 +182,14 @@ Graphics::SavedState::~SavedState()
 }
 
 //==============================================================================
-Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer) noexcept
+Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale) noexcept
     : context (context)
     , factory (*context.factory())
     , renderer (renderer)
 {
     renderOptions.emplace_back();
+
+    currentRenderOptions().scale = scale;
 }
 
 //==============================================================================
@@ -279,7 +284,7 @@ ColorGradient Graphics::getStrokeColorGradient() const
 
 void Graphics::setStrokeWidth (float strokeWidth)
 {
-    currentRenderOptions().strokeWidth = strokeWidth;
+    currentRenderOptions().strokeWidth = jmax (0.0f, strokeWidth);
 }
 
 float Graphics::getStrokeWidth() const
@@ -347,9 +352,11 @@ void Graphics::setClipPath (const Rectangle<float>& clipRect)
 
 void Graphics::setClipPath (const Path& clipPath)
 {
-    currentRenderOptions().clipPath = clipPath;
+    auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (clipPath);
+    options.clipPath = clipPath;
+
+    auto rawPath = toRawPath (clipPath, options.getUntranslatedTransform());
     auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
     renderer.clipPath (renderPath.get());
 }
@@ -390,7 +397,7 @@ void Graphics::fillAll()
     path.lineTo (area.getX(), area.getY() + area.getHeight());
     path.lineTo (area.getX(), area.getY());
 
-    auto rawPath = toRawPath (path);
+    auto rawPath = toRawPath (path, options.getUntranslatedTransform());
     renderFillPath (rawPath, options);
 }
 
@@ -542,14 +549,14 @@ void Graphics::renderStrokePath (rive::RawPath& rawPath, const RenderOptions& op
 {
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::stroke);
-    paint->thickness (options.strokeWidth);
+    paint->thickness (options.getStrokeWidth());
     paint->join (toStrokeJoin (options.join));
     paint->cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient()));
+        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
     auto renderPath = factory.makeEmptyRenderPath();
     convertRawPathToRenderPath (rawPath, renderPath.get());
@@ -565,7 +572,7 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
     if (options.isFillColor())
         paint->color (options.getFillColor());
     else
-        paint->shader (toColorGradient (factory, options.getFillColorGradient()));
+        paint->shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
 
     auto renderPath = factory.makeEmptyRenderPath();
     convertRawPathToRenderPath (rawPath, renderPath.get());
@@ -584,7 +591,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient()));
+        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
     auto path = factory.makeEmptyRenderPath();
 

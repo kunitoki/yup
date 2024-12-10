@@ -219,28 +219,39 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_execute_process_or_fail)
+    execute_process (
+        COMMAND ${ARGN}
+        RESULT_VARIABLE result
+        ERROR_VARIABLE error_message
+        OUTPUT_QUIET)
+
+    if (NOT result EQUAL 0)
+        _yup_join_list_with_separator ("${command}" " " "" "" command_string)
+        message (FATAL_ERROR "Failed to execute command '${command_string}': ${error_message}")
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_convert_png_to_icns png_path icons_path output_variable)
     set (temp_iconset_path "${icons_path}.iconset")
     set (output_iconset_path "${icons_path}.icns")
 
-    # TODO - check png_path has png extension
-
+    file (REMOVE_RECURSE "${temp_iconset_path}")
     file (MAKE_DIRECTORY "${temp_iconset_path}")
 
-    execute_process(
-        COMMAND mkdir -p "${temp_iconset_path}"
-        COMMAND sips -z 16 16     -s format png "${png_path}" --out "${temp_iconset_path}/icon_16x16.png"
-        COMMAND sips -z 32 32     -s format png "${png_path}" --out "${temp_iconset_path}/icon_32x32.png"
-        COMMAND sips -z 32 32     -s format png "${png_path}" --out "${temp_iconset_path}/icon_16x16@2x.png"
-        COMMAND sips -z 64 64     -s format png "${png_path}" --out "${temp_iconset_path}/icon_32x32@2x.png"
-        COMMAND sips -z 128 128   -s format png "${png_path}" --out "${temp_iconset_path}/icon_128x128.png"
-        COMMAND sips -z 256 256   -s format png "${png_path}" --out "${temp_iconset_path}/icon_128x128@2x.png"
-        COMMAND sips -z 256 256   -s format png "${png_path}" --out "${temp_iconset_path}/icon_256x256.png"
-        COMMAND sips -z 512 512   -s format png "${png_path}" --out "${temp_iconset_path}/icon_256x256@2x.png"
-        COMMAND sips -z 512 512   -s format png "${png_path}" --out "${temp_iconset_path}/icon_512x512.png"
-        COMMAND sips -z 1024 1024 -s format png "${png_path}" --out "${temp_iconset_path}/icon_512x512@2x.png"
-        COMMAND iconutil -c icns -o "${output_iconset_path}" "${temp_iconset_path}"
-        ERROR_VARIABLE error_message)
+    _yup_execute_process_or_fail (/usr/bin/sips -z 16 16     "${png_path}" --out "${temp_iconset_path}/icon_16x16.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 32 32     "${png_path}" --out "${temp_iconset_path}/icon_32x32.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 32 32     "${png_path}" --out "${temp_iconset_path}/icon_16x16@2x.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 64 64     "${png_path}" --out "${temp_iconset_path}/icon_32x32@2x.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 128 128   "${png_path}" --out "${temp_iconset_path}/icon_128x128.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 256 256   "${png_path}" --out "${temp_iconset_path}/icon_128x128@2x.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 256 256   "${png_path}" --out "${temp_iconset_path}/icon_256x256.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 512 512   "${png_path}" --out "${temp_iconset_path}/icon_256x256@2x.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 512 512   "${png_path}" --out "${temp_iconset_path}/icon_512x512.png")
+    _yup_execute_process_or_fail (/usr/bin/sips -z 1024 1024 "${png_path}" --out "${temp_iconset_path}/icon_512x512@2x.png")
+    _yup_execute_process_or_fail (/usr/bin/iconutil -c icns -o "${output_iconset_path}" "${temp_iconset_path}")
 
     file (REMOVE_RECURSE "${temp_iconset_path}")
 

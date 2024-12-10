@@ -151,7 +151,7 @@ void Component::setSize (const Size<float>& newSize)
     boundsInParent = boundsInParent.withSize (newSize);
 
     if (options.onDesktop)
-        native->setSize(newSize.to<int>());
+        native->setSize (newSize.to<int>());
 
     resized();
 }
@@ -187,7 +187,7 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     boundsInParent = newBounds;
 
     if (options.onDesktop)
-        native->setBounds(newBounds.to<int>());
+        native->setBounds (newBounds.to<int>());
 
     resized();
 }
@@ -658,16 +658,16 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
     keyUp (keys, position);
 }
 
-void Component::internalResized (int width, int height, float scaleDpi)
+void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<float> (width, height) * scaleDpi);
+    boundsInParent = boundsInParent.withSize (Size<float> (width, height));
 
     resized();
 }
 
-void Component::internalMoved (int xpos, int ypos, float scaleDpi)
+void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos) * scaleDpi);
+    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos));
 
     moved();
 }

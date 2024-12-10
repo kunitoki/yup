@@ -187,7 +187,7 @@ function (_yup_module_setup_target module_name
 
     set_target_properties (${module_name} PROPERTIES
         CXX_EXTENSIONS              OFF
-        CXX_VISIBILITY_PRESET       "hidden"
+        CXX_VISIBILITY_PRESET       hidden
         VISIBILITY_INLINES_HIDDEN   ON)
 
     if ("${yup_platform}" MATCHES "^(osx|ios)$")

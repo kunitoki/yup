@@ -72,7 +72,7 @@ public:
         @param context Reference to the GraphicsContext that defines the drawing surface and capabilities.
         @param renderer Reference to the Renderer that executes the drawing commands.
     */
-    Graphics (GraphicsContext& context, rive::Renderer& renderer) noexcept;
+    Graphics (GraphicsContext& context, rive::Renderer& renderer, float scale = 1.0f) noexcept;
 
     //==============================================================================
     /** Saves the current state of the Graphics object.
@@ -94,6 +94,7 @@ public:
     */
     Color getFillColor() const;
 
+    //==============================================================================
     /** Sets the current drawing stroke color.
 
         @param color The new color to use for subsequent stroke drawing operations.
@@ -106,6 +107,7 @@ public:
     */
     Color getStrokeColor() const;
 
+    //==============================================================================
     /** Sets the current color gradient for fills.
 
         @param gradient The new color gradient to use for subsequent fill drawing operations.
@@ -118,6 +120,7 @@ public:
     */
     ColorGradient getFillColorGradient() const;
 
+    //==============================================================================
     /** Sets the current color gradient for strokes.
 
         @param gradient The new color gradient to use for subsequent stroke drawing operations.
@@ -130,12 +133,14 @@ public:
     */
     ColorGradient getStrokeColorGradient() const;
 
+    //==============================================================================
     // TODO - doxygen
     void setStrokeWidth (float strokeWidth);
 
     // TODO - doxygen
     float getStrokeWidth() const;
 
+    //==============================================================================
     /** Sets the opacity for subsequent drawing operations.
 
         @param opacity The new opacity level (0.0-1.0).
@@ -148,6 +153,7 @@ public:
     */
     float getOpacity() const;
 
+    //==============================================================================
     /** Sets the stroke join style for drawing lines and paths.
 
         @param join The join style to use.
@@ -160,6 +166,7 @@ public:
     */
     StrokeJoin getStrokeJoin() const;
 
+    //==============================================================================
     /** Sets the stroke cap style for drawing lines and paths.
 
         @param cap The cap style to use.
@@ -172,6 +179,7 @@ public:
     */
     StrokeCap getStrokeCap() const;
 
+    //==============================================================================
     /** Defines the area within which drawing operations are clipped.
 
         @param r The rectangle that defines the clipping region.
@@ -184,6 +192,7 @@ public:
     */
     Rectangle<float> getDrawingArea() const;
 
+    //==============================================================================
     /** Defines the affine transformation to use when drawing.
 
         @param transform The affine transformation used when drawing.
@@ -196,6 +205,7 @@ public:
     */
     AffineTransform getTransform() const;
 
+    //==============================================================================
     void setClipPath (const Rectangle<float>& clipRect);
     void setClipPath (const Path& clipPath);
     Path getClipPath() const;
@@ -432,17 +442,30 @@ private:
             return strokeGradient.withMultipliedAlpha (opacity);
         }
 
+        float getStrokeWidth() const noexcept
+        {
+            return strokeWidth * scale;
+        }
+
         const Rectangle<float>& getDrawingArea() const noexcept
         {
             return drawingArea;
         }
 
+        AffineTransform getUntranslatedTransform() const noexcept
+        {
+            return transform
+                .scaled (scale);
+        }
+
         AffineTransform getTransform() const noexcept
         {
             return transform
-                .translated (drawingArea.getX(), drawingArea.getY());
+                .translated (drawingArea.getX(), drawingArea.getY())
+                .scaled (scale);
         }
 
+        float scale = 1.0f;
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
         Color fillColor = 0xff000000;
