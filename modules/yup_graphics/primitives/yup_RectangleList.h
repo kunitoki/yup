@@ -181,7 +181,6 @@ public:
         return false;
     }
 
-
     [[nodiscard]] bool contains (const Point<ValueType>& point) const
     {
         return contains (point.getX(), point.getY());
