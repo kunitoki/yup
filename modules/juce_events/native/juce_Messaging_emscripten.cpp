@@ -56,6 +56,12 @@ public:
     }
 
     //==============================================================================
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
+    }
+
+    //==============================================================================
     bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
@@ -93,6 +99,9 @@ private:
     {
         Timer::callPendingTimersSynchronously();
 
+        if (loopCallback)
+            loopCallback();
+
         ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
         {
@@ -111,6 +120,7 @@ private:
 
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
+    std::function<void()> loopCallback;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
@@ -157,4 +167,8 @@ void MessageManager::stopDispatchLoop()
     quitMessagePosted = true;
 }
 
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
+}
 } // namespace juce

@@ -61,8 +61,8 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
-        _yup_fetch_glfw3()
-        list (APPEND additional_libraries glfw)
+        _yup_fetch_sdl2()
+        list (APPEND additional_libraries SDL2-static)
     endif()
 
     # ==== Enable profiling

@@ -191,6 +191,7 @@ private:
 
     friend class ComponentNative;
     friend class GLFWComponentNative;
+    friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
 
     using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;

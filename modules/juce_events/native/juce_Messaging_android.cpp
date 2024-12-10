@@ -51,6 +51,12 @@ public:
     }
 
     //==============================================================================
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
+    }
+
+    //==============================================================================
     void postMessage (MessageManager::MessageBase* const msg) noexcept
     {
         const ScopedLock sl (lock);
@@ -65,7 +71,8 @@ public:
 
         for (;;)
         {
-            glfwPollEvents();
+            if (loopCallback)
+                loopCallback();
 
             {
                 const ScopedLock sl (lock);
@@ -102,6 +109,7 @@ public:
 private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> queue;
+    std::function<void()> loopCallback;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
@@ -134,6 +142,11 @@ bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* cons
 
 void MessageManager::broadcastMessage (const String&)
 {
+}
+
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
 }
 
 //==============================================================================

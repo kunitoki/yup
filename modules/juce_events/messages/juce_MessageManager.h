@@ -91,8 +91,7 @@ public:
     */
     void stopDispatchLoop();
 
-    /** Returns true if the stopDispatchLoop() method has been called.
-    */
+    /** Returns true if the stopDispatchLoop() method has been called. */
     bool hasStopMessageBeenSent() const noexcept { return quitMessagePosted.get() != 0; }
 
 #if JUCE_MODAL_LOOPS_PERMITTED
@@ -103,6 +102,10 @@ public:
     */
     bool runDispatchLoopUntil (int millisecondsToRunFor);
 #endif
+
+    //==============================================================================
+    /** Register an event loop callback that will be processed in the event loop. */
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet);
 
     //==============================================================================
     /** Asynchronously invokes a function or C++11 lambda on the message thread.

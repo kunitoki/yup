@@ -168,8 +168,8 @@ private:
     }
 
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 4;
-    int totalColumns = 4;
+    int totalRows = 1;
+    int totalColumns = 2;
 };
 
 //==============================================================================

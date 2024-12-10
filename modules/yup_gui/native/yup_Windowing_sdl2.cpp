@@ -24,173 +24,172 @@ namespace yup
 
 //==============================================================================
 
-MouseEvent::Buttons toMouseButton (int button) noexcept
+MouseEvent::Buttons toMouseButton (Uint8 sdlButton) noexcept
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT)
-        return MouseEvent::Buttons::leftButton;
+    switch (sdlButton)
+    {
+        case SDL_BUTTON_LEFT:
+            return MouseEvent::Buttons::leftButton;
 
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT)
-        return MouseEvent::Buttons::rightButton;
+        case SDL_BUTTON_RIGHT:
+            return MouseEvent::Buttons::rightButton;
 
-    else if (button == GLFW_MOUSE_BUTTON_MIDDLE)
-        return MouseEvent::Buttons::middleButton;
+        case SDL_BUTTON_MIDDLE:
+            return MouseEvent::Buttons::middleButton;
 
-    return MouseEvent::Buttons::noButtons;
+        default:
+            return MouseEvent::Buttons::noButtons;
+    }
 }
 
 //==============================================================================
 
-int convertKeyToModifier (int key) noexcept
+KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept
 {
-    int mod = 0;
+    int modifiers;
 
-    if (key == GLFW_KEY_LEFT_CONTROL || key == GLFW_KEY_RIGHT_CONTROL)
-        mod = GLFW_MOD_CONTROL;
+    if (sdlMod & KMOD_CTRL)
+        modifiers |= KeyModifiers::controlMask;
 
-    else if (key == GLFW_KEY_LEFT_SHIFT || key == GLFW_KEY_RIGHT_SHIFT)
-        mod = GLFW_MOD_SHIFT;
+    if (sdlMod & KMOD_SHIFT)
+        modifiers |= KeyModifiers::shiftMask;
 
-    else if (key == GLFW_KEY_LEFT_ALT || key == GLFW_KEY_RIGHT_ALT)
-        mod = GLFW_MOD_ALT;
+    if (sdlMod & KMOD_ALT)
+        modifiers |= KeyModifiers::altMask;
 
-    else if (key == GLFW_KEY_LEFT_SUPER || key == GLFW_KEY_RIGHT_SUPER)
-        mod = GLFW_MOD_SUPER;
+    if (sdlMod & KMOD_GUI)
+        modifiers |= KeyModifiers::superMask;
 
-    return mod;
-}
-
-KeyModifiers toKeyModifiers (int modifiers) noexcept
-{
-    return { modifiers };
+    return modifiers;
 }
 
 // clang-format off
-KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
+KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifiers) noexcept
 {
     const char32_t sc = static_cast<char32_t> (scancode);
 
     switch (key)
     {
-    case GLFW_KEY_SPACE:            return { KeyPress::spaceKey, modifiers, sc };
-    case GLFW_KEY_APOSTROPHE:       return { KeyPress::apostropheKey, modifiers, sc };
-    case GLFW_KEY_COMMA:            return { KeyPress::commaKey, modifiers, sc };
-    case GLFW_KEY_MINUS:            return { KeyPress::minusKey, modifiers, sc };
-    case GLFW_KEY_PERIOD:           return { KeyPress::periodKey, modifiers, sc };
-    case GLFW_KEY_SLASH:            return { KeyPress::slashKey, modifiers, sc };
-    case GLFW_KEY_0:                return { KeyPress::number0Key, modifiers, sc };
-    case GLFW_KEY_1:                return { KeyPress::number1Key, modifiers, sc };
-    case GLFW_KEY_2:                return { KeyPress::number2Key, modifiers, sc };
-    case GLFW_KEY_3:                return { KeyPress::number3Key, modifiers, sc };
-    case GLFW_KEY_4:                return { KeyPress::number4Key, modifiers, sc };
-    case GLFW_KEY_5:                return { KeyPress::number5Key, modifiers, sc };
-    case GLFW_KEY_6:                return { KeyPress::number6Key, modifiers, sc };
-    case GLFW_KEY_7:                return { KeyPress::number7Key, modifiers, sc };
-    case GLFW_KEY_8:                return { KeyPress::number8Key, modifiers, sc };
-    case GLFW_KEY_9:                return { KeyPress::number9Key, modifiers, sc };
-    case GLFW_KEY_SEMICOLON:        return { KeyPress::semicolonKey, modifiers, sc };
-    case GLFW_KEY_EQUAL:            return { KeyPress::equalKey, modifiers, sc };
-    case GLFW_KEY_A:                return { KeyPress::textAKey, modifiers, sc };
-    case GLFW_KEY_B:                return { KeyPress::textBKey, modifiers, sc };
-    case GLFW_KEY_C:                return { KeyPress::textCKey, modifiers, sc };
-    case GLFW_KEY_D:                return { KeyPress::textDKey, modifiers, sc };
-    case GLFW_KEY_E:                return { KeyPress::textEKey, modifiers, sc };
-    case GLFW_KEY_F:                return { KeyPress::textFKey, modifiers, sc };
-    case GLFW_KEY_G:                return { KeyPress::textGKey, modifiers, sc };
-    case GLFW_KEY_H:                return { KeyPress::textHKey, modifiers, sc };
-    case GLFW_KEY_I:                return { KeyPress::textIKey, modifiers, sc };
-    case GLFW_KEY_J:                return { KeyPress::textJKey, modifiers, sc };
-    case GLFW_KEY_K:                return { KeyPress::textKKey, modifiers, sc };
-    case GLFW_KEY_L:                return { KeyPress::textLKey, modifiers, sc };
-    case GLFW_KEY_M:                return { KeyPress::textMKey, modifiers, sc };
-    case GLFW_KEY_N:                return { KeyPress::textNKey, modifiers, sc };
-    case GLFW_KEY_O:                return { KeyPress::textOKey, modifiers, sc };
-    case GLFW_KEY_P:                return { KeyPress::textPKey, modifiers, sc };
-    case GLFW_KEY_Q:                return { KeyPress::textQKey, modifiers, sc };
-    case GLFW_KEY_R:                return { KeyPress::textRKey, modifiers, sc };
-    case GLFW_KEY_S:                return { KeyPress::textSKey, modifiers, sc };
-    case GLFW_KEY_T:                return { KeyPress::textTKey, modifiers, sc };
-    case GLFW_KEY_U:                return { KeyPress::textUKey, modifiers, sc };
-    case GLFW_KEY_V:                return { KeyPress::textVKey, modifiers, sc };
-    case GLFW_KEY_W:                return { KeyPress::textWKey, modifiers, sc };
-    case GLFW_KEY_X:                return { KeyPress::textXKey, modifiers, sc };
-    case GLFW_KEY_Y:                return { KeyPress::textYKey, modifiers, sc };
-    case GLFW_KEY_Z:                return { KeyPress::textZKey, modifiers, sc };
-    case GLFW_KEY_LEFT_BRACKET:     return { KeyPress::leftBracketKey, modifiers, sc };
-    case GLFW_KEY_BACKSLASH:        return { KeyPress::backslashKey, modifiers, sc };
-    case GLFW_KEY_RIGHT_BRACKET:    return { KeyPress::rightBracketKey, modifiers, sc };
-    case GLFW_KEY_GRAVE_ACCENT:     return { KeyPress::graveAccentKey, modifiers, sc };
-    case GLFW_KEY_WORLD_1:          return { KeyPress::world1Key, modifiers, sc };
-    case GLFW_KEY_WORLD_2:          return { KeyPress::world2Key, modifiers, sc };
-    case GLFW_KEY_ESCAPE:           return { KeyPress::escapeKey, modifiers, sc };
-    case GLFW_KEY_ENTER:            return { KeyPress::enterKey, modifiers, sc };
-    case GLFW_KEY_TAB:              return { KeyPress::tabKey, modifiers, sc };
-    case GLFW_KEY_BACKSPACE:        return { KeyPress::backspaceKey, modifiers, sc };
-    case GLFW_KEY_INSERT:           return { KeyPress::insertKey, modifiers, sc };
-    case GLFW_KEY_DELETE:           return { KeyPress::deleteKey, modifiers, sc };
-    case GLFW_KEY_RIGHT:            return { KeyPress::rightKey, modifiers, sc };
-    case GLFW_KEY_LEFT:             return { KeyPress::leftKey, modifiers, sc };
-    case GLFW_KEY_DOWN:             return { KeyPress::downKey, modifiers, sc };
-    case GLFW_KEY_UP:               return { KeyPress::upKey, modifiers, sc };
-    case GLFW_KEY_PAGE_UP:          return { KeyPress::pageUpKey, modifiers, sc };
-    case GLFW_KEY_PAGE_DOWN:        return { KeyPress::pageDownKey, modifiers, sc };
-    case GLFW_KEY_HOME:             return { KeyPress::homeKey, modifiers, sc };
-    case GLFW_KEY_END:              return { KeyPress::endKey, modifiers, sc };
-    case GLFW_KEY_CAPS_LOCK:        return { KeyPress::capsLockKey, modifiers, sc };
-    case GLFW_KEY_SCROLL_LOCK:      return { KeyPress::scrollLockKey, modifiers, sc };
-    case GLFW_KEY_NUM_LOCK:         return { KeyPress::numLockKey, modifiers, sc };
-    case GLFW_KEY_PRINT_SCREEN:     return { KeyPress::printScreenKey, modifiers, sc };
-    case GLFW_KEY_PAUSE:            return { KeyPress::pauseKey, modifiers, sc };
-    case GLFW_KEY_F1:               return { KeyPress::f1Key, modifiers, sc };
-    case GLFW_KEY_F2:               return { KeyPress::f2Key, modifiers, sc };
-    case GLFW_KEY_F3:               return { KeyPress::f3Key, modifiers, sc };
-    case GLFW_KEY_F4:               return { KeyPress::f4Key, modifiers, sc };
-    case GLFW_KEY_F5:               return { KeyPress::f5Key, modifiers, sc };
-    case GLFW_KEY_F6:               return { KeyPress::f6Key, modifiers, sc };
-    case GLFW_KEY_F7:               return { KeyPress::f7Key, modifiers, sc };
-    case GLFW_KEY_F8:               return { KeyPress::f8Key, modifiers, sc };
-    case GLFW_KEY_F9:               return { KeyPress::f9Key, modifiers, sc };
-    case GLFW_KEY_F10:              return { KeyPress::f10Key, modifiers, sc };
-    case GLFW_KEY_F11:              return { KeyPress::f11Key, modifiers, sc };
-    case GLFW_KEY_F12:              return { KeyPress::f12Key, modifiers, sc };
-    case GLFW_KEY_F13:              return { KeyPress::f13Key, modifiers, sc };
-    case GLFW_KEY_F14:              return { KeyPress::f14Key, modifiers, sc };
-    case GLFW_KEY_F15:              return { KeyPress::f15Key, modifiers, sc };
-    case GLFW_KEY_F16:              return { KeyPress::f16Key, modifiers, sc };
-    case GLFW_KEY_F17:              return { KeyPress::f17Key, modifiers, sc };
-    case GLFW_KEY_F18:              return { KeyPress::f18Key, modifiers, sc };
-    case GLFW_KEY_F19:              return { KeyPress::f19Key, modifiers, sc };
-    case GLFW_KEY_F20:              return { KeyPress::f20Key, modifiers, sc };
-    case GLFW_KEY_F21:              return { KeyPress::f21Key, modifiers, sc };
-    case GLFW_KEY_F22:              return { KeyPress::f22Key, modifiers, sc };
-    case GLFW_KEY_F23:              return { KeyPress::f23Key, modifiers, sc };
-    case GLFW_KEY_F24:              return { KeyPress::f24Key, modifiers, sc };
-    case GLFW_KEY_F25:              return { KeyPress::f25Key, modifiers, sc };
-    case GLFW_KEY_KP_0:             return { KeyPress::kp0Key, modifiers, sc };
-    case GLFW_KEY_KP_1:             return { KeyPress::kp1Key, modifiers, sc };
-    case GLFW_KEY_KP_2:             return { KeyPress::kp2Key, modifiers, sc };
-    case GLFW_KEY_KP_3:             return { KeyPress::kp3Key, modifiers, sc };
-    case GLFW_KEY_KP_4:             return { KeyPress::kp4Key, modifiers, sc };
-    case GLFW_KEY_KP_5:             return { KeyPress::kp5Key, modifiers, sc };
-    case GLFW_KEY_KP_6:             return { KeyPress::kp6Key, modifiers, sc };
-    case GLFW_KEY_KP_7:             return { KeyPress::kp7Key, modifiers, sc };
-    case GLFW_KEY_KP_8:             return { KeyPress::kp8Key, modifiers, sc };
-    case GLFW_KEY_KP_9:             return { KeyPress::kp9Key, modifiers, sc };
-    case GLFW_KEY_KP_DECIMAL:       return { KeyPress::kpDecimalKey, modifiers, sc };
-    case GLFW_KEY_KP_DIVIDE:        return { KeyPress::kpDivideKey, modifiers, sc };
-    case GLFW_KEY_KP_MULTIPLY:      return { KeyPress::kpMultiplyKey, modifiers, sc };
-    case GLFW_KEY_KP_SUBTRACT:      return { KeyPress::kpSubtractKey, modifiers, sc };
-    case GLFW_KEY_KP_ADD:           return { KeyPress::kpAddKey, modifiers, sc };
-    case GLFW_KEY_KP_ENTER:         return { KeyPress::kpEnterKey, modifiers, sc };
-    case GLFW_KEY_KP_EQUAL:         return { KeyPress::kpEqualKey, modifiers, sc };
-    case GLFW_KEY_LEFT_SHIFT:       return { KeyPress::leftShiftKey, modifiers, sc };
-    case GLFW_KEY_LEFT_CONTROL:     return { KeyPress::leftControlKey, modifiers, sc };
-    case GLFW_KEY_LEFT_ALT:         return { KeyPress::leftAltKey, modifiers, sc };
-    case GLFW_KEY_LEFT_SUPER:       return { KeyPress::leftSuperKey, modifiers, sc };
-    case GLFW_KEY_RIGHT_SHIFT:      return { KeyPress::rightShiftKey, modifiers, sc };
-    case GLFW_KEY_RIGHT_CONTROL:    return { KeyPress::rightControlKey, modifiers, sc };
-    case GLFW_KEY_RIGHT_ALT:        return { KeyPress::rightAltKey, modifiers, sc };
-    case GLFW_KEY_RIGHT_SUPER:      return { KeyPress::rightSuperKey, modifiers, sc };
-    case GLFW_KEY_MENU:             return { KeyPress::menuKey, modifiers, sc };
+    case SDLK_SPACE:            return { KeyPress::spaceKey, modifiers, sc };
+    //case SDLK_APOSTROPHE:       return { KeyPress::apostropheKey, modifiers, sc };
+    case SDLK_COMMA:            return { KeyPress::commaKey, modifiers, sc };
+    case SDLK_MINUS:            return { KeyPress::minusKey, modifiers, sc };
+    case SDLK_PERIOD:           return { KeyPress::periodKey, modifiers, sc };
+    case SDLK_SLASH:            return { KeyPress::slashKey, modifiers, sc };
+    case SDLK_0:                return { KeyPress::number0Key, modifiers, sc };
+    case SDLK_1:                return { KeyPress::number1Key, modifiers, sc };
+    case SDLK_2:                return { KeyPress::number2Key, modifiers, sc };
+    case SDLK_3:                return { KeyPress::number3Key, modifiers, sc };
+    case SDLK_4:                return { KeyPress::number4Key, modifiers, sc };
+    case SDLK_5:                return { KeyPress::number5Key, modifiers, sc };
+    case SDLK_6:                return { KeyPress::number6Key, modifiers, sc };
+    case SDLK_7:                return { KeyPress::number7Key, modifiers, sc };
+    case SDLK_8:                return { KeyPress::number8Key, modifiers, sc };
+    case SDLK_9:                return { KeyPress::number9Key, modifiers, sc };
+    case SDLK_SEMICOLON:        return { KeyPress::semicolonKey, modifiers, sc };
+    case SDLK_EQUALS:           return { KeyPress::equalKey, modifiers, sc };
+    case SDLK_a:                return { KeyPress::textAKey, modifiers, sc };
+    case SDLK_b:                return { KeyPress::textBKey, modifiers, sc };
+    case SDLK_c:                return { KeyPress::textCKey, modifiers, sc };
+    case SDLK_d:                return { KeyPress::textDKey, modifiers, sc };
+    case SDLK_e:                return { KeyPress::textEKey, modifiers, sc };
+    case SDLK_f:                return { KeyPress::textFKey, modifiers, sc };
+    case SDLK_g:                return { KeyPress::textGKey, modifiers, sc };
+    case SDLK_h:                return { KeyPress::textHKey, modifiers, sc };
+    case SDLK_i:                return { KeyPress::textIKey, modifiers, sc };
+    case SDLK_j:                return { KeyPress::textJKey, modifiers, sc };
+    case SDLK_k:                return { KeyPress::textKKey, modifiers, sc };
+    case SDLK_l:                return { KeyPress::textLKey, modifiers, sc };
+    case SDLK_m:                return { KeyPress::textMKey, modifiers, sc };
+    case SDLK_n:                return { KeyPress::textNKey, modifiers, sc };
+    case SDLK_o:                return { KeyPress::textOKey, modifiers, sc };
+    case SDLK_p:                return { KeyPress::textPKey, modifiers, sc };
+    case SDLK_q:                return { KeyPress::textQKey, modifiers, sc };
+    case SDLK_r:                return { KeyPress::textRKey, modifiers, sc };
+    case SDLK_s:                return { KeyPress::textSKey, modifiers, sc };
+    case SDLK_t:                return { KeyPress::textTKey, modifiers, sc };
+    case SDLK_u:                return { KeyPress::textUKey, modifiers, sc };
+    case SDLK_v:                return { KeyPress::textVKey, modifiers, sc };
+    case SDLK_w:                return { KeyPress::textWKey, modifiers, sc };
+    case SDLK_x:                return { KeyPress::textXKey, modifiers, sc };
+    case SDLK_y:                return { KeyPress::textYKey, modifiers, sc };
+    case SDLK_z:                return { KeyPress::textZKey, modifiers, sc };
+    case SDLK_LEFTBRACKET:      return { KeyPress::leftBracketKey, modifiers, sc };
+    case SDLK_BACKSLASH:        return { KeyPress::backslashKey, modifiers, sc };
+    case SDLK_RIGHTBRACKET:     return { KeyPress::rightBracketKey, modifiers, sc };
+    //case SDLK_GRAVE_ACCENT:     return { KeyPress::graveAccentKey, modifiers, sc };
+    //case SDLK_WORLD_1:          return { KeyPress::world1Key, modifiers, sc };
+    //case SDLK_WORLD_2:          return { KeyPress::world2Key, modifiers, sc };
+    case SDLK_ESCAPE:           return { KeyPress::escapeKey, modifiers, sc };
+    case SDLK_RETURN:           return { KeyPress::enterKey, modifiers, sc };
+    case SDLK_TAB:              return { KeyPress::tabKey, modifiers, sc };
+    case SDLK_BACKSPACE:        return { KeyPress::backspaceKey, modifiers, sc };
+    case SDLK_INSERT:           return { KeyPress::insertKey, modifiers, sc };
+    case SDLK_DELETE:           return { KeyPress::deleteKey, modifiers, sc };
+    case SDLK_RIGHT:            return { KeyPress::rightKey, modifiers, sc };
+    case SDLK_LEFT:             return { KeyPress::leftKey, modifiers, sc };
+    case SDLK_DOWN:             return { KeyPress::downKey, modifiers, sc };
+    case SDLK_UP:               return { KeyPress::upKey, modifiers, sc };
+    case SDLK_PAGEUP:           return { KeyPress::pageUpKey, modifiers, sc };
+    case SDLK_PAGEDOWN:         return { KeyPress::pageDownKey, modifiers, sc };
+    case SDLK_HOME:             return { KeyPress::homeKey, modifiers, sc };
+    case SDLK_END:              return { KeyPress::endKey, modifiers, sc };
+    case SDLK_CAPSLOCK:         return { KeyPress::capsLockKey, modifiers, sc };
+    case SDLK_SCROLLLOCK:       return { KeyPress::scrollLockKey, modifiers, sc };
+    case SDLK_NUMLOCKCLEAR:     return { KeyPress::numLockKey, modifiers, sc };
+    case SDLK_PRINTSCREEN:      return { KeyPress::printScreenKey, modifiers, sc };
+    case SDLK_PAUSE:            return { KeyPress::pauseKey, modifiers, sc };
+    case SDLK_F1:               return { KeyPress::f1Key, modifiers, sc };
+    case SDLK_F2:               return { KeyPress::f2Key, modifiers, sc };
+    case SDLK_F3:               return { KeyPress::f3Key, modifiers, sc };
+    case SDLK_F4:               return { KeyPress::f4Key, modifiers, sc };
+    case SDLK_F5:               return { KeyPress::f5Key, modifiers, sc };
+    case SDLK_F6:               return { KeyPress::f6Key, modifiers, sc };
+    case SDLK_F7:               return { KeyPress::f7Key, modifiers, sc };
+    case SDLK_F8:               return { KeyPress::f8Key, modifiers, sc };
+    case SDLK_F9:               return { KeyPress::f9Key, modifiers, sc };
+    case SDLK_F10:              return { KeyPress::f10Key, modifiers, sc };
+    case SDLK_F11:              return { KeyPress::f11Key, modifiers, sc };
+    case SDLK_F12:              return { KeyPress::f12Key, modifiers, sc };
+    case SDLK_F13:              return { KeyPress::f13Key, modifiers, sc };
+    case SDLK_F14:              return { KeyPress::f14Key, modifiers, sc };
+    case SDLK_F15:              return { KeyPress::f15Key, modifiers, sc };
+    case SDLK_F16:              return { KeyPress::f16Key, modifiers, sc };
+    case SDLK_F17:              return { KeyPress::f17Key, modifiers, sc };
+    case SDLK_F18:              return { KeyPress::f18Key, modifiers, sc };
+    case SDLK_F19:              return { KeyPress::f19Key, modifiers, sc };
+    case SDLK_F20:              return { KeyPress::f20Key, modifiers, sc };
+    case SDLK_F21:              return { KeyPress::f21Key, modifiers, sc };
+    case SDLK_F22:              return { KeyPress::f22Key, modifiers, sc };
+    case SDLK_F23:              return { KeyPress::f23Key, modifiers, sc };
+    case SDLK_F24:              return { KeyPress::f24Key, modifiers, sc };
+    //case SDLK_F25:              return { KeyPress::f25Key, modifiers, sc };
+    case SDLK_KP_0:             return { KeyPress::kp0Key, modifiers, sc };
+    case SDLK_KP_1:             return { KeyPress::kp1Key, modifiers, sc };
+    case SDLK_KP_2:             return { KeyPress::kp2Key, modifiers, sc };
+    case SDLK_KP_3:             return { KeyPress::kp3Key, modifiers, sc };
+    case SDLK_KP_4:             return { KeyPress::kp4Key, modifiers, sc };
+    case SDLK_KP_5:             return { KeyPress::kp5Key, modifiers, sc };
+    case SDLK_KP_6:             return { KeyPress::kp6Key, modifiers, sc };
+    case SDLK_KP_7:             return { KeyPress::kp7Key, modifiers, sc };
+    case SDLK_KP_8:             return { KeyPress::kp8Key, modifiers, sc };
+    case SDLK_KP_9:             return { KeyPress::kp9Key, modifiers, sc };
+    case SDLK_KP_DECIMAL:       return { KeyPress::kpDecimalKey, modifiers, sc };
+    case SDLK_KP_DIVIDE:        return { KeyPress::kpDivideKey, modifiers, sc };
+    case SDLK_KP_POWER:         return { KeyPress::kpMultiplyKey, modifiers, sc };
+    case SDLK_KP_MINUS:         return { KeyPress::kpSubtractKey, modifiers, sc };
+    case SDLK_KP_PLUS:          return { KeyPress::kpAddKey, modifiers, sc };
+    case SDLK_KP_ENTER:         return { KeyPress::kpEnterKey, modifiers, sc };
+    case SDLK_KP_EQUALS:        return { KeyPress::kpEqualKey, modifiers, sc };
+    case SDLK_LSHIFT:           return { KeyPress::leftShiftKey, modifiers, sc };
+    case SDLK_LCTRL:            return { KeyPress::leftControlKey, modifiers, sc };
+    case SDLK_LALT:             return { KeyPress::leftAltKey, modifiers, sc };
+    case SDLK_LGUI:             return { KeyPress::leftSuperKey, modifiers, sc };
+    case SDLK_RSHIFT:           return { KeyPress::rightShiftKey, modifiers, sc };
+    case SDLK_RCTRL:            return { KeyPress::rightControlKey, modifiers, sc };
+    case SDLK_RALT:             return { KeyPress::rightAltKey, modifiers, sc };
+    case SDLK_RGUI:             return { KeyPress::rightSuperKey, modifiers, sc };
+    case SDLK_MENU:             return { KeyPress::menuKey, modifiers, sc };
 
     default:
         break;
@@ -198,10 +197,40 @@ KeyPress toKeyPress (int key, int scancode, int modifiers) noexcept
 
     return {};
 }
-
 // clang-format on
 
 //==============================================================================
+
+void* getNativeWindowHandle (SDL_Window* window)
+{
+    if (window == nullptr)
+        return nullptr;
+
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION (&wmInfo.version);
+    if (SDL_GetWindowWMInfo (window, &wmInfo))
+    {
+#if JUCE_MAC
+        return (__bridge void*) wmInfo.info.cocoa.window; // NSWindow*
+
+#elif JUCE_IOS
+        return (__bridge void*) wmInfo.info.uikit.window; // UIWindow*
+
+#elif JUCE_WINDOWS
+        return wmInfo.info.win.window; // HWND
+
+#elif JUCE_LINUX
+        return reinterpret_cast<void*> (wmInfo.info.x11.window); // X11 Window
+
+#elif JUCE_ANDROID
+        return reinterpret_cast<void*> (wmInfo.info.android.window); // ANativeWindow*
+
+#endif
+    }
+
+    return nullptr;
+}
+
 
 Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
 {
@@ -240,11 +269,11 @@ Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
 #endif
 }
 
-void setNativeParent (void* nativeDisplay, void* nativeWindow, GLFWwindow* window)
+void setNativeParent (void* nativeDisplay, void* nativeWindow, SDL_Window* window)
 {
 #if JUCE_WINDOWS
     HWND hpar = reinterpret_cast<HWND> (nativeWindow);
-    HWND hwnd = reinterpret_cast<HWND> (glfwGetWin32Window (window));
+    HWND hwnd = reinterpret_cast<HWND> (getNativeWindowHandle (window));
     SetParent (hwnd, hpar);
 
     long style = GetWindowLong (hwnd, GWL_STYLE);
@@ -256,7 +285,7 @@ void setNativeParent (void* nativeDisplay, void* nativeWindow, GLFWwindow* windo
 
 #elif JUCE_MAC
     NSWindow* parentWindow = [reinterpret_cast<NSView*> (nativeWindow) window];
-    NSWindow* currentWindow = glfwGetCocoaWindow (window);
+    NSWindow* currentWindow = reinterpret_cast<NSWindow*> (getNativeWindowHandle (window));
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
 #elif JUCE_LINUX
@@ -297,38 +326,47 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
     return desiredApi;
 }
 
-void setContextWindowHints (GraphicsContext::Api desiredApi)
+Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
 {
     if (desiredApi == GraphicsContext::Metal)
     {
-        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint (GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "metal");
+
+        return SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI;
     }
 
     if (desiredApi == GraphicsContext::Direct3D)
     {
-        glfwWindowHint (GLFW_CLIENT_API, GLFW_NO_API);
+        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "direct3d11");
+
+        return SDL_WINDOW_ALLOW_HIGHDPI;
     }
 
     if (desiredApi == GraphicsContext::OpenGL)
     {
 #if defined(ANGLE) || defined(JUCE_ANDROID)
-        glfwWindowHint (GLFW_CONTEXT_CREATION_API, GLFW_EGL_CONTEXT_API);
-        glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-        glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
-        glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
-        glfwWindowHint (GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles");
+
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #else
-        glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_API);
-        glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, YUP_RIVE_OPENGL_MAJOR);
-        glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, YUP_RIVE_OPENGL_MINOR);
+        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl");
+
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, YUP_RIVE_OPENGL_MAJOR);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, YUP_RIVE_OPENGL_MINOR);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 #endif
+
+        return SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
     }
+
+    return SDL_WINDOW_ALLOW_HIGHDPI;
 }
 
 //==============================================================================
 
-class GLFWComponentNative final
+class SDL2ComponentNative final
     : public ComponentNative
     , public Timer
     , public Thread
@@ -339,11 +377,11 @@ public:
 
     //==============================================================================
 
-    GLFWComponentNative (Component& component,
+    SDL2ComponentNative (Component& component,
                          const Options& options,
                          void* parent);
 
-    ~GLFWComponentNative() override;
+    ~SDL2ComponentNative() override;
 
     //==============================================================================
 
@@ -419,6 +457,9 @@ public:
     void timerCallback() override;
 
     //==============================================================================
+    Point<float> getCursorPosition() const;
+
+    //==============================================================================
     void handleMouseMoveOrDrag (const Point<float>& localPosition);
     void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
     void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
@@ -432,18 +473,12 @@ public:
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
-    Point<float> getCursorPosition() const;
+    void handleWindowEvent (const SDL_WindowEvent& windowEvent);
 
     //==============================================================================
-    static void glfwWindowContentScale (GLFWwindow* window, float xscale, float yscale);
-    static void glfwWindowClose (GLFWwindow* window);
-    static void glfwWindowPos (GLFWwindow* window, int xpos, int ypos);
-    static void glfwWindowSize (GLFWwindow* window, int width, int height);
-    static void glfwWindowFocus (GLFWwindow* window, int focused);
-    static void glfwMouseMove (GLFWwindow* window, double x, double y);
-    static void glfwMousePress (GLFWwindow* window, int button, int action, int mods);
-    static void glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset);
-    static void glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods);
+    int handleEvent (SDL_Event* event);
+
+    static int eventDispatcher (void* userdata, SDL_Event* event);
 
 private:
     void updateComponentUnderMouse (const MouseEvent& event);
@@ -453,7 +488,10 @@ private:
     void startRendering();
     void stopRendering();
 
-    GLFWwindow* window = nullptr;
+    SDL_Window* window = nullptr;
+    SDL_Renderer* windowRenderer = nullptr;
+    SDL_GLContext windowContext = nullptr;
+
     void* parentWindow = nullptr;
     String windowTitle;
 
@@ -473,7 +511,7 @@ private:
     WeakReference<Component> lastComponentFocused;
     WeakReference<Component> lastComponentUnderMouse;
 
-    int keyState[GLFW_KEY_LAST] = {};
+    HashMap<int, char> keyState;
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
     KeyModifiers currentKeyModifiers;
 
@@ -494,21 +532,15 @@ private:
     static constexpr int defaultForcedRedraws = 2;
 
     Rectangle<float> currentRepaintArea;
-
-#if JUCE_MAC
-    id<MTLDevice> gpu = nil;
-    id<MTLCommandQueue> queue = nil;
-    CAMetalLayer* swapchain = nullptr;
-#endif
 };
 
 //==============================================================================
 
-std::atomic_flag GLFWComponentNative::isInitialised = ATOMIC_FLAG_INIT;
+std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
 
-GLFWComponentNative::GLFWComponentNative (Component& component,
+SDL2ComponentNative::SDL2ComponentNative (Component& component,
                                           const Options& options,
                                           void* parent)
     : ComponentNative (component, options.flags)
@@ -520,65 +552,43 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
 {
-#if JUCE_MAC
-    if (currentGraphicsApi == GraphicsContext::Metal)
-    {
-        gpu = MTLCreateSystemDefaultDevice();
-        queue = [gpu newCommandQueue];
-        swapchain = [CAMetalLayer layer];
-        swapchain.device = gpu;
-        swapchain.opaque = YES;
-    }
-#endif
+    SDL_AddEventWatch (eventDispatcher, this);
 
     // Setup window hints
-    setContextWindowHints (currentGraphicsApi);
+    auto windowFlags = setContextWindowHints (currentGraphicsApi);
+    windowFlags |= SDL_WINDOW_RESIZABLE;
 
-    glfwWindowHint (GLFW_VISIBLE, component.isVisible() ? GLFW_TRUE : GLFW_FALSE);
-    glfwWindowHint (GLFW_DECORATED, options.flags.test (decoratedWindow) ? GLFW_TRUE : GLFW_FALSE);
+    if (component.isVisible())
+        windowFlags |= SDL_WINDOW_SHOWN;
+    else
+        windowFlags |= SDL_WINDOW_HIDDEN;
 
-    // Create the window and parent it
-    auto monitor = component.isFullScreen() ? glfwGetPrimaryMonitor() : nullptr;
-    window = glfwCreateWindow (1, 1, component.getTitle().toRawUTF8(), monitor, nullptr);
+    if (! options.flags.test (decoratedWindow))
+        windowFlags |= SDL_WINDOW_BORDERLESS;
+
+    // Create the window, renderer and parent it
+    window = SDL_CreateWindow (component.getTitle().toRawUTF8(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1, 1, windowFlags);
     if (window == nullptr)
         return; // TODO - raise something ?
+
+    windowRenderer = SDL_CreateRenderer (window, -1, SDL_RENDERER_PRESENTVSYNC);
+
+    SDL_SetWindowData (window, "self", this);
 
     if (parent != nullptr)
         setNativeParent (nullptr, parent, window);
 
-#if JUCE_MAC
-    if (currentGraphicsApi == GraphicsContext::Metal)
-    {
-        NSWindow* nswindow = glfwGetCocoaWindow (window);
-        nswindow.contentView.layer = swapchain;
-        nswindow.contentView.wantsLayer = YES;
-    }
-#endif
-
     // Create the rendering context
     if (currentGraphicsApi == GraphicsContext::OpenGL)
     {
-        glfwMakeContextCurrent (window);
-#if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
-        glfwSwapInterval (0);
-#endif
+        windowContext = SDL_GL_CreateContext (window);
+
+        SDL_GL_MakeCurrent (window, windowContext);
     }
 
     context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
     if (context == nullptr)
         return; // TODO - raise something ?
-
-    // Setup callbacks
-    glfwSetWindowUserPointer (window, this);
-    glfwSetWindowContentScaleCallback (window, glfwWindowContentScale);
-    glfwSetWindowCloseCallback (window, glfwWindowClose);
-    glfwSetWindowSizeCallback (window, glfwWindowSize);
-    glfwSetWindowPosCallback (window, glfwWindowPos);
-    glfwSetWindowFocusCallback (window, glfwWindowFocus);
-    glfwSetCursorPosCallback (window, glfwMouseMove);
-    glfwSetMouseButtonCallback (window, glfwMousePress);
-    glfwSetScrollCallback (window, glfwMouseScroll);
-    glfwSetKeyCallback (window, glfwKeyPress);
 
     // Resize after callbacks are in place
     setBounds (
@@ -591,16 +601,19 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
     startRendering();
 }
 
-GLFWComponentNative::~GLFWComponentNative()
+SDL2ComponentNative::~SDL2ComponentNative()
 {
     // Stop the rendering
     stopRendering();
 
-    // Destroy the window
+    // Destroy the renderer and window
+    if (windowRenderer != nullptr)
+        SDL_DestroyRenderer (windowRenderer);
+
     if (window != nullptr)
     {
-        glfwSetWindowUserPointer (window, nullptr);
-        glfwDestroyWindow (window);
+        SDL_SetWindowData (window, "self", nullptr);
+        SDL_DestroyWindow (window);
     }
 
     window = nullptr;
@@ -608,24 +621,24 @@ GLFWComponentNative::~GLFWComponentNative()
 
 //==============================================================================
 
-void GLFWComponentNative::setTitle (const String& title)
+void SDL2ComponentNative::setTitle (const String& title)
 {
     if (windowTitle == title)
         return;
 
     if (window != nullptr)
-        glfwSetWindowTitle (window, title.toRawUTF8());
+        SDL_SetWindowTitle (window, title.toRawUTF8());
 
     windowTitle = title;
 }
 
-String GLFWComponentNative::getTitle() const
+String SDL2ComponentNative::getTitle() const
 {
 #if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
     if (window == nullptr)
         return {};
 
-    if (auto title = glfwGetWindowTitle (window))
+    if (auto title = SDL_GetWindowTitle (window))
         return String::fromUTF8 (title);
 #endif
 
@@ -634,70 +647,70 @@ String GLFWComponentNative::getTitle() const
 
 //==============================================================================
 
-void GLFWComponentNative::setVisible (bool shouldBeVisible)
+void SDL2ComponentNative::setVisible (bool shouldBeVisible)
 {
     if (window == nullptr)
         return;
 
     if (shouldBeVisible)
-        glfwShowWindow (window);
+        SDL_ShowWindow (window);
     else
-        glfwHideWindow (window);
+        SDL_HideWindow (window);
 }
 
-bool GLFWComponentNative::isVisible() const
+bool SDL2ComponentNative::isVisible() const
 {
-    return window != nullptr && glfwGetWindowAttrib (window, GLFW_VISIBLE) != 0;
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_SHOWN) != 0;
 }
 
 //==============================================================================
 
-void GLFWComponentNative::setSize (const Size<int>& size)
+void SDL2ComponentNative::setSize (const Size<int>& size)
 {
     setBounds (screenBounds.withSize (size));
 }
 
-Size<int> GLFWComponentNative::getSize() const
+Size<int> SDL2ComponentNative::getSize() const
 {
     int width = 0, height = 0;
 
     if (window != nullptr)
-        glfwGetWindowSize (window, &width, &height);
+        SDL_GetWindowSize (window, &width, &height);
 
     return { width, height };
 }
 
-Size<int> GLFWComponentNative::getContentSize() const
+Size<int> SDL2ComponentNative::getContentSize() const
 {
     int width = 0, height = 0;
 
     if (window != nullptr)
-        glfwGetFramebufferSize (window, &width, &height);
+        SDL_GL_GetDrawableSize (window, &width, &height); // TODO - context size
 
     return { width, height };
 }
 
-Point<int> GLFWComponentNative::getPosition() const
+Point<int> SDL2ComponentNative::getPosition() const
 {
     return screenBounds.getPosition();
 }
 
-void GLFWComponentNative::setPosition (const Point<int>& newPosition)
+void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
     if (window == nullptr || screenBounds.getPosition() == newPosition)
         return;
 
-    glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
+    SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
 
     screenBounds = screenBounds.withPosition (newPosition);
 }
 
-Rectangle<int> GLFWComponentNative::getBounds() const
+Rectangle<int> SDL2ComponentNative::getBounds() const
 {
     return screenBounds;
 }
 
-void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
+void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
 {
 #if JUCE_ANDROID
     screenBounds = Rectangle<int> (0, 0, getSize());
@@ -720,16 +733,16 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 
 #else
     if (! isFullScreen() && isDecorated())
-        glfwGetWindowFrameSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
+        SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
-    glfwSetWindowSize (window,
+    SDL_SetWindowSize (window,
                        jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
                        jmax (1, newBounds.getHeight() - topMargin - bottomMargin));
 
 #endif
 
     //setPosition (newBounds.getPosition().translated (leftMargin, topMargin));
-    glfwSetWindowPos (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
+    SDL_SetWindowPosition (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
 
     screenBounds = newBounds;
 
@@ -738,7 +751,7 @@ void GLFWComponentNative::setBounds (const Rectangle<int>& newBounds)
 
 //==============================================================================
 
-void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
+void SDL2ComponentNative::setFullScreen (bool shouldBeFullScreen)
 {
     if (window == nullptr)
         return;
@@ -750,16 +763,7 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
 #else
         lastScreenBounds = screenBounds;
 
-        auto monitor = glfwGetPrimaryMonitor();
-        const GLFWvidmode* mode = glfwGetVideoMode (monitor);
-
-        glfwSetWindowMonitor (window,
-                              monitor,
-                              0,
-                              0,
-                              mode->width,
-                              mode->height,
-                              mode->refreshRate);
+        SDL_SetWindowFullscreen (window, SDL_WINDOW_FULLSCREEN); // SDL_SetWindowDisplayMode
 #endif
     }
     else
@@ -767,47 +771,48 @@ void GLFWComponentNative::setFullScreen (bool shouldBeFullScreen)
 #if JUCE_EMSCRIPTEN
         emscripten_exit_fullscreen();
 #else
-        glfwSetWindowMonitor (window,
-                              nullptr,
-                              component.getX(),
-                              component.getY(),
-                              component.getWidth(),
-                              component.getHeight(),
-                              GLFW_DONT_CARE);
+        SDL_RestoreWindow (window);
+        SDL_SetWindowSize (window, component.getWidth(), component.getHeight());
+        SDL_SetWindowPosition (window, component.getX(), component.getY());
 
         setBounds (lastScreenBounds);
 #endif
     }
 }
 
-bool GLFWComponentNative::isFullScreen() const
+bool SDL2ComponentNative::isFullScreen() const
 {
-    return window != nullptr && glfwGetWindowMonitor (window) != nullptr;
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_FULLSCREEN) != 0;
 }
 
 //==============================================================================
 
-bool GLFWComponentNative::isDecorated() const
+bool SDL2ComponentNative::isDecorated() const
 {
-    return window != nullptr && glfwGetWindowAttrib (window, GLFW_DECORATED) != 0;
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_BORDERLESS) == 0;
 }
 
 //==============================================================================
 
-void GLFWComponentNative::setOpacity (float opacity)
+void SDL2ComponentNative::setOpacity (float opacity)
 {
     if (window != nullptr)
-        glfwSetWindowOpacity (window, jlimit (0.0f, 1.0f, opacity));
+        SDL_SetWindowOpacity (window, jlimit (0.0f, 1.0f, opacity));
 }
 
-float GLFWComponentNative::getOpacity() const
+float SDL2ComponentNative::getOpacity() const
 {
-    return window != nullptr ? glfwGetWindowOpacity (window) : 1.0f;
+    float opacity = 1.0f;
+
+    if (window != nullptr)
+        SDL_GetWindowOpacity (window, &opacity);
+
+    return opacity;
 }
 
 //==============================================================================
 
-void GLFWComponentNative::setFocusedComponent (Component* comp)
+void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
     if (lastComponentFocused != nullptr)
         ; // TODO
@@ -815,41 +820,41 @@ void GLFWComponentNative::setFocusedComponent (Component* comp)
     lastComponentFocused = comp;
 }
 
-Component* GLFWComponentNative::getFocusedComponent() const
+Component* SDL2ComponentNative::getFocusedComponent() const
 {
     return lastComponentFocused;
 }
 
 //==============================================================================
 
-bool GLFWComponentNative::isContinuousRepaintingEnabled() const
+bool SDL2ComponentNative::isContinuousRepaintingEnabled() const
 {
     return shouldRenderContinuous;
 }
 
-void GLFWComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
+void SDL2ComponentNative::enableContinuousRepainting (bool shouldBeEnabled)
 {
     shouldRenderContinuous = shouldBeEnabled;
 }
 
-bool GLFWComponentNative::isAtomicModeEnabled() const
+bool SDL2ComponentNative::isAtomicModeEnabled() const
 {
     return renderAtomicMode;
 }
 
-void GLFWComponentNative::enableAtomicMode (bool shouldBeEnabled)
+void SDL2ComponentNative::enableAtomicMode (bool shouldBeEnabled)
 {
     renderAtomicMode = shouldBeEnabled;
 
     component.repaint();
 }
 
-bool GLFWComponentNative::isWireframeEnabled() const
+bool SDL2ComponentNative::isWireframeEnabled() const
 {
     return renderWireframe;
 }
 
-void GLFWComponentNative::enableWireframe (bool shouldBeEnabled)
+void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 {
     renderWireframe = shouldBeEnabled;
 
@@ -858,7 +863,7 @@ void GLFWComponentNative::enableWireframe (bool shouldBeEnabled)
 
 //==============================================================================
 
-void GLFWComponentNative::repaint (const Rectangle<float>& rect)
+void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
 {
     if (! currentRepaintArea.isEmpty())
         currentRepaintArea = currentRepaintArea.smallestContainingRectangle (rect);
@@ -868,36 +873,35 @@ void GLFWComponentNative::repaint (const Rectangle<float>& rect)
     triggerRenderingUpdate();
 }
 
-Rectangle<float> GLFWComponentNative::getRepaintArea() const
+Rectangle<float> SDL2ComponentNative::getRepaintArea() const
 {
     return currentRepaintArea;
 }
 
 //==============================================================================
 
-float GLFWComponentNative::getScaleDpi() const
+float SDL2ComponentNative::getScaleDpi() const
 {
     return context != nullptr ? context->dpiScale (getNativeHandle()) : 1.0f;
 }
 
-float GLFWComponentNative::getCurrentFrameRate() const
+float SDL2ComponentNative::getCurrentFrameRate() const
 {
     return currentFrameRate.load (std::memory_order_relaxed);
 }
 
-float GLFWComponentNative::getDesiredFrameRate() const
+float SDL2ComponentNative::getDesiredFrameRate() const
 {
     return desiredFrameRate;
 }
 
 //==============================================================================
 
-Point<float> GLFWComponentNative::getCursorPosition() const
+Point<float> SDL2ComponentNative::getCursorPosition() const
 {
-    double x = 0.0, y = 0.0;
+    int x = 0, y = 0;
 
-    if (window != nullptr)
-        glfwGetCursorPos (window, &x, &y);
+    SDL_GetMouseState (&x, &y);
 
     return {
         static_cast<float> (x),
@@ -907,39 +911,21 @@ Point<float> GLFWComponentNative::getCursorPosition() const
 
 //==============================================================================
 
-rive::Factory* GLFWComponentNative::getFactory()
+rive::Factory* SDL2ComponentNative::getFactory()
 {
     return context ? context->factory() : nullptr;
 }
 
 //==============================================================================
 
-void* GLFWComponentNative::getNativeHandle() const
+void* SDL2ComponentNative::getNativeHandle() const
 {
-    if (window == nullptr)
-        return nullptr;
-
-#if JUCE_MAC
-    return (__bridge void*) glfwGetCocoaWindow (window);
-
-#elif JUCE_WINDOWS
-    return glfwGetWin32Window (window);
-
-#elif JUCE_LINUX
-    return reinterpret_cast<void*> (glfwGetX11Window (window));
-
-#elif JUCE_ANDROID
-    return reinterpret_cast<void*> (glfwGetAndroidApp()->window);
-
-#else
-    return nullptr;
-
-#endif
+    return getNativeWindowHandle (window);
 }
 
 //==============================================================================
 
-void GLFWComponentNative::run()
+void SDL2ComponentNative::run()
 {
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
@@ -994,7 +980,7 @@ void GLFWComponentNative::run()
     }
 }
 
-void GLFWComponentNative::handleAsyncUpdate()
+void SDL2ComponentNative::handleAsyncUpdate()
 {
     if (! isThreadRunning() || ! isInitialised.test_and_set())
         return;
@@ -1004,14 +990,14 @@ void GLFWComponentNative::handleAsyncUpdate()
     renderEvent.signal();
 }
 
-void GLFWComponentNative::timerCallback()
+void SDL2ComponentNative::timerCallback()
 {
     renderContext();
 }
 
 //==============================================================================
 
-void GLFWComponentNative::renderContext()
+void SDL2ComponentNative::renderContext()
 {
     auto [contentWidth, contentHeight] = getContentSize();
     if (context == nullptr || contentWidth == 0 || contentHeight == 0)
@@ -1070,7 +1056,7 @@ void GLFWComponentNative::renderContext()
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
-        glfwSwapBuffers (window);
+        SDL_GL_SwapWindow (window);
 
     if (! renderContinuous)
     {
@@ -1083,7 +1069,7 @@ void GLFWComponentNative::renderContext()
 
 //==============================================================================
 
-void GLFWComponentNative::triggerRenderingUpdate()
+void SDL2ComponentNative::triggerRenderingUpdate()
 {
     if (shouldRenderContinuous)
         return;
@@ -1094,7 +1080,7 @@ void GLFWComponentNative::triggerRenderingUpdate()
 
 //==============================================================================
 
-void GLFWComponentNative::startRendering()
+void SDL2ComponentNative::startRendering()
 {
 #if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     startTimerHz (desiredFrameRate);
@@ -1103,7 +1089,7 @@ void GLFWComponentNative::startRendering()
 #endif
 }
 
-void GLFWComponentNative::stopRendering()
+void SDL2ComponentNative::stopRendering()
 {
 #if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     stopTimer();
@@ -1118,7 +1104,7 @@ void GLFWComponentNative::stopRendering()
 
 //==============================================================================
 
-void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
+void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
@@ -1148,7 +1134,7 @@ void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPositi
     lastMouseMovePosition = localPosition;
 }
 
-void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
     currentKeyModifiers = modifiers;
@@ -1192,7 +1178,7 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     lastMouseMovePosition = localPosition;
 }
 
-void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
     currentKeyModifiers = modifiers;
@@ -1229,7 +1215,7 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
 
 //==============================================================================
 
-void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
+void SDL2ComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
@@ -1262,10 +1248,10 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 
 //==============================================================================
 
-void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
+void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
 {
     currentKeyModifiers = keys.getModifiers();
-    keyState[keys.getKey()] = 1;
+    keyState.set (keys.getKey(), 1);
 
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalKeyDown (keys, cursorPosition);
@@ -1273,10 +1259,10 @@ void GLFWComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
         component.internalKeyDown (keys, cursorPosition);
 }
 
-void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
+void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
 {
     currentKeyModifiers = keys.getModifiers();
-    keyState[keys.getKey()] = 0;
+    keyState.set (keys.getKey(), 0);
 
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalKeyUp (keys, cursorPosition);
@@ -1286,14 +1272,14 @@ void GLFWComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 //==============================================================================
 
-void GLFWComponentNative::handleMoved (int xpos, int ypos)
+void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
 }
 
-void GLFWComponentNative::handleResized (int width, int height)
+void SDL2ComponentNative::handleResized (int width, int height)
 {
     component.internalResized (width, height);
 
@@ -1303,30 +1289,30 @@ void GLFWComponentNative::handleResized (int width, int height)
     triggerRenderingUpdate();
 }
 
-void GLFWComponentNative::handleFocusChanged (bool gotFocus)
+void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
     //DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
 }
 
-void GLFWComponentNative::handleContentScaleChanged (float xscale, float yscale)
+void SDL2ComponentNative::handleContentScaleChanged (float xscale, float yscale)
 {
     int width = screenBounds.getWidth();
     int height = screenBounds.getHeight();
 
     if (window != nullptr)
-        glfwGetWindowSize (window, &width, &height);
+        SDL_GetWindowSize (window, &width, &height);
 
     handleResized (width, height);
 }
 
-void GLFWComponentNative::handleUserTriedToCloseWindow()
+void SDL2ComponentNative::handleUserTriedToCloseWindow()
 {
     component.internalUserTriedToCloseWindow();
 }
 
 //==============================================================================
 
-void GLFWComponentNative::updateComponentUnderMouse (const MouseEvent& event)
+void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 {
     Component* child = component.findComponentAt (event.getPosition());
     if (child != nullptr)
@@ -1358,141 +1344,137 @@ std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& componen
                                                              const Options& options,
                                                              void* parent)
 {
-    return std::make_unique<GLFWComponentNative> (component, options, parent);
+    return std::make_unique<SDL2ComponentNative> (component, options, parent);
 }
 
 //==============================================================================
 
-void GLFWComponentNative::glfwWindowContentScale (GLFWwindow* window, float xscale, float yscale)
+void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 {
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    nativeComponent->handleContentScaleChanged (xscale, yscale);
-}
-
-void GLFWComponentNative::glfwWindowClose (GLFWwindow* window)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    nativeComponent->handleUserTriedToCloseWindow();
-}
-
-void GLFWComponentNative::glfwWindowPos (GLFWwindow* window, int xpos, int ypos)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    nativeComponent->handleMoved (xpos, ypos);
-}
-
-void GLFWComponentNative::glfwWindowSize (GLFWwindow* window, int width, int height)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    nativeComponent->handleResized (width, height);
-}
-
-void GLFWComponentNative::glfwWindowFocus (GLFWwindow* window, int focused)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    nativeComponent->handleFocusChanged (focused != 0);
-}
-
-void GLFWComponentNative::glfwMouseMove (GLFWwindow* window, double x, double y)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    nativeComponent->handleMouseMoveOrDrag ({ static_cast<float> (x), static_cast<float> (y) });
-}
-
-void GLFWComponentNative::glfwMousePress (GLFWwindow* window, int button, int action, int mods)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    auto cursorPosition = nativeComponent->getCursorPosition();
-
-    if (action == GLFW_PRESS)
-        nativeComponent->handleMouseDown (cursorPosition, toMouseButton (button), toKeyModifiers (mods));
-    else
-        nativeComponent->handleMouseUp (cursorPosition, toMouseButton (button), toKeyModifiers (mods));
-}
-
-void GLFWComponentNative::glfwMouseScroll (GLFWwindow* window, double xoffset, double yoffset)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    auto cursorPosition = nativeComponent->getCursorPosition();
-
-    nativeComponent->handleMouseWheel (cursorPosition, { static_cast<float> (xoffset), static_cast<float> (yoffset) });
-}
-
-void GLFWComponentNative::glfwKeyPress (GLFWwindow* window, int key, int scancode, int action, int mods)
-{
-    auto* nativeComponent = static_cast<GLFWComponentNative*> (glfwGetWindowUserPointer (window));
-
-    auto cursorPosition = nativeComponent->getCursorPosition();
-
-    if (action == GLFW_PRESS)
+    switch (windowEvent.event)
     {
-        mods |= convertKeyToModifier (key);
-        nativeComponent->handleKeyDown (toKeyPress (key, scancode, mods), cursorPosition);
+        case SDL_WINDOWEVENT_SIZE_CHANGED:
+            handleResized (windowEvent.data1, windowEvent.data2);
+            break;
+
+        case SDL_WINDOWEVENT_MOVED:
+            handleMoved (windowEvent.data1, windowEvent.data2);
+            break;
+
+        case SDL_WINDOWEVENT_FOCUS_GAINED:
+            handleFocusChanged (true);
+            break;
+
+        case SDL_WINDOWEVENT_FOCUS_LOST:
+            handleFocusChanged (false);
+            break;
     }
-    else
+}
+
+//==============================================================================
+
+int SDL2ComponentNative::handleEvent (SDL_Event* event)
+{
+    switch (event->type)
     {
-        mods &= ~convertKeyToModifier (key);
-        nativeComponent->handleKeyUp (toKeyPress (key, scancode, mods), cursorPosition);
+        case SDL_QUIT:
+            component.internalUserTriedToCloseWindow();
+            break;
+
+        case SDL_WINDOWEVENT:
+            handleWindowEvent (event->window);
+            break;
+
+        case SDL_MOUSEMOTION:
+            handleMouseMoveOrDrag ({ static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) });
+            break;
+
+        case SDL_MOUSEBUTTONDOWN:
+        {
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+
+            handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers());
+
+            break;
+        }
+
+        case SDL_MOUSEBUTTONUP:
+        {
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+
+            handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers());
+
+            break;
+        }
+
+        case SDL_MOUSEWHEEL:
+        {
+            auto cursorPosition = Point<float> { static_cast<float> (event->wheel.mouseX), static_cast<float> (event->wheel.mouseY) };
+
+            handleMouseWheel (cursorPosition, { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) });
+
+            break;
+        }
+
+        case SDL_KEYDOWN:
+        {
+            auto cursorPosition = getCursorPosition();
+            auto modifiers = toKeyModifiers (event->key.keysym.mod);
+
+            handleKeyDown (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
+
+            break;
+        }
+
+        case SDL_KEYUP:
+        {
+            auto cursorPosition = getCursorPosition();
+            auto modifiers = toKeyModifiers (event->key.keysym.mod);
+
+            handleKeyDown (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
+
+            break;
+        }
     }
+}
+
+//==============================================================================
+
+int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
+{
+    return static_cast<SDL2ComponentNative*> (userdata)->handleEvent (event);
 }
 
 //==============================================================================
 
 void Desktop::updateDisplays()
 {
-    int count;
-    GLFWmonitor** monitors = glfwGetMonitors (&count);
-    auto primaryMonitor = glfwGetPrimaryMonitor();
-
-    for (int index = 0; index < count; ++index)
+    const int numDisplays = SDL_GetNumVideoDisplays();
+    for (int i = 0; i < numDisplays; ++i)
     {
-        auto monitor = monitors[index];
-        if (monitor == nullptr)
+        SDL_Rect bounds;
+        if (SDL_GetDisplayBounds (i, &bounds) != 0)
             continue;
 
         auto display = std::make_unique<Display>();
-#if ! (JUCE_EMSCRIPTEN && RIVE_WEBGL)
-        glfwSetMonitorUserPointer (monitor, display.get());
-#endif
+        display->virtualPosition = Point<int> (bounds.x, bounds.y);
+        display->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
 
-        int physicalWidth = 0, physicalHeight = 0;
-        glfwGetMonitorPhysicalSize (monitor, &physicalWidth, &physicalHeight);
-        display->physicalSizeMillimeters = Size<int> (physicalWidth, physicalHeight);
-
-        int posX = 0, posY = 0;
-        glfwGetMonitorPos (monitor, &posX, &posY);
-        display->virtualPosition = Point<int> (posX, posY);
-
-        int workX = 0, workY = 0, workWidth = 0, workHeight = 0;
-        glfwGetMonitorWorkarea (monitor, &workX, &workY, &workWidth, &workHeight);
-        display->workArea = Rectangle<int> (workX, workY, workWidth, workHeight);
-
-        float scaleX = 1.0f, scaleY = 1.0f;
-        glfwGetMonitorContentScale (monitor, &scaleX, &scaleY);
-        display->contentScaleX = scaleX;
-        display->contentScaleY = scaleY;
-
-        if (auto name = glfwGetMonitorName (monitor))
-            display->name = String::fromUTF8 (name);
-
-        if (primaryMonitor == monitor)
+        float ddpi, hdpi, vdpi;
+        if (SDL_GetDisplayDPI (i, &ddpi, &hdpi, &vdpi) == 0)
         {
-            display->isPrimary = true;
+            display->physicalSizeMillimeters = Size<int>(
+                static_cast<int> (bounds.w * 25.4f / hdpi),
+                static_cast<int> (bounds.h * 25.4f / vdpi));
+        }
 
-            displays.insert (0, display.release());
-        }
-        else
-        {
-            displays.add (display.release());
-        }
+        display->contentScaleX = hdpi / 96.0f; // Assuming 96 DPI as standard
+        display->contentScaleY = vdpi / 96.0f;
+
+        display->name = String (SDL_GetDisplayName (i));
+        display->isPrimary = (i == 0);
+
+        displays.add (display.release());
     }
 }
 
@@ -1500,50 +1482,32 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    // Setup error callback
-    {
-        auto errorCallback = +[] (int code, const char* message)
-        {
-            DBG ("GLFW Error: " << code << " - " << message);
-        };
-
-        glfwSetErrorCallback (errorCallback);
-    }
-
     // Initialise glfw
-    glfwInit();
+    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+    {
+        DBG ("Error initialising SDL");
+    }
 
     // Setup monitor callback
     {
         Desktop::getInstance()->updateDisplays();
-
-        auto monitorCallback = +[] (GLFWmonitor* monitor, int event)
-        {
-            auto desktop = Desktop::getInstance();
-
-            if (event == GLFW_CONNECTED)
-            {
-            }
-            else if (event == GLFW_DISCONNECTED)
-            {
-            }
-
-            desktop->updateDisplays();
-        };
-
-        glfwSetMonitorCallback (monitorCallback);
     }
 
-    GLFWComponentNative::isInitialised.test_and_set();
+    MessageManager::getInstance()->registerEventLoopCallback ([]
+    {
+        SDL_PollEvent (nullptr);
+    });
+
+    SDL2ComponentNative::isInitialised.test_and_set();
 }
 
 void shutdownYup_Windowing()
 {
-    GLFWComponentNative::isInitialised.clear();
+    SDL2ComponentNative::isInitialised.clear();
 
     Desktop::getInstance()->deleteInstance();
 
-    glfwTerminate();
+    SDL_Quit();
 }
 
 } // namespace yup

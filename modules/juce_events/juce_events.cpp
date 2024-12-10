@@ -101,7 +101,7 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-#include "native/juce_MessageQueue_mac.h"
+#include "native/juce_MessageQueue_apple.h"
 #if JUCE_MAC
 #include "native/juce_MessageManager_mac.mm"
 #else

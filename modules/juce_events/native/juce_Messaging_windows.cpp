@@ -71,6 +71,12 @@ public:
     JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
 
     //==============================================================================
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
+    }
+
+    //==============================================================================
     void broadcastMessage (const String& message)
     {
         auto localCopy = message;
@@ -235,6 +241,9 @@ private:
     {
         ReferenceCountedArray<MessageManager::MessageBase> messagesToDispatch;
 
+        if (loopCallback)
+            loopCallback();
+
         {
             const ScopedLock sl (lock);
 
@@ -261,6 +270,7 @@ private:
 
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> messageQueue;
+    std::function<void()> loopCallback;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InternalMessageQueue)
@@ -299,6 +309,11 @@ void MessageManager::broadcastMessage (const String& value)
 {
     if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
         queue->broadcastMessage (value);
+}
+
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
 }
 
 //==============================================================================

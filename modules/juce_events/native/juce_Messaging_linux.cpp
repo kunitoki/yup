@@ -245,6 +245,11 @@ public:
 
     void removeListener (LinuxEventLoopInternal::Listener& listener) { listeners.remove (&listener); }
 
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
+    }
+
     //==============================================================================
     JUCE_DECLARE_SINGLETON (InternalRunLoop, false)
 
@@ -299,6 +304,8 @@ private:
     std::vector<pollfd> pfds;
 
     ListenerList<LinuxEventLoopInternal::Listener> listeners;
+
+    std::function<void()> loopCallback;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalRunLoop)
@@ -356,6 +363,11 @@ bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* cons
 void MessageManager::broadcastMessage (const String&)
 {
     // TODO
+}
+
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    InternalRunLoop::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
 }
 
 namespace detail

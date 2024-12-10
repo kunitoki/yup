@@ -90,12 +90,12 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 #endif
 
 //==============================================================================
-static std::unique_ptr<MessageQueue> messageQueue;
+static std::unique_ptr<InternalMessageQueue> messageQueue;
 
 void MessageManager::doPlatformSpecificInitialisation()
 {
     if (messageQueue == nullptr)
-        messageQueue.reset(new MessageQueue());
+        messageQueue.reset(new InternalMessageQueue());
 }
 
 void MessageManager::doPlatformSpecificShutdown()
@@ -114,6 +114,12 @@ bool MessageManager::postMessageToSystemQueue(MessageManager::MessageBase* const
 void MessageManager::broadcastMessage(const String&)
 {
     // N/A on current iOS
+}
+
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    jassert (messageQueue);
+    messageQueue->registerEventLoopCallback (std::move (loopCallbackToSet));
 }
 
 } // namespace juce

@@ -51,41 +51,25 @@
 #include "windowing/yup_DocumentWindow.cpp"
 
 //==============================================================================
-#if JUCE_MAC
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 
+//==============================================================================
+#if JUCE_MAC || JUCE_IOS
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
+#if JUCE_MAC
+#import <AppKit/AppKit.h>
+#endif
+
 #elif JUCE_LINUX
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_X11
-#define GLFW_EXPOSE_NATIVE_GLX
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-#undef None
-#undef KeyPress
-#undef SIZEOF
 
 #elif JUCE_WINDOWS
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_WGL
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
 
 #elif JUCE_ANDROID
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_ANDROID
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
 
 #else
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
 
 #endif
 
@@ -96,4 +80,5 @@
 #endif
 
 //==============================================================================
-#include "native/yup_Windowing_glfw.cpp"
+//#include "native/yup_Windowing_glfw.cpp"
+#include "native/yup_Windowing_sdl2.cpp"

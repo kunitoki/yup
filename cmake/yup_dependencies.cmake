@@ -39,6 +39,24 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_fetch_sdl2)
+    FetchContent_Declare (sdl
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG release-2.30.10
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS TRUE)
+
+    set (BUILD_SHARED_LIBS OFF)
+    set (SDL_SHARED OFF)
+    set (SDL_STATIC ON)
+
+    FetchContent_MakeAvailable (sdl)
+
+    set_target_properties (SDL2-static PROPERTIES FOLDER "Thirdparty")
+endfunction()
+
+#==============================================================================
+
 function (_yup_fetch_perfetto)
     FetchContent_Declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
