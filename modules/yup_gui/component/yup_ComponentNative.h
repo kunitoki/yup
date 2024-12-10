@@ -64,9 +64,16 @@ public:
             return *this;
         }
 
+        Options& withDoubleClickTime(std::optional<RelativeTime> newDoubleClickTime) noexcept
+        {
+            doubleClickTime = newDoubleClickTime;
+            return *this;
+        }
+
         Flags flags = defaultFlags;                      ///<
         std::optional<GraphicsContext::Api> graphicsApi; ///<
         std::optional<float> framerateRedraw;            ///<
+        std::optional<RelativeTime> doubleClickTime;     ///<
     };
 
     //==============================================================================
