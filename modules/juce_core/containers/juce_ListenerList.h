@@ -280,7 +280,7 @@ public:
             if (bailOutChecker.shouldBailOut())
                 return;
 
-            auto* listener = localListeners->getUnchecked (it.index);
+            auto listener = localListeners->getUnchecked (it.index);
 
             if (listener == listenerToExclude)
                 continue;

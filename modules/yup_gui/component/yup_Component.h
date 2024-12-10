@@ -166,6 +166,10 @@ public:
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
 
     //==============================================================================
+    void addMouseListener (MouseListener* listener);
+    void removeMouseListener (MouseListener* listener);
+
+    //==============================================================================
     virtual void keyDown (const KeyPress& keys, const Point<float>& position);
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
 
@@ -189,12 +193,15 @@ private:
     friend class GLFWComponentNative;
     friend class WeakReference<Component>;
 
+    using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
+
     String componentID, componentTitle;
     Component* parentComponent = nullptr;
     Array<Component*> children;
     Rectangle<float> boundsInParent;
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
+    MouseListenerList mouseListeners;
     NamedValueSet properties;
     uint8 opacity = 255;
 

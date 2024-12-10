@@ -535,6 +535,18 @@ void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
 
 //==============================================================================
 
+void Component::addMouseListener (MouseListener* listener)
+{
+    mouseListeners.add (listener);
+}
+
+void Component::removeMouseListener (MouseListener* listener)
+{
+    mouseListeners.remove (listener);
+}
+
+//==============================================================================
+
 void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
@@ -584,6 +596,8 @@ void Component::internalMouseEnter (const MouseEvent& event)
         return;
 
     mouseEnter (event);
+
+    mouseListeners.call (&MouseListener::mouseEnter, event);
 }
 
 void Component::internalMouseExit (const MouseEvent& event)
@@ -592,6 +606,8 @@ void Component::internalMouseExit (const MouseEvent& event)
         return;
 
     mouseExit (event);
+
+    mouseListeners.call (&MouseListener::mouseExit, event);
 }
 
 void Component::internalMouseDown (const MouseEvent& event)
@@ -600,6 +616,8 @@ void Component::internalMouseDown (const MouseEvent& event)
         return;
 
     mouseDown (event);
+
+    mouseListeners.call (&MouseListener::mouseDown, event);
 }
 
 void Component::internalMouseMove (const MouseEvent& event)
@@ -608,6 +626,8 @@ void Component::internalMouseMove (const MouseEvent& event)
         return;
 
     mouseMove (event);
+
+    mouseListeners.call (&MouseListener::mouseMove, event);
 }
 
 void Component::internalMouseDrag (const MouseEvent& event)
@@ -616,6 +636,8 @@ void Component::internalMouseDrag (const MouseEvent& event)
         return;
 
     mouseDrag (event);
+
+    mouseListeners.call (&MouseListener::mouseDrag, event);
 }
 
 void Component::internalMouseUp (const MouseEvent& event)
@@ -624,6 +646,8 @@ void Component::internalMouseUp (const MouseEvent& event)
         return;
 
     mouseUp (event);
+
+    mouseListeners.call (&MouseListener::mouseUp, event);
 }
 
 void Component::internalMouseDoubleClick (const MouseEvent& event)
@@ -632,6 +656,8 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
         return;
 
     mouseDoubleClick (event);
+
+    mouseListeners.call (&MouseListener::mouseDoubleClick, event);
 }
 
 void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
@@ -640,6 +666,8 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
         return;
 
     mouseWheel (event, wheelData);
+
+    mouseListeners.call (&MouseListener::mouseWheel, event, wheelData);
 }
 
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
