@@ -466,7 +466,7 @@ private:
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
-    Point<float> lastMouseDownPosition = { -1.0f, -1.0f };
+    std::optional<Point<float>> lastMouseDownPosition;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
@@ -487,7 +487,6 @@ private:
     std::atomic<bool> shouldRenderContinuous = false;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
-    bool forceSizeChange = false;
     int forcedRedraws = 0;
     static constexpr int defaultForcedRedraws = 2;
 
@@ -681,7 +680,7 @@ Point<int> GLFWComponentNative::getPosition() const
 
 void GLFWComponentNative::setPosition (const Point<int>& newPosition)
 {
-    if (window == nullptr || screenBounds.getPosition() == newPosition)
+    if (window == nullptr || screenBounds.getPosition() == newPosition)
         return;
 
     glfwSetWindowPos (window, newPosition.getX(), newPosition.getY());
@@ -1016,7 +1015,7 @@ void GLFWComponentNative::renderContext()
 
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
 
-    if (forceSizeChange || currentContentWidth != contentWidth || currentContentHeight != contentHeight)
+    if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
@@ -1026,7 +1025,6 @@ void GLFWComponentNative::renderContext()
 
         repaint (Rectangle<float> (0, 0, contentWidth, contentHeight));
         forcedRedraws = defaultForcedRedraws;
-        forceSizeChange = false;
     }
 
     if (parentWindow != nullptr)
@@ -1118,17 +1116,18 @@ void GLFWComponentNative::stopRendering()
 
 void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
 {
-    const auto event = MouseEvent()
-                           .withButtons (currentMouseButtons)
-                           .withModifiers (currentKeyModifiers)
-                           .withPosition (localPosition);
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
     {
-        lastComponentClicked->internalMouseDrag (event
-                                                     .withSourceComponent (lastComponentClicked)
-                                                 //.withSourcePosition (lastMouseDownPosition)
-        );
+        event = event.withSourceComponent (lastComponentClicked);
+        if (lastMouseDownPosition)
+            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+
+        lastComponentClicked->internalMouseDrag (event);
     }
     else
     {
@@ -1146,10 +1145,10 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
     currentKeyModifiers = modifiers;
 
-    const auto event = MouseEvent()
-                           .withButtons (currentMouseButtons)
-                           .withModifiers (currentKeyModifiers)
-                           .withPosition (localPosition);
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
 
     if (lastComponentClicked == nullptr)
     {
@@ -1161,10 +1160,11 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     {
         lastMouseDownPosition = localPosition;
 
-        lastComponentClicked->internalMouseDown (event
-                                                     .withSourceComponent (lastComponentClicked)
-                                                 //.withSourcePosition (lastMouseDownPosition)
-        );
+        event = event.withSourceComponent (lastComponentClicked);
+        if (lastMouseDownPosition)
+            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+
+        lastComponentClicked->internalMouseDown (event);
     }
 
     lastMouseMovePosition = localPosition;
@@ -1175,17 +1175,18 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
     currentKeyModifiers = modifiers;
 
-    const auto event = MouseEvent()
-                           .withButtons (currentMouseButtons)
-                           .withModifiers (currentKeyModifiers)
-                           .withPosition (localPosition);
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
 
     if (lastComponentClicked != nullptr)
     {
-        lastComponentClicked->internalMouseUp (event
-                                                   .withSourceComponent (lastComponentClicked)
-                                               //.withSourcePosition (lastMouseDownPosition)
-        );
+        event = event.withSourceComponent (lastComponentClicked);
+        if (lastMouseDownPosition)
+            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+
+        lastComponentClicked->internalMouseUp (event);
     }
 
     if (currentMouseButtons == MouseEvent::noButtons)
@@ -1196,6 +1197,7 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     }
 
     lastMouseMovePosition = localPosition;
+    lastMouseDownPosition.reset();
 }
 
 //==============================================================================
@@ -1272,8 +1274,6 @@ void GLFWComponentNative::handleContentScaleChanged (float xscale, float yscale)
 
     if (window != nullptr)
         glfwGetWindowSize (window, &width, &height);
-
-    // forceSizeChange = true;
 
     handleResized (width, height);
 }

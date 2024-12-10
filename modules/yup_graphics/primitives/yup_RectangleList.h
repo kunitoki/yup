@@ -56,11 +56,11 @@ public:
     }
 
     /** Construct from initializer list of rectangles of different type. */
-    template <class OtherRectangleType, class = std::enable_if_t<! std::is_same_v<OtherRectangleType, RectangleType>>>
-    RectangleList (std::initializer_list<OtherRectangleType> rects)
+    template <class OtherValueType, class = std::enable_if_t<! std::is_same_v<OtherValueType, ValueType>>>
+    RectangleList (std::initializer_list<Rectangle<OtherValueType>> rects)
     {
-        for (auto& otherRect : rects)
-            rectangles.add (otherRect.to<ValueType>());
+        for (const auto& otherRect : rects)
+            rectangles.add (otherRect.template to<ValueType>());
     }
 
     //==============================================================================
