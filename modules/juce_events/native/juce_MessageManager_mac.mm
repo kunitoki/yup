@@ -448,10 +448,10 @@ void MessageManager::broadcastMessage(const String& message)
                                                                  userInfo:info];
 }
 
-void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+void MessageManager::registerEventLoopCallback(std::function<void()> loopCallbackToSet)
 {
     jassert(appDelegate != nil);
-    appDelegate->messageQueue.registerEventLoopCallback (std::move (loopCallbackToSet));
+    appDelegate->messageQueue.registerEventLoopCallback(std::move(loopCallbackToSet));
 }
 
 //==============================================================================

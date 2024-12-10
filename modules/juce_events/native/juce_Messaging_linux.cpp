@@ -313,24 +313,24 @@ JUCE_IMPLEMENT_SINGLETON (InternalRunLoop)
 //==============================================================================
 namespace LinuxErrorHandling
 {
-    static bool keyboardBreakOccurred = false;
+static bool keyboardBreakOccurred = false;
 
-    static void keyboardBreakSignalHandler (int sig)
-    {
-        if (sig == SIGINT)
-            keyboardBreakOccurred = true;
-    }
+static void keyboardBreakSignalHandler (int sig)
+{
+    if (sig == SIGINT)
+        keyboardBreakOccurred = true;
+}
 
-    static void installKeyboardBreakHandler()
-    {
-        struct sigaction saction;
-        sigset_t maskSet;
-        sigemptyset (&maskSet);
-        saction.sa_handler = keyboardBreakSignalHandler;
-        saction.sa_mask = maskSet;
-        saction.sa_flags = 0;
-        sigaction (SIGINT, &saction, nullptr);
-    }
+static void installKeyboardBreakHandler()
+{
+    struct sigaction saction;
+    sigset_t maskSet;
+    sigemptyset (&maskSet);
+    saction.sa_handler = keyboardBreakSignalHandler;
+    saction.sa_mask = maskSet;
+    saction.sa_flags = 0;
+    sigaction (SIGINT, &saction, nullptr);
+}
 } // namespace LinuxErrorHandling
 
 //==============================================================================
@@ -372,28 +372,28 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 
 namespace detail
 {
-    // this function expects that it will NEVER be called simultaneously for two concurrent threads
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+// this function expects that it will NEVER be called simultaneously for two concurrent threads
+bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    for (;;)
     {
-        for (;;)
+        if (LinuxErrorHandling::keyboardBreakOccurred)
+            JUCEApplicationBase::quit();
+
+        if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
         {
-            if (LinuxErrorHandling::keyboardBreakOccurred)
-                JUCEApplicationBase::quit();
+            if (runLoop->dispatchPendingEvents())
+                break;
 
-            if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
-            {
-                if (runLoop->dispatchPendingEvents())
-                    break;
+            if (returnIfNoPendingMessages)
+                return false;
 
-                if (returnIfNoPendingMessages)
-                    return false;
-
-                runLoop->sleepUntilNextEvent (2000);
-            }
+            runLoop->sleepUntilNextEvent (2000);
         }
-
-        return true;
     }
+
+    return true;
+}
 } // namespace detail
 
 //==============================================================================

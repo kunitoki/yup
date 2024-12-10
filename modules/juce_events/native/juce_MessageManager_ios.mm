@@ -116,10 +116,10 @@ void MessageManager::broadcastMessage(const String&)
     // N/A on current iOS
 }
 
-void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+void MessageManager::registerEventLoopCallback(std::function<void()> loopCallbackToSet)
 {
-    jassert (messageQueue);
-    messageQueue->registerEventLoopCallback (std::move (loopCallbackToSet));
+    jassert(messageQueue);
+    messageQueue->registerEventLoopCallback(std::move(loopCallbackToSet));
 }
 
 } // namespace juce

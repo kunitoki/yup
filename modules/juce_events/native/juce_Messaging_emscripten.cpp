@@ -65,7 +65,7 @@ public:
     bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
-           const ScopedLock sl (lock);
+            const ScopedLock sl (lock);
 
             eventQueue.add (msg);
         }
@@ -137,13 +137,13 @@ void MessageManager::doPlatformSpecificShutdown()
 
 namespace detail
 {
-    bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
-    {
-        Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
-        exit (1);
+bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
+{
+    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
+    exit (1);
 
-        return true;
-    }
+    return true;
+}
 } // namespace detail
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)

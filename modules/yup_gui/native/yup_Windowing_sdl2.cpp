@@ -197,6 +197,7 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
 
     return {};
 }
+
 // clang-format on
 
 //==============================================================================
@@ -230,7 +231,6 @@ void* getNativeWindowHandle (SDL_Window* window)
 
     return nullptr;
 }
-
 
 Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
 {
@@ -1463,7 +1463,7 @@ void Desktop::updateDisplays()
         float ddpi, hdpi, vdpi;
         if (SDL_GetDisplayDPI (i, &ddpi, &hdpi, &vdpi) == 0)
         {
-            display->physicalSizeMillimeters = Size<int>(
+            display->physicalSizeMillimeters = Size<int> (
                 static_cast<int> (bounds.w * 25.4f / hdpi),
                 static_cast<int> (bounds.h * 25.4f / vdpi));
         }
@@ -1483,7 +1483,7 @@ void Desktop::updateDisplays()
 void initialiseYup_Windowing()
 {
     // Initialise glfw
-    if (SDL_Init(SDL_INIT_VIDEO) != 0)
+    if (SDL_Init (SDL_INIT_VIDEO) != 0)
     {
         DBG ("Error initialising SDL");
     }
@@ -1494,9 +1494,9 @@ void initialiseYup_Windowing()
     }
 
     MessageManager::getInstance()->registerEventLoopCallback ([]
-    {
-        SDL_PollEvent (nullptr);
-    });
+                                                              {
+                                                                  SDL_PollEvent (nullptr);
+                                                              });
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }

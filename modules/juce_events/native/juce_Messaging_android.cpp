@@ -86,7 +86,7 @@ public:
                 if (returnIfNoPendingMessages)
                     return false;
 
-                Thread::sleep(1); // TODO - Make this better somehow ?
+                Thread::sleep (1); // TODO - Make this better somehow ?
             }
             else
             {
@@ -127,10 +127,10 @@ void MessageManager::doPlatformSpecificShutdown()
 
 namespace detail
 {
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-    {
-        return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
-    }
+bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
+}
 } // namespace detail
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)

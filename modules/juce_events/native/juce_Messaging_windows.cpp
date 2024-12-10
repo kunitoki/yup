@@ -284,13 +284,13 @@ const TCHAR InternalMessageQueue::messageWindowName[] = _T("JUCEWindow");
 namespace detail
 {
 
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-    {
-        if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
-            return queue->dispatchNextMessage (returnIfNoPendingMessages);
+bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
+        return queue->dispatchNextMessage (returnIfNoPendingMessages);
 
-        return false;
-    }
+    return false;
+}
 
 } // namespace detail
 
