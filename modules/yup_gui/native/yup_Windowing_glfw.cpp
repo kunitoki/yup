@@ -467,6 +467,7 @@ private:
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
     std::optional<Point<float>> lastMouseDownPosition;
+    std::optional<juce::Time> lastMouseDownTime;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;
@@ -475,6 +476,8 @@ private:
     int keyState[GLFW_KEY_LAST] = {};
     MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
     KeyModifiers currentKeyModifiers;
+
+    RelativeTime doubleClickTime;
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
@@ -513,6 +516,7 @@ GLFWComponentNative::GLFWComponentNative (Component& component,
     , parentWindow (parent)
     , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
     , screenBounds (component.getBounds().to<int>())
+    , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
 {
@@ -1121,11 +1125,15 @@ void GLFWComponentNative::handleMouseMoveOrDrag (const Point<float>& localPositi
                      .withModifiers (currentKeyModifiers)
                      .withPosition (localPosition);
 
+    if (lastMouseDownPosition)
+        event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+
+    if (lastMouseDownTime)
+        event = event.withLastMouseDownTime (*lastMouseDownTime);
+
     if (lastComponentClicked != nullptr)
     {
         event = event.withSourceComponent (lastComponentClicked);
-        if (lastMouseDownPosition)
-            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
 
         lastComponentClicked->internalMouseDrag (event);
     }
@@ -1158,13 +1166,29 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
 
     if (lastComponentClicked != nullptr)
     {
+        const auto currentMouseDownTime = juce::Time::getCurrentTime();
+
         lastMouseDownPosition = localPosition;
+        lastMouseDownTime = currentMouseDownTime;
 
         event = event.withSourceComponent (lastComponentClicked);
+
         if (lastMouseDownPosition)
             event = event.withLastMouseDownPosition (*lastMouseDownPosition);
 
-        lastComponentClicked->internalMouseDown (event);
+        if (lastMouseDownTime)
+            event = event.withLastMouseDownTime (*lastMouseDownTime);
+
+        if (lastMouseDownTime
+            && lastMouseDownTime->currentTimeMillis() > 0
+            && currentMouseDownTime - *lastMouseDownTime < doubleClickTime)
+        {
+            lastComponentClicked->internalMouseDoubleClick (event);
+        }
+        else
+        {
+            lastComponentClicked->internalMouseDown (event);
+        }
     }
 
     lastMouseMovePosition = localPosition;
@@ -1180,11 +1204,15 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
                      .withModifiers (currentKeyModifiers)
                      .withPosition (localPosition);
 
+    if (lastMouseDownPosition)
+        event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+
+    if (lastMouseDownTime)
+        event = event.withLastMouseDownTime (*lastMouseDownTime);
+
     if (lastComponentClicked != nullptr)
     {
         event = event.withSourceComponent (lastComponentClicked);
-        if (lastMouseDownPosition)
-            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
 
         lastComponentClicked->internalMouseUp (event);
     }
@@ -1198,19 +1226,28 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
 
     lastMouseMovePosition = localPosition;
     lastMouseDownPosition.reset();
+    lastMouseDownTime.reset();
 }
 
 //==============================================================================
 
 void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
 {
-    const auto event = MouseEvent()
-                           .withButtons (currentMouseButtons)
-                           .withModifiers (currentKeyModifiers)
-                           .withPosition (localPosition);
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
+
+    if (lastMouseDownPosition)
+        event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+
+    if (lastMouseDownTime)
+        event = event.withLastMouseDownTime (*lastMouseDownTime);
 
     if (lastComponentClicked != nullptr)
     {
+        event = event.withSourceComponent (lastComponentClicked);
+
         lastComponentClicked->internalMouseWheel (event, wheelData);
     }
     else if (lastComponentFocused != nullptr)

@@ -70,7 +70,9 @@ public:
 
     //==============================================================================
     Point<float> getLastMouseDownPosition() const noexcept;
-    MouseEvent withLastMouseDownPosition (const Point<float>& newLastMouseDownPosition) const noexcept;
+    MouseEvent withLastMouseDownPosition (const Point<float>& newPosition) const noexcept;
+    juce::Time getLastMouseDownTime() const noexcept;
+    MouseEvent withLastMouseDownTime (juce::Time newTime) const noexcept;
 
     //==============================================================================
     Component* getSourceComponent() const noexcept;
@@ -85,12 +87,14 @@ private:
                 KeyModifiers newModifiers,
                 const Point<float>& newPosition,
                 const Point<float>& lastMouseDownPosition,
+                juce::Time lastMouseDownTime,
                 Component* sourceComponent) noexcept;
 
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;
     Point<float> lastMouseDownPosition;
+    juce::Time lastMouseDownTime;
     Component* sourceComponent = nullptr;
 };
 

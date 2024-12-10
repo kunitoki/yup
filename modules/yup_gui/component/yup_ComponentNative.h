@@ -46,27 +46,34 @@ public:
         /** Default constructor, initializes the options with default values. */
         constexpr Options() noexcept = default;
 
-        Options& withFlags(Flags newFlags) noexcept
+        Options& withFlags (Flags newFlags) noexcept
         {
             flags = newFlags;
             return *this;
         }
 
-        Options& withGraphicsApi(std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
+        Options& withGraphicsApi (std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
         {
             graphicsApi = newGraphicsApi;
             return *this;
         }
 
-        Options& withFramerateRedraw(std::optional<float> newFramerateRedraw) noexcept
+        Options& withFramerateRedraw (std::optional<float> newFramerateRedraw) noexcept
         {
             framerateRedraw = newFramerateRedraw;
+            return *this;
+        }
+
+        Options& withDoubleClickTime (std::optional<RelativeTime> newDoubleClickTime) noexcept
+        {
+            doubleClickTime = newDoubleClickTime;
             return *this;
         }
 
         Flags flags = defaultFlags;                      ///<
         std::optional<GraphicsContext::Api> graphicsApi; ///<
         std::optional<float> framerateRedraw;            ///<
+        std::optional<RelativeTime> doubleClickTime;     ///<
     };
 
     //==============================================================================

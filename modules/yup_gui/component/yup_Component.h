@@ -162,6 +162,7 @@ public:
     virtual void mouseMove (const MouseEvent& event);
     virtual void mouseDrag (const MouseEvent& event);
     virtual void mouseUp (const MouseEvent& event);
+    virtual void mouseDoubleClick (const MouseEvent& event);
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
 
     //==============================================================================
@@ -176,6 +177,7 @@ private:
     void internalMouseMove (const MouseEvent& event);
     void internalMouseDrag (const MouseEvent& event);
     void internalMouseUp (const MouseEvent& event);
+    void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
