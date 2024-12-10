@@ -1234,9 +1234,9 @@ void GLFWComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
 void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
 {
     auto event = MouseEvent()
-                           .withButtons (currentMouseButtons)
-                           .withModifiers (currentKeyModifiers)
-                           .withPosition (localPosition);
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
