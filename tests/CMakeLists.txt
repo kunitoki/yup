@@ -65,7 +65,13 @@ yup_standalone_app (
 # ==== Setup sources
 file (GLOB_RECURSE sources
       "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
-      "${CMAKE_CURRENT_LIST_DIR}/*.cpp"
-      "${CMAKE_CURRENT_LIST_DIR}/*.mm")
+      "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+
+if ("${yup_platform}" MATCHES "^(osx|ios)$")
+    file (GLOB_RECURSE apple_sources
+        "${CMAKE_CURRENT_LIST_DIR}/*.mm")
+    list (APPEND sources ${apple_sources})
+endif()
+
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})

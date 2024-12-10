@@ -53,7 +53,7 @@
 
 //==============================================================================
 
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes")
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/text/utf.hpp>
 #include <rive/renderer/render_context.hpp>

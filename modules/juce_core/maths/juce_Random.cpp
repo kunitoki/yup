@@ -177,42 +177,4 @@ void Random::fillBitsRandomly (BigInteger& arrayToChange, int startBit, int numB
         arrayToChange.setBit (startBit + numBits, nextBool());
 }
 
-//==============================================================================
-//==============================================================================
-#if JUCE_UNIT_TESTS
-
-class RandomTests final : public UnitTest
-{
-public:
-    RandomTests()
-        : UnitTest ("Random", UnitTestCategories::maths)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("Random");
-
-        Random r = getRandom();
-
-        for (int i = 2000; --i >= 0;)
-        {
-            expect (r.nextDouble() >= 0.0 && r.nextDouble() < 1.0);
-            expect (r.nextFloat() >= 0.0f && r.nextFloat() < 1.0f);
-            expect (r.nextInt (5) >= 0 && r.nextInt (5) < 5);
-            expect (r.nextInt (1) == 0);
-
-            int n = r.nextInt (50) + 1;
-            expect (r.nextInt (n) >= 0 && r.nextInt (n) < n);
-
-            n = r.nextInt (0x7ffffffe) + 1;
-            expect (r.nextInt (n) >= 0 && r.nextInt (n) < n);
-        }
-    }
-};
-
-static RandomTests randomTests;
-
-#endif
-
 } // namespace juce

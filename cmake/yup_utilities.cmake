@@ -19,16 +19,23 @@
 
 #==============================================================================
 
-function (_yup_set_default VAR VALUE)
-    if (NOT DEFINED ${VAR})
-        set (${VAR} "${VALUE}" PARENT_SCOPE)
+function (_yup_set_default var value)
+    if (NOT DEFINED ${var})
+        set (${var} "${value}" PARENT_SCOPE)
     endif()
 endfunction()
 
 #==============================================================================
 
+function (_yup_valid_identifier_string identifier output_variable)
+    string (REPLACE "_" "-" identifier ${identifier})
+    set (${output_variable} "${identifier}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_strip_list input_list output_variable)
-    set (inner_list "" PARENT_SCOPE)
+    set (inner_list "")
     foreach (item ${input_list})
         string (STRIP ${item} stripped_item)
         if (${stripped_item} STREQUAL "")
@@ -40,9 +47,15 @@ function (_yup_strip_list input_list output_variable)
 endfunction()
 
 function (_yup_comma_or_space_separated_list input_list output_variable)
-    string (REPLACE "," " " temp1_list ${input_list})
-    string (REPLACE " " ";" temp2_list ${temp1_list})
-    _yup_strip_list ("${temp2_list}" final_list)
+    set (final_list "")
+    list (LENGTH input_list input_list_len)
+    if (${input_list_len} GREATER 1)
+        string (REPLACE "," " " input_list ${input_list})
+    endif()
+    if (${input_list_len} GREATER 0)
+        string (REPLACE " " ";" input_list ${input_list})
+        _yup_strip_list ("${input_list}" final_list)
+    endif()
     set (${output_variable} "${final_list}" PARENT_SCOPE)
 endfunction()
 
@@ -123,6 +136,19 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_generate_random_filename prefix extension output_variable)
+    # Generate a random number
+    math (RANDOM random_number)
+
+    # Format the filename
+    set (random_filename "${prefix}${random_number}${extension}")
+
+    # Return the generated filename
+    set (${output_variable} "${random_filename}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
 function (_yup_get_package_config_libs package_name output_variable)
     find_package (PkgConfig REQUIRED)
     pkg_check_modules (${package_name} REQUIRED IMPORTED_TARGET ${package_name})
@@ -147,15 +173,62 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_resolve_variable_path input_path output_variable)
+    string (REPLACE "{HOME}" "$ENV{HOME}" input_path ${input_path})
+    string (REPLACE "{ANDROID_NDK}" "${ANDROID_NDK}" input_path ${input_path})
+    if (YUP_ENABLE_VULKAN)
+        string (REPLACE "{Vulkan_INCLUDE_DIR}" "${Vulkan_INCLUDE_DIR}" input_path ${input_path})
+    endif()
+    set (${output_variable} "${input_path}" PARENT_SCOPE)
+endfunction()
+
+function (_yup_resolve_variable_paths input_list output_list)
+    set (resolved_list "")
+
+    foreach (item IN LISTS input_list)
+        _yup_resolve_variable_path ("${item}" resolved_item)
+        list (APPEND resolved_list "${resolved_item}")
+    endforeach()
+
+    set (${output_list} "${resolved_list}" PARENT_SCOPE)
+endfunction()
+
+#==============================================================================
+
+function (_yup_merge_plist original_plist subset_xml_string output_plist)
+    if (NOT EXISTS "${original_plist}")
+        message (FATAL_ERROR "Original plist file does not exist: ${original_plist}")
+    endif()
+
+    file (COPY "${original_plist}" DESTINATION "${output_plist}")
+
+    _yup_generate_random_filename ("${CMAKE_BINARY_DIR}/temp_plist_" ".plist" temp_plist)
+    file (WRITE "${temp_plist}" "${subset_xml_string}")
+
+    execute_process(
+        COMMAND /usr/libexec/PlistBuddy -c "Merge ${temp_plist}" "${output_plist}"
+        RESULT_VARIABLE result
+        ERROR_VARIABLE error_message)
+
+    if (NOT result EQUAL 0)
+        message (FATAL_ERROR "Failed to merge plist: ${error_message}")
+    endif()
+
+    file (REMOVE "${temp_plist}")
+endfunction()
+
+#==============================================================================
+
 function (_yup_convert_png_to_icns png_path icons_path output_variable)
     set (temp_iconset_path "${icons_path}.iconset")
     set (output_iconset_path "${icons_path}.icns")
 
     # TODO - check png_path has png extension
 
-    add_custom_command(
-        OUTPUT "${output_iconset_path}"
-        COMMAND mkdir -p "${temp_iconset_name}"
+    file (MAKE_DIRECTORY "${temp_iconset_path}")
+
+    execute_process(
+        COMMAND mkdir -p "${temp_iconset_path}"
         COMMAND sips -z 16 16     -s format png "${png_path}" --out "${temp_iconset_path}/icon_16x16.png"
         COMMAND sips -z 32 32     -s format png "${png_path}" --out "${temp_iconset_path}/icon_32x32.png"
         COMMAND sips -z 32 32     -s format png "${png_path}" --out "${temp_iconset_path}/icon_16x16@2x.png"
@@ -166,8 +239,10 @@ function (_yup_convert_png_to_icns png_path icons_path output_variable)
         COMMAND sips -z 512 512   -s format png "${png_path}" --out "${temp_iconset_path}/icon_256x256@2x.png"
         COMMAND sips -z 512 512   -s format png "${png_path}" --out "${temp_iconset_path}/icon_512x512.png"
         COMMAND sips -z 1024 1024 -s format png "${png_path}" --out "${temp_iconset_path}/icon_512x512@2x.png"
-        COMMAND iconutil -c icns "${temp_iconset_path}"
-        COMMAND rm -R "${temp_iconset_path}")
+        COMMAND iconutil -c icns -o "${output_iconset_path}" "${temp_iconset_path}"
+        ERROR_VARIABLE error_message)
+
+    file (REMOVE_RECURSE "${temp_iconset_path}")
 
     set (${output_variable} "${output_iconset_path}" PARENT_SCOPE)
 endfunction()

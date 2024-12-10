@@ -25,4 +25,3 @@ emscripten CONFIG="Debug":
   cmake --build build --config {{CONFIG}}
   python3 -m http.server -d .
   #python3 tools/serve.py -p 8000 -d .
-
