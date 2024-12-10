@@ -44,7 +44,8 @@
 
 using namespace juce;
 
-namespace {
+namespace
+{
 class MockListener
 {
 public:
