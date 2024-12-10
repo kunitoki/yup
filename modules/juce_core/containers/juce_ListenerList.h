@@ -285,7 +285,8 @@ public:
             if (listener == listenerToExclude)
                 continue;
 
-            callback (*listener);
+            if (listener)
+                callback (*listener);
         }
     }
 

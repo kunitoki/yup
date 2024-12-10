@@ -1242,6 +1242,8 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
     if (lastMouseDownTime)
         event = event.withLastMouseDownTime (*lastMouseDownTime);
 
+    updateComponentUnderMouse (event);
+
     if (lastComponentClicked != nullptr)
     {
         event = event.withSourceComponent (lastComponentClicked);
@@ -1251,6 +1253,10 @@ void GLFWComponentNative::handleMouseWheel (const Point<float>& localPosition, c
     else if (lastComponentFocused != nullptr)
     {
         lastComponentFocused->internalMouseWheel (event, wheelData);
+    }
+    else if (lastComponentUnderMouse != nullptr)
+    {
+        lastComponentUnderMouse->internalMouseWheel (event, wheelData);
     }
 }
 
