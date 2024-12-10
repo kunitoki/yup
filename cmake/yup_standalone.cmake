@@ -113,7 +113,7 @@ function (yup_standalone_app)
                 MACOSX_BUNDLE_INFO_PLIST                       "${YUP_ARG_CUSTOM_PLIST}"
                 MACOSX_BUNDLE_ICON_FILE                        "${target_iconset_name}"
                 RESOURCE                                       "${target_resources}"
-                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER      "${target_gui_identifier}")
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER      "${target_app_namespace}")
 
         endif()
 

@@ -36,6 +36,7 @@
     searchpaths:        include source
     osxFrameworks:      Metal QuartzCore
     defines:            WITH_RIVE_TEXT=1
+    iosDefines:         RIVE_IOS=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
     androidDefines:     RIVE_ANDROID=1

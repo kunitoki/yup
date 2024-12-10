@@ -17,7 +17,6 @@ on:
       - "!**/native/*_mac.*"
       - "!**/native/*_posix.*"
       - "!**/native/*_wasm.*"
-  pull_request:
     branches:
       - "**"
 

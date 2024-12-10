@@ -15,7 +15,6 @@ on:
       - "!**/native/*_ios.*"
       - "!**/native/*_mac.*"
       - "!**/native/*_windows.*"
-  pull_request:
     branches:
       - "**"
 

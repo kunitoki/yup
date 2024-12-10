@@ -64,6 +64,7 @@
 #include "keyboard/yup_KeyPress.h"
 #include "mouse/yup_MouseEvent.h"
 #include "mouse/yup_MouseWheelData.h"
+#include "mouse/yup_MouseListener.h"
 #include "desktop/yup_Display.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"

@@ -1,0 +1,68 @@
+name: Android
+
+# See https://medium.com/@dcostalloyd90/automating-android-builds-with-github-actions-a-step-by-step-guide-2a02a54f59cd
+
+on:
+  push:
+    paths:
+      - "CMakeLists.txt"
+      - "**/workflows/build_android.yml"
+      - "**/cmake/**"
+      - "**/examples/**"
+      - "**/modules/**"
+      - "**/tests/**"
+      - "**/thirdparty/**"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_ios.*"
+      - "!**/native/*_linux.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
+    branches:
+      - "**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+        - uses: actions/checkout@v4
+
+        - uses: seanmiddleditch/gha-setup-ninja@master
+
+        - name: Setup Java
+          uses: actions/setup-java@v3
+          with:
+            distribution: 'temurin'
+            java-version: 17
+
+        - name: Setup Android SDK
+          uses: android-actions/setup-android@v2.0.10
+
+        - name: Setup Android NDK
+          uses: nttld/setup-ndk@v1
+          with:
+            ndk-version: r26d
+
+        - name: Create Build Environment
+          run: cmake -E make_directory ${{runner.workspace}}/build
+
+        - name: Configure
+          working-directory: ${{runner.workspace}}/build
+          run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+
+        - name: Build Debug
+          run: |
+            pushd ${{runner.workspace}}/build/examples/app && ./gradlew assembleDebug && popd
+            pushd ${{runner.workspace}}/build/examples/graphics && ./gradlew assembleDebug && popd
+            pushd ${{runner.workspace}}/build/examples/render && ./gradlew assembleDebug && popd
+
+        - name: Build Release
+          run: |
+            pushd ${{runner.workspace}}/build/examples/app && ./gradlew assemble && popd
+            pushd ${{runner.workspace}}/build/examples/graphics && ./gradlew assemble && popd
+            pushd ${{runner.workspace}}/build/examples/render && ./gradlew assemble && popd
