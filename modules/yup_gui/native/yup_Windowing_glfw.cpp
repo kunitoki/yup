@@ -1168,27 +1168,25 @@ void GLFWComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     {
         const auto currentMouseDownTime = juce::Time::getCurrentTime();
 
-        lastMouseDownPosition = localPosition;
-        lastMouseDownTime = currentMouseDownTime;
-
         event = event.withSourceComponent (lastComponentClicked);
 
-        if (lastMouseDownPosition)
-            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
-
-        if (lastMouseDownTime)
-            event = event.withLastMouseDownTime (*lastMouseDownTime);
-
         if (lastMouseDownTime
-            && lastMouseDownTime->currentTimeMillis() > 0
+            && lastMouseDownPosition
+            && *lastMouseDownTime > juce::Time()
             && currentMouseDownTime - *lastMouseDownTime < doubleClickTime)
         {
+            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
+            event = event.withLastMouseDownTime (*lastMouseDownTime);
+
             lastComponentClicked->internalMouseDoubleClick (event);
         }
         else
         {
             lastComponentClicked->internalMouseDown (event);
         }
+
+        lastMouseDownPosition = localPosition;
+        lastMouseDownTime = currentMouseDownTime;
     }
 
     lastMouseMovePosition = localPosition;
