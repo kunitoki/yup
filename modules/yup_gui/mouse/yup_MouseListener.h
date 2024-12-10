@@ -28,12 +28,19 @@ public:
     virtual ~MouseListener() {}
 
     virtual void mouseEnter (const MouseEvent& event) {}
+
     virtual void mouseExit (const MouseEvent& event) {}
-    virtual void mouseDoubleClick(const MouseEvent& event) {}
+
+    virtual void mouseDoubleClick (const MouseEvent& event) {}
+
     virtual void mouseDown (const MouseEvent& event) {}
+
     virtual void mouseMove (const MouseEvent& event) {}
+
     virtual void mouseDrag (const MouseEvent& event) {}
+
     virtual void mouseUp (const MouseEvent& event) {}
+
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 
 private:
