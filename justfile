@@ -15,6 +15,10 @@ ios:
   cmake -G Xcode -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64
   -open build/yup.xcodeproj
 
+ios_simulator:
+  cmake -G Xcode -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=SIMULATORARM64
+  -open build/yup.xcodeproj
+
 android:
   cmake -G "Unix Makefiles" -B build -DYUP_TARGET_ANDROID=ON
   -open -a /Applications/Android\ Studio.app build/examples/render

@@ -32,7 +32,6 @@
     website:          https://github.com/Tehreer/SheenBidi
     license:          Apache-2.0
 
-    dependencies:
     searchpaths:      include
 
   END_JUCE_MODULE_DECLARATION

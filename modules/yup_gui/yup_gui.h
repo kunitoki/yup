@@ -36,6 +36,7 @@
     dependencies:       juce_events yup_graphics rive
     osxFrameworks:      Metal
     iosFrameworks:      Metal
+    iosSimFrameworks:   Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION

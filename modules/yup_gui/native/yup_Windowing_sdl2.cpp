@@ -301,7 +301,7 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 {
     GraphicsContext::Api desiredApi;
 
-#if JUCE_MAC
+#if JUCE_MAC || JUCE_IOS
 #if YUP_RIVE_USE_METAL
     desiredApi = forceContextApi.value_or (GraphicsContext::Metal);
 #elif YUP_RIVE_USE_OPENGL
@@ -485,8 +485,7 @@ public:
     void handleWindowEvent (const SDL_WindowEvent& windowEvent);
 
     //==============================================================================
-    int handleEvent (SDL_Event* event);
-
+    void handleEvent (SDL_Event* event);
     static int eventDispatcher (void* userdata, SDL_Event* event);
 
 private:
@@ -1375,21 +1374,27 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
 //==============================================================================
 
-int SDL2ComponentNative::handleEvent (SDL_Event* event)
+void SDL2ComponentNative::handleEvent (SDL_Event* event)
 {
     switch (event->type)
     {
         case SDL_QUIT:
+        {
             component.internalUserTriedToCloseWindow();
             break;
+        }
 
         case SDL_WINDOWEVENT:
+        {
             handleWindowEvent (event->window);
             break;
+        }
 
         case SDL_MOUSEMOTION:
+        {
             handleMouseMoveOrDrag ({ static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) });
             break;
+        }
 
         case SDL_MOUSEBUTTONDOWN:
         {
@@ -1441,15 +1446,14 @@ int SDL2ComponentNative::handleEvent (SDL_Event* event)
         default:
             break;
     }
-
-    return 0;
 }
 
 //==============================================================================
 
 int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 {
-    return static_cast<SDL2ComponentNative*> (userdata)->handleEvent (event);
+    static_cast<SDL2ComponentNative*> (userdata)->handleEvent (event);
+    return 0;
 }
 
 //==============================================================================
@@ -1489,6 +1493,8 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
+    SDL_SetMainReady();
+
     // Initialise SDL2
     if (SDL_Init (SDL_INIT_VIDEO) != 0)
     {
@@ -1496,15 +1502,16 @@ void initialiseYup_Windowing()
         return; // quit !
     }
 
-    // Setup monitor callback
-    {
-        Desktop::getInstance()->updateDisplays();
-    }
+    // Update available displays
+    Desktop::getInstance()->updateDisplays();
 
-    MessageManager::getInstance()->registerEventLoopCallback ([]
-                                                              {
-                                                                  SDL_PollEvent (nullptr);
-                                                              });
+    // Allow SDL to poll events
+    auto loopCallback = []
+    {
+        SDL_PollEvent (nullptr);
+    };
+
+    MessageManager::getInstance()->registerEventLoopCallback (loopCallback);
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }
@@ -1512,6 +1519,8 @@ void initialiseYup_Windowing()
 void shutdownYup_Windowing()
 {
     SDL2ComponentNative::isInitialised.clear();
+
+    MessageManager::getInstance()->registerEventLoopCallback (nullptr);
 
     Desktop::getInstance()->deleteInstance();
 

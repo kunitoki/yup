@@ -61,6 +61,8 @@
 
 #if JUCE_MAC
 #import <AppKit/AppKit.h>
+#else
+#include "native/yup_Windowing_ios.mm"
 #endif
 
 //==============================================================================

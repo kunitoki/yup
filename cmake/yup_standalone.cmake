@@ -29,7 +29,7 @@ function (yup_standalone_app)
         INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
         # Globals
-        DEFINITIONS MODULES LINK_OPTIONS
+        DEFINITIONS COMPILE_OPTIONS MODULES LINK_OPTIONS
         # Emscripten
         PRELOAD_FILES)
 
@@ -52,6 +52,9 @@ function (yup_standalone_app)
     _yup_set_default (target_console OFF)
     _yup_make_short_version ("${target_version}" target_version_short)
 
+    # ==== Output status
+    _yup_message (STATUS "Configuring standalone application ${target_name} ${target_version}")
+
     # ==== Setup Android platform, build gradle stage
     if (YUP_TARGET_ANDROID)
         _yup_prepare_gradle_android(
@@ -64,6 +67,7 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
+        _yup_message (STATUS "Fetching SDL2 library")
         _yup_fetch_sdl2()
         list (APPEND additional_libraries SDL2-static)
     endif()
@@ -192,7 +196,7 @@ function (yup_standalone_app)
     # ==== Definitions and link libraries
     target_compile_options (${target_name} PRIVATE
         ${additional_options}
-        ${YUP_ARG_OPTIONS})
+        ${YUP_ARG_COMPILE_OPTIONS})
 
     target_compile_definitions (${target_name} PRIVATE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
