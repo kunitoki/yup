@@ -20,16 +20,15 @@
 #==============================================================================
 
 function (_yup_fetch_sdl2)
+    set (SDL_STATIC_PIC ON)
+    set (SDL_SHARED OFF)
+    set (SDL_STATIC ON)
+
     FetchContent_Declare (sdl
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
         GIT_TAG release-2.30.10
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
-
-    set (BUILD_SHARED_LIBS OFF)
-    set (SDL_STATIC_PIC ON)
-    set (SDL_SHARED OFF)
-    set (SDL_STATIC ON)
 
     FetchContent_MakeAvailable (sdl)
 
