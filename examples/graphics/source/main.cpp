@@ -159,7 +159,6 @@ public:
 #endif
 
         // Initialize the audio device
-        deviceManager.addAudioCallback (this);
         deviceManager.initialiseWithDefaultDevices (0, 2);
 
         // Initialize sine wave generators
@@ -170,6 +169,8 @@ public:
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
             sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), sampleRate);
         }
+
+        deviceManager.addAudioCallback (this);
 
         // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
@@ -202,6 +203,7 @@ public:
 
     ~CustomWindow() override
     {
+        deviceManager.removeAudioCallback(this);
         deviceManager.closeAudioDevice();
     }
 

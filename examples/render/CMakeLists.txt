@@ -53,7 +53,7 @@ yup_standalone_app (
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
-    TARGET_APP_NAMESPACE "org.yup.${target_name}"
+    TARGET_APP_NAMESPACE "org.yup"
     INITIAL_MEMORY 268435456
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"

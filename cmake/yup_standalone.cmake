@@ -24,7 +24,7 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_ICON TARGET_CXX_STANDARD
+        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_NAMESPACE TARGET_ICON TARGET_CXX_STANDARD
         # Emscripten
         INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
@@ -41,9 +41,9 @@ function (yup_standalone_app)
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
     set (target_console "${YUP_ARG_TARGET_CONSOLE}")
-    set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
-    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_icon "${YUP_ARG_TARGET_ICON}")
+    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
+    set (target_app_identifier "${target_app_namespace}.${target_name}")
     set (target_resources "")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (additional_definitions "")
@@ -63,7 +63,7 @@ function (yup_standalone_app)
         _yup_prepare_gradle_android(
             TARGET_NAME ${target_name}
             TARGET_ICON ${target_icon}
-            APPLICATION_ID ${target_app_id}
+            APPLICATION_ID ${target_app_identifier}
             APPLICATION_NAMESPACE ${target_app_namespace}
             APPLICATION_VERSION ${target_version})
 
@@ -109,7 +109,7 @@ function (yup_standalone_app)
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
         if (NOT "${target_console}")
             _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist")
-            _yup_valid_identifier_string ("${target_app_namespace}" target_app_namespace)
+            _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
             _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")
             _yup_convert_png_to_icns ("${target_icon}" "${CMAKE_CURRENT_BINARY_DIR}/icons" target_iconset)
@@ -121,7 +121,7 @@ function (yup_standalone_app)
                 BUNDLE                                         ON
                 CXX_EXTENSIONS                                 OFF
                 MACOSX_BUNDLE_EXECUTABLE_NAME                  "${target_name}"
-                MACOSX_BUNDLE_GUI_IDENTIFIER                   "${target_app_namespace}"
+                MACOSX_BUNDLE_GUI_IDENTIFIER                   "${target_app_identifier}"
                 MACOSX_BUNDLE_BUNDLE_NAME                      "${target_name}"
                 MACOSX_BUNDLE_BUNDLE_VERSION                   "${target_version}"
                 MACOSX_BUNDLE_LONG_VERSION_STRING              "${target_version}"
@@ -129,7 +129,7 @@ function (yup_standalone_app)
                 MACOSX_BUNDLE_INFO_PLIST                       "${YUP_ARG_CUSTOM_PLIST}"
                 MACOSX_BUNDLE_ICON_FILE                        "${target_iconset_name}"
                 RESOURCE                                       "${target_resources}"
-                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER      "${target_app_namespace}")
+                XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER      "${target_app_identifier}")
 
         endif()
 

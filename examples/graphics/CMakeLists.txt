@@ -51,7 +51,7 @@ yup_standalone_app (
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
-    TARGET_APP_NAMESPACE "org.yup.${target_name}"
+    TARGET_APP_NAMESPACE "org.yup"
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf@data/Roboto-Regular.ttf"
     MODULES

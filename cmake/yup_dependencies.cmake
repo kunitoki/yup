@@ -31,10 +31,11 @@ function (_yup_fetch_sdl2)
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
-    set (BUILD_SHARED_LIBS OFF)
-    set (SDL_SHARED OFF)
-    set (SDL_STATIC ON)
-    set (SDL_STATIC_PIC ON)
+    set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set (SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set (SDL_STATIC ON CACHE BOOL "" FORCE)
+    set (SDL_STATIC_PIC ON CACHE BOOL "" FORCE)
+    set (SDL_AUDIO_ENABLED_BY_DEFAULT OFF CACHE BOOL "" FORCE)
 
     FetchContent_MakeAvailable (SDL2)
 

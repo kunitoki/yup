@@ -27,6 +27,16 @@ endfunction()
 
 #==============================================================================
 
+function (_yup_bool_to_string value output_variable)
+    if (value)
+        set (${output_variable} "true" PARENT_SCOPE)
+    else()
+        set (${output_variable} "false" PARENT_SCOPE)
+    endif()
+endfunction()
+
+#==============================================================================
+
 function (_yup_valid_identifier_string identifier output_variable)
     string (REPLACE "_" "-" identifier ${identifier})
     set (${output_variable} "${identifier}" PARENT_SCOPE)

@@ -478,7 +478,7 @@ public:
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
-    void handleContentScaleChanged (float xscale, float yscale);
+    void handleContentScaleChanged();
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
@@ -1298,7 +1298,7 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
     //DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
 }
 
-void SDL2ComponentNative::handleContentScaleChanged (float xscale, float yscale)
+void SDL2ComponentNative::handleContentScaleChanged()
 {
     int width = screenBounds.getWidth();
     int height = screenBounds.getHeight();
@@ -1357,6 +1357,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 {
     switch (windowEvent.event)
     {
+        case SDL_WINDOWEVENT_RESIZED:
         case SDL_WINDOWEVENT_SIZE_CHANGED:
             handleResized (windowEvent.data1, windowEvent.data2);
             break;
@@ -1365,12 +1366,25 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             handleMoved (windowEvent.data1, windowEvent.data2);
             break;
 
+        case SDL_WINDOWEVENT_MINIMIZED:
+            break;
+
+        case SDL_WINDOWEVENT_MAXIMIZED:
+            break;
+
+        case SDL_WINDOWEVENT_RESTORED:
+            break;
+
         case SDL_WINDOWEVENT_FOCUS_GAINED:
             handleFocusChanged (true);
             break;
 
         case SDL_WINDOWEVENT_FOCUS_LOST:
             handleFocusChanged (false);
+            break;
+
+        case SDL_WINDOWEVENT_DISPLAY_CHANGED:
+            handleContentScaleChanged();
             break;
     }
 }
@@ -1383,13 +1397,28 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
     {
         case SDL_QUIT:
         {
-            component.internalUserTriedToCloseWindow();
+            // component.internalUserTriedToCloseWindow();
             break;
         }
 
         case SDL_WINDOWEVENT:
         {
             handleWindowEvent (event->window);
+            break;
+        }
+
+        case SDL_DISPLAYEVENT:
+        {
+            break;
+        }
+
+        case SDL_RENDER_TARGETS_RESET:
+        {
+            break;
+        }
+
+        case SDL_RENDER_DEVICE_RESET:
+        {
             break;
         }
 
@@ -1441,7 +1470,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             auto cursorPosition = getCursorPosition();
             auto modifiers = toKeyModifiers (event->key.keysym.mod);
 
-            handleKeyDown (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
+            handleKeyUp (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
 
             break;
         }
@@ -1509,7 +1538,7 @@ void initialiseYup_Windowing()
     // Allow SDL to poll events
     auto loopCallback = []
     {
-        SDL_PollEvent (nullptr);
+        SDL_PumpEvents();
     };
 
     MessageManager::getInstance()->registerEventLoopCallback (loopCallback);
