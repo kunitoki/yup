@@ -56,6 +56,7 @@
   minimumCppStandard: 17
 
   dependencies:       juce_core
+  androidSearchpaths: {ANDROID_NDK}/sources/android/native_app_glue
 
  END_JUCE_MODULE_DECLARATION
 
@@ -83,6 +84,10 @@
     // "C:\Program Files (x86)\Windows Kits\10\Include\10.0.14393.0\winrt".
 #include <inspectable.h>
 #include <hstring.h>
+#endif
+
+#if JUCE_ANDROID
+#include <android_native_app_glue.h>
 #endif
 
 #include "messages/juce_MessageManager.h"

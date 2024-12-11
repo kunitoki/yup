@@ -159,7 +159,7 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     }
 
 #define JUCE_MAIN_FUNCTION_DEFINITION                                        \
-    int main()                                                               \
+    void android_main(struct android_app*)                                   \
     {                                                                        \
         juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
         return juce::JUCEApplicationBase::main(0, nullptr);                  \

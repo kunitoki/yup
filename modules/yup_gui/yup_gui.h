@@ -36,7 +36,6 @@
     dependencies:       juce_events yup_graphics rive
     osxFrameworks:      Metal
     iosFrameworks:      Metal
-    androidSearchpaths: {ANDROID_NDK}/sources/android/native_app_glue
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
