@@ -152,7 +152,7 @@ public:
 #else
         auto fontFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
 #endif
-                .getChildFile ("Roboto-Regular.ttf");
+                                .getChildFile ("Roboto-Regular.ttf");
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
@@ -203,7 +203,7 @@ public:
 
     ~CustomWindow() override
     {
-        deviceManager.removeAudioCallback(this);
+        deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
     }
 
