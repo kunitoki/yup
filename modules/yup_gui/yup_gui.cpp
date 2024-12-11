@@ -64,6 +64,9 @@
 #endif
 
 #elif JUCE_LINUX
+#undef None
+#undef KeyPress
+#undef SIZEOF
 
 #elif JUCE_WINDOWS
 
