@@ -52,6 +52,15 @@ public:
             return *this;
         }
 
+        Options& withRenderContinuous (bool shouldRenderContinuous) noexcept
+        {
+            if (shouldRenderContinuous)
+                flags |= renderContinuous;
+            else
+                flags &= ~renderContinuous;
+            return *this;
+        }
+
         Options& withGraphicsApi (std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
         {
             graphicsApi = newGraphicsApi;

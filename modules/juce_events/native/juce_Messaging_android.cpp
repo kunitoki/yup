@@ -150,6 +150,18 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 }
 
 //==============================================================================
+/*
+extern "C" jint JNIEXPORT JNI_OnLoad2 (JavaVM* vm, void*);
+//extern "C" jint JNIEXPORT JNI_OnLoad (JavaVM *vm, void*);
+
+    //JNI_OnLoad (nativeApp->activity->vm, nullptr);
+    JNI_OnLoad2 (nativeApp->activity->vm, nullptr);
+
+    // JNIClassBase::initialiseAllClasses (nativeApp->activity->env, nativeApp->activity->clazz);
+    Thread::initialiseJUCE (nativeApp->activity->env, nativeApp->activity->clazz);
+*/
+
+//==============================================================================
 void juce_juceEventsAndroidStartApp()
 {
 }

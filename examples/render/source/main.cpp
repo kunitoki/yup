@@ -40,7 +40,7 @@ public:
     CustomWindow()
         // Fluid and continuous animations needs continuous repainting
         : yup::DocumentWindow (yup::ComponentNative::Options()
-                                   .withFlags (yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous),
+                                   .withRenderContinuous (true),
                                {})
     {
         // Set title
@@ -84,17 +84,20 @@ public:
         //for (int i = 0; i < totalRows * totalColumns; ++i)
         //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
 
+        if (artboards.size() != totalRows * totalColumns)
+            return;
+
         auto bounds = getLocalBounds().reduced (50);
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
-        for (int i = 0; i < totalRows && artboards.size(); ++i)
+        for (int i = 0; i < totalRows; ++i)
         {
             auto row = bounds.removeFromTop (height);
             for (int j = 0; j < totalColumns; ++j)
             {
                 auto col = row.removeFromLeft (width);
-                artboards.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
+                artboards.getUnchecked (j * totalRows + i)->setBounds (col.largestFittingSquare());
             }
         }
     }
@@ -118,8 +121,8 @@ public:
                 break;
 
             case yup::KeyPress::textPKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->setPaused (! artboards[i]->isPaused());
+                for (auto& artboard : artboards)
+                    artboard->setPaused (! artboard->isPaused());
                 break;
 
             case yup::KeyPress::textZKey:
@@ -168,8 +171,8 @@ private:
     }
 
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 1;
-    int totalColumns = 2;
+    int totalRows = 2;
+    int totalColumns = 1;
 };
 
 //==============================================================================
@@ -195,7 +198,13 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
+
+#if JUCE_IOS || JUCE_ANDROID
+        window->centreWithSize ({ 1080, 2400 });
+#else
         window->centreWithSize ({ 1280, 866 });
+#endif
+
         window->setVisible (true);
     }
 
