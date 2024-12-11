@@ -502,6 +502,7 @@ private:
 
     void* parentWindow = nullptr;
     String windowTitle;
+    uint32 windowFlags = 0;
 
     GraphicsContext::Api currentGraphicsApi;
 
@@ -562,9 +563,11 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 {
     SDL_AddEventWatch (eventDispatcher, this);
 
-    // Setup window hints
-    auto windowFlags = setContextWindowHints (currentGraphicsApi);
-    windowFlags |= SDL_WINDOW_RESIZABLE;
+    // Setup window hints and get flags
+    windowFlags = setContextWindowHints (currentGraphicsApi);
+
+    if (options.flags.test (resizableWindow))
+        windowFlags |= SDL_WINDOW_RESIZABLE;
 
     if (component.isVisible())
         windowFlags |= SDL_WINDOW_SHOWN;
@@ -577,8 +580,15 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
+    SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
+
     // Create the window, renderer and parent it
-    window = SDL_CreateWindow (component.getTitle().toRawUTF8(), SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 1, 1, windowFlags);
+    window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
+                               SDL_WINDOWPOS_UNDEFINED,
+                               SDL_WINDOWPOS_UNDEFINED,
+                               1,
+                               1,
+                               windowFlags);
     if (window == nullptr)
         return; // TODO - raise something ?
 

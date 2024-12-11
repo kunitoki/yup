@@ -28,18 +28,20 @@ class Component;
 class JUCE_API ComponentNative
 {
     struct decoratedWindowTag;
+    struct resizableWindowTag;
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
 
 public:
     //==============================================================================
-    using Flags = FlagSet<uint32, decoratedWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
+    using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
 
     static inline constexpr Flags noFlags = Flags();
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
+    static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
-    static inline constexpr Flags defaultFlags = decoratedWindow | allowHighDensityDisplay;
+    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Configuration options for creating a native component. */
@@ -51,6 +53,15 @@ public:
         Options& withFlags (Flags newFlags) noexcept
         {
             flags = newFlags;
+            return *this;
+        }
+
+        Options& withResizableWindow (bool shouldAllowResizing) noexcept
+        {
+            if (shouldAllowResizing)
+                flags |= resizableWindow;
+            else
+                flags &= ~resizableWindow;
             return *this;
         }
 
