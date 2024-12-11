@@ -27,6 +27,7 @@ function (_yup_fetch_sdl2)
         GIT_PROGRESS TRUE)
 
     set (BUILD_SHARED_LIBS OFF)
+    set (SDL_STATIC_PIC ON)
     set (SDL_SHARED OFF)
     set (SDL_STATIC ON)
 
