@@ -19,26 +19,6 @@
 
 #==============================================================================
 
-function (_yup_fetch_glfw3)
-    FetchContent_Declare (glfw
-        GIT_REPOSITORY https://github.com/kunitoki/glfw.git
-        GIT_TAG dev/android_support
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE)
-
-    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-    set (GLFW_INSTALL OFF CACHE STRING "" FORCE)
-
-    FetchContent_MakeAvailable (glfw)
-
-    set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
-endfunction()
-
-#==============================================================================
-
 function (_yup_fetch_sdl2)
     FetchContent_Declare (sdl
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git

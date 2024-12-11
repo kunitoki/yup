@@ -1489,7 +1489,7 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    // Initialise glfw
+    // Initialise SDL2
     if (SDL_Init (SDL_INIT_VIDEO) != 0)
     {
         DBG ("Error initialising SDL");

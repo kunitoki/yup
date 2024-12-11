@@ -27,8 +27,7 @@
 #include "rive/renderer/gl/render_target_gl.hpp"
 
 #if RIVE_DESKTOP_GL || JUCE_ANDROID
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
+#include <SDL2/sdl.h>
 #endif
 
 namespace yup
@@ -78,7 +77,7 @@ public:
     {
 #if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
-        if (! gladLoadCustomLoader ((GLADloadproc) glfwGetProcAddress))
+        if (! gladLoadCustomLoader ((GLADloadproc) SDL_GL_GetProcAddress))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
             exit (-1);

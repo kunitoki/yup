@@ -75,10 +75,6 @@
 #include <deque>
 #include <mutex>
 
-#elif JUCE_ANDROID
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-
 #endif
 
 //==============================================================================
