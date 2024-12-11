@@ -20,8 +20,6 @@
 #==============================================================================
 
 function (_yup_fetch_sdl2)
-    set (CMAKE_POSITION_INDEPENDENT_CODE ON)
-
     FetchContent_Declare (sdl
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
         GIT_TAG release-2.30.10
@@ -34,7 +32,9 @@ function (_yup_fetch_sdl2)
 
     FetchContent_MakeAvailable (sdl)
 
-    set_target_properties (SDL2-static PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (SDL2-static PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        FOLDER "Thirdparty")
 endfunction()
 
 #==============================================================================
@@ -59,7 +59,7 @@ function (_yup_fetch_perfetto)
         "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk>")
 
     set_target_properties (perfetto PROPERTIES
-        POSITION_INDEPENDENT_CODE TRUE
+        POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")
 
     if (WIN32)

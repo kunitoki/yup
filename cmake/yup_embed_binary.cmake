@@ -35,7 +35,8 @@ function (yup_add_embedded_binary_resources library_name)
     target_include_directories (${library_name} PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
     target_compile_features (${library_name} PUBLIC cxx_std_17)
 
-    set_target_properties (${library_name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    set_target_properties (${library_name} PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
 
     file (WRITE "${binary_header_path}"
         "#pragma once\n"
