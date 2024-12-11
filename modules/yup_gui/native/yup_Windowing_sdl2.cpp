@@ -332,14 +332,14 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "metal");
 
-        return SDL_WINDOW_METAL | SDL_WINDOW_ALLOW_HIGHDPI;
+        return SDL_WINDOW_METAL;
     }
 
     if (desiredApi == GraphicsContext::Direct3D)
     {
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "direct3d11");
 
-        return SDL_WINDOW_ALLOW_HIGHDPI;
+        return 0;
     }
 
     if (desiredApi == GraphicsContext::OpenGL)
@@ -358,7 +358,7 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
         SDL_GL_SetAttribute (SDL_GL_STENCIL_SIZE, 8);
         SDL_GL_SetAttribute (SDL_GL_DOUBLEBUFFER, 1);
 
-        return SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+        return SDL_WINDOW_OPENGL;
 #else
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl");
 
@@ -366,11 +366,11 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, YUP_RIVE_OPENGL_MINOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
 
-        return SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+        return SDL_WINDOW_OPENGL;
 #endif
     }
 
-    return SDL_WINDOW_ALLOW_HIGHDPI;
+    return 0;
 }
 
 //==============================================================================
@@ -570,6 +570,9 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         windowFlags |= SDL_WINDOW_SHOWN;
     else
         windowFlags |= SDL_WINDOW_HIDDEN;
+
+    if (options.flags.test (allowHighDensityDisplay))
+        windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI;
 
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;

@@ -252,8 +252,26 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
 #endif
 
 //==============================================================================
+#if JUCE_ANDROID
+extern "C" jint JNIEXPORT juce_JNI_OnLoad (JavaVM* vm, void*);
+#endif
+
 int JUCEApplicationBase::main()
 {
+#if JUCE_ANDROID
+    auto env = (JNIEnv*) SDL_AndroidGetJNIEnv();
+    auto clazz = (jobject) SDL_AndroidGetActivity();
+    JavaVM* vm = nullptr;
+
+    if (env != nullptr && env->GetJavaVM (&vm) == 0)
+    {
+        juce_JNI_OnLoad (vm, nullptr);
+
+        JNIClassBase::initialiseAllClasses (env, clazz);
+        Thread::initialiseJUCE (env, clazz);
+    }
+#endif
+
     ScopedJuceInitialiser_GUI libraryInitialiser;
     jassert (createInstance != nullptr);
 

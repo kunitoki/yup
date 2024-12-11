@@ -29,15 +29,17 @@ class JUCE_API ComponentNative
 {
     struct decoratedWindowTag;
     struct renderContinuousTag;
+    struct allowHighDensityDisplayTag;
 
 public:
     //==============================================================================
-    using Flags = FlagSet<uint32, decoratedWindowTag, renderContinuousTag>;
+    using Flags = FlagSet<uint32, decoratedWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
 
     static inline constexpr Flags noFlags = Flags();
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
-    static inline constexpr Flags defaultFlags = decoratedWindow;
+    static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
+    static inline constexpr Flags defaultFlags = decoratedWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Configuration options for creating a native component. */
@@ -58,6 +60,15 @@ public:
                 flags |= renderContinuous;
             else
                 flags &= ~renderContinuous;
+            return *this;
+        }
+
+        Options& withAllowedHighDensityDisplay (bool shouldAllowHighDensity) noexcept
+        {
+            if (shouldAllowHighDensity)
+                flags |= allowHighDensityDisplay;
+            else
+                flags &= ~allowHighDensityDisplay;
             return *this;
         }
 

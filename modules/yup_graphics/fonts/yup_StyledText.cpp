@@ -64,6 +64,7 @@ void StyledText::appendText (const Font& font,
 {
     textRuns.push_back (append (font, size, lineHeight, text));
 
+    jassert (font.getFont() != nullptr);
     paragraphs = font.getFont()->shapeText (unicodeChars, textRuns);
 }
 

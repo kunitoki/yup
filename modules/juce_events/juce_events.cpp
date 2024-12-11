@@ -75,6 +75,11 @@
 #include <deque>
 #include <mutex>
 
+#elif JUCE_ANDROID
+#include <jni.h>
+
+#include <SDL2/SDL_system.h>
+
 #endif
 
 //==============================================================================

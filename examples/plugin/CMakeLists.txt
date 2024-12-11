@@ -23,6 +23,8 @@ cmake_minimum_required(VERSION 3.28)
 set (target_name example_plugin)
 set (target_version "1.0.0")
 
+project (${target_name} VERSION ${target_version})
+
 yup_add_embedded_binary_resources (
     "${target_name}_binary_data"
     OUT_DIR BinaryData

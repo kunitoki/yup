@@ -42,8 +42,8 @@ if (ANDROID)
         RESOURCE_NAMES
             RiveFile
         RESOURCES
-            ${CMAKE_CURRENT_LIST_DIR}/${rive_file}
-    )
+            "${CMAKE_CURRENT_LIST_DIR}/${rive_file}")
+
     set (link_libraries "${target_name}_binary_data")
 endif()
 
@@ -54,7 +54,6 @@ yup_standalone_app (
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup.${target_name}"
-    LINK_OPTIONS ${link_options}
     INITIAL_MEMORY 268435456
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"
@@ -70,8 +69,7 @@ yup_standalone_app (
         sheenbidi
         rive
         rive_renderer
-        ${link_libraries}
-)
+        ${link_libraries})
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)

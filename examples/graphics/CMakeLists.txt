@@ -26,24 +26,24 @@ set (target_version "1.0.0")
 project (${target_name} VERSION ${target_version})
 
 # ==== Prepare Android build
+set (link_libraries "")
 if (ANDROID)
-    # project (${target_name} VERSION ${target_version})
     include (../../cmake/yup.cmake)
     _yup_setup_platform()
     _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
-endif()
 
-# ==== Prepare Android build
-yup_add_embedded_binary_resources (
-    "${target_name}_binary_data"
-    OUT_DIR BinaryData
-    HEADER BinaryData.h
-    NAMESPACE yup
-    RESOURCE_NAMES
-        RobotoRegularFont
-    RESOURCES
-        ${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf
-)
+    yup_add_embedded_binary_resources (
+        "${target_name}_binary_data"
+        OUT_DIR BinaryData
+        HEADER BinaryData.h
+        NAMESPACE yup
+        RESOURCE_NAMES
+            RobotoRegularFont
+        RESOURCES
+            "${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf")
+
+    set (link_libraries "${target_name}_binary_data")
+endif()
 
 # ==== Prepare target
 yup_standalone_app (
@@ -66,8 +66,7 @@ yup_standalone_app (
         sheenbidi
         rive
         rive_renderer
-        "${target_name}_binary_data"
-)
+        ${link_libraries})
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)

@@ -36,6 +36,7 @@ function (yup_standalone_app)
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
     _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 17)
+    _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_SOURCE_DIR}/cmake/resources/app-icon.png")
 
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
@@ -54,12 +55,11 @@ function (yup_standalone_app)
     _yup_make_short_version ("${target_version}" target_version_short)
 
     # ==== Output status
-    _yup_message (STATUS "Configuring standalone application ${target_name} ${target_version}")
+    _yup_message (STATUS "${target_name} - Configuring standalone application")
 
     # ==== Setup Android platform, build gradle stage
     if (YUP_TARGET_ANDROID)
-        _yup_fetch_sdl2()
-
+        _yup_message (STATUS "${target_name} - Creating java gradle project")
         _yup_prepare_gradle_android(
             TARGET_NAME ${target_name}
             TARGET_ICON ${target_icon}
@@ -67,6 +67,8 @@ function (yup_standalone_app)
             APPLICATION_NAMESPACE ${target_app_namespace}
             APPLICATION_VERSION ${target_version})
 
+        _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
+        _yup_fetch_sdl2()
         _yup_copy_sdl2_activity_android()
 
         return()
@@ -74,7 +76,7 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
-        _yup_message (STATUS "Fetching SDL2 library")
+        _yup_message (STATUS "${target_name} - Fetching SDL2 library")
         _yup_fetch_sdl2()
         list (APPEND additional_libraries sdl2::sdl2)
     endif()
@@ -109,8 +111,8 @@ function (yup_standalone_app)
             _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist")
             _yup_valid_identifier_string ("${target_app_namespace}" target_app_namespace)
 
-            _yup_set_default (YUP_ARG_TARGET_ICON "${CMAKE_SOURCE_DIR}/cmake/resources/app-icon.png")
-            _yup_convert_png_to_icns ("${YUP_ARG_TARGET_ICON}" "${CMAKE_CURRENT_BINARY_DIR}/icons" target_iconset)
+            _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")
+            _yup_convert_png_to_icns ("${target_icon}" "${CMAKE_CURRENT_BINARY_DIR}/icons" target_iconset)
             get_filename_component (target_iconset_name "${target_iconset}" NAME)
             target_sources (${target_name} PRIVATE ${target_iconset})
             list (APPEND target_resources "${target_iconset}")

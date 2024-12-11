@@ -66,10 +66,25 @@ function (_yup_prepare_gradle_android)
 
     # Copy icons
     if (YUP_ANDROID_TARGET_ICON)
-        foreach (mipmap_directory mimpap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi)
-            file (MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/res/${mipmap_directory})
-            file (COPY ${YUP_ANDROID_TARGET_ICON} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/res/${mipmap_directory}/ic_launcher.png)
-        endforeach()
+        set (base_icon_path "${CMAKE_CURRENT_BINARY_DIR}/app/src/main/res")
+
+        find_program (sips_program sips)
+        if (sips_program)
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-ldpi RESULT result)
+            _yup_execute_process_or_fail (${sips_program} -z 36 36   "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-ldpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-mdpi RESULT result)
+            _yup_execute_process_or_fail (${sips_program} -z 48 48   "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-mdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-hdpi RESULT result)
+            _yup_execute_process_or_fail (${sips_program} -z 72 72   "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-hdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-xhdpi RESULT result)
+            _yup_execute_process_or_fail (${sips_program} -z 96 96   "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-xhdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-xxhdpi RESULT result)
+            _yup_execute_process_or_fail (${sips_program} -z 144 144 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-xxhdpi/ic_launcher.png")
+            file (MAKE_DIRECTORY ${base_icon_path}/mipmap-xxxhdpi RESULT result)
+            _yup_execute_process_or_fail (${sips_program} -z 192 192 "${YUP_ANDROID_TARGET_ICON}" --out "${base_icon_path}/mipmap-xxxhdpi/ic_launcher.png")
+        else()
+            configure_file (${YUP_ANDROID_TARGET_ICON} ${base_icon_path}/mipmap-xxxhdpi/ic_launcher.png COPYONLY)
+        endif()
     endif()
 
 endfunction()
@@ -77,8 +92,6 @@ endfunction()
 #==============================================================================
 
 function (_yup_copy_sdl2_activity_android)
-    _yup_message (STATUS "Copying SDL2 activity to Android project")
-
     set (JAVA_SOURCE_RELATIVE_FOLDER app/src/main/java)
     set (SOURCE_FOLDER ${CMAKE_BINARY_DIR}/externals/SDL2/android-project/${JAVA_SOURCE_RELATIVE_FOLDER}/org)
     file (COPY ${SOURCE_FOLDER} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/${JAVA_SOURCE_RELATIVE_FOLDER})

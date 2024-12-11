@@ -14,8 +14,10 @@ public class YupActivity extends SDLActivity
      * @return names of shared libraries to be loaded (e.g. "SDL2", "main").
      */
     @Override
-    protected String[] getLibraries() {
-        return new String[]{
+    protected String[] getLibraries()
+    {
+        return new String[]
+        {
             "@YUP_ANDROID_TARGET_NAME@"
         };
     }
