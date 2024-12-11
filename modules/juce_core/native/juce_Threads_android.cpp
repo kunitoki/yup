@@ -79,6 +79,7 @@ static void JNICALL juce_JavainitialiseJUCE (JNIEnv* env, jobject /*jclass*/, jo
     Thread::initialiseJUCE (env, context);
 }
 
+/*
 extern "C" jint JNIEXPORT JNI_OnLoad (JavaVM* vm, void*)
 {
     // Huh? JNI_OnLoad was called two times!
@@ -108,6 +109,7 @@ extern "C" jint JNIEXPORT JNI_OnLoad (JavaVM* vm, void*)
 
     return JNI_VERSION_1_2;
 }
+*/
 
 //==============================================================================
 class JuceActivityWatcher final : public ActivityLifecycleCallbacks

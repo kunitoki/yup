@@ -77,7 +77,7 @@ function (yup_standalone_app)
     # ==== Prepare executable
     set (executable_options "")
     if (NOT "${target_console}")
-        if ("${yup_platform}" MATCHES "^(win32)$")
+        if ("${yup_platform}" MATCHES "^(windows)$")
             set (executable_options "WIN32")
         elseif ("${yup_platform}" MATCHES "^(osx)$")
             set (executable_options "MACOSX_BUNDLE")

@@ -70,12 +70,12 @@ function (_yup_module_collect_sources folder output_variable)
     foreach (extension ${source_extensions})
         file (GLOB found_source_files "${base_path}*${extension}")
 
-        if (NOT "${yup_platform}" MATCHES "^(win32|uwp)$")
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
+        if (NOT "${yup_platform}" MATCHES "^(windows|uwp)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_microsoft${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(win32)$")
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_win32${extension}")
+        if (NOT "${yup_platform}" MATCHES "^(windows)$")
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
         endif()
 
         if (NOT "${yup_platform}" MATCHES "^(uwp)$")
@@ -115,9 +115,7 @@ function (_yup_module_collect_sources folder output_variable)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
 
-        foreach (source ${found_source_files})
-            list (APPEND all_module_sources ${source})
-        endforeach()
+        list (APPEND all_module_sources ${found_source_files})
     endforeach()
 
     set (module_sources "")
@@ -173,7 +171,7 @@ function (_yup_module_setup_target module_name
                                    module_frameworks
                                    module_dependencies
                                    module_arc_enabled)
-    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
+    if ("${yup_platform}" MATCHES "^(windows|uwp)$")
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
     endif()
 
@@ -221,7 +219,7 @@ endfunction()
 #==============================================================================
 
 function (_yup_module_setup_plugin_client_clap target_name plugin_client_target folder_name)
-    if (NOT "${yup_platform}" MATCHES "^(osx|linux|win32)$")
+    if (NOT "${yup_platform}" MATCHES "^(osx|linux|windows)$")
         return()
     endif()
 
@@ -390,7 +388,7 @@ function (yup_add_module module_path)
         _yup_resolve_variable_paths ("${module_androidSearchpaths}" module_androidSearchpaths)
         list (APPEND module_searchpaths ${module_androidSearchpaths})
 
-    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
+    elseif ("${yup_platform}" MATCHES "^(windows|uwp)$")
         list (APPEND module_dependencies ${module_windowsDeps})
         list (APPEND module_defines ${module_windowsDefines})
         list (APPEND module_options ${module_windowsOptions})
