@@ -46,7 +46,7 @@ namespace juce
 */
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-FIELD (activityInfo, "activityInfo", "Landroid/content/pm/ActivityInfo;")
+    FIELD (activityInfo, "activityInfo", "Landroid/content/pm/ActivityInfo;")
 
 DECLARE_JNI_CLASS (AndroidResolveInfo, "android/content/pm/ResolveInfo")
 #undef JNI_CLASS_MEMBERS
