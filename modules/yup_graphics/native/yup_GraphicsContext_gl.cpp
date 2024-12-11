@@ -99,7 +99,7 @@ public:
         printf ("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n", GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 #endif
 
-#if DEBUG && !RIVE_ANDROID
+#if DEBUG && ! RIVE_ANDROID
         int n;
         glGetIntegerv (GL_NUM_EXTENSIONS, &n);
         for (size_t i = 0; i < n; ++i)
