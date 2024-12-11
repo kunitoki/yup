@@ -45,10 +45,6 @@
 #if JUCE_MAC || JUCE_IOS
 
 #if JUCE_IOS
-#if JUCE_MODULE_AVAILABLE_juce_opengl
-#define GLES_SILENCE_DEPRECATION 1
-#endif
-
 #define Component CarbonDummyCompName
 #import <Foundation/Foundation.h>
 #undef Component
@@ -57,14 +53,12 @@
 #import <CoreData/CoreData.h>
 #import <MobileCoreServices/MobileCoreServices.h>
 #include <sys/fcntl.h>
-#else
-#if JUCE_MODULE_AVAILABLE_juce_opengl
-#define GL_SILENCE_DEPRECATION 1
-#endif
 
+#else
 #import <Cocoa/Cocoa.h>
 #import <CoreAudio/HostTime.h>
 #include <sys/dir.h>
+
 #endif
 
 #include <sys/socket.h>
