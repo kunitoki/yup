@@ -189,8 +189,8 @@
     params: list of params (bracketed)
  */
 #define JUCE_LOAD_WINAPI_FUNCTION(dll, functionName, localFunctionName, returnType, params) \
-typedef returnType (WINAPI* type##localFunctionName) params;                                \
-type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFunction (#functionName);
+    typedef returnType (WINAPI* type##localFunctionName) params;                            \
+    type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFunction (#functionName);
 
 //==============================================================================
 #elif JUCE_LINUX

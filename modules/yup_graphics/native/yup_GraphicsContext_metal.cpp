@@ -65,7 +65,7 @@ public:
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-#if !TARGET_OS_IOS
+#if ! TARGET_OS_IOS
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
@@ -78,7 +78,7 @@ public:
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
         m_swapchain.maximumDrawableCount = 2;
-#if !TARGET_OS_IOS
+#if ! TARGET_OS_IOS
         m_swapchain.displaySyncEnabled = YES;
 #endif
 

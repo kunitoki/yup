@@ -26,23 +26,23 @@
 
 @implementation YupApplicationDelegate
 
-- (id) init
+- (id)init
 {
     self = [super init];
     return self;
 }
 
-- (void) dealloc
+- (void)dealloc
 {
     [super dealloc];
 }
 
-- (void) applicationDidFinishLaunching: (UIApplication* __unused) application
+- (void)applicationDidFinishLaunching:(UIApplication* __unused)application
 {
     if (auto* app = juce::JUCEApplicationBase::createInstance())
     {
-        if (! app->initialiseApp())
-            exit (app->shutdownApp());
+        if (!app->initialiseApp())
+            exit(app->shutdownApp());
     }
     else
     {
@@ -50,41 +50,42 @@
     }
 }
 
-- (void) applicationWillTerminate: (UIApplication* __unused) application
+- (void)applicationWillTerminate:(UIApplication* __unused)application
 {
     juce::JUCEApplicationBase::appWillTerminateByForce();
 }
 
-- (void) applicationDidEnterBackground: (UIApplication* __unused) application
+- (void)applicationDidEnterBackground:(UIApplication* __unused)application
 {
     if (auto* app = juce::JUCEApplicationBase::getInstance())
         app->suspended();
 }
 
-- (void) applicationWillEnterForeground: (UIApplication* __unused) application
+- (void)applicationWillEnterForeground:(UIApplication* __unused)application
 {
     if (auto* app = juce::JUCEApplicationBase::getInstance())
         app->resumed();
 }
 
-- (void) applicationDidBecomeActive: (UIApplication* __unused) application
+- (void)applicationDidBecomeActive:(UIApplication* __unused)application
 {
 }
 
-- (void) applicationWillResignActive: (UIApplication* __unused) application
+- (void)applicationWillResignActive:(UIApplication* __unused)application
 {
 }
 
 @end
 
-namespace juce {
-
-int juce_iOSMain (int argc, const char* argv[], void* customDelegatePtr);
-int juce_iOSMain (int argc, const char* argv[], void* customDelegatePtr)
+namespace juce
 {
-    Class delegateClass = (customDelegatePtr != nullptr ? reinterpret_cast<Class> (customDelegatePtr) : [YupApplicationDelegate class]);
 
-    return UIApplicationMain (argc, const_cast<char**> (argv), nil, NSStringFromClass (delegateClass));
+int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
+int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
+{
+    Class delegateClass = (customDelegatePtr != nullptr ? reinterpret_cast<Class>(customDelegatePtr) : [YupApplicationDelegate class]);
+
+    return UIApplicationMain(argc, const_cast<char**>(argv), nil, NSStringFromClass(delegateClass));
 }
 
 } // namespace juce
