@@ -25,7 +25,7 @@ set (target_version "1.0.0")
 
 project (${target_name} VERSION ${target_version})
 
-set (rive_file "data/seasynth.riv")
+set (rive_file "data/alien.riv")
 
 # ==== Prepare Android build
 set (link_libraries "")

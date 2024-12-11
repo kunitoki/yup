@@ -37,6 +37,8 @@ class InternalMessageQueue
 public:
     InternalMessageQueue()
     {
+        emscripten_set_main_loop (dispatchLoopInternal, 0, 0);
+
         createDirIfNotExists (File::userHomeDirectory);
         createDirIfNotExists (File::userDocumentsDirectory);
         createDirIfNotExists (File::userMusicDirectory);
@@ -76,6 +78,8 @@ public:
     //==============================================================================
     void runDispatchLoop()
     {
+        emscripten_cancel_main_loop();
+
         constexpr int framesPerSeconds = 0;
         constexpr int simulateInfiniteLoop = 1;
         emscripten_set_main_loop (dispatchLoopInternal, framesPerSeconds, simulateInfiniteLoop);

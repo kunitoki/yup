@@ -24,7 +24,7 @@ function (yup_standalone_app)
     set (options "")
     set (one_value_args
         # Globals
-        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_ICON
+        TARGET_NAME TARGET_VERSION TARGET_CONSOLE TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_ICON TARGET_CXX_STANDARD
         # Emscripten
         INITIAL_MEMORY PTHREAD_POOL_SIZE CUSTOM_PLIST CUSTOM_SHELL)
     set (multi_value_args
@@ -35,12 +35,15 @@ function (yup_standalone_app)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
+    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 17)
+
     set (target_name "${YUP_ARG_TARGET_NAME}")
     set (target_version "${YUP_ARG_TARGET_VERSION}")
     set (target_console "${YUP_ARG_TARGET_CONSOLE}")
     set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
     set (target_resources "")
+    set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (additional_definitions "")
     set (additional_options "")
     set (additional_libraries "")
@@ -60,7 +63,7 @@ function (yup_standalone_app)
     endif()
 
     # ==== Find dependencies
-    if (NOT "${yup_platform}" MATCHES "^(emscripten|ios)$")
+    if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
         _yup_fetch_sdl2()
         list (APPEND additional_libraries SDL2-static)
     endif()
@@ -87,7 +90,7 @@ function (yup_standalone_app)
         add_executable (${target_name} ${executable_options})
     endif()
 
-    target_compile_features (${target_name} PRIVATE cxx_std_17)
+    target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
 
     # ==== Per platform configuration
     if ("${yup_platform}" MATCHES "^(osx|ios)$")
@@ -129,8 +132,8 @@ function (yup_standalone_app)
         if (NOT "${target_console}")
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
 
-            list (APPEND additional_definitions RIVE_WEBGL=1)
-            list (APPEND additional_link_options -sUSE_GLFW=3 -sMAX_WEBGL_VERSION=2)
+            list (APPEND additional_options -sUSE_SDL=2)
+            list (APPEND additional_link_options -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2)
         endif()
 
         _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")

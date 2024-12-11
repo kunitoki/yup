@@ -344,21 +344,30 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
 
     if (desiredApi == GraphicsContext::OpenGL)
     {
-#if defined(ANGLE) || defined(JUCE_ANDROID)
-        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles");
+#if defined(ANGLE) || defined(JUCE_ANDROID) || defined(JUCE_EMSCRIPTEN)
+        SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles2");
 
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 3);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, 0);
-        SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
+        SDL_GL_SetAttribute (SDL_GL_RED_SIZE, 8);
+        SDL_GL_SetAttribute (SDL_GL_GREEN_SIZE, 8);
+        SDL_GL_SetAttribute (SDL_GL_BLUE_SIZE, 8);
+        SDL_GL_SetAttribute (SDL_GL_ALPHA_SIZE, 8);
+        SDL_GL_SetAttribute (SDL_GL_DEPTH_SIZE, 24);
+        SDL_GL_SetAttribute (SDL_GL_STENCIL_SIZE, 8);
+        SDL_GL_SetAttribute (SDL_GL_DOUBLEBUFFER, 1);
+
+        return SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
 #else
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengl");
 
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, YUP_RIVE_OPENGL_MAJOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MINOR_VERSION, YUP_RIVE_OPENGL_MINOR);
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-#endif
 
         return SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
+#endif
     }
 
     return SDL_WINDOW_ALLOW_HIGHDPI;
@@ -571,7 +580,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (window == nullptr)
         return; // TODO - raise something ?
 
-    windowRenderer = SDL_CreateRenderer (window, -1, SDL_RENDERER_PRESENTVSYNC);
+    windowRenderer = SDL_CreateRenderer (window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
 
     SDL_SetWindowData (window, "self", this);
 
@@ -579,13 +588,6 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         setNativeParent (nullptr, parent, window);
 
     // Create the rendering context
-    if (currentGraphicsApi == GraphicsContext::OpenGL)
-    {
-        windowContext = SDL_GL_CreateContext (window);
-
-        SDL_GL_MakeCurrent (window, windowContext);
-    }
-
     context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
     if (context == nullptr)
         return; // TODO - raise something ?
@@ -684,8 +686,8 @@ Size<int> SDL2ComponentNative::getContentSize() const
 {
     int width = 0, height = 0;
 
-    if (window != nullptr)
-        SDL_GL_GetDrawableSize (window, &width, &height); // TODO - context size
+    if (windowRenderer != nullptr)
+        SDL_GetRendererOutputSize (windowRenderer, &width, &height);
 
     return { width, height };
 }
@@ -723,7 +725,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
 
 #if JUCE_EMSCRIPTEN && RIVE_WEBGL
     const double devicePixelRatio = emscripten_get_device_pixel_ratio();
-    glfwSetWindowSize (window,
+    SDL_SetWindowSize (window,
                        static_cast<int> (newBounds.getWidth() * devicePixelRatio),
                        static_cast<int> (newBounds.getHeight() * devicePixelRatio));
 
@@ -1409,7 +1411,7 @@ int SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEWHEEL:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->wheel.mouseX), static_cast<float> (event->wheel.mouseY) };
+            auto cursorPosition = getCursorPosition();
 
             handleMouseWheel (cursorPosition, { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) });
 
@@ -1435,7 +1437,12 @@ int SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             break;
         }
+
+        default:
+            break;
     }
+
+    return 0;
 }
 
 //==============================================================================
@@ -1486,6 +1493,7 @@ void initialiseYup_Windowing()
     if (SDL_Init (SDL_INIT_VIDEO) != 0)
     {
         DBG ("Error initialising SDL");
+        return; // quit !
     }
 
     // Setup monitor callback
