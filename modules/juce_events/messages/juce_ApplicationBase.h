@@ -292,20 +292,10 @@ public:
     bool isInitialising() const noexcept { return stillInitialising; }
 
     //==============================================================================
-#if JUCE_ANDROID
-    struct android_app* getNativeApplication() const noexcept { return nativeApp; }
-#endif
-
-    //==============================================================================
 #ifndef DOXYGEN
     // The following methods are for internal use only...
     static int main();
-
-#if JUCE_ANDROID
-    static void main (struct android_app* state);
-#else
     static int main (int argc, const char* argv[]);
-#endif
 
     static void appWillTerminateByForce();
     using CreateInstanceFunction = JUCEApplicationBase* (*) ();
@@ -329,10 +319,6 @@ private:
 
     struct MultipleInstanceHandler;
     std::unique_ptr<MultipleInstanceHandler> multipleInstanceHandler;
-
-#if JUCE_ANDROID
-    struct android_app* nativeApp = nullptr;
-#endif
 
     JUCE_DECLARE_NON_COPYABLE (JUCEApplicationBase)
 };

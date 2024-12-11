@@ -13,15 +13,10 @@
 
     <application
         android:hasCode="true"
-        android:label="@YUP_ANDROID_TARGET_NAME@"
-        android:extractNativeLibs="true"
-        android:isGame="true">
+        android:label="@YUP_ANDROID_TARGET_NAME@">
         <activity
-            android:name="android.app.NativeActivity"
+            android:name="org.yup.YupActivity"
             android:exported="true">
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="@YUP_ANDROID_TARGET_NAME@" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>

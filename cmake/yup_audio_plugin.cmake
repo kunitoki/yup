@@ -38,7 +38,7 @@ function (yup_audio_plugin)
 
     if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
         _yup_fetch_sdl2()
-        list (APPEND additional_libraries SDL2-static)
+        list (APPEND additional_libraries sdl2::sdl2)
 
         # ==== Fetch plugins SDKS
         if (YUP_ARG_PLUGIN_CREATE_CLAP)

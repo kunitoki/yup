@@ -23,7 +23,7 @@ function (_yup_prepare_gradle_android)
     set (options "")
     set (one_value_args
         MIN_SDK_VERSION COMPILE_SDK_VERSION TARGET_SDK_VERSION
-        TARGET_NAME ABI TOOLCHAIN PLATFORM STL CPP_VERSION CMAKE_VERSION
+        TARGET_NAME TARGET_ICON ABI TOOLCHAIN PLATFORM STL CPP_VERSION CMAKE_VERSION
         APPLICATION_ID APPLICATION_NAMESPACE APPLICATION_CMAKELISTS_PATH APPLICATION_VERSION)
     set (multi_value_args "")
 
@@ -55,6 +55,7 @@ function (_yup_prepare_gradle_android)
     configure_file (${BASE_FILES_PATH}/settings.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/settings.gradle.kts)
     configure_file (${BASE_FILES_PATH}/app/build.gradle.kts.in ${CMAKE_CURRENT_BINARY_DIR}/app/build.gradle.kts)
     configure_file (${BASE_FILES_PATH}/app/proguard-rules.pro.in ${CMAKE_CURRENT_BINARY_DIR}/app/proguard-rules.pro)
+    configure_file (${BASE_FILES_PATH}/app/src/main/java/org/yup/YupActivity.java.in ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/java/org/yup/YupActivity.java)
     configure_file (${BASE_FILES_PATH}/app/src/main/AndroidManifest.xml.in ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/AndroidManifest.xml)
     configure_file (${BASE_FILES_PATH}/gradle/libs.versions.toml.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/libs.versions.toml COPYONLY)
     configure_file (${BASE_FILES_PATH}/gradle/wrapper/gradle-wrapper.jar.in ${CMAKE_CURRENT_BINARY_DIR}/gradle/wrapper/gradle-wrapper.jar COPYONLY)
@@ -62,6 +63,23 @@ function (_yup_prepare_gradle_android)
     configure_file (${BASE_FILES_PATH}/gradlew.in ${CMAKE_CURRENT_BINARY_DIR}/gradlew COPYONLY)
     configure_file (${BASE_FILES_PATH}/gradlew.bat.in ${CMAKE_CURRENT_BINARY_DIR}/gradlew.bat COPYONLY)
     configure_file (${BASE_FILES_PATH}/gradle.properties.in ${CMAKE_CURRENT_BINARY_DIR}/gradle.properties COPYONLY)
+
+    # Copy icons
+    if (YUP_ANDROID_TARGET_ICON)
+        foreach (mipmap_directory mimpap-hdpi mipmap-mdpi mipmap-xhdpi mipmap-xxhdpi mipmap-xxxhdpi)
+            file (MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/res/${mipmap_directory})
+            file (COPY ${YUP_ANDROID_TARGET_ICON} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/app/src/main/res/${mipmap_directory}/ic_launcher.png)
+        endforeach()
+    endif()
+
 endfunction()
 
 #==============================================================================
+
+function (_yup_copy_sdl2_activity_android)
+    _yup_message (STATUS "Copying SDL2 activity to Android project")
+
+    set (JAVA_SOURCE_RELATIVE_FOLDER app/src/main/java)
+    set (SOURCE_FOLDER ${CMAKE_BINARY_DIR}/externals/SDL2/android-project/${JAVA_SOURCE_RELATIVE_FOLDER}/org)
+    file (COPY ${SOURCE_FOLDER} DESTINATION ${CMAKE_CURRENT_BINARY_DIR}/${JAVA_SOURCE_RELATIVE_FOLDER})
+endfunction()

@@ -229,7 +229,6 @@ StringArray JUCEApplicationBase::getCommandLineParameterArray()
     return result;
 }
 
-#if ! JUCE_ANDROID
 int JUCEApplicationBase::main (int argc, const char* argv[])
 {
     JUCE_AUTORELEASEPOOL
@@ -249,26 +248,17 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
 #endif
     }
 }
-#endif
 
 #endif
 
 //==============================================================================
-#if JUCE_ANDROID
-void JUCEApplicationBase::main (struct android_app* app)
-#else
 int JUCEApplicationBase::main()
-#endif
 {
     ScopedJuceInitialiser_GUI libraryInitialiser;
     jassert (createInstance != nullptr);
 
     const std::unique_ptr<JUCEApplicationBase> app (createInstance());
     jassert (app != nullptr);
-
-#if JUCE_ANDROID
-    app->nativeApp = app;
-#endif
 
     if (! app->initialiseApp())
         return app->shutdownApp();

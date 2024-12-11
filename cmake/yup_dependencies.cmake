@@ -20,9 +20,14 @@
 #==============================================================================
 
 function (_yup_fetch_sdl2)
-    FetchContent_Declare (sdl
+    if (TARGET sdl2::sdl2)
+        return()
+    endif()
+
+    FetchContent_Declare (SDL2
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
         GIT_TAG release-2.30.10
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/SDL2
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
@@ -31,19 +36,26 @@ function (_yup_fetch_sdl2)
     set (SDL_STATIC ON)
     set (SDL_STATIC_PIC ON)
 
-    FetchContent_MakeAvailable (sdl)
+    FetchContent_MakeAvailable (SDL2)
 
     set_target_properties (SDL2-static PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")
+
+    add_library (sdl2::sdl2 ALIAS SDL2-static)
 endfunction()
 
 #==============================================================================
 
 function (_yup_fetch_perfetto)
+    if (TARGET perfetto::perfetto)
+        return()
+    endif()
+
     FetchContent_Declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
         GIT_TAG v42.0
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/Perfetto
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 

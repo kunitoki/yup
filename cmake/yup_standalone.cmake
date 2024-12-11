@@ -42,6 +42,7 @@ function (yup_standalone_app)
     set (target_console "${YUP_ARG_TARGET_CONSOLE}")
     set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
     set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
+    set (target_icon "${YUP_ARG_TARGET_ICON}")
     set (target_resources "")
     set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (additional_definitions "")
@@ -57,11 +58,17 @@ function (yup_standalone_app)
 
     # ==== Setup Android platform, build gradle stage
     if (YUP_TARGET_ANDROID)
+        _yup_fetch_sdl2()
+
         _yup_prepare_gradle_android(
             TARGET_NAME ${target_name}
+            TARGET_ICON ${target_icon}
             APPLICATION_ID ${target_app_id}
             APPLICATION_NAMESPACE ${target_app_namespace}
             APPLICATION_VERSION ${target_version})
+
+        _yup_copy_sdl2_activity_android()
+
         return()
     endif()
 
@@ -69,7 +76,7 @@ function (yup_standalone_app)
     if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
         _yup_message (STATUS "Fetching SDL2 library")
         _yup_fetch_sdl2()
-        list (APPEND additional_libraries SDL2-static)
+        list (APPEND additional_libraries sdl2::sdl2)
     endif()
 
     # ==== Enable profiling
