@@ -51,8 +51,13 @@
 
 #if YUP_RIVE_USE_METAL
 #import <Metal/Metal.h>
-#import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
+
+#if JUCE_MAC
+#import <Cocoa/Cocoa.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
 
 #include "native/yup_GraphicsContext_metal.cpp"
 #endif

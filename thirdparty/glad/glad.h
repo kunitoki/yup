@@ -32,7 +32,6 @@
     website:          https://glad.dav1d.de/
     license:          MIT
 
-    dependencies:
     searchpaths:      include
 
   END_JUCE_MODULE_DECLARATION

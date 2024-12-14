@@ -41,11 +41,10 @@ namespace juce
 {
 
 //==============================================================================
-/* An internal message pump class used in OSX and iOS. */
-class MessageQueue
+class InternalMessageQueue
 {
 public:
-    MessageQueue()
+    InternalMessageQueue()
     {
 #if JUCE_IOS
         runLoop = CFRunLoopGetCurrent();
@@ -61,10 +60,15 @@ public:
         CFRunLoopAddSource (runLoop, runLoopSource.get(), kCFRunLoopCommonModes);
     }
 
-    ~MessageQueue() noexcept
+    ~InternalMessageQueue() noexcept
     {
         CFRunLoopRemoveSource (runLoop, runLoopSource.get(), kCFRunLoopCommonModes);
         CFRunLoopSourceInvalidate (runLoopSource.get());
+    }
+
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
     }
 
     void post (MessageManager::MessageBase* const message)
@@ -77,6 +81,7 @@ private:
     ReferenceCountedArray<MessageManager::MessageBase, CriticalSection> messages;
     CFRunLoopRef runLoop;
     CFUniquePtr<CFRunLoopSourceRef> runLoopSource;
+    std::function<void()> loopCallback;
 
     void wakeUp() noexcept
     {
@@ -105,6 +110,9 @@ private:
 
     void runLoopCallback() noexcept
     {
+        if (loopCallback)
+            loopCallback();
+
         for (int i = 4; --i >= 0;)
             if (! deliverNextMessage())
                 return;
@@ -114,7 +122,7 @@ private:
 
     static void runLoopSourceCallback (void* info) noexcept
     {
-        static_cast<MessageQueue*> (info)->runLoopCallback();
+        static_cast<InternalMessageQueue*> (info)->runLoopCallback();
     }
 };
 

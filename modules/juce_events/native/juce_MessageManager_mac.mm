@@ -316,7 +316,7 @@ struct AppDelegate
         return juceStringToNS("juce_" + String::toHexString(File::getSpecialLocation(File::currentExecutableFile).hashCode64()));
     }
 
-    MessageQueue messageQueue;
+    InternalMessageQueue messageQueue;
     id delegate;
 };
 
@@ -446,6 +446,12 @@ void MessageManager::broadcastMessage(const String& message)
     [[NSDistributedNotificationCenter defaultCenter] postNotificationName:AppDelegate::getBroadcastEventName()
                                                                    object:nil
                                                                  userInfo:info];
+}
+
+void MessageManager::registerEventLoopCallback(std::function<void()> loopCallbackToSet)
+{
+    jassert(appDelegate != nil);
+    appDelegate->messageQueue.registerEventLoopCallback(std::move(loopCallbackToSet));
 }
 
 //==============================================================================

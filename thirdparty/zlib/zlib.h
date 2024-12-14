@@ -32,8 +32,6 @@
     website:          https://www.zlib.net/
     license:          Public Domain
 
-    dependencies:
-
   END_JUCE_MODULE_DECLARATION
 
   ==============================================================================

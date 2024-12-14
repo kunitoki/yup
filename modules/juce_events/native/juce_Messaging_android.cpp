@@ -51,6 +51,12 @@ public:
     }
 
     //==============================================================================
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
+    }
+
+    //==============================================================================
     void postMessage (MessageManager::MessageBase* const msg) noexcept
     {
         const ScopedLock sl (lock);
@@ -65,7 +71,8 @@ public:
 
         for (;;)
         {
-            glfwPollEvents();
+            if (loopCallback)
+                loopCallback();
 
             {
                 const ScopedLock sl (lock);
@@ -79,7 +86,7 @@ public:
                 if (returnIfNoPendingMessages)
                     return false;
 
-                Thread::sleep(1); // TODO - Make this better somehow ?
+                Thread::sleep (1); // TODO - Make this better somehow ?
             }
             else
             {
@@ -102,6 +109,7 @@ public:
 private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> queue;
+    std::function<void()> loopCallback;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
@@ -119,10 +127,10 @@ void MessageManager::doPlatformSpecificShutdown()
 
 namespace detail
 {
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-    {
-        return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
-    }
+bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
+}
 } // namespace detail
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
@@ -135,6 +143,23 @@ bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* cons
 void MessageManager::broadcastMessage (const String&)
 {
 }
+
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
+}
+
+//==============================================================================
+/*
+extern "C" jint JNIEXPORT JNI_OnLoad2 (JavaVM* vm, void*);
+//extern "C" jint JNIEXPORT JNI_OnLoad (JavaVM *vm, void*);
+
+    //JNI_OnLoad (nativeApp->activity->vm, nullptr);
+    JNI_OnLoad2 (nativeApp->activity->vm, nullptr);
+
+    // JNIClassBase::initialiseAllClasses (nativeApp->activity->env, nativeApp->activity->clazz);
+    Thread::initialiseJUCE (nativeApp->activity->env, nativeApp->activity->clazz);
+*/
 
 //==============================================================================
 void juce_juceEventsAndroidStartApp()

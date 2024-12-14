@@ -58,6 +58,7 @@
   dependencies:       zlib
   osxFrameworks:      Cocoa Foundation IOKit Security
   iosFrameworks:      Foundation UIKit
+  iosSimFrameworks:   Foundation UIKit
   linuxLibs:          rt dl pthread
   androidLibs:        log android
   androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures

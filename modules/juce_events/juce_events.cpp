@@ -38,7 +38,7 @@
 */
 
 #ifdef JUCE_EVENTS_H_INCLUDED
-    /* When you add this cpp file to your project, you mustn't include it in a file where you've
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
@@ -76,8 +76,9 @@
 #include <mutex>
 
 #elif JUCE_ANDROID
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
+#include <jni.h>
+
+#include <SDL2/SDL_system.h>
 
 #endif
 
@@ -101,7 +102,7 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-#include "native/juce_MessageQueue_mac.h"
+#include "native/juce_MessageQueue_apple.h"
 #if JUCE_MAC
 #include "native/juce_MessageManager_mac.mm"
 #else

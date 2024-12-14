@@ -23,6 +23,8 @@
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/metal/render_context_metal_impl.h"
 
+#include <TargetConditionals.h>
+
 namespace yup
 {
 
@@ -45,8 +47,14 @@ public:
 
     float dpiScale (void* window) const override
     {
+#if TARGET_OS_IOS
+        UIWindow* uiWindow = (__bridge UIWindow*) window;
+        UIScreen* screen = [uiWindow screen] ?: [UIScreen mainScreen];
+        return screen.nativeScale;
+#else
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1.0f;
+#endif
     }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
@@ -57,9 +65,11 @@ public:
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
+#if ! TARGET_OS_IOS
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
+#endif
 
         m_swapchain = [CAMetalLayer layer];
         m_swapchain.device = m_gpu;
@@ -67,9 +77,18 @@ public:
         m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
-        m_swapchain.displaySyncEnabled = YES;
         m_swapchain.maximumDrawableCount = 2;
+#if ! TARGET_OS_IOS
+        m_swapchain.displaySyncEnabled = YES;
+#endif
+
+#if TARGET_OS_IOS
+        UIView* view = (__bridge UIView*) window;
+        m_swapchain.frame = view.bounds;
+        [view.layer addSublayer:m_swapchain];
+#else
         view.layer = m_swapchain;
+#endif
 
         auto plsContextImpl = m_plsContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
         m_renderTarget = plsContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);

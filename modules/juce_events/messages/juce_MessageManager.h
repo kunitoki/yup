@@ -91,8 +91,7 @@ public:
     */
     void stopDispatchLoop();
 
-    /** Returns true if the stopDispatchLoop() method has been called.
-    */
+    /** Returns true if the stopDispatchLoop() method has been called. */
     bool hasStopMessageBeenSent() const noexcept { return quitMessagePosted.get() != 0; }
 
 #if JUCE_MODAL_LOOPS_PERMITTED
@@ -103,6 +102,10 @@ public:
     */
     bool runDispatchLoopUntil (int millisecondsToRunFor);
 #endif
+
+    //==============================================================================
+    /** Register an event loop callback that will be processed in the event loop. */
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet);
 
     //==============================================================================
     /** Asynchronously invokes a function or C++11 lambda on the message thread.
@@ -488,7 +491,7 @@ private:
     created, which could happen if you accidentally invoke it during a static constructor.
 */
 #define JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED \
-jassert (juce::MessageManager::existsAndIsLockedByCurrentThread());
+    jassert (juce::MessageManager::existsAndIsLockedByCurrentThread());
 
 /** This macro is used to catch unsafe use of functions which expect to only be called
     on the message thread.
@@ -496,12 +499,12 @@ jassert (juce::MessageManager::existsAndIsLockedByCurrentThread());
     created, which could happen if you accidentally invoke it during a static constructor.
 */
 #define JUCE_ASSERT_MESSAGE_THREAD \
-jassert (juce::MessageManager::existsAndIsCurrentThread());
+    jassert (juce::MessageManager::existsAndIsCurrentThread());
 
 /** This macro is used to catch unsafe use of functions which expect to not be called
     outside the lifetime of the MessageManager.
 */
 #define JUCE_ASSERT_MESSAGE_MANAGER_EXISTS \
-jassert (juce::MessageManager::getInstanceWithoutCreating() != nullptr);
+    jassert (juce::MessageManager::getInstanceWithoutCreating() != nullptr);
 
 } // namespace juce

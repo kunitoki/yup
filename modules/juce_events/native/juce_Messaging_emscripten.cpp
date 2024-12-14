@@ -37,6 +37,8 @@ class InternalMessageQueue
 public:
     InternalMessageQueue()
     {
+        emscripten_set_main_loop (dispatchLoopInternal, 0, 0);
+
         createDirIfNotExists (File::userHomeDirectory);
         createDirIfNotExists (File::userDocumentsDirectory);
         createDirIfNotExists (File::userMusicDirectory);
@@ -56,10 +58,16 @@ public:
     }
 
     //==============================================================================
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+    {
+        loopCallback = std::move (loopCallbackToSet);
+    }
+
+    //==============================================================================
     bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
-           const ScopedLock sl (lock);
+            const ScopedLock sl (lock);
 
             eventQueue.add (msg);
         }
@@ -70,6 +78,8 @@ public:
     //==============================================================================
     void runDispatchLoop()
     {
+        emscripten_cancel_main_loop();
+
         constexpr int framesPerSeconds = 0;
         constexpr int simulateInfiniteLoop = 1;
         emscripten_set_main_loop (dispatchLoopInternal, framesPerSeconds, simulateInfiniteLoop);
@@ -93,6 +103,9 @@ private:
     {
         Timer::callPendingTimersSynchronously();
 
+        if (loopCallback)
+            loopCallback();
+
         ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
         {
@@ -111,6 +124,7 @@ private:
 
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
+    std::function<void()> loopCallback;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
@@ -127,13 +141,13 @@ void MessageManager::doPlatformSpecificShutdown()
 
 namespace detail
 {
-    bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
-    {
-        Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
-        exit (1);
+bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
+{
+    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
+    exit (1);
 
-        return true;
-    }
+    return true;
+}
 } // namespace detail
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
@@ -157,4 +171,8 @@ void MessageManager::stopDispatchLoop()
     quitMessagePosted = true;
 }
 
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
+}
 } // namespace juce

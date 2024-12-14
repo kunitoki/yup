@@ -103,7 +103,7 @@ void JUCEApplicationBase::sendUnhandledException (const std::exception* const e,
 }
 
 //==============================================================================
-#if ! (JUCE_IOS || JUCE_ANDROID)
+#if ! (JUCE_IOS || JUCE_ANDROID || JUCE_EMSCRIPTEN)
 #define JUCE_HANDLE_MULTIPLE_INSTANCES 1
 #endif
 
@@ -188,16 +188,12 @@ StringArray JUCE_CALLTYPE JUCEApplicationBase::getCommandLineParameterArray()
 
 #else
 
-#if JUCE_IOS && JUCE_MODULE_AVAILABLE_juce_gui_basics
+#if JUCE_IOS && JUCE_MODULE_AVAILABLE_yup_gui
 extern int juce_iOSMain (int argc, const char* argv[], void* classPtr);
 #endif
 
 #if JUCE_MAC
 extern void initialiseNSApplication();
-#endif
-
-#if (JUCE_LINUX || JUCE_BSD) && JUCE_MODULE_AVAILABLE_juce_gui_extra && (! defined(JUCE_WEB_BROWSER) || JUCE_WEB_BROWSER)
-extern "C" int juce_gtkWebkitMain (int argc, const char* const* argv);
 #endif
 
 #if JUCE_WINDOWS || JUCE_ANDROID
@@ -244,12 +240,7 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
         initialiseNSApplication();
 #endif
 
-#if (JUCE_LINUX || JUCE_BSD) && JUCE_MODULE_AVAILABLE_juce_gui_extra && (! defined(JUCE_WEB_BROWSER) || JUCE_WEB_BROWSER)
-        if (argc >= 2 && String (argv[1]) == "--juce-gtkwebkitfork-child")
-            return juce_gtkWebkitMain (argc, argv);
-#endif
-
-#if JUCE_IOS && JUCE_MODULE_AVAILABLE_juce_gui_basics
+#if JUCE_IOS && JUCE_MODULE_AVAILABLE_yup_gui
         return juce_iOSMain (argc, argv, iOSCustomDelegate);
 #else
 
@@ -261,8 +252,26 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
 #endif
 
 //==============================================================================
+#if JUCE_ANDROID
+extern "C" jint JNIEXPORT juce_JNI_OnLoad (JavaVM* vm, void*);
+#endif
+
 int JUCEApplicationBase::main()
 {
+#if JUCE_ANDROID
+    auto env = (JNIEnv*) SDL_AndroidGetJNIEnv();
+    auto clazz = (jobject) SDL_AndroidGetActivity();
+    JavaVM* vm = nullptr;
+
+    if (env != nullptr && env->GetJavaVM (&vm) == 0)
+    {
+        juce_JNI_OnLoad (vm, nullptr);
+
+        JNIClassBase::initialiseAllClasses (env, clazz);
+        Thread::initialiseJUCE (env, clazz);
+    }
+#endif
+
     ScopedJuceInitialiser_GUI libraryInitialiser;
     jassert (createInstance != nullptr);
 

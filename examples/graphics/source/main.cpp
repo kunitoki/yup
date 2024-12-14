@@ -28,6 +28,10 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
+#if JUCE_ANDROID
+#include <BinaryData.h>
+#endif
+
 //==============================================================================
 
 class SineWaveGenerator
@@ -138,19 +142,23 @@ public:
         setTitle ("main");
 
         // Load the font
-        yup::File fontFilePath =
-#if JUCE_WASM
-            yup::File ("/data")
+#if JUCE_ANDROID
+        yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
+        if (auto result = font.loadFromData (mb, factory); result.failed())
+            yup::Logger::outputDebugString (result.getErrorMessage());
 #else
-            yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
+#if JUCE_WASM
+        auto fontFilePath = yup::File ("/data")
+#else
+        auto fontFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
 #endif
-                .getChildFile ("Roboto-Regular.ttf");
+                                .getChildFile ("Roboto-Regular.ttf");
 
         if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
+#endif
 
         // Initialize the audio device
-        deviceManager.addAudioCallback (this);
         deviceManager.initialiseWithDefaultDevices (0, 2);
 
         // Initialize sine wave generators
@@ -161,6 +169,8 @@ public:
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
             sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), sampleRate);
         }
+
+        deviceManager.addAudioCallback (this);
 
         // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
@@ -193,6 +203,7 @@ public:
 
     ~CustomWindow() override
     {
+        deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
     }
 
@@ -371,6 +382,14 @@ struct Application : yup::YUPApplication
 
         window = std::make_unique<CustomWindow>();
         window->centreWithSize ({ 800, 800 });
+
+#if JUCE_IOS || JUCE_ANDROID
+        window->centreWithSize ({ 1080, 2400 });
+        // window->setFullScreen(true);
+#else
+        window->centreWithSize ({ 800, 800 });
+#endif
+
         window->setVisible (true);
     }
 

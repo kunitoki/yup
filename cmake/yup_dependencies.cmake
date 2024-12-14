@@ -19,30 +19,44 @@
 
 #==============================================================================
 
-function (_yup_fetch_glfw3)
-    FetchContent_Declare (glfw
-        GIT_REPOSITORY https://github.com/kunitoki/glfw.git
-        GIT_TAG dev/android_support
+function (_yup_fetch_sdl2)
+    if (TARGET sdl2::sdl2)
+        return()
+    endif()
+
+    FetchContent_Declare (SDL2
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG release-2.30.10
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/SDL2
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
-    set (GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set (GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
-    set (GLFW_INSTALL OFF CACHE STRING "" FORCE)
+    set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set (SDL_SHARED OFF CACHE BOOL "" FORCE)
+    set (SDL_STATIC ON CACHE BOOL "" FORCE)
+    set (SDL_STATIC_PIC ON CACHE BOOL "" FORCE)
+    set (SDL_AUDIO_ENABLED_BY_DEFAULT OFF CACHE BOOL "" FORCE)
 
-    FetchContent_MakeAvailable (glfw)
+    FetchContent_MakeAvailable (SDL2)
 
-    set_target_properties (glfw PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (SDL2-static PROPERTIES
+        POSITION_INDEPENDENT_CODE ON
+        FOLDER "Thirdparty")
+
+    add_library (sdl2::sdl2 ALIAS SDL2-static)
 endfunction()
 
 #==============================================================================
 
 function (_yup_fetch_perfetto)
+    if (TARGET perfetto::perfetto)
+        return()
+    endif()
+
     FetchContent_Declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
         GIT_TAG v42.0
+        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/Perfetto
         GIT_SHALLOW TRUE
         GIT_PROGRESS TRUE)
 
@@ -59,7 +73,7 @@ function (_yup_fetch_perfetto)
         "$<BUILD_INTERFACE:${perfetto_SOURCE_DIR}/sdk>")
 
     set_target_properties (perfetto PROPERTIES
-        POSITION_INDEPENDENT_CODE TRUE
+        POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")
 
     if (WIN32)
