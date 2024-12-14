@@ -37,18 +37,21 @@ YUP brings a suite of powerful features, including:
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
 
+## Supported Platforms
+| **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**        | **iOS**            |
+|--------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
+| :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     | :construction:     |
+
 ## Supported Rendering Backends
-|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**<sup>(1)</sup> | **iOS**<sup>(1)</sup> |
+|                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
 |--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|
 | **OpenGL 4.2**           | :white_check_mark: |                    | :white_check_mark: |                    |                           |                       |
-| **OpenGL ES2.0**         |                    |                    |                    | :white_check_mark: | :construction:            |                       |
-| **OpenGL ES3.0**         |                    |                    |                    | :white_check_mark: | :construction:            |                       |
-| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :construction:        |
+| **OpenGL ES3.0**         |                    |                    |                    |                    | :white_check_mark:        |                       |
+| **WebGL2 (GLES3.0)**     |                    |                    |                    | :white_check_mark: |                           |                       |
+| **Metal**                |                    | :white_check_mark: |                    |                    |                           | :white_check_mark:    |
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
-| **Vulkan**               | :construction:     | :construction:     | :construction:     |                    | :construction:            |                       |
-| **WebGPU**               |                    |                    |                    |                    |                           |                       |
-
-1. Platforms not fully supported by the windowing system
+| **Vulkan**               | :construction:     |                    | :construction:     |                    | :construction:            |                       |
+| **WebGPU**               | :construction:     | :construction:     | :construction:     | :construction:     | :construction:            | :construction:        |
 
 ## Supported Audio Backends
 |                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
