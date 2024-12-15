@@ -1187,6 +1187,9 @@ public:
     /** Reverses a part of the buffer. */
     void reverse (int startSample, int numSamples) const noexcept
     {
+        if (isClear || numSamples <= 0)
+            return;
+
         for (int i = 0; i < numChannels; ++i)
             reverse (i, startSample, numSamples);
     }
