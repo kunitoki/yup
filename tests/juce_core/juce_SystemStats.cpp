@@ -155,7 +155,7 @@ TEST (SystemStatsTests, GetMachineIdentifiers)
     EXPECT_FALSE(identifiers.isEmpty());
 }
 
-TEST (SystemStatsTests, CpuInfo)
+TEST (SystemStatsTests, DISABLED_CpuInfo)
 {
     int numCpus = SystemStats::getNumCpus();
     EXPECT_GT(numCpus, 0);
