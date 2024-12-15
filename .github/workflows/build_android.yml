@@ -55,13 +55,13 @@ jobs:
           working-directory: ${{runner.workspace}}/build
           run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
-        - name: Build Debug
+        - name: Build Examples Debug
           run: |
             pushd ${{runner.workspace}}/build/examples/app && ./gradlew assembleDebug && popd
             pushd ${{runner.workspace}}/build/examples/graphics && ./gradlew assembleDebug && popd
             pushd ${{runner.workspace}}/build/examples/render && ./gradlew assembleDebug && popd
 
-        - name: Build Release
+        - name: Build Examples Release
           run: |
             pushd ${{runner.workspace}}/build/examples/app && ./gradlew assemble && popd
             pushd ${{runner.workspace}}/build/examples/graphics && ./gradlew assemble && popd

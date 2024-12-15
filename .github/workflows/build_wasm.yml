@@ -51,29 +51,34 @@ jobs:
       working-directory: ${{runner.workspace}}/build
       run: emcmake cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
-    - name: Build Debug
+    - name: Build Tests Debug
       working-directory: ${{runner.workspace}}/build
-      run: |
-        cmake --build . --config Debug --parallel 4 --target yup_tests
-        cmake --build . --config Debug --parallel 4 --target example_console
-        cmake --build . --config Debug --parallel 4 --target example_app
-        cmake --build . --config Debug --parallel 4 --target example_graphics
-        cmake --build . --config Debug --parallel 4 --target example_render
+      run: cmake --build . --config Debug --parallel 4 --target yup_tests
 
-    - name: Test Debug
+    - name: Execute Tests Debug
       working-directory: ${{runner.workspace}}/build/tests/Debug
       run: node yup_tests.js
 
-    - name: Build Release
+    - name: Build Tests Release
       working-directory: ${{runner.workspace}}/build
-      run: |
-        cmake --build . --config Release --parallel 4 --target yup_tests
-        cmake --build . --config Release --parallel 4 --target example_console
-        cmake --build . --config Release --parallel 4 --target example_app
-        cmake --build . --config Release --parallel 4 --target example_graphics
-        cmake --build . --config Release --parallel 4 --target example_render
+      run: cmake --build . --config Release --parallel 4 --target yup_tests
 
     - name: Test Release
       working-directory: ${{runner.workspace}}/build/tests/Release
       run: node yup_tests.js
 
+    - name: Build Examples Debug
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        cmake --build . --config Debug --parallel 4 --target example_console
+        cmake --build . --config Debug --parallel 4 --target example_app
+        cmake --build . --config Debug --parallel 4 --target example_graphics
+        cmake --build . --config Debug --parallel 4 --target example_render
+
+    - name: Build Examples Release
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        cmake --build . --config Release --parallel 4 --target example_console
+        cmake --build . --config Release --parallel 4 --target example_app
+        cmake --build . --config Release --parallel 4 --target example_graphics
+        cmake --build . --config Release --parallel 4 --target example_render
