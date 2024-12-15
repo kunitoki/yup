@@ -182,7 +182,6 @@ protected:
             return std::abs (v1 - v2) < std::numeric_limits<ValueType>::epsilon();
         }
     };
-
 };
 
 TEST_F (FloatVectorOperationsTests, BasicOperations)
