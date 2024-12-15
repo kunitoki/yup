@@ -35,6 +35,7 @@ function (_yup_fetch_sdl2)
     set (SDL_SHARED OFF CACHE BOOL "" FORCE)
     set (SDL_STATIC ON CACHE BOOL "" FORCE)
     set (SDL_STATIC_PIC ON CACHE BOOL "" FORCE)
+    set (SDL_TESTS OFF CACHE BOOL "" FORCE)
     set (SDL_AUDIO_ENABLED_BY_DEFAULT OFF CACHE BOOL "" FORCE)
 
     FetchContent_MakeAvailable (SDL2)
@@ -42,6 +43,11 @@ function (_yup_fetch_sdl2)
     set_target_properties (SDL2-static PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")
+
+    set_target_properties (SDL2main PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (SDL2_test PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (sdl_headers_copy PROPERTIES FOLDER "Thirdparty")
+    set_target_properties (uninstall PROPERTIES FOLDER "Thirdparty")
 
     add_library (sdl2::sdl2 ALIAS SDL2-static)
 endfunction()

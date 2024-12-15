@@ -99,6 +99,7 @@ public:
     {
         jassert (dataToReferTo != nullptr);
         jassert (numChannelsToUse >= 0 && numSamples >= 0);
+
         allocateChannels (dataToReferTo, 0);
     }
 
@@ -127,6 +128,7 @@ public:
     {
         jassert (dataToReferTo != nullptr);
         jassert (numChannelsToUse >= 0 && startSample >= 0 && numSamples >= 0);
+
         allocateChannels (dataToReferTo, startSample);
     }
 
@@ -177,10 +179,10 @@ public:
             }
             else
             {
-                isClear = false;
-
                 for (int i = 0; i < numChannels; ++i)
                     FloatVectorOperations::copy (channels[i], other.channels[i], size);
+
+                isClear = false;
             }
         }
 
@@ -195,11 +197,11 @@ public:
 
     /** Move constructor. */
     AudioBuffer (AudioBuffer&& other) noexcept
-        : numChannels (other.numChannels)
-        , size (other.size)
-        , allocatedBytes (other.allocatedBytes)
+        : numChannels (std::exchange (other.numChannels, 0))
+        , size (std::exchange (other.size, 0))
+        , allocatedBytes (std::exchange (other.allocatedBytes, 0))
         , allocatedData (std::move (other.allocatedData))
-        , isClear (other.isClear)
+        , isClear (std::exchange (other.isClear, true))
     {
         if (numChannels < (int) numElementsInArray (preallocatedChannelSpace))
         {
@@ -212,20 +214,16 @@ public:
         {
             channels = other.channels;
         }
-
-        other.numChannels = 0;
-        other.size = 0;
-        other.allocatedBytes = 0;
     }
 
     /** Move assignment. */
     AudioBuffer& operator= (AudioBuffer&& other) noexcept
     {
-        numChannels = other.numChannels;
-        size = other.size;
-        allocatedBytes = other.allocatedBytes;
+        numChannels = std::exchange (other.numChannels, 0);
+        size = std::exchange (other.size, 0);
+        allocatedBytes = std::exchange (other.allocatedBytes, 0);
         allocatedData = std::move (other.allocatedData);
-        isClear = other.isClear;
+        isClear = std::exchange (other.isClear, true);
 
         if (numChannels < (int) numElementsInArray (preallocatedChannelSpace))
         {
@@ -239,9 +237,6 @@ public:
             channels = other.channels;
         }
 
-        other.numChannels = 0;
-        other.size = 0;
-        other.allocatedBytes = 0;
         return *this;
     }
 
@@ -270,6 +265,7 @@ public:
     const Type* getReadPointer (int channelNumber) const noexcept
     {
         jassert (isPositiveAndBelow (channelNumber, numChannels));
+
         return channels[channelNumber];
     }
 
@@ -286,6 +282,7 @@ public:
     {
         jassert (isPositiveAndBelow (channelNumber, numChannels));
         jassert (isPositiveAndBelow (sampleIndex, size));
+
         return channels[channelNumber] + sampleIndex;
     }
 
@@ -308,7 +305,9 @@ public:
     Type* getWritePointer (int channelNumber) noexcept
     {
         jassert (isPositiveAndBelow (channelNumber, numChannels));
+
         isClear = false;
+
         return channels[channelNumber];
     }
 
@@ -332,7 +331,9 @@ public:
     {
         jassert (isPositiveAndBelow (channelNumber, numChannels));
         jassert (isPositiveAndBelow (sampleIndex, size));
+
         isClear = false;
+
         return channels[channelNumber] + sampleIndex;
     }
 
@@ -359,6 +360,7 @@ public:
     Type* const* getArrayOfWritePointers() noexcept
     {
         isClear = false;
+
         return channels;
     }
 
@@ -400,6 +402,7 @@ public:
             auto channelListSize = ((static_cast<size_t> (1 + newNumChannels) * sizeof (Type*)) + 15) & ~15u;
             auto newTotalBytes = ((size_t) newNumChannels * (size_t) allocatedSamplesPerChannel * sizeof (Type))
                                + channelListSize + 32;
+            bool wasNonEmptyClearedData = isClear && size > 0;
 
             if (keepExistingContent)
             {
@@ -410,7 +413,7 @@ public:
                 else
                 {
                     HeapBlock<char, true> newData;
-                    newData.allocate (newTotalBytes, clearExtraSpace || isClear);
+                    newData.allocate (newTotalBytes, clearExtraSpace || wasNonEmptyClearedData);
 
                     auto numSamplesToCopy = (size_t) jmin (newNumSamples, size);
 
@@ -445,8 +448,9 @@ public:
                 }
                 else
                 {
+                    
                     allocatedBytes = newTotalBytes;
-                    allocatedData.allocate (newTotalBytes, clearExtraSpace || isClear);
+                    allocatedData.allocate (newTotalBytes, clearExtraSpace || wasNonEmptyClearedData);
                     channels = unalignedPointerCast<Type**> (allocatedData.get());
                 }
 
@@ -462,6 +466,7 @@ public:
             channels[newNumChannels] = nullptr;
             size = newNumSamples;
             numChannels = newNumChannels;
+            isClear = wasNonEmptyClearedData || (isClear && clearExtraSpace);
         }
     }
 
@@ -553,8 +558,6 @@ public:
         }
         else
         {
-            isClear = false;
-
             for (int chan = 0; chan < numChannels; ++chan)
             {
                 auto* dest = channels[chan];
@@ -563,6 +566,8 @@ public:
                 for (int i = 0; i < size; ++i)
                     dest[i] = static_cast<Type> (src[i]);
             }
+
+            isClear = false;
         }
     }
 
@@ -603,9 +608,9 @@ public:
     */
     void clear (int startSample, int numSamples) noexcept
     {
-        jassert (startSample >= 0 && numSamples >= 0 && startSample + numSamples <= size);
+        jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (isClear)
+        if (isClear || numSamples <= 0)
             return;
 
         for (int i = 0; i < numChannels; ++i)
@@ -664,6 +669,7 @@ public:
     {
         jassert (isPositiveAndBelow (channel, numChannels));
         jassert (isPositiveAndBelow (sampleIndex, size));
+
         return *(channels[channel] + sampleIndex);
     }
 
@@ -679,7 +685,9 @@ public:
     {
         jassert (isPositiveAndBelow (destChannel, numChannels));
         jassert (isPositiveAndBelow (destSample, size));
+
         *(channels[destChannel] + destSample) = newValue;
+
         isClear = false;
     }
 
@@ -695,7 +703,9 @@ public:
     {
         jassert (isPositiveAndBelow (destChannel, numChannels));
         jassert (isPositiveAndBelow (destSample, size));
+
         *(channels[destChannel] + destSample) += valueToAdd;
+
         isClear = false;
     }
 
@@ -727,7 +737,7 @@ public:
         for (int i = 0; i < numChannels; ++i)
             applyGain (i, startSample, numSamples, gain);
 
-        if (gain == Type())
+        if (startSample == 0 && numSamples == size && gain == Type())
             isClear = true;
     }
 
@@ -754,8 +764,15 @@ public:
         jassert (isPositiveAndBelow (channel, numChannels));
         jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        const auto increment = (endGain - startGain) / (float) numSamples;
         auto* d = channels[channel] + startSample;
+
+        if (numSamples == 1)
+        {
+            *d *= endGain;
+            return;
+        }
+
+        const auto increment = (endGain - startGain) / (Type) (numSamples - 1);
 
         while (--numSamples >= 0)
         {
@@ -778,7 +795,7 @@ public:
         for (int i = 0; i < numChannels; ++i)
             applyGainRamp (i, startSample, numSamples, startGain, endGain);
 
-        if (startGain == Type() && endGain == Type())
+        if (startSample == 0 && numSamples == size && startGain == Type() && endGain == Type())
             isClear = true;
     }
 
@@ -910,8 +927,15 @@ public:
         if (numSamples <= 0)
             return;
 
-        const auto increment = (endGain - startGain) / (Type) numSamples;
         auto* d = channels[destChannel] + destStartSample;
+
+        if (numSamples == 1)
+        {
+            *d += endGain * *source;
+            return;
+        }
+
+        const auto increment = (endGain - startGain) / (Type) (numSamples - 1);
 
         while (--numSamples >= 0)
         {
@@ -1063,8 +1087,15 @@ public:
         if (numSamples <= 0)
             return;
 
-        const auto increment = (endGain - startGain) / (Type) numSamples;
         auto* d = channels[destChannel] + destStartSample;
+
+        if (numSamples == 1)
+        {
+            *d = endGain * *source;
+            return;
+        }
+
+        const auto increment = (endGain - startGain) / (Type) (numSamples - 1);
 
         while (--numSamples >= 0)
         {
@@ -1112,8 +1143,10 @@ public:
         Type mag (0);
 
         if (! isClear)
+        {
             for (int i = 0; i < numChannels; ++i)
                 mag = jmax (mag, getMagnitude (i, startSample, numSamples));
+        }
 
         return mag;
     }
@@ -1249,10 +1282,11 @@ private:
 
     int numChannels = 0, size = 0;
     size_t allocatedBytes = 0;
-    Type** channels;
+    Type** channels = nullptr;
     HeapBlock<char, true> allocatedData;
-    Type* preallocatedChannelSpace[32];
-    bool isClear = false;
+    Type* preallocatedChannelSpace[32] = {};
+    bool isClear = true;
+
     static constexpr size_t maxAlignment = getMaxAlignment();
 
     JUCE_LEAK_DETECTOR (AudioBuffer)
