@@ -467,7 +467,7 @@ TEST_F (ListenerListTests, RemoveMultipleListenersInCallback)
 
 TEST_F (ListenerListTests, RemovingListenersRandomly)
 {
-    auto random = Random::getSystemRandom();
+    auto& random = Random::getSystemRandom();
     for (auto run = 0; run < 10; ++run)
     {
         const auto numListeners = random.nextInt ({ 10, 100 });
@@ -549,7 +549,7 @@ TEST_F (ListenerListTests, NestedCall)
 TEST_F (ListenerListTests, RandomCall)
 {
     const auto numListeners = 20;
-    auto random = Random::getSystemRandom();
+    auto& random = Random::getSystemRandom();
 
     for (int run = 0; run < 10; ++run)
     {

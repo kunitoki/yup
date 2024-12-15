@@ -40,15 +40,20 @@
 namespace juce
 {
 
+Random::Random()
+    : seed (1)
+{
+    setSeedRandomly();
+}
+
 Random::Random (int64 seedValue) noexcept
     : seed (seedValue)
 {
 }
 
-Random::Random()
-    : seed (1)
+Random::Random (const Random& other) noexcept
+    : seed (other.seed)
 {
-    setSeedRandomly();
 }
 
 void Random::setSeed (const int64 newSeed) noexcept

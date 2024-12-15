@@ -67,13 +67,6 @@ protected:
 
         return CharPointer_UTF32 (buffer);
     }
-
-    auto& getRandom()
-    {
-        auto& random = Random::getSystemRandom();
-        random.setSeedRandomly();
-        return random;
-    }
 };
 
 TEST_F (TextDiffTests, AppliesSingleInsertionCorrectly)
@@ -183,7 +176,7 @@ TEST_F (TextDiffTests, SingleCharacterChanges)
 
 TEST_F (TextDiffTests, RandomStringDiffs)
 {
-    auto& r = getRandom();
+    auto r = Random();
 
     for (int i = 0; i < 500; ++i)
     {

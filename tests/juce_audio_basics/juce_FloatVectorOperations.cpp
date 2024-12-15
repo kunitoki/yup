@@ -49,7 +49,7 @@ protected:
     template <class ValueType>
     struct TestRunner
     {
-        static void runTest (Random random)
+        static void runTest (Random& random)
         {
             const int range = random.nextBool() ? 500 : 10;
             const int num = random.nextInt (range) + 1;

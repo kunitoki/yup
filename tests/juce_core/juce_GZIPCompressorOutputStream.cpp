@@ -45,7 +45,7 @@ using namespace juce;
 
 TEST (GZIPCompressorOutputStreamTests, Zipping)
 {
-    Random rng = Random::getSystemRandom();
+    Random& rng = Random::getSystemRandom();
 
     for (int i = 100; --i >= 0;)
     {

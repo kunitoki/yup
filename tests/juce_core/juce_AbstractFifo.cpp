@@ -48,11 +48,10 @@ namespace
 
 struct WriteThread : public Thread
 {
-    WriteThread (AbstractFifo& fifo, int* buffer, Random rng)
+    WriteThread (AbstractFifo& fifo, int* buffer)
         : Thread ("fifo writer")
         , fifo (fifo)
         , buffer (buffer)
-        , random (rng)
     {
         startThread();
     }
@@ -65,6 +64,7 @@ struct WriteThread : public Thread
     void run() override
     {
         int n = 0;
+        auto& random = Random::getSystemRandom();
 
         while (! threadShouldExit())
         {
@@ -87,7 +87,6 @@ struct WriteThread : public Thread
 
     AbstractFifo& fifo;
     int* buffer;
-    Random random;
 };
 
 } // namespace
@@ -97,7 +96,7 @@ TEST (AbstractFifoTests, BasicFunctionality)
     int buffer[5000];
     AbstractFifo fifo (numElementsInArray (buffer));
 
-    WriteThread writer (fifo, buffer, Random::getSystemRandom());
+    WriteThread writer (fifo, buffer);
 
     int n = 0;
     Random r;
