@@ -2051,9 +2051,7 @@ String String::formattedRaw (const char* pf, ...)
         va_list args;
         va_start (args, pf);
 
-#if JUCE_WINDOWS
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-#endif
+        JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 #if JUCE_ANDROID
         HeapBlock<char> temp (bufferSize);
@@ -2072,9 +2070,8 @@ String String::formattedRaw (const char* pf, ...)
             (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
 #endif
 
-#if JUCE_WINDOWS
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-#endif
+        JUCE_END_IGNORE_DEPRECATION_WARNINGS
+
         va_end (args);
 
         if (num > 0)
@@ -2555,13 +2552,11 @@ static String serialiseDouble (double input, int maxDecimalPlaces = 0)
 //==============================================================================
 #if JUCE_ALLOW_STATIC_NULL_VARIABLES
 
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
+JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 const String String::empty;
 
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-JUCE_END_IGNORE_WARNINGS_MSVC
+JUCE_END_IGNORE_DEPRECATION_WARNINGS
 
 #endif
 
