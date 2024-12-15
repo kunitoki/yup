@@ -380,8 +380,8 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "detail/juce_CallbackListenerList.h"
 
 #if JUCE_CORE_INCLUDE_OBJC_HELPERS && (JUCE_MAC || JUCE_IOS)
-#include "native/juce_CFHelpers_mac.h"
-#include "native/juce_ObjCHelpers_mac.h"
+#include "native/juce_CFHelpers_apple.h"
+#include "native/juce_ObjCHelpers_apple.h"
 #endif
 
 #if JUCE_CORE_INCLUDE_COM_SMART_PTR && JUCE_WINDOWS
