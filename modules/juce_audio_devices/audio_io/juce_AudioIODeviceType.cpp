@@ -149,7 +149,7 @@ AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ALSA()
 }
 #endif
 
-#if (JUCE_LINUX || JUCE_BSD) && JUCE_JACK
+#if (JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_WINDOWS) && JUCE_JACK
 AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_JACK()
 {
     return new JackAudioIODeviceType();
