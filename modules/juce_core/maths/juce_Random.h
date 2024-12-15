@@ -136,14 +136,17 @@ public:
     /** The overhead of creating a new Random object is fairly small, but if you want to avoid
         it, you can call this method to get a global shared Random object.
 
-        It's not thread-safe though, so threads should use their own Random object, otherwise
-        you run the risk of your random numbers becoming.. erm.. randomly corrupted..
+        The method is thread safe.
     */
     static Random& getSystemRandom() noexcept;
 
 private:
     //==============================================================================
     int64 seed;
+
+#if JUCE_ASSERTIONS_ENABLED_OR_LOGGED
+    bool isSystemRandom = false;
+#endif
 
     JUCE_LEAK_DETECTOR (Random)
 };

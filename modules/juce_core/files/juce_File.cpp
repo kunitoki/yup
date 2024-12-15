@@ -352,8 +352,9 @@ bool File::copyDirectoryTo (const File& newDirectory) const
                 return false;
 
         for (auto& f : findChildFiles (File::findDirectories, false))
-            if (! f.copyDirectoryTo (newDirectory.getChildFile (f.getFileName())))
-                return false;
+            if (! f.isSymbolicLink())
+                if (! f.copyDirectoryTo (newDirectory.getChildFile (f.getFileName())))
+                    return false;
 
         return true;
     }

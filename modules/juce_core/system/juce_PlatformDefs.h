@@ -216,6 +216,9 @@ constexpr bool isConstantEvaluated() noexcept
 //==============================================================================
 // clang-format off
 #if (JUCE_DEBUG && ! JUCE_DISABLE_ASSERTIONS) || DOXYGEN
+/** Assertion are enabled in debug unless explicitly disabled. */
+#define JUCE_ASSERTIONS_ENABLED 1
+
 /** Writes a string to the standard error stream.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
@@ -274,10 +277,10 @@ constexpr bool isConstantEvaluated() noexcept
 #else
 //==============================================================================
 /** If debugging is disabled, these dummy debug and assertion macros are used. */
+#define JUCE_ASSERTIONS_ENABLED 0
 
 #define DBG(textToWrite)
 #define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
-#define JUCE_ASSERTIONS_ENABLED 0
 
 #if JUCE_LOG_ASSERTIONS
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)

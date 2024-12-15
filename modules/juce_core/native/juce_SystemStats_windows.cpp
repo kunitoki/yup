@@ -316,6 +316,17 @@ RTL_OSVERSIONINFOW getWindowsVersionInfo()
 }
 #endif
 
+String SystemStats::getOperatingSystemVersionString()
+{
+    auto versionInfo = getWindowsVersionInfo();
+
+    auto major = versionInfo.dwMajorVersion;
+    auto minor = versionInfo.dwMinorVersion;
+    auto build = versionInfo.dwBuildNumber;
+
+    return String::formatted ("%d.%d.%d", major, minor, build);
+}
+
 SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 {
 #if JUCE_MINGW

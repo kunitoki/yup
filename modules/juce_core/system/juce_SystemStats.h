@@ -110,6 +110,13 @@ public:
     */
     static String getOperatingSystemName();
 
+    /** Returns the version of the operating system we're running on.
+
+        @returns a string describing the OS version.
+        @see getOperatingSystemName
+    */
+    static String getOperatingSystemVersionString();
+
     /** Returns true if the OS is 64-bit, or false for a 32-bit OS. */
     static bool isOperatingSystem64Bit();
 
