@@ -191,6 +191,14 @@ __pragma (warning (push)) JUCE_IGNORE_MSVC (warnings)
 #define JUCE_SANITIZER_ATTRIBUTE_MINIMUM_CLANG_VERSION 9
 #endif
 
+#define JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS                                  \
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")           \
+    JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
+
+#define JUCE_END_IGNORE_DEPRECATION_WARNINGS                                    \
+    JUCE_END_IGNORE_WARNINGS_MSVC                                               \
+    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+
 /** Disable sanitizers for a range of functions.
 
     This functionality doesn't seem to exist on GCC yet, so at the moment this only works for clang.

@@ -277,6 +277,7 @@ constexpr bool isConstantEvaluated() noexcept
 
 #define DBG(textToWrite)
 #define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
+#define JUCE_ASSERTIONS_ENABLED 0
 
 #if JUCE_LOG_ASSERTIONS
 #define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
@@ -288,6 +289,8 @@ constexpr bool isConstantEvaluated() noexcept
 
 #endif
 // clang-format on
+
+#define JUCE_ASSERTIONS_ENABLED_OR_LOGGED   JUCE_ASSERTIONS_ENABLED || JUCE_LOG_ASSERTIONS
 
 //==============================================================================
 /** This is a shorthand macro for deleting a class's copy constructor and copy assignment operator.
@@ -342,14 +345,9 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_MSVC && ! defined(DOXYGEN)
-#define JUCE_WARNING_HELPER(file, line, mess) message (file "(" JUCE_STRINGIFY (line) ") : Warning: " #mess)
-#define JUCE_COMPILER_WARNING(message) __pragma (JUCE_WARNING_HELPER (__FILE__, __LINE__, message))
+#define JUCE_COMPILER_WARNING(msg) __pragma (message (__FILE__ "(" JUCE_STRINGIFY (__LINE__) ") : Warning: " msg))
 #else
-#ifndef DOXYGEN
-#define JUCE_WARNING_HELPER(mess) message (#mess)
-#endif
-
-    /** This macro allows you to emit a custom compiler warning message.
+/** This macro allows you to emit a custom compiler warning message.
 
     Very handy for marking bits of code as "to-do" items, or for shaming
     code written by your co-workers in a way that's hard to ignore.
@@ -357,12 +355,12 @@ static void operator delete (void*) = delete;
     GCC and Clang provide the \#warning directive, but MSVC doesn't, so this macro
     is a cross-compiler way to get the same functionality as \#warning.
 */
-#define JUCE_COMPILER_WARNING(message) _Pragma (JUCE_STRINGIFY (JUCE_WARNING_HELPER (message)))
+#define JUCE_COMPILER_WARNING(msg)  _Pragma (JUCE_STRINGIFY (message (msg)))
 #endif
 
 //==============================================================================
 #if JUCE_DEBUG || DOXYGEN
-    /** A platform-independent way of forcing an inline function.
+/** A platform-independent way of forcing an inline function.
 
     Use the syntax:
 
