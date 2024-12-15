@@ -1178,9 +1178,10 @@ public:
         jassert (isPositiveAndBelow (channel, numChannels));
         jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (! isClear && numSamples > 0)
-            std::reverse (channels[channel] + startSample,
-                          channels[channel] + startSample + numSamples);
+        if (isClear || numSamples <= 0)
+            return;
+
+        std::reverse (channels[channel] + startSample, channels[channel] + startSample + numSamples);
     }
 
     /** Reverses a part of the buffer. */
