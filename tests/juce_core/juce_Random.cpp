@@ -68,7 +68,13 @@ TEST (RandomTests, Concurrent)
     {
     public:
         void notify() { notified = true; }
-        void wait() const { while (! notified){} }
+
+        void wait() const
+        {
+            while (! notified)
+            {
+            }
+        }
 
     private:
         std::atomic<bool> notified = false;
@@ -78,10 +84,10 @@ TEST (RandomTests, Concurrent)
     {
     public:
         InvokerThread (std::function<void()> fn, FastWaitableEvent& notificationEvent, int numInvocationsToTrigger)
-            : Thread ("InvokerThread"),
-              invokable (fn),
-              notified (&notificationEvent),
-              numInvocations (numInvocationsToTrigger)
+            : Thread ("InvokerThread")
+            , invokable (fn)
+            , notified (&notificationEvent)
+            , numInvocations (numInvocationsToTrigger)
         {
             startThread();
         }
@@ -114,7 +120,12 @@ TEST (RandomTests, Concurrent)
     FastWaitableEvent start;
 
     for (int i = numberOfThreads; --i >= 0;)
-        threads.push_back (std::make_unique<InvokerThread> ([] { Random::getSystemRandom().nextInt(); }, start, numberOfInvocationsPerThread));
+        threads.push_back (std::make_unique<InvokerThread> ([]
+                                                            {
+                                                                Random::getSystemRandom().nextInt();
+                                                            },
+                                                            start,
+                                                            numberOfInvocationsPerThread));
 
     for (auto& thread : threads)
         thread->waitUntilReady();
