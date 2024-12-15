@@ -28,7 +28,7 @@ using namespace juce;
 TEST (SystemStats, JUCEVersion)
 {
     auto version = SystemStats::getJUCEVersion();
-    EXPECT_FALSE(version.isEmpty());
+    EXPECT_FALSE (version.isEmpty());
 }
 
 TEST (SystemStats, OperatingSystemType)
@@ -36,46 +36,46 @@ TEST (SystemStats, OperatingSystemType)
     auto systemType = SystemStats::getOperatingSystemType();
 
 #if JUCE_WINDOWS
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::Windows);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::Windows);
 #elif JUCE_MAC
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::MacOSX);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::MacOSX);
 #elif JUCE_LINUX
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::Linux);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::Linux);
 #elif JUCE_ANDROID
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::Android);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::Android);
 #elif JUCE_IOS
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::iOS);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::iOS);
 #elif JUCE_EMSCRIPTEN
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::WebBrowser);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::WebBrowser);
 #elif JUCE_WASM
-    EXPECT_TRUE(systemType & SystemStats::OperatingSystemType::WASM);
+    EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::WASM);
 #else
-    ignoreUnused(systemType);
+    ignoreUnused (systemType);
 #endif
 }
 
 TEST (SystemStatsTests, GetOperatingSystemName)
 {
     String osName = SystemStats::getOperatingSystemName();
-    EXPECT_FALSE(osName.isEmpty());
+    EXPECT_FALSE (osName.isEmpty());
 }
 
 TEST (SystemStatsTests, IsOperatingSystem64Bit)
 {
     bool is64Bit = SystemStats::isOperatingSystem64Bit();
-    if constexpr (sizeof(void*) == 8)
-        EXPECT_TRUE(is64Bit);
+    if constexpr (sizeof (void*) == 8)
+        EXPECT_TRUE (is64Bit);
     else
-        EXPECT_FALSE(is64Bit);
+        EXPECT_FALSE (is64Bit);
 }
 
 TEST (SystemStatsTests, GetEnvironmentVariable)
 {
-    String existingVar = SystemStats::getEnvironmentVariable("PATH", "default");
-    EXPECT_FALSE(existingVar.isEmpty());
+    String existingVar = SystemStats::getEnvironmentVariable ("PATH", "default");
+    EXPECT_FALSE (existingVar.isEmpty());
 
-    String nonExistingVar = SystemStats::getEnvironmentVariable("NON_EXISTENT_VAR", "default");
-    EXPECT_EQ(nonExistingVar, "default");
+    String nonExistingVar = SystemStats::getEnvironmentVariable ("NON_EXISTENT_VAR", "default");
+    EXPECT_EQ (nonExistingVar, "default");
 }
 
 TEST (SystemStatsTests, DISABLED_SetAndRemoveEnvironmentVariable)
@@ -83,150 +83,153 @@ TEST (SystemStatsTests, DISABLED_SetAndRemoveEnvironmentVariable)
     String varName = "JUCE_TEST_ENV_VAR";
     String varValue = "JUCE_TEST_VALUE";
 
-    bool setResult = SystemStats::setEnvironmentVariable(varName, varValue);
-    EXPECT_TRUE(setResult);
+    bool setResult = SystemStats::setEnvironmentVariable (varName, varValue);
+    EXPECT_TRUE (setResult);
 
-    String fetchedValue = SystemStats::getEnvironmentVariable(varName, "");
-    EXPECT_EQ(fetchedValue, varValue);
+    String fetchedValue = SystemStats::getEnvironmentVariable (varName, "");
+    EXPECT_EQ (fetchedValue, varValue);
 
-    bool removeResult = SystemStats::removeEnvironmentVariable(varName);
-    EXPECT_TRUE(removeResult);
+    bool removeResult = SystemStats::removeEnvironmentVariable (varName);
+    EXPECT_TRUE (removeResult);
 
-    String afterRemoval = SystemStats::getEnvironmentVariable(varName, "");
-    EXPECT_EQ(afterRemoval, "");
+    String afterRemoval = SystemStats::getEnvironmentVariable (varName, "");
+    EXPECT_EQ (afterRemoval, "");
 }
 
 TEST (SystemStatsTests, GetEnvironmentVariables)
 {
     auto envVars = SystemStats::getEnvironmentVariables();
-    EXPECT_GT(envVars.size(), 0);
+    EXPECT_GT (envVars.size(), 0);
 }
 
 TEST (SystemStatsTests, DISABLED_UserAndComputerInfo)
 {
     String logonName = SystemStats::getLogonName();
-    EXPECT_FALSE(logonName.isEmpty());
+    EXPECT_FALSE (logonName.isEmpty());
 
     String fullUserName = SystemStats::getFullUserName();
-    EXPECT_FALSE(fullUserName.isEmpty());
+    EXPECT_FALSE (fullUserName.isEmpty());
 
     String computerName = SystemStats::getComputerName();
-    EXPECT_FALSE(computerName.isEmpty());
+    EXPECT_FALSE (computerName.isEmpty());
 }
 
 TEST (SystemStatsTests, DISABLED_LocaleInfo)
 {
     String userLanguage = SystemStats::getUserLanguage();
-    EXPECT_FALSE(userLanguage.isEmpty());
-    EXPECT_GE(userLanguage.length(), 2);
+    EXPECT_FALSE (userLanguage.isEmpty());
+    EXPECT_GE (userLanguage.length(), 2);
 
     String userRegion = SystemStats::getUserRegion();
-    EXPECT_FALSE(userRegion.isEmpty());
-    EXPECT_GT(userRegion.length(), 0);
+    EXPECT_FALSE (userRegion.isEmpty());
+    EXPECT_GT (userRegion.length(), 0);
 
     String displayLanguage = SystemStats::getDisplayLanguage();
-    EXPECT_FALSE(displayLanguage.isEmpty());
-    EXPECT_GE(displayLanguage.length(), 2);
+    EXPECT_FALSE (displayLanguage.isEmpty());
+    EXPECT_GE (displayLanguage.length(), 2);
 }
 
 TEST (SystemStatsTests, DISABLED_DeviceInfo)
 {
     String deviceDescription = SystemStats::getDeviceDescription();
-    EXPECT_TRUE(deviceDescription.isNotEmpty());
+    EXPECT_TRUE (deviceDescription.isNotEmpty());
 
-#if !JUCE_WASM
+#if ! JUCE_WASM
     String deviceManufacturer = SystemStats::getDeviceManufacturer();
-    EXPECT_TRUE(deviceManufacturer.isNotEmpty());
+    EXPECT_TRUE (deviceManufacturer.isNotEmpty());
 #endif
 }
 
 TEST (SystemStatsTests, GetUniqueDeviceID)
 {
     String deviceID = SystemStats::getUniqueDeviceID();
-    EXPECT_TRUE(deviceID.isNotEmpty());
+    EXPECT_TRUE (deviceID.isNotEmpty());
 
     String deviceID2 = SystemStats::getUniqueDeviceID();
-    EXPECT_EQ(deviceID, deviceID2);
+    EXPECT_EQ (deviceID, deviceID2);
 }
 
 TEST (SystemStatsTests, GetMachineIdentifiers)
 {
-    auto identifiers = SystemStats::getMachineIdentifiers(SystemStats::MachineIdFlags::uniqueId);
-    EXPECT_FALSE(identifiers.isEmpty());
+    auto identifiers = SystemStats::getMachineIdentifiers (SystemStats::MachineIdFlags::uniqueId);
+    EXPECT_FALSE (identifiers.isEmpty());
 }
 
 TEST (SystemStatsTests, DISABLED_CpuInfo)
 {
     int numCpus = SystemStats::getNumCpus();
-    EXPECT_GT(numCpus, 0);
+    EXPECT_GT (numCpus, 0);
 
     int numPhysicalCpus = SystemStats::getNumPhysicalCpus();
-    EXPECT_GT(numPhysicalCpus, 0);
+    EXPECT_GT (numPhysicalCpus, 0);
 
-#if !JUCE_WASM
+#if ! JUCE_WASM
     int cpuSpeed = SystemStats::getCpuSpeedInMegahertz();
-    EXPECT_GT(cpuSpeed, 0);
+    EXPECT_GT (cpuSpeed, 0);
 
     String cpuVendor = SystemStats::getCpuVendor();
-    EXPECT_TRUE(cpuVendor.isNotEmpty());
+    EXPECT_TRUE (cpuVendor.isNotEmpty());
 
     String cpuModel = SystemStats::getCpuModel();
-    EXPECT_TRUE(cpuModel.isNotEmpty());
+    EXPECT_TRUE (cpuModel.isNotEmpty());
 #endif
 }
 
 TEST (SystemStatsTests, CpuFeatures)
 {
-    EXPECT_NO_THROW(SystemStats::hasMMX());
-    EXPECT_NO_THROW(SystemStats::hasSSE());
-    EXPECT_NO_THROW(SystemStats::hasSSE2());
-    EXPECT_NO_THROW(SystemStats::hasSSE3());
-    EXPECT_NO_THROW(SystemStats::hasSSSE3());
-    EXPECT_NO_THROW(SystemStats::hasSSE41());
-    EXPECT_NO_THROW(SystemStats::hasSSE42());
-    EXPECT_NO_THROW(SystemStats::hasAVX());
-    EXPECT_NO_THROW(SystemStats::hasAVX2());
-    EXPECT_NO_THROW(SystemStats::hasNeon());
+    EXPECT_NO_THROW (SystemStats::hasMMX());
+    EXPECT_NO_THROW (SystemStats::hasSSE());
+    EXPECT_NO_THROW (SystemStats::hasSSE2());
+    EXPECT_NO_THROW (SystemStats::hasSSE3());
+    EXPECT_NO_THROW (SystemStats::hasSSSE3());
+    EXPECT_NO_THROW (SystemStats::hasSSE41());
+    EXPECT_NO_THROW (SystemStats::hasSSE42());
+    EXPECT_NO_THROW (SystemStats::hasAVX());
+    EXPECT_NO_THROW (SystemStats::hasAVX2());
+    EXPECT_NO_THROW (SystemStats::hasNeon());
 }
 
 TEST (SystemStatsTests, MemoryInfo)
 {
-#if !JUCE_WASM
+#if ! JUCE_WASM
     int memorySize = SystemStats::getMemorySizeInMegabytes();
-    EXPECT_GT(memorySize, 0);
+    EXPECT_GT (memorySize, 0);
 #endif
 
     int pageSize = SystemStats::getPageSize();
-    EXPECT_GT(pageSize, 0);
+    EXPECT_GT (pageSize, 0);
 }
 
 TEST (SystemStatsTests, GetStackBacktrace)
 {
-#if !JUCE_WASM
+#if ! JUCE_WASM
     String backtrace = SystemStats::getStackBacktrace();
-    EXPECT_TRUE(backtrace.isNotEmpty());
+    EXPECT_TRUE (backtrace.isNotEmpty());
 #endif
 }
 
 TEST (SystemStatsTests, SetApplicationCrashHandler)
 {
     static bool handlerCalled = false;
-    auto crashHandler = [](void*) { handlerCalled = true; };
+    auto crashHandler = [] (void*)
+    {
+        handlerCalled = true;
+    };
 
-    SystemStats::setApplicationCrashHandler(crashHandler);
-    EXPECT_NO_THROW(SystemStats::setApplicationCrashHandler(crashHandler));
+    SystemStats::setApplicationCrashHandler (crashHandler);
+    EXPECT_NO_THROW (SystemStats::setApplicationCrashHandler (crashHandler));
 }
 
 TEST (SystemStatsTests, IsRunningInAppExtensionSandbox)
 {
     bool isSandboxed = SystemStats::isRunningInAppExtensionSandbox();
-    EXPECT_TRUE(isSandboxed == true || isSandboxed == false);
+    EXPECT_TRUE (isSandboxed == true || isSandboxed == false);
 }
 
 #if JUCE_MAC
 TEST (SystemStatsTests, IsAppSandboxEnabled)
 {
     bool isSandboxEnabled = SystemStats::isAppSandboxEnabled();
-    EXPECT_TRUE(isSandboxEnabled == true || isSandboxEnabled == false);
+    EXPECT_TRUE (isSandboxEnabled == true || isSandboxEnabled == false);
 }
 #endif
