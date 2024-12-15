@@ -632,9 +632,9 @@ public:
     void clear (int channel, int startSample, int numSamples) noexcept
     {
         jassert (isPositiveAndBelow (channel, numChannels));
-        jassert (startSample >= 0 && numSamples >= 0 && startSample + numSamples <= size);
+        jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (isClear)
+        if (isClear || numSamples <= 0)
             return;
 
         FloatVectorOperations::clear (channels[channel] + startSample, numSamples);
@@ -1115,9 +1115,9 @@ public:
     Range<Type> findMinMax (int channel, int startSample, int numSamples) const noexcept
     {
         jassert (isPositiveAndBelow (channel, numChannels));
-        jassert (startSample >= 0 && numSamples >= 0 && startSample + numSamples <= size);
+        jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (isClear)
+        if (isClear || numSamples <= 0)
             return { Type (0), Type (0) };
 
         return FloatVectorOperations::findMinAndMax (channels[channel] + startSample, numSamples);
@@ -1127,9 +1127,9 @@ public:
     Type getMagnitude (int channel, int startSample, int numSamples) const noexcept
     {
         jassert (isPositiveAndBelow (channel, numChannels));
-        jassert (startSample >= 0 && numSamples >= 0 && startSample + numSamples <= size);
+        jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (isClear)
+        if (isClear || numSamples <= 0)
             return Type (0);
 
         auto r = findMinMax (channel, startSample, numSamples);
@@ -1157,7 +1157,7 @@ public:
         jassert (isPositiveAndBelow (channel, numChannels));
         jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (numSamples <= 0 || channel < 0 || channel >= numChannels || isClear)
+        if (isClear || numSamples <= 0)
             return Type (0);
 
         auto* data = channels[channel] + startSample;
@@ -1176,9 +1176,9 @@ public:
     void reverse (int channel, int startSample, int numSamples) const noexcept
     {
         jassert (isPositiveAndBelow (channel, numChannels));
-        jassert (startSample >= 0 && numSamples >= 0 && startSample + numSamples <= size);
+        jassert (startSample >= 0 && startSample + numSamples <= size);
 
-        if (! isClear)
+        if (! isClear && numSamples > 0)
             std::reverse (channels[channel] + startSample,
                           channels[channel] + startSample + numSamples);
     }
