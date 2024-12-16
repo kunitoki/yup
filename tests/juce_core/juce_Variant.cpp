@@ -1444,8 +1444,7 @@ TEST_F (VariantTests, MethodReturnsAnotherMethod)
     var vObject (obj);
     EXPECT_TRUE (vObject.isObject());
 
-    var argsOuter[] = {};
-    var multiplierVar = vObject.invoke (Identifier ("getMultiplier"), argsOuter, 0);
+    var multiplierVar = vObject.invoke (Identifier ("getMultiplier"), nullptr, 0);
     EXPECT_TRUE (multiplierVar.isObject());
 
     var argsInner[] = { var (5.0), var (6.0) };
