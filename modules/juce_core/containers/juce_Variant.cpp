@@ -409,8 +409,8 @@ struct var::VariantType
 
     static var objectClone (const var& original)
     {
-        if (auto* d = original.getDynamicObject())
-            return d->clone().release();
+        if (auto d = original.getDynamicObject())
+            return d->clone().get();
 
         jassertfalse; // can only clone DynamicObjects!
         return {};
@@ -584,7 +584,18 @@ struct var::VariantType
 
     static bool methodEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
     {
-        return otherType.isMethod && otherData.methodValue == data.methodValue;
+        auto targetEquals = [](const auto* method1, const auto* method2)
+        {
+            using methodType = var (const NativeFunctionArgs&);
+
+            if (method1 != nullptr && method2 != nullptr)
+                return method1->template target<methodType>() == method2->template target<methodType>();
+
+            return false;
+        };
+
+        return otherType.isMethod
+            && (otherData.methodValue == data.methodValue || targetEquals (otherData.methodValue, data.methodValue));
     }
 
     static void methodWriteToStream (const ValueUnion&, OutputStream& output)
@@ -677,6 +688,12 @@ var::var (const Array<var>& v)
 }
 
 var::var (const String& v)
+    : type (&Instance::attributesString)
+{
+    new (value.stringValue) String (v);
+}
+
+var::var (StringRef v)
     : type (&Instance::attributesString)
 {
     new (value.stringValue) String (v);
@@ -845,6 +862,14 @@ var& var::operator= (const String& v)
     return *this;
 }
 
+var& var::operator= (StringRef v)
+{
+    type->cleanUp (value);
+    type = &Instance::attributesString;
+    new (value.stringValue) String (v);
+    return *this;
+}
+
 var& var::operator= (const MemoryBlock& v)
 {
     type->cleanUp (value);
@@ -983,6 +1008,11 @@ const var& var::operator[] (const char* const propertyName) const
     return operator[] (Identifier (propertyName));
 }
 
+const var& var::operator[] (StringRef propertyName) const
+{
+    return operator[] (Identifier (propertyName));
+}
+
 var var::getProperty (const Identifier& propertyName, const var& defaultReturnValue) const
 {
     if (auto* o = getDynamicObject())
@@ -995,6 +1025,25 @@ bool var::hasProperty (const Identifier& propertyName) const noexcept
 {
     if (auto* o = getDynamicObject())
         return o->hasProperty (propertyName);
+
+    return false;
+}
+
+var var::getMethod (const Identifier& methodName, const var& defaultReturnValue) const
+{
+    if (auto* o = getDynamicObject())
+    {
+        if (auto method = o->getProperties().getWithDefault (methodName, var()); method.isMethod())
+            return method;
+    }
+
+    return defaultReturnValue;
+}
+
+bool var::hasMethod (const Identifier& methodName) const noexcept
+{
+    if (auto* o = getDynamicObject())
+        return o->hasMethod (methodName);
 
     return false;
 }

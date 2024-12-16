@@ -88,6 +88,7 @@ public:
     var (const char* value);
     var (const wchar_t* value);
     var (const String& value);
+    var (StringRef value);
     var (const Array<var>& value);
     var (const StringArray& value);
     var (ReferenceCountedObject* object);
@@ -103,6 +104,7 @@ public:
     var& operator= (const char* value);
     var& operator= (const wchar_t* value);
     var& operator= (const String& value);
+    var& operator= (StringRef value);
     var& operator= (const MemoryBlock& value);
     var& operator= (const Array<var>& value);
     var& operator= (ReferenceCountedObject* object);
@@ -262,11 +264,16 @@ public:
     const var& operator[] (const Identifier& propertyName) const;
     /** If this variant is an object, this returns one of its properties. */
     const var& operator[] (const char* propertyName) const;
-    /** If this variant is an object, this returns one of its properties, or a default
-        fallback value if the property is not set. */
+    /** If this variant is an object, this returns one of its properties. */
+    const var& operator[] (StringRef propertyName) const;
+    /** If this variant is an object, this returns one of its properties, or a default fallback value if the property is not set. */
     var getProperty (const Identifier& propertyName, const var& defaultReturnValue) const;
     /** Returns true if this variant is an object and if it has the given property. */
     bool hasProperty (const Identifier& propertyName) const noexcept;
+    /** If this variant is an object, this returns one of its methods, or a default fallback value if the property is not set. */
+    var getMethod (const Identifier& methodName, const var& defaultReturnValue) const;
+    /** Returns true if this variant is an object and if it has the given method. */
+    bool hasMethod (const Identifier& methodName) const noexcept;
 
     /** Invokes a named method call with no arguments. */
     var call (const Identifier& method) const;

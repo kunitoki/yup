@@ -105,11 +105,11 @@ void DynamicObject::cloneAllProperties()
             *v = v->clone();
 }
 
-std::unique_ptr<DynamicObject> DynamicObject::clone() const
+DynamicObject::Ptr DynamicObject::clone() const
 {
     auto result = std::make_unique<DynamicObject> (*this);
     result->cloneAllProperties();
-    return result;
+    return result.release();
 }
 
 void DynamicObject::writeAsJSON (OutputStream& out, const JSON::FormatOptions& format)

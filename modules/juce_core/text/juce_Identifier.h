@@ -74,6 +74,12 @@ public:
         Because this name may need to be used in contexts such as script variables or XML
         tags, it must only contain ascii letters and digits, or the underscore character.
     */
+    Identifier (StringRef name);
+
+    /** Creates an identifier with a specified name.
+        Because this name may need to be used in contexts such as script variables or XML
+        tags, it must only contain ascii letters and digits, or the underscore character.
+    */
     Identifier (String::CharPointerType nameStart, String::CharPointerType nameEnd);
 
     /** Creates a copy of another identifier. */

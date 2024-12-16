@@ -80,6 +80,13 @@ Identifier::Identifier (const char* nm)
     jassert (nm != nullptr && nm[0] != 0);
 }
 
+Identifier::Identifier (StringRef nm)
+    : name (StringPool::getGlobalPool().getPooledString (nm))
+{
+    // An Identifier cannot be created from an empty string!
+    jassert (nm.isNotEmpty());
+}
+
 Identifier::Identifier (String::CharPointerType start, String::CharPointerType end)
     : name (StringPool::getGlobalPool().getPooledString (start, end))
 {
