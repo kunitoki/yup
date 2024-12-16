@@ -291,14 +291,17 @@ TEST_F (DynamicObjectTests, OverwriteMethod)
     obj->setMethod (methodName, greetFunc1);
     EXPECT_TRUE (obj->hasMethod (methodName));
 
-    var argsArray[] = {};
-    var::NativeFunctionArgs funcArgs (obj.get(), argsArray, 0);
+    var::NativeFunctionArgs funcArgs (obj.get(), nullptr, 0);
     var result1 = obj->invokeMethod (methodName, funcArgs);
     EXPECT_EQ (result1, var ("Hello"));
+    EXPECT_EQ (result1.toString(), "Hello");
 
     obj->setMethod (methodName, greetFunc2);
+    EXPECT_TRUE (obj->hasMethod (methodName));
+
     var result2 = obj->invokeMethod (methodName, funcArgs);
     EXPECT_EQ (result2, var ("Hi"));
+    EXPECT_EQ (result2.toString(), "Hi");
 }
 
 // Test invoking method with insufficient arguments
@@ -338,8 +341,7 @@ TEST_F (DynamicObjectTests, SetMethodAsNonFunction)
     EXPECT_FALSE (obj->hasMethod (methodName));
 
     // Attempt to invoke as a method
-    var argsArray[] = {};
-    var::NativeFunctionArgs funcArgs (obj.get(), argsArray, 0);
+    var::NativeFunctionArgs funcArgs (obj.get(), nullptr, 0);
     var result = obj->invokeMethod (methodName, funcArgs);
     EXPECT_EQ (result, var()); // Expecting default var since property is not a method
 }
@@ -361,8 +363,7 @@ TEST_F (DynamicObjectTests, SetMethodWithLambdaCapture)
     obj->setMethod (methodName, incrementFunc);
     EXPECT_TRUE (obj->hasMethod (methodName));
 
-    var argsArray[] = {};
-    var::NativeFunctionArgs funcArgs (obj.get(), argsArray, 0);
+    var::NativeFunctionArgs funcArgs (obj.get(), nullptr, 0);
     var result1 = obj->invokeMethod (methodName, funcArgs);
     EXPECT_EQ (result1, makeVar (1.0));
     EXPECT_EQ (externalCounter, 1.0);

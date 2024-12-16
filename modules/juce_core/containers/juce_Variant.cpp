@@ -584,18 +584,7 @@ struct var::VariantType
 
     static bool methodEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
     {
-        auto targetEquals = [] (const auto* method1, const auto* method2)
-        {
-            using methodType = var (const NativeFunctionArgs&);
-
-            if (method1 != nullptr && method2 != nullptr)
-                return method1->template target<methodType>() == method2->template target<methodType>();
-
-            return false;
-        };
-
-        return otherType.isMethod
-            && (otherData.methodValue == data.methodValue || targetEquals (otherData.methodValue, data.methodValue));
+        return otherType.isMethod && otherData.methodValue == data.methodValue;
     }
 
     static void methodWriteToStream (const ValueUnion&, OutputStream& output)

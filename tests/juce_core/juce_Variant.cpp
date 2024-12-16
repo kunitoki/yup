@@ -459,13 +459,12 @@ TEST_F (VariantTests, MethodOperations)
     EXPECT_FALSE (vObject.isMethod());
 
     // Invoke method
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("increment"), argsArray, 0);
+    var result = vObject.invoke(Identifier("increment"), nullptr, 0);
     EXPECT_EQ (static_cast<double> (result), 1.0);
     EXPECT_EQ (counter, 1.0);
 
     // Invoke again
-    result = vObject.invoke (Identifier ("increment"), argsArray, 0);
+    result = vObject.invoke(Identifier("increment"), nullptr, 0);
     EXPECT_EQ (static_cast<double> (result), 2.0);
     EXPECT_EQ (counter, 2.0);
 }
@@ -637,8 +636,7 @@ TEST_F (VariantTests, InvokeMethodReturnsString)
     EXPECT_FALSE (vObject.hasProperty ("greet"));
     EXPECT_TRUE (vObject.hasMethod ("greet"));
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("greet"), argsArray, 0);
+    var result = vObject.invoke(Identifier("greet"), nullptr, 0);
     EXPECT_TRUE (result.isString());
     EXPECT_EQ (result.toString(), String ("Hello, JUCE!"));
 }
@@ -753,12 +751,11 @@ TEST_F (VariantTests, InvokeMethodModifiesExternalState)
     EXPECT_FALSE (vObject.hasProperty ("increaseCounter"));
     EXPECT_TRUE (vObject.hasMethod ("increaseCounter"));
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("increaseCounter"), argsArray, 0);
+    var result = vObject.invoke(Identifier("increaseCounter"), nullptr, 0);
     EXPECT_EQ (static_cast<int> (result), 5);
     EXPECT_EQ (counter, 5);
 
-    result = vObject.invoke (Identifier ("increaseCounter"), argsArray, 0);
+    result = vObject.invoke(Identifier("increaseCounter"), nullptr, 0);
     EXPECT_EQ (static_cast<int> (result), 10);
     EXPECT_EQ (counter, 10);
 }
@@ -859,8 +856,7 @@ TEST_F (VariantTests, InvokeUndefinedMethod)
     DynamicObject::Ptr obj = new DynamicObject();
     var vObject (obj);
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("undefinedMethod"), argsArray, 0);
+    var result = vObject.invoke(Identifier("undefinedMethod"), nullptr, 0);
     EXPECT_TRUE (result.isVoid());
 }
 
@@ -929,8 +925,7 @@ TEST_F (VariantTests, MethodReturnsObject)
     var vParent (parentObj);
     EXPECT_TRUE (vParent.isObject());
 
-    var argsArray[] = {};
-    var result = vParent.invoke (Identifier ("getChild"), argsArray, 0);
+    var result = vParent.invoke(Identifier("getChild"), nullptr, 0);
     EXPECT_TRUE (result.isObject());
 
     DynamicObject* retrievedChild = result.getDynamicObject();
@@ -963,11 +958,10 @@ TEST_F (VariantTests, MethodReturnsMethod)
     var vObject (obj);
     EXPECT_TRUE (vObject.isObject());
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("getInnerMethod"), argsArray, 0);
+    var result = vObject.invoke(Identifier("getInnerMethod"), nullptr, 0);
     EXPECT_TRUE (result.isObject());
 
-    var innerResult = result.invoke (Identifier ("inner"), argsArray, 0);
+    var innerResult = result.invoke(Identifier("inner"), nullptr, 0);
     EXPECT_EQ (innerResult.toString(), String ("Inner Method Called"));
 }
 
@@ -1042,8 +1036,7 @@ TEST_F (VariantTests, MethodReturnsVoid)
     EXPECT_FALSE (vObject.hasProperty ("doNothing"));
     EXPECT_TRUE (vObject.hasMethod ("doNothing"));
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("doNothing"), argsArray, 0);
+    var result = vObject.invoke(Identifier("doNothing"), nullptr, 0);
     EXPECT_TRUE (result.isVoid());
 }
 
@@ -1151,8 +1144,7 @@ TEST_F (VariantTests, MethodReturnsArray)
     var vObject (obj);
     EXPECT_TRUE (vObject.isObject());
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("createArray"), argsArray, 0);
+    var result = vObject.invoke(Identifier("createArray"), nullptr, 0);
     EXPECT_TRUE (result.isArray());
     EXPECT_EQ (result.size(), 3);
     EXPECT_EQ (static_cast<int> (result[0]), 1);
@@ -1479,7 +1471,7 @@ TEST_F (VariantTests, CloneMethodVar)
     var clonedMethod = originalMethod.clone();
 
     EXPECT_TRUE (clonedMethod.isMethod());
-    EXPECT_TRUE (clonedMethod.equals (originalMethod));
+    EXPECT_FALSE(clonedMethod.equals(originalMethod));
 }
 
 // Test converting var to int
@@ -1660,8 +1652,7 @@ TEST_F (VariantTests, MethodReturnsFunction)
     var vObject (obj);
     EXPECT_TRUE (vObject.isObject());
 
-    var argsOuter[] = {};
-    var adderVar = vObject.invoke (Identifier ("getAdder"), argsOuter, 0);
+    var adderVar = vObject.invoke(Identifier("getAdder"), nullptr, 0);
     EXPECT_TRUE (adderVar.isMethod());
 
     var argsInner[] = { var (5) };
@@ -1685,8 +1676,7 @@ TEST_F (VariantTests, MethodReturnsUndefined)
     var vObject (obj);
     EXPECT_TRUE (vObject.isObject());
 
-    var argsArray[] = {};
-    var result = vObject.invoke (Identifier ("returnUndefined"), argsArray, 0);
+    var result = vObject.invoke(Identifier("returnUndefined"), nullptr, 0);
     EXPECT_TRUE (result.isUndefined());
 }
 
