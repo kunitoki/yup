@@ -63,33 +63,29 @@ void AudioIODeviceType::callDeviceChangeListeners()
 }
 
 //==============================================================================
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_CoreAudio()
+{
 #if JUCE_MAC
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_CoreAudio()
-{
     return new CoreAudioClasses::CoreAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_CoreAudio()
-{
     return nullptr;
-}
 #endif
+}
 
+//==============================================================================
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_iOSAudio()
+{
 #if JUCE_IOS
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_iOSAudio()
-{
     return new iOSAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_iOSAudio()
-{
     return nullptr;
-}
 #endif
+}
 
-#if JUCE_WINDOWS && JUCE_WASAPI
+//==============================================================================
 AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_WASAPI (WASAPIDeviceMode deviceMode)
 {
+#if JUCE_WINDOWS && JUCE_WASAPI
     auto windowsVersion = SystemStats::getOperatingSystemType();
 
     if (windowsVersion < SystemStats::WinVista
@@ -97,85 +93,62 @@ AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_WASAPI (WASAPIDevi
         return nullptr;
 
     return new WasapiClasses::WASAPIAudioIODeviceType (deviceMode);
-}
-
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_WASAPI (bool exclusiveMode)
-{
-    return createAudioIODeviceType_WASAPI (exclusiveMode ? WASAPIDeviceMode::exclusive
-                                                         : WASAPIDeviceMode::shared);
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_WASAPI (WASAPIDeviceMode)
-{
+    ignoreUnused (deviceMode);
     return nullptr;
+#endif
 }
 
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_WASAPI (bool) { return nullptr; }
-#endif
-
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_DirectSound()
+{
 #if JUCE_WINDOWS && JUCE_DIRECTSOUND
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_DirectSound()
-{
     return new DSoundAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_DirectSound()
-{
     return nullptr;
-}
 #endif
+}
 
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ASIO()
+{
 #if JUCE_WINDOWS && JUCE_ASIO
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ASIO()
-{
     return new ASIOAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ASIO()
-{
     return nullptr;
-}
 #endif
+}
 
+//==============================================================================
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ALSA()
+{
 #if (JUCE_LINUX || JUCE_BSD) && JUCE_ALSA
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ALSA()
-{
     return createAudioIODeviceType_ALSA_PCMDevices();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_ALSA()
-{
     return nullptr;
-}
 #endif
+}
 
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_JACK()
+{
 #if (JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_WINDOWS) && JUCE_JACK
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_JACK()
-{
     return new JackAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_JACK()
-{
     return nullptr;
-}
 #endif
+}
 
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Bela()
+{
 #if JUCE_LINUX && JUCE_BELA
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Bela()
-{
     return new BelaAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Bela()
-{
     return nullptr;
-}
 #endif
+}
 
-#if JUCE_ANDROID
+//==============================================================================
 AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Android()
 {
+#if JUCE_ANDROID
 #if JUCE_USE_ANDROID_OBOE
     if (isOboeAvailable())
         return nullptr;
@@ -187,48 +160,37 @@ AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Android()
 #endif
 
     return new AndroidAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Android()
-{
     return nullptr;
-}
 #endif
+}
 
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_OpenSLES()
+{
 #if JUCE_ANDROID && JUCE_USE_ANDROID_OPENSLES
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_OpenSLES()
-{
     return isOpenSLAvailable() ? new OpenSLAudioDeviceType() : nullptr;
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_OpenSLES()
-{
     return nullptr;
-}
 #endif
+}
 
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Oboe()
+{
 #if JUCE_ANDROID && JUCE_USE_ANDROID_OBOE
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Oboe()
-{
     return isOboeAvailable() ? new OboeAudioIODeviceType() : nullptr;
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_Oboe()
-{
     return nullptr;
-}
 #endif
+}
 
+//==============================================================================
+AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_AudioWorklet()
+{
 #if JUCE_EMSCRIPTEN
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_AudioWorklet()
-{
     return new AudioWorkletAudioIODeviceType();
-}
 #else
-AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_AudioWorklet()
-{
     return nullptr;
-}
 #endif
+}
 
 } // namespace juce

@@ -73,16 +73,6 @@ struct JuceVersionPrinter
 static JuceVersionPrinter juceVersionPrinter;
 #endif
 
-StringArray SystemStats::getDeviceIdentifiers()
-{
-    for (const auto flag : { MachineIdFlags::fileSystemId, MachineIdFlags::macAddresses })
-        if (auto ids = getMachineIdentifiers (flag); ! ids.isEmpty())
-            return ids;
-
-    jassertfalse; // Failed to create any IDs!
-    return {};
-}
-
 String getLegacyUniqueDeviceID();
 
 StringArray SystemStats::getMachineIdentifiers (MachineIdFlags flags)

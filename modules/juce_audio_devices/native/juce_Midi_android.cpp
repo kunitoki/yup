@@ -1057,29 +1057,6 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     return {};
 }
 
-StringArray MidiInput::getDevices()
-{
-    if (getAndroidSDKVersion() < 23)
-        return {};
-
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiInput::getDefaultDeviceIndex()
-{
-    return (getAndroidSDKVersion() < 23 ? -1 : 0);
-}
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* callback)
-{
-    return openDevice (getAvailableDevices()[index].identifier, callback);
-}
-
 MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
     : deviceInfo (deviceName, deviceIdentifier)
 {
@@ -1134,29 +1111,6 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     }
 
     return {};
-}
-
-StringArray MidiOutput::getDevices()
-{
-    if (getAndroidSDKVersion() < 23)
-        return {};
-
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiOutput::getDefaultDeviceIndex()
-{
-    return (getAndroidSDKVersion() < 23 ? -1 : 0);
-}
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int index)
-{
-    return openDevice (getAvailableDevices()[index].identifier);
 }
 
 MidiOutput::~MidiOutput()

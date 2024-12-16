@@ -12,6 +12,7 @@ on:
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"
+      - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_ios.*"
       - "!**/native/*_linux.*"

@@ -1192,15 +1192,4 @@ var::NativeFunctionArgs::NativeFunctionArgs (const var& t, const var* args, int 
 {
 }
 
-//==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES
-
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
-
-const var var::null;
-
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
-
-#endif
-
 } // namespace juce

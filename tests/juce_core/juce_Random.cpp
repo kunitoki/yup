@@ -92,9 +92,15 @@ TEST (RandomTests, Concurrent)
             startThread();
         }
 
-        ~InvokerThread() { stopThread (-1); }
+        ~InvokerThread()
+        {
+            stopThread (-1);
+        }
 
-        void waitUntilReady() const { ready.wait(); }
+        void waitUntilReady() const
+        {
+            ready.wait();
+        }
 
     private:
         void run() final
@@ -115,17 +121,19 @@ TEST (RandomTests, Concurrent)
     constexpr int numberOfInvocationsPerThread = 10000;
     constexpr int numberOfThreads = 100;
 
-    std::vector<std::unique_ptr<InvokerThread>> threads;
-    threads.reserve ((size_t) numberOfThreads);
     FastWaitableEvent start;
 
+    std::vector<std::unique_ptr<InvokerThread>> threads;
+    threads.reserve ((size_t) numberOfThreads);
+
+    auto threadCallback = [] { Random::getSystemRandom().nextInt(); };
+
     for (int i = numberOfThreads; --i >= 0;)
-        threads.push_back (std::make_unique<InvokerThread> ([]
-                                                            {
-                                                                Random::getSystemRandom().nextInt();
-                                                            },
+    {
+        threads.push_back (std::make_unique<InvokerThread> (threadCallback,
                                                             start,
                                                             numberOfInvocationsPerThread));
+    }
 
     for (auto& thread : threads)
         thread->waitUntilReady();

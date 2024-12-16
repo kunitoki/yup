@@ -299,14 +299,6 @@ public:
     */
     static var readFromStream (InputStream& input);
 
-    //==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
-    [[deprecated ("This was a static empty var object, but is now deprecated as it's too easy to accidentally "
-                  "use it indirectly during a static constructor leading to hard-to-find order-of-initialisation "
-                  "problems. Use var() or {} instead. For returning an empty var from a function by reference, "
-                  "use a function-local static var and return that.")]] static const var null;
-#endif
-
 private:
     //==============================================================================
     struct VariantType;

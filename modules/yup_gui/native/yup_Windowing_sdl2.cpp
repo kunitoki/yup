@@ -491,6 +491,7 @@ public:
 private:
     void updateComponentUnderMouse (const MouseEvent& event);
     void triggerRenderingUpdate();
+    void recreateContext();
     void renderContext();
 
     void startRendering();
@@ -1011,6 +1012,18 @@ void SDL2ComponentNative::timerCallback()
 
 //==============================================================================
 
+void SDL2ComponentNative::recreateContext()
+{
+    // Create the rendering context
+    context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
+    if (context == nullptr)
+        return; // TODO - raise something ?
+
+    triggerRenderingUpdate();
+}
+
+//==============================================================================
+
 void SDL2ComponentNative::renderContext()
 {
     auto [contentWidth, contentHeight] = getContentSize();
@@ -1383,6 +1396,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_WINDOWEVENT_RESTORED:
+            //recreateContext();
             break;
 
         case SDL_WINDOWEVENT_FOCUS_GAINED:

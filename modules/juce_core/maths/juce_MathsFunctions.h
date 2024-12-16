@@ -967,17 +967,6 @@ struct UnsignedTypeWithSize<8>
 } // namespace TypeHelpers
 
 //==============================================================================
-#ifndef DOXYGEN
-[[deprecated ("Use roundToInt instead.")]] inline int roundDoubleToInt (double value) noexcept
-{
-    return roundToInt (value);
-}
-
-[[deprecated ("Use roundToInt instead.")]] inline int roundFloatToInt (float value) noexcept { return roundToInt (value); }
-
-[[deprecated ("Use std::abs() instead.")]] inline int64 abs64 (int64 n) noexcept { return std::abs (n); }
-#endif
-
 /** Converts an enum to its underlying integral type.
     Similar to std::to_underlying, which is only available in C++23 and above.
 */

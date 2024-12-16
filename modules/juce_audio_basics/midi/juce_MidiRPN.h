@@ -96,12 +96,6 @@ public:
     void reset() noexcept;
 
     //==============================================================================
-    /** @see tryParse() */
-    [[deprecated ("Use tryParse() instead")]] bool parseControllerMessage (int midiChannel,
-                                                                           int controllerNumber,
-                                                                           int controllerValue,
-                                                                           MidiRPNMessage& result) noexcept;
-
     /** Takes the next in a stream of incoming MIDI CC messages and returns
         a MidiRPNMessage if the current message produces a well-formed RPN or NRPN.
 

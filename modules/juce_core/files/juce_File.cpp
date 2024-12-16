@@ -1087,17 +1087,6 @@ File File::getLinkedTarget() const
 #endif
 
 //==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES
-
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
-
-const File File::nonexistent {};
-
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
-
-#endif
-
-//==============================================================================
 MemoryMappedFile::MemoryMappedFile (const File& file, MemoryMappedFile::AccessMode mode, bool exclusive)
     : range (0, file.getSize())
 {

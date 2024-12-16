@@ -178,13 +178,6 @@ public:
     */
     static String getDeviceManufacturer();
 
-    /** This method calculates some IDs to uniquely identify the device.
-
-        The first choice for an ID is a filesystem ID for the user's home folder or
-        windows directory. If that fails then this function returns the MAC addresses.
-    */
-    [[deprecated ("The identifiers produced by this function are not reliable. Use getUniqueDeviceID() instead.")]] static StringArray getDeviceIdentifiers();
-
     /** This method returns a machine unique ID unaffected by storage or peripheral
         changes.
 
@@ -312,14 +305,6 @@ public:
 
 #if JUCE_MAC
     static bool isAppSandboxEnabled();
-#endif
-
-    //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("This method was spelt wrong! Please change your code to use getCpuSpeedInMegahertz instead.")]] static int getCpuSpeedInMegaherz()
-    {
-        return getCpuSpeedInMegahertz();
-    }
 #endif
 
 private:

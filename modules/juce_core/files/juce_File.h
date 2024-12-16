@@ -1161,17 +1161,6 @@ public:
         bool foldersFirst;
     };
 
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
-    /* These static objects are deprecated because it's too easy to accidentally use them indirectly
-       during a static constructor, which leads to very obscure order-of-initialisation bugs.
-       Use File::getSeparatorChar() and File::getSeparatorString(), and instead of File::nonexistent,
-       just use File() or {}.
-    */
-    [[deprecated]] static const juce_wchar separator;
-    [[deprecated]] static const StringRef separatorString;
-    [[deprecated]] static const File nonexistent;
-#endif
-
 private:
     //==============================================================================
     String fullPath;

@@ -11,6 +11,7 @@ on:
       - "**/tests/**"
       - "**/thirdparty/**"
       - "!**/native/*_android.*"
+      - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
       - "!**/native/*_ios.*"

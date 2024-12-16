@@ -1046,42 +1046,4 @@ bool URL::launchInDefaultBrowser() const
     return Process::openDocument (u, {});
 }
 
-//==============================================================================
-std::unique_ptr<InputStream> URL::createInputStream (bool usePostCommand,
-                                                     OpenStreamProgressCallback* cb,
-                                                     void* context,
-                                                     String headers,
-                                                     int timeOutMs,
-                                                     StringPairArray* responseHeaders,
-                                                     int* statusCode,
-                                                     int numRedirectsToFollow,
-                                                     String httpRequestCmd) const
-{
-    std::function<bool (int, int)> callback;
-
-    if (cb != nullptr)
-        callback = [context, cb] (int sent, int total)
-        {
-            return cb (context, sent, total);
-        };
-
-    return createInputStream (InputStreamOptions (toHandling (usePostCommand))
-                                  .withProgressCallback (std::move (callback))
-                                  .withExtraHeaders (headers)
-                                  .withConnectionTimeoutMs (timeOutMs)
-                                  .withResponseHeaders (responseHeaders)
-                                  .withStatusCode (statusCode)
-                                  .withNumRedirectsToFollow (numRedirectsToFollow)
-                                  .withHttpRequestCmd (httpRequestCmd));
-}
-
-std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocation,
-                                                        String extraHeaders,
-                                                        DownloadTask::Listener* listener,
-                                                        bool usePostCommand)
-{
-    auto options = DownloadTaskOptions().withExtraHeaders (std::move (extraHeaders)).withListener (listener).withUsePost (usePostCommand);
-    return downloadToFile (targetLocation, std::move (options));
-}
-
 } // namespace juce

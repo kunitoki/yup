@@ -67,8 +67,8 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-#include <juce_audio_basics/native/juce_CoreAudioTimeConversions_mac.h>
-#include <juce_audio_basics/native/juce_AudioWorkgroup_mac.h>
+#include <juce_audio_basics/native/juce_CoreAudioTimeConversions_apple.h>
+#include <juce_audio_basics/native/juce_AudioWorkgroup_apple.h>
 #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
 #include <juce_audio_basics/midi/ump/juce_UMP.h>
 #include "midi_io/ump/juce_UMPBytestreamInputHandler.h"
@@ -85,7 +85,7 @@
 #undef Component
 
 #include "native/juce_CoreAudio_mac.cpp"
-#include "native/juce_CoreMidi_mac.mm"
+#include "native/juce_CoreMidi_apple.mm"
 
 #elif JUCE_IOS
 #import <AudioToolbox/AudioToolbox.h>
@@ -101,7 +101,7 @@
 #endif
 
 #include "native/juce_Audio_ios.cpp"
-#include "native/juce_CoreMidi_mac.mm"
+#include "native/juce_CoreMidi_apple.mm"
 
 //==============================================================================
 #elif JUCE_WINDOWS

@@ -882,16 +882,6 @@ public:
     static MidiMessage createSysExMessage (Span<const std::byte> data);
 
     //==============================================================================
-#ifndef DOXYGEN
-    /** Reads a midi variable-length integer.
-
-        The `data` argument indicates the data to read the number from,
-        and `numBytesUsed` is used as an out-parameter to indicate the number
-        of bytes that were read.
-    */
-    [[deprecated ("This signature has been deprecated in favour of the safer readVariableLengthValue.")]] static int readVariableLengthVal (const uint8* data, int& numBytesUsed) noexcept;
-#endif
-
     /** Holds information about a variable-length value which was parsed
         from a stream of bytes.
 
