@@ -154,12 +154,12 @@ static MaxNumFileHandlesInitialiser maxNumFileHandlesInitialiser;
 //==============================================================================
 #if JUCE_ALLOW_STATIC_NULL_VARIABLES
 
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 const juce_wchar File::separator = '/';
 const StringRef File::separatorString ("/");
 
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+JUCE_END_IGNORE_DEPRECATION_WARNINGS
 
 #endif
 
@@ -494,7 +494,26 @@ bool File::replaceInternal (const File& dest) const
 
 Result File::createDirectoryInternal (const String& fileName) const
 {
-    return getResultForReturnValue (mkdir (fileName.toUTF8(), 0777));
+    auto res = getResultForReturnValue (mkdir (fileName.toUTF8(), 0777));
+
+    if (res.ok())
+    {
+        auto parent = File (fileName).getParentDirectory().getFullPathName();
+
+        struct stat parentInfo;
+        struct stat childInfo;
+
+        if (stat (parent.toRawUTF8(), &parentInfo) == 0 && stat (fileName.toRawUTF8(), &childInfo) == 0)
+        {
+            if (parentInfo.st_mode & S_IWOTH) childInfo.st_mode |= S_IWOTH;
+            if (parentInfo.st_mode & S_IWUSR) childInfo.st_mode |= S_IWUSR;
+            if (parentInfo.st_mode & S_IWGRP) childInfo.st_mode |= S_IWGRP;
+
+            chmod (fileName.toRawUTF8(), childInfo.st_mode);
+        }
+    }
+
+    return res;
 }
 
 //==============================================================================
@@ -508,12 +527,29 @@ int64 juce_fileSetPosition (void* handle, int64 pos)
 
 void FileInputStream::openHandle()
 {
-    auto f = open (file.getFullPathName().toUTF8(), O_RDONLY);
+    mode_t permission = 00644;
 
+    auto parent = file.getParentDirectory().getFullPathName();
+
+    struct stat parentInfo;
+
+    if (stat (parent.toRawUTF8(), &parentInfo) == 0)
+    {
+        if (parentInfo.st_mode & S_IWOTH) permission |= S_IWOTH;
+        if (parentInfo.st_mode & S_IWUSR) permission |= S_IWUSR;
+        if (parentInfo.st_mode & S_IWGRP) permission |= S_IWGRP;
+    }
+
+    auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT, permission);
     if (f != -1)
+    {
+        fchmod (f, permission);
         fileHandle = fdToVoidPointer (f);
+    }
     else
+    {
         status = getResultForErrno();
+    }
 }
 
 FileInputStream::~FileInputStream()

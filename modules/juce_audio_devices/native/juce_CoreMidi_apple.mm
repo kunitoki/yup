@@ -964,7 +964,7 @@ struct CreatorFunctions<ImplementationStrategy::both>
 #endif
 
 using CreatorFunctionsToUse = CreatorFunctions<implementationStrategy>;
-}
+} // namespace CoreMidiHelpers
 
 //==============================================================================
 class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback
@@ -1126,26 +1126,6 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice(const String& deviceName, 
                                callback);
 }
 
-StringArray MidiInput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add(d.name);
-
-    return deviceNames;
-}
-
-int MidiInput::getDefaultDeviceIndex()
-{
-    return 0;
-}
-
-std::unique_ptr<MidiInput> MidiInput::openDevice(int index, MidiInputCallback* callback)
-{
-    return openDevice(getAvailableDevices()[index].identifier, callback);
-}
-
 MidiInput::MidiInput(const String& deviceName, const String& deviceIdentifier)
     : deviceInfo(deviceName, deviceIdentifier)
 {
@@ -1258,26 +1238,6 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice(const String& deviceName
     }
 
     return {};
-}
-
-StringArray MidiOutput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add(d.name);
-
-    return deviceNames;
-}
-
-int MidiOutput::getDefaultDeviceIndex()
-{
-    return 0;
-}
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice(int index)
-{
-    return openDevice(getAvailableDevices()[index].identifier);
 }
 
 MidiOutput::~MidiOutput()

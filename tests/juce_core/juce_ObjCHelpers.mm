@@ -45,7 +45,7 @@
 
 #include <juce_core/juce_core.h>
 
-#include <juce_core/native/juce_ObjCHelpers_mac.h>
+#include <juce_core/native/juce_ObjCHelpers_apple.h>
 
 using namespace juce;
 

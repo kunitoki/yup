@@ -198,10 +198,10 @@ public:
     {
         ComSmartPtr<OtherComClass> destObject;
 
-        if (QueryInterface (destObject) == S_OK)
-            return destObject;
+        if (const auto hr = QueryInterface (destObject); FAILED (hr))
+            return {};
 
-        return {};
+        return destObject;
     }
 
     /** Increments refcount. */

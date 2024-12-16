@@ -55,7 +55,7 @@ TEST (BigIntegerTests, BasicTests)
         return b;
     };
 
-    Random r = Random::getSystemRandom();
+    Random& r = Random::getSystemRandom();
 
     EXPECT_TRUE (BigInteger().isZero());
     EXPECT_TRUE (BigInteger (1).isOne());

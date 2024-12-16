@@ -230,14 +230,14 @@ extern char** environ;
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-#include "native/juce_Files_mac.mm"
-#include "native/juce_Network_mac.mm"
-#include "native/juce_Strings_mac.mm"
+#include "native/juce_Files_apple.mm"
+#include "native/juce_Network_apple.mm"
+#include "native/juce_Strings_apple.mm"
 #include "native/juce_SharedCode_intel.h"
-#include "native/juce_SystemStats_mac.mm"
-#include "native/juce_Threads_mac.mm"
+#include "native/juce_SystemStats_apple.mm"
+#include "native/juce_Threads_apple.mm"
 #include "native/juce_PlatformTimer_generic.cpp"
-#include "native/juce_Process_mac.mm"
+#include "native/juce_Process_apple.mm"
 
 //==============================================================================
 #elif JUCE_WINDOWS

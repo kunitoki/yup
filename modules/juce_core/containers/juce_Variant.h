@@ -88,9 +88,11 @@ public:
     var (const char* value);
     var (const wchar_t* value);
     var (const String& value);
+    var (StringRef value);
     var (const Array<var>& value);
     var (const StringArray& value);
     var (ReferenceCountedObject* object);
+    var (std::unique_ptr<DynamicObject> object);
     var (NativeFunction method) noexcept;
     var (const void* binaryData, size_t dataSize);
     var (const MemoryBlock& binaryData);
@@ -103,9 +105,11 @@ public:
     var& operator= (const char* value);
     var& operator= (const wchar_t* value);
     var& operator= (const String& value);
+    var& operator= (StringRef value);
     var& operator= (const MemoryBlock& value);
     var& operator= (const Array<var>& value);
     var& operator= (ReferenceCountedObject* object);
+    var& operator= (std::unique_ptr<DynamicObject> object);
     var& operator= (NativeFunction method);
 
     var (var&&) noexcept;
@@ -262,11 +266,16 @@ public:
     const var& operator[] (const Identifier& propertyName) const;
     /** If this variant is an object, this returns one of its properties. */
     const var& operator[] (const char* propertyName) const;
-    /** If this variant is an object, this returns one of its properties, or a default
-        fallback value if the property is not set. */
+    /** If this variant is an object, this returns one of its properties. */
+    const var& operator[] (StringRef propertyName) const;
+    /** If this variant is an object, this returns one of its properties, or a default fallback value if the property is not set. */
     var getProperty (const Identifier& propertyName, const var& defaultReturnValue) const;
     /** Returns true if this variant is an object and if it has the given property. */
     bool hasProperty (const Identifier& propertyName) const noexcept;
+    /** If this variant is an object, this returns one of its methods, or a default fallback value if the property is not set. */
+    var getMethod (const Identifier& methodName, const var& defaultReturnValue) const;
+    /** Returns true if this variant is an object and if it has the given method. */
+    bool hasMethod (const Identifier& methodName) const noexcept;
 
     /** Invokes a named method call with no arguments. */
     var call (const Identifier& method) const;
@@ -298,14 +307,6 @@ public:
         @see JSON
     */
     static var readFromStream (InputStream& input);
-
-    //==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
-    [[deprecated ("This was a static empty var object, but is now deprecated as it's too easy to accidentally "
-                  "use it indirectly during a static constructor leading to hard-to-find order-of-initialisation "
-                  "problems. Use var() or {} instead. For returning an empty var from a function by reference, "
-                  "use a function-local static var and return that.")]] static const var null;
-#endif
 
 private:
     //==============================================================================
@@ -344,7 +345,7 @@ JUCE_API bool operator== (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator!= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator<(const var&, const var&);
+JUCE_API bool operator< (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator<= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */

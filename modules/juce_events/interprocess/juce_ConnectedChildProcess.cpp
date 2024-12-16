@@ -165,14 +165,7 @@ ChildProcessCoordinator::~ChildProcessCoordinator()
 
 void ChildProcessCoordinator::handleConnectionLost() {}
 
-void ChildProcessCoordinator::handleMessageFromWorker (const MemoryBlock& mb)
-{
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-    JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
-    handleMessageFromSlave (mb);
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-    JUCE_END_IGNORE_WARNINGS_MSVC
-}
+void ChildProcessCoordinator::handleMessageFromWorker (const MemoryBlock& mb) {}
 
 bool ChildProcessCoordinator::sendMessageToWorker (const MemoryBlock& mb)
 {
@@ -294,14 +287,7 @@ void ChildProcessWorker::handleConnectionMade() {}
 
 void ChildProcessWorker::handleConnectionLost() {}
 
-void ChildProcessWorker::handleMessageFromCoordinator (const MemoryBlock& mb)
-{
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-    JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
-    handleMessageFromMaster (mb);
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-    JUCE_END_IGNORE_WARNINGS_MSVC
-}
+void ChildProcessWorker::handleMessageFromCoordinator (const MemoryBlock& mb) {}
 
 bool ChildProcessWorker::sendMessageToCoordinator (const MemoryBlock& mb)
 {

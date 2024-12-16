@@ -272,7 +272,7 @@ bool Thread::stopThread (const int timeOutMilliseconds)
             // very bad karma if this point is reached, as there are bound to be
             // locks and events left in silly states when a thread is killed by force..
             jassertfalse;
-            Logger::writeToLog ("!! killing thread by force !!");
+            Logger::writeToLog ("!! killing thread " + threadName + " by force !!");
 
             killThread();
 

@@ -47,7 +47,11 @@ static void* juce_loadJackFunction (const char* const name)
     if (juce_libjackHandle == nullptr)
         return nullptr;
 
+#if JUCE_WINDOWS
+    return GetProcAddress ((HMODULE) juce_libjackHandle, name);
+#else
     return dlsym (juce_libjackHandle, name);
+#endif
 }
 
 #define JUCE_DECL_JACK_FUNCTION(return_type, fn_name, argument_types, arguments) \
@@ -633,12 +637,20 @@ public:
         inputNames.clear();
         outputNames.clear();
 
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = dlopen ("libjack.so.0", RTLD_LAZY);
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = dlopen ("libjack.so", RTLD_LAZY);
-        if (juce_libjackHandle == nullptr)
-            return;
+#if (JUCE_LINUX || JUCE_BSD)
+        if (juce_libjackHandle == nullptr)  juce_libjackHandle = dlopen ("libjack.so.0", RTLD_LAZY);
+        if (juce_libjackHandle == nullptr)  juce_libjackHandle = dlopen ("libjack.so",   RTLD_LAZY);
+#elif JUCE_MAC
+        if (juce_libjackHandle == nullptr)  juce_libjackHandle = dlopen ("libjack.dylib", RTLD_LAZY);
+#elif JUCE_WINDOWS
+#if JUCE_64BIT
+        if (juce_libjackHandle == nullptr)  juce_libjackHandle = LoadLibraryA ("libjack64.dll");
+#else
+        if (juce_libjackHandle == nullptr)  juce_libjackHandle = LoadLibraryA ("libjack.dll");
+#endif
+#endif
+
+        if (juce_libjackHandle == nullptr)  return;
 
         jack_status_t status = {};
 

@@ -126,7 +126,6 @@ struct Atomic final
 
         @returns true if the comparison was true and the value was replaced; false if
                  the comparison failed and the value was left unchanged.
-        @see compareAndSetValue
     */
     bool compareAndSetBool (Type newValue, Type valueToCompare) noexcept
     {
@@ -168,12 +167,6 @@ struct Atomic final
 
     /** The std::atomic object that this class operates on. */
     std::atomic<Type> value;
-
-    //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("This method has been deprecated as there is no equivalent method in "
-                  "std::atomic. Use compareAndSetBool instead.")]] Type compareAndSetValue (Type, Type) noexcept;
-#endif
 };
 
 } // namespace juce

@@ -106,7 +106,12 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 
 String SystemStats::getOperatingSystemName()
 {
-    return "Android " + AndroidStatsHelpers::getSystemProperty ("os.version");
+    return "Android " + getOperatingSystemVersionString();
+}
+
+String SystemStats::getOperatingSystemVersionString()
+{
+    return AndroidStatsHelpers::getSystemProperty ("os.version");
 }
 
 String SystemStats::getDeviceDescription()
@@ -157,12 +162,10 @@ int SystemStats::getCpuSpeedInMegahertz()
 
 int SystemStats::getMemorySizeInMegabytes()
 {
-#if __ANDROID_API__ >= 9
     struct sysinfo sysi;
 
     if (sysinfo (&sysi) == 0)
         return static_cast<int> ((sysi.totalram * sysi.mem_unit) / (1024 * 1024));
-#endif
 
     return 0;
 }

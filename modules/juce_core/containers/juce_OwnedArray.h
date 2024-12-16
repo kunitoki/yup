@@ -810,16 +810,6 @@ public:
     /** Returns the type of scoped lock to use for locking this array */
     using ScopedLockType = typename TypeOfCriticalSectionToUse::ScopedLockType;
 
-    //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("This method has been replaced by a more flexible templated version and renamed "
-                  "to swapWith to be more consistent with the names used in other classes.")]] void
-        swapWithArray (OwnedArray& other) noexcept
-    {
-        swapWith (other);
-    }
-#endif
-
 private:
     //==============================================================================
     ArrayBase<ObjectClass*, TypeOfCriticalSectionToUse> values;

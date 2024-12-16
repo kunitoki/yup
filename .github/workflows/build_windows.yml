@@ -11,6 +11,7 @@ on:
       - "**/tests/**"
       - "**/thirdparty/**"
       - "!**/native/*_android.*"
+      - "!**/native/*_apple.*"
       - "!**/native/*_emscripten.*"
       - "!**/native/*_linux.*"
       - "!**/native/*_ios.*"
@@ -40,30 +41,36 @@ jobs:
       working-directory: ${{runner.workspace}}/build
       run: cmake ${{ github.workspace }} -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
-    - name: Build Debug
+    - name: Build Tests Debug
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Debug --parallel 4 --target yup_tests
+
+    - name: Execute Tests Debug
+      working-directory: ${{runner.workspace}}/build/tests/Debug
+      run: ./yup_tests.exe
+
+    - name: Build Tests Release
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Release --parallel 4 --target yup_tests
+
+    - name: Execute Tests Release
+      working-directory: ${{runner.workspace}}/build/tests/Release
+      run: ./yup_tests.exe
+
+    - name: Build Examples Debug
       working-directory: ${{runner.workspace}}/build
       run: |
-        cmake --build . --config Debug --parallel 4 --target yup_tests
         cmake --build . --config Debug --parallel 4 --target example_console
         cmake --build . --config Debug --parallel 4 --target example_app
         cmake --build . --config Debug --parallel 4 --target example_graphics
         cmake --build . --config Debug --parallel 4 --target example_render
         cmake --build . --config Debug --parallel 4 --target example_plugin
 
-    - name: Test Debug
-      working-directory: ${{runner.workspace}}/build/tests/Debug
-      run: ./yup_tests.exe
-
-    - name: Build Release
+    - name: Build Examples Release
       working-directory: ${{runner.workspace}}/build
       run: |
-        cmake --build . --config Release --parallel 4 --target yup_tests
         cmake --build . --config Release --parallel 4 --target example_console
         cmake --build . --config Release --parallel 4 --target example_app
         cmake --build . --config Release --parallel 4 --target example_graphics
         cmake --build . --config Release --parallel 4 --target example_render
         cmake --build . --config Release --parallel 4 --target example_plugin
-
-    - name: Test Release
-      working-directory: ${{runner.workspace}}/build/tests/Release
-      run: ./yup_tests.exe
