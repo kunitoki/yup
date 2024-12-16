@@ -584,7 +584,7 @@ struct var::VariantType
 
     static bool methodEquals (const ValueUnion& data, const ValueUnion& otherData, const VariantType& otherType) noexcept
     {
-        auto targetEquals = [](const auto* method1, const auto* method2)
+        auto targetEquals = [] (const auto* method1, const auto* method2)
         {
             using methodType = var (const NativeFunctionArgs&);
 

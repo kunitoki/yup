@@ -110,7 +110,7 @@ public:
     inline bool operator!= (StringRef other) const noexcept { return name != other; }
 
     /** Compares the identifier with a string. */
-    inline bool operator<(StringRef other) const noexcept { return name < other; }
+    inline bool operator< (StringRef other) const noexcept { return name < other; }
 
     /** Compares the identifier with a string. */
     inline bool operator<= (StringRef other) const noexcept { return name <= other; }
