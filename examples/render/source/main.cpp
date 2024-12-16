@@ -177,6 +177,24 @@ private:
 
 //==============================================================================
 
+class CustomWindow2
+    : public yup::DocumentWindow
+{
+public:
+    CustomWindow2()
+        : yup::DocumentWindow (yup::ComponentNative::Options(), {})
+    {
+        setTitle ("secondary");
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        setVisible (false);
+    }
+};
+
+//==============================================================================
+
 struct Application : yup::YUPApplication
 {
     Application() = default;
@@ -198,14 +216,18 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-
 #if JUCE_IOS || JUCE_ANDROID
         window->centreWithSize ({ 1080, 2400 });
 #else
         window->centreWithSize ({ 1280, 866 });
 #endif
-
         window->setVisible (true);
+        window->toFront();
+
+        window2 = std::make_unique<CustomWindow2>();
+        window2->centreWithSize ({ 300, 300 });
+        window2->setVisible (true);
+        window2->toFront();
     }
 
     void shutdown() override
@@ -214,11 +236,14 @@ struct Application : yup::YUPApplication
 
         window.reset();
 
+        window2.reset();
+
         YUP_PROFILE_STOP();
     }
 
 private:
     std::unique_ptr<CustomWindow> window;
+    std::unique_ptr<CustomWindow2> window2;
 };
 
 START_JUCE_APPLICATION (Application)

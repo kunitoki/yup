@@ -154,6 +154,7 @@ public:
     virtual void enableWireframe (bool shouldBeEnabld) = 0;
 
     //==============================================================================
+    virtual void repaint() = 0;
     virtual void repaint (const Rectangle<float>& rect) = 0;
     virtual Rectangle<float> getRepaintArea() const = 0;
 

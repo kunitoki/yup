@@ -39,6 +39,10 @@
 #include <rive/animation/state_machine_input_instance.hpp>
 
 //==============================================================================
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
+
+//==============================================================================
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "mouse/yup_MouseEvent.cpp"
@@ -49,10 +53,6 @@
 #include "widgets/yup_Slider.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
-
-//==============================================================================
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
@@ -88,4 +88,5 @@
 #endif
 
 //==============================================================================
+#include "native/yup_Windowing_utils.h"
 #include "native/yup_Windowing_sdl2.cpp"

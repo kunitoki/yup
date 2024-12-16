@@ -204,6 +204,20 @@
 #define JUCE_ENABLE_ALLOCATION_HOOKS 0
 #endif
 
+/** Config: JUCE_PROFILING_CATEGORIES
+    If enabled, this will add global profiling categories to the profiler. The "yup" category should
+    always be defined, only additional categories should be provided (note the first comma).
+    Format of the categories is like:
+    ```
+        #define JUCE_PROFILING_CATEGORIES \
+            , perfetto::Category ("custom1") \
+            , perfetto::Category ("custom2")
+    ```
+*/
+#ifndef JUCE_PROFILING_CATEGORIES
+#define JUCE_PROFILING_CATEGORIES
+#endif
+
 #ifndef JUCE_STRING_UTF_TYPE
 #define JUCE_STRING_UTF_TYPE 8
 #endif
