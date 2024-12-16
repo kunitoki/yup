@@ -63,17 +63,17 @@ struct UUIDGetter<::IUnknown>
     static CLSID get() { return { 0, 0, 0, { 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } }; }
 };
 
-#define JUCE_DECLARE_UUID_GETTER(name, uuid)         \
-template <>                                          \
-struct UUIDGetter<name>                              \
-{                                                    \
-static CLSID get() { return uuidFromString (uuid); } \
-};
+#define JUCE_DECLARE_UUID_GETTER(name, uuid)                 \
+    template <>                                              \
+    struct UUIDGetter<name>                                  \
+    {                                                        \
+        static CLSID get() { return uuidFromString (uuid); } \
+    };
 
-#define JUCE_COMCLASS(name, guid)     \
-struct name;                          \
-JUCE_DECLARE_UUID_GETTER (name, guid) \
-struct name
+#define JUCE_COMCLASS(name, guid)         \
+    struct name;                          \
+    JUCE_DECLARE_UUID_GETTER (name, guid) \
+    struct name
 
 #else
 #define JUCE_DECLARE_UUID_GETTER(name, uuid)
@@ -173,7 +173,7 @@ public:
 
     HRESULT CoCreateInstance (REFCLSID classUUID, DWORD dwClsContext = CLSCTX_INPROC_SERVER)
     {
-        auto hr = ::CoCreateInstance (classUUID, nullptr, dwClsContext, __uuidof(ComClass), (void**) resetAndGetPointerAddress());
+        auto hr = ::CoCreateInstance (classUUID, nullptr, dwClsContext, __uuidof (ComClass), (void**) resetAndGetPointerAddress());
         jassert (hr != CO_E_NOTINITIALIZED); // You haven't called CoInitialize for the current thread!
         return hr;
     }
@@ -190,7 +190,7 @@ public:
     template <class OtherComClass>
     HRESULT QueryInterface (ComSmartPtr<OtherComClass>& destObject) const
     {
-        return this->QueryInterface (__uuidof(OtherComClass), destObject);
+        return this->QueryInterface (__uuidof (OtherComClass), destObject);
     }
 
     template <class OtherComClass>
@@ -276,7 +276,7 @@ protected:
 
     JUCE_COMRESULT QueryInterface (REFIID refId, void** result) override
     {
-        if (refId == __uuidof(IUnknown))
+        if (refId == __uuidof (IUnknown))
             return castToType<First> (result);
 
         *result = nullptr;
@@ -306,7 +306,7 @@ public:
     JUCE_COMRESULT QueryInterface (REFIID refId, void** result) override
     {
         const std::tuple<IID, void*> bases[] {
-            std::make_tuple (__uuidof(ComClasses),
+            std::make_tuple (__uuidof (ComClasses),
                              static_cast<void*> (static_cast<ComClasses*> (this)))...
         };
 

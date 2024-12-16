@@ -448,7 +448,6 @@ public:
                 }
                 else
                 {
-                    
                     allocatedBytes = newTotalBytes;
                     allocatedData.allocate (newTotalBytes, clearExtraSpace || wasNonEmptyClearedData);
                     channels = unalignedPointerCast<Type**> (allocatedData.get());

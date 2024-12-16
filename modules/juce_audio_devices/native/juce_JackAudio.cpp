@@ -55,24 +55,24 @@ static void* juce_loadJackFunction (const char* const name)
 }
 
 #define JUCE_DECL_JACK_FUNCTION(return_type, fn_name, argument_types, arguments) \
-return_type fn_name argument_types                                               \
-{                                                                                \
-using ReturnType = return_type;                                                  \
-typedef return_type (*fn_type) argument_types;                                   \
-static fn_type fn = (fn_type) juce_loadJackFunction (#fn_name);                  \
-jassert (fn != nullptr);                                                         \
-return (fn != nullptr) ? ((*fn) arguments) : ReturnType();                       \
-}
+    return_type fn_name argument_types                                           \
+    {                                                                            \
+        using ReturnType = return_type;                                          \
+        typedef return_type (*fn_type) argument_types;                           \
+        static fn_type fn = (fn_type) juce_loadJackFunction (#fn_name);          \
+        jassert (fn != nullptr);                                                 \
+        return (fn != nullptr) ? ((*fn) arguments) : ReturnType();               \
+    }
 
 #define JUCE_DECL_VOID_JACK_FUNCTION(fn_name, argument_types, arguments) \
-void fn_name argument_types                                              \
-{                                                                        \
-typedef void (*fn_type) argument_types;                                  \
-static fn_type fn = (fn_type) juce_loadJackFunction (#fn_name);          \
-jassert (fn != nullptr);                                                 \
-if (fn != nullptr)                                                       \
-(*fn) arguments;                                                         \
-}
+    void fn_name argument_types                                          \
+    {                                                                    \
+        typedef void (*fn_type) argument_types;                          \
+        static fn_type fn = (fn_type) juce_loadJackFunction (#fn_name);  \
+        jassert (fn != nullptr);                                         \
+        if (fn != nullptr)                                               \
+            (*fn) arguments;                                             \
+    }
 
 //==============================================================================
 JUCE_DECL_JACK_FUNCTION (jack_client_t*, jack_client_open, (const char* client_name, jack_options_t options, jack_status_t* status, ...), (client_name, options, status))
@@ -131,19 +131,19 @@ const char* getJackErrorMessage (const jack_status_t status)
 }
 } // namespace
 
-#define JUCE_JACK_LOG_STATUS(x)              \
-{                                            \
-if (const char* m = getJackErrorMessage (x)) \
-jack_Log (m);                                \
-}
+#define JUCE_JACK_LOG_STATUS(x)                      \
+    {                                                \
+        if (const char* m = getJackErrorMessage (x)) \
+            jack_Log (m);                            \
+    }
 #define JUCE_JACK_LOG(x) jack_Log (x)
 #else
 #define JUCE_JACK_LOG_STATUS(x) \
-{                               \
-}
+    {                           \
+    }
 #define JUCE_JACK_LOG(x) \
-{                        \
-}
+    {                    \
+    }
 #endif
 
 //==============================================================================
@@ -638,19 +638,25 @@ public:
         outputNames.clear();
 
 #if (JUCE_LINUX || JUCE_BSD)
-        if (juce_libjackHandle == nullptr)  juce_libjackHandle = dlopen ("libjack.so.0", RTLD_LAZY);
-        if (juce_libjackHandle == nullptr)  juce_libjackHandle = dlopen ("libjack.so",   RTLD_LAZY);
+        if (juce_libjackHandle == nullptr)
+            juce_libjackHandle = dlopen ("libjack.so.0", RTLD_LAZY);
+        if (juce_libjackHandle == nullptr)
+            juce_libjackHandle = dlopen ("libjack.so", RTLD_LAZY);
 #elif JUCE_MAC
-        if (juce_libjackHandle == nullptr)  juce_libjackHandle = dlopen ("libjack.dylib", RTLD_LAZY);
+        if (juce_libjackHandle == nullptr)
+            juce_libjackHandle = dlopen ("libjack.dylib", RTLD_LAZY);
 #elif JUCE_WINDOWS
 #if JUCE_64BIT
-        if (juce_libjackHandle == nullptr)  juce_libjackHandle = LoadLibraryA ("libjack64.dll");
+        if (juce_libjackHandle == nullptr)
+            juce_libjackHandle = LoadLibraryA ("libjack64.dll");
 #else
-        if (juce_libjackHandle == nullptr)  juce_libjackHandle = LoadLibraryA ("libjack.dll");
+        if (juce_libjackHandle == nullptr)
+            juce_libjackHandle = LoadLibraryA ("libjack.dll");
 #endif
 #endif
 
-        if (juce_libjackHandle == nullptr)  return;
+        if (juce_libjackHandle == nullptr)
+            return;
 
         jack_status_t status = {};
 

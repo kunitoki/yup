@@ -42,13 +42,13 @@ namespace juce
 
 namespace FloatVectorHelpers
 {
-#define JUCE_INCREMENT_SRC_DEST \
-dest += (16 / sizeof (*dest));  \
-src += (16 / sizeof (*dest));
+#define JUCE_INCREMENT_SRC_DEST    \
+    dest += (16 / sizeof (*dest)); \
+    src += (16 / sizeof (*dest));
 #define JUCE_INCREMENT_SRC1_SRC2_DEST \
-dest += (16 / sizeof (*dest));        \
-src1 += (16 / sizeof (*dest));        \
-src2 += (16 / sizeof (*dest));
+    dest += (16 / sizeof (*dest));    \
+    src1 += (16 / sizeof (*dest));    \
+    src2 += (16 / sizeof (*dest));
 #define JUCE_INCREMENT_DEST dest += (16 / sizeof (*dest));
 
 #if JUCE_USE_SSE_INTRINSICS
@@ -175,117 +175,117 @@ struct BasicOps64
     }
 };
 
-#define JUCE_BEGIN_VEC_OP                                        \
-using Mode = FloatVectorHelpers::ModeType<sizeof (*dest)>::Mode; \
-{                                                                \
-const auto numLongOps = num / Mode::numParallel;
+#define JUCE_BEGIN_VEC_OP                                            \
+    using Mode = FloatVectorHelpers::ModeType<sizeof (*dest)>::Mode; \
+    {                                                                \
+        const auto numLongOps = num / Mode::numParallel;
 
-#define JUCE_FINISH_VEC_OP(normalOp)            \
-num &= (Mode::numParallel - 1);                 \
-if (num == 0)                                   \
-return;                                         \
-}                                               \
-for (auto i = (decltype (num)) 0; i < num; ++i) \
-normalOp;
+#define JUCE_FINISH_VEC_OP(normalOp)                \
+    num &= (Mode::numParallel - 1);                 \
+    if (num == 0)                                   \
+        return;                                     \
+    }                                               \
+    for (auto i = (decltype (num)) 0; i < num; ++i) \
+        normalOp;
 
-#define JUCE_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                                                                                                                                                               \
-JUCE_BEGIN_VEC_OP                                                                                                                                                                                                                \
-setupOp if (FloatVectorHelpers::isAligned (dest)) JUCE_VEC_LOOP (vecOp, dummy, Mode::loadA, Mode::storeA, locals, JUCE_INCREMENT_DEST) else JUCE_VEC_LOOP (vecOp, dummy, Mode::loadU, Mode::storeU, locals, JUCE_INCREMENT_DEST) \
+#define JUCE_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                                                                                                                                                                   \
+    JUCE_BEGIN_VEC_OP                                                                                                                                                                                                                \
+    setupOp if (FloatVectorHelpers::isAligned (dest)) JUCE_VEC_LOOP (vecOp, dummy, Mode::loadA, Mode::storeA, locals, JUCE_INCREMENT_DEST) else JUCE_VEC_LOOP (vecOp, dummy, Mode::loadU, Mode::storeU, locals, JUCE_INCREMENT_DEST) \
+        JUCE_FINISH_VEC_OP (normalOp)
+
+#define JUCE_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp)            \
+    JUCE_BEGIN_VEC_OP                                                                        \
+    setupOp if (FloatVectorHelpers::isAligned (dest))                                        \
+    {                                                                                        \
+        if (FloatVectorHelpers::isAligned (src))                                             \
+            JUCE_VEC_LOOP (vecOp, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
+        else                                                                                 \
+            JUCE_VEC_LOOP (vecOp, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
+    }                                                                                        \
+    else                                                                                     \
+    {                                                                                        \
+        if (FloatVectorHelpers::isAligned (src))                                             \
+            JUCE_VEC_LOOP (vecOp, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
+        else                                                                                 \
+            JUCE_VEC_LOOP (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+    }                                                                                        \
     JUCE_FINISH_VEC_OP (normalOp)
 
-#define JUCE_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp) \
-JUCE_BEGIN_VEC_OP                                                                 \
-setupOp if (FloatVectorHelpers::isAligned (dest))                                 \
-{                                                                                 \
-if (FloatVectorHelpers::isAligned (src))                                          \
-JUCE_VEC_LOOP (vecOp, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment)  \
-else                                                                              \
-JUCE_VEC_LOOP (vecOp, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment)  \
-}                                                                                 \
-else                                                                              \
-{                                                                                 \
-if (FloatVectorHelpers::isAligned (src))                                          \
-JUCE_VEC_LOOP (vecOp, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment)  \
-else                                                                              \
-JUCE_VEC_LOOP (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment)  \
-}                                                                                 \
-JUCE_FINISH_VEC_OP (normalOp)
+#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp)                      \
+    JUCE_BEGIN_VEC_OP                                                                                        \
+    setupOp if (FloatVectorHelpers::isAligned (dest))                                                        \
+    {                                                                                                        \
+        if (FloatVectorHelpers::isAligned (src1))                                                            \
+        {                                                                                                    \
+            if (FloatVectorHelpers::isAligned (src2))                                                        \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
+            else                                                                                             \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadU, Mode::storeA, locals, increment) \
+        }                                                                                                    \
+        else                                                                                                 \
+        {                                                                                                    \
+            if (FloatVectorHelpers::isAligned (src2))                                                        \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
+            else                                                                                             \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeA, locals, increment) \
+        }                                                                                                    \
+    }                                                                                                        \
+    else                                                                                                     \
+    {                                                                                                        \
+        if (FloatVectorHelpers::isAligned (src1))                                                            \
+        {                                                                                                    \
+            if (FloatVectorHelpers::isAligned (src2))                                                        \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadA, Mode::storeU, locals, increment) \
+            else                                                                                             \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
+        }                                                                                                    \
+        else                                                                                                 \
+        {                                                                                                    \
+            if (FloatVectorHelpers::isAligned (src2))                                                        \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadA, Mode::storeU, locals, increment) \
+            else                                                                                             \
+                JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+        }                                                                                                    \
+    }                                                                                                        \
+    JUCE_FINISH_VEC_OP (normalOp)
 
-#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp)      \
-JUCE_BEGIN_VEC_OP                                                                            \
-setupOp if (FloatVectorHelpers::isAligned (dest))                                            \
-{                                                                                            \
-if (FloatVectorHelpers::isAligned (src1))                                                    \
-{                                                                                            \
-if (FloatVectorHelpers::isAligned (src2))                                                    \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-else                                                                                         \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadU, Mode::storeA, locals, increment) \
-}                                                                                            \
-else                                                                                         \
-{                                                                                            \
-if (FloatVectorHelpers::isAligned (src2))                                                    \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-else                                                                                         \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeA, locals, increment) \
-}                                                                                            \
-}                                                                                            \
-else                                                                                         \
-{                                                                                            \
-if (FloatVectorHelpers::isAligned (src1))                                                    \
-{                                                                                            \
-if (FloatVectorHelpers::isAligned (src2))                                                    \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadA, Mode::storeU, locals, increment) \
-else                                                                                         \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-}                                                                                            \
-else                                                                                         \
-{                                                                                            \
-if (FloatVectorHelpers::isAligned (src2))                                                    \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadA, Mode::storeU, locals, increment) \
-else                                                                                         \
-JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-}                                                                                            \
-}                                                                                            \
-JUCE_FINISH_VEC_OP (normalOp)
-
-#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp)                             \
-JUCE_BEGIN_VEC_OP                                                                                                        \
-setupOp if (FloatVectorHelpers::isAligned (dest))                                                                        \
-{                                                                                                                        \
-if (FloatVectorHelpers::isAligned (src1))                                                                                \
-{                                                                                                                        \
-if (FloatVectorHelpers::isAligned (src2))                                                                                \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-else                                                                                                                     \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-}                                                                                                                        \
-else                                                                                                                     \
-{                                                                                                                        \
-if (FloatVectorHelpers::isAligned (src2))                                                                                \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-else                                                                                                                     \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-}                                                                                                                        \
-}                                                                                                                        \
-else                                                                                                                     \
-{                                                                                                                        \
-if (FloatVectorHelpers::isAligned (src1))                                                                                \
-{                                                                                                                        \
-if (FloatVectorHelpers::isAligned (src2))                                                                                \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-else                                                                                                                     \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-}                                                                                                                        \
-else                                                                                                                     \
-{                                                                                                                        \
-if (FloatVectorHelpers::isAligned (src2))                                                                                \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-else                                                                                                                     \
-JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-}                                                                                                                        \
-}                                                                                                                        \
-JUCE_FINISH_VEC_OP (normalOp)
+#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp)                                             \
+    JUCE_BEGIN_VEC_OP                                                                                                                    \
+    setupOp if (FloatVectorHelpers::isAligned (dest))                                                                                    \
+    {                                                                                                                                    \
+        if (FloatVectorHelpers::isAligned (src1))                                                                                        \
+        {                                                                                                                                \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
+            else                                                                                                                         \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
+        }                                                                                                                                \
+        else                                                                                                                             \
+        {                                                                                                                                \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
+            else                                                                                                                         \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
+        }                                                                                                                                \
+    }                                                                                                                                    \
+    else                                                                                                                                 \
+    {                                                                                                                                    \
+        if (FloatVectorHelpers::isAligned (src1))                                                                                        \
+        {                                                                                                                                \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
+            else                                                                                                                         \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+        }                                                                                                                                \
+        else                                                                                                                             \
+        {                                                                                                                                \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
+            else                                                                                                                         \
+                JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+        }                                                                                                                                \
+    }                                                                                                                                    \
+    JUCE_FINISH_VEC_OP (normalOp)
 
 //==============================================================================
 #elif JUCE_USE_ARM_NEON
@@ -428,88 +428,88 @@ struct BasicOps64
     static forcedinline Type min (ParallelType a) noexcept { return a; }
 };
 
-#define JUCE_BEGIN_VEC_OP                                        \
-using Mode = FloatVectorHelpers::ModeType<sizeof (*dest)>::Mode; \
-if (Mode::numParallel > 1)                                       \
-{                                                                \
-const auto numLongOps = num / Mode::numParallel;
+#define JUCE_BEGIN_VEC_OP                                            \
+    using Mode = FloatVectorHelpers::ModeType<sizeof (*dest)>::Mode; \
+    if (Mode::numParallel > 1)                                       \
+    {                                                                \
+        const auto numLongOps = num / Mode::numParallel;
 
-#define JUCE_FINISH_VEC_OP(normalOp)            \
-num &= (Mode::numParallel - 1);                 \
-if (num == 0)                                   \
-return;                                         \
-}                                               \
-for (auto i = (decltype (num)) 0; i < num; ++i) \
-normalOp;
+#define JUCE_FINISH_VEC_OP(normalOp)                \
+    num &= (Mode::numParallel - 1);                 \
+    if (num == 0)                                   \
+        return;                                     \
+    }                                               \
+    for (auto i = (decltype (num)) 0; i < num; ++i) \
+        normalOp;
 
-#define JUCE_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                       \
-JUCE_BEGIN_VEC_OP                                                                        \
-setupOp                                                                                  \
-    JUCE_VEC_LOOP (vecOp, dummy, Mode::loadU, Mode::storeU, locals, JUCE_INCREMENT_DEST) \
-        JUCE_FINISH_VEC_OP (normalOp)
+#define JUCE_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                           \
+    JUCE_BEGIN_VEC_OP                                                                        \
+    setupOp                                                                                  \
+        JUCE_VEC_LOOP (vecOp, dummy, Mode::loadU, Mode::storeU, locals, JUCE_INCREMENT_DEST) \
+            JUCE_FINISH_VEC_OP (normalOp)
 
-#define JUCE_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp)    \
-JUCE_BEGIN_VEC_OP                                                                    \
-setupOp                                                                              \
-    JUCE_VEC_LOOP (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-        JUCE_FINISH_VEC_OP (normalOp)
+#define JUCE_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp)        \
+    JUCE_BEGIN_VEC_OP                                                                    \
+    setupOp                                                                              \
+        JUCE_VEC_LOOP (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+            JUCE_FINISH_VEC_OP (normalOp)
 
-#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp)          \
-JUCE_BEGIN_VEC_OP                                                                                \
-setupOp                                                                                          \
-    JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-        JUCE_FINISH_VEC_OP (normalOp)
+#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp)              \
+    JUCE_BEGIN_VEC_OP                                                                                \
+    setupOp                                                                                          \
+        JUCE_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+            JUCE_FINISH_VEC_OP (normalOp)
 
-#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp)                                 \
-JUCE_BEGIN_VEC_OP                                                                                                            \
-setupOp                                                                                                                      \
-    JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-        JUCE_FINISH_VEC_OP (normalOp)
+#define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp)                                     \
+    JUCE_BEGIN_VEC_OP                                                                                                            \
+    setupOp                                                                                                                      \
+        JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
+            JUCE_FINISH_VEC_OP (normalOp)
 
 //==============================================================================
 #else
 #define JUCE_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp) \
-for (auto i = (decltype (num)) 0; i < num; ++i)                    \
-normalOp;
+    for (auto i = (decltype (num)) 0; i < num; ++i)                \
+        normalOp;
 
 #define JUCE_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp) \
-for (auto i = (decltype (num)) 0; i < num; ++i)                                   \
-normalOp;
+    for (auto i = (decltype (num)) 0; i < num; ++i)                               \
+        normalOp;
 
 #define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp) \
-for (auto i = (decltype (num)) 0; i < num; ++i)                                         \
-normalOp;
+    for (auto i = (decltype (num)) 0; i < num; ++i)                                     \
+        normalOp;
 
 #define JUCE_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp) \
-for (auto i = (decltype (num)) 0; i < num; ++i)                                              \
-normalOp;
+    for (auto i = (decltype (num)) 0; i < num; ++i)                                          \
+        normalOp;
 
 #endif
 
 //==============================================================================
 #define JUCE_VEC_LOOP(vecOp, srcLoad, dstLoad, dstStore, locals, increment) \
-for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)               \
-{                                                                           \
-locals (srcLoad, dstLoad);                                                  \
-dstStore (dest, vecOp);                                                     \
-increment;                                                                  \
-}
+    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)           \
+    {                                                                       \
+        locals (srcLoad, dstLoad);                                          \
+        dstStore (dest, vecOp);                                             \
+        increment;                                                          \
+    }
 
 #define JUCE_VEC_LOOP_TWO_SOURCES(vecOp, src1Load, src2Load, dstStore, locals, increment) \
-for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                             \
-{                                                                                         \
-locals (src1Load, src2Load);                                                              \
-dstStore (dest, vecOp);                                                                   \
-increment;                                                                                \
-}
+    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                         \
+    {                                                                                     \
+        locals (src1Load, src2Load);                                                      \
+        dstStore (dest, vecOp);                                                           \
+        increment;                                                                        \
+    }
 
 #define JUCE_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD(vecOp, src1Load, src2Load, dstLoad, dstStore, locals, increment) \
-for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                                                     \
-{                                                                                                                 \
-locals (src1Load, src2Load, dstLoad);                                                                             \
-dstStore (dest, vecOp);                                                                                           \
-increment;                                                                                                        \
-}
+    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                                                 \
+    {                                                                                                             \
+        locals (src1Load, src2Load, dstLoad);                                                                     \
+        dstStore (dest, vecOp);                                                                                   \
+        increment;                                                                                                \
+    }
 
 #define JUCE_LOAD_NONE(srcLoad, dstLoad)
 #define JUCE_LOAD_DEST(srcLoad, dstLoad) const Mode::ParallelType d = dstLoad (dest);
@@ -1623,11 +1623,11 @@ intptr_t JUCE_CALLTYPE FloatVectorOperations::getFpStatusRegister() noexcept
     fpsr = (intptr_t) (_control87 (0, 0) & _MCW_DN);
 #else
 #if JUCE_64BIT
-    asm volatile("mrs %0, fpcr"
-                 : "=r"(fpsr));
+    asm volatile ("mrs %0, fpcr"
+                  : "=r"(fpsr));
 #elif JUCE_USE_ARM_NEON
-    asm volatile("vmrs %0, fpscr"
-                 : "=r"(fpsr));
+    asm volatile ("vmrs %0, fpscr"
+                  : "=r"(fpsr));
 #endif
 #endif
 #else
@@ -1651,13 +1651,13 @@ void JUCE_CALLTYPE FloatVectorOperations::setFpStatusRegister ([[maybe_unused]] 
     _control87 ((unsigned int) fpsr, _MCW_DN);
 #else
 #if JUCE_64BIT
-    asm volatile("msr fpcr, %0"
-                 :
-                 : "ri"(fpsr));
+    asm volatile ("msr fpcr, %0"
+                  :
+                  : "ri"(fpsr));
 #elif JUCE_USE_ARM_NEON
-    asm volatile("vmsr fpscr, %0"
-                 :
-                 : "ri"(fpsr));
+    asm volatile ("vmsr fpscr, %0"
+                  :
+                  : "ri"(fpsr));
 #endif
 #endif
 #else

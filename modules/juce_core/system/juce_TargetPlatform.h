@@ -135,7 +135,7 @@
 /** If defined, this indicates that the processor is little-endian. */
 #define JUCE_LITTLE_ENDIAN 1
 
-#if defined (_M_ARM) || defined (_M_ARM64) || defined (_M_ARM64EC) || defined (__arm__) || defined (__aarch64__)
+#if defined(_M_ARM) || defined(_M_ARM64) || defined(_M_ARM64EC) || defined(__arm__) || defined(__aarch64__)
 #define JUCE_ARM 1
 #else
 #define JUCE_INTEL 1
@@ -190,9 +190,9 @@
 #endif
 
 #if JUCE_MAC
-#if ! JUCE_MAC_API_VERSION_CAN_BE_BUILT (11, 1)
+#if ! JUCE_MAC_API_VERSION_CAN_BE_BUILT(11, 1)
 #error "The macOS 11.1 SDK (Xcode 12.4+) is required to build JUCE apps. You can create apps that run on macOS 10.11+ by changing the deployment target."
-#elif ! JUCE_MAC_API_VERSION_MIN_REQUIRED_AT_LEAST (10, 11)
+#elif ! JUCE_MAC_API_VERSION_MIN_REQUIRED_AT_LEAST(10, 11)
 #error "Building for OSX 10.10 and earlier is no longer supported!"
 #endif
 #endif
@@ -214,7 +214,7 @@
 #define JUCE_BIG_ENDIAN 1
 #endif
 
-#if defined (__LP64__) || defined (_LP64) || defined (__arm64__) || defined (__aarch64__)
+#if defined(__LP64__) || defined(_LP64) || defined(__arm64__) || defined(__aarch64__)
 #define JUCE_64BIT 1
 #else
 #define JUCE_32BIT 1

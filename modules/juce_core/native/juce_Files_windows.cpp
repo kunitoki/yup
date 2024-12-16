@@ -41,7 +41,7 @@ namespace juce
 {
 
 #ifndef INVALID_FILE_ATTRIBUTES
-#define INVALID_FILE_ATTRIBUTES ((DWORD) -1)
+#define INVALID_FILE_ATTRIBUTES ((DWORD) - 1)
 #endif
 
 //==============================================================================
@@ -83,7 +83,7 @@ typedef struct _REPARSE_DATA_BUFFER
             UCHAR DataBuffer[1];
         } GenericReparseBuffer;
     } DUMMYUNIONNAME;
-} * PREPARSE_DATA_BUFFER, REPARSE_DATA_BUFFER;
+} *PREPARSE_DATA_BUFFER, REPARSE_DATA_BUFFER;
 
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #endif

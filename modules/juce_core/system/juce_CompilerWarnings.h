@@ -46,7 +46,7 @@
     the parameter pack.
 */
 #define JUCE_NTH_ARG_(_00, _01, _02, _03, _04, _05, _06, _07, _08, _09, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, _47, _48, _49, N, ...) \
-N
+    N
 
 #define JUCE_EACH_00_(FN)
 #define JUCE_EACH_01_(FN, X) FN (X)
@@ -100,9 +100,9 @@ N
 #define JUCE_EACH_49_(FN, X, ...) FN (X) JUCE_EACH_48_ (FN, __VA_ARGS__)
 
 /** Apply the macro FN to each of the other arguments. */
-#define JUCE_EACH(FN, ...)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  \
-JUCE_NTH_ARG_ (, __VA_ARGS__, JUCE_EACH_49_, JUCE_EACH_48_, JUCE_EACH_47_, JUCE_EACH_46_, JUCE_EACH_45_, JUCE_EACH_44_, JUCE_EACH_43_, JUCE_EACH_42_, JUCE_EACH_41_, JUCE_EACH_40_, JUCE_EACH_39_, JUCE_EACH_38_, JUCE_EACH_37_, JUCE_EACH_36_, JUCE_EACH_35_, JUCE_EACH_34_, JUCE_EACH_33_, JUCE_EACH_32_, JUCE_EACH_31_, JUCE_EACH_30_, JUCE_EACH_29_, JUCE_EACH_28_, JUCE_EACH_27_, JUCE_EACH_26_, JUCE_EACH_25_, JUCE_EACH_24_, JUCE_EACH_23_, JUCE_EACH_22_, JUCE_EACH_21_, JUCE_EACH_20_, JUCE_EACH_19_, JUCE_EACH_18_, JUCE_EACH_17_, JUCE_EACH_16_, JUCE_EACH_15_, JUCE_EACH_14_, JUCE_EACH_13_, JUCE_EACH_12_, JUCE_EACH_11_, JUCE_EACH_10_, JUCE_EACH_09_, JUCE_EACH_08_, JUCE_EACH_07_, JUCE_EACH_06_, JUCE_EACH_05_, JUCE_EACH_04_, JUCE_EACH_03_, JUCE_EACH_02_, JUCE_EACH_01_, JUCE_EACH_00_) \
-(FN, __VA_ARGS__)
+#define JUCE_EACH(FN, ...)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      \
+    JUCE_NTH_ARG_ (, __VA_ARGS__, JUCE_EACH_49_, JUCE_EACH_48_, JUCE_EACH_47_, JUCE_EACH_46_, JUCE_EACH_45_, JUCE_EACH_44_, JUCE_EACH_43_, JUCE_EACH_42_, JUCE_EACH_41_, JUCE_EACH_40_, JUCE_EACH_39_, JUCE_EACH_38_, JUCE_EACH_37_, JUCE_EACH_36_, JUCE_EACH_35_, JUCE_EACH_34_, JUCE_EACH_33_, JUCE_EACH_32_, JUCE_EACH_31_, JUCE_EACH_30_, JUCE_EACH_29_, JUCE_EACH_28_, JUCE_EACH_27_, JUCE_EACH_26_, JUCE_EACH_25_, JUCE_EACH_24_, JUCE_EACH_23_, JUCE_EACH_22_, JUCE_EACH_21_, JUCE_EACH_20_, JUCE_EACH_19_, JUCE_EACH_18_, JUCE_EACH_17_, JUCE_EACH_16_, JUCE_EACH_15_, JUCE_EACH_14_, JUCE_EACH_13_, JUCE_EACH_12_, JUCE_EACH_11_, JUCE_EACH_10_, JUCE_EACH_09_, JUCE_EACH_08_, JUCE_EACH_07_, JUCE_EACH_06_, JUCE_EACH_05_, JUCE_EACH_04_, JUCE_EACH_03_, JUCE_EACH_02_, JUCE_EACH_01_, JUCE_EACH_00_) \
+    (FN, __VA_ARGS__)
 
 /** Concatenate two tokens to form a new token. */
 #define JUCE_CONCAT_(a, b) a##b
@@ -115,25 +115,25 @@ JUCE_NTH_ARG_ (, __VA_ARGS__, JUCE_EACH_49_, JUCE_EACH_48_, JUCE_EACH_47_, JUCE_
 #define JUCE_IGNORE_GCC_IMPL_(compiler, warning)
 #define JUCE_IGNORE_GCC_IMPL_0(compiler, warning)
 #define JUCE_IGNORE_GCC_IMPL_1(compiler, warning) \
-_Pragma (JUCE_TO_STRING (compiler diagnostic ignored warning))
+    _Pragma (JUCE_TO_STRING (compiler diagnostic ignored warning))
 
 /** If 'warning' is recognised by this compiler, ignore it. */
 #if defined(__has_warning)
-#define JUCE_IGNORE_GCC_LIKE(compiler, warning)              \
-JUCE_CONCAT (JUCE_IGNORE_GCC_IMPL_, __has_warning (warning)) \
-(compiler, warning)
+#define JUCE_IGNORE_GCC_LIKE(compiler, warning)                  \
+    JUCE_CONCAT (JUCE_IGNORE_GCC_IMPL_, __has_warning (warning)) \
+    (compiler, warning)
 #else
 #define JUCE_IGNORE_GCC_LIKE(compiler, warning) \
-JUCE_IGNORE_GCC_IMPL_1 (compiler, warning)
+    JUCE_IGNORE_GCC_IMPL_1 (compiler, warning)
 #endif
 
 /** Ignore GCC/clang-specific warnings. */
 #define JUCE_IGNORE_GCC(warning) JUCE_IGNORE_GCC_LIKE (GCC, warning)
 #define JUCE_IGNORE_clang(warning) JUCE_IGNORE_GCC_LIKE (clang, warning)
 
-#define JUCE_IGNORE_WARNINGS_GCC_LIKE(compiler, ...) \
-_Pragma (JUCE_TO_STRING (compiler diagnostic push))  \
-    JUCE_EACH (JUCE_CONCAT (JUCE_IGNORE_, compiler), __VA_ARGS__)
+#define JUCE_IGNORE_WARNINGS_GCC_LIKE(compiler, ...)    \
+    _Pragma (JUCE_TO_STRING (compiler diagnostic push)) \
+        JUCE_EACH (JUCE_CONCAT (JUCE_IGNORE_, compiler), __VA_ARGS__)
 
 /** Push a new warning scope, and then ignore each warning for either clang
         or gcc. If the compiler doesn't support __has_warning, we add -Wpragmas
@@ -142,15 +142,15 @@ _Pragma (JUCE_TO_STRING (compiler diagnostic push))  \
     */
 #if defined(__has_warning)
 #define JUCE_PUSH_WARNINGS_GCC_LIKE(compiler, ...) \
-JUCE_IGNORE_WARNINGS_GCC_LIKE (compiler, __VA_ARGS__)
+    JUCE_IGNORE_WARNINGS_GCC_LIKE (compiler, __VA_ARGS__)
 #else
 #define JUCE_PUSH_WARNINGS_GCC_LIKE(compiler, ...) \
-JUCE_IGNORE_WARNINGS_GCC_LIKE (compiler, "-Wpragmas", __VA_ARGS__)
+    JUCE_IGNORE_WARNINGS_GCC_LIKE (compiler, "-Wpragmas", __VA_ARGS__)
 #endif
 
 /** Pop the current warning scope. */
 #define JUCE_POP_WARNINGS_GCC_LIKE(compiler) \
-_Pragma (JUCE_TO_STRING (compiler diagnostic pop))
+    _Pragma (JUCE_TO_STRING (compiler diagnostic pop))
 
 /** Push/pop warnings on compilers with gcc-like warning flags.
         These macros expand to nothing on other compilers (like MSVC).
@@ -174,9 +174,9 @@ _Pragma (JUCE_TO_STRING (compiler diagnostic pop))
 #define JUCE_IGNORE_MSVC(warnings) __pragma (warning (disable \
                                                       : warnings))
 #define JUCE_BEGIN_IGNORE_WARNINGS_LEVEL_MSVC(level, warnings) \
-__pragma (warning (push, level)) JUCE_IGNORE_MSVC (warnings)
+    __pragma (warning (push, level)) JUCE_IGNORE_MSVC (warnings)
 #define JUCE_BEGIN_IGNORE_WARNINGS_MSVC(warnings) \
-__pragma (warning (push)) JUCE_IGNORE_MSVC (warnings)
+    __pragma (warning (push)) JUCE_IGNORE_MSVC (warnings)
 #define JUCE_END_IGNORE_WARNINGS_MSVC __pragma (warning (pop))
 #else
 #define JUCE_IGNORE_MSVC(warnings)
@@ -191,12 +191,12 @@ __pragma (warning (push)) JUCE_IGNORE_MSVC (warnings)
 #define JUCE_SANITIZER_ATTRIBUTE_MINIMUM_CLANG_VERSION 9
 #endif
 
-#define JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS                                  \
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")           \
+#define JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS                        \
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations") \
     JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
 
-#define JUCE_END_IGNORE_DEPRECATION_WARNINGS                                    \
-    JUCE_END_IGNORE_WARNINGS_MSVC                                               \
+#define JUCE_END_IGNORE_DEPRECATION_WARNINGS \
+    JUCE_END_IGNORE_WARNINGS_MSVC            \
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 /** Disable sanitizers for a range of functions.
@@ -205,7 +205,7 @@ __pragma (warning (push)) JUCE_IGNORE_MSVC (warnings)
 */
 #if JUCE_CLANG && __clang_major__ >= JUCE_SANITIZER_ATTRIBUTE_MINIMUM_CLANG_VERSION
 #define JUCE_BEGIN_NO_SANITIZE(warnings) \
-_Pragma (JUCE_TO_STRING (clang attribute push (__attribute__ ((no_sanitize (warnings))), apply_to = function)))
+    _Pragma (JUCE_TO_STRING (clang attribute push (__attribute__ ((no_sanitize (warnings))), apply_to = function)))
 #define JUCE_END_NO_SANITIZE _Pragma (JUCE_TO_STRING (clang attribute pop))
 #else
 #define JUCE_BEGIN_NO_SANITIZE(warnings)

@@ -104,16 +104,16 @@ static void callCPUID (int result[4], uint32 type)
     uint32 la = (uint32) result[0], lb = (uint32) result[1],
            lc = (uint32) result[2], ld = (uint32) result[3];
 
-    asm("mov %%ebx, %%esi \n\t"
-        "cpuid \n\t"
-        "xchg %%esi, %%ebx"
-        : "=a"(la), "=S"(lb), "=c"(lc), "=d"(ld)
-        : "a"(type)
+    asm ("mov %%ebx, %%esi \n\t"
+         "cpuid \n\t"
+         "xchg %%esi, %%ebx"
+         : "=a"(la), "=S"(lb), "=c"(lc), "=d"(ld)
+         : "a"(type)
 #if JUCE_64BIT
-              ,
-          "b"(lb),
-          "c"(lc),
-          "d"(ld)
+               ,
+           "b"(lb),
+           "c"(lc),
+           "d"(ld)
 #endif
     );
 
@@ -541,7 +541,7 @@ static int64 juce_getClockCycleCounter() noexcept
     // GNU inline asm version...
     unsigned int hi = 0, lo = 0;
 
-    __asm__ __volatile__(
+    __asm__ __volatile__ (
         "xor %%eax, %%eax               \n\
          xor %%edx, %%edx               \n\
          rdtsc                          \n\
@@ -556,8 +556,8 @@ static int64 juce_getClockCycleCounter() noexcept
 #elif JUCE_ARM
     int64 retval;
 
-    __asm__ __volatile__("mrs %0, cntvct_el0"
-                         : "=r"(retval));
+    __asm__ __volatile__ ("mrs %0, cntvct_el0"
+                          : "=r"(retval));
     return retval;
 #endif
 #else

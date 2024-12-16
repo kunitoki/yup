@@ -192,7 +192,7 @@ TYPED_TEST (AudioBufferTests, SetSize)
     {
         const TypeParam* readPtr = buffer.getReadPointer (ch);
         for (int i = 0; i < 150; ++i)
-            EXPECT_TRUE (approximatelyEqual(readPtr[i], static_cast<TypeParam> (0)));
+            EXPECT_TRUE (approximatelyEqual (readPtr[i], static_cast<TypeParam> (0)));
     }
 }
 
@@ -1324,8 +1324,8 @@ TYPED_TEST (AudioBufferTests, DISABLED_AddFromExternalDataWithGain)
     EXPECT_EQ (buffer.getNumSamples(), samples);
     EXPECT_FALSE (buffer.hasBeenCleared());
 
-    buffer.addFrom (0, 0, buffer, 0, 0, 2, static_cast<TypeParam> (2.0)); // externalData += externalData * 2
-    EXPECT_TRUE (approximatelyEqual (externalData[0], static_cast<TypeParam> (6.0)));            // 2 + 2*2
-    EXPECT_TRUE (approximatelyEqual (externalData[1], static_cast<TypeParam> (9.0)));            // 3 + 3*2
+    buffer.addFrom (0, 0, buffer, 0, 0, 2, static_cast<TypeParam> (2.0));             // externalData += externalData * 2
+    EXPECT_TRUE (approximatelyEqual (externalData[0], static_cast<TypeParam> (6.0))); // 2 + 2*2
+    EXPECT_TRUE (approximatelyEqual (externalData[1], static_cast<TypeParam> (9.0))); // 3 + 3*2
     EXPECT_FALSE (buffer.hasBeenCleared());
 }

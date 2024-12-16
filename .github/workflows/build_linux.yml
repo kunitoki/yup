@@ -24,21 +24,21 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  INSTALL_DEPS: >-
+    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
+    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
+    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+
 jobs:
-  test:
+  configure:
     runs-on: ubuntu-latest
 
     steps:
     - uses: actions/checkout@v4
-
     - uses: seanmiddleditch/gha-setup-ninja@master
-
     - name: Install Dependencies
-      run: |
-        sudo apt-get update && sudo apt-get install -y \
-        libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev \
-        libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev \
-        libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+      run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
@@ -47,36 +47,102 @@ jobs:
       working-directory: ${{runner.workspace}}/build
       run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
-    - name: Build Tests Debug
-      working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config Debug --parallel 4 --target yup_tests
+    - name: Build SDL2
+      run: |
+        cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target SDL2-static
+        cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target SDL2-static
 
-    - name: Execute Tests Debug
-      working-directory: ${{runner.workspace}}/build/tests/Debug
+    - name: Cache Configure
+      id: cache-build
+      uses: actions/cache/save@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+
+  build_tests:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
+    - working-directory: ${{runner.workspace}}/build/tests/Debug
+      run: ./yup_tests
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
+    - working-directory: ${{runner.workspace}}/build/tests/Release
       run: ./yup_tests
 
-    - name: Build Tests Release
-      working-directory: ${{runner.workspace}}/build
-      run: cmake --build . --config Release --parallel 4 --target yup_tests
+  build_console:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
-    - name: Execute Tests Release
-      working-directory: ${{runner.workspace}}/build/tests/Release
-      run: ./yup_tests
+  build_app:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
 
-    - name: Build Examples Debug
-      working-directory: ${{runner.workspace}}/build
-      run: |
-        cmake --build . --config Debug --parallel 4 --target example_console
-        cmake --build . --config Debug --parallel 4 --target example_app
-        cmake --build . --config Debug --parallel 4 --target example_graphics
-        cmake --build . --config Debug --parallel 4 --target example_render
-        cmake --build . --config Debug --parallel 4 --target example_plugin
+  build_graphics:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
 
-    - name: Build Examples Release
-      working-directory: ${{runner.workspace}}/build
-      run: |
-        cmake --build . --config Release --parallel 4 --target example_console
-        cmake --build . --config Release --parallel 4 --target example_app
-        cmake --build . --config Release --parallel 4 --target example_graphics
-        cmake --build . --config Release --parallel 4 --target example_render
-        cmake --build . --config Release --parallel 4 --target example_plugin
+  build_render:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+
+  build_plugin:
+    runs-on: ubuntu-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: linux-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin
