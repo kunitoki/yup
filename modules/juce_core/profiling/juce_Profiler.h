@@ -23,7 +23,7 @@
 
 PERFETTO_DEFINE_CATEGORIES (
     perfetto::Category ("yup")
-    JUCE_PROFILING_CATEGORIES);
+        JUCE_PROFILING_CATEGORIES);
 
 namespace juce
 {

@@ -1275,7 +1275,7 @@ void initialiseYup_Windowing()
 
         jassertfalse;
 
-        exit(1);
+        exit (1);
     }
 
     // Update available displays
