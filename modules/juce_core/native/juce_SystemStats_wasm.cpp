@@ -84,6 +84,11 @@ String SystemStats::getOperatingSystemName()
 
 }
 
+String SystemStats::getOperatingSystemVersionString()
+{
+    return {};
+}
+
 bool SystemStats::isOperatingSystem64Bit()
 {
     return sizeof (void*) == 8;

@@ -173,6 +173,15 @@ String SystemStats::getOperatingSystemName()
 #endif
 }
 
+String SystemStats::getOperatingSystemVersionString()
+{
+#if JUCE_IOS
+    return nsStringToJuce([[UIDevice currentDevice] systemVersion]);
+#else
+    return getOSXVersion();
+#endif
+}
+
 String SystemStats::getDeviceDescription()
 {
     if (auto* userInfo = [[NSProcessInfo processInfo] environment])

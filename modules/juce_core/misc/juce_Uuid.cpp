@@ -69,7 +69,7 @@ bool Uuid::operator== (const Uuid& other) const noexcept { return memcmp (uuid, 
 
 bool Uuid::operator!= (const Uuid& other) const noexcept { return ! operator== (other); }
 
-bool Uuid::operator<(const Uuid& other) const noexcept { return compare (other) < 0; }
+bool Uuid::operator< (const Uuid& other) const noexcept { return compare (other) < 0; }
 
 bool Uuid::operator> (const Uuid& other) const noexcept { return compare (other) > 0; }
 
@@ -117,6 +117,16 @@ String Uuid::toDashedString() const
          + "-" + getHexRegion (6, 2)
          + "-" + getHexRegion (8, 2)
          + "-" + getHexRegion (10, 6);
+}
+
+String Uuid::toArrayString() const
+{
+    String arrayUUID = "{ ";
+
+    for (int i = 0; i < 16; i++)
+        arrayUUID += "0x" + getHexRegion (i, 1) + (i < 15 ? ", " : "");
+
+    return arrayUUID + " }";
 }
 
 Uuid::Uuid (const String& uuidString)

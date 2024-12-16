@@ -54,6 +54,8 @@ public:
 
     ~InternalMessageQueue()
     {
+        emscripten_cancel_main_loop();
+
         clearSingletonInstance();
     }
 

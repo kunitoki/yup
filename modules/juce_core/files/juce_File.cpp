@@ -272,7 +272,7 @@ bool File::operator== (const File& other) const { return compareFilenames (fullP
 
 bool File::operator!= (const File& other) const { return compareFilenames (fullPath, other.fullPath) != 0; }
 
-bool File::operator<(const File& other) const { return compareFilenames (fullPath, other.fullPath) < 0; }
+bool File::operator< (const File& other) const { return compareFilenames (fullPath, other.fullPath) < 0; }
 
 bool File::operator> (const File& other) const { return compareFilenames (fullPath, other.fullPath) > 0; }
 
@@ -352,8 +352,9 @@ bool File::copyDirectoryTo (const File& newDirectory) const
                 return false;
 
         for (auto& f : findChildFiles (File::findDirectories, false))
-            if (! f.copyDirectoryTo (newDirectory.getChildFile (f.getFileName())))
-                return false;
+            if (! f.isSymbolicLink())
+                if (! f.copyDirectoryTo (newDirectory.getChildFile (f.getFileName())))
+                    return false;
 
         return true;
     }
@@ -1083,19 +1084,6 @@ File File::getLinkedTarget() const
 
     return *this;
 }
-#endif
-
-//==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES
-
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
-
-const File File::nonexistent {};
-
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-JUCE_END_IGNORE_WARNINGS_MSVC
-
 #endif
 
 //==============================================================================

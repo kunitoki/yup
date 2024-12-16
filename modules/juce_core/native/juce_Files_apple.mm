@@ -146,9 +146,9 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
             return true;
         }
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wdeprecated-declarations")
+        JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
         return [[UIApplication sharedApplication] openURL:filenameAsURL];
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        JUCE_END_IGNORE_DEPRECATION_WARNINGS
 
 #else
         auto workspace = [NSWorkspace sharedWorkspace];
@@ -200,7 +200,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
                 }
 #endif
 
-                JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wdeprecated-declarations")
+                JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
                 NSMutableDictionary* dict = [[NSMutableDictionary new] autorelease];
 
@@ -221,7 +221,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
                                            configuration:dict
                                                    error:nil];
 
-                JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+                JUCE_END_IGNORE_DEPRECATION_WARNINGS
             }
         }
 
@@ -231,9 +231,9 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
         {
             // NB: the length check here is because of strange failures involving long filenames,
             // probably due to filesystem name length limitations..
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wdeprecated-declarations")
+            JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
             return (fileName.length() < 1024 && [workspace openFile:fileNameAsNS]) || [workspace openURL:filenameAsURL];
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            JUCE_END_IGNORE_DEPRECATION_WARNINGS
         }
 
         if (File(fileName).exists())
@@ -243,7 +243,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 #endif
     }
 }
-}
+} // namespace MacFileHelpers
 
 bool File::isOnCDRomDrive() const
 {

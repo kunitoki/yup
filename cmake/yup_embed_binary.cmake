@@ -112,4 +112,7 @@ function (yup_add_embedded_binary_resources library_name)
     add_custom_target ("${library_name}_content" DEPENDS "${resources_hex_files}")
     add_dependencies (${library_name} "${library_name}_content")
 
+    set_target_properties ("${library_name}_content" PROPERTIES FOLDER "EmbeddedResources")
+    set_target_properties (${library_name} PROPERTIES FOLDER "EmbeddedResources")
+
 endfunction()

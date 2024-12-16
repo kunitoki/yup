@@ -97,6 +97,8 @@ public:
                                                                                                              File::FollowSymlinks follow = File::FollowSymlinks::yes)
         : DirectoryIterator (directory, recursive, pattern, type, follow, nullptr)
     {
+        // Following symbolic links can lead to deadlocks. Don't do it.
+        jassert (! isRecursive || (followSymlinks == File::FollowSymlinks::no || followSymlinks == File::FollowSymlinks::noCycles));
     }
 
     /** Moves the iterator along to the next file.
