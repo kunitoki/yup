@@ -38,7 +38,6 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
-
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
@@ -65,14 +64,18 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{runner.workspace}}/build/tests/Debug
       run: node yup_tests.js
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
     - working-directory: ${{runner.workspace}}/build/tests/Release
       run: node yup_tests.js
 
@@ -83,12 +86,16 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
   build_app:
     runs-on: ubuntu-latest
@@ -97,12 +104,16 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
 
   build_graphics:
     runs-on: ubuntu-latest
@@ -111,12 +122,16 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
 
   build_render:
     runs-on: ubuntu-latest
@@ -125,12 +140,16 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
 
   build_plugin:
     runs-on: ubuntu-latest
@@ -139,9 +158,13 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Setup emsdk
+      uses: mymindstorm/setup-emsdk@v14
+      with:
+        version: 3.1.45
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin
+    - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin
