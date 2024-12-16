@@ -51,11 +51,6 @@ jobs:
       working-directory: ${{runner.workspace}}/build
       run: emcmake cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
-    - name: Build SDL2
-      run: |
-        cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target SDL2-static
-        cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target SDL2-static
-
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v4
