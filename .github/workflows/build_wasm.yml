@@ -55,7 +55,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
 
   build_tests:
     runs-on: ubuntu-latest
@@ -71,7 +71,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{runner.workspace}}/build/tests/Debug
       run: node yup_tests.js
@@ -93,7 +93,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
@@ -111,7 +111,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
 
@@ -129,7 +129,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
 
@@ -147,7 +147,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
 
@@ -165,6 +165,6 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.os }}-build-${{ github.sha }}
+        key: ${{ runner.name }}-build-${{ github.sha }}
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin
     - run: emcmake cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin
