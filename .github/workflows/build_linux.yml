@@ -37,7 +37,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
-    - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
