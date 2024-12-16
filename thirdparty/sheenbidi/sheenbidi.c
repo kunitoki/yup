@@ -21,7 +21,7 @@
 
 #include "sheenbidi.h"
 
-#if __GNUC__
+#if __GNUC__ && !defined(EMSCRIPTEN)
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wstringop-overflow"
 #endif
@@ -47,6 +47,6 @@
 #include "source/IsolatingRun.c"
 #include "source/SBAlgorithm.c"
 
-#if __GNUC__
+#if __GNUC__ && !defined(EMSCRIPTEN)
  #pragma GCC diagnostic pop
 #endif
