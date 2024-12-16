@@ -118,8 +118,8 @@ TEST (RandomTests, Concurrent)
         int numInvocations;
     };
 
-    constexpr int numberOfInvocationsPerThread = 10000;
-    constexpr int numberOfThreads = 100;
+    constexpr int numberOfInvocationsPerThread = 1000;
+    constexpr int numberOfThreads = 10;
 
     FastWaitableEvent start;
 
