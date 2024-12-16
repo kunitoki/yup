@@ -1120,7 +1120,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             tb.parseFunctionParamsAndBody (*this);
         }
 
-        DynamicObject::Ptr clone() const override { return new FunctionObject (*this); }
+        std::unique_ptr<DynamicObject> clone() const override { return std::make_unique<FunctionObject> (*this); }
 
         void writeAsJSON (OutputStream& out, const JSON::FormatOptions&) override
         {

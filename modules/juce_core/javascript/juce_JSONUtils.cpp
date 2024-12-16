@@ -92,7 +92,7 @@ std::optional<var> JSONUtils::setPointer (const var& v,
         {
             auto cloned = object->clone();
             cloned->setProperty (unescaped, *newProperty);
-            return var (cloned.get());
+            return var (cloned.release());
         }
     }
     else if (auto* array = v.getArray())

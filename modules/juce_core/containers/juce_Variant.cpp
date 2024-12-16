@@ -410,7 +410,7 @@ struct var::VariantType
     static var objectClone (const var& original)
     {
         if (auto d = original.getDynamicObject())
-            return d->clone().get();
+            return d->clone();
 
         jassertfalse; // can only clone DynamicObjects!
         return {};
@@ -733,6 +733,15 @@ var::var (ReferenceCountedObject* const object)
         object->incReferenceCount();
 }
 
+var::var (std::unique_ptr<DynamicObject> object)
+    : type (&Instance::attributesObject)
+{
+    value.objectValue = object.release();
+
+    if (value.objectValue != nullptr)
+        value.objectValue->incReferenceCount();
+}
+
 var var::undefined() noexcept { return var (Instance::attributesUndefined); }
 
 //==============================================================================
@@ -877,6 +886,13 @@ var& var::operator= (const Array<var>& v)
 var& var::operator= (ReferenceCountedObject* v)
 {
     var v2 (v);
+    swapWith (v2);
+    return *this;
+}
+
+var& var::operator= (std::unique_ptr<DynamicObject> v)
+{
+    var v2 (std::move (v));
     swapWith (v2);
     return *this;
 }

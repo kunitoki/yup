@@ -445,7 +445,7 @@ TEST_F (DynamicObjectTests, CloneAllPropertiesDeepCopy)
     obj->setProperty (makeIdentifier ("number"), makeVar (20));
 
     // Ensure clone remains unaffected
-    DynamicObject::Ptr cloneObj = obj->clone();
+    auto cloneObj = obj->clone();
     EXPECT_EQ (cloneObj->getProperty (makeIdentifier ("number")), makeVar (20));
     EXPECT_EQ (cloneObj->getProperty (makeIdentifier ("text")), var ("hello"));
 }

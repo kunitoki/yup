@@ -92,6 +92,7 @@ public:
     var (const Array<var>& value);
     var (const StringArray& value);
     var (ReferenceCountedObject* object);
+    var (std::unique_ptr<DynamicObject> object);
     var (NativeFunction method) noexcept;
     var (const void* binaryData, size_t dataSize);
     var (const MemoryBlock& binaryData);
@@ -108,6 +109,7 @@ public:
     var& operator= (const MemoryBlock& value);
     var& operator= (const Array<var>& value);
     var& operator= (ReferenceCountedObject* object);
+    var& operator= (std::unique_ptr<DynamicObject> object);
     var& operator= (NativeFunction method);
 
     var (var&&) noexcept;
