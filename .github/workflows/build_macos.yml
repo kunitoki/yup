@@ -50,7 +50,7 @@ jobs:
       uses: actions/cache/save@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
 
   build_tests:
     runs-on: macos-latest
@@ -60,7 +60,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{runner.workspace}}/build/tests/Debug
       run: ./yup_tests
@@ -76,7 +76,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
@@ -88,7 +88,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
 
@@ -100,7 +100,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
 
@@ -112,7 +112,7 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
 
@@ -124,6 +124,6 @@ jobs:
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
-        key: ${{ runner.name }}-build-${{ github.sha }}
+        key: macos-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin
