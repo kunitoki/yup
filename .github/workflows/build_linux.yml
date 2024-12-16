@@ -29,7 +29,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-
     - uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: Install Dependencies
@@ -48,7 +47,7 @@ jobs:
 
     - name: Cache Configure
       id: cache-build
-      uses: actions/cache@v3
+      uses: actions/cache/save@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
@@ -59,9 +58,12 @@ jobs:
     needs: [configure]
 
     steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+
     - name: Restore Cache Configure
       id: cache-build
-      uses: actions/cache@v3
+      uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
@@ -86,9 +88,12 @@ jobs:
     needs: [configure]
 
     steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+
     - name: Restore Cache Configure
       id: cache-build
-      uses: actions/cache@v3
+      uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
         key: ${{ runner.os }}-build-${{ github.sha }}
