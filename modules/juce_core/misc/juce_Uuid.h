@@ -77,7 +77,7 @@ public:
 
     bool operator== (const Uuid&) const noexcept;
     bool operator!= (const Uuid&) const noexcept;
-    bool operator<(const Uuid&) const noexcept;
+    bool operator< (const Uuid&) const noexcept;
     bool operator> (const Uuid&) const noexcept;
     bool operator<= (const Uuid&) const noexcept;
     bool operator>= (const Uuid&) const noexcept;

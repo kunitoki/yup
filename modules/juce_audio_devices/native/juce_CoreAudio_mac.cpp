@@ -41,12 +41,12 @@ namespace juce
 {
 
 #if JUCE_COREAUDIO_LOGGING_ENABLED
-#define JUCE_COREAUDIOLOG(a)  \
-{                             \
-String camsg ("CoreAudio: "); \
-camsg << a;                   \
-Logger::writeToLog (camsg);   \
-}
+#define JUCE_COREAUDIOLOG(a)          \
+    {                                 \
+        String camsg ("CoreAudio: "); \
+        camsg << a;                   \
+        Logger::writeToLog (camsg);   \
+    }
 #else
 #define JUCE_COREAUDIOLOG(a)
 #endif
@@ -1273,7 +1273,7 @@ struct CoreAudioClasses
                 CFRelease (aggregateDeviceUid);
 
                 // Guaranteed available earlier in CoreAudioIODeviceType::createDevice()
-                OSStatus status = AudioHardwareCreateAggregateDevice ((CFDictionaryRef)description, &aggregateDeviceID);
+                OSStatus status = AudioHardwareCreateAggregateDevice ((CFDictionaryRef) description, &aggregateDeviceID);
                 return status == noErr ? std::make_unique<CoreAudioInternal> (*this, aggregateDeviceID, true, true) : nullptr;
             }();
 
@@ -1501,7 +1501,7 @@ struct CoreAudioClasses
             AudioObjectPropertyAddress pa { kAudioDevicePropertyDeviceUID, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
             AudioObjectGetPropertyData (deviceID, &pa, 0, nullptr, &uidSize, &uid);
 
-            return [(NSString*)uid autorelease];
+            return [(NSString*) uid autorelease];
         }
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CoreAudioIODevice)
