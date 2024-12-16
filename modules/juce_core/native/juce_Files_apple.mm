@@ -243,7 +243,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 #endif
     }
 }
-}
+} // namespace MacFileHelpers
 
 bool File::isOnCDRomDrive() const
 {

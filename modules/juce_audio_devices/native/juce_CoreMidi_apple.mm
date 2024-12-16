@@ -964,7 +964,7 @@ struct CreatorFunctions<ImplementationStrategy::both>
 #endif
 
 using CreatorFunctionsToUse = CreatorFunctions<implementationStrategy>;
-}
+} // namespace CoreMidiHelpers
 
 //==============================================================================
 class MidiInput::Pimpl : public CoreMidiHelpers::MidiPortAndCallback

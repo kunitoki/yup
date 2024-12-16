@@ -126,7 +126,10 @@ TEST (RandomTests, Concurrent)
     std::vector<std::unique_ptr<InvokerThread>> threads;
     threads.reserve ((size_t) numberOfThreads);
 
-    auto threadCallback = [] { Random::getSystemRandom().nextInt(); };
+    auto threadCallback = []
+    {
+        Random::getSystemRandom().nextInt();
+    };
 
     for (int i = numberOfThreads; --i >= 0;)
     {

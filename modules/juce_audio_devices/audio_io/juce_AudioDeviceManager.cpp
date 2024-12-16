@@ -575,8 +575,7 @@ void AudioDeviceManager::insertDefaultDeviceNames (AudioDeviceSetup& setup) cons
                     elem = tempDevice->getAvailableSampleRates();
 
                 return elem;
-            }
-            ();
+            }();
 
             return entry;
         };

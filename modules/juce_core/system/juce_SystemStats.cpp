@@ -239,7 +239,7 @@ String SystemStats::getStackBacktrace()
 {
     String result;
 
-#if JUCE_MINGW || (JUCE_WASM && !JUCE_EMSCRIPTEN)
+#if JUCE_MINGW || (JUCE_WASM && ! JUCE_EMSCRIPTEN)
     jassertfalse; // sorry, not implemented yet!
 
 #elif JUCE_WINDOWS
@@ -275,8 +275,8 @@ String SystemStats::getStackBacktrace()
 
 #elif JUCE_EMSCRIPTEN
     std::string temporaryStack;
-    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8)(stackTrace()); }));
-    EM_ASM_ARGS({ (stringToUTF8 || Module.stringToUTF8)(stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
+    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8) (stackTrace()); }));
+    EM_ASM_ARGS ({ (stringToUTF8 || Module.stringToUTF8) (stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
     result << temporaryStack.c_str();
 
 #else

@@ -947,7 +947,7 @@ bool operator== (const var& v1, const var& v2) { return v1.equals (v2); }
 
 bool operator!= (const var& v1, const var& v2) { return ! v1.equals (v2); }
 
-bool operator<(const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) < 0; }
+bool operator< (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) < 0; }
 
 bool operator> (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) > 0; }
 

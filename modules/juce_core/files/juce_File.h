@@ -345,7 +345,7 @@ public:
     /** Compares the pathnames for two files. */
     bool operator!= (const File&) const;
     /** Compares the pathnames for two files. */
-    bool operator<(const File&) const;
+    bool operator< (const File&) const;
     /** Compares the pathnames for two files. */
     bool operator> (const File&) const;
 

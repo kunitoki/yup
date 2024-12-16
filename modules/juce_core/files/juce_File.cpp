@@ -272,7 +272,7 @@ bool File::operator== (const File& other) const { return compareFilenames (fullP
 
 bool File::operator!= (const File& other) const { return compareFilenames (fullPath, other.fullPath) != 0; }
 
-bool File::operator<(const File& other) const { return compareFilenames (fullPath, other.fullPath) < 0; }
+bool File::operator< (const File& other) const { return compareFilenames (fullPath, other.fullPath) < 0; }
 
 bool File::operator> (const File& other) const { return compareFilenames (fullPath, other.fullPath) > 0; }
 

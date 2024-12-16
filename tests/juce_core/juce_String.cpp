@@ -43,7 +43,8 @@
 
 using namespace juce;
 
-namespace juce {
+namespace juce
+{
 extern String reduceLengthOfFloatString (const String& input);
 extern String serialiseDouble (double input, int maxDecimalPlaces = 0);
 } // namespace juce
@@ -476,9 +477,9 @@ TEST_F (StringTests, Subsections)
 
 TEST_F (StringTests, UTFConversions)
 {
-    TestUTFConversion<CharPointer_UTF32>::test ();
-    TestUTFConversion<CharPointer_UTF8>::test ();
-    TestUTFConversion<CharPointer_UTF16>::test ();
+    TestUTFConversion<CharPointer_UTF32>::test();
+    TestUTFConversion<CharPointer_UTF8>::test();
+    TestUTFConversion<CharPointer_UTF16>::test();
 }
 
 TEST_F (StringTests, StringArray)

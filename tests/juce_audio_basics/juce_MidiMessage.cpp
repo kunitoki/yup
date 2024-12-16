@@ -43,7 +43,8 @@
 
 using namespace juce;
 
-namespace {
+namespace
+{
 const std::vector<uint8> metaEvents[] {
     // Format is 0xff, followed by a 'kind' byte, followed by a variable-length
     // 'data-length' value, followed by that many data bytes
@@ -101,7 +102,7 @@ TEST (MidiMessageTests, ReadVariableLengthValueShouldReturnCompatibleResults)
     };
 
     EXPECT_EQ (std::distance (begin (inputs), end (inputs)),
-                    std::distance (begin (outputs), end (outputs)));
+               std::distance (begin (outputs), end (outputs)));
 
     size_t index = 0;
 
@@ -113,7 +114,7 @@ TEST (MidiMessageTests, ReadVariableLengthValueShouldReturnCompatibleResults)
             copy.push_back (0);
 
         const auto result = MidiMessage::readVariableLengthValue (copy.data(),
-                                                                    (int) copy.size());
+                                                                  (int) copy.size());
 
         EXPECT_TRUE (result.isValid());
         EXPECT_EQ (result.value, outputs[index]);
@@ -131,7 +132,7 @@ TEST (MidiMessageTests, ReadVariableLengthValueShouldReturnZeroWithTruncatedInpu
         input.resize (i, 0xFF);
 
         const auto result = MidiMessage::readVariableLengthValue (input.data(),
-                                                                    (int) input.size());
+                                                                  (int) input.size());
 
         EXPECT_TRUE (! result.isValid());
         EXPECT_EQ (result.value, 0);

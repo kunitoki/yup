@@ -825,7 +825,7 @@ private:
     @see forEachXmlChildElementWithTagName
 */
 #define forEachXmlChildElement(parentXmlElement, childElementVariableName) \
-for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
+    for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
 
 /** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
     which have a specified tag.
@@ -853,7 +853,7 @@ for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), 
     @see forEachXmlChildElement
 */
 #define forEachXmlChildElementWithTagName(parentXmlElement, childElementVariableName, requiredTagName) \
-for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
+    for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
 
 #endif
 

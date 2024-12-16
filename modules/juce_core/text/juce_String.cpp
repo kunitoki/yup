@@ -698,7 +698,7 @@ JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, StringRef s2) noexcept
 
 JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator<(const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) < 0; }
+JUCE_API bool JUCE_CALLTYPE operator< (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) < 0; }
 
 JUCE_API bool JUCE_CALLTYPE operator<= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) <= 0; }
 

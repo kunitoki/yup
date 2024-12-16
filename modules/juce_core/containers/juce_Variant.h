@@ -336,7 +336,7 @@ JUCE_API bool operator== (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator!= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator<(const var&, const var&);
+JUCE_API bool operator< (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
 JUCE_API bool operator<= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
