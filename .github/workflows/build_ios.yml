@@ -24,6 +24,7 @@ concurrency:
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_15.1.app/Contents/Developer
+  IOS_PLATFORM: OS64
 
 jobs:
   configure:
@@ -31,14 +32,16 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
 
     - name: Configure
       working-directory: ${{runner.workspace}}/build
-      run: cmake ${{ github.workspace }} -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 \
-        -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+      run: |
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
     - name: Build SDL2
       run: |
@@ -57,6 +60,7 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
@@ -69,6 +73,7 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
@@ -81,6 +86,7 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
@@ -93,6 +99,7 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
@@ -105,6 +112,7 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       with:
         path: ${{runner.workspace}}/build
