@@ -75,7 +75,7 @@ public:
 
         cancelPendingUpdate();
 
-        if (auto prev = std::exchange (lastNotifiedState, State{}); prev != lastNotifiedState)
+        if (auto prev = std::exchange (lastNotifiedState, State {}); prev != lastNotifiedState)
             for (auto it = callbacks.begin(); it != callbacks.end();)
                 NullCheckedInvocation::invoke ((it++)->second);
     }

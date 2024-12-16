@@ -505,9 +505,12 @@ Result File::createDirectoryInternal (const String& fileName) const
 
         if (stat (parent.toRawUTF8(), &parentInfo) == 0 && stat (fileName.toRawUTF8(), &childInfo) == 0)
         {
-            if (parentInfo.st_mode & S_IWOTH) childInfo.st_mode |= S_IWOTH;
-            if (parentInfo.st_mode & S_IWUSR) childInfo.st_mode |= S_IWUSR;
-            if (parentInfo.st_mode & S_IWGRP) childInfo.st_mode |= S_IWGRP;
+            if (parentInfo.st_mode & S_IWOTH)
+                childInfo.st_mode |= S_IWOTH;
+            if (parentInfo.st_mode & S_IWUSR)
+                childInfo.st_mode |= S_IWUSR;
+            if (parentInfo.st_mode & S_IWGRP)
+                childInfo.st_mode |= S_IWGRP;
 
             chmod (fileName.toRawUTF8(), childInfo.st_mode);
         }
@@ -535,9 +538,12 @@ void FileInputStream::openHandle()
 
     if (stat (parent.toRawUTF8(), &parentInfo) == 0)
     {
-        if (parentInfo.st_mode & S_IWOTH) permission |= S_IWOTH;
-        if (parentInfo.st_mode & S_IWUSR) permission |= S_IWUSR;
-        if (parentInfo.st_mode & S_IWGRP) permission |= S_IWGRP;
+        if (parentInfo.st_mode & S_IWOTH)
+            permission |= S_IWOTH;
+        if (parentInfo.st_mode & S_IWUSR)
+            permission |= S_IWUSR;
+        if (parentInfo.st_mode & S_IWGRP)
+            permission |= S_IWGRP;
     }
 
     auto f = open (file.getFullPathName().toUTF8(), O_RDWR | O_CREAT, permission);
@@ -1094,9 +1100,9 @@ static void* makeThreadHandle (PosixThreadAttribute& attr, void* userData, void*
     if (status != 0)
         return nullptr;
 
-//#if !JUCE_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
+    //#if !JUCE_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
     pthread_detach (handle);
-//#endif
+    //#endif
 
     return (void*) handle;
 }

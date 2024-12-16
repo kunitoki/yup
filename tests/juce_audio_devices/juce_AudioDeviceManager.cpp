@@ -43,14 +43,16 @@
 
 using namespace juce;
 
-namespace {
+namespace
+{
 struct Restartable
 {
     virtual ~Restartable() = default;
     virtual void restart (double newSr, int newBs) = 0;
 };
 
-class MockDevice final : public AudioIODevice, private Restartable
+class MockDevice final : public AudioIODevice
+    , private Restartable
 {
 public:
     MockDevice (ListenerList<Restartable>& l, String typeNameIn, String outNameIn, String inNameIn)

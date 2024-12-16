@@ -241,11 +241,11 @@ static void logNSError (NSError* e)
 }
 
 #define JUCE_NSERROR_CHECK(X) \
-{                             \
-NSError* error = nil;         \
-X;                            \
-logNSError (error);           \
-}
+    {                         \
+        NSError* error = nil; \
+        X;                    \
+        logNSError (error);   \
+    }
 
 //==============================================================================
 class iOSAudioIODeviceType final : public AudioIODeviceType
