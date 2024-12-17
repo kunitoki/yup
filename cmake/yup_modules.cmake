@@ -298,7 +298,7 @@ function (yup_add_module module_path)
     set (${module_name}_Found OFF PARENT_SCOPE)
 
     if (NOT EXISTS ${module_path})
-        _yup_message (FATAL_ERROR "Module location not found")
+        _yup_message (FATAL_ERROR "Module location ${module_path} not found")
     endif()
 
     set (module_header "${module_path}/${module_name}.h")
