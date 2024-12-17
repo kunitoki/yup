@@ -123,6 +123,7 @@ public:
     void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
+    void handleTextInput (const String& textInput);
     void handleMoved (int xpos, int ypos);
     void handleResized (int width, int height);
     void handleFocusChanged (bool gotFocus);
@@ -949,6 +950,16 @@ void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
         component.internalKeyUp (keys, cursorPosition);
 }
 
+void SDL2ComponentNative::handleTextInput (const String& textInput)
+{
+    DBG ("handleTextInput: " << textInput);
+
+    if (lastComponentFocused != nullptr)
+        lastComponentFocused->internalTextInput (textInput);
+    else
+        component.internalTextInput (textInput);
+}
+
 //==============================================================================
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
@@ -1181,6 +1192,17 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
             if (event->key.windowID == SDL_GetWindowID (window))
                 handleKeyUp (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
+
+            break;
+        }
+
+        case SDL_TEXTINPUT:
+        {
+            // auto cursorPosition = getCursorPosition();
+            // auto modifiers = toKeyModifiers (getKeyModifiers());
+
+            if (event->text.windowID == SDL_GetWindowID (window))
+                handleTextInput (String::fromUTF8 (event->text.text));
 
             break;
         }

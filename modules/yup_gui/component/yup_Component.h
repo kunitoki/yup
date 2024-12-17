@@ -172,6 +172,7 @@ public:
     //==============================================================================
     virtual void keyDown (const KeyPress& keys, const Point<float>& position);
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+    virtual void textInput (const String& text);
 
 private:
     void internalPaint (Graphics& g, bool renderContinuous);
@@ -185,6 +186,7 @@ private:
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
+    void internalTextInput (const String& text);
     void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
     void internalUserTriedToCloseWindow();
@@ -215,6 +217,7 @@ private:
         bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool wantsTextInput : 1;
     };
 
     union
