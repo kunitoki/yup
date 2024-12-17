@@ -43,18 +43,6 @@
 #include <SDL2/SDL_syswm.h>
 
 //==============================================================================
-#include "application/yup_Application.cpp"
-#include "desktop/yup_Desktop.cpp"
-#include "mouse/yup_MouseEvent.cpp"
-#include "component/yup_ComponentNative.cpp"
-#include "component/yup_Component.cpp"
-#include "widgets/yup_Button.cpp"
-#include "widgets/yup_TextButton.cpp"
-#include "widgets/yup_Slider.cpp"
-#include "artboard/yup_Artboard.cpp"
-#include "windowing/yup_DocumentWindow.cpp"
-
-//==============================================================================
 #if JUCE_MAC || JUCE_IOS
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
@@ -86,6 +74,18 @@
 #else
 
 #endif
+
+//==============================================================================
+#include "application/yup_Application.cpp"
+#include "desktop/yup_Desktop.cpp"
+#include "mouse/yup_MouseEvent.cpp"
+#include "component/yup_ComponentNative.cpp"
+#include "component/yup_Component.cpp"
+#include "widgets/yup_Button.cpp"
+#include "widgets/yup_TextButton.cpp"
+#include "widgets/yup_Slider.cpp"
+#include "artboard/yup_Artboard.cpp"
+#include "windowing/yup_DocumentWindow.cpp"
 
 //==============================================================================
 #include "native/yup_Windowing_utils.h"
