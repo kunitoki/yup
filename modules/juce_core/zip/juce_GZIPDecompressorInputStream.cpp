@@ -37,8 +37,6 @@
   ==============================================================================
 */
 
-#include "zlib/zlib.h"
-
 namespace juce
 {
 
@@ -50,7 +48,6 @@ class GZIPDecompressorInputStream::GZIPDecompressHelper
 public:
     GZIPDecompressHelper (Format f)
     {
-        using namespace zlibNamespace;
         zerostruct (stream);
         streamIsValid = (inflateInit2 (&stream, getBitsForFormat (f)) == Z_OK);
         finished = error = ! streamIsValid;
@@ -59,7 +56,7 @@ public:
     ~GZIPDecompressHelper()
     {
         if (streamIsValid)
-            zlibNamespace::inflateEnd (&stream);
+            inflateEnd (&stream);
     }
 
     bool needsInput() const noexcept { return dataSize <= 0; }
@@ -72,8 +69,6 @@ public:
 
     int doNextBlock (uint8* const dest, const unsigned int destSize)
     {
-        using namespace zlibNamespace;
-
         if (streamIsValid && data != nullptr && ! finished)
         {
             stream.next_in = data;
@@ -135,7 +130,7 @@ public:
     };
 
 private:
-    zlibNamespace::z_stream stream;
+    z_stream stream;
     uint8* data = nullptr;
     size_t dataSize = 0;
 

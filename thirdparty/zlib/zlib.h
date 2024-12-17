@@ -39,26 +39,14 @@
 
 #pragma once
 
-#if defined (__APPLE__)
-#include <TargetConditionals.h>
+#if __cplusplus
+extern "C" {
 #endif
 
-namespace zlibNamespace {
-
-#undef OS_CODE
-#undef fdopen
 #define ZLIB_INTERNAL
 #define NO_DUMMY_DECL
 #include "src/zlib.h"
 
-#if ! defined(YUP_ZLIB_INTERNAL_NOUNDEF)
-#undef Byte
-#undef fdopen
-#undef local
-#undef Freq
-#undef Code
-#undef Dad
-#undef Len
+#if __cplusplus
+} // extern "C"
 #endif
-
-} // namespace zlibNamespace

@@ -147,6 +147,8 @@ extern char** environ;
 #include <android/log.h>
 #endif
 
+#include "zlib/zlib.h"
+
 #undef check
 
 //==============================================================================

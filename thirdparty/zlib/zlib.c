@@ -19,20 +19,13 @@
   ==============================================================================
 */
 
-#define YUP_ZLIB_INTERNAL_NOUNDEF
 #include "zlib.h"
-#undef YUP_ZLIB_INTERNAL_NOUNDEF
 
-#include <cstdlib>
-#include <cstdio>
-
-#if defined (_MSC_VER)
-#pragma warning (push)
-#else
-#pragma clang diagnostic push
-#endif
+#include <stdlib.h>
+#include <stdio.h>
 
 #if defined(_MSC_VER)
+#pragma warning (push)
 #pragma warning (disable: 4309)
 #pragma warning (disable: 4305)
 #pragma warning (disable: 4365)
@@ -40,6 +33,7 @@
 #pragma warning (disable: 6326)
 #pragma warning (disable: 6340)
 #else
+#pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wconversion"
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wshadow"
@@ -51,8 +45,6 @@
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
 #pragma clang diagnostic ignored "-Wcomma"
 #endif
-
-namespace zlibNamespace {
 
 #include "src/adler32.c"
 #include "src/compress.c"
@@ -72,8 +64,6 @@ namespace zlibNamespace {
 #include "src/inftrees.c"
 #include "src/trees.c"
 #include "src/zutil.c"
-
-} // namespace zlibNamespace
 
 #if _MSC_VER
 #pragma warning (pop)
