@@ -19,7 +19,9 @@
   ==============================================================================
 */
 
+#define YUP_ZLIB_INTERNAL_NOUNDEF
 #include "zlib.h"
+#undef YUP_ZLIB_INTERNAL_NOUNDEF
 
 #include <stdlib.h>
 #include <stdio.h>

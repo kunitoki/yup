@@ -54,3 +54,13 @@ extern "C" {
 #if __cplusplus
 } // extern "C"
 #endif
+
+#if ! defined(YUP_ZLIB_INTERNAL_NOUNDEF)
+#undef Byte
+#undef fdopen
+#undef local
+#undef Freq
+#undef Code
+#undef Dad
+#undef Len
+#endif
