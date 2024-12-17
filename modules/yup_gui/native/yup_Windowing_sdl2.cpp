@@ -1246,7 +1246,7 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
             desktop->handleDisplayOrientationChanged (event->display.display);
             break;
 
-#if !JUCE_EMSCRIPTEN
+#if ! JUCE_EMSCRIPTEN
         case SDL_DISPLAYEVENT_MOVED:
             desktop->handleDisplayMoved (event->display.display);
             break;
