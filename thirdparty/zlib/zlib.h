@@ -39,6 +39,8 @@
 
 #pragma once
 
+#include <TargetConditionals.h>
+
 #if __cplusplus
 extern "C" {
 #endif
