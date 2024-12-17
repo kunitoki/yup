@@ -32,10 +32,10 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       rive glad
+    dependencies:       rive rive_decoders glad
     searchpaths:        include source
     osxFrameworks:      Metal QuartzCore
-    defines:            WITH_RIVE_TEXT=1
+    defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
     iosDefines:         RIVE_IOS=1
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1
