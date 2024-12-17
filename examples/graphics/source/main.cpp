@@ -130,21 +130,12 @@ public:
     CustomWindow()
         : yup::DocumentWindow ({}, yup::Color (0xff404040))
     {
-        rive::Factory* factory = getNativeComponent()->getFactory();
-        if (factory == nullptr)
-        {
-            yup::Logger::outputDebugString ("Failed to create a graphics context");
-
-            yup::YUPApplication::getInstance()->systemRequestedQuit();
-            return;
-        }
-
         setTitle ("main");
 
         // Load the font
 #if JUCE_ANDROID
         yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
-        if (auto result = font.loadFromData (mb, factory); result.failed())
+        if (auto result = font.loadFromData (mb); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 #else
 #if JUCE_WASM
@@ -154,7 +145,7 @@ public:
 #endif
                                 .getChildFile ("Roboto-Regular.ttf");
 
-        if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
+        if (auto result = font.loadFromFile (fontFilePath); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 #endif
 
