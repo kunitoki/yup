@@ -90,7 +90,7 @@ public:
         {
             ComPtr<ID3D11Texture2D> backbuffer;
             VERIFY_OK (m_swapchain->GetBuffer (0,
-                                               __uuidof(ID3D11Texture2D),
+                                               __uuidof (ID3D11Texture2D),
                                                reinterpret_cast<void**> (backbuffer.ReleaseAndGetAddressOf())));
 
             m_renderTarget->setTargetTexture (backbuffer);
@@ -119,7 +119,7 @@ std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (Graphics
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;
-    VERIFY_OK (CreateDXGIFactory (__uuidof(IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
+    VERIFY_OK (CreateDXGIFactory (__uuidof (IDXGIFactory2), reinterpret_cast<void**> (factory.ReleaseAndGetAddressOf())));
 
     ComPtr<IDXGIAdapter> adapter;
     DXGI_ADAPTER_DESC adapterDesc {};
