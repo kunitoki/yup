@@ -303,7 +303,7 @@ function (yup_add_module module_path)
 
     set (module_header "${module_path}/${module_name}.h")
     if (NOT EXISTS ${module_header})
-        _yup_message (FATAL_ERROR "Module header ${module_header} not found")
+        _yup_message (FATAL_ERROR "Module header ${module_header} in module ${module_path} not found")
     endif()
 
     # ==== Add module as library
