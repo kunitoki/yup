@@ -39,7 +39,9 @@
 
 #pragma once
 
+#if defined (__APPLE__)
 #include <TargetConditionals.h>
+#endif
 
 #if __cplusplus
 extern "C" {
