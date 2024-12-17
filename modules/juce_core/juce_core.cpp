@@ -147,8 +147,6 @@ extern char** environ;
 #include <android/log.h>
 #endif
 
-#include "zlib/zlib.h"
-
 #undef check
 
 //==============================================================================
@@ -213,9 +211,6 @@ extern char** environ;
 #include "containers/juce_DynamicObject.cpp"
 #include "xml/juce_XmlDocument.cpp"
 #include "xml/juce_XmlElement.cpp"
-#include "zip/juce_GZIPDecompressorInputStream.cpp"
-#include "zip/juce_GZIPCompressorOutputStream.cpp"
-#include "zip/juce_ZipFile.cpp"
 #include "files/juce_FileFilter.cpp"
 #include "files/juce_WildcardFileFilter.cpp"
 #include "native/juce_ThreadPriorities_native.h"
@@ -314,6 +309,13 @@ extern char** environ;
 #if JUCE_UNIT_TESTS
 #include "maths/juce_MathsFunctions_test.cpp"
 #endif
+
+//==============================================================================
+#include <zlib/zlib.h>
+
+#include "zip/juce_GZIPDecompressorInputStream.cpp"
+#include "zip/juce_GZIPCompressorOutputStream.cpp"
+#include "zip/juce_ZipFile.cpp"
 
 //==============================================================================
 namespace juce
