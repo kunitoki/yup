@@ -231,7 +231,6 @@
 
 #if defined(__arm__) || defined(__aarch64__) || defined(_M_ARM) || defined(_M_ARM64)
 #define PNG_ARM_NEON_OPT 1
-#define PNG_ARM_NEON_INTRINSICS_AVAILABLE 1
 #else
 #define PNG_ARM_NEON_OPT 0
 #endif
@@ -244,7 +243,7 @@
 
 #include <zlib/zlib.h>
 
-#if ! defined (jmp_buf) || ! defined (longjmp)
+#if ! defined(jmp_buf) || ! defined(longjmp)
 #include <setjmp.h>
 #endif
 
