@@ -45,5 +45,5 @@
 
 #if defined(__SSE2__) || defined(_M_X64) || defined(_M_IX86)
 #include "upstream/intel/intel_init.c"
-#include "upstream/intel/intel_sse2_intrinsics.c"
+#include "upstream/intel/filter_sse2_intrinsics.c"
 #endif
