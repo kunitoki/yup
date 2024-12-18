@@ -230,11 +230,17 @@ public:
         oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
     }
 
+    void paint (yup::Graphics& g) override
+    {
+        yup::DocumentWindow::paint (g);
+        //g.drawImageAt (image, getLocalBounds().getCenter());
+    }
+
     void paintOverChildren (yup::Graphics& g) override
     {
-        //g.setBlendMode (yup::BlendMode::ColorDodge);
-        //g.setOpacity (1.0f);
-        //g.drawImageAt (image, getLocalBounds().getCenter());
+        g.setBlendMode (yup::BlendMode::ColorDodge);
+        g.setOpacity (1.0f);
+        g.drawImageAt (image, getLocalBounds().getCenter());
     }
 
     void mouseDown (const yup::MouseEvent& event) override

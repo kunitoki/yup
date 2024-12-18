@@ -612,7 +612,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
         return;
 
-    auto bounds = (options.onDesktop ? getLocalBounds() : getBoundsRelativeToAncestor());
+    auto bounds = getBoundsRelativeToAncestor();
 
     auto dirtyBounds = repaintArea;
     auto boundsToRedraw = bounds.intersection (dirtyBounds);
@@ -620,7 +620,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         return;
 
     const auto opacity = g.getOpacity() * getOpacity();
-    if (opacity == 0.0f)
+    if (opacity <= 0.0f)
         return;
 
     const auto globalState = g.saveState();
@@ -639,11 +639,19 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     for (auto child : children)
         child->internalPaint (g, boundsToRedraw, renderContinuous);
 
-    g.setDrawingArea (bounds);
-    if (! options.unclippedRendering)
-        g.setClipPath (boundsToRedraw);
-
     paintOverChildren (g);
+
+#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+    g.setFillColor (debugColor);
+    g.setOpacity (0.2f);
+    g.fillAll();
+
+    if (--counter == 0)
+    {
+        counter = 2;
+        debugColor = Color::opaqueRandom();
+    }
+#endif
 }
 
 void Component::internalMouseEnter (const MouseEvent& event)

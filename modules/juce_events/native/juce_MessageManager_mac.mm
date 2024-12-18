@@ -55,17 +55,19 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
     AppDelegateClass()
         : ObjCClass("JUCEAppDelegate_")
     {
+        // clang-format off
         addMethod(@selector(applicationWillFinishLaunching:), [](id self, SEL, NSNotification*)
-                  {
+        {
             JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
             [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self
                                                                andSelector: @selector (getUrl:withReplyEvent:)
                                                              forEventClass: kInternetEventClass
                                                                 andEventID: kAEGetURL];
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE });
+            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        });
 
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
             {
                 app->systemRequestedQuit();
@@ -74,23 +76,27 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                     return NSTerminateCancel;
             }
 
-            return NSTerminateNow; });
+            return NSTerminateNow;
+        });
 
         addMethod(@selector(applicationWillTerminate:), [](id /*self*/, SEL, NSNotification*)
-                  { JUCEApplicationBase::appWillTerminateByForce(); });
+        {
+            JUCEApplicationBase::appWillTerminateByForce();
+        });
 
         addMethod(@selector(application:openFile:), [](id /*self*/, SEL, NSApplication*, NSString* filename)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
             {
                 app->anotherInstanceStarted (quotedIfContainsSpaces (filename));
                 return YES;
             }
 
-            return NO; });
+            return NO;
+        });
 
         addMethod(@selector(application:openFiles:), [](id /*self*/, SEL, NSApplication*, NSArray* filenames)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
             {
                 StringArray files;
@@ -100,32 +106,47 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
                 if (files.size() > 0)
                     app->anotherInstanceStarted (files.joinIntoString (" "));
-            } });
+            }
+        });
 
         addMethod(@selector(applicationDidBecomeActive:), [](id /*self*/, SEL, NSNotification*)
-                  { focusChanged(); });
+        {
+            focusChanged();
+        });
+
         addMethod(@selector(applicationDidResignActive:), [](id /*self*/, SEL, NSNotification*)
-                  { focusChanged(); });
+        {
+            focusChanged();
+        });
+
         addMethod(@selector(applicationWillUnhide:), [](id /*self*/, SEL, NSNotification*)
-                  { focusChanged(); });
+        {
+            focusChanged();
+        });
 
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(getUrl:withReplyEvent:), [](id /*self*/, SEL, NSAppleEventDescriptor* event, NSAppleEventDescriptor*)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
-                app->anotherInstanceStarted (quotedIfContainsSpaces ([[event paramDescriptorForKeyword: keyDirectObject] stringValue])); });
+                app->anotherInstanceStarted (quotedIfContainsSpaces ([[event paramDescriptorForKeyword: keyDirectObject] stringValue]));
+        });
 
         addMethod(@selector(broadcastMessageCallback:), [](id /*self*/, SEL, NSNotification* n)
-                  {
+        {
             NSDictionary* dict = (NSDictionary*) [n userInfo];
             auto messageString = nsStringToJuce ((NSString*) [dict valueForKey: nsStringLiteral ("message")]);
-            MessageManager::getInstance()->deliverBroadcastMessage (messageString); });
+            MessageManager::getInstance()->deliverBroadcastMessage (messageString);
+        });
 
         addMethod(@selector(mainMenuTrackingBegan:), [](id /*self*/, SEL, NSNotification*)
-                  { NullCheckedInvocation::invoke(menuTrackingChangedCallback, true); });
+        {
+            NullCheckedInvocation::invoke(menuTrackingChangedCallback, true);
+        });
 
         addMethod(@selector(mainMenuTrackingEnded:), [](id /*self*/, SEL, NSNotification*)
-                  { NullCheckedInvocation::invoke(menuTrackingChangedCallback, false); });
+        {
+            NullCheckedInvocation::invoke(menuTrackingChangedCallback, false);
+        });
 
         // (used as a way of running a dummy thread)
         addMethod(@selector(dummyMethod), [](id /*self*/, SEL) {});
@@ -136,7 +157,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         addIvar<NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>*>("pushNotificationsDelegate");
 
         addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification* notification)
-                  {
+        {
             if (notification.userInfo != nil)
             {
                 JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
@@ -149,15 +170,18 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 if (userNotification != nil && userNotification.userInfo != nil)
                     [self application: [NSApplication sharedApplication] didReceiveRemoteNotification: userNotification.userInfo];
                 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-            } });
+            }
+        });
 
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(setPushNotificationsDelegate:), [](id self, SEL, NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>* delegate)
-                  { object_setInstanceVariable(self, "pushNotificationsDelegate", delegate); });
+        {
+            object_setInstanceVariable(self, "pushNotificationsDelegate", delegate);
+        });
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
         addMethod(@selector(application:didRegisterForRemoteNotificationsWithDeviceToken:), [](id self, SEL, NSApplication* application, NSData* deviceToken)
-                  {
+        {
             auto* delegate = getPushNotificationsDelegate (self);
 
             SEL selector = @selector (application:didRegisterForRemoteNotificationsWithDeviceToken:);
@@ -171,10 +195,11 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 [invocation setArgument: &deviceToken atIndex:3];
 
                 [invocation invoke];
-            } });
+            }
+        });
 
         addMethod(@selector(application:didFailToRegisterForRemoteNotificationsWithError:), [](id self, SEL, NSApplication* application, NSError* error)
-                  {
+        {
             auto* delegate = getPushNotificationsDelegate (self);
 
             SEL selector =  @selector (application:didFailToRegisterForRemoteNotificationsWithError:);
@@ -188,10 +213,11 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 [invocation setArgument: &error       atIndex:3];
 
                 [invocation invoke];
-            } });
+            }
+        });
 
         addMethod(@selector(application:didReceiveRemoteNotification:), [](id self, SEL, NSApplication* application, NSDictionary* userInfo)
-                  {
+        {
             auto* delegate = getPushNotificationsDelegate (self);
 
             SEL selector =  @selector (application:didReceiveRemoteNotification:);
@@ -205,10 +231,12 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 [invocation setArgument: &userInfo    atIndex:3];
 
                 [invocation invoke];
-            } });
+            }
+        });
 #endif
-
         registerClass();
+
+        // clang-format on
     }
 
    private:
@@ -355,7 +383,7 @@ static void shutdownNSApp()
 {
     [NSApp stop:nil];
     [NSEvent stopPeriodicEvents];
-    [NSEvent startPeriodicEventsAfterDelay:0 withPeriod:0.1];
+    // [NSEvent startPeriodicEventsAfterDelay:0 withPeriod:0.1];
 }
 
 void MessageManager::stopDispatchLoop()

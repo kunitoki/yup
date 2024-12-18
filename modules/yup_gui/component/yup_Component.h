@@ -233,6 +233,11 @@ private:
         Options options;
     };
 
+#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+    Color debugColor = Color::opaqueRandom();
+    int counter = 2;
+#endif
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
 };
 

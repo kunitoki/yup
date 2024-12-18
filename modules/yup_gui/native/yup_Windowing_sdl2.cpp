@@ -519,7 +519,7 @@ void SDL2ComponentNative::enableAtomicMode (bool shouldBeEnabled)
 {
     renderAtomicMode = shouldBeEnabled;
 
-    component.repaint();
+    repaint();
 }
 
 bool SDL2ComponentNative::isWireframeEnabled() const
@@ -531,7 +531,7 @@ void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 {
     renderWireframe = shouldBeEnabled;
 
-    component.repaint();
+    repaint();
 }
 
 //==============================================================================
@@ -551,8 +551,7 @@ void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
     else
         currentRepaintArea = rect;
 
-    if (! currentRepaintArea.isEmpty())
-        triggerRenderingUpdate();
+    triggerRenderingUpdate();
 }
 
 Rectangle<float> SDL2ComponentNative::getRepaintArea() const
@@ -629,6 +628,8 @@ void SDL2ComponentNative::run()
         {
             while (! commandEvent.wait (1000.0f))
                 currentFrameRate.store (0.0f, std::memory_order_relaxed);
+
+            forcedRedraws = defaultForcedRedraws;
         }
 
         // Measure spent time and cap the framerate
@@ -742,7 +743,7 @@ void SDL2ComponentNative::renderContext()
 
     if (! renderContinuous)
     {
-        if (--forcedRedraws >= 0)
+        if (--forcedRedraws > 0)
             renderContext();
         else
             currentRepaintArea = {};
@@ -756,7 +757,6 @@ void SDL2ComponentNative::triggerRenderingUpdate()
     if (shouldRenderContinuous)
         return;
 
-    forcedRedraws = defaultForcedRedraws;
     commandEvent.signal();
 }
 
@@ -993,9 +993,9 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
     if (gotFocus)
     {
-        startRendering();
-
         repaint();
+
+        startRendering();
     }
 }
 
@@ -1146,6 +1146,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
         {
             if (event->window.windowID == SDL_GetWindowID (window))
                 handleWindowEvent (event->window);
+
             break;
         }
 

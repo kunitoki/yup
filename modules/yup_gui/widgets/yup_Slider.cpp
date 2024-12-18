@@ -40,6 +40,8 @@ void Slider::setValue (float newValue)
     sendValueChanged();
 
     updateRenderItems (false);
+
+    repaint();
 }
 
 float Slider::getValue() const
