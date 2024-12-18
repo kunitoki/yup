@@ -162,6 +162,9 @@ public:
     virtual void paintOverChildren (Graphics& g);
 
     //==============================================================================
+    virtual void refreshDisplay (double lastFrameTimeSeconds);
+
+    //==============================================================================
     virtual void mouseEnter (const MouseEvent& event);
     virtual void mouseExit (const MouseEvent& event);
     virtual void mouseDown (const MouseEvent& event);
@@ -181,7 +184,7 @@ public:
     virtual void textInput (const String& text);
 
 private:
-    void internalPaint (Graphics& g, bool renderContinuous);
+    void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);

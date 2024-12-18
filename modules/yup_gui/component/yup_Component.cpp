@@ -565,6 +565,8 @@ void Component::paint (Graphics& g) {}
 
 void Component::paintOverChildren (Graphics& g) {}
 
+void Component::refreshDisplay (double lastFrameTimeSeconds) {}
+
 //==============================================================================
 
 void Component::mouseEnter (const MouseEvent& event) {}
@@ -604,6 +606,16 @@ void Component::removeMouseListener (MouseListener* listener)
 //==============================================================================
 
 void Component::userTriedToCloseWindow() {}
+
+//==============================================================================
+
+void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
+{
+    refreshDisplay (lastFrameTimeSeconds);
+
+    for (auto child : children)
+        child->internalRefreshDisplay (lastFrameTimeSeconds);
+}
 
 //==============================================================================
 

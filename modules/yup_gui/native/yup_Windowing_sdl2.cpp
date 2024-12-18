@@ -146,11 +146,11 @@ public:
 
 private:
     void updateComponentUnderMouse (const MouseEvent& event);
-    void triggerRenderingUpdate();
     void renderContext();
 
     void startRendering();
     void stopRendering();
+    bool isRendering() const;
 
     SDL_Window* window = nullptr;
     SDL_Renderer* windowRenderer = nullptr;
@@ -189,12 +189,10 @@ private:
     int currentContentHeight = 0;
 
     WaitableEvent renderEvent { true };
-    WaitableEvent commandEvent;
     std::atomic<bool> shouldRenderContinuous = false;
+    double lastRenderTimeSeconds = 0.0;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
-    int forcedRedraws = 0;
-    static constexpr int defaultForcedRedraws = 2;
 
     Rectangle<float> currentRepaintArea;
 };
@@ -539,9 +537,6 @@ void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 void SDL2ComponentNative::repaint()
 {
     currentRepaintArea = Rectangle<float>().withSize (getSize().to<float>());
-
-    if (! currentRepaintArea.isEmpty())
-        triggerRenderingUpdate();
 }
 
 void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
@@ -550,8 +545,6 @@ void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
         currentRepaintArea = currentRepaintArea.smallestContainingRectangle (rect);
     else
         currentRepaintArea = rect;
-
-    triggerRenderingUpdate();
 }
 
 Rectangle<float> SDL2ComponentNative::getRepaintArea() const
@@ -623,15 +616,6 @@ void SDL2ComponentNative::run()
         triggerAsyncUpdate();
         renderEvent.wait (maxFrameTimeMs);
 
-        // Wait for any repaint command
-        if (! shouldRenderContinuous)
-        {
-            while (! commandEvent.wait (1000.0f))
-                currentFrameRate.store (0.0f, std::memory_order_relaxed);
-
-            forcedRedraws = defaultForcedRedraws;
-        }
-
         // Measure spent time and cap the framerate
         double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
@@ -682,7 +666,10 @@ void SDL2ComponentNative::timerCallback()
 
 void SDL2ComponentNative::renderContext()
 {
-    auto [contentWidth, contentHeight] = getContentSize();
+    const auto contentSize = getContentSize();
+    auto contentWidth = contentSize.getWidth();
+    auto contentHeight = contentSize.getHeight();
+
     if (context == nullptr || contentWidth == 0 || contentHeight == 0)
         return;
 
@@ -696,8 +683,7 @@ void SDL2ComponentNative::renderContext()
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
 
-        repaint();
-        forcedRedraws = defaultForcedRedraws;
+        currentRepaintArea = Rectangle<float>().withSize (getSize().to<float>());
     }
 
     if (parentWindow != nullptr)
@@ -706,64 +692,65 @@ void SDL2ComponentNative::renderContext()
         setPosition (nativeWindowPos.getTopLeft());
     }
 
-    if (! renderContinuous && currentRepaintArea.isEmpty())
+    auto newElapsedTime = juce::Time::getMillisecondCounterHiRes();
+    component.internalRefreshDisplay (newElapsedTime - lastRenderTimeSeconds);
+    lastRenderTimeSeconds = newElapsedTime;
+
+    if (renderContinuous)
+        repaint();
+    else if (currentRepaintArea.isEmpty())
         return;
 
-    const auto loadAction = renderContinuous
-                              ? rive::gpu::LoadAction::clear
-                              : rive::gpu::LoadAction::preserveRenderTarget;
-
-    // Begin context drawing
-    rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
-    frameDescriptor.renderTargetWidth = static_cast<uint32_t> (contentWidth);
-    frameDescriptor.renderTargetHeight = static_cast<uint32_t> (contentHeight);
-    frameDescriptor.loadAction = loadAction;
-    frameDescriptor.clearColor = 0xff000000;
-    frameDescriptor.msaaSampleCount = 0;
-    frameDescriptor.disableRasterOrdering = renderAtomicMode;
-    frameDescriptor.wireframe = renderWireframe;
-    frameDescriptor.fillsDisabled = false;
-    frameDescriptor.strokesDisabled = false;
-    context->begin (frameDescriptor);
-
-    // Repaint components hierarchy
-    if (renderer != nullptr)
+    auto renderFrame = [&]
     {
-        Graphics g (*context, *renderer, currentScaleDpi);
-        component.internalPaint (g, currentRepaintArea, renderContinuous);
-    }
+        // Setup frame description
+        const auto loadAction = renderContinuous
+                                  ? rive::gpu::LoadAction::clear
+                                  : rive::gpu::LoadAction::preserveRenderTarget;
 
-    // Finish context drawing
-    context->end (getNativeHandle());
-    context->tick();
+        rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
+        frameDescriptor.renderTargetWidth = static_cast<uint32_t> (contentWidth);
+        frameDescriptor.renderTargetHeight = static_cast<uint32_t> (contentHeight);
+        frameDescriptor.loadAction = loadAction;
+        frameDescriptor.clearColor = 0xff000000;
+        frameDescriptor.msaaSampleCount = 0;
+        frameDescriptor.disableRasterOrdering = renderAtomicMode;
+        frameDescriptor.wireframe = renderWireframe;
+        frameDescriptor.fillsDisabled = false;
+        frameDescriptor.strokesDisabled = false;
+
+        // Begin context drawing
+        context->begin (frameDescriptor);
+
+        // Repaint components hierarchy
+        if (renderer != nullptr)
+        {
+            Graphics g (*context, *renderer, currentScaleDpi);
+            component.internalPaint (g, currentRepaintArea, renderContinuous);
+        }
+
+        // Finish context drawing
+        context->end (getNativeHandle());
+        context->tick();
+    };
+
+    renderFrame();
+    if (! renderContinuous)
+        renderFrame();
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
         SDL_GL_SwapWindow (window);
 
-    if (! renderContinuous)
-    {
-        if (--forcedRedraws > 0)
-            renderContext();
-        else
-            currentRepaintArea = {};
-    }
-}
-
-//==============================================================================
-
-void SDL2ComponentNative::triggerRenderingUpdate()
-{
-    if (shouldRenderContinuous)
-        return;
-
-    commandEvent.signal();
+    currentRepaintArea = {};
 }
 
 //==============================================================================
 
 void SDL2ComponentNative::startRendering()
 {
+    lastRenderTimeSeconds = juce::Time::getMillisecondCounterHiRes();
+
 #if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     if (! isTimerRunning())
         startTimerHz (desiredFrameRate);
@@ -771,6 +758,8 @@ void SDL2ComponentNative::startRendering()
     if (! isThreadRunning())
         startThread (Priority::high);
 #endif
+
+    repaint();
 }
 
 void SDL2ComponentNative::stopRendering()
@@ -784,9 +773,17 @@ void SDL2ComponentNative::stopRendering()
         signalThreadShouldExit();
         notify();
         renderEvent.signal();
-        commandEvent.signal();
         stopThread (-1);
     }
+#endif
+}
+
+bool SDL2ComponentNative::isRendering() const
+{
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    return isTimerRunning();
+#else
+    return isThreadRunning();
 #endif
 }
 
@@ -989,41 +986,29 @@ void SDL2ComponentNative::handleResized (int width, int height)
 
 void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
-    DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
-
     if (gotFocus)
     {
-        repaint();
-
         startRendering();
     }
 }
 
 void SDL2ComponentNative::handleMinimized()
 {
-    DBG ("handleMinimized");
-
     stopRendering();
 }
 
 void SDL2ComponentNative::handleMaximized()
 {
-    DBG ("handleMaximized");
+    repaint();
 }
 
 void SDL2ComponentNative::handleRestored()
 {
-    DBG ("handleRestored");
-
     startRendering();
-
-    repaint();
 }
 
 void SDL2ComponentNative::handleExposed()
 {
-    DBG ("handleExposed");
-
     repaint();
 }
 
@@ -1087,16 +1072,23 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
     switch (windowEvent.event)
     {
         case SDL_WINDOWEVENT_CLOSE:
+            DBG ("SDL_WINDOWEVENT_CLOSE");
             component.internalUserTriedToCloseWindow();
             break;
 
-        //case SDL_WINDOWEVENT_RESIZED:
+        case SDL_WINDOWEVENT_RESIZED:
+            break;
+
         case SDL_WINDOWEVENT_SIZE_CHANGED:
             handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_MOVED:
             handleMoved (windowEvent.data1, windowEvent.data2);
+            break;
+
+        case SDL_WINDOWEVENT_SHOWN:
+            repaint();
             break;
 
         case SDL_WINDOWEVENT_MINIMIZED:
@@ -1112,8 +1104,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_WINDOWEVENT_EXPOSED:
-            if (! shouldRenderContinuous)
-                repaint();
+            repaint();
             break;
 
         case SDL_WINDOWEVENT_FOCUS_GAINED:
@@ -1138,7 +1129,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
     {
         case SDL_QUIT:
         {
-            component.internalUserTriedToCloseWindow();
+            DBG ("SDL_QUIT");
             break;
         }
 
@@ -1152,11 +1143,13 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_RENDER_TARGETS_RESET:
         {
+            DBG ("SDL_RENDER_TARGETS_RESET");
             break;
         }
 
         case SDL_RENDER_DEVICE_RESET:
         {
+            DBG ("SDL_RENDER_DEVICE_RESET");
             break;
         }
 
@@ -1317,7 +1310,7 @@ void Desktop::updateDisplays()
 void initialiseYup_Windowing()
 {
     // Initialise SDL2
-    if (SDL_Init (SDL_INIT_VIDEO) != 0)
+    if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
         DBG ("Error initialising SDL: " << SDL_GetError());
 
@@ -1331,7 +1324,10 @@ void initialiseYup_Windowing()
     Desktop::getInstance()->updateDisplays();
 
     // Allow SDL to poll events
-    MessageManager::getInstance()->registerEventLoopCallback (&SDL_PumpEvents);
+    MessageManager::getInstance()->registerEventLoopCallback ([]
+    {
+        SDL_PumpEvents();
+    });
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }
@@ -1340,12 +1336,12 @@ void shutdownYup_Windowing()
 {
     SDL2ComponentNative::isInitialised.clear();
 
-    MessageManager::getInstance()->registerEventLoopCallback (nullptr);
-
-    SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
-    Desktop::getInstance()->deleteInstance();
+    // MessageManager::getInstance()->registerEventLoopCallback (nullptr);
+    // SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
 
     SDL_Quit();
+
+    Desktop::getInstance()->deleteInstance();
 }
 
 } // namespace yup

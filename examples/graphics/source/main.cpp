@@ -282,7 +282,10 @@ public:
     void timerCallback() override
     {
         updateWindowTitle();
+    }
 
+    void refreshDisplay (double lastFrameTimeSeconds) override
+    {
         {
             const yup::CriticalSection::ScopedLockType sl (renderMutex);
             oscilloscope.setRenderData (renderData);

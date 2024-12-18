@@ -520,8 +520,8 @@ private:
     const RenderOptions& currentRenderOptions() const;
     void restoreState();
 
-    void renderStrokePath (rive::RawPath& rawPath, const RenderOptions& options);
-    void renderFillPath (rive::RawPath& rawPath, const RenderOptions& options);
+    void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
+    void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
 
     GraphicsContext& context;
 
