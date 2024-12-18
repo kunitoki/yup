@@ -8,6 +8,8 @@
 #include <string.h>
 #include <vector>
 
+namespace rive {
+
 Bitmap::Bitmap(uint32_t width,
                uint32_t height,
                PixelFormat pixelFormat,
@@ -69,3 +71,5 @@ void Bitmap::pixelFormat(PixelFormat format)
     m_Bytes = std::move(nextBytes);
     m_PixelFormat = format;
 }
+
+} // namespace rive

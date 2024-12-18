@@ -26,6 +26,27 @@ namespace yup
 class GraphicsContext;
 
 //==============================================================================
+enum class BlendMode : uint8
+{
+    SrcOver,
+    Screen,
+    Overlay,
+    Darken,
+    Lighten,
+    ColorDodge,
+    ColorBurn,
+    HardLight,
+    SoftLight,
+    Difference,
+    Exclusion,
+    Multiply,
+    Hue,
+    Saturation,
+    Color,
+    Luminosity
+};
+
+//==============================================================================
 /** A graphical interface for drawing operations within a defined rendering context.
 
     This class provides a high-level drawing interface to perform various graphical
@@ -178,6 +199,15 @@ public:
         @return The stroke cap style.
     */
     StrokeCap getStrokeCap() const;
+
+    //==============================================================================
+    /**
+     */
+    void setBlendMode (BlendMode blendMode);
+
+    /**
+     */
+    BlendMode getBlendMode() const;
 
     //==============================================================================
     /** Defines the area within which drawing operations are clipped.
@@ -367,6 +397,10 @@ public:
     void fillPath (const Path& path);
 
     //==============================================================================
+
+    void drawImageAt (const Image& image, const Point<float>& pos);
+
+    //==============================================================================
     /** Draws an attributed text.
     */
     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
@@ -476,6 +510,7 @@ private:
         Rectangle<float> drawingArea;
         AffineTransform transform;
         Path clipPath;
+        BlendMode blendMode = BlendMode::SrcOver;
         float opacity = 1.0f;
         bool isCurrentFillColor = true;
         bool isCurrentStrokeColor = true;

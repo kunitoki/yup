@@ -164,14 +164,6 @@ Size<float> Component::getSize() const
     return boundsInParent.getSize();
 }
 
-Size<float> Component::getContentSize() const
-{
-    if (options.onDesktop)
-        return native->getContentSize().to<float>();
-
-    return getSize();
-}
-
 float Component::getWidth() const
 {
     return boundsInParent.getWidth();
@@ -200,6 +192,22 @@ Rectangle<float> Component::getBounds() const
 Rectangle<float> Component::getLocalBounds() const
 {
     return boundsInParent.withZeroPosition();
+}
+
+Rectangle<float> Component::getBoundsRelativeToAncestor() const
+{
+    auto bounds = boundsInParent;
+    if (options.onDesktop)
+        return bounds.withZeroPosition();
+
+    auto parent = getParentComponent();
+    while (parent != nullptr && ! parent->options.onDesktop)
+    {
+        bounds.translate (parent->getPosition());
+        parent = parent->getParentComponent();
+    }
+
+    return bounds;
 }
 
 float Component::proportionOfWidth (float proportion) const
@@ -278,14 +286,20 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
+    if (getBounds().isEmpty())
+        return;
+
     if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (getBounds());
+        nativeComponent->repaint (getBoundsRelativeToAncestor());
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
+    if (rect.isEmpty())
+        return;
+
     if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBounds().getTopLeft()));
+        nativeComponent->repaint (rect.translated (getBoundsRelativeToAncestor().getTopLeft()));
 }
 
 //==============================================================================
@@ -360,6 +374,11 @@ void Component::removeFromDesktop()
 //==============================================================================
 
 Component* Component::getParentComponent()
+{
+    return parentComponent;
+}
+
+const Component* Component::getParentComponent() const
 {
     return parentComponent;
 }
@@ -588,14 +607,14 @@ void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, bool renderContinuous)
+void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
 {
     if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
         return;
 
-    auto bounds = (options.onDesktop ? getLocalBounds() : getBounds());
+    auto bounds = (options.onDesktop ? getLocalBounds() : getBoundsRelativeToAncestor());
 
-    auto dirtyBounds = getNativeComponent()->getRepaintArea();
+    auto dirtyBounds = repaintArea;
     auto boundsToRedraw = bounds.intersection (dirtyBounds);
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
@@ -618,7 +637,7 @@ void Component::internalPaint (Graphics& g, bool renderContinuous)
     }
 
     for (auto child : children)
-        child->internalPaint (g, renderContinuous);
+        child->internalPaint (g, boundsToRedraw, renderContinuous);
 
     g.setDrawingArea (bounds);
     if (! options.unclippedRendering)

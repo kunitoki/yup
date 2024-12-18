@@ -21,8 +21,6 @@
 
 #include "rive_decoders.h"
 
-#include <libpng/libpng.h>
-
 #include "source/bitmap_decoder.cpp"
 #include "source/bitmap_decoder_thirdparty.cpp"
 

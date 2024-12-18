@@ -82,6 +82,7 @@ private:
     CFRunLoopRef runLoop;
     CFUniquePtr<CFRunLoopSourceRef> runLoopSource;
     std::function<void()> loopCallback;
+    std::atomic_bool loopCallbackRecursiveCheck = false;
 
     void wakeUp() noexcept
     {
@@ -110,8 +111,12 @@ private:
 
     void runLoopCallback() noexcept
     {
-        if (loopCallback)
+        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
+        {
             loopCallback();
+
+            loopCallbackRecursiveCheck.exchange (false);
+        }
 
         for (int i = 4; --i >= 0;)
             if (! deliverNextMessage())

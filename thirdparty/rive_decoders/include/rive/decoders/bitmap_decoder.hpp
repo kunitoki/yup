@@ -8,6 +8,8 @@
 #include <memory>
 #include <vector>
 
+namespace rive {
+
 /// Bitmap will always take ownership of the bytes it is constructed with.
 class Bitmap
 {
@@ -74,5 +76,7 @@ public:
     // Change the pixel format (note this will resize bytes).
     void pixelFormat(PixelFormat format);
 };
+
+} // namespace rive
 
 #endif

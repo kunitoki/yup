@@ -44,4 +44,4 @@
 
 #pragma once
 
-#include <libpng/libpng.h>
+#include "include/rive/decoders/bitmap_decoder.hpp"

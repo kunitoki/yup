@@ -22,6 +22,8 @@
 #include <string.h>
 #include <vector>
 
+namespace rive {
+
 // Represents raw, premultiplied, RGBA image data with tightly packed rows
 // (width * 4 bytes).
 struct PlatformCGImage
@@ -166,3 +168,5 @@ std::unique_ptr<Bitmap> Bitmap::decode(const uint8_t bytes[], size_t byteCount)
     return std::make_unique<Bitmap>(
         image.width, image.height, PixelFormat::RGBA, std::move(image.pixels));
 }
+
+} // namespace rive

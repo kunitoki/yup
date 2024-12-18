@@ -164,7 +164,7 @@ private:
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
-        auto [width, height] = getContentSize();
+        auto [width, height] = getNativeComponent()->getContentSize();
         title << " | " << width << " x " << height;
 
         setTitle (title);

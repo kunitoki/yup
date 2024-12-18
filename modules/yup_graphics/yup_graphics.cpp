@@ -98,6 +98,7 @@
 #include "primitives/yup_Path.cpp"
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"
+#include "imaging/yup_Image.cpp"
 #include "graphics/yup_Color.cpp"
 #include "graphics/yup_Colors.cpp"
 #include "graphics/yup_Graphics.cpp"

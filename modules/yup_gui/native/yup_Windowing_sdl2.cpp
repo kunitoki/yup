@@ -538,9 +538,10 @@ void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 
 void SDL2ComponentNative::repaint()
 {
-    currentRepaintArea = Rectangle<float>().withSize (getContentSize().to<float>());
+    currentRepaintArea = Rectangle<float>().withSize (getSize().to<float>());
 
-    triggerRenderingUpdate();
+    if (! currentRepaintArea.isEmpty())
+        triggerRenderingUpdate();
 }
 
 void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
@@ -550,7 +551,8 @@ void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
     else
         currentRepaintArea = rect;
 
-    triggerRenderingUpdate();
+    if (! currentRepaintArea.isEmpty())
+        triggerRenderingUpdate();
 }
 
 Rectangle<float> SDL2ComponentNative::getRepaintArea() const
@@ -625,7 +627,7 @@ void SDL2ComponentNative::run()
         // Wait for any repaint command
         if (! shouldRenderContinuous)
         {
-            while (! commandEvent.wait (10.0f))
+            while (! commandEvent.wait (1000.0f))
                 currentFrameRate.store (0.0f, std::memory_order_relaxed);
         }
 
@@ -693,7 +695,7 @@ void SDL2ComponentNative::renderContext()
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
 
-        repaint (Rectangle<float> (0, 0, contentWidth, contentHeight));
+        repaint();
         forcedRedraws = defaultForcedRedraws;
     }
 
@@ -727,7 +729,7 @@ void SDL2ComponentNative::renderContext()
     if (renderer != nullptr)
     {
         Graphics g (*context, *renderer, currentScaleDpi);
-        component.internalPaint (g, desiredFrameRate);
+        component.internalPaint (g, currentRepaintArea, renderContinuous);
     }
 
     // Finish context drawing
@@ -740,8 +742,8 @@ void SDL2ComponentNative::renderContext()
 
     if (! renderContinuous)
     {
-        if (forcedRedraws > 0)
-            --forcedRedraws;
+        if (--forcedRedraws >= 0)
+            renderContext();
         else
             currentRepaintArea = {};
     }
@@ -763,22 +765,28 @@ void SDL2ComponentNative::triggerRenderingUpdate()
 void SDL2ComponentNative::startRendering()
 {
 #if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    startTimerHz (desiredFrameRate);
+    if (! isTimerRunning())
+        startTimerHz (desiredFrameRate);
 #else
-    startThread (Priority::high);
+    if (! isThreadRunning())
+        startThread (Priority::high);
 #endif
 }
 
 void SDL2ComponentNative::stopRendering()
 {
 #if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    stopTimer();
+    if (isTimerRunning())
+        stopTimer();
 #else
-    signalThreadShouldExit();
-    notify();
-    renderEvent.signal();
-    commandEvent.signal();
-    stopThread (-1);
+    if (isThreadRunning())
+    {
+        signalThreadShouldExit();
+        notify();
+        renderEvent.signal();
+        commandEvent.signal();
+        stopThread (-1);
+    }
 #endif
 }
 
@@ -976,17 +984,26 @@ void SDL2ComponentNative::handleResized (int width, int height)
     screenBounds = screenBounds.withSize (width, height);
     currentScaleDpi = getScaleDpi();
 
-    triggerRenderingUpdate();
+    repaint();
 }
 
 void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
     DBG ("handleFocusChanged: " << (gotFocus ? 1 : 0));
+
+    if (gotFocus)
+    {
+        startRendering();
+
+        repaint();
+    }
 }
 
 void SDL2ComponentNative::handleMinimized()
 {
     DBG ("handleMinimized");
+
+    stopRendering();
 }
 
 void SDL2ComponentNative::handleMaximized()
@@ -997,11 +1014,17 @@ void SDL2ComponentNative::handleMaximized()
 void SDL2ComponentNative::handleRestored()
 {
     DBG ("handleRestored");
+
+    startRendering();
+
+    repaint();
 }
 
 void SDL2ComponentNative::handleExposed()
 {
     DBG ("handleExposed");
+
+    repaint();
 }
 
 void SDL2ComponentNative::handleContentScaleChanged()
@@ -1067,7 +1090,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             component.internalUserTriedToCloseWindow();
             break;
 
-        case SDL_WINDOWEVENT_RESIZED:
+        //case SDL_WINDOWEVENT_RESIZED:
         case SDL_WINDOWEVENT_SIZE_CHANGED:
             handleResized (windowEvent.data1, windowEvent.data2);
             break;

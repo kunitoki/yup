@@ -118,3 +118,14 @@
 #define RIVE_DAWN 1
 #endif
 #endif
+
+//==============================================================================
+// Public API
+#include <rive/renderer/texture.hpp>
+#include <rive/renderer/rive_render_image.hpp>
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/render_context_impl.hpp>
+
+//==============================================================================
+// Internals
+#include <rive_renderer/source/rive_render_path.hpp>

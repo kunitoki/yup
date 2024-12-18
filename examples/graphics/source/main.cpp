@@ -139,15 +139,25 @@ public:
             yup::Logger::outputDebugString (result.getErrorMessage());
 #else
 #if JUCE_WASM
-        auto fontFilePath = yup::File ("/data")
+        auto baseFilePath = yup::File ("/data");
 #else
-        auto fontFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
+        auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-                                .getChildFile ("Roboto-Regular.ttf");
 
+        auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
         if (auto result = font.loadFromFile (fontFilePath); result.failed())
             yup::Logger::outputDebugString (result.getErrorMessage());
 #endif
+
+        yup::MemoryBlock mb;
+
+        auto imageFile = baseFilePath.getChildFile ("logo.png");
+        if (imageFile.loadFileAsData(mb))
+        {
+            auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+            if (loadedImage.wasOk())
+                image = std::move (loadedImage.getReference());
+        }
 
         // Initialize the audio device
         deviceManager.initialiseWithDefaultDevices (0, 2);
@@ -218,6 +228,13 @@ public:
             button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth (0.4f), 0.0f));
 
         oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
+    }
+
+    void paintOverChildren (yup::Graphics& g) override
+    {
+        //g.setBlendMode (yup::BlendMode::ColorDodge);
+        //g.setOpacity (1.0f);
+        //g.drawImageAt (image, getLocalBounds().getCenter());
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -316,18 +333,22 @@ public:
 private:
     void updateWindowTitle()
     {
-        /*
         yup::String title;
 
-        title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
+        auto currentFps = getNativeComponent()->getCurrentFrameRate();
+        title << "[" << yup::String (currentFps, 1) << " FPS]";
+
+        title << " (x" << (totalRows * totalColumns) << " instances)";
         title << " | "
               << "YUP On Rive Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
+        auto [width, height] = getNativeComponent()->getContentSize();
+        title << " | " << width << " x " << height;
+
         setTitle (title);
-        */
     }
 
     yup::AudioDeviceManager deviceManager;
@@ -347,6 +368,8 @@ private:
 
     yup::Font font;
     yup::StyledText styleText;
+
+    yup::Image image;
 };
 
 //==============================================================================

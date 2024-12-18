@@ -1,9 +1,12 @@
 #include "rive/decoders/bitmap_decoder.hpp"
-#include "webp/decode.h"
-#include "webp/demux.h"
+
+#include <libwebp/libwebp.h>
+
 #include <stdio.h>
 #include <vector>
 #include <memory>
+
+namespace rive {
 
 std::unique_ptr<Bitmap> DecodeWebP(const uint8_t bytes[], size_t byteCount)
 {
@@ -70,3 +73,5 @@ std::unique_ptr<Bitmap> DecodeWebP(const uint8_t bytes[], size_t byteCount)
                                     Bitmap::PixelFormat::RGBA,
                                     std::move(pixelBuffer));
 }
+
+} // namespace rive

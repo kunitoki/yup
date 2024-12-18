@@ -58,12 +58,12 @@ public:
     //==============================================================================
     virtual void setSize (const Size<float>& newSize);
     Size<float> getSize() const;
-    Size<float> getContentSize() const;
     float getWidth() const;
     float getHeight() const;
     virtual void setBounds (const Rectangle<float>& newBounds);
     Rectangle<float> getBounds() const;
     Rectangle<float> getLocalBounds() const;
+    Rectangle<float> getBoundsRelativeToAncestor() const;
     float proportionOfWidth (float proportion) const;
     float proportionOfHeight (float proportion) const;
     virtual void resized();
@@ -102,6 +102,7 @@ public:
 
     //==============================================================================
     Component* getParentComponent();
+    const Component* getParentComponent() const;
 
     template <class T>
     T* getParentComponentOfType()
@@ -181,6 +182,7 @@ public:
 
 private:
     void internalPaint (Graphics& g, bool renderContinuous);
+    void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);

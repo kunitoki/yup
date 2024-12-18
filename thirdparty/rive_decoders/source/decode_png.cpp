@@ -3,11 +3,15 @@
  */
 
 #include "rive/decoders/bitmap_decoder.hpp"
-#include "png.h"
+
+#include <libpng/libpng.h>
+
 #include <algorithm>
 #include <cassert>
 #include <string.h>
 #include <setjmp.h>
+
+namespace rive {
 
 struct EncodedImageBuffer
 {
@@ -158,3 +162,5 @@ std::unique_ptr<Bitmap> DecodePng(const uint8_t bytes[], size_t byteCount)
                                     pixelFormat,
                                     std::move(pixelBuffer));
 }
+
+} // namespace rive

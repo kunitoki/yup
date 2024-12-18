@@ -36,6 +36,63 @@ rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
     return static_cast<rive::StrokeCap> (cap);
 }
 
+rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
+{
+    switch (blendMode)
+    {
+        case BlendMode::SrcOver:
+            return rive::BlendMode::srcOver;
+
+        case BlendMode::Screen:
+            return rive::BlendMode::screen;
+
+        case BlendMode::Overlay:
+            return rive::BlendMode::overlay;
+
+        case BlendMode::Darken:
+            return rive::BlendMode::darken;
+
+        case BlendMode::Lighten:
+            return rive::BlendMode::lighten;
+
+        case BlendMode::ColorDodge:
+            return rive::BlendMode::colorDodge;
+
+        case BlendMode::ColorBurn:
+            return rive::BlendMode::colorBurn;
+
+        case BlendMode::HardLight:
+            return rive::BlendMode::hardLight;
+
+        case BlendMode::SoftLight:
+            return rive::BlendMode::softLight;
+
+        case BlendMode::Difference:
+            return rive::BlendMode::difference;
+
+        case BlendMode::Exclusion:
+            return rive::BlendMode::exclusion;
+
+        case BlendMode::Multiply:
+            return rive::BlendMode::multiply;
+
+        case BlendMode::Hue:
+            return rive::BlendMode::hue;
+
+        case BlendMode::Saturation:
+            return rive::BlendMode::saturation;
+
+        case BlendMode::Color:
+            return rive::BlendMode::color;
+
+        case BlendMode::Luminosity:
+            return rive::BlendMode::luminosity;
+
+        default:
+            return rive::BlendMode::srcOver;
+    }
+}
+
 rive::Mat2D toMat2d (const yup::AffineTransform& t) noexcept
 {
     return {
@@ -322,6 +379,16 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+void Graphics::setBlendMode (BlendMode blendMode)
+{
+    currentRenderOptions().blendMode = blendMode;
+}
+
+BlendMode Graphics::getBlendMode() const
+{
+    return currentRenderOptions().blendMode;
+}
+
 void Graphics::setDrawingArea (const Rectangle<float>& drawingArea)
 {
     currentRenderOptions().drawingArea = drawingArea;
@@ -578,6 +645,41 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
     convertRawPathToRenderPath (rawPath, renderPath.get());
 
     renderer.drawPath (renderPath.get(), paint.get());
+}
+
+//==============================================================================
+void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
+{
+    auto renderContext = context.renderContextOrNull();
+    if (renderContext == nullptr)
+        return;
+
+    const auto& options = currentRenderOptions();
+
+    renderer.save();
+    renderer.scale (image.getWidth(), image.getHeight());
+    renderer.transform (toMat2d (options.getTransform()));
+
+    // renderer.translate (pos.getX(), pos.getY());
+
+    if (! image.createTextureIfNotPresent (context))
+        return;
+
+    static const auto unitRectPath = []
+    {
+        auto unitRectPath = rive::make_rcp<rive::RiveRenderPath>();
+        unitRectPath->line ({ 1, 0 });
+        unitRectPath->line ({ 1, 1 });
+        unitRectPath->line ({ 0, 1 });
+        return unitRectPath;
+    }();
+
+    rive::RiveRenderPaint paint;
+    paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
+    paint.blendMode (toBlendMode (options.blendMode));
+    renderer.drawPath (unitRectPath.get(), &paint);
+
+    renderer.restore();
 }
 
 //==============================================================================

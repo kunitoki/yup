@@ -8,6 +8,8 @@
 #include <string.h>
 #include <vector>
 
+namespace rive {
+
 #ifdef RIVE_PNG
 std::unique_ptr<Bitmap> DecodePng(const uint8_t bytes[], size_t byteCount);
 #endif
@@ -95,3 +97,5 @@ std::unique_ptr<Bitmap> Bitmap::decode(const uint8_t bytes[], size_t byteCount)
     }
     return nullptr;
 }
+
+} // namespace rive
