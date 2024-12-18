@@ -241,8 +241,12 @@ private:
     {
         ReferenceCountedArray<MessageManager::MessageBase> messagesToDispatch;
 
-        if (loopCallback)
+        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
+        {
             loopCallback();
+
+            loopCallbackRecursiveCheck.exchange (false);
+        }
 
         {
             const ScopedLock sl (lock);
@@ -271,6 +275,7 @@ private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> messageQueue;
     std::function<void()> loopCallback;
+    std::atomic_bool loopCallbackRecursiveCheck = false;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InternalMessageQueue)

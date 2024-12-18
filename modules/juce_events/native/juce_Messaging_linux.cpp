@@ -196,6 +196,13 @@ public:
 
     bool dispatchPendingEvents()
     {
+        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
+        {
+            loopCallback();
+
+            loopCallbackRecursiveCheck.exchange (false);
+        }
+
         callbackStorage.clear();
         getFunctionsToCallThisTime (callbackStorage);
 
@@ -229,8 +236,10 @@ public:
     std::vector<int> getRegisteredFds()
     {
         const ScopedLock sl (lock);
+
         std::vector<int> result;
         result.reserve (callbacks.size());
+
         std::transform (callbacks.begin(),
                         callbacks.end(),
                         std::back_inserter (result),
@@ -238,6 +247,7 @@ public:
                         {
                             return pair.first;
                         });
+
         return result;
     }
 
@@ -306,6 +316,7 @@ private:
     ListenerList<LinuxEventLoopInternal::Listener> listeners;
 
     std::function<void()> loopCallback;
+    std::atomic_bool loopCallbackRecursiveCheck = false;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalRunLoop)

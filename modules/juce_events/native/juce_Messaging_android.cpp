@@ -71,8 +71,12 @@ public:
 
         for (;;)
         {
-            if (loopCallback)
+            if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
+            {
                 loopCallback();
+
+                loopCallbackRecursiveCheck.exchange (false);
+            }
 
             {
                 const ScopedLock sl (lock);
@@ -110,6 +114,7 @@ private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> queue;
     std::function<void()> loopCallback;
+    std::atomic_bool loopCallbackRecursiveCheck = false;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)

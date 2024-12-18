@@ -105,8 +105,12 @@ private:
     {
         Timer::callPendingTimersSynchronously();
 
-        if (loopCallback)
+        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
+        {
             loopCallback();
+
+            loopCallbackRecursiveCheck.exchange (false);
+        }
 
         ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
@@ -127,6 +131,7 @@ private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
     std::function<void()> loopCallback;
+    std::atomic_bool loopCallbackRecursiveCheck = false;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)

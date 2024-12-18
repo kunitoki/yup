@@ -105,13 +105,12 @@ public:
 
     void end (void*) override
     {
-        if (m_currentFrameSurface == nil)
-        {
-            m_currentFrameSurface = [m_swapchain nextDrawable];
-            assert (m_currentFrameSurface.texture.width == m_renderTarget->width());
-            assert (m_currentFrameSurface.texture.height == m_renderTarget->height());
-            m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
-        }
+        jassert (m_currentFrameSurface == nil);
+
+        m_currentFrameSurface = [m_swapchain nextDrawable];
+        jassert (m_currentFrameSurface.texture.width == m_renderTarget->width());
+        jassert (m_currentFrameSurface.texture.height == m_renderTarget->height());
+        m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
 
         id<MTLCommandBuffer> flushCommandBuffer = [m_queue commandBuffer];
         m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) flushCommandBuffer });
