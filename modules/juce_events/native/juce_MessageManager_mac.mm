@@ -351,7 +351,7 @@ struct AppDelegate
 //==============================================================================
 void MessageManager::runDispatchLoop()
 {
-    if (quitMessagePosted.get() == 0) // check that the quit message wasn't already posted..
+    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
     {
         // must only be called by the message thread!
         jassert (isThisTheMessageThread());

@@ -37,7 +37,7 @@ class InternalMessageQueue
 public:
     InternalMessageQueue()
     {
-        emscripten_set_main_loop (dispatchLoopInternal, 0, 0);
+        emscripten_set_main_loop ([]{}, 0, 0);
 
         createDirIfNotExists (File::userHomeDirectory);
         createDirIfNotExists (File::userDocumentsDirectory);
@@ -60,12 +60,6 @@ public:
     }
 
     //==============================================================================
-    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
-    {
-        loopCallback = std::move (loopCallbackToSet);
-    }
-
-    //==============================================================================
     bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
@@ -78,40 +72,8 @@ public:
     }
 
     //==============================================================================
-    void runDispatchLoop()
+    void deliverNextMessages()
     {
-        emscripten_cancel_main_loop();
-
-        constexpr int framesPerSeconds = 0;
-        constexpr int simulateInfiniteLoop = 1;
-        emscripten_set_main_loop (dispatchLoopInternal, framesPerSeconds, simulateInfiniteLoop);
-    }
-
-    void stopDispatchLoop()
-    {
-        emscripten_cancel_main_loop();
-    }
-
-    //==============================================================================
-    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
-
-private:
-    static void dispatchLoopInternal()
-    {
-        InternalMessageQueue::getInstance()->dispatchLoop();
-    }
-
-    void dispatchLoop()
-    {
-        Timer::callPendingTimersSynchronously();
-
-        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
-        {
-            loopCallback();
-
-            loopCallbackRecursiveCheck.exchange (false);
-        }
-
         ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
         {
@@ -128,10 +90,13 @@ private:
         }
     }
 
+    //==============================================================================
+    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+
+private:
+
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
-    std::function<void()> loopCallback;
-    std::atomic_bool loopCallbackRecursiveCheck = false;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
@@ -139,6 +104,8 @@ JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
 void MessageManager::doPlatformSpecificInitialisation()
 {
     InternalMessageQueue::getInstance();
+
+    MessageManager::getInstance()->registerEventLoopCallback ([]{});
 }
 
 void MessageManager::doPlatformSpecificShutdown()
@@ -168,18 +135,30 @@ void MessageManager::broadcastMessage (const String&)
 
 void MessageManager::runDispatchLoop()
 {
-    InternalMessageQueue::getInstance()->runDispatchLoop();
+    emscripten_cancel_main_loop();
+
+    auto mainLoop = [](void* arg)
+    {
+        Timer::callPendingTimersSynchronously();
+
+        auto* messageManager = static_cast<MessageManager*> (arg);
+        jassert (messageManager != nullptr);
+        jassert (messageManager->loopCallback != nullptr);
+        messageManager->loopCallback();
+
+        InternalMessageQueue::getInstance()->deliverNextMessages();
+    };
+
+    constexpr int framesPerSeconds = 0;
+    constexpr int simulateInfiniteLoop = 1;
+    emscripten_set_main_loop_arg (mainLoop, this, framesPerSeconds, simulateInfiniteLoop);
 }
 
 void MessageManager::stopDispatchLoop()
 {
-    InternalMessageQueue::getInstance()->stopDispatchLoop();
-
     quitMessagePosted = true;
+
+    emscripten_cancel_main_loop();
 }
 
-void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
-{
-    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
-}
 } // namespace juce

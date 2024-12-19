@@ -264,6 +264,15 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (parent != nullptr)
         setNativeParent (nullptr, parent, window);
 
+    if (currentGraphicsApi == GraphicsContext::OpenGL)
+    {
+        windowContext = SDL_GL_CreateContext (window);
+        if (windowContext == nullptr)
+            return; // TODO - raise something ?
+
+        SDL_GL_MakeCurrent (window, windowContext);
+    }
+
     // Create the rendering context
     context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
     if (context == nullptr)
@@ -1384,31 +1393,28 @@ void initialiseYup_Windowing()
     {
         constexpr double timeoutInterval = 1.0 / 60.0;
 
-        while (true)
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+
+        bool timeoutProcessingEvents = false;
+        auto timeoutDetector = TimeoutDetector (timeoutInterval);
+
+        SDL_Event event;
+        while (SDL_PollEvent (&event))
         {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
 
-            bool timeoutProcessingEvents = false;
-            auto timeoutDetector = TimeoutDetector (timeoutInterval);
+            if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                return;
 
-            SDL_Event event;
-            while (SDL_PollEvent (&event))
+            if (timeoutDetector.hasTimedOut())
             {
-                YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
-
-                if (MessageManager::getInstance()->hasStopMessageBeenSent())
-                    return;
-
-                if (timeoutDetector.hasTimedOut())
-                {
-                    timeoutProcessingEvents = true;
-                    break;
-                }
+                timeoutProcessingEvents = true;
+                break;
             }
-
-            if (! timeoutProcessingEvents)
-                SDL_Delay (1);
         }
+
+        if (! timeoutProcessingEvents)
+            SDL_Delay (1);
     });
 
     SDL2ComponentNative::isInitialised.test_and_set();

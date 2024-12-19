@@ -42,11 +42,11 @@ namespace juce
 
 void MessageManager::runDispatchLoop()
 {
-    if (quitMessagePosted.get() == 0) // check that the quit message wasn't already posted..
-    {
-        // must only be called by the message thread!
-        jassert (isThisTheMessageThread());
+    // must only be called by the message thread!
+    jassert (isThisTheMessageThread());
 
+    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
+    {
         loopCallback();
     }
 }
@@ -89,8 +89,6 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 //==============================================================================
 void runNSApplication()
 {
-    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
-    {
         JUCE_AUTORELEASEPOOL
         {
             [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
