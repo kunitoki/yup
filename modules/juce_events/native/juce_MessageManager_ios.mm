@@ -88,7 +88,7 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 
 //==============================================================================
 void runNSApplication()
-{
+{
     while (! MessageManager::getInstance()->hasStopMessageBeenSent())
     {
         JUCE_AUTORELEASEPOOL

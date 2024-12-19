@@ -41,7 +41,7 @@ public:
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
-    static inline constexpr Flags defaultFlags = renderContinuous | decoratedWindow | resizableWindow | allowHighDensityDisplay;
+    static inline constexpr Flags defaultFlags = renderContinuous | decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Configuration options for creating a native component. */

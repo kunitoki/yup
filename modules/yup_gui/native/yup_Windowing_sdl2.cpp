@@ -1363,6 +1363,8 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
+    SDL_SetMainReady();
+
     // Initialise SDL
     if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {

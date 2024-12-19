@@ -158,6 +158,10 @@ public:
             if (loadedImage.wasOk())
                 image = std::move (loadedImage.getReference());
         }
+        else
+        {
+            yup::Logger::outputDebugString ("Unable to load requested image");
+        }
 
         // Initialize the audio device
         deviceManager.initialiseWithDefaultDevices (0, 2);
@@ -210,7 +214,7 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced (100);
+        auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f), proportionOfHeight (0.2f));
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
@@ -225,9 +229,13 @@ public:
         }
 
         if (button != nullptr)
-            button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth (0.4f), 0.0f));
+            button->setBounds (getLocalBounds()
+                .removeFromTop (proportionOfHeight (0.2f))
+                .reduced (proportionOfWidth (0.2f), 0.0f));
 
-        oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
+        oscilloscope.setBounds (getLocalBounds()
+            .removeFromBottom (proportionOfHeight (0.2f))
+            .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
     }
 
     void paint (yup::Graphics& g) override
@@ -404,9 +412,10 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-        window->centreWithSize ({ 800, 800 });
 
-#if JUCE_IOS || JUCE_ANDROID
+#if JUCE_IOS
+        window->centreWithSize ({ 320, 480 });
+#elif JUCE_ANDROID
         window->centreWithSize ({ 1080, 2400 });
         // window->setFullScreen(true);
 #else
