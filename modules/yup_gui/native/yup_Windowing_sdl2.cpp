@@ -23,6 +23,18 @@ namespace yup
 {
 
 //==============================================================================
+#define YUP_VERBOSE_WINDOWING_DBG 1
+
+#if YUP_VERBOSE_WINDOWING_DBG
+#define YUP_DBG_WINDOWING(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    juce::String tempDbgBuf;                                             \
+    tempDbgBuf << textToWrite;                                           \
+    juce::Logger::outputDebugString (tempDbgBuf);)
+#else
+#define YUP_DBG_WINDOWING(textToWrite)
+#endif
+
+//==============================================================================
 
 class SDL2ComponentNative final
     : public ComponentNative
@@ -153,7 +165,6 @@ private:
     bool isRendering() const;
 
     SDL_Window* window = nullptr;
-    SDL_Renderer* windowRenderer = nullptr;
     SDL_GLContext windowContext = nullptr;
 
     void* parentWindow = nullptr;
@@ -165,6 +176,7 @@ private:
     std::unique_ptr<GraphicsContext> context;
     std::unique_ptr<rive::Renderer> renderer;
 
+    Color clearColor;
     float currentScaleDpi = 1.0f;
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
@@ -210,6 +222,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , Thread ("YUP Render Thread")
     , parentWindow (parent)
     , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
+    , clearColor (options.clearColor.value_or (Colors::black))
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
@@ -246,8 +259,6 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (window == nullptr)
         return; // TODO - raise something ?
 
-    windowRenderer = SDL_CreateRenderer (window, -1, SDL_RENDERER_PRESENTVSYNC | SDL_RENDERER_ACCELERATED);
-
     SDL_SetWindowData (window, "self", this);
 
     if (parent != nullptr)
@@ -277,10 +288,7 @@ SDL2ComponentNative::~SDL2ComponentNative()
     // Remove event watch
     SDL_DelEventWatch (eventDispatcher, this);
 
-    // Destroy the renderer and window
-    if (windowRenderer != nullptr)
-        SDL_DestroyRenderer (windowRenderer);
-
+    // Destroy the window
     if (window != nullptr)
     {
         SDL_SetWindowData (window, "self", nullptr);
@@ -355,8 +363,9 @@ Size<int> SDL2ComponentNative::getContentSize() const
 {
     int width = 0, height = 0;
 
-    if (windowRenderer != nullptr)
-        SDL_GetRendererOutputSize (windowRenderer, &width, &height);
+    const auto dpiScale = getScaleDpi();
+    width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
     return { width, height };
 }
@@ -613,8 +622,9 @@ void SDL2ComponentNative::run()
 
         // Trigger and wait for rendering
         renderEvent.reset();
+        cancelPendingUpdate();
         triggerAsyncUpdate();
-        renderEvent.wait (maxFrameTimeMs);
+        renderEvent.wait (maxFrameTimeMs - 2.0f);
 
         // Measure spent time and cap the framerate
         double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -666,6 +676,8 @@ void SDL2ComponentNative::timerCallback()
 
 void SDL2ComponentNative::renderContext()
 {
+    YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
+
     const auto contentSize = getContentSize();
     auto contentWidth = contentSize.getWidth();
     auto contentHeight = contentSize.getHeight();
@@ -677,13 +689,15 @@ void SDL2ComponentNative::renderContext()
 
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (ResizeRenderer);
+
         currentContentWidth = contentWidth;
         currentContentHeight = contentHeight;
 
         context->onSizeChanged (getNativeHandle(), contentWidth, contentHeight, 0);
         renderer = context->makeRenderer (contentWidth, contentHeight);
 
-        currentRepaintArea = Rectangle<float>().withSize (getSize().to<float>());
+        repaint();
     }
 
     if (parentWindow != nullptr)
@@ -703,6 +717,8 @@ void SDL2ComponentNative::renderContext()
 
     auto renderFrame = [&]
     {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
+
         // Setup frame description
         const auto loadAction = renderContinuous
                                   ? rive::gpu::LoadAction::clear
@@ -712,31 +728,40 @@ void SDL2ComponentNative::renderContext()
         frameDescriptor.renderTargetWidth = static_cast<uint32_t> (contentWidth);
         frameDescriptor.renderTargetHeight = static_cast<uint32_t> (contentHeight);
         frameDescriptor.loadAction = loadAction;
-        frameDescriptor.clearColor = 0xff000000;
-        frameDescriptor.msaaSampleCount = 0;
+        frameDescriptor.clearColor = clearColor.getARGB();
         frameDescriptor.disableRasterOrdering = renderAtomicMode;
         frameDescriptor.wireframe = renderWireframe;
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
 
-        // Begin context drawing
-        context->begin (frameDescriptor);
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
+
+            // Begin context drawing
+            context->begin (frameDescriptor);
+        }
 
         // Repaint components hierarchy
         if (renderer != nullptr)
         {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+
             Graphics g (*context, *renderer, currentScaleDpi);
             component.internalPaint (g, currentRepaintArea, renderContinuous);
         }
 
         // Finish context drawing
-        context->end (getNativeHandle());
-        context->tick();
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextEnd);
+
+            context->end (getNativeHandle());
+            context->tick();
+        }
     };
 
     renderFrame();
     if (! renderContinuous)
-        renderFrame();
+        renderFrame(); // This is needed on double buffered platforms
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
@@ -969,6 +994,8 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
@@ -976,6 +1003,8 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 
 void SDL2ComponentNative::handleResized (int width, int height)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
@@ -1009,11 +1038,15 @@ void SDL2ComponentNative::handleRestored()
 
 void SDL2ComponentNative::handleExposed()
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     repaint();
 }
 
 void SDL2ComponentNative::handleContentScaleChanged()
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     int width = screenBounds.getWidth();
     int height = screenBounds.getHeight();
 
@@ -1025,6 +1058,8 @@ void SDL2ComponentNative::handleContentScaleChanged()
 
 void SDL2ComponentNative::handleUserTriedToCloseWindow()
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     component.internalUserTriedToCloseWindow();
 }
 
@@ -1069,53 +1104,70 @@ std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& componen
 
 void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     switch (windowEvent.event)
     {
         case SDL_WINDOWEVENT_CLOSE:
-            DBG ("SDL_WINDOWEVENT_CLOSE");
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_CLOSE");
             component.internalUserTriedToCloseWindow();
             break;
 
         case SDL_WINDOWEVENT_RESIZED:
+            //YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_SIZE_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
             handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_MOVED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
             handleMoved (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_SHOWN:
-            repaint();
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SHOWN");
+            // repaint();
+            break;
+
+        case SDL_WINDOWEVENT_HIDDEN:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_HIDDEN");
             break;
 
         case SDL_WINDOWEVENT_MINIMIZED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MINIMIZED");
             handleMinimized();
             break;
 
         case SDL_WINDOWEVENT_MAXIMIZED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MAXIMIZED");
             handleMaximized();
             break;
 
         case SDL_WINDOWEVENT_RESTORED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESTORED");
             handleRestored();
             break;
 
         case SDL_WINDOWEVENT_EXPOSED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_EXPOSED");
             repaint();
             break;
 
         case SDL_WINDOWEVENT_FOCUS_GAINED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_FOCUS_GAINED");
             handleFocusChanged (true);
             break;
 
         case SDL_WINDOWEVENT_FOCUS_LOST:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_FOCUS_LOST");
             handleFocusChanged (false);
             break;
 
         case SDL_WINDOWEVENT_DISPLAY_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
             handleContentScaleChanged();
             break;
     }
@@ -1125,11 +1177,13 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 
 void SDL2ComponentNative::handleEvent (SDL_Event* event)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     switch (event->type)
     {
         case SDL_QUIT:
         {
-            DBG ("SDL_QUIT");
+            YUP_DBG_WINDOWING ("SDL_QUIT");
             break;
         }
 
@@ -1143,13 +1197,13 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_RENDER_TARGETS_RESET:
         {
-            DBG ("SDL_RENDER_TARGETS_RESET");
+            YUP_DBG_WINDOWING ("SDL_RENDER_TARGETS_RESET");
             break;
         }
 
         case SDL_RENDER_DEVICE_RESET:
         {
-            DBG ("SDL_RENDER_DEVICE_RESET");
+            YUP_DBG_WINDOWING ("SDL_RENDER_DEVICE_RESET");
             break;
         }
 
@@ -1309,24 +1363,50 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    // Initialise SDL2
+    // Initialise SDL
     if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
         DBG ("Error initialising SDL: " << SDL_GetError());
 
         jassertfalse;
 
-        exit (1);
+        JUCEApplicationBase::quit();
     }
 
     // Update available displays
-    SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
     Desktop::getInstance()->updateDisplays();
+    SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
-    // Allow SDL to poll events
+    // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
     {
-        SDL_PumpEvents();
+        constexpr double timeoutInterval = 1.0 / 60.0;
+
+        while (true)
+        {
+            YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+
+            bool timeoutProcessingEvents = false;
+            auto timeoutDetector = TimeoutDetector (timeoutInterval);
+
+            SDL_Event event;
+            while (SDL_PollEvent (&event))
+            {
+                YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
+
+                if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                    return;
+
+                if (timeoutDetector.hasTimedOut())
+                {
+                    timeoutProcessingEvents = true;
+                    break;
+                }
+            }
+
+            if (! timeoutProcessingEvents)
+                SDL_Delay (1);
+        }
     });
 
     SDL2ComponentNative::isInitialised.test_and_set();
@@ -1336,12 +1416,15 @@ void shutdownYup_Windowing()
 {
     SDL2ComponentNative::isInitialised.clear();
 
-    // MessageManager::getInstance()->registerEventLoopCallback (nullptr);
-    // SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
-
-    SDL_Quit();
-
+    // Shutdown desktop
+    SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
     Desktop::getInstance()->deleteInstance();
+
+    // Unregister event loop
+    MessageManager::getInstance()->registerEventLoopCallback (nullptr);
+
+    // Quit SDL
+    SDL_Quit();
 }
 
 } // namespace yup

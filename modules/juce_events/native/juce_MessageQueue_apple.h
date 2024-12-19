@@ -66,11 +66,6 @@ public:
         CFRunLoopSourceInvalidate (runLoopSource.get());
     }
 
-    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
-    {
-        loopCallback = std::move (loopCallbackToSet);
-    }
-
     void post (MessageManager::MessageBase* const message)
     {
         messages.add (message);
@@ -81,17 +76,19 @@ private:
     ReferenceCountedArray<MessageManager::MessageBase, CriticalSection> messages;
     CFRunLoopRef runLoop;
     CFUniquePtr<CFRunLoopSourceRef> runLoopSource;
-    std::function<void()> loopCallback;
-    std::atomic_bool loopCallbackRecursiveCheck = false;
 
     void wakeUp() noexcept
     {
+        YUP_PROFILE_INTERNAL_TRACE();
+
         CFRunLoopSourceSignal (runLoopSource.get());
         CFRunLoopWakeUp (runLoop);
     }
 
     bool deliverNextMessage()
     {
+        YUP_PROFILE_INTERNAL_TRACE();
+
         const MessageManager::MessageBase::Ptr nextMessage (messages.removeAndReturn (0));
 
         if (nextMessage == nullptr)
@@ -111,16 +108,24 @@ private:
 
     void runLoopCallback() noexcept
     {
-        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
+        YUP_PROFILE_INTERNAL_TRACE();
+
+        auto timeoutDetector = TimeoutDetector (1.0 / 60.0);
+
+        if (! deliverNextMessage())
+            return;
+
+        if (! timeoutDetector.hasTimedOut())
         {
-            loopCallback();
+            for (int i = 3; --i >= 0;)
+            {
+                if (! deliverNextMessage())
+                    break;
 
-            loopCallbackRecursiveCheck.exchange (false);
+                if (timeoutDetector.hasTimedOut())
+                    break;
+            }
         }
-
-        for (int i = 4; --i >= 0;)
-            if (! deliverNextMessage())
-                return;
 
         wakeUp();
     }

@@ -353,29 +353,10 @@ void MessageManager::runDispatchLoop()
 {
     if (quitMessagePosted.get() == 0) // check that the quit message wasn't already posted..
     {
-        JUCE_AUTORELEASEPOOL
-        {
-            // must only be called by the message thread!
-            jassert(isThisTheMessageThread());
+        // must only be called by the message thread!
+        jassert (isThisTheMessageThread());
 
-#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
-            @try
-            {
-                [NSApp run];
-            }
-            @catch (NSException* e)
-            {
-                // An AppKit exception will kill the app, but at least this provides a chance to log it.,
-                std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
-                JUCEApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
-            }
-            @finally
-            {
-            }
-#else
-            [NSApp run];
-#endif
-        }
+        loopCallback();
     }
 }
 
@@ -450,12 +431,38 @@ void initialiseNSApplication()
     }
 }
 
+void runNSApplication()
+{
+    JUCE_AUTORELEASEPOOL
+    {
+#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
+        @try
+        {
+            [NSApp run];
+        }
+        @catch (NSException* e)
+        {
+            // An AppKit exception will kill the app, but at least this provides a chance to log it.,
+            std::runtime_error ex (std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
+            JUCEApplicationBase::sendUnhandledException (&ex, __FILE__, __LINE__);
+        }
+        @finally
+        {
+        }
+#else
+        [NSApp run];
+#endif
+    }
+}
+
 static std::unique_ptr<AppDelegate> appDelegate;
 
 void MessageManager::doPlatformSpecificInitialisation()
 {
     if (appDelegate == nil)
         appDelegate.reset(new AppDelegate());
+
+    MessageManager::getInstance()->registerEventLoopCallback (runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()
@@ -478,12 +485,6 @@ void MessageManager::broadcastMessage(const String& message)
     [[NSDistributedNotificationCenter defaultCenter] postNotificationName:AppDelegate::getBroadcastEventName()
                                                                    object:nil
                                                                  userInfo:info];
-}
-
-void MessageManager::registerEventLoopCallback(std::function<void()> loopCallbackToSet)
-{
-    jassert(appDelegate != nil);
-    appDelegate->messageQueue.registerEventLoopCallback(std::move(loopCallbackToSet));
 }
 
 //==============================================================================

@@ -104,7 +104,7 @@ public:
 #endif
 
     //==============================================================================
-    /** Register an event loop callback that will be processed in the event loop. */
+    /** Register an event loop callback that will be processed as the event dispatch loop. */
     void registerEventLoopCallback (std::function<void()> loopCallbackToSet);
 
     //==============================================================================
@@ -357,6 +357,7 @@ private:
     Atomic<int> quitMessagePosted { 0 }, quitMessageReceived { 0 };
     Atomic<Thread::ThreadID> messageThreadId;
     Atomic<Thread::ThreadID> threadWithLock;
+    std::function<void()> loopCallback;
 
     static bool postMessageToSystemQueue (MessageBase*);
     static void* exitModalLoopCallback (void*);

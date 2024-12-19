@@ -97,6 +97,14 @@ bool MessageManager::MessageBase::post()
 }
 
 //==============================================================================
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    jassert (isThisTheMessageThread()); // must only be called by the message thread
+
+    loopCallback = std::move (loopCallbackToSet);
+}
+
+//==============================================================================
 #if ! (JUCE_MAC || JUCE_IOS || JUCE_WASM)
 // implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
 namespace detail

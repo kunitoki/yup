@@ -42,15 +42,12 @@ namespace juce
 
 void MessageManager::runDispatchLoop()
 {
-    jassert(isThisTheMessageThread()); // must only be called by the message thread
-
-    while (quitMessagePosted.get() == 0)
+    if (quitMessagePosted.get() == 0) // check that the quit message wasn't already posted..
     {
-        JUCE_AUTORELEASEPOOL
-        {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
-        }
+        // must only be called by the message thread!
+        jassert (isThisTheMessageThread());
+
+        loopCallback();
     }
 }
 
@@ -90,12 +87,27 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 #endif
 
 //==============================================================================
+void runNSApplication()
+{
+    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
+    {
+        JUCE_AUTORELEASEPOOL
+        {
+            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+        }
+    }
+}
+
+//==============================================================================
 static std::unique_ptr<InternalMessageQueue> messageQueue;
 
 void MessageManager::doPlatformSpecificInitialisation()
 {
     if (messageQueue == nullptr)
         messageQueue.reset(new InternalMessageQueue());
+
+    MessageManager::getInstance()->registerEventLoopCallback (runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()
@@ -114,12 +126,6 @@ bool MessageManager::postMessageToSystemQueue(MessageManager::MessageBase* const
 void MessageManager::broadcastMessage(const String&)
 {
     // N/A on current iOS
-}
-
-void MessageManager::registerEventLoopCallback(std::function<void()> loopCallbackToSet)
-{
-    jassert(messageQueue);
-    messageQueue->registerEventLoopCallback(std::move(loopCallbackToSet));
 }
 
 } // namespace juce

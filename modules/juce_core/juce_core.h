@@ -312,6 +312,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "containers/juce_FixedSizeFunction.h"
 #include "time/juce_RelativeTime.h"
 #include "time/juce_Time.h"
+#include "time/juce_TimeoutDetector.h"
 #include "streams/juce_InputStream.h"
 #include "streams/juce_OutputStream.h"
 #include "streams/juce_BufferedInputStream.h"
