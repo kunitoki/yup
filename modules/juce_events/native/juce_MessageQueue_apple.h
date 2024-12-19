@@ -110,21 +110,13 @@ private:
     {
         YUP_PROFILE_INTERNAL_TRACE();
 
-        auto timeoutDetector = TimeoutDetector (1.0 / 60.0);
-
         if (! deliverNextMessage())
             return;
 
-        if (! timeoutDetector.hasTimedOut())
+        for (int i = 3; --i >= 0;)
         {
-            for (int i = 3; --i >= 0;)
-            {
-                if (! deliverNextMessage())
-                    break;
-
-                if (timeoutDetector.hasTimedOut())
-                    break;
-            }
+            if (! deliverNextMessage())
+                break;
         }
 
         wakeUp();

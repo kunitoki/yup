@@ -107,11 +107,18 @@ public:
             return *this;
         }
 
+        Options& withUpdateOnlyFocused (bool onlyWhenFocused) noexcept
+        {
+            updateOnlyWhenFocused = onlyWhenFocused;
+            return *this;
+        }
+
         Flags flags = defaultFlags;                      ///<
         std::optional<GraphicsContext::Api> graphicsApi; ///<
         std::optional<float> framerateRedraw;            ///<
         std::optional<Color> clearColor;                 ///<
         std::optional<RelativeTime> doubleClickTime;     ///<
+        bool updateOnlyWhenFocused = false;              ///<
     };
 
     //==============================================================================

@@ -42,6 +42,12 @@ class SDL2ComponentNative final
     , public Thread
     , public AsyncUpdater
 {
+#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
+    static constexpr bool renderDrivenByTimer = true;
+#else
+    static constexpr bool renderDrivenByTimer = false;
+#endif
+
 public:
     //==============================================================================
 
@@ -196,6 +202,8 @@ private:
 
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
+    double frameRateStartTimeSeconds = 0.0;
+    uint64_t frameRateCounter = 0;
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
@@ -205,6 +213,7 @@ private:
     double lastRenderTimeSeconds = 0.0;
     bool renderAtomicMode = false;
     bool renderWireframe = false;
+    bool updateOnlyWhenFocused = false;
 
     Rectangle<float> currentRepaintArea;
 };
@@ -227,6 +236,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
+    , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
 {
     SDL_AddEventWatch (eventDispatcher, this);
 
@@ -302,9 +312,8 @@ SDL2ComponentNative::~SDL2ComponentNative()
     {
         SDL_SetWindowData (window, "self", nullptr);
         SDL_DestroyWindow (window);
+        window = nullptr;
     }
-
-    window = nullptr;
 }
 
 //==============================================================================
@@ -622,9 +631,6 @@ void SDL2ComponentNative::run()
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    double fpsMeasureStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-    uint64_t frameCounter = 0;
-
     while (! threadShouldExit())
     {
         double frameStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -649,19 +655,6 @@ void SDL2ComponentNative::run()
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
                 Thread::sleep (0);
-        }
-
-        // Measure current framerate
-        ++frameCounter;
-
-        const double timeSinceFpsMeasure = currentTimeSeconds - fpsMeasureStartTimeSeconds;
-        if (timeSinceFpsMeasure >= 1.0)
-        {
-            const double currentFps = static_cast<double> (frameCounter) / timeSinceFpsMeasure;
-            currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-            fpsMeasureStartTimeSeconds = currentTimeSeconds;
-            frameCounter = 0;
         }
     }
 }
@@ -715,9 +708,13 @@ void SDL2ComponentNative::renderContext()
         setPosition (nativeWindowPos.getTopLeft());
     }
 
-    auto newElapsedTime = juce::Time::getMillisecondCounterHiRes();
-    component.internalRefreshDisplay (newElapsedTime - lastRenderTimeSeconds);
-    lastRenderTimeSeconds = newElapsedTime;
+    auto currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
+
+        component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+    }
 
     if (renderContinuous)
         repaint();
@@ -776,6 +773,19 @@ void SDL2ComponentNative::renderContext()
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
         SDL_GL_SwapWindow (window);
 
+    // Compute framerate
+    ++frameRateCounter;
+
+    const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
+    if (timeSinceFpsMeasure >= 1.0)
+    {
+        const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
+        currentFrameRate.store (currentFps, std::memory_order_relaxed);
+
+        frameRateStartTimeSeconds = currentTimeSeconds;
+        frameRateCounter = 0;
+    }
+
     currentRepaintArea = {};
 }
 
@@ -783,42 +793,49 @@ void SDL2ComponentNative::renderContext()
 
 void SDL2ComponentNative::startRendering()
 {
-    lastRenderTimeSeconds = juce::Time::getMillisecondCounterHiRes();
+    lastRenderTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    frameRateStartTimeSeconds = lastRenderTimeSeconds;
+    frameRateCounter = 0;
 
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    if (! isTimerRunning())
-        startTimerHz (desiredFrameRate);
-#else
-    if (! isThreadRunning())
-        startThread (Priority::high);
-#endif
+    if constexpr (renderDrivenByTimer)
+    {
+        if (! isTimerRunning())
+            startTimerHz (desiredFrameRate);
+    }
+    else
+    {
+        if (! isThreadRunning())
+            startThread (Priority::high);
+    }
 
     repaint();
 }
 
 void SDL2ComponentNative::stopRendering()
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    if (isTimerRunning())
-        stopTimer();
-#else
-    if (isThreadRunning())
+    if constexpr (renderDrivenByTimer)
     {
-        signalThreadShouldExit();
-        notify();
-        renderEvent.signal();
-        stopThread (-1);
+        if (isTimerRunning())
+            stopTimer();
     }
-#endif
+    else
+    {
+        if (isThreadRunning())
+        {
+            signalThreadShouldExit();
+            notify();
+            renderEvent.signal();
+            stopThread (-1);
+        }
+    }
 }
 
 bool SDL2ComponentNative::isRendering() const
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    return isTimerRunning();
-#else
-    return isThreadRunning();
-#endif
+    if constexpr (renderDrivenByTimer)
+        return isTimerRunning();
+    else
+        return isThreadRunning();
 }
 
 //==============================================================================
@@ -991,8 +1008,6 @@ void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 void SDL2ComponentNative::handleTextInput (const String& textInput)
 {
-    DBG ("handleTextInput: " << textInput);
-
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalTextInput (textInput);
     else
@@ -1003,8 +1018,6 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
-    YUP_PROFILE_INTERNAL_TRACE();
-
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
@@ -1012,8 +1025,6 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 
 void SDL2ComponentNative::handleResized (int width, int height)
 {
-    YUP_PROFILE_INTERNAL_TRACE();
-
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
@@ -1027,6 +1038,11 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
     if (gotFocus)
     {
         startRendering();
+    }
+    else
+    {
+        if (updateOnlyWhenFocused)
+            stopRendering();
     }
 }
 
@@ -1042,13 +1058,11 @@ void SDL2ComponentNative::handleMaximized()
 
 void SDL2ComponentNative::handleRestored()
 {
-    startRendering();
+    repaint();
 }
 
 void SDL2ComponentNative::handleExposed()
 {
-    YUP_PROFILE_INTERNAL_TRACE();
-
     repaint();
 }
 
@@ -1372,16 +1386,16 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    SDL_SetMainReady();
-
     // Initialise SDL
+    SDL_SetMainReady();
     if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
         DBG ("Error initialising SDL: " << SDL_GetError());
 
         jassertfalse;
-
         JUCEApplicationBase::quit();
+
+        return;
     }
 
     // Update available displays
@@ -1390,32 +1404,25 @@ void initialiseYup_Windowing()
 
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
-                                                              {
-                                                                  constexpr double timeoutInterval = 1.0 / 60.0;
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
 
-                                                                  YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+        constexpr double timeoutInterval = 1.0 / 60.0; // TODO
+        auto timeoutDetector = TimeoutDetector (timeoutInterval);
 
-                                                                  bool timeoutProcessingEvents = false;
-                                                                  auto timeoutDetector = TimeoutDetector (timeoutInterval);
+        SDL_Event event;
+        while (SDL_PollEvent (&event))
+        {
+            if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                break;
 
-                                                                  SDL_Event event;
-                                                                  while (SDL_PollEvent (&event))
-                                                                  {
-                                                                      YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
+            if (timeoutDetector.hasTimedOut())
+                break;
+        }
 
-                                                                      if (MessageManager::getInstance()->hasStopMessageBeenSent())
-                                                                          return;
-
-                                                                      if (timeoutDetector.hasTimedOut())
-                                                                      {
-                                                                          timeoutProcessingEvents = true;
-                                                                          break;
-                                                                      }
-                                                                  }
-
-                                                                  if (! timeoutProcessingEvents)
-                                                                      SDL_Delay (1);
-                                                              });
+        if (! timeoutDetector.hasTimedOut())
+            Thread::sleep (1);
+    });
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }

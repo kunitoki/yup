@@ -32,9 +32,7 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       libpng
     searchpaths:        include
-    defines:            RIVE_PNG=1
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
@@ -43,5 +41,13 @@
 */
 
 #pragma once
+
+#if JUCE_MODULE_AVAILABLE_libpng
+#define RIVE_PNG 1
+#endif
+
+#if JUCE_MODULE_AVAILABLE_libwebp
+#define RIVE_WEBP 1
+#endif
 
 #include "include/rive/decoders/bitmap_decoder.hpp"

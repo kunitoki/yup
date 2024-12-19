@@ -47,6 +47,7 @@ public:
     virtual void propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue);
 
     //==============================================================================
+    void refreshDisplay (double lastFrameTimeSeconds) override;
     void paint (Graphics& g) override;
     void resized() override;
     void mouseEnter (const MouseEvent& event) override;
@@ -71,6 +72,7 @@ private:
     int artboardIndex = -1;
     int animationIndex = -1;
     int stateMachineIndex = -1;
+    float animationTime = 0.0f;
 
     bool useStateMachines = true;
     bool paused = false;

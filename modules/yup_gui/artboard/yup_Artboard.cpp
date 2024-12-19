@@ -110,13 +110,18 @@ void Artboard::setNumberInput (const String& name, double value)
 
 //==============================================================================
 
+void Artboard::refreshDisplay (double lastFrameTimeSeconds)
+{
+    if (! paused)
+        advanceAndApply (static_cast<float> (lastFrameTimeSeconds));
+}
+
+//==============================================================================
+
 void Artboard::paint (Graphics& g)
 {
-    if (rivFile == nullptr || scene == nullptr)
+    if (scene == nullptr)
         return;
-
-    if (! paused && getNativeComponent() != nullptr)
-        scene->advanceAndApply (1.0f / getNativeComponent()->getDesiredFrameRate());
 
     auto* renderer = g.getRenderer();
 
