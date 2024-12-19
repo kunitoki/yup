@@ -352,6 +352,9 @@ public:
     ~Image() = default;
 
     //==============================================================================
+    bool isValid() const noexcept;
+
+    //==============================================================================
     /** Returns the width of the image in pixels. */
     int getWidth() const noexcept;
 

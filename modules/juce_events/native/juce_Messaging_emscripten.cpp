@@ -100,28 +100,16 @@ private:
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
+//==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
 {
     InternalMessageQueue::getInstance();
-
-    MessageManager::getInstance()->registerEventLoopCallback ([] {});
 }
 
 void MessageManager::doPlatformSpecificShutdown()
 {
     InternalMessageQueue::deleteInstance();
 }
-
-namespace detail
-{
-bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
-{
-    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
-    exit (1);
-
-    return true;
-}
-} // namespace detail
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
@@ -132,6 +120,7 @@ void MessageManager::broadcastMessage (const String&)
 {
 }
 
+//==============================================================================
 void MessageManager::runDispatchLoop()
 {
     emscripten_cancel_main_loop();
@@ -156,8 +145,15 @@ void MessageManager::runDispatchLoop()
 void MessageManager::stopDispatchLoop()
 {
     quitMessagePosted = true;
-
     emscripten_cancel_main_loop();
 }
+
+#if JUCE_MODAL_LOOPS_PERMITTED
+bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
+{
+    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
+    exit (1);
+}
+#endif
 
 } // namespace juce

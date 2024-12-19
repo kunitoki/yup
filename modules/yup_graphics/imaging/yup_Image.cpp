@@ -54,6 +54,12 @@ Image& Image::operator= (Image&& other) noexcept
 }
 
 //==============================================================================
+bool Image::isValid() const noexcept
+{
+    return bitmapData != nullptr;
+}
+
+//==============================================================================
 int Image::getWidth() const noexcept
 {
     jassert (bitmapData != nullptr);

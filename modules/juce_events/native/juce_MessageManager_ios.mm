@@ -40,6 +40,17 @@
 namespace juce
 {
 
+//==============================================================================
+void runNSApplication()
+{
+    JUCE_AUTORELEASEPOOL
+    {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+    }
+}
+
+//==============================================================================
 void MessageManager::runDispatchLoop()
 {
     // must only be called by the message thread!
@@ -85,17 +96,6 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
     }
 }
 #endif
-
-//==============================================================================
-void runNSApplication()
-{
-    JUCE_AUTORELEASEPOOL
-    {
-        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
-    }
-}
-}
 
 //==============================================================================
 static std::unique_ptr<InternalMessageQueue> messageQueue;

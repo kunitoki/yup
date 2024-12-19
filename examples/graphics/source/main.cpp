@@ -132,35 +132,39 @@ public:
     {
         setTitle ("main");
 
-        // Load the font
-#if JUCE_ANDROID
-        yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
-        if (auto result = font.loadFromData (mb); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
-#else
 #if JUCE_WASM
         auto baseFilePath = yup::File ("/data");
 #else
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
 
-        auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
-        if (auto result = font.loadFromFile (fontFilePath); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
+        // Load the font
+        {
+#if JUCE_ANDROID
+            yup::MemoryBlock mb(yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
+            if (auto result = font.loadFromData(mb); result.failed())
+                yup::Logger::outputDebugString(result.getErrorMessage());
+#else
+            auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
+            if (auto result = font.loadFromFile (fontFilePath); result.failed())
+                yup::Logger::outputDebugString (result.getErrorMessage());
 #endif
-
-        yup::MemoryBlock mb;
-
-        auto imageFile = baseFilePath.getChildFile ("logo.png");
-        if (imageFile.loadFileAsData (mb))
-        {
-            auto loadedImage = yup::Image::loadFromData (mb.asBytes());
-            if (loadedImage.wasOk())
-                image = std::move (loadedImage.getReference());
         }
-        else
+
+        // Load an image
         {
-            yup::Logger::outputDebugString ("Unable to load requested image");
+            yup::MemoryBlock mb;
+            auto imageFile = baseFilePath.getChildFile ("logo.png");
+            if (imageFile.loadFileAsData (mb))
+            {
+                auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+                if (loadedImage.wasOk())
+                    image = std::move (loadedImage.getReference());
+            }
+            else
+            {
+                yup::Logger::outputDebugString ("Unable to load requested image");
+            }
         }
 
         // Initialize the audio device
@@ -246,6 +250,9 @@ public:
 
     void paintOverChildren (yup::Graphics& g) override
     {
+        if (! image.isValid())
+            return;
+
         g.setBlendMode (yup::BlendMode::ColorDodge);
         g.setOpacity (1.0f);
         g.drawImageAt (image, getLocalBounds().getCenter());

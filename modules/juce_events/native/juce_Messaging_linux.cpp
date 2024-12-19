@@ -196,13 +196,6 @@ public:
 
     bool dispatchPendingEvents()
     {
-        if (loopCallback && ! loopCallbackRecursiveCheck.exchange (true))
-        {
-            loopCallback();
-
-            loopCallbackRecursiveCheck.exchange (false);
-        }
-
         callbackStorage.clear();
         getFunctionsToCallThisTime (callbackStorage);
 
@@ -314,9 +307,6 @@ private:
     std::vector<pollfd> pfds;
 
     ListenerList<LinuxEventLoopInternal::Listener> listeners;
-
-    std::function<void()> loopCallback;
-    std::atomic_bool loopCallbackRecursiveCheck = false;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalRunLoop)
@@ -343,6 +333,30 @@ static void installKeyboardBreakHandler()
     sigaction (SIGINT, &saction, nullptr);
 }
 } // namespace LinuxErrorHandling
+
+//==============================================================================
+// this function expects that it will NEVER be called simultaneously for two concurrent threads
+bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    for (;;)
+    {
+        if (LinuxErrorHandling::keyboardBreakOccurred)
+            JUCEApplicationBase::quit();
+
+        if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
+        {
+            if (runLoop->dispatchPendingEvents())
+                break;
+
+            if (returnIfNoPendingMessages)
+                return false;
+
+            runLoop->sleepUntilNextEvent (2000);
+        }
+    }
+
+    return true;
+}
 
 //==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
@@ -375,37 +389,6 @@ void MessageManager::broadcastMessage (const String&)
 {
     // TODO
 }
-
-void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
-{
-    InternalRunLoop::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
-}
-
-namespace detail
-{
-// this function expects that it will NEVER be called simultaneously for two concurrent threads
-bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-{
-    for (;;)
-    {
-        if (LinuxErrorHandling::keyboardBreakOccurred)
-            JUCEApplicationBase::quit();
-
-        if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
-        {
-            if (runLoop->dispatchPendingEvents())
-                break;
-
-            if (returnIfNoPendingMessages)
-                return false;
-
-            runLoop->sleepUntilNextEvent (2000);
-        }
-    }
-
-    return true;
-}
-} // namespace detail
 
 //==============================================================================
 void LinuxEventLoop::registerFdCallback (int fd, std::function<void (int)> readCallback, short eventMask)

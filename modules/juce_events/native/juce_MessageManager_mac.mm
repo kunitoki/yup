@@ -349,6 +349,47 @@ struct AppDelegate
 };
 
 //==============================================================================
+void initialiseNSApplication();
+void initialiseNSApplication()
+{
+    JUCE_AUTORELEASEPOOL
+    {
+        [NSApplication sharedApplication];
+    }
+}
+
+static void runNSApplication()
+{
+    JUCE_AUTORELEASEPOOL
+    {
+#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
+        @try
+    {
+        [NSApp run];
+    }
+    @catch (NSException* e)
+    {
+        // An AppKit exception will kill the app, but at least this provides a chance to log it.,
+        std::runtime_error ex (std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
+        JUCEApplicationBase::sendUnhandledException (&ex, __FILE__, __LINE__);
+    }
+    @finally
+    {
+    }
+#else
+        [NSApp run];
+#endif
+    }
+}
+
+static void shutdownNSApp()
+{
+    [NSApp terminate:nil];
+    [NSEvent stopPeriodicEvents];
+    [NSEvent startPeriodicEventsAfterDelay:0 withPeriod:0.1];
+}
+
+//==============================================================================
 void MessageManager::runDispatchLoop()
 {
     while (!MessageManager::getInstance()->hasStopMessageBeenSent())
@@ -358,13 +399,6 @@ void MessageManager::runDispatchLoop()
 
         loopCallback();
     }
-}
-
-static void shutdownNSApp()
-{
-    [NSApp terminate:nil];
-    [NSEvent stopPeriodicEvents];
-    [NSEvent startPeriodicEventsAfterDelay:0 withPeriod:0.1];
 }
 
 void MessageManager::stopDispatchLoop()
@@ -422,39 +456,6 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 #endif
 
 //==============================================================================
-void initialiseNSApplication();
-void initialiseNSApplication()
-{
-    JUCE_AUTORELEASEPOOL
-    {
-        [NSApplication sharedApplication];
-    }
-}
-
-void runNSApplication()
-{
-    JUCE_AUTORELEASEPOOL
-    {
-#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
-        @try
-        {
-            [NSApp run];
-        }
-        @catch (NSException* e)
-        {
-            // An AppKit exception will kill the app, but at least this provides a chance to log it.,
-            std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
-            JUCEApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
-        }
-        @finally
-        {
-        }
-#else
-        [NSApp run];
-#endif
-    }
-}
-
 static std::unique_ptr<AppDelegate> appDelegate;
 
 void MessageManager::doPlatformSpecificInitialisation()
