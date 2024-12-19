@@ -357,7 +357,7 @@ private:
     Atomic<int> quitMessagePosted { 0 }, quitMessageReceived { 0 };
     Atomic<Thread::ThreadID> messageThreadId;
     Atomic<Thread::ThreadID> threadWithLock;
-    std::function<void()> loopCallback = []{};
+    std::function<void()> loopCallback = [] {};
 
     static bool postMessageToSystemQueue (MessageBase*);
     static void* exitModalLoopCallback (void*);
