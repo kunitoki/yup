@@ -30,7 +30,7 @@ namespace juce
     of time has elapsed since its creation. It uses high-resolution timing to ensure
     precise timeout detection.
 
-    @see RelativeTime
+    @see RelativeTime, Time
 
     @tags{Core}
 */
@@ -38,7 +38,10 @@ class JUCE_API TimeoutDetector
 {
 public:
     //==============================================================================
-    /** Creates a TimeoutDetector object.
+    /**
+        Creates a TimeoutDetector object with a specified timeout duration.
+
+        @param timeoutSeconds The duration in seconds after which the detector will consider the timeout to have been reached.
     */
     TimeoutDetector (double timeoutSeconds)
         : initialTimeTicks (Time::getHighResolutionTicks())
@@ -46,6 +49,12 @@ public:
     {
     }
 
+    //==============================================================================
+    /**
+        Checks whether the timeout duration has been reached.
+
+        @return `true` if the current time has reached or exceeded the timeout threshold, otherwise `false`.
+    */
     forcedinline bool hasTimedOut() const
     {
         return Time::getHighResolutionTicks() >= timeoutTicks;
