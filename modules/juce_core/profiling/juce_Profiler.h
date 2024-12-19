@@ -84,6 +84,7 @@ protected:
     Profiler();
 
     std::unique_ptr<perfetto::TracingSession> session;
+    int fileDescriptor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Profiler);
 };

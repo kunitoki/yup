@@ -77,25 +77,9 @@ void Profiler::startTracing (uint32 sizeInKilobytes)
 {
     perfetto::TraceConfig traceConfig;
     traceConfig.add_buffers()->set_size_kb (sizeInKilobytes);
+
     auto dataSourceConfig = traceConfig.add_data_sources()->mutable_config();
     dataSourceConfig->set_name ("track_event");
-
-    session = perfetto::Tracing::NewTrace();
-    session->Setup (traceConfig);
-    session->StartBlocking();
-}
-
-//==============================================================================
-
-void Profiler::stopTracing()
-{
-    if (session == nullptr)
-        return;
-
-    perfetto::TrackEvent::Flush();
-
-    session->StopBlocking();
-    std::vector<char> traceData (session->ReadTraceBlocking());
 
     String fileName;
     fileName
@@ -114,23 +98,25 @@ void Profiler::stopTracing()
     if (destination.existsAsFile())
         destination.deleteFile();
 
-    if (auto output = destination.createOutputStream(); output != nullptr && output->openedOk())
-    {
-        output->write (traceData.data(), traceData.size());
+    fileDescriptor = open (destination.getFullPathName().toRawUTF8(), O_RDWR | O_CREAT | O_TRUNC, 0600);
 
-        String message;
-        message
-            << "Trace written in " << destination.getFullPathName() << ". "
-            << "To read this trace in text form, `./tools/traceconv text " << destination.getFullPathName() << "`";
+    session = perfetto::Tracing::NewTrace();
+    session->Setup (traceConfig, fileDescriptor);
+    session->StartBlocking();
+}
 
-        DBG (message);
-    }
-    else
-    {
-        DBG ("Failed to write trace file. Check for missing permissions.");
+//==============================================================================
 
-        jassertfalse;
-    }
+void Profiler::stopTracing()
+{
+    if (session == nullptr)
+        return;
+
+    perfetto::TrackEvent::Flush();
+
+    session->StopBlocking();
+
+    close (fileDescriptor);
 
     Profiler::deleteInstance();
 }
