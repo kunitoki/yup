@@ -187,7 +187,7 @@ ResultValue<Image> Image::loadFromData (Span<const uint8> imageData)
 
     Image result;
 
-    result.bitmapData = new BitmapData(
+    result.bitmapData = new BitmapData (
         bitmap->width(),
         bitmap->height(),
         (bitmap->pixelFormat() == rive::Bitmap::PixelFormat::RGB)

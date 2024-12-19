@@ -152,7 +152,7 @@ public:
         yup::MemoryBlock mb;
 
         auto imageFile = baseFilePath.getChildFile ("logo.png");
-        if (imageFile.loadFileAsData(mb))
+        if (imageFile.loadFileAsData (mb))
         {
             auto loadedImage = yup::Image::loadFromData (mb.asBytes());
             if (loadedImage.wasOk())
@@ -230,12 +230,12 @@ public:
 
         if (button != nullptr)
             button->setBounds (getLocalBounds()
-                .removeFromTop (proportionOfHeight (0.2f))
-                .reduced (proportionOfWidth (0.2f), 0.0f));
+                                   .removeFromTop (proportionOfHeight (0.2f))
+                                   .reduced (proportionOfWidth (0.2f), 0.0f));
 
         oscilloscope.setBounds (getLocalBounds()
-            .removeFromBottom (proportionOfHeight (0.2f))
-            .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+                                    .removeFromBottom (proportionOfHeight (0.2f))
+                                    .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
     }
 
     void paint (yup::Graphics& g) override

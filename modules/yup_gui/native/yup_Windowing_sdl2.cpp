@@ -26,9 +26,9 @@ namespace yup
 #define YUP_VERBOSE_WINDOWING_DBG 1
 
 #if YUP_VERBOSE_WINDOWING_DBG
-#define YUP_DBG_WINDOWING(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    juce::String tempDbgBuf;                                             \
-    tempDbgBuf << textToWrite;                                           \
+#define YUP_DBG_WINDOWING(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
+    juce::String tempDbgBuf;                                              \
+    tempDbgBuf << textToWrite;                                            \
     juce::Logger::outputDebugString (tempDbgBuf);)
 #else
 #define YUP_DBG_WINDOWING(textToWrite)
@@ -1390,32 +1390,32 @@ void initialiseYup_Windowing()
 
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
-    {
-        constexpr double timeoutInterval = 1.0 / 60.0;
+                                                              {
+                                                                  constexpr double timeoutInterval = 1.0 / 60.0;
 
-        YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+                                                                  YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
 
-        bool timeoutProcessingEvents = false;
-        auto timeoutDetector = TimeoutDetector (timeoutInterval);
+                                                                  bool timeoutProcessingEvents = false;
+                                                                  auto timeoutDetector = TimeoutDetector (timeoutInterval);
 
-        SDL_Event event;
-        while (SDL_PollEvent (&event))
-        {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
+                                                                  SDL_Event event;
+                                                                  while (SDL_PollEvent (&event))
+                                                                  {
+                                                                      YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
 
-            if (MessageManager::getInstance()->hasStopMessageBeenSent())
-                return;
+                                                                      if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                                                                          return;
 
-            if (timeoutDetector.hasTimedOut())
-            {
-                timeoutProcessingEvents = true;
-                break;
-            }
-        }
+                                                                      if (timeoutDetector.hasTimedOut())
+                                                                      {
+                                                                          timeoutProcessingEvents = true;
+                                                                          break;
+                                                                      }
+                                                                  }
 
-        if (! timeoutProcessingEvents)
-            SDL_Delay (1);
-    });
+                                                                  if (! timeoutProcessingEvents)
+                                                                      SDL_Delay (1);
+                                                              });
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }

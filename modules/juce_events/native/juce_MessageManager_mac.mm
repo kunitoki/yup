@@ -351,10 +351,10 @@ struct AppDelegate
 //==============================================================================
 void MessageManager::runDispatchLoop()
 {
-    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
+    while (!MessageManager::getInstance()->hasStopMessageBeenSent())
     {
         // must only be called by the message thread!
-        jassert (isThisTheMessageThread());
+        jassert(isThisTheMessageThread());
 
         loopCallback();
     }
@@ -443,8 +443,8 @@ void runNSApplication()
         @catch (NSException* e)
         {
             // An AppKit exception will kill the app, but at least this provides a chance to log it.,
-            std::runtime_error ex (std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
-            JUCEApplicationBase::sendUnhandledException (&ex, __FILE__, __LINE__);
+            std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
+            JUCEApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
         }
         @finally
         {
@@ -462,7 +462,7 @@ void MessageManager::doPlatformSpecificInitialisation()
     if (appDelegate == nil)
         appDelegate.reset(new AppDelegate());
 
-    MessageManager::getInstance()->registerEventLoopCallback (runNSApplication);
+    MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()

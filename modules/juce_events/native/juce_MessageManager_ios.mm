@@ -43,9 +43,9 @@ namespace juce
 void MessageManager::runDispatchLoop()
 {
     // must only be called by the message thread!
-    jassert (isThisTheMessageThread());
+    jassert(isThisTheMessageThread());
 
-    while (! MessageManager::getInstance()->hasStopMessageBeenSent())
+    while (!MessageManager::getInstance()->hasStopMessageBeenSent())
     {
         loopCallback();
     }
@@ -89,12 +89,12 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 //==============================================================================
 void runNSApplication()
 {
-        JUCE_AUTORELEASEPOOL
-        {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
-        }
+    JUCE_AUTORELEASEPOOL
+    {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
     }
+}
 }
 
 //==============================================================================
@@ -105,7 +105,7 @@ void MessageManager::doPlatformSpecificInitialisation()
     if (messageQueue == nullptr)
         messageQueue.reset(new InternalMessageQueue());
 
-    MessageManager::getInstance()->registerEventLoopCallback (runNSApplication);
+    MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()

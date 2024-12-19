@@ -109,7 +109,7 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 // implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
 namespace detail
 {
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
+bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 } // namespace detail
 
 class MessageManager::QuitMessage final : public MessageManager::MessageBase
@@ -267,7 +267,7 @@ void MessageManager::setCurrentThreadAsMessageThread()
 {
     auto thisThread = Thread::getCurrentThreadId();
 
-    messageThreadId.exchange(thisThread);
+    messageThreadId.exchange (thisThread);
 
     if (messageThreadId.get() != thisThread)
     {

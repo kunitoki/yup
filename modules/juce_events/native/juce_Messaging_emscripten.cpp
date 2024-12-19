@@ -37,7 +37,7 @@ class InternalMessageQueue
 public:
     InternalMessageQueue()
     {
-        emscripten_set_main_loop ([]{}, 0, 0);
+        emscripten_set_main_loop ([] {}, 0, 0);
 
         createDirIfNotExists (File::userHomeDirectory);
         createDirIfNotExists (File::userDocumentsDirectory);
@@ -94,7 +94,6 @@ public:
     JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
 
 private:
-
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
 };
@@ -105,7 +104,7 @@ void MessageManager::doPlatformSpecificInitialisation()
 {
     InternalMessageQueue::getInstance();
 
-    MessageManager::getInstance()->registerEventLoopCallback ([]{});
+    MessageManager::getInstance()->registerEventLoopCallback ([] {});
 }
 
 void MessageManager::doPlatformSpecificShutdown()
@@ -137,7 +136,7 @@ void MessageManager::runDispatchLoop()
 {
     emscripten_cancel_main_loop();
 
-    auto mainLoop = [](void* arg)
+    auto mainLoop = [] (void* arg)
     {
         Timer::callPendingTimersSynchronously();
 
