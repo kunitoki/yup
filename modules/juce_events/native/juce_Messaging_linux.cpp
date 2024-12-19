@@ -248,11 +248,6 @@ public:
 
     void removeListener (LinuxEventLoopInternal::Listener& listener) { listeners.remove (&listener); }
 
-    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
-    {
-        loopCallback = std::move (loopCallbackToSet);
-    }
-
     //==============================================================================
     JUCE_DECLARE_SINGLETON (InternalRunLoop, false)
 
