@@ -40,6 +40,10 @@ function (_yup_fetch_sdl2)
 
     FetchContent_MakeAvailable (SDL2)
 
+    if (APPLE)
+        target_compile_options (SDL2-static PRIVATE -Wno-deprecated-declarations)
+    endif()
+
     set_target_properties (SDL2-static PROPERTIES
         POSITION_INDEPENDENT_CODE ON
         FOLDER "Thirdparty")

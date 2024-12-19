@@ -41,7 +41,7 @@ public:
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
-    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
+    static inline constexpr Flags defaultFlags = renderContinuous | decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Configuration options for creating a native component. */
@@ -95,6 +95,12 @@ public:
             return *this;
         }
 
+        Options& withClearColor (std::optional<Color> newClearColor) noexcept
+        {
+            clearColor = newClearColor;
+            return *this;
+        }
+
         Options& withDoubleClickTime (std::optional<RelativeTime> newDoubleClickTime) noexcept
         {
             doubleClickTime = newDoubleClickTime;
@@ -104,6 +110,7 @@ public:
         Flags flags = defaultFlags;                      ///<
         std::optional<GraphicsContext::Api> graphicsApi; ///<
         std::optional<float> framerateRedraw;            ///<
+        std::optional<Color> clearColor;                 ///<
         std::optional<RelativeTime> doubleClickTime;     ///<
     };
 
@@ -154,6 +161,7 @@ public:
     virtual void enableWireframe (bool shouldBeEnabld) = 0;
 
     //==============================================================================
+    virtual void repaint() = 0;
     virtual void repaint (const Rectangle<float>& rect) = 0;
     virtual Rectangle<float> getRepaintArea() const = 0;
 

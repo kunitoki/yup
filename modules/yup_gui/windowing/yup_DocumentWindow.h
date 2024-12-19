@@ -39,6 +39,8 @@ public:
     //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
+    /** @internal */
+    void userTriedToCloseWindow() override;
 
 private:
     Color backgroundColor;

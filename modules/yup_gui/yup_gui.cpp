@@ -39,20 +39,9 @@
 #include <rive/animation/state_machine_input_instance.hpp>
 
 //==============================================================================
-#include "application/yup_Application.cpp"
-#include "desktop/yup_Desktop.cpp"
-#include "mouse/yup_MouseEvent.cpp"
-#include "component/yup_ComponentNative.cpp"
-#include "component/yup_Component.cpp"
-#include "widgets/yup_Button.cpp"
-#include "widgets/yup_TextButton.cpp"
-#include "widgets/yup_Slider.cpp"
-#include "artboard/yup_Artboard.cpp"
-#include "windowing/yup_DocumentWindow.cpp"
-
-//==============================================================================
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_syswm.h>
+#include <SDL2/SDL_main.h>
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
@@ -88,4 +77,17 @@
 #endif
 
 //==============================================================================
+#include "application/yup_Application.cpp"
+#include "desktop/yup_Desktop.cpp"
+#include "mouse/yup_MouseEvent.cpp"
+#include "component/yup_ComponentNative.cpp"
+#include "component/yup_Component.cpp"
+#include "widgets/yup_Button.cpp"
+#include "widgets/yup_TextButton.cpp"
+#include "widgets/yup_Slider.cpp"
+#include "artboard/yup_Artboard.cpp"
+#include "windowing/yup_DocumentWindow.cpp"
+
+//==============================================================================
+#include "native/yup_Windowing_utils.h"
 #include "native/yup_Windowing_sdl2.cpp"

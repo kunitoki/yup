@@ -164,14 +164,6 @@ Size<float> Component::getSize() const
     return boundsInParent.getSize();
 }
 
-Size<float> Component::getContentSize() const
-{
-    if (options.onDesktop)
-        return native->getContentSize().to<float>();
-
-    return getSize();
-}
-
 float Component::getWidth() const
 {
     return boundsInParent.getWidth();
@@ -200,6 +192,22 @@ Rectangle<float> Component::getBounds() const
 Rectangle<float> Component::getLocalBounds() const
 {
     return boundsInParent.withZeroPosition();
+}
+
+Rectangle<float> Component::getBoundsRelativeToAncestor() const
+{
+    auto bounds = boundsInParent;
+    if (options.onDesktop)
+        return bounds.withZeroPosition();
+
+    auto parent = getParentComponent();
+    while (parent != nullptr && ! parent->options.onDesktop)
+    {
+        bounds.translate (parent->getPosition());
+        parent = parent->getParentComponent();
+    }
+
+    return bounds;
 }
 
 float Component::proportionOfWidth (float proportion) const
@@ -278,14 +286,20 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
+    if (getBounds().isEmpty())
+        return;
+
     if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (getBounds());
+        nativeComponent->repaint (getBoundsRelativeToAncestor());
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
+    if (rect.isEmpty())
+        return;
+
     if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBounds().getTopLeft()));
+        nativeComponent->repaint (rect.translated (getBoundsRelativeToAncestor().getTopLeft()));
 }
 
 //==============================================================================
@@ -360,6 +374,11 @@ void Component::removeFromDesktop()
 //==============================================================================
 
 Component* Component::getParentComponent()
+{
+    return parentComponent;
+}
+
+const Component* Component::getParentComponent() const
 {
     return parentComponent;
 }
@@ -475,8 +494,11 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
 
 void Component::takeFocus()
 {
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->setFocusedComponent (this);
+    if (options.wantsKeyboardFocus)
+    {
+        if (auto nativeComponent = getNativeComponent())
+            nativeComponent->setFocusedComponent (this);
+    }
 }
 
 void Component::leaveFocus()
@@ -487,10 +509,42 @@ void Component::leaveFocus()
 
 bool Component::hasFocus() const
 {
+    if (! options.wantsKeyboardFocus)
+        return false;
+
     if (auto nativeComponent = getNativeComponent())
         return nativeComponent->getFocusedComponent() == this;
 
     return false;
+}
+
+//==============================================================================
+
+void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
+{
+    if (color)
+        properties.set (colorId, static_cast<int64> (color->getARGB()));
+    else
+        properties.remove (colorId);
+}
+
+std::optional<Color> Component::getColor (const Identifier& colorId) const
+{
+    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
+        return Color (static_cast<uint32> (static_cast<int64> (*color)));
+
+    return std::nullopt;
+}
+
+std::optional<Color> Component::findColor (const Identifier& colorId) const
+{
+    if (auto color = getColor (colorId))
+        return color;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findColor (colorId);
+
+    return std::nullopt;
 }
 
 //==============================================================================
@@ -510,6 +564,8 @@ const NamedValueSet& Component::getProperties() const
 void Component::paint (Graphics& g) {}
 
 void Component::paintOverChildren (Graphics& g) {}
+
+void Component::refreshDisplay (double lastFrameTimeSeconds) {}
 
 //==============================================================================
 
@@ -533,6 +589,8 @@ void Component::keyDown (const KeyPress& keys, const Point<float>& position) {}
 
 void Component::keyUp (const KeyPress& keys, const Point<float>& position) {}
 
+void Component::textInput (const String& text) {}
+
 //==============================================================================
 
 void Component::addMouseListener (MouseListener* listener)
@@ -551,20 +609,30 @@ void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
 
-void Component::internalPaint (Graphics& g, bool renderContinuous)
+void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
+{
+    refreshDisplay (lastFrameTimeSeconds);
+
+    for (auto child : children)
+        child->internalRefreshDisplay (lastFrameTimeSeconds);
+}
+
+//==============================================================================
+
+void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous)
 {
     if (! isVisible() || (getWidth() == 0 || getHeight() == 0))
         return;
 
-    auto bounds = (options.onDesktop ? getLocalBounds() : getBounds());
+    auto bounds = getBoundsRelativeToAncestor();
 
-    auto dirtyBounds = getNativeComponent()->getRepaintArea();
+    auto dirtyBounds = repaintArea;
     auto boundsToRedraw = bounds.intersection (dirtyBounds);
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
     const auto opacity = g.getOpacity() * getOpacity();
-    if (opacity == 0.0f)
+    if (opacity <= 0.0f)
         return;
 
     const auto globalState = g.saveState();
@@ -581,13 +649,21 @@ void Component::internalPaint (Graphics& g, bool renderContinuous)
     }
 
     for (auto child : children)
-        child->internalPaint (g, renderContinuous);
-
-    g.setDrawingArea (bounds);
-    if (! options.unclippedRendering)
-        g.setClipPath (boundsToRedraw);
+        child->internalPaint (g, boundsToRedraw, renderContinuous);
 
     paintOverChildren (g);
+
+#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+    g.setFillColor (debugColor);
+    g.setOpacity (0.2f);
+    g.fillAll();
+
+    if (--counter == 0)
+    {
+        counter = 2;
+        debugColor = Color::opaqueRandom();
+    }
+#endif
 }
 
 void Component::internalMouseEnter (const MouseEvent& event)
@@ -684,6 +760,14 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
         return;
 
     keyUp (keys, position);
+}
+
+void Component::internalTextInput (const String& text)
+{
+    if (! isVisible() || ! options.wantsTextInput)
+        return;
+
+    textInput (text);
 }
 
 void Component::internalResized (int width, int height)

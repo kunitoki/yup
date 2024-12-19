@@ -298,12 +298,12 @@ function (yup_add_module module_path)
     set (${module_name}_Found OFF PARENT_SCOPE)
 
     if (NOT EXISTS ${module_path})
-        _yup_message (FATAL_ERROR "Module location not found")
+        _yup_message (FATAL_ERROR "Module location ${module_path} not found")
     endif()
 
     set (module_header "${module_path}/${module_name}.h")
     if (NOT EXISTS ${module_header})
-        _yup_message (FATAL_ERROR "Module header ${module_header} not found")
+        _yup_message (FATAL_ERROR "Module header ${module_header} in module ${module_path} not found")
     endif()
 
     # ==== Add module as library
@@ -470,9 +470,12 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/zlib)
     yup_add_module (${modules_path}/thirdparty/glad)
     yup_add_module (${modules_path}/thirdparty/harfbuzz)
+    yup_add_module (${modules_path}/thirdparty/libpng)
+    yup_add_module (${modules_path}/thirdparty/libwebp)
     yup_add_module (${modules_path}/thirdparty/sheenbidi)
     yup_add_module (${modules_path}/thirdparty/yoga_library)
     yup_add_module (${modules_path}/thirdparty/rive)
+    yup_add_module (${modules_path}/thirdparty/rive_decoders)
     yup_add_module (${modules_path}/thirdparty/rive_renderer)
     yup_add_module (${modules_path}/thirdparty/oboe_library)
 

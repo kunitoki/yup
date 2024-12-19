@@ -97,12 +97,17 @@ bool MessageManager::MessageBase::post()
 }
 
 //==============================================================================
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    jassert (isThisTheMessageThread()); // must only be called by the message thread
+
+    loopCallback = std::move (loopCallbackToSet);
+}
+
+//==============================================================================
 #if ! (JUCE_MAC || JUCE_IOS || JUCE_WASM)
 // implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
-namespace detail
-{
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
-} // namespace detail
+bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 
 class MessageManager::QuitMessage final : public MessageManager::MessageBase
 {
@@ -126,7 +131,9 @@ void MessageManager::runDispatchLoop()
     {
         JUCE_TRY
         {
-            if (! detail::dispatchNextMessageOnSystemQueue (false))
+            loopCallback();
+
+            if (! juce_dispatchNextMessageOnSystemQueue (false))
                 Thread::sleep (1);
         }
         JUCE_CATCH_EXCEPTION
@@ -135,8 +142,8 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
-    (new QuitMessage())->post();
     quitMessagePosted = true;
+    (new QuitMessage())->post();
 }
 
 #if JUCE_MODAL_LOOPS_PERMITTED
@@ -150,7 +157,9 @@ bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
     {
         JUCE_TRY
         {
-            if (! detail::dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
+            loopCallback();
+
+            if (! juce_dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
                 Thread::sleep (1);
         }
         JUCE_CATCH_EXCEPTION
@@ -259,7 +268,7 @@ void MessageManager::setCurrentThreadAsMessageThread()
 {
     auto thisThread = Thread::getCurrentThreadId();
 
-    messageThreadId.exchange(thisThread);
+    messageThreadId.exchange (thisThread);
 
     if (messageThreadId.get() != thisThread)
     {

@@ -24,25 +24,25 @@ namespace yup
 
 //==============================================================================
 
-Font::Font (const MemoryBlock& fontBytes, rive::Factory* factory)
+Font::Font (const MemoryBlock& fontBytes)
 {
-    loadFromData (fontBytes, factory);
+    loadFromData (fontBytes);
 }
 
-Font::Font (const File& fontFile, rive::Factory* factory)
+Font::Font (const File& fontFile)
 {
-    loadFromFile (fontFile, factory);
+    loadFromFile (fontFile);
 }
 
 //==============================================================================
 
-Result Font::loadFromData (const MemoryBlock& fontBytes, rive::Factory* factory)
+Result Font::loadFromData (const MemoryBlock& fontBytes)
 {
-    font = factory->decodeFont (rive::Span<const uint8_t> { static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize() });
+    font = HBFont::Decode (rive::Span<const uint8_t> { static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize() });
     return font ? Result::ok() : Result::fail ("Unable to load font");
 }
 
-Result Font::loadFromFile (const File& fontFile, rive::Factory* factory)
+Result Font::loadFromFile (const File& fontFile)
 {
     if (! fontFile.existsAsFile())
         return Result::fail ("Unable to load font from non existing file");
@@ -52,7 +52,7 @@ Result Font::loadFromFile (const File& fontFile, rive::Factory* factory)
         yup::MemoryBlock mb;
         is->readIntoMemoryBlock (mb);
 
-        font = factory->decodeFont (rive::Span<const uint8_t> { static_cast<const uint8_t*> (mb.getData()), mb.getSize() });
+        font = HBFont::Decode (rive::Span<const uint8_t> { static_cast<const uint8_t*> (mb.getData()), mb.getSize() });
         if (! font)
             return Result::fail ("Unable to load font");
     }

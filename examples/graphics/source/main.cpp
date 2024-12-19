@@ -130,33 +130,42 @@ public:
     CustomWindow()
         : yup::DocumentWindow ({}, yup::Color (0xff404040))
     {
-        rive::Factory* factory = getNativeComponent()->getFactory();
-        if (factory == nullptr)
-        {
-            yup::Logger::outputDebugString ("Failed to create a graphics context");
-
-            yup::YUPApplication::getInstance()->systemRequestedQuit();
-            return;
-        }
-
         setTitle ("main");
 
-        // Load the font
-#if JUCE_ANDROID
-        yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
-        if (auto result = font.loadFromData (mb, factory); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
-#else
 #if JUCE_WASM
-        auto fontFilePath = yup::File ("/data")
+        auto baseFilePath = yup::File ("/data");
 #else
-        auto fontFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
+        auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-                                .getChildFile ("Roboto-Regular.ttf");
 
-        if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
+        // Load the font
+        {
+#if JUCE_ANDROID
+            yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
+            if (auto result = font.loadFromData (mb); result.failed())
+                yup::Logger::outputDebugString (result.getErrorMessage());
+#else
+            auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
+            if (auto result = font.loadFromFile (fontFilePath); result.failed())
+                yup::Logger::outputDebugString (result.getErrorMessage());
 #endif
+        }
+
+        // Load an image
+        {
+            yup::MemoryBlock mb;
+            auto imageFile = baseFilePath.getChildFile ("logo.png");
+            if (imageFile.loadFileAsData (mb))
+            {
+                auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+                if (loadedImage.wasOk())
+                    image = std::move (loadedImage.getReference());
+            }
+            else
+            {
+                yup::Logger::outputDebugString ("Unable to load requested image");
+            }
+        }
 
         // Initialize the audio device
         deviceManager.initialiseWithDefaultDevices (0, 2);
@@ -209,7 +218,7 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced (100);
+        auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f), proportionOfHeight (0.2f));
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
@@ -224,9 +233,29 @@ public:
         }
 
         if (button != nullptr)
-            button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth (0.4f), 0.0f));
+            button->setBounds (getLocalBounds()
+                                   .removeFromTop (proportionOfHeight (0.2f))
+                                   .reduced (proportionOfWidth (0.2f), 0.0f));
 
-        oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
+        oscilloscope.setBounds (getLocalBounds()
+                                    .removeFromBottom (proportionOfHeight (0.2f))
+                                    .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        yup::DocumentWindow::paint (g);
+        //g.drawImageAt (image, getLocalBounds().getCenter());
+    }
+
+    void paintOverChildren (yup::Graphics& g) override
+    {
+        if (! image.isValid())
+            return;
+
+        g.setBlendMode (yup::BlendMode::ColorDodge);
+        g.setOpacity (1.0f);
+        g.drawImageAt (image, getLocalBounds().getCenter());
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -268,7 +297,10 @@ public:
     void timerCallback() override
     {
         updateWindowTitle();
+    }
 
+    void refreshDisplay (double lastFrameTimeSeconds) override
+    {
         {
             const yup::CriticalSection::ScopedLockType sl (renderMutex);
             oscilloscope.setRenderData (renderData);
@@ -325,18 +357,22 @@ public:
 private:
     void updateWindowTitle()
     {
-        /*
         yup::String title;
 
-        title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
+        auto currentFps = getNativeComponent()->getCurrentFrameRate();
+        title << "[" << yup::String (currentFps, 1) << " FPS]";
+
+        title << " (x" << (totalRows * totalColumns) << " instances)";
         title << " | "
               << "YUP On Rive Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
+        auto [width, height] = getNativeComponent()->getContentSize();
+        title << " | " << width << " x " << height;
+
         setTitle (title);
-        */
     }
 
     yup::AudioDeviceManager deviceManager;
@@ -356,6 +392,8 @@ private:
 
     yup::Font font;
     yup::StyledText styleText;
+
+    yup::Image image;
 };
 
 //==============================================================================
@@ -381,9 +419,10 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-        window->centreWithSize ({ 800, 800 });
 
-#if JUCE_IOS || JUCE_ANDROID
+#if JUCE_IOS
+        window->centreWithSize ({ 320, 480 });
+#elif JUCE_ANDROID
         window->centreWithSize ({ 1080, 2400 });
         // window->setFullScreen(true);
 #else

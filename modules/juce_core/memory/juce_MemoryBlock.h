@@ -143,6 +143,19 @@ public:
     const char* end() const noexcept { return begin() + getSize(); }
 
     //==============================================================================
+    /** Returns a span to the raw const data. */
+    Span<const uint8> asBytes() const noexcept
+    {
+        return { reinterpret_cast<const uint8*> (data.getData()), getSize() };
+    }
+
+    /** Returns a span to the raw data. */
+    Span<uint8> asWritableBytes() const noexcept
+    {
+        return { reinterpret_cast<uint8*> (data.getData()), getSize() };
+    }
+
+    //==============================================================================
     /** Returns true if the memory block has zero size. */
     bool isEmpty() const noexcept { return getSize() == 0; }
 

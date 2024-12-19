@@ -37,7 +37,7 @@ class InternalMessageQueue
 public:
     InternalMessageQueue()
     {
-        emscripten_set_main_loop (dispatchLoopInternal, 0, 0);
+        emscripten_set_main_loop ([] {}, 0, 0);
 
         createDirIfNotExists (File::userHomeDirectory);
         createDirIfNotExists (File::userDocumentsDirectory);
@@ -60,12 +60,6 @@ public:
     }
 
     //==============================================================================
-    void registerEventLoopCallback (std::function<void()> loopCallbackToSet)
-    {
-        loopCallback = std::move (loopCallbackToSet);
-    }
-
-    //==============================================================================
     bool postMessage (MessageManager::MessageBase* const msg)
     {
         {
@@ -78,36 +72,8 @@ public:
     }
 
     //==============================================================================
-    void runDispatchLoop()
+    void deliverNextMessages()
     {
-        emscripten_cancel_main_loop();
-
-        constexpr int framesPerSeconds = 0;
-        constexpr int simulateInfiniteLoop = 1;
-        emscripten_set_main_loop (dispatchLoopInternal, framesPerSeconds, simulateInfiniteLoop);
-    }
-
-    void stopDispatchLoop()
-    {
-        emscripten_cancel_main_loop();
-    }
-
-    //==============================================================================
-    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
-
-private:
-    static void dispatchLoopInternal()
-    {
-        InternalMessageQueue::getInstance()->dispatchLoop();
-    }
-
-    void dispatchLoop()
-    {
-        Timer::callPendingTimersSynchronously();
-
-        if (loopCallback)
-            loopCallback();
-
         ReferenceCountedArray<MessageManager::MessageBase> currentEvents;
 
         {
@@ -124,13 +90,17 @@ private:
         }
     }
 
+    //==============================================================================
+    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+
+private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
-    std::function<void()> loopCallback;
 };
 
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
+//==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
 {
     InternalMessageQueue::getInstance();
@@ -141,17 +111,6 @@ void MessageManager::doPlatformSpecificShutdown()
     InternalMessageQueue::deleteInstance();
 }
 
-namespace detail
-{
-bool dispatchNextMessageOnSystemQueue (const bool returnIfNoPendingMessages)
-{
-    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
-    exit (1);
-
-    return true;
-}
-} // namespace detail
-
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
     return InternalMessageQueue::getInstance()->postMessage (message);
@@ -161,20 +120,40 @@ void MessageManager::broadcastMessage (const String&)
 {
 }
 
+//==============================================================================
 void MessageManager::runDispatchLoop()
 {
-    InternalMessageQueue::getInstance()->runDispatchLoop();
+    emscripten_cancel_main_loop();
+
+    auto mainLoop = [] (void* arg)
+    {
+        Timer::callPendingTimersSynchronously();
+
+        auto* messageManager = static_cast<MessageManager*> (arg);
+        jassert (messageManager != nullptr);
+        jassert (messageManager->loopCallback != nullptr);
+        messageManager->loopCallback();
+
+        InternalMessageQueue::getInstance()->deliverNextMessages();
+    };
+
+    constexpr int framesPerSeconds = 0;
+    constexpr int simulateInfiniteLoop = 1;
+    emscripten_set_main_loop_arg (mainLoop, this, framesPerSeconds, simulateInfiniteLoop);
 }
 
 void MessageManager::stopDispatchLoop()
 {
-    InternalMessageQueue::getInstance()->stopDispatchLoop();
-
     quitMessagePosted = true;
+    emscripten_cancel_main_loop();
 }
 
-void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+#if JUCE_MODAL_LOOPS_PERMITTED
+bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
 {
-    InternalMessageQueue::getInstance()->registerEventLoopCallback (std::move (loopCallbackToSet));
+    Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");
+    exit (1);
 }
+#endif
+
 } // namespace juce

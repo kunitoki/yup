@@ -91,13 +91,13 @@ public:
 
         @return Pointer to a rive::pls::PLSRenderContext, or nullptr if not available.
     */
-    virtual rive::gpu::RenderContext* plsContextOrNull() = 0;
+    virtual rive::gpu::RenderContext* renderContextOrNull() = 0;
 
     /** Gets the PLS render target, if available.
 
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
-    virtual rive::gpu::RenderTarget* plsRenderTargetOrNull() = 0;
+    virtual rive::gpu::RenderTarget* renderTargetOrNull() = 0;
 
     /** Creates a renderer suitable for the specified dimensions.
 

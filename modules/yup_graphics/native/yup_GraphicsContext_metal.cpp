@@ -42,7 +42,6 @@ public:
             metalOptions.disableFramebufferReads = true;
 
         m_plsContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
-        printf ("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
     }
 
     float dpiScale (void* window) const override
@@ -59,9 +58,9 @@ public:
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* renderContextOrNull() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* renderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
@@ -106,21 +105,16 @@ public:
 
     void end (void*) override
     {
-        if (m_currentFrameSurface == nil)
-        {
-            m_currentFrameSurface = [m_swapchain nextDrawable];
-            assert (m_currentFrameSurface.texture.width == m_renderTarget->width());
-            assert (m_currentFrameSurface.texture.height == m_renderTarget->height());
-            m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
-        }
+        jassert (m_currentFrameSurface == nil);
+        m_currentFrameSurface = [m_swapchain nextDrawable];
+        jassert (m_currentFrameSurface.texture.width == m_renderTarget->width());
+        jassert (m_currentFrameSurface.texture.height == m_renderTarget->height());
+        m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
 
-        id<MTLCommandBuffer> flushCommandBuffer = [m_queue commandBuffer];
-        m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) flushCommandBuffer });
-        [flushCommandBuffer commit];
-
-        id<MTLCommandBuffer> presentCommandBuffer = [m_queue commandBuffer];
-        [presentCommandBuffer presentDrawable:m_currentFrameSurface];
-        [presentCommandBuffer commit];
+        id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
+        m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        [commandBuffer presentDrawable:m_currentFrameSurface];
+        [commandBuffer commit];
 
         m_currentFrameSurface = nil;
         m_renderTarget->setTargetTexture (nil);

@@ -52,6 +52,15 @@
 #include <yup_graphics/yup_graphics.h>
 
 //==============================================================================
+/** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+
+    Enable repaint debugging for components.
+*/
+#ifndef YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#define YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING 0
+#endif
+
+//==============================================================================
 
 #include <rive/artboard.hpp>
 #include <rive/file.hpp>

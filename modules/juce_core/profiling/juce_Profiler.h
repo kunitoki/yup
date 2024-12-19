@@ -22,8 +22,8 @@
 #if JUCE_ENABLE_PROFILING
 
 PERFETTO_DEFINE_CATEGORIES (
-    perfetto::Category ("rendering"),
-    perfetto::Category ("network"));
+    perfetto::Category ("yup")
+        JUCE_PROFILING_CATEGORIES);
 
 namespace juce
 {
@@ -153,6 +153,7 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 */
 #define YUP_PROFILE_STOP(...) ::juce::Profiler::getInstance()->stopTracing()
 
+#if ! YUP_PROFILE_DISABLE_TRACE
 /** Records a profiling trace event.
 
     This macro is used to trace events for profiling purposes.
@@ -162,12 +163,32 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
     @param category The category for the trace event.
     @param ... Optional additional arguments for the trace event.
 */
-#if ! YUP_PROFILE_DISABLE_TRACE
 #define YUP_PROFILE_TRACE(category, ...)                                                                                                                        \
     constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
     TRACE_EVENT (category, ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
+
+#define YUP_PROFILE_NAMED_TRACE(category, name, ...)                                                                                                                        \
+    TRACE_EVENT (category, ::perfetto::StaticString (#name), ##__VA_ARGS__)
+
+/** Records a profiling internal trace event.
+
+    This macro is used internally by the yup framework to trace events for profiling purposes.
+
+    @param ... Optional additional arguments for the trace event.
+*/
+#define YUP_PROFILE_INTERNAL_TRACE(...)                                                                                                                        \
+    constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
+    TRACE_EVENT ("yup", ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
+
+#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)                                                                                                                        \
+    TRACE_EVENT ("yup", ::perfetto::StaticString (#name), ##__VA_ARGS__)
+
 #else
 #define YUP_PROFILE_TRACE(category, ...)
+#define YUP_PROFILE_NAMED_TRACE(category, name, ...)                                                                                                                        \
+#define YUP_PROFILE_INTERNAL_TRACE(...)
+#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)                                                                                                                        \
+
 #endif
 // clang-format on
 
@@ -175,5 +196,8 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 #define YUP_PROFILE_START(...)
 #define YUP_PROFILE_STOP(...)
 #define YUP_PROFILE_TRACE(category, ...)
+#define YUP_PROFILE_INTERNAL_TRACE(name, ...)
+#define YUP_PROFILE_NAMED_TRACE(category, name, ...)
+#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)
 
 #endif

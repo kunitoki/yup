@@ -51,14 +51,13 @@
 #include <juce_core/juce_core.h>
 
 #include <rive_renderer/rive_renderer.h>
+#include <rive_decoders/rive_decoders.h>
 
 //==============================================================================
 
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/text/utf.hpp>
-#include <rive/renderer/render_context.hpp>
-#include <rive/renderer/render_context_impl.hpp>
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
@@ -76,6 +75,7 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #include "primitives/yup_Path.h"
 #include "fonts/yup_Font.h"
 #include "fonts/yup_StyledText.h"
+#include "imaging/yup_Image.h"
 #include "graphics/yup_Color.h"
 #include "graphics/yup_ColorGradient.h"
 #include "graphics/yup_Colors.h"

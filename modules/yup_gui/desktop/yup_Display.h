@@ -22,9 +22,11 @@
 namespace yup
 {
 
-class JUCE_API Display
+class JUCE_API Display : public ReferenceCountedObject
 {
 public:
+    using Ptr = ReferenceCountedObjectPtr<Display>;
+
     Display() {}
 
     Size<int> physicalSizeMillimeters;

@@ -58,12 +58,12 @@ public:
     //==============================================================================
     virtual void setSize (const Size<float>& newSize);
     Size<float> getSize() const;
-    Size<float> getContentSize() const;
     float getWidth() const;
     float getHeight() const;
     virtual void setBounds (const Rectangle<float>& newBounds);
     Rectangle<float> getBounds() const;
     Rectangle<float> getLocalBounds() const;
+    Rectangle<float> getBoundsRelativeToAncestor() const;
     float proportionOfWidth (float proportion) const;
     float proportionOfHeight (float proportion) const;
     virtual void resized();
@@ -102,6 +102,7 @@ public:
 
     //==============================================================================
     Component* getParentComponent();
+    const Component* getParentComponent() const;
 
     template <class T>
     T* getParentComponentOfType()
@@ -148,12 +149,20 @@ public:
     bool hasFocus() const;
 
     //==============================================================================
+    void setColor (const Identifier& colorId, const std::optional<Color>& color);
+    std::optional<Color> getColor (const Identifier& colorId) const;
+    std::optional<Color> findColor (const Identifier& colorId) const;
+
+    //==============================================================================
     NamedValueSet& getProperties();
     const NamedValueSet& getProperties() const;
 
     //==============================================================================
     virtual void paint (Graphics& g);
     virtual void paintOverChildren (Graphics& g);
+
+    //==============================================================================
+    virtual void refreshDisplay (double lastFrameTimeSeconds);
 
     //==============================================================================
     virtual void mouseEnter (const MouseEvent& event);
@@ -172,9 +181,11 @@ public:
     //==============================================================================
     virtual void keyDown (const KeyPress& keys, const Point<float>& position);
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+    virtual void textInput (const String& text);
 
 private:
-    void internalPaint (Graphics& g, bool renderContinuous);
+    void internalRefreshDisplay (double lastFrameTimeSeconds);
+    void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
@@ -185,6 +196,7 @@ private:
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
+    void internalTextInput (const String& text);
     void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
     void internalUserTriedToCloseWindow();
@@ -215,6 +227,7 @@ private:
         bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool wantsTextInput : 1;
     };
 
     union
@@ -222,6 +235,11 @@ private:
         uint32 optionsValue;
         Options options;
     };
+
+#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+    Color debugColor = Color::opaqueRandom();
+    int counter = 2;
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
 };

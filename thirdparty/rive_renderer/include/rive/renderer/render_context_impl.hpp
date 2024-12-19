@@ -31,6 +31,11 @@ public:
     virtual rcp<Texture> decodeImageTexture(
         Span<const uint8_t> encodedBytes) = 0;
 
+    virtual rcp<Texture> makeImageTexture(uint32_t width,
+                                          uint32_t height,
+                                          uint32_t mipLevelCount,
+                                          const uint8_t imageDataRGBA[]) = 0;
+
     // Resize GPU buffers. These methods cannot fail, and must allocate the
     // exact size requested.
     //

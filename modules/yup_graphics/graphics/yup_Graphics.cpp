@@ -22,19 +22,83 @@
 namespace yup
 {
 
-//==============================================================================
 namespace
 {
+
+//==============================================================================
 
 rive::StrokeJoin toStrokeJoin (StrokeJoin join) noexcept
 {
     return static_cast<rive::StrokeJoin> (join);
 }
 
+//==============================================================================
+
 rive::StrokeCap toStrokeCap (StrokeCap cap) noexcept
 {
     return static_cast<rive::StrokeCap> (cap);
 }
+
+//==============================================================================
+
+rive::BlendMode toBlendMode (BlendMode blendMode) noexcept
+{
+    switch (blendMode)
+    {
+        case BlendMode::SrcOver:
+            return rive::BlendMode::srcOver;
+
+        case BlendMode::Screen:
+            return rive::BlendMode::screen;
+
+        case BlendMode::Overlay:
+            return rive::BlendMode::overlay;
+
+        case BlendMode::Darken:
+            return rive::BlendMode::darken;
+
+        case BlendMode::Lighten:
+            return rive::BlendMode::lighten;
+
+        case BlendMode::ColorDodge:
+            return rive::BlendMode::colorDodge;
+
+        case BlendMode::ColorBurn:
+            return rive::BlendMode::colorBurn;
+
+        case BlendMode::HardLight:
+            return rive::BlendMode::hardLight;
+
+        case BlendMode::SoftLight:
+            return rive::BlendMode::softLight;
+
+        case BlendMode::Difference:
+            return rive::BlendMode::difference;
+
+        case BlendMode::Exclusion:
+            return rive::BlendMode::exclusion;
+
+        case BlendMode::Multiply:
+            return rive::BlendMode::multiply;
+
+        case BlendMode::Hue:
+            return rive::BlendMode::hue;
+
+        case BlendMode::Saturation:
+            return rive::BlendMode::saturation;
+
+        case BlendMode::Color:
+            return rive::BlendMode::color;
+
+        case BlendMode::Luminosity:
+            return rive::BlendMode::luminosity;
+
+        default:
+            return rive::BlendMode::srcOver;
+    }
+}
+
+//==============================================================================
 
 rive::Mat2D toMat2d (const yup::AffineTransform& t) noexcept
 {
@@ -48,34 +112,66 @@ rive::Mat2D toMat2d (const yup::AffineTransform& t) noexcept
     };
 }
 
-rive::RawPath toRawPath (const Path& path)
+//==============================================================================
+
+rive::rcp<rive::RenderPath> toRenderPath (rive::Factory& factory, const Path& path)
 {
-    rive::RawPath rawPath;
+    auto result = factory.makeEmptyRenderPath();
+
+    float lastX = 0.0f, lastY = 0.0f;
 
     for (const auto& segment : path)
     {
         if (segment.type == Path::SegmentType::MoveTo)
-            rawPath.moveTo (segment.x, segment.y);
+        {
+            auto x = segment.x, y = segment.y;
+            result->move (rive::Vec2D (x, y));
+
+            lastX = x;
+            lastY = y;
+        }
 
         else if (segment.type == Path::SegmentType::LineTo)
-            rawPath.lineTo (segment.x, segment.y);
+        {
+            auto x = segment.x, y = segment.y;
+            result->line (rive::Vec2D (x, y));
+
+            lastX = x;
+            lastY = y;
+        }
 
         else if (segment.type == Path::SegmentType::QuadTo)
-            rawPath.quadTo (segment.x, segment.y, segment.x1, segment.y1);
+        {
+            auto x = segment.x, y = segment.y, x1 = segment.x1, y1 = segment.y1;
+            result->cubic (rive::Vec2D::lerp (rive::Vec2D (lastX, lastY), rive::Vec2D (x1, y1), 2 / 3.f),
+                           rive::Vec2D::lerp (rive::Vec2D (x, y), rive::Vec2D (x1, y1), 2 / 3.f),
+                           rive::Vec2D (x, y));
+
+            lastX = x;
+            lastY = y;
+        }
 
         else if (segment.type == Path::SegmentType::CubicTo)
-            rawPath.cubicTo (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
+        {
+            auto x = segment.x, y = segment.y, x1 = segment.x1, y1 = segment.y1, x2 = segment.x2, y2 = segment.y2;
+            result->cubic (rive::Vec2D (x, y), rive::Vec2D (x1, y1), rive::Vec2D (x2, y2));
+
+            lastX = x;
+            lastY = y;
+        }
     }
 
-    return rawPath;
+    return result;
 }
 
-rive::RawPath toRawPath (const Path& path, const AffineTransform& transform)
+rive::rcp<rive::RenderPath> toRenderPath (rive::Factory& factory, const Path& path, const AffineTransform& transform)
 {
     if (transform.isIdentity())
-        return toRawPath (path);
+        return toRenderPath (factory, path);
 
-    rive::RawPath rawPath;
+    auto result = factory.makeEmptyRenderPath();
+
+    float lastX = 0.0f, lastY = 0.0f;
 
     for (const auto& segment : path)
     {
@@ -83,33 +179,49 @@ rive::RawPath toRawPath (const Path& path, const AffineTransform& transform)
         {
             auto x = segment.x, y = segment.y;
             transform.transformPoints (x, y);
-            rawPath.moveTo (x, y);
+            result->move (rive::Vec2D (x, y));
+
+            lastX = x;
+            lastY = y;
         }
 
         else if (segment.type == Path::SegmentType::LineTo)
         {
             auto x = segment.x, y = segment.y;
             transform.transformPoints (x, y);
-            rawPath.lineTo (x, y);
+            result->line (rive::Vec2D (x, y));
+
+            lastX = x;
+            lastY = y;
         }
 
         else if (segment.type == Path::SegmentType::QuadTo)
         {
             auto x = segment.x, y = segment.y, x1 = segment.x1, y1 = segment.y1;
             transform.transformPoints (x, y, x1, y1);
-            rawPath.quadTo (x, y, x1, y1);
+            result->cubic (rive::Vec2D::lerp (rive::Vec2D (lastX, lastY), rive::Vec2D (x1, y1), 2 / 3.f),
+                           rive::Vec2D::lerp (rive::Vec2D (x, y), rive::Vec2D (x1, y1), 2 / 3.f),
+                           rive::Vec2D (x, y));
+
+            lastX = x;
+            lastY = y;
         }
 
         else if (segment.type == Path::SegmentType::CubicTo)
         {
             auto x = segment.x, y = segment.y, x1 = segment.x1, y1 = segment.y1, x2 = segment.x2, y2 = segment.y2;
             transform.transformPoints (x, y, x1, y1, x2, y2);
-            rawPath.cubicTo (x, y, x1, y1, x2, y2);
+            result->cubic (rive::Vec2D (x, y), rive::Vec2D (x1, y1), rive::Vec2D (x2, y2));
+
+            lastX = x;
+            lastY = y;
         }
     }
 
-    return rawPath;
+    return result;
 }
+
+//==============================================================================
 
 void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output)
 {
@@ -126,6 +238,8 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 
     newInput.addTo (output);
 }
+
+//==============================================================================
 
 rive::rcp<rive::RenderShader> toColorGradient (rive::Factory& factory, const ColorGradient& gradient, const AffineTransform& transform)
 {
@@ -322,6 +436,16 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+void Graphics::setBlendMode (BlendMode blendMode)
+{
+    currentRenderOptions().blendMode = blendMode;
+}
+
+BlendMode Graphics::getBlendMode() const
+{
+    return currentRenderOptions().blendMode;
+}
+
 void Graphics::setDrawingArea (const Rectangle<float>& drawingArea)
 {
     currentRenderOptions().drawingArea = drawingArea;
@@ -356,8 +480,8 @@ void Graphics::setClipPath (const Path& clipPath)
 
     options.clipPath = clipPath;
 
-    auto rawPath = toRawPath (clipPath, options.getUntranslatedTransform());
-    auto renderPath = factory.makeRenderPath (rawPath, rive::FillRule::nonZero);
+    auto renderPath = toRenderPath (factory, clipPath, options.getUntranslatedTransform());
+    renderPath->fillRule (rive::FillRule::nonZero);
     renderer.clipPath (renderPath.get());
 }
 
@@ -375,8 +499,7 @@ void Graphics::strokeLine (float x1, float y1, float x2, float y2)
     path.moveTo (x1, y1);
     path.lineTo (x2, y2);
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderStrokePath (rawPath, options);
+    renderStrokePath (path, options, options.getTransform());
 }
 
 void Graphics::strokeLine (const Point<float>& p1, const Point<float>& p2)
@@ -397,8 +520,7 @@ void Graphics::fillAll()
     path.lineTo (area.getX(), area.getY() + area.getHeight());
     path.lineTo (area.getX(), area.getY());
 
-    auto rawPath = toRawPath (path, options.getUntranslatedTransform());
-    renderFillPath (rawPath, options);
+    renderFillPath (path, options, options.getUntranslatedTransform());
 }
 
 //==============================================================================
@@ -413,8 +535,7 @@ void Graphics::fillRect (float x, float y, float width, float height)
     path.lineTo (x, y + height);
     path.lineTo (x, y);
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderFillPath (rawPath, options);
+    renderFillPath (path, options, options.getTransform());
 }
 
 void Graphics::fillRect (const Rectangle<float>& r)
@@ -434,8 +555,7 @@ void Graphics::strokeRect (float x, float y, float width, float height)
     path.lineTo (x, y + height);
     path.lineTo (x, y);
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderStrokePath (rawPath, options);
+    renderStrokePath (path, options, options.getTransform());
 }
 
 void Graphics::strokeRect (const Rectangle<float>& r)
@@ -452,8 +572,7 @@ void Graphics::fillRoundedRect (float x, float y, float width, float height, flo
     path.addRoundedRectangle (
         x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderFillPath (rawPath, options);
+    renderFillPath (path, options, options.getTransform());
 }
 
 void Graphics::fillRoundedRect (float x, float y, float width, float height, float radius)
@@ -480,8 +599,7 @@ void Graphics::strokeRoundedRect (float x, float y, float width, float height, f
     path.addRoundedRectangle (
         x, y, width, height, radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderStrokePath (rawPath, options);
+    renderStrokePath (path, options, options.getTransform());
 }
 
 void Graphics::strokeRoundedRect (float x, float y, float width, float height, float radius)
@@ -504,8 +622,7 @@ void Graphics::strokePath (const Path& path)
 {
     const auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderStrokePath (rawPath, options);
+    renderStrokePath (path, options, options.getTransform());
 }
 
 //==============================================================================
@@ -513,8 +630,7 @@ void Graphics::fillPath (const Path& path)
 {
     const auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    renderFillPath (rawPath, options);
+    renderFillPath (path, options, options.getTransform());
 }
 
 //==============================================================================
@@ -536,16 +652,12 @@ void Graphics::clipPath (const Path& path)
 {
     const auto& options = currentRenderOptions();
 
-    auto rawPath = toRawPath (path, options.getTransform());
-    auto renderPath = factory.makeEmptyRenderPath();
-
-    convertRawPathToRenderPath (rawPath, renderPath.get());
-
+    auto renderPath = toRenderPath (factory, path, options.getTransform());
     renderer.clipPath (renderPath.get());
 }
 
 //==============================================================================
-void Graphics::renderStrokePath (rive::RawPath& rawPath, const RenderOptions& options)
+void Graphics::renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::stroke);
@@ -556,15 +668,13 @@ void Graphics::renderStrokePath (rive::RawPath& rawPath, const RenderOptions& op
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
+        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
 
-    auto renderPath = factory.makeEmptyRenderPath();
-    convertRawPathToRenderPath (rawPath, renderPath.get());
-
+    auto renderPath = toRenderPath (factory, path, transform);
     renderer.drawPath (renderPath.get(), paint.get());
 }
 
-void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& options)
+void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::fill);
@@ -572,12 +682,45 @@ void Graphics::renderFillPath (rive::RawPath& rawPath, const RenderOptions& opti
     if (options.isFillColor())
         paint->color (options.getFillColor());
     else
-        paint->shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
+        paint->shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
-    auto renderPath = factory.makeEmptyRenderPath();
-    convertRawPathToRenderPath (rawPath, renderPath.get());
-
+    auto renderPath = toRenderPath (factory, path, transform);
     renderer.drawPath (renderPath.get(), paint.get());
+}
+
+//==============================================================================
+void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
+{
+    auto renderContext = context.renderContextOrNull();
+    if (renderContext == nullptr)
+        return;
+
+    const auto& options = currentRenderOptions();
+
+    renderer.save();
+    renderer.scale (image.getWidth(), image.getHeight());
+    renderer.transform (toMat2d (options.getTransform()));
+
+    // renderer.translate (pos.getX(), pos.getY());
+
+    if (! image.createTextureIfNotPresent (context))
+        return;
+
+    static const auto unitRectPath = []
+    {
+        auto unitRectPath = rive::make_rcp<rive::RiveRenderPath>();
+        unitRectPath->line ({ 1, 0 });
+        unitRectPath->line ({ 1, 1 });
+        unitRectPath->line ({ 0, 1 });
+        return unitRectPath;
+    }();
+
+    rive::RiveRenderPaint paint;
+    paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
+    paint.blendMode (toBlendMode (options.blendMode));
+    renderer.drawPath (unitRectPath.get(), &paint);
+
+    renderer.restore();
 }
 
 //==============================================================================
