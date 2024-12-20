@@ -46,6 +46,8 @@ public:
 
         This method starts the tracing process using a default buffer size. The tracing session is managed internally
         and will continue until `stopTracing()` is called.
+
+        @see YUP_PROFILE_START
     */
     void startTracing();
 
@@ -54,6 +56,8 @@ public:
         This method allows you to specify the buffer size used for tracing. The buffer size is defined in kilobytes.
 
         @param sizeInKilobytes The size of the tracing buffer in kilobytes.
+
+        @see YUP_PROFILE_START
     */
     void startTracing (uint32 sizeInKilobytes);
 
@@ -61,8 +65,20 @@ public:
 
         This method stops the tracing process and finalizes the trace data.
         Once tracing is stopped, the data can be retrieved and analyzed.
+
+        @see YUP_PROFILE_STOP
     */
     void stopTracing();
+
+    /** Define the output folder of the traces.
+
+        Call this method as erly as possible to
+
+        @param newOutputFolder The output folder where to save traces.
+
+        @see YUP_PROFILE_SET_OUTPUT_FOLDER
+     */
+    void setOutputFolder (const File& newOutputFolder);
 
     /** A constexpr function that prettifies a function name at compile time.
 
@@ -84,6 +100,7 @@ protected:
     Profiler();
 
     std::unique_ptr<perfetto::TracingSession> session;
+    File outputFolder;
     int fileDescriptor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Profiler);
@@ -154,6 +171,9 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 */
 #define YUP_PROFILE_STOP(...) ::juce::Profiler::getInstance()->stopTracing()
 
+/** Define the output folder of the traces. */
+#define YUP_PROFILE_SET_OUTPUT_FOLDER(path) ::juce::Profiler::getInstance()->setOutputFolder (path)
+
 #if ! YUP_PROFILE_DISABLE_TRACE
 /** Records a profiling trace event.
 
@@ -168,7 +188,7 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
     constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
     TRACE_EVENT (category, ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
 
-#define YUP_PROFILE_NAMED_TRACE(category, name, ...)                                                                                                                        \
+#define YUP_PROFILE_NAMED_TRACE(category, name, ...)                                                                                                            \
     TRACE_EVENT (category, ::perfetto::StaticString (#name), ##__VA_ARGS__)
 
 /** Records a profiling internal trace event.
@@ -177,18 +197,18 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 
     @param ... Optional additional arguments for the trace event.
 */
-#define YUP_PROFILE_INTERNAL_TRACE(...)                                                                                                                        \
+#define YUP_PROFILE_INTERNAL_TRACE(...)                                                                                                                         \
     constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
     TRACE_EVENT ("yup", ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
 
-#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)                                                                                                                        \
+#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)                                                                                                             \
     TRACE_EVENT ("yup", ::perfetto::StaticString (#name), ##__VA_ARGS__)
 
 #else
 #define YUP_PROFILE_TRACE(category, ...)
-#define YUP_PROFILE_NAMED_TRACE(category, name, ...)                                                                                                                        \
+#define YUP_PROFILE_NAMED_TRACE(category, name, ...)
 #define YUP_PROFILE_INTERNAL_TRACE(...)
-#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)                                                                                                                        \
+#define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)
 
 #endif
 // clang-format on

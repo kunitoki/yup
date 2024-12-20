@@ -83,17 +83,23 @@ void Profiler::startTracing (uint32 sizeInKilobytes)
 
     String fileName;
     fileName
-        << "yup-profile"
+        << JUCE_PROFILING_FILE_PREFIX
 #if JUCE_DEBUG
         << "-DEBUG-"
 #else
         << "-RELEASE-"
 #endif
-        << Time::getCurrentTime().formatted ("%Y-%m-%d_%H%M%S")
+        << Time::getCurrentTime().formatted ("%Y%m%d%H%M%S")
+        << "-" << String::toHexString (static_cast<uint16> (Random::getSystemRandom().nextInt()))
         << ".pftrace";
 
-    const auto destination = File::getSpecialLocation (File::userHomeDirectory) // TODO - make it configurable
-                                 .getChildFile (fileName);
+    File destination;
+    if (outputFolder != File() && outputFolder.isDirectory())
+        destination = outputFolder;
+    else
+        destination = File::getSpecialLocation (File::userHomeDirectory);
+
+    destination = destination.getChildFile (fileName);
 
     if (destination.existsAsFile())
         destination.deleteFile();
@@ -119,6 +125,13 @@ void Profiler::stopTracing()
     close (fileDescriptor);
 
     Profiler::deleteInstance();
+}
+
+//==============================================================================
+
+void Profiler::setOutputFolder (const File& newOutputFolder)
+{
+    outputFolder = newOutputFolder;
 }
 
 } // namespace juce
