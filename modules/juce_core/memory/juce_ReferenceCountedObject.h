@@ -144,7 +144,7 @@ protected:
     /** Resets the reference count to zero without deleting the object.
         You should probably never need to use this!
     */
-    void resetReferenceCount() noexcept
+    void resetReferenceCount() const noexcept
     {
         refCount = 0;
     }

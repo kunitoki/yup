@@ -221,10 +221,10 @@ struct Application : yup::YUPApplication
         window->setVisible (true);
         window->toFront();
 
-        window2 = std::make_unique<CustomWindow2>();
-        window2->centreWithSize ({ 300, 300 });
-        window2->setVisible (true);
-        window2->toFront();
+        //window2 = std::make_unique<CustomWindow2>();
+        //window2->centreWithSize ({ 300, 300 });
+        //window2->setVisible (true);
+        //window2->toFront();
     }
 
     void shutdown() override
@@ -233,14 +233,14 @@ struct Application : yup::YUPApplication
 
         window.reset();
 
-        window2.reset();
+        //window2.reset();
 
         YUP_PROFILE_STOP();
     }
 
 private:
     std::unique_ptr<CustomWindow> window;
-    std::unique_ptr<CustomWindow2> window2;
+    //std::unique_ptr<CustomWindow2> window2;
 };
 
 START_JUCE_APPLICATION (Application)

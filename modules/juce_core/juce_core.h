@@ -202,6 +202,13 @@
 #define JUCE_PROFILING_CATEGORIES
 #endif
 
+/** Config: JUCE_PROFILING_FILE_PREFIX
+    If provided, it will be used as prefix for profilation files generated. By default it will use "yup-profile".
+*/
+#ifndef JUCE_PROFILING_FILE_PREFIX
+#define JUCE_PROFILING_FILE_PREFIX "yup-profile"
+#endif
+
 #ifndef JUCE_STRING_UTF_TYPE
 #define JUCE_STRING_UTF_TYPE 8
 #endif

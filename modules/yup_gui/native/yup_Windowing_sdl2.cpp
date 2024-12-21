@@ -23,193 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-#define YUP_VERBOSE_WINDOWING_DBG 1
-
-#if YUP_VERBOSE_WINDOWING_DBG
-#define YUP_DBG_WINDOWING(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
-    juce::String tempDbgBuf;                                              \
-    tempDbgBuf << textToWrite;                                            \
-    juce::Logger::outputDebugString (tempDbgBuf);)
-#else
-#define YUP_DBG_WINDOWING(textToWrite)
-#endif
-
-//==============================================================================
-
-class SDL2ComponentNative final
-    : public ComponentNative
-    , public Timer
-    , public Thread
-    , public AsyncUpdater
-{
-public:
-    //==============================================================================
-
-    SDL2ComponentNative (Component& component,
-                         const Options& options,
-                         void* parent);
-
-    ~SDL2ComponentNative() override;
-
-    //==============================================================================
-
-    void setTitle (const String& title) override;
-    String getTitle() const override;
-
-    //==============================================================================
-
-    void setVisible (bool shouldBeVisible) override;
-    bool isVisible() const override;
-
-    //==============================================================================
-
-    void setSize (const Size<int>& size) override;
-    Size<int> getSize() const override;
-    Size<int> getContentSize() const override;
-
-    Point<int> getPosition() const override;
-    void setPosition (const Point<int>& newPosition) override;
-
-    Rectangle<int> getBounds() const override;
-    void setBounds (const Rectangle<int>& newBounds) override;
-
-    //==============================================================================
-
-    void setFullScreen (bool shouldBeFullScreen) override;
-    bool isFullScreen() const override;
-
-    //==============================================================================
-
-    bool isDecorated() const override;
-
-    //==============================================================================
-    bool isContinuousRepaintingEnabled() const override;
-    void enableContinuousRepainting (bool shouldBeEnabled) override;
-    bool isAtomicModeEnabled() const override;
-    void enableAtomicMode (bool shouldBeEnabled) override;
-    bool isWireframeEnabled() const override;
-    void enableWireframe (bool shouldBeEnabled) override;
-
-    //==============================================================================
-    void repaint() override;
-    void repaint (const Rectangle<float>& rect) override;
-    Rectangle<float> getRepaintArea() const override;
-
-    //==============================================================================
-
-    float getScaleDpi() const override;
-    float getCurrentFrameRate() const override;
-    float getDesiredFrameRate() const override;
-
-    //==============================================================================
-
-    void setOpacity (float opacity) override;
-    float getOpacity() const override;
-
-    //==============================================================================
-
-    void setFocusedComponent (Component* comp) override;
-    Component* getFocusedComponent() const override;
-
-    //==============================================================================
-
-    rive::Factory* getFactory() override;
-
-    //==============================================================================
-
-    void* getNativeHandle() const override;
-
-    //==============================================================================
-
-    void run() override;
-    void handleAsyncUpdate() override;
-    void timerCallback() override;
-
-    //==============================================================================
-    Point<float> getCursorPosition() const;
-
-    //==============================================================================
-    void handleMouseMoveOrDrag (const Point<float>& localPosition);
-    void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
-    void handleKeyDown (const KeyPress& keys, const Point<float>& position);
-    void handleKeyUp (const KeyPress& keys, const Point<float>& position);
-    void handleTextInput (const String& textInput);
-    void handleMoved (int xpos, int ypos);
-    void handleResized (int width, int height);
-    void handleFocusChanged (bool gotFocus);
-    void handleMinimized();
-    void handleMaximized();
-    void handleRestored();
-    void handleExposed();
-    void handleContentScaleChanged();
-    void handleUserTriedToCloseWindow();
-
-    //==============================================================================
-    void handleWindowEvent (const SDL_WindowEvent& windowEvent);
-
-    //==============================================================================
-    void handleEvent (SDL_Event* event);
-    static int eventDispatcher (void* userdata, SDL_Event* event);
-
-    //==============================================================================
-    static std::atomic_flag isInitialised;
-
-private:
-    void updateComponentUnderMouse (const MouseEvent& event);
-    void renderContext();
-
-    void startRendering();
-    void stopRendering();
-    bool isRendering() const;
-
-    SDL_Window* window = nullptr;
-    SDL_GLContext windowContext = nullptr;
-
-    void* parentWindow = nullptr;
-    String windowTitle;
-    uint32 windowFlags = 0;
-
-    GraphicsContext::Api currentGraphicsApi;
-
-    std::unique_ptr<GraphicsContext> context;
-    std::unique_ptr<rive::Renderer> renderer;
-
-    Color clearColor;
-    float currentScaleDpi = 1.0f;
-    Rectangle<int> screenBounds = { 0, 0, 1, 1 };
-    Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
-    Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
-    std::optional<Point<float>> lastMouseDownPosition;
-    std::optional<juce::Time> lastMouseDownTime;
-
-    WeakReference<Component> lastComponentClicked;
-    WeakReference<Component> lastComponentFocused;
-    WeakReference<Component> lastComponentUnderMouse;
-
-    HashMap<int, char> keyState;
-    MouseEvent::Buttons currentMouseButtons = MouseEvent::noButtons;
-    KeyModifiers currentKeyModifiers;
-
-    RelativeTime doubleClickTime;
-
-    float desiredFrameRate = 60.0f;
-    std::atomic<float> currentFrameRate = 0.0f;
-
-    int currentContentWidth = 0;
-    int currentContentHeight = 0;
-
-    WaitableEvent renderEvent { true };
-    std::atomic<bool> shouldRenderContinuous = false;
-    double lastRenderTimeSeconds = 0.0;
-    bool renderAtomicMode = false;
-    bool renderWireframe = false;
-
-    Rectangle<float> currentRepaintArea;
-};
-
-//==============================================================================
 
 std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
@@ -227,6 +40,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
     , shouldRenderContinuous (options.flags.test (renderContinuous))
+    , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
 {
     SDL_AddEventWatch (eventDispatcher, this);
 
@@ -302,9 +116,8 @@ SDL2ComponentNative::~SDL2ComponentNative()
     {
         SDL_SetWindowData (window, "self", nullptr);
         SDL_DestroyWindow (window);
+        window = nullptr;
     }
-
-    window = nullptr;
 }
 
 //==============================================================================
@@ -622,9 +435,6 @@ void SDL2ComponentNative::run()
     const double maxFrameTimeSeconds = 1.0 / static_cast<double> (desiredFrameRate);
     const double maxFrameTimeMs = maxFrameTimeSeconds * 1000.0;
 
-    double fpsMeasureStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-    uint64_t frameCounter = 0;
-
     while (! threadShouldExit())
     {
         double frameStartTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -649,19 +459,6 @@ void SDL2ComponentNative::run()
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
                 Thread::sleep (0);
-        }
-
-        // Measure current framerate
-        ++frameCounter;
-
-        const double timeSinceFpsMeasure = currentTimeSeconds - fpsMeasureStartTimeSeconds;
-        if (timeSinceFpsMeasure >= 1.0)
-        {
-            const double currentFps = static_cast<double> (frameCounter) / timeSinceFpsMeasure;
-            currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-            fpsMeasureStartTimeSeconds = currentTimeSeconds;
-            frameCounter = 0;
         }
     }
 }
@@ -715,9 +512,13 @@ void SDL2ComponentNative::renderContext()
         setPosition (nativeWindowPos.getTopLeft());
     }
 
-    auto newElapsedTime = juce::Time::getMillisecondCounterHiRes();
-    component.internalRefreshDisplay (newElapsedTime - lastRenderTimeSeconds);
-    lastRenderTimeSeconds = newElapsedTime;
+    auto currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
+
+        component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+    }
 
     if (renderContinuous)
         repaint();
@@ -734,8 +535,8 @@ void SDL2ComponentNative::renderContext()
                                   : rive::gpu::LoadAction::preserveRenderTarget;
 
         rive::gpu::RenderContext::FrameDescriptor frameDescriptor;
-        frameDescriptor.renderTargetWidth = static_cast<uint32_t> (contentWidth);
-        frameDescriptor.renderTargetHeight = static_cast<uint32_t> (contentHeight);
+        frameDescriptor.renderTargetWidth = static_cast<uint32_t> (currentContentWidth);
+        frameDescriptor.renderTargetHeight = static_cast<uint32_t> (currentContentHeight);
         frameDescriptor.loadAction = loadAction;
         frameDescriptor.clearColor = clearColor.getARGB();
         frameDescriptor.disableRasterOrdering = renderAtomicMode;
@@ -776,6 +577,19 @@ void SDL2ComponentNative::renderContext()
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
         SDL_GL_SwapWindow (window);
 
+    // Compute framerate
+    ++frameRateCounter;
+
+    const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
+    if (timeSinceFpsMeasure >= 1.0)
+    {
+        const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
+        currentFrameRate.store (currentFps, std::memory_order_relaxed);
+
+        frameRateStartTimeSeconds = currentTimeSeconds;
+        frameRateCounter = 0;
+    }
+
     currentRepaintArea = {};
 }
 
@@ -783,42 +597,49 @@ void SDL2ComponentNative::renderContext()
 
 void SDL2ComponentNative::startRendering()
 {
-    lastRenderTimeSeconds = juce::Time::getMillisecondCounterHiRes();
+    lastRenderTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    frameRateStartTimeSeconds = lastRenderTimeSeconds;
+    frameRateCounter = 0;
 
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    if (! isTimerRunning())
-        startTimerHz (desiredFrameRate);
-#else
-    if (! isThreadRunning())
-        startThread (Priority::high);
-#endif
+    if constexpr (renderDrivenByTimer)
+    {
+        if (! isTimerRunning())
+            startTimerHz (desiredFrameRate);
+    }
+    else
+    {
+        if (! isThreadRunning())
+            startThread (Priority::high);
+    }
 
     repaint();
 }
 
 void SDL2ComponentNative::stopRendering()
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    if (isTimerRunning())
-        stopTimer();
-#else
-    if (isThreadRunning())
+    if constexpr (renderDrivenByTimer)
     {
-        signalThreadShouldExit();
-        notify();
-        renderEvent.signal();
-        stopThread (-1);
+        if (isTimerRunning())
+            stopTimer();
     }
-#endif
+    else
+    {
+        if (isThreadRunning())
+        {
+            signalThreadShouldExit();
+            notify();
+            renderEvent.signal();
+            stopThread (-1);
+        }
+    }
 }
 
 bool SDL2ComponentNative::isRendering() const
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    return isTimerRunning();
-#else
-    return isThreadRunning();
-#endif
+    if constexpr (renderDrivenByTimer)
+        return isTimerRunning();
+    else
+        return isThreadRunning();
 }
 
 //==============================================================================
@@ -991,8 +812,6 @@ void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
 
 void SDL2ComponentNative::handleTextInput (const String& textInput)
 {
-    DBG ("handleTextInput: " << textInput);
-
     if (lastComponentFocused != nullptr)
         lastComponentFocused->internalTextInput (textInput);
     else
@@ -1003,8 +822,6 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
-    YUP_PROFILE_INTERNAL_TRACE();
-
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
@@ -1012,8 +829,6 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 
 void SDL2ComponentNative::handleResized (int width, int height)
 {
-    YUP_PROFILE_INTERNAL_TRACE();
-
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
@@ -1027,6 +842,11 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
     if (gotFocus)
     {
         startRendering();
+    }
+    else
+    {
+        if (updateOnlyWhenFocused)
+            stopRendering();
     }
 }
 
@@ -1042,13 +862,11 @@ void SDL2ComponentNative::handleMaximized()
 
 void SDL2ComponentNative::handleRestored()
 {
-    startRendering();
+    repaint();
 }
 
 void SDL2ComponentNative::handleExposed()
 {
-    YUP_PROFILE_INTERNAL_TRACE();
-
     repaint();
 }
 
@@ -1372,16 +1190,16 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
-    SDL_SetMainReady();
-
     // Initialise SDL
+    SDL_SetMainReady();
     if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
         DBG ("Error initialising SDL: " << SDL_GetError());
 
         jassertfalse;
-
         JUCEApplicationBase::quit();
+
+        return;
     }
 
     // Update available displays
@@ -1390,32 +1208,25 @@ void initialiseYup_Windowing()
 
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
-                                                              {
-                                                                  constexpr double timeoutInterval = 1.0 / 60.0;
+    {
+        YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
 
-                                                                  YUP_PROFILE_NAMED_INTERNAL_TRACE (EventLoop);
+        constexpr double timeoutInterval = 1.0 / 60.0; // TODO
+        auto timeoutDetector = TimeoutDetector (timeoutInterval);
 
-                                                                  bool timeoutProcessingEvents = false;
-                                                                  auto timeoutDetector = TimeoutDetector (timeoutInterval);
+        SDL_Event event;
+        while (SDL_PollEvent (&event))
+        {
+            if (MessageManager::getInstance()->hasStopMessageBeenSent())
+                break;
 
-                                                                  SDL_Event event;
-                                                                  while (SDL_PollEvent (&event))
-                                                                  {
-                                                                      YUP_PROFILE_NAMED_INTERNAL_TRACE (PollEvent);
+            if (timeoutDetector.hasTimedOut())
+                break;
+        }
 
-                                                                      if (MessageManager::getInstance()->hasStopMessageBeenSent())
-                                                                          return;
-
-                                                                      if (timeoutDetector.hasTimedOut())
-                                                                      {
-                                                                          timeoutProcessingEvents = true;
-                                                                          break;
-                                                                      }
-                                                                  }
-
-                                                                  if (! timeoutProcessingEvents)
-                                                                      SDL_Delay (1);
-                                                              });
+        if (! timeoutDetector.hasTimedOut())
+            Thread::sleep (1);
+    });
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }

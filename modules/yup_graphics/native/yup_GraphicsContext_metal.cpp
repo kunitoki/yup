@@ -78,7 +78,7 @@ public:
         m_swapchain.contentsScale = dpiScale (window);
         m_swapchain.maximumDrawableCount = 2;
 #if ! TARGET_OS_IOS
-        m_swapchain.displaySyncEnabled = YES;
+        m_swapchain.displaySyncEnabled = NO;
 #endif
 
 #if TARGET_OS_IOS
