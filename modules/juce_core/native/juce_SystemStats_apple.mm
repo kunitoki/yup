@@ -311,6 +311,7 @@ String SystemStats::getUserLanguage()
 {
     return getLocaleValue(kCFLocaleLanguageCode);
 }
+
 String SystemStats::getUserRegion()
 {
     return getLocaleValue(kCFLocaleCountryCode);
@@ -375,14 +376,17 @@ uint32 juce_millisecondsSinceStartup() noexcept
 {
     return hiResCounterInfo.millisecondsSinceStartup();
 }
+
 double Time::getMillisecondCounterHiRes() noexcept
 {
     return hiResCounterInfo.getMillisecondCounterHiRes();
 }
+
 int64 Time::getHighResolutionTicksPerSecond() noexcept
 {
     return hiResCounterInfo.highResTimerFrequency;
 }
+
 int64 Time::getHighResolutionTicks() noexcept
 {
     return (int64)mach_absolute_time();
