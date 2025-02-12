@@ -40,17 +40,25 @@ public:
     SineWaveGenerator()
         : sampleRate (44100.0)
         , currentAngle (0.0)
-        , angleDelta (0.0)
+        , frequency (0.0)
         , amplitude (0.0)
     {
     }
 
-    void setFrequency (double frequency, double newSampleRate)
+    void setSampleRate (double newSampleRate)
     {
         sampleRate = newSampleRate;
-        angleDelta = (juce::MathConstants<double>::twoPi * frequency) / sampleRate;
 
-        amplitude.reset (sampleRate, 0.1);
+        frequency.reset (newSampleRate, 0.1);
+        amplitude.reset (newSampleRate, 0.1);
+    }
+
+    void setFrequency (double newFrequency, bool immediate = false)
+    {
+        if (immediate)
+            frequency.setCurrentAndTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+        else
+            frequency.setTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
     }
 
     void setAmplitude (float newAmplitude)
@@ -58,11 +66,16 @@ public:
         amplitude.setTargetValue (newAmplitude);
     }
 
+    float getAmplitude() const
+    {
+        return amplitude.getCurrentValue();
+    }
+
     float getNextSample()
     {
         auto sample = std::sin (currentAngle) * amplitude.getNextValue();
 
-        currentAngle += angleDelta;
+        currentAngle += frequency.getNextValue();
         if (currentAngle >= juce::MathConstants<double>::twoPi)
             currentAngle -= juce::MathConstants<double>::twoPi;
 
@@ -72,7 +85,7 @@ public:
 private:
     double sampleRate;
     double currentAngle;
-    double angleDelta;
+    yup::SmoothedValue<float> frequency;
     yup::SmoothedValue<float> amplitude;
 };
 
@@ -86,7 +99,7 @@ public:
     {
     }
 
-    void setRenderData (const std::vector<float>& data)
+    void setRenderData (const std::vector<float>& data, int newReadPos)
     {
         renderData.resize (data.size());
 
@@ -104,11 +117,9 @@ public:
 
         float xSize = getWidth() / float (renderData.size());
 
-        yup::Path path;
+        path.reserveSpace ((int) renderData.size());
+        path.clear();
         path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
-
-        for (size_t i = 1; i < renderData.size(); ++i)
-            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
         g.setStrokeColor (0xff4b4bff);
         g.setStrokeWidth (2.0f);
@@ -117,6 +128,7 @@ public:
 
 private:
     std::vector<float> renderData;
+    yup::Path path;
 };
 
 //==============================================================================
@@ -176,7 +188,8 @@ public:
         for (size_t i = 0; i < sineWaveGenerators.size(); ++i)
         {
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
-            sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), sampleRate);
+            sineWaveGenerators[i]->setSampleRate (sampleRate);
+            sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i + 1), true);
         }
 
         deviceManager.addAudioCallback (this);
@@ -186,9 +199,10 @@ public:
         {
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i), font));
 
-            slider->onValueChanged = [this, i] (float value)
+            slider->onValueChanged = [this, i, sampleRate] (float value)
             {
-                sineWaveGenerators[i]->setAmplitude (value);
+                sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1 + value, i + 1));
+                sineWaveGenerators[i]->setAmplitude (value * 0.5);
             };
 
             addAndMakeVisible (slider);
@@ -303,7 +317,7 @@ public:
     {
         {
             const yup::CriticalSection::ScopedLockType sl (renderMutex);
-            oscilloscope.setRenderData (renderData);
+            oscilloscope.setRenderData (renderData, readPos);
         }
 
         oscilloscope.repaint();
@@ -324,17 +338,23 @@ public:
         for (int sample = 0; sample < numSamples; ++sample)
         {
             float mixedSample = 0.0f;
+            float totalScale = 0.0f;
 
             for (int i = 0; i < sineWaveGenerators.size(); ++i)
+            {
                 mixedSample += sineWaveGenerators[i]->getNextSample();
+                totalScale += sineWaveGenerators[i]->getAmplitude();
+            }
 
-            mixedSample /= static_cast<float> (sineWaveGenerators.size());
+            if (totalScale > 1.0f)
+                mixedSample /= static_cast<float> (totalScale);
 
             for (int channel = 0; channel < numOutputChannels; ++channel)
                 outputChannelData[channel][sample] = mixedSample;
 
-            inputData[readPos++] = mixedSample;
-            readPos %= inputData.size();
+            auto pos = readPos.fetch_add (1);
+            inputData[pos] = mixedSample;
+            readPos = readPos % inputData.size();
         }
 
         const yup::CriticalSection::ScopedLockType sl (renderMutex);
@@ -381,7 +401,7 @@ private:
     std::vector<float> renderData;
     std::vector<float> inputData;
     yup::CriticalSection renderMutex;
-    int readPos = 0;
+    std::atomic_int readPos = 0;
 
     yup::OwnedArray<yup::Slider> sliders;
     int totalRows = 4;
