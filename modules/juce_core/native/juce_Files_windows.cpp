@@ -737,7 +737,7 @@ uint64 File::getFileIdentifier() const
     if (isRoot())
         path += "\\";
 
-    auto h = CreateFile (toLongPath (path.toWideCharPointer()),
+    auto h = CreateFile (toLongPath (path).toWideCharPointer(),
                          GENERIC_READ,
                          FILE_SHARE_READ,
                          nullptr,
