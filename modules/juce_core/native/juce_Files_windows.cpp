@@ -89,7 +89,7 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 //==============================================================================
-juce::String toLongPath(const juce::String& path)
+juce::String toLongPath (const juce::String& path)
 {
     return L"\\\\?\\" + path;
 }
@@ -433,8 +433,8 @@ Result File::createDirectoryInternal (const String& fileName) const
     using namespace WindowsFileHelpers;
 
     return CreateDirectory (toLongPath (fileName).toWideCharPointer(), nullptr)
-        ? Result::ok()
-        : WindowsFileHelpers::getResultForLastError();
+             ? Result::ok()
+             : WindowsFileHelpers::getResultForLastError();
 }
 
 //==============================================================================
