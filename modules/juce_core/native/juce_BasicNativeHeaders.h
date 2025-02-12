@@ -126,6 +126,7 @@
 #include <shlwapi.h>
 #include <mmsystem.h>
 #include <winioctl.h>
+#include <pathcch.h>
 
 #ifndef SECURITY_WIN32
 #define SECURITY_WIN32
@@ -164,6 +165,7 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "secur32.lib")
+#pragma comment(lib, "pathcch.lib")
 
 #ifdef _NATIVE_WCHAR_T_DEFINED
 #ifdef _DEBUG
