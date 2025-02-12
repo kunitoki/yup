@@ -170,7 +170,6 @@ private:
     std::unique_ptr<rive::Renderer> renderer;
 
     Color clearColor;
-    float currentScaleDpi = 1.0f;
     Rectangle<int> screenBounds = { 0, 0, 1, 1 };
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };

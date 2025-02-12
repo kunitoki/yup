@@ -183,11 +183,9 @@ Size<int> SDL2ComponentNative::getSize() const
 
 Size<int> SDL2ComponentNative::getContentSize() const
 {
-    int width = 0, height = 0;
-
     const auto dpiScale = getScaleDpi();
-    width = static_cast<int> (screenBounds.getWidth() * dpiScale);
-    height = static_cast<int> (screenBounds.getHeight() * dpiScale);
+    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
     return { width, height };
 }
@@ -484,14 +482,15 @@ void SDL2ComponentNative::renderContext()
 {
     YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderContext);
 
+    if (context == nullptr)
+        return;
+
     const auto contentSize = getContentSize();
     auto contentWidth = contentSize.getWidth();
     auto contentHeight = contentSize.getHeight();
 
-    if (context == nullptr || contentWidth == 0 || contentHeight == 0)
+    if (contentWidth == 0 || contentHeight == 0)
         return;
-
-    auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
 
     if (currentContentWidth != contentWidth || currentContentHeight != contentHeight)
     {
@@ -506,18 +505,15 @@ void SDL2ComponentNative::renderContext()
         repaint();
     }
 
-    if (parentWindow != nullptr)
-    {
-        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
-        setPosition (nativeWindowPos.getTopLeft());
-    }
-
+    auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
     auto currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    const auto dpiScale = getScaleDpi();
 
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
 
         component.internalRefreshDisplay (currentTimeSeconds - lastRenderTimeSeconds);
+        lastRenderTimeSeconds = currentTimeSeconds;
     }
 
     if (renderContinuous)
@@ -543,6 +539,7 @@ void SDL2ComponentNative::renderContext()
         frameDescriptor.wireframe = renderWireframe;
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
+        frameDescriptor.clockwiseFill = false;
 
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
@@ -556,7 +553,7 @@ void SDL2ComponentNative::renderContext()
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
 
-            Graphics g (*context, *renderer, currentScaleDpi);
+            Graphics g (*context, *renderer, dpiScale);
             component.internalPaint (g, currentRepaintArea, renderContinuous);
         }
 
@@ -825,6 +822,12 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
+
+    if (parentWindow != nullptr)
+    {
+        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        setPosition (nativeWindowPos.getTopLeft());
+    }
 }
 
 void SDL2ComponentNative::handleResized (int width, int height)
@@ -832,7 +835,12 @@ void SDL2ComponentNative::handleResized (int width, int height)
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
-    currentScaleDpi = getScaleDpi();
+
+    if (parentWindow != nullptr)
+    {
+        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        setPosition (nativeWindowPos.getTopLeft());
+    }
 
     repaint();
 }
@@ -874,13 +882,7 @@ void SDL2ComponentNative::handleContentScaleChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    int width = screenBounds.getWidth();
-    int height = screenBounds.getHeight();
-
-    if (window != nullptr)
-        SDL_GetWindowSize (window, &width, &height);
-
-    handleResized (width, height);
+    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
 }
 
 void SDL2ComponentNative::handleUserTriedToCloseWindow()
