@@ -45,9 +45,10 @@ Result Artboard::loadFromFile (const File& file, int defaultArtboardIndex, bool 
 
 Result Artboard::loadFromStream (InputStream& is, int defaultArtboardIndex, bool shouldUseStateMachines)
 {
-    jassert (getNativeComponent() != nullptr); // Must be added to a NativeComponent !
+    if (getNativeComponent() == nullptr)
+        return Result::fail ("Unable to access top level native component");
 
-    rive::Factory* factory = getNativeComponent()->getFactory();
+    auto factory = getNativeComponent()->getFactory();
     if (factory == nullptr)
         return Result::fail ("Failed to create a graphics context");
 
