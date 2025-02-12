@@ -118,7 +118,11 @@ void BackgroundShaderCompiler::threadMain()
         }
         if (shaderMiscFlags & gpu::ShaderMiscFlags::clockwiseFill)
         {
-            defines[@GLSL_CLOCKWISE_FILL] = @"";
+            defines[@GLSL_CLOCKWISE_FILL] = @"1";
+        }
+        if (shaderMiscFlags & gpu::ShaderMiscFlags::atlasCoverage)
+        {
+            defines[@GLSL_ATLAS_COVERAGE] = @"1";
         }
 
         auto source =
@@ -134,6 +138,7 @@ void BackgroundShaderCompiler::threadMain()
         switch (drawType)
         {
             case DrawType::midpointFanPatches:
+            case DrawType::midpointFanCenterAAPatches:
             case DrawType::outerCurvePatches:
                 // Add baseInstance to the instanceID for path draws.
                 defines[@GLSL_ENABLE_INSTANCE_INDEX] = @"";
@@ -169,6 +174,7 @@ void BackgroundShaderCompiler::threadMain()
                 assert(interlockMode == InterlockMode::atomics);
                 defines[@GLSL_DRAW_IMAGE] = @"";
                 defines[@GLSL_DRAW_IMAGE_RECT] = @"";
+                [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
                 [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
 #endif
                 break;
@@ -178,11 +184,15 @@ void BackgroundShaderCompiler::threadMain()
 #ifdef RIVE_IOS
                 [source appendFormat:@"%s\n", gpu::glsl::draw_image_mesh];
 #else
-                [source appendFormat:@"%s\n",
-                                     interlockMode ==
-                                             gpu::InterlockMode::rasterOrdering
-                                         ? gpu::glsl::draw_image_mesh
-                                         : gpu::glsl::atomic_draw];
+                if (interlockMode == gpu::InterlockMode::rasterOrdering)
+                {
+                    [source appendFormat:@"%s\n", gpu::glsl::draw_image_mesh];
+                }
+                else
+                {
+                    [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
+                    [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
+                }
 #endif
                 break;
             case DrawType::atomicInitialize:
@@ -201,6 +211,7 @@ void BackgroundShaderCompiler::threadMain()
                 {
                     defines[@GLSL_SWIZZLE_COLOR_BGRA_TO_RGBA] = @"";
                 }
+                [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
                 [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
 #endif
                 break;
@@ -216,6 +227,7 @@ void BackgroundShaderCompiler::threadMain()
                 {
                     defines[@GLSL_COALESCED_PLS_RESOLVE_AND_TRANSFER] = @"";
                 }
+                [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
                 [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
 #endif
                 break;

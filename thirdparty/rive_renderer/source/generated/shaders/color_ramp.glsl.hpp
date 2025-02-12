@@ -6,26 +6,26 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char color_ramp[] = R"===(#ifdef AB
-Y0(V)
-#ifdef h6
-a0(0,uint,OC);a0(1,uint,PC);a0(2,uint,QC);a0(3,uint,RC);
+L0(e0)
+#ifdef G7
+h0(0,uint,TC);h0(1,uint,UC);h0(2,uint,VC);h0(3,uint,WC);
 #else
-a0(0,G,NB);
+h0(0,D,ZB);
 #endif
-Z0
+M0
 #endif
-H1 w0 W(0,i,v4);I1
+o1 o0 H(0,i,h5);p1
 #ifdef AB
-R1 S1 f2 g2 i P9(uint j){return E7((G(j,j,j,j)>>G(16,8,0,24))&0xffu)/255.;}h1(RD,V,q,n,H){
-#ifdef h6
-f0(H,q,OC,uint);f0(H,q,PC,uint);f0(H,q,QC,uint);f0(H,q,RC,uint);G NB=G(OC,PC,QC,RC);
+H2 I2 r3 v3 i Jb(uint j){return m9((D(j,j,j,j)>>D(16,8,0,24))&0xffu)/255.;}Z0(XD,e0,o,l,I){
+#ifdef G7
+k0(I,o,TC,uint);k0(I,o,UC,uint);k0(I,o,VC,uint);k0(I,o,WC,uint);D ZB=D(TC,UC,VC,WC);
 #else
-f0(H,q,NB,G);
+k0(I,o,ZB,D);
 #endif
-c0(v4,i);float x=float((n&1)==0?NB.x&0xffffu:NB.x>>16)/65536.;float i6=(n&2)==0?1.:.0;if(P.j6<.0){i6=1.-i6;}v4=P9((n&1)==0?NB.z:NB.w);g T;T.x=x*2.-1.;T.y=(float(NB.y)+i6)*P.j6-sign(P.j6);T.zw=f(0,1);d0(v4);i1(T);}
+P(h5,i);int l6=l>>1;float x=float(l6<=1?ZB.x&0xffffu:ZB.x>>16)/65536.;float H7=(l&1)==0?.0:1.;if(m.n9<.0){H7=1.-H7;}uint i5=ZB.y;float y=float(i5&~Kb)+H7;if((i5&o9)!=0u&&l6==0){if((i5&I7)!=0u)x=.0;else x-=p9;}if((i5&q9)!=0u&&l6==3){if((i5&I7)!=0u)x=1.;else x+=p9;}h5=Jb(l6<=1?ZB.z:ZB.w);e Q=m6(c(x,y),2.,m.n9);X(h5);U0(Q);}
 #endif
-#ifdef EB
-q2(i,SD){Y(v4,i);r2(v4);}
+#ifdef HB
+J2 L2 T1(i,YD){Z(h5,i);U1(h5);}
 #endif
 )===";
 } // namespace glsl

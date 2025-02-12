@@ -3,6 +3,8 @@
 
 #include <string>
 #include <stdint.h>
+#include <vector>
+#include <algorithm>
 
 namespace rive
 {
@@ -73,17 +75,45 @@ public:
     void value(float newValue);
 };
 
-class SMITrigger : public SMIInput
+class Triggerable
+{
+
+public:
+    bool isUsedInLayer(StateMachineLayerInstance* layer) const
+    {
+        auto it = std::find(m_usedLayers.begin(), m_usedLayers.end(), layer);
+        if (it == m_usedLayers.end())
+        {
+            return false;
+        }
+        return true;
+    }
+    void useInLayer(StateMachineLayerInstance* layer) const
+    {
+        auto it = std::find(m_usedLayers.begin(), m_usedLayers.end(), layer);
+        if (it == m_usedLayers.end())
+        {
+            m_usedLayers.push_back(layer);
+        }
+    }
+
+protected:
+    mutable std::vector<StateMachineLayerInstance*> m_usedLayers;
+};
+
+class SMITrigger : public SMIInput, public Triggerable
 {
     friend class StateMachineInstance;
     friend class TransitionTriggerCondition;
-
-private:
     bool m_fired = false;
 
     SMITrigger(const StateMachineTrigger* input,
                StateMachineInstance* machineInstance);
-    void advanced() override { m_fired = false; }
+    void advanced() override
+    {
+        m_fired = false;
+        m_usedLayers.clear();
+    }
 
 public:
     void fire();

@@ -139,7 +139,7 @@ void Artboard::paint (Graphics& g)
 
 void Artboard::resized()
 {
-    auto scaleDpi = getNativeComponent()->getScaleDpi();
+    auto scaleDpi = getNativeComponent() ? getNativeComponent()->getScaleDpi() : 1.0f;
     auto scaledBounds = getBounds() * scaleDpi;
 
     auto frameBounds = rive::AABB (
@@ -281,6 +281,7 @@ void Artboard::updateSceneFromFile()
 
     artboard = std::move (currentArtboard);
     scene = std::move (currentScene);
+
     if (currentStateMachine)
         stateMachine = currentStateMachine;
 }

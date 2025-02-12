@@ -164,8 +164,6 @@ protected:
         size_t capacityInBytes, StorageBufferStructure) override;
     std::unique_ptr<BufferRing> makeVertexBufferRing(
         size_t capacityInBytes) override;
-    std::unique_ptr<BufferRing> makeTextureTransferBufferRing(
-        size_t capacityInBytes) override;
 
 private:
     // Renders paths to the main render target.
@@ -173,6 +171,7 @@ private:
 
     void resizeGradientTexture(uint32_t width, uint32_t height) override;
     void resizeTessellationTexture(uint32_t width, uint32_t height) override;
+    void resizeAtlasTexture(uint32_t width, uint32_t height) override;
 
     // Obtains an exclusive lock on the next buffer ring index, potentially
     // blocking until the GPU has finished rendering with it. This ensures it is
@@ -211,11 +210,20 @@ private:
     std::unique_ptr<ColorRampPipeline> m_colorRampPipeline;
     id<MTLTexture> m_gradientTexture = nullptr;
 
+    // Gaussian integral table for feathering.
+    id<MTLTexture> m_featherTexture = nullptr;
+
     // Renders tessellated vertices to the tessellation texture.
     class TessellatePipeline;
     std::unique_ptr<TessellatePipeline> m_tessPipeline;
     id<MTLBuffer> m_tessSpanIndexBuffer = nullptr;
     id<MTLTexture> m_tessVertexTexture = nullptr;
+
+    // Atlas rendering.
+    class AtlasPipeline;
+    std::unique_ptr<AtlasPipeline> m_atlasFillPipeline;
+    std::unique_ptr<AtlasPipeline> m_atlasStrokePipeline;
+    id<MTLTexture> m_atlasTexture = nullptr;
 
     std::map<uint32_t, std::unique_ptr<DrawPipeline>> m_drawPipelines;
 

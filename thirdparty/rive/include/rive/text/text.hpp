@@ -4,6 +4,7 @@
 #include "rive/math/aabb.hpp"
 #include "rive/text/text_value_run.hpp"
 #include "rive/text_engine.hpp"
+#include "rive/shapes/shape_paint_path.hpp"
 #include "rive/simple_array.hpp"
 #include <vector>
 #include "rive/text/glyph_lookup.hpp"
@@ -148,7 +149,9 @@ public:
     const GlyphRun* lastRun() const { return m_runs.back(); }
     uint32_t startGlyphIndex(const GlyphRun* run) const
     {
-        switch (run->dir)
+        TextDirection dir =
+            run->level & 1 ? TextDirection::rtl : TextDirection::ltr;
+        switch (dir)
         {
             case TextDirection::ltr:
                 return m_startLogical == run ? m_startGlyphIndex : 0;
@@ -161,7 +164,9 @@ public:
     }
     uint32_t endGlyphIndex(const GlyphRun* run) const
     {
-        switch (run->dir)
+        TextDirection dir =
+            run->level & 1 ? TextDirection::rtl : TextDirection::ltr;
+        switch (dir)
         {
             case TextDirection::ltr:
                 return m_endLogical == run ? m_endGlyphIndex
@@ -186,7 +191,9 @@ public:
     void markPaintDirty();
     void update(ComponentDirt value) override;
     Mat2D m_transform;
+    Mat2D m_shapeWorldTransform;
 
+    const Mat2D& shapeWorldTransform() const { return m_shapeWorldTransform; }
     TextSizing sizing() const { return (TextSizing)sizingValue(); }
     TextSizing effectiveSizing() const;
     TextOverflow overflow() const { return (TextOverflow)overflowValue(); }
@@ -208,7 +215,9 @@ public:
                         LayoutMeasureMode widthMode,
                         float height,
                         LayoutMeasureMode heightMode) override;
-    void controlSize(Vec2D size) override;
+    void controlSize(Vec2D size,
+                     LayoutScaleType widthScaleType,
+                     LayoutScaleType heightScaleType) override;
     float effectiveWidth()
     {
         return std::isnan(m_layoutWidth) ? width() : m_layoutWidth;
@@ -276,7 +285,8 @@ private:
     // Runs ordered by paragraph line.
     std::vector<OrderedLine> m_orderedLines;
     GlyphRun m_ellipsisRun;
-    rcp<RenderPath> m_clipRenderPath;
+    RawPath m_clipRect;
+    ShapePaintPath m_clipPath;
     AABB m_bounds;
     std::vector<TextModifierGroup*> m_modifierGroups;
 
@@ -287,9 +297,8 @@ private:
 #endif
     float m_layoutWidth = NAN;
     float m_layoutHeight = NAN;
-    // If set to true, it means the parent LayoutComponent is set to hug
-    // and has called measureLayout() on this text component
-    bool m_layoutMeasured = false;
+    uint8_t m_layoutWidthScaleType = std::numeric_limits<uint8_t>::max();
+    uint8_t m_layoutHeightScaleType = std::numeric_limits<uint8_t>::max();
     Vec2D measure(Vec2D maxSize);
 };
 } // namespace rive

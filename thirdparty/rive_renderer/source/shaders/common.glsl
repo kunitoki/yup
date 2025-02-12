@@ -2,10 +2,13 @@
  * Copyright 2022 Rive
  */
 
-// Common functions shared by multiple shaders.
-#define PI float(3.141592653589793238)
+// Common definitions and functions shared by multiple shaders.
 
-#ifndef @USING_DEPTH_STENCIL
+#define PI 3.141592653589793238
+#define ONE_OVER_SQRT_2PI 0.398942280401433 // 1/sqrt(2*pi)
+#define ONE_OVER_SQRT_2 0.70710678118       // 1/sqrt(2)
+
+#ifndef @RENDER_MODE_MSAA
 #define AA_RADIUS float(.5)
 #else
 #define AA_RADIUS float(.0)
@@ -53,6 +56,8 @@ INLINE half2 make_half2(half x)
     return ret;
 }
 
+INLINE float2 make_float2(float x) { return float2(x, x); }
+
 INLINE half3 make_half3(half x, half y, half z)
 {
     half3 ret;
@@ -88,6 +93,8 @@ INLINE half4 make_half4(half x)
     ret.x = x, ret.y = x, ret.z = x, ret.w = x;
     return ret;
 }
+
+INLINE bool2 make_bool2(bool b) { return bool2(b, b); }
 
 INLINE half3x3 make_half3x3(half3 a, half3 b, half3 c)
 {
@@ -130,13 +137,9 @@ INLINE half id_bits_to_f16(uint idBits, uint pathIDGranularity)
 
 INLINE float atan2(float2 v)
 {
-    float bias = .0;
-    if (abs(v.x) > abs(v.y))
-    {
-        v = float2(v.y, -v.x);
-        bias = PI / 2.;
-    }
-    return atan(v.y, v.x) + bias;
+    v = normalize(v);
+    float theta = acos(clamp(v.x, -1., 1.));
+    return v.y >= .0 ? theta : -theta;
 }
 
 INLINE half4 premultiply(half4 color)
@@ -146,8 +149,16 @@ INLINE half4 premultiply(half4 color)
 
 INLINE half4 unmultiply(half4 color)
 {
-    if (color.a != .0)
-        color.rgb *= 1.0 / color.a;
+    if (.0 < color.a && color.a < 1.)
+    {
+        color.rgb *= 1. / color.a;
+        // Since multiplying by the reciprocal isn't exact, and to handle
+        // invalid premultiplied data, take extra steps to ensure
+        // color * 1/alpha == 1 when color >= alpha.
+        color.rgb = mix(color.rgb,
+                        make_half3(1.),
+                        greaterThan(color.rgb, make_half3(254.5 / 255.)));
+    }
     return color;
 }
 
@@ -160,8 +171,6 @@ INLINE half min_value(half4 min4)
 
 INLINE float manhattan_width(float2 x) { return abs(x.x) + abs(x.y); }
 
-#ifdef @VERTEX
-
 #ifndef $UNIFORM_DEFINITIONS_AUTO_GENERATED
 UNIFORM_BLOCK_BEGIN(FLUSH_UNIFORM_BUFFER_IDX, @FlushUniforms)
 float gradInverseViewportY;
@@ -170,24 +179,40 @@ float renderTargetInverseViewportX;
 float renderTargetInverseViewportY;
 uint renderTargetWidth;
 uint renderTargetHeight;
-uint colorClearValue;          // Only used if clears are implemented as draws.
-uint coverageClearValue;       // Only used if clears are implemented as draws.
-int4 renderTargetUpdateBounds; // drawBounds, or renderTargetBounds if there is
-                               // a clear. (LTRB.)
-uint pathIDGranularity;        // Spacing between adjacent path IDs (1 if IEEE
-                               // compliant).
+uint colorClearValue;           // Only used if clears are implemented as draws.
+uint coverageClearValue;        // Only used if clears are implemented as draws.
+int4 renderTargetUpdateBounds;  // drawBounds, or renderTargetBounds if there is
+                                // a clear. (LTRB.)
+float2 atlasTextureInverseSize; // 1 / [atlasWidth, atlasHeight]
+float2 atlasContentInverseViewport; // 2 / atlasContentBounds
+uint coverageBufferPrefix;
+uint pathIDGranularity; // Spacing between adjacent path IDs (1 if IEEE
+                        // compliant).
 float vertexDiscardValue;
+// Debugging.
+uint wireframeEnabled;
 UNIFORM_BLOCK_END(uniforms)
 #endif
 
-#define RENDER_TARGET_COORD_TO_CLIP_COORD(COORD)                               \
-    float4((COORD).x* uniforms.renderTargetInverseViewportX - 1.,              \
-           (COORD).y * -uniforms.renderTargetInverseViewportY +                \
-               sign(uniforms.renderTargetInverseViewportY),                    \
-           .0,                                                                 \
-           1.)
+#ifdef @VERTEX
 
-#ifndef @USING_DEPTH_STENCIL
+INLINE float4 pixel_coord_to_clip_coord(float2 pixelCoord,
+                                        float inverseViewportX,
+                                        float inverseViewportY)
+{
+    return float4(pixelCoord.x * inverseViewportX - 1.,
+                  pixelCoord.y * inverseViewportY - sign(inverseViewportY),
+                  0.,
+                  1.);
+}
+
+// Defined as a macro because 'uniforms' isn't always available at global scope.
+#define RENDER_TARGET_COORD_TO_CLIP_COORD(COORD)                               \
+    pixel_coord_to_clip_coord(COORD,                                           \
+                              uniforms.renderTargetInverseViewportX,           \
+                              uniforms.renderTargetInverseViewportY)
+
+#ifndef @RENDER_MODE_MSAA
 // Calculates the Manhattan distance in pixels from the given pixelPosition, to
 // the point at each edge of the clipRect where coverage = 0.
 //
@@ -219,7 +244,7 @@ INLINE float4 find_clip_rect_coverage_distances(float2x2 clipRectInverseMatrix,
     }
 }
 
-#else // USING_DEPTH_STENCIL
+#else // RENDER_MODE_MSAA
 
 INLINE float normalize_z_index(uint zIndex)
 {
@@ -250,7 +275,7 @@ INLINE void set_clip_rect_plane_distances(float2x2 clipRectInverseMatrix,
     }
 }
 #endif // ENABLE_CLIP_RECT
-#endif // USING_DEPTH_STENCIL
+#endif // RENDER_MODE_MSAA
 #endif // VERTEX
 
 #ifdef @DRAW_IMAGE

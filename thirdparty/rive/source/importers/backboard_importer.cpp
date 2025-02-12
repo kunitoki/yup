@@ -5,10 +5,13 @@
 #include "rive/backboard.hpp"
 #include "rive/assets/file_asset_referencer.hpp"
 #include "rive/assets/file_asset.hpp"
+#include "rive/constraints/scrolling/scroll_physics.hpp"
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/data_bind/converters/data_converter_group_item.hpp"
+#include "rive/data_bind/converters/data_converter_range_mapper.hpp"
+#include "rive/data_bind/converters/data_converter_interpolator.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include <unordered_set>
 
@@ -88,14 +91,29 @@ StatusCode BackboardImporter::resolve()
         auto asset = m_FileAssets[index];
         referencer->setAsset(asset);
     }
-    for (auto referencer : m_DataConverterReferencers)
+
+    for (auto converter : m_DataConverters)
     {
-        auto index = (size_t)referencer->converterId();
-        if (index >= m_DataConverters.size() || index < 0)
+        if (converter->is<DataConverterRangeMapper>())
         {
-            continue;
+            size_t converterId =
+                converter->as<DataConverterRangeMapper>()->interpolatorId();
+            if (converterId != -1 && converterId < m_interpolators.size())
+            {
+                converter->as<DataConverterRangeMapper>()->interpolator(
+                    m_interpolators[converterId]);
+            }
         }
-        referencer->converter(m_DataConverters[index]);
+        else if (converter->is<DataConverterInterpolator>())
+        {
+            size_t converterId =
+                converter->as<DataConverterInterpolator>()->interpolatorId();
+            if (converterId != -1 && converterId < m_interpolators.size())
+            {
+                converter->as<DataConverterInterpolator>()->interpolator(
+                    m_interpolators[converterId]);
+            }
+        }
     }
     for (auto referencer : m_DataConverterGroupItemReferencers)
     {
@@ -105,6 +123,16 @@ StatusCode BackboardImporter::resolve()
             continue;
         }
         referencer->converter(m_DataConverters[index]);
+    }
+    for (auto referencer : m_DataConverterReferencers)
+    {
+        auto index = (size_t)referencer->converterId();
+        if (index >= m_DataConverters.size() || index < 0)
+        {
+            continue;
+        }
+        referencer->converter(
+            m_DataConverters[index]->clone()->as<DataConverter>());
     }
     return StatusCode::Ok;
 }
@@ -123,4 +151,17 @@ void BackboardImporter::addDataConverterGroupItemReferencer(
     DataConverterGroupItem* dataBind)
 {
     m_DataConverterGroupItemReferencers.push_back(dataBind);
+}
+
+void BackboardImporter::addInterpolator(KeyFrameInterpolator* interpolator)
+{
+    // Since these interpolators do not belong to an artboard, we have to
+    // initialize them
+    interpolator->initialize();
+    m_interpolators.push_back(interpolator);
+}
+
+void BackboardImporter::addPhysics(ScrollPhysics* physics)
+{
+    m_physics.push_back(physics);
 }

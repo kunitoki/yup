@@ -30,19 +30,19 @@
  #pragma GCC diagnostic ignored "-Wattributes"
 #endif
 
-#include "source/draw.cpp"
-#include "source/gpu.cpp"
-#include "source/gr_triangulator.cpp"
-#include "source/gradient.cpp"
-#include "source/intersection_board.cpp"
-#include "source/path_utils.cpp"
-#include "source/render_context_helper_impl.cpp"
+#include "source/rive_renderer.cpp"
 #include "source/render_context.cpp"
-#include "source/rive_render_factory.cpp"
-#include "source/rive_render_image.cpp"
 #include "source/rive_render_paint.cpp"
 #include "source/rive_render_path.cpp"
-#include "source/rive_renderer.cpp"
+#include "source/rive_render_image.cpp"
+#include "source/intersection_board.cpp"
+#include "source/draw.cpp"
+#include "source/gr_triangulator.cpp"
+#include "source/gradient.cpp"
+#include "source/sk_rectanizer_skyline.cpp"
+#include "source/gpu.cpp"
+#include "source/rive_render_factory.cpp"
+#include "source/render_context_helper_impl.cpp"
 
 #if __clang__
  #pragma clang diagnostic pop

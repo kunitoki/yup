@@ -17,6 +17,7 @@
 #include "rive/data_bind/context/context_value_color.hpp"
 #include "rive/data_bind/context/context_value_trigger.hpp"
 #include "rive/data_bind/data_values/data_type.hpp"
+#include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/animation/transition_viewmodel_condition.hpp"
 #include "rive/animation/state_machine.hpp"
 #include "rive/importers/artboard_importer.hpp"
@@ -38,7 +39,6 @@ StatusCode DataBind::onAddedDirty(CoreContext* context)
 
 StatusCode DataBind::import(ImportStack& importStack)
 {
-
     auto backboardImporter =
         importStack.latest<BackboardImporter>(Backboard::typeKey);
     if (backboardImporter == nullptr)
@@ -48,37 +48,46 @@ StatusCode DataBind::import(ImportStack& importStack)
     backboardImporter->addDataConverterReferencer(this);
     if (target())
     {
-        switch (target()->coreType())
+        if (target()->is<DataConverter>())
         {
-            case BindablePropertyNumberBase::typeKey:
-            case BindablePropertyStringBase::typeKey:
-            case BindablePropertyBooleanBase::typeKey:
-            case BindablePropertyEnumBase::typeKey:
-            case BindablePropertyColorBase::typeKey:
-            case BindablePropertyTriggerBase::typeKey:
-            case TransitionPropertyViewModelComparatorBase::typeKey:
+            target()->as<DataConverter>()->addDataBind(this);
+        }
+        else
+        {
+
+            switch (target()->coreType())
             {
-                auto stateMachineImporter =
-                    importStack.latest<StateMachineImporter>(
-                        StateMachineBase::typeKey);
-                if (stateMachineImporter != nullptr)
+                case BindablePropertyNumberBase::typeKey:
+                case BindablePropertyStringBase::typeKey:
+                case BindablePropertyBooleanBase::typeKey:
+                case BindablePropertyEnumBase::typeKey:
+                case BindablePropertyColorBase::typeKey:
+                case BindablePropertyTriggerBase::typeKey:
+                case TransitionPropertyViewModelComparatorBase::typeKey:
                 {
-                    stateMachineImporter->addDataBind(
-                        std::unique_ptr<DataBind>(this));
-                    return Super::import(importStack);
+                    auto stateMachineImporter =
+                        importStack.latest<StateMachineImporter>(
+                            StateMachineBase::typeKey);
+                    if (stateMachineImporter != nullptr)
+                    {
+                        stateMachineImporter->addDataBind(
+                            std::unique_ptr<DataBind>(this));
+                        return Super::import(importStack);
+                    }
+                    break;
                 }
-                break;
-            }
-            default:
-            {
-                auto artboardImporter =
-                    importStack.latest<ArtboardImporter>(ArtboardBase::typeKey);
-                if (artboardImporter != nullptr)
+                default:
                 {
-                    artboardImporter->addDataBind(this);
-                    return Super::import(importStack);
+                    auto artboardImporter =
+                        importStack.latest<ArtboardImporter>(
+                            ArtboardBase::typeKey);
+                    if (artboardImporter != nullptr)
+                    {
+                        artboardImporter->addDataBind(this);
+                        return Super::import(importStack);
+                    }
+                    break;
                 }
-                break;
             }
         }
     }
@@ -112,45 +121,41 @@ DataType DataBind::outputType()
     return DataType::none;
 }
 
+DataBind::~DataBind()
+{
+    delete m_ContextValue;
+    m_ContextValue = nullptr;
+    delete m_dataConverter;
+    m_dataConverter = nullptr;
+}
+
 void DataBind::bind()
 {
+    delete m_ContextValue;
+    m_ContextValue = nullptr;
     switch (outputType())
     {
         case DataType::number:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueNumber>(m_Source,
-                                                                 converter());
+            m_ContextValue = new DataBindContextValueNumber(this);
             break;
         case DataType::string:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueString>(m_Source,
-                                                                 converter());
+            m_ContextValue = new DataBindContextValueString(this);
             break;
         case DataType::boolean:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueBoolean>(m_Source,
-                                                                  converter());
+            m_ContextValue = new DataBindContextValueBoolean(this);
             break;
         case DataType::color:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueColor>(m_Source,
-                                                                converter());
+            m_ContextValue = new DataBindContextValueColor(this);
             break;
         case DataType::enumType:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueEnum>(m_Source,
-                                                               converter());
+            m_ContextValue = new DataBindContextValueEnum(this);
             break;
         case DataType::list:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueList>(m_Source,
-                                                               converter());
+            m_ContextValue = new DataBindContextValueList(this);
             m_ContextValue->update(m_target);
             break;
         case DataType::trigger:
-            m_ContextValue =
-                rivestd::make_unique<DataBindContextValueTrigger>(m_Source,
-                                                                  converter());
+            m_ContextValue = new DataBindContextValueTrigger(this);
             break;
         default:
             break;
@@ -169,6 +174,11 @@ void DataBind::unbind()
 
 void DataBind::update(ComponentDirt value)
 {
+    if ((value & ComponentDirt::Dependents) == ComponentDirt::Dependents &&
+        m_dataConverter != nullptr)
+    {
+        m_dataConverter->update();
+    }
     if (m_Source != nullptr && m_ContextValue != nullptr)
     {
 
@@ -184,9 +194,7 @@ void DataBind::update(ComponentDirt value)
             // not set for certain modes, we might be able to skip the mode
             // validation.
             auto flagsValue = static_cast<DataBindFlags>(flags());
-            if (((flagsValue & DataBindFlags::Direction) ==
-                 DataBindFlags::ToTarget) ||
-                ((flagsValue & DataBindFlags::TwoWay) == DataBindFlags::TwoWay))
+            if (toTarget())
             {
                 m_ContextValue->apply(m_target,
                                       propertyKey(),
@@ -200,8 +208,7 @@ void DataBind::update(ComponentDirt value)
 void DataBind::updateSourceBinding()
 {
     auto flagsValue = static_cast<DataBindFlags>(flags());
-    if (((flagsValue & DataBindFlags::Direction) == DataBindFlags::ToSource) ||
-        ((flagsValue & DataBindFlags::TwoWay) == DataBindFlags::TwoWay))
+    if (toSource())
     {
         if (m_ContextValue != nullptr)
         {
@@ -229,5 +236,38 @@ bool DataBind::addDirt(ComponentDirt value, bool recurse)
         m_changedCallback();
     }
 #endif
+    if (target() != nullptr && target()->is<DataConverter>())
+    {
+        target()->as<DataConverter>()->addDirt(value);
+    }
     return true;
+}
+
+bool DataBind::bindsOnce()
+{
+    auto flagsValue = static_cast<DataBindFlags>(flags());
+    return (flagsValue & DataBindFlags::Once) == DataBindFlags::Once;
+}
+
+bool DataBind::toSource()
+{
+    auto flagsValue = static_cast<DataBindFlags>(flags());
+    return (flagsValue & (DataBindFlags::TwoWay | DataBindFlags::ToSource)) !=
+           0;
+}
+
+bool DataBind::toTarget()
+{
+    auto flagsValue = static_cast<DataBindFlags>(flags());
+    return (flagsValue & DataBindFlags::TwoWay) != 0 ||
+           (flagsValue & DataBindFlags::ToSource) == 0;
+}
+
+bool DataBind::advance(float elapsedTime)
+{
+    if (converter())
+    {
+        return converter()->advance(elapsedTime);
+    }
+    return false;
 }

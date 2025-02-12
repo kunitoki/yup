@@ -123,9 +123,13 @@ hb_shape_plan_key_t::init (bool                           copy,
     for (unsigned int i = 0; i < HB_SHAPERS_COUNT; i++)
       if (false)
 	;
+#ifdef HB_ONLY_ONE_SHAPER
+#define HB_SHAPER_IMPLEMENT(shaper) HB_SHAPER_PLAN (shaper);
+#else
 #define HB_SHAPER_IMPLEMENT(shaper) \
       else if (shapers[i].func == _hb_##shaper##_shape) \
 	HB_SHAPER_PLAN (shaper);
+#endif
 #include "hb-shaper-list.hh"
 #undef HB_SHAPER_IMPLEMENT
   }
@@ -417,9 +421,13 @@ _hb_shape_plan_execute_internal (hb_shape_plan_t    *shape_plan,
 
   if (false)
     ;
+#ifdef HB_ONLY_ONE_SHAPER
+#define HB_SHAPER_IMPLEMENT(shaper) HB_SHAPER_EXECUTE (shaper);
+#else
 #define HB_SHAPER_IMPLEMENT(shaper) \
   else if (shape_plan->key.shaper_func == _hb_##shaper##_shape) \
     HB_SHAPER_EXECUTE (shaper);
+#endif
 #include "hb-shaper-list.hh"
 #undef HB_SHAPER_IMPLEMENT
 

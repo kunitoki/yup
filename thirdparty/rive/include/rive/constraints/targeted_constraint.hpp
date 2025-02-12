@@ -9,9 +9,12 @@ class TargetedConstraint : public TargetedConstraintBase
 {
 protected:
     TransformComponent* m_Target = nullptr;
+    virtual bool requiresTarget() { return true; };
 
 public:
     void buildDependencies() override;
+
+    bool validate(CoreContext* context) override;
     StatusCode onAddedDirty(CoreContext* context) override;
 };
 } // namespace rive
