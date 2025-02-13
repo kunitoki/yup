@@ -32,6 +32,10 @@
  #pragma warning (disable : 4244)
 #endif
 
+#if !defined(_RIVE_INTERNAL_)
+#define _RIVE_INTERNAL_ 1
+#endif
+
 #include "source/generated/nested_artboard_layout_base.cpp"
 #include "source/generated/viewmodel/viewmodel_instance_list_base.cpp"
 #include "source/generated/viewmodel/viewmodel_instance_enum_base.cpp"
