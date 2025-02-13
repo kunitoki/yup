@@ -2302,7 +2302,7 @@ std::unique_ptr<RenderContext> RenderContextGLImpl::MakeContext(
 
     if (!contextOptions.disablePixelLocalStorage)
     {
-#ifdef RIVE_ANDROID || RIVE_DESKTOP_GL
+#if defined(RIVE_ANDROID) || defined(RIVE_DESKTOP_GL)
         if (capabilities.EXT_shader_pixel_local_storage &&
             (capabilities.ARM_shader_framebuffer_fetch ||
              capabilities.EXT_shader_framebuffer_fetch))
