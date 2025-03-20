@@ -98,15 +98,143 @@ float Artboard::durationSeconds() const
 
 //==============================================================================
 
+bool Artboard::hasBoolInput (const String& name) const
+{
+    if (scene == nullptr)
+        return false;
+
+    return scene->getBool (name.toStdString()) != nullptr;
+}
+
+void Artboard::setBoolInput (const String& name, bool value)
+{
+    if (scene == nullptr)
+        return;
+
+    if (auto sceneInput = scene->getBool (name.toStdString()))
+    {
+        sceneInput->value (value);
+
+        repaint();
+    }
+}
+
+bool Artboard::hasNumberInput (const String& name) const
+{
+    if (scene == nullptr)
+        return false;
+
+    return scene->getNumber (name.toStdString()) != nullptr;
+}
+
 void Artboard::setNumberInput (const String& name, double value)
 {
     if (scene == nullptr)
         return;
 
-    if (auto numberInput = scene->getNumber (name.toStdString()))
-        numberInput->value (static_cast<float> (value));
+    if (auto sceneInput = scene->getNumber (name.toStdString()))
+    {
+        sceneInput->value (static_cast<float> (value));
 
-    repaint();
+        repaint();
+    }
+}
+
+bool Artboard::hasTriggerInput (const String& name) const
+{
+    if (scene == nullptr)
+        return false;
+
+    return scene->getTrigger (name.toStdString()) != nullptr;
+}
+
+void Artboard::triggerInput (const String& name)
+{
+    if (scene == nullptr)
+        return;
+
+    if (auto sceneInput = scene->getTrigger (name.toStdString()))
+    {
+        sceneInput->fire();
+
+        repaint();
+    }
+}
+
+//==============================================================================
+
+var Artboard::getAllInputs() const
+{
+    if (stateMachine == nullptr)
+        return {};
+
+    Array<var> stateMachineInputs;
+    stateMachineInputs.ensureStorageAllocated(static_cast<int>(stateMachine->inputCount()));
+
+    for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
+    {
+        auto inputObject = stateMachine->input (inputIndex);
+
+        DynamicObject::Ptr object = new DynamicObject;
+        object->setProperty ("id", String (inputObject->name()));
+
+        if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
+        {
+            object->setProperty("type", "number");
+            object->setProperty("value", number->value());
+        }
+        else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
+        {
+            object->setProperty("type", "boolean");
+            object->setProperty("value", boolean->value());
+        }
+        else if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        {
+            object->setProperty("type", "trigger");
+        }
+
+        stateMachineInputs.add (var (object.get()));
+    }
+
+	return stateMachineInputs;
+}
+
+void Artboard::setAllInputs (const var& value)
+{
+}
+
+void Artboard::setInput (const String& inputName, const var& value)
+{
+    if (stateMachine == nullptr)
+        return;
+
+    for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
+    {
+        auto inputObject = stateMachine->input (inputIndex);
+
+        if (StringRef (inputObject->name()) != inputName)
+            continue;
+
+        if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        {
+            trigger->fire();
+            break;
+        }
+        else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
+        {
+            jassert (value.isBool());
+
+            boolean->value (static_cast<bool> (value));
+            break;
+        }
+        else if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
+        {
+            jassert (value.isDouble() || value.isInt() || value.isInt64());
+
+            number->value (static_cast<float> (value));
+            break;
+        }
+    }
 }
 
 //==============================================================================

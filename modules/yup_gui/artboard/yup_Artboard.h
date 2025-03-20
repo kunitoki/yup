@@ -41,7 +41,19 @@ public:
     float durationSeconds() const;
 
     //==============================================================================
+    bool hasBoolInput (const String& name) const;
+    void setBoolInput (const String& name, bool value);
+
+    bool hasNumberInput (const String& name) const;
     void setNumberInput (const String& name, double value);
+
+    bool hasTriggerInput (const String& name) const;
+    void triggerInput (const String& name);
+
+    //==============================================================================
+    var getAllInputs() const;
+    void setAllInputs (const var& value);
+    void setInput (const String& state, const var& value);
 
     //==============================================================================
     virtual void propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue);
