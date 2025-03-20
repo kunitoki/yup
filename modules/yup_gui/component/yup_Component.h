@@ -74,6 +74,7 @@ public:
 
     //==============================================================================
     float getScaleDpi() const;
+    virtual void contentScaleChanged(float dpiScale);
 
     //==============================================================================
     float getOpacity() const;
@@ -199,6 +200,7 @@ private:
     void internalTextInput (const String& text);
     void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
+    void internalContentScaleChanged(float dpiScale);
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;

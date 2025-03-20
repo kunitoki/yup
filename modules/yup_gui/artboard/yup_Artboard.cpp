@@ -139,7 +139,7 @@ void Artboard::paint (Graphics& g)
 
 void Artboard::resized()
 {
-    auto scaleDpi = getNativeComponent()->getScaleDpi();
+    auto scaleDpi = getScaleDpi();
     auto scaledBounds = getBounds() * scaleDpi;
 
     auto frameBounds = rive::AABB (
@@ -161,6 +161,13 @@ void Artboard::resized()
 
 //==============================================================================
 
+void Artboard::contentScaleChanged (float dpiScale)
+{
+    resized();
+}
+
+//==============================================================================
+
 void Artboard::mouseEnter (const MouseEvent& event)
 {
     repaint();
@@ -176,7 +183,7 @@ void Artboard::mouseDown (const MouseEvent& event)
     if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
     scene->pointerDown (xy);
@@ -189,7 +196,7 @@ void Artboard::mouseUp (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
     scene->pointerUp (xy);
@@ -202,7 +209,7 @@ void Artboard::mouseMove (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
     scene->pointerMove (xy);
@@ -215,7 +222,7 @@ void Artboard::mouseDrag (const MouseEvent& event)
     if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
     scene->pointerMove (xy);
