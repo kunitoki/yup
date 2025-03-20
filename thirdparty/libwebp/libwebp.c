@@ -274,7 +274,9 @@
 #include "libwebp_undef.h"
 #include "src/dsp/ssim.c"
 #include "libwebp_undef.h"
+#define kWeight kWeightSSE2
 #include "src/dsp/ssim_sse2.c"
+#undef kWeight
 #include "libwebp_undef.h"
 #include "src/dsp/dec_neon.c"
 #include "libwebp_undef.h"
