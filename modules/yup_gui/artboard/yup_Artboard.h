@@ -37,6 +37,9 @@ public:
     bool isPaused() const;
     void setPaused (bool shouldPause);
 
+    void advanceAndApply (float elapsedSeconds);
+    float durationSeconds() const;
+
     //==============================================================================
     void setBoolInput (const String& name, bool value);
     void setNumberInput (const String& name, double value);
@@ -47,20 +50,15 @@ public:
     void setAllInputs (int stateMachineIndex, const var& value);
     void setInput (int stateMachineIndex, const String& state, const var& value);
 
-    //==============================================================================
-    void addHorizontalRepeats (int repeatsToAdd);
-    void addVerticalRepeats (int repeatsToAdd);
-
-    int getNumInstances() const;
-
-    //==============================================================================
-    void multiplyScale (float factor);
 
     //==============================================================================
     virtual void propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue);
 
     //==============================================================================
+    void refreshDisplay (double lastFrameTimeSeconds) override;
     void paint (Graphics& g) override;
+    void resized() override;
+    void contentScaleChanged (float dpiScale) override;
     void mouseEnter (const MouseEvent& event) override;
     void mouseExit (const MouseEvent& event) override;
     void mouseDown (const MouseEvent& event) override;
@@ -69,24 +67,22 @@ public:
     void mouseDrag (const MouseEvent& event) override;
 
 private:
-    void updateScenesFromFile (std::size_t count);
+    void updateSceneFromFile();
     void pullEventsFromStateMachines();
 
-    std::unique_ptr<rive::File> rivFile;
-    std::vector<std::unique_ptr<rive::Artboard>> artboards;
-    std::vector<std::unique_ptr<rive::Scene>> scenes;
-    std::vector<rive::StateMachineInstance*> stateMachines;
+    std::shared_ptr<rive::File> rivFile;
+    std::unique_ptr<rive::Artboard> artboard;
+    std::unique_ptr<rive::Scene> scene;
+    rive::StateMachineInstance* stateMachine = nullptr;
     HashMap<String, var> eventProperties;
 
     rive::Mat2D viewTransform;
-    float scale = 1.0f;
+    float dpiScale = 1.0f;
 
     int artboardIndex = -1;
     int animationIndex = -1;
     int stateMachineIndex = -1;
-
-    int horzRepeat = 0;
-    int vertRepeat = 0;
+    float animationTime = 0.0f;
 
     bool useStateMachines = true;
     bool paused = false;
