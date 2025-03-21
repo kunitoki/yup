@@ -67,37 +67,167 @@ YUP brings a suite of powerful features, including:
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
 
 ## Getting Started
-To begin using YUP, follow these detailed steps to set up the environment and run a simple example application:
+YUP is designed for flexibility across multiple platforms. Below is a comprehensive guide to set up, configure, and compile the library for your target environment.
 
 ### Prerequisites
-Ensure you have the following installed:
-- C++17 compatible compiler
+Before building, ensure you have a:
+- C++17-compliant compiler
 - CMake 3.28 or later
 
+#### Windows
+Visual Studio 2022
+
+#### macOS / iOS
+Xcode 15.2 (and command-line tools).
+
+#### Linux
+Required packages as:
+```bash
+sudo apt-get update && sudo apt-get install -y \
+    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev \
+    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev \
+    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+```
+
+#### Wasm
+Emscripten SDK (at least version 3.1.45).
+
+#### Android
+JDK 17, Android SDK, and NDK (at least r26d).
+
 ### Installation
-Clone the YUP repository and build the library using the following commands:
+Clone the YUP repository:
 
 ```bash
 git clone https://github.com/kunitoki/yup.git
 cd yup
-mkdir build
-cmake -B build
 ```
 
-### Running Your First Application
-Here is a simple example of creating a basic window using YUP:
-
-```cpp
-// TODO
-```
-
-Save this as `main.cpp` and compile it using:
+### Preparing the build directory
+Create a Dedicated Build Directory:
 
 ```bash
-# TODO
+mkdir -p build
 ```
 
-This will open a window titled "Hello YUP" with dimensions 800x600.
+### Configure
+Generate the build system files with CMake. For a standard desktop build with tests and examples enabled, run:
+
+```bash
+cmake . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+```
+
+For platform-specific targets, add extra flags:
+
+#### Android
+
+```bash
+cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+```
+
+#### iOS
+
+```bash
+cmake -G "Ninja Multi-Config" . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+```
+
+#### Wasm
+
+Use Emscripten’s helper command, after having activated the emsdk (refer to https://emscripten.org/docs/getting_started/downloads.html how to install and activate Emscripten):
+
+```bash
+emcmake cmake -G "Ninja Multi-Config" . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+```
+
+### Building the Library
+Once configuration is complete, compile YUP using your build system. For a Ninja-based build, for example:
+
+```bash
+cmake --build build --config Release --parallel 4
+```
+
+This command builds the project in Release mode. Replace `Release` with `Debug` if you need a debug build.
+
+### Running Tests and Examples
+After compilation, you can validate the build and explore YUP’s features:
+
+- Run Tests:
+Build and execute the yup_tests target to run the automated test suite.
+
+- Build Examples:
+Compile example targets like example_app, example_console, or example_render to see practical implementations.
+
+
+## Running Your First Application
+Here is a simple example of creating a basic window using YUP, save this as `main.cpp`:
+
+```cpp
+#include <juce_core/juce_core.h>
+#include <juce_events/juce_events.h>
+#include <yup_graphics/yup_graphics.h>
+#include <yup_gui/yup_gui.h>
+
+class MyWindow : public yup::DocumentWindow
+{
+public:
+    MyWindow()
+        : yup::DocumentWindow (yup::ComponentNative::Options(), {})
+    {
+        setTitle ("MyWindow");
+
+        takeFocus();
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.fillAll (0xffffffff);
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        yup::YUPApplication::getInstance()->systemRequestedQuit();
+    }
+};
+
+struct MyApplication : yup::YUPApplication
+{
+    MyApplication() = default;
+
+    const yup::String getApplicationName() override
+    {
+        return "MyApplication";
+    }
+
+    const yup::String getApplicationVersion() override
+    {
+        return "1.0";
+    }
+
+    void initialise (const yup::String& commandLineParameters) override
+    {
+        window = std::make_unique<MyWindow>();
+        window->centreWithSize ({ 1080, 2400 });
+        window->setVisible (true);
+        window->toFront();
+    }
+
+    void shutdown() override
+    {
+        window.reset();
+    }
+
+private:
+    std::unique_ptr<MyWindow> window;
+};
+
+START_JUCE_APPLICATION (MyApplication)
+```
+
+And add this as `CMakeLists.txt`:
+
+```cmake
+# TODO
+```
 
 ## Documentation
 For full documentation, including more detailed tutorials and comprehensive API references, please visit [YUP Documentation](https://yup.github.io/docs).
@@ -108,14 +238,6 @@ Join our growing community and contribute to the YUP project. Connect with us an
 
 > [!IMPORTANT]
 > We are looking for collaborators to bring forward the framework!
-
-## Contributing
-Interested in contributing? Here's how you can help:
-1. Fork the repository.
-2. Create a new branch for your changes (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request.
 
 ## License
 YUP is distributed under the ISC License, supporting both personal and commercial use, modification, and distribution without restrictions.
