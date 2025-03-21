@@ -147,7 +147,7 @@ cd build/examples/render
 ```
 
 
-### iOS
+### iOS
 You can either use Ninja or Xcode:
 
 ```bash
@@ -156,7 +156,7 @@ cmake --build build --config Release --parallel 4
 ```
 
 
-### Wasm
+### Wasm
 Use Emscripten’s helper command, after having activated the emsdk (refer to https://emscripten.org/docs/getting_started/downloads.html how to install and activate Emscripten):
 
 ```bash
