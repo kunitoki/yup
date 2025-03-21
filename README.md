@@ -74,11 +74,12 @@ Before building, ensure you have a:
 ### Windows
 Visual Studio 2022
 
-### macOS / iOS
+### macOS and iOS
 Xcode 15.2 (and command-line tools).
 
 ### Linux
-Required packages as:
+Required packages:
+
 ```bash
 sudo apt-get update && sudo apt-get install -y \
     libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev \
@@ -109,7 +110,6 @@ mkdir -p build
 
 ## Configure
 Generate the build system files with CMake. For a standard desktop build with tests and examples enabled, run:
-
 ```bash
 cmake . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
@@ -117,28 +117,23 @@ cmake . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 For platform-specific targets, add extra flags:
 
 ### Android
-
 ```bash
 cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
 
 ### iOS
-
 ```bash
 cmake -G "Ninja Multi-Config" . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
 
 ### Wasm
-
 Use Emscripten’s helper command, after having activated the emsdk (refer to https://emscripten.org/docs/getting_started/downloads.html how to install and activate Emscripten):
-
 ```bash
 emcmake cmake -G "Ninja Multi-Config" . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
 
 ## Building the Library
 Once configuration is complete, compile YUP using your build system. For a Ninja-based build, for example:
-
 ```bash
 cmake --build build --config Release --parallel 4
 ```
@@ -156,7 +151,6 @@ Compile example targets like example_app, example_console, or example_render to 
 
 ## Running Your First Application
 Here is a simple example of creating a basic window using YUP, save this as `main.cpp`:
-
 ```cpp
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
