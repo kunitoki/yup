@@ -136,7 +136,7 @@ cmake --build build --config Release --parallel 4
 ```
 
 
-### Android
+### Android
 Android will rely on cmake for configuration and gradlew will again call into cmake to build the native part of yup:
 
 ```bash
@@ -168,7 +168,7 @@ python3 -m http.server -d build
 These command builds the project in Release mode. Replace `Release` with `Debug` if you need a debug build.
 
 
-## Running Tests and Examples
+## Running Tests and Examples
 After compilation, you can validate the build and explore YUP’s features:
 
 - Run Tests:
