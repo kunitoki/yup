@@ -142,8 +142,8 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
-    quitMessagePosted = true;
     (new QuitMessage())->post();
+    quitMessagePosted = true;
 }
 
 #if JUCE_MODAL_LOOPS_PERMITTED
