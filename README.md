@@ -66,21 +66,18 @@ YUP brings a suite of powerful features, including:
 | **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
 
-## Getting Started
-YUP is designed for flexibility across multiple platforms. Below is a comprehensive guide to set up, configure, and compile the library for your target environment.
-
-### Prerequisites
+## Prerequisites
 Before building, ensure you have a:
 - C++17-compliant compiler
 - CMake 3.28 or later
 
-#### Windows
+### Windows
 Visual Studio 2022
 
-#### macOS / iOS
+### macOS / iOS
 Xcode 15.2 (and command-line tools).
 
-#### Linux
+### Linux
 Required packages as:
 ```bash
 sudo apt-get update && sudo apt-get install -y \
@@ -89,13 +86,13 @@ sudo apt-get update && sudo apt-get install -y \
     libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
 ```
 
-#### Wasm
+### Wasm
 Emscripten SDK (at least version 3.1.45).
 
-#### Android
+### Android
 JDK 17, Android SDK, and NDK (at least r26d).
 
-### Installation
+## Installation
 Clone the YUP repository:
 
 ```bash
@@ -103,14 +100,14 @@ git clone https://github.com/kunitoki/yup.git
 cd yup
 ```
 
-### Preparing the build directory
+## Preparing the build directory
 Create a Dedicated Build Directory:
 
 ```bash
 mkdir -p build
 ```
 
-### Configure
+## Configure
 Generate the build system files with CMake. For a standard desktop build with tests and examples enabled, run:
 
 ```bash
@@ -119,19 +116,19 @@ cmake . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
 For platform-specific targets, add extra flags:
 
-#### Android
+### Android
 
 ```bash
 cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
 
-#### iOS
+### iOS
 
 ```bash
 cmake -G "Ninja Multi-Config" . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
 
-#### Wasm
+### Wasm
 
 Use Emscripten’s helper command, after having activated the emsdk (refer to https://emscripten.org/docs/getting_started/downloads.html how to install and activate Emscripten):
 
@@ -139,7 +136,7 @@ Use Emscripten’s helper command, after having activated the emsdk (refer to ht
 emcmake cmake -G "Ninja Multi-Config" . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 ```
 
-### Building the Library
+## Building the Library
 Once configuration is complete, compile YUP using your build system. For a Ninja-based build, for example:
 
 ```bash
@@ -148,7 +145,7 @@ cmake --build build --config Release --parallel 4
 
 This command builds the project in Release mode. Replace `Release` with `Debug` if you need a debug build.
 
-### Running Tests and Examples
+## Running Tests and Examples
 After compilation, you can validate the build and explore YUP’s features:
 
 - Run Tests:
@@ -156,7 +153,6 @@ Build and execute the yup_tests target to run the automated test suite.
 
 - Build Examples:
 Compile example targets like example_app, example_console, or example_render to see practical implementations.
-
 
 ## Running Your First Application
 Here is a simple example of creating a basic window using YUP, save this as `main.cpp`:
