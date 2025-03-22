@@ -440,7 +440,7 @@ void Artboard::pullEventsFromStateMachines()
             propertyChanged (eventName, String (child->name()), oldValue, newValue);
 
             if (onPropertyChanged)
-                onPropertyChanged (eventName, String (child->name()), oldValue, newValue);
+                onPropertyChanged (*this, eventName, String (child->name()), oldValue, newValue);
         }
     }
 }
