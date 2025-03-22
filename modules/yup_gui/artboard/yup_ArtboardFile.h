@@ -33,8 +33,8 @@ public:
     //==============================================================================
     using LoadResult = ResultValue<std::shared_ptr<ArtboardFile>>;
 
-    static LoadResult load(const File& file, rive::Factory& factory);
-    static LoadResult load(InputStream& is, rive::Factory& factory);
+    static LoadResult load (const File& file, rive::Factory& factory);
+    static LoadResult load (InputStream& is, rive::Factory& factory);
 
 private:
     ArtboardFile() = default;

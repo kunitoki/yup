@@ -41,7 +41,7 @@ void Artboard::setFile (std::shared_ptr<ArtboardFile> file)
 {
     clear();
 
-    artboardFile = std::move(file);
+    artboardFile = std::move (file);
 
     updateSceneFromFile();
 }
@@ -163,7 +163,7 @@ var Artboard::getAllInputs() const
         return {};
 
     Array<var> stateMachineInputs;
-    stateMachineInputs.ensureStorageAllocated(static_cast<int>(stateMachine->inputCount()));
+    stateMachineInputs.ensureStorageAllocated (static_cast<int> (stateMachine->inputCount()));
 
     for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
     {
@@ -174,23 +174,23 @@ var Artboard::getAllInputs() const
 
         if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
         {
-            object->setProperty("type", "number");
-            object->setProperty("value", number->value());
+            object->setProperty ("type", "number");
+            object->setProperty ("value", number->value());
         }
         else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
         {
-            object->setProperty("type", "boolean");
-            object->setProperty("value", boolean->value());
+            object->setProperty ("type", "boolean");
+            object->setProperty ("value", boolean->value());
         }
         else if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
         {
-            object->setProperty("type", "trigger");
+            object->setProperty ("type", "trigger");
         }
 
         stateMachineInputs.add (var (object.get()));
     }
 
-	return stateMachineInputs;
+    return stateMachineInputs;
 }
 
 void Artboard::setAllInputs (const var& value)

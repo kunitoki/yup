@@ -43,7 +43,7 @@ rive::File* ArtboardFile::getRiveFile()
 
 //==============================================================================
 
-ArtboardFile::LoadResult ArtboardFile::load(const File& file, rive::Factory& factory)
+ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& factory)
 {
     if (! file.existsAsFile())
         return LoadResult::fail ("Failed to find artboard file to load");
@@ -63,8 +63,8 @@ ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& fac
     rive::ImportResult result;
     auto rivFile = rive::File::import (
         { static_cast<const uint8_t*> (mb.getData()), mb.getSize() },
-        std::addressof(factory),
-        std::addressof(result));
+        std::addressof (factory),
+        std::addressof (result));
 
     if (result == rive::ImportResult::malformed)
         return LoadResult::fail ("Malformed artboard file");
@@ -75,7 +75,7 @@ ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& fac
     if (rivFile == nullptr)
         return LoadResult::fail ("Failed to import artboard file");
 
-    return LoadResult::ok (std::shared_ptr<ArtboardFile> (new ArtboardFile{ std::move (rivFile) }));
+    return LoadResult::ok (std::shared_ptr<ArtboardFile> (new ArtboardFile { std::move (rivFile) }));
 }
 
 } // namespace yup
