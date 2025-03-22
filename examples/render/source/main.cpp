@@ -50,11 +50,20 @@ public:
         yup::File riveFilePath = yup::File (__FILE__)
                                      .getParentDirectory()
                                      .getSiblingFile ("data")
-                                     .getChildFile ("alien.riv");
+                                     .getChildFile ("charge.riv");
 #endif
 
         auto factory = getNativeComponent()->getFactory();
         if (factory == nullptr)
+            return;
+
+#if JUCE_ANDROID
+        yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
+        auto artboardFile = yup::ArtboardFile::load (is, *factory);
+#else
+        auto artboardFile = yup::ArtboardFile::load (riveFilePath, *factory);
+#endif
+        if (! artboardFile)
             return;
 
         // Setup artboards
@@ -63,14 +72,7 @@ public:
             auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
             addAndMakeVisible (art);
 
-#if JUCE_ANDROID
-            yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
-            if (auto artboardFile = yup::ArtboardFile::load (is, *factory))
-                art->setFile (artboardFile.getValue());
-#else
-            if (auto artboardFile = yup::ArtboardFile::load (riveFilePath, *factory))
-                art->setFile (artboardFile.getValue());
-#endif
+            art->setFile (artboardFile.getValue());
 
             art->advanceAndApply (i * art->durationSeconds());
         }
@@ -130,6 +132,21 @@ public:
 
             case yup::KeyPress::textZKey:
                 setFullScreen (! isFullScreen());
+                break;
+
+            case yup::KeyPress::number1Key:
+                for (auto& a : artboards)
+                    a->setNumberInput("%", 10.5);
+                break;
+
+            case yup::KeyPress::number5Key:
+                for (auto& a : artboards)
+                    a->setNumberInput("%", 50.0);
+                break;
+
+            case yup::KeyPress::number9Key:
+                for (auto& a : artboards)
+                    a->setNumberInput("%", 90.5);
                 break;
         }
     }
