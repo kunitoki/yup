@@ -53,6 +53,10 @@ public:
                                      .getChildFile ("alien.riv");
 #endif
 
+        auto factory = getNativeComponent()->getFactory();
+        if (factory == nullptr)
+            return;
+
         // Setup artboards
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
@@ -61,9 +65,11 @@ public:
 
 #if JUCE_ANDROID
             yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
-            art->loadFromStream (is, 0, true);
+            if (auto artboardFile = yup::ArtboardFile::load (is, *factory))
+                art->setFile (artboardFile.getValue());
 #else
-            art->loadFromFile (riveFilePath, 0, true);
+            if (auto artboardFile = yup::ArtboardFile::load (riveFilePath, *factory))
+                art->setFile (artboardFile.getValue());
 #endif
 
             art->advanceAndApply (i * art->durationSeconds());
@@ -168,7 +174,7 @@ private:
     }
 
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 2;
+    int totalRows = 1;
     int totalColumns = 1;
 };
 

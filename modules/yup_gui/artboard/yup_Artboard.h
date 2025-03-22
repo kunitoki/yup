@@ -28,10 +28,12 @@ class JUCE_API Artboard : public Component
 public:
     //==============================================================================
     Artboard (StringRef componentID);
+    Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> artboardFile);
+
+    void setFile (std::shared_ptr<ArtboardFile> artboardFile);
 
     //==============================================================================
-    Result loadFromFile (const File& file, int defaultArtboardIndex = -1, bool shouldUseStateMachines = true);
-    Result loadFromStream (InputStream& is, int defaultArtboardIndex = -1, bool shouldUseStateMachines = true);
+    void clear();
 
     //==============================================================================
     bool isPaused() const;
@@ -56,6 +58,8 @@ public:
     void setInput (const String& state, const var& value);
 
     //==============================================================================
+    std::function<void (Artboard&, const String&, const String&, const var&, const var&)> onPropertyChanged;
+
     virtual void propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue);
 
     //==============================================================================
@@ -74,20 +78,16 @@ private:
     void updateSceneFromFile();
     void pullEventsFromStateMachines();
 
-    std::shared_ptr<rive::File> rivFile;
+    std::shared_ptr<ArtboardFile> artboardFile;
+
     std::unique_ptr<rive::Artboard> artboard;
     std::unique_ptr<rive::Scene> scene;
     rive::StateMachineInstance* stateMachine = nullptr;
+
     HashMap<String, var> eventProperties;
 
     rive::Mat2D viewTransform;
 
-    int artboardIndex = -1;
-    int animationIndex = -1;
-    int stateMachineIndex = -1;
-    float animationTime = 0.0f;
-
-    bool useStateMachines = true;
     bool paused = false;
 };
 

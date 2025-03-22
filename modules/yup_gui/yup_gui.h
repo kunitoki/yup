@@ -81,5 +81,6 @@
 #include "widgets/yup_Button.h"
 #include "widgets/yup_TextButton.h"
 #include "widgets/yup_Slider.h"
+#include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
