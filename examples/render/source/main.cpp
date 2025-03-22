@@ -136,17 +136,17 @@ public:
 
             case yup::KeyPress::number1Key:
                 for (auto& a : artboards)
-                    a->setNumberInput("%", 10.5);
+                    a->setNumberInput ("%", 10.5);
                 break;
 
             case yup::KeyPress::number5Key:
                 for (auto& a : artboards)
-                    a->setNumberInput("%", 50.0);
+                    a->setNumberInput ("%", 50.0);
                 break;
 
             case yup::KeyPress::number9Key:
                 for (auto& a : artboards)
-                    a->setNumberInput("%", 90.5);
+                    a->setNumberInput ("%", 90.5);
                 break;
         }
     }
