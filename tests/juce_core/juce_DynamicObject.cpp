@@ -129,14 +129,14 @@ TEST_F (DynamicObjectTests, SetAndHasMethod)
     EXPECT_FALSE (obj.hasMethod (methodName));
 
     var::NativeFunction func = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                     {
-                                                         if (args.numArguments > 0)
-                                                         {
-                                                             double currentVolume = args.arguments[0];
-                                                             return var (currentVolume + 10.0);
-                                                         }
-                                                         return var();
-                                                     });
+    {
+        if (args.numArguments > 0)
+        {
+            double currentVolume = args.arguments[0];
+            return var (currentVolume + 10.0);
+        }
+        return var();
+    });
 
     obj.setMethod (methodName, func);
     EXPECT_TRUE (obj.hasMethod (methodName));
@@ -150,15 +150,15 @@ TEST_F (DynamicObjectTests, InvokeMethod)
 
     // Define a method that multiplies two numbers
     var::NativeFunction multiplyFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 if (args.numArguments >= 2)
-                                                                 {
-                                                                     double a = args.arguments[0];
-                                                                     double b = args.arguments[1];
-                                                                     return var (a * b);
-                                                                 }
-                                                                 return var();
-                                                             });
+    {
+        if (args.numArguments >= 2)
+        {
+            double a = args.arguments[0];
+            double b = args.arguments[1];
+            return var (a * b);
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, multiplyFunc);
     EXPECT_TRUE (obj->hasMethod (methodName));
@@ -279,14 +279,14 @@ TEST_F (DynamicObjectTests, OverwriteMethod)
     Identifier methodName ("greet");
 
     var::NativeFunction greetFunc1 = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                           {
-                                                               return var ("Hello");
-                                                           });
+    {
+        return var ("Hello");
+    });
 
     var::NativeFunction greetFunc2 = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                           {
-                                                               return var ("Hi");
-                                                           });
+    {
+        return var ("Hi");
+    });
 
     obj->setMethod (methodName, greetFunc1);
     EXPECT_TRUE (obj->hasMethod (methodName));
@@ -311,15 +311,15 @@ TEST_F (DynamicObjectTests, InvokeMethodInsufficientArguments)
     Identifier methodName ("sum");
 
     var::NativeFunction sumFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                        {
-                                                            if (args.numArguments >= 2)
-                                                            {
-                                                                double a = args.arguments[0];
-                                                                double b = args.arguments[1];
-                                                                return var (a + b);
-                                                            }
-                                                            return var();
-                                                        });
+    {
+        if (args.numArguments >= 2)
+        {
+            double a = args.arguments[0];
+            double b = args.arguments[1];
+            return var (a + b);
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, sumFunc);
 
@@ -355,10 +355,10 @@ TEST_F (DynamicObjectTests, SetMethodWithLambdaCapture)
     double externalCounter = 0.0;
 
     var::NativeFunction incrementFunc = createNativeFunction ([&externalCounter] (const var::NativeFunctionArgs& args) -> var
-                                                              {
-                                                                  externalCounter += 1.0;
-                                                                  return var (externalCounter);
-                                                              });
+    {
+        externalCounter += 1.0;
+        return var (externalCounter);
+    });
 
     obj->setMethod (methodName, incrementFunc);
     EXPECT_TRUE (obj->hasMethod (methodName));
@@ -457,9 +457,9 @@ TEST_F (DynamicObjectTests, InvokeMethodAfterRemoval)
     Identifier methodName ("sayHello");
 
     var::NativeFunction sayHelloFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 return var ("Hello, World!");
-                                                             });
+    {
+        return var ("Hello, World!");
+    });
 
     obj->setMethod (methodName, sayHelloFunc);
     EXPECT_TRUE (obj->hasMethod (methodName));
@@ -497,9 +497,9 @@ TEST_F (DynamicObjectTests, SetMethodWithIdentifierAndFunction)
     Identifier methodName ("getStatus");
 
     var::NativeFunction getStatusFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                              {
-                                                                  return var ("OK");
-                                                              });
+    {
+        return var ("OK");
+    });
 
     obj->setMethod (methodName, getStatusFunc);
     EXPECT_TRUE (obj->hasMethod (methodName));
@@ -533,9 +533,9 @@ TEST_F (DynamicObjectTests, PropertiesAndMethodsAreNotSeparate)
 
     var propValue = makeVar (1);
     var::NativeFunction statusFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                           {
-                                                               return var ("Method Status");
-                                                           });
+    {
+        return var ("Method Status");
+    });
 
     obj->setProperty (propName, propValue);
     obj->setMethod (methodName, statusFunc);
@@ -558,15 +558,15 @@ TEST_F (DynamicObjectTests, InvokeMethodWithArguments)
     Identifier methodName ("concat");
 
     var::NativeFunction concatFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                           {
-                                                               if (args.numArguments >= 2)
-                                                               {
-                                                                   String a = args.arguments[0];
-                                                                   String b = args.arguments[1];
-                                                                   return var (a + b);
-                                                               }
-                                                               return var();
-                                                           });
+    {
+        if (args.numArguments >= 2)
+        {
+            String a = args.arguments[0];
+            String b = args.arguments[1];
+            return var (a + b);
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, concatFunc);
 
@@ -627,9 +627,9 @@ TEST_F (DynamicObjectTests, ClearRemovesMethods)
     Identifier methodName ("doSomething");
 
     var::NativeFunction func = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                     {
-                                                         return var ("Done");
-                                                     });
+    {
+        return var ("Done");
+    });
 
     obj->setMethod (methodName, func);
     EXPECT_TRUE (obj->hasMethod (methodName));
@@ -647,9 +647,9 @@ TEST_F (DynamicObjectTests, ClearDoesNotAffectOtherProperties)
 
     obj->setProperty (propName, makeVar (999));
     var::NativeFunction func = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                     {
-                                                         return var ("Removed");
-                                                     });
+    {
+        return var ("Removed");
+    });
     obj->setMethod (methodName, func);
 
     EXPECT_TRUE (obj->hasProperty (propName));
@@ -669,9 +669,9 @@ TEST_F (DynamicObjectTests, DISABLED_WriteAsJSONExcludesMethods)
 
     Identifier methodName ("method");
     var::NativeFunction func = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                     {
-                                                         return var ("MethodResult");
-                                                     });
+    {
+        return var ("MethodResult");
+    });
     obj->setMethod (methodName, func);
 
     MemoryOutputStream stream;
@@ -693,9 +693,9 @@ TEST_F (DynamicObjectTests, SetMethodDoesNotClearPropertiesFlag)
 
     Identifier methodName ("activate");
     var::NativeFunction func = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                     {
-                                                         return var ("Activated");
-                                                     });
+    {
+        return var ("Activated");
+    });
     obj->setMethod (methodName, func);
 
     EXPECT_TRUE (obj->hasProperty (propName));
@@ -715,14 +715,14 @@ TEST_F (DynamicObjectTests, InvokeMethodDoesNotAffectOtherProperties)
     obj->setProperty (propName, makeVar (0));
 
     var::NativeFunction incrementFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                              {
-                                                                  if (args.numArguments > 0)
-                                                                  {
-                                                                      double current = args.arguments[0];
-                                                                      return var (current + 1.0);
-                                                                  }
-                                                                  return var();
-                                                              });
+    {
+        if (args.numArguments > 0)
+        {
+            double current = args.arguments[0];
+            return var (current + 1.0);
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, incrementFunc);
 

@@ -884,7 +884,7 @@ void SDL2ComponentNative::handleContentScaleChanged()
 
     handleResized (screenBounds.getWidth(), screenBounds.getHeight());
 
-    component.internalContentScaleChanged(getScaleDpi());
+    component.internalContentScaleChanged (getScaleDpi());
 }
 
 void SDL2ComponentNative::handleUserTriedToCloseWindow()

@@ -192,9 +192,9 @@ public:
     void restartDevices (double newSr, int newBs)
     {
         listeners.call ([&] (auto& l)
-                        {
-                            return l.restart (newSr, newBs);
-                        });
+        {
+            return l.restart (newSr, newBs);
+        });
     }
 
 private:

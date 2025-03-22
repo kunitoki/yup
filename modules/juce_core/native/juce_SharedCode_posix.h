@@ -1234,9 +1234,9 @@ public:
     ActiveProcess (const StringArray& arguments, int streamFlags)
     {
         startProcess (arguments, streamFlags, {}, [] (const String& exe, const Array<char*>& argv, const Array<char*>&)
-                      {
-                          execvp (exe.toRawUTF8(), argv.getRawDataPointer());
-                      });
+        {
+            execvp (exe.toRawUTF8(), argv.getRawDataPointer());
+        });
     }
 
     ActiveProcess (const StringArray& arguments, const StringPairArray& environment, int streamFlags)
@@ -1273,9 +1273,9 @@ public:
         }
 
         startProcess (args, streamFlags, env, [] (const String& exe, const Array<char*>& argv, const Array<char*>& env)
-                      {
-                          execve (exe.toRawUTF8(), argv.getRawDataPointer(), env.getRawDataPointer());
-                      });
+        {
+            execve (exe.toRawUTF8(), argv.getRawDataPointer(), env.getRawDataPointer());
+        });
     }
 
     ~ActiveProcess()
