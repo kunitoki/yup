@@ -51,7 +51,7 @@ public:
         constexpr Options() noexcept = default;
 
         bool retinaDisplay = true;                  ///< Whether the context supports Retina or high-DPI displays.
-        bool readableFramebuffer = true;            ///< Allows the framebuffer to be readable.
+        bool readableFramebuffer = false;           ///< Allows the framebuffer to be readable.
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
@@ -91,13 +91,13 @@ public:
 
         @return Pointer to a rive::pls::PLSRenderContext, or nullptr if not available.
     */
-    virtual rive::gpu::RenderContext* plsContextOrNull() = 0;
+    virtual rive::gpu::RenderContext* renderContextOrNull() = 0;
 
     /** Gets the PLS render target, if available.
 
         @return Pointer to a rive::pls::PLSRenderTarget, or nullptr if not available.
     */
-    virtual rive::gpu::RenderTarget* plsRenderTargetOrNull() = 0;
+    virtual rive::gpu::RenderTarget* renderTargetOrNull() = 0;
 
     /** Creates a renderer suitable for the specified dimensions.
 
@@ -135,14 +135,6 @@ public:
     virtual void tick() {}
 
     //==============================================================================
-    /** Static factory method to create a graphics context with specific options.
-
-        @param options Configuration options for the graphics context.
-
-        @return A unique pointer to a GraphicsContext, configured according to the specified options.
-    */
-    static std::unique_ptr<GraphicsContext> createContext (Options options);
-
     /** Static factory method to create a graphics context using a specific graphics API.
 
         @param graphicsApi The graphics API to use.

@@ -19,7 +19,7 @@
 
 #==============================================================================
 
-#list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/tools")
+include_guard (GLOBAL)
 
 #==============================================================================
 
@@ -54,7 +54,7 @@ function (_yup_setup_platform)
         if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")
             set (yup_platform "uwp")
         else()
-            set (yup_platform "win32")
+            set (yup_platform "windows")
         endif()
 
     else()

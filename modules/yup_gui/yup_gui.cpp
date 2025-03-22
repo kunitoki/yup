@@ -39,6 +39,44 @@
 #include <rive/animation/state_machine_input_instance.hpp>
 
 //==============================================================================
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
+#include <SDL2/SDL_main.h>
+
+//==============================================================================
+#if JUCE_MAC || JUCE_IOS
+#import <Metal/Metal.h>
+#import <QuartzCore/CAMetalLayer.h>
+
+#if JUCE_MAC
+#import <AppKit/AppKit.h>
+#else
+#include "native/yup_Windowing_ios.mm"
+#endif
+
+//==============================================================================
+#elif JUCE_LINUX
+#undef None
+#undef KeyPress
+#undef SIZEOF
+
+//==============================================================================
+#elif JUCE_WINDOWS
+
+//==============================================================================
+#elif JUCE_ANDROID
+
+//==============================================================================
+#elif JUCE_EMSCRIPTEN
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
+
+//==============================================================================
+#else
+
+#endif
+
+//==============================================================================
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "mouse/yup_MouseEvent.cpp"
@@ -51,49 +89,6 @@
 #include "windowing/yup_DocumentWindow.cpp"
 
 //==============================================================================
-#if JUCE_MAC
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-
-#import <Metal/Metal.h>
-#import <QuartzCore/CAMetalLayer.h>
-
-#elif JUCE_LINUX
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_X11
-#define GLFW_EXPOSE_NATIVE_GLX
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-#undef None
-#undef KeyPress
-#undef SIZEOF
-
-#elif JUCE_WINDOWS
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_WGL
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-
-#elif JUCE_ANDROID
-#define GLFW_INCLUDE_NONE
-#define GLFW_EXPOSE_NATIVE_ANDROID
-#include <GLFW/glfw3.h>
-#include <GLFW/glfw3native.h>
-
-#else
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
-
-#endif
-
-//==============================================================================
-#if JUCE_EMSCRIPTEN
-#include <emscripten/emscripten.h>
-#include <emscripten/html5.h>
-#endif
-
-//==============================================================================
-#include "native/yup_Windowing_glfw.cpp"
+#include "native/yup_Windowing_utils.h"
+#include "native/yup_Windowing_sdl2.h"
+#include "native/yup_Windowing_sdl2.cpp"

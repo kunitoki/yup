@@ -40,17 +40,25 @@
 namespace juce
 {
 
+//==============================================================================
+void runNSApplication()
+{
+    JUCE_AUTORELEASEPOOL
+    {
+        [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
+                                 beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
+    }
+}
+
+//==============================================================================
 void MessageManager::runDispatchLoop()
 {
-    jassert(isThisTheMessageThread()); // must only be called by the message thread
+    // must only be called by the message thread!
+    jassert(isThisTheMessageThread());
 
-    while (quitMessagePosted.get() == 0)
+    while (!MessageManager::getInstance()->hasStopMessageBeenSent())
     {
-        JUCE_AUTORELEASEPOOL
-        {
-            [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
-                                     beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
-        }
+        loopCallback();
     }
 }
 
@@ -90,12 +98,14 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 #endif
 
 //==============================================================================
-static std::unique_ptr<MessageQueue> messageQueue;
+static std::unique_ptr<InternalMessageQueue> messageQueue;
 
 void MessageManager::doPlatformSpecificInitialisation()
 {
     if (messageQueue == nullptr)
-        messageQueue.reset(new MessageQueue());
+        messageQueue.reset(new InternalMessageQueue());
+
+    MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()

@@ -144,7 +144,7 @@ protected:
     /** Resets the reference count to zero without deleting the object.
         You should probably never need to use this!
     */
-    void resetReferenceCount() noexcept
+    void resetReferenceCount() const noexcept
     {
         refCount = 0;
     }
@@ -455,13 +455,6 @@ public:
         increased type safety and can prevent some common slip-ups.
     */
     operator ReferencedType*() const noexcept { return referencedObject; }
-#endif
-
-#ifndef DOXYGEN
-    [[deprecated ("Use the get method instead.")]] ReferencedType* getObject() const
-    {
-        return get();
-    }
 #endif
 
 private:

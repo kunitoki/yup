@@ -33,10 +33,12 @@
     license:            MIT
     minimumCppStandard: 17
 
-    dependencies:       rive glad
+    dependencies:       rive rive_decoders glad
     searchpaths:        include source
     osxFrameworks:      Metal QuartzCore
-    defines:            WITH_RIVE_TEXT=1
+    defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
+    iosDefines:         RIVE_IOS=1
+    iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
     androidDefines:     RIVE_ANDROID=1
@@ -125,9 +127,15 @@
  #pragma clang diagnostic ignored "-Wattributes"
 #endif
 
-#include "include/rive/renderer/render_context.hpp"
+// Public API
+#include <rive/renderer/texture.hpp>
+#include <rive/renderer/rive_render_image.hpp>
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/render_context_impl.hpp>
+
+// Internals
+#include <rive_renderer/source/rive_render_path.hpp>
 
 #if __clang__
  #pragma clang diagnostic pop
 #endif
-

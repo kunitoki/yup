@@ -291,66 +291,6 @@ public:
     */
     MidiBufferIterator findNextSamplePosition (int samplePosition) const noexcept;
 
-    //==============================================================================
-#ifndef DOXYGEN
-    /** This class is now deprecated in favour of MidiBufferIterator.
-
-        Used to iterate through the events in a MidiBuffer.
-
-        Note that altering the buffer while an iterator is using it will produce
-        undefined behaviour.
-
-        @see MidiBuffer
-    */
-    class [[deprecated]] JUCE_API Iterator
-    {
-    public:
-        //==============================================================================
-        /** Creates an Iterator for this MidiBuffer. */
-        Iterator (const MidiBuffer& b) noexcept;
-
-        //==============================================================================
-        /** Repositions the iterator so that the next event retrieved will be the first
-            one whose sample position is at greater than or equal to the given position.
-        */
-        void setNextSamplePosition (int samplePosition) noexcept;
-
-        /** Retrieves a copy of the next event from the buffer.
-
-            @param result   on return, this will be the message. The MidiMessage's timestamp
-                            is set to the same value as samplePosition.
-            @param samplePosition   on return, this will be the position of the event, as a
-                            sample index in the buffer
-            @returns        true if an event was found, or false if the iterator has reached
-                            the end of the buffer
-        */
-        bool getNextEvent (MidiMessage& result,
-                           int& samplePosition) noexcept;
-
-        /** Retrieves the next event from the buffer.
-
-            @param midiData     on return, this pointer will be set to a block of data containing
-                                the midi message. Note that to make it fast, this is a pointer
-                                directly into the MidiBuffer's internal data, so is only valid
-                                temporarily until the MidiBuffer is altered.
-            @param numBytesOfMidiData   on return, this is the number of bytes of data used by the
-                                        midi message
-            @param samplePosition   on return, this will be the position of the event, as a
-                                    sample index in the buffer
-            @returns        true if an event was found, or false if the iterator has reached
-                            the end of the buffer
-        */
-        bool getNextEvent (const uint8*& midiData,
-                           int& numBytesOfMidiData,
-                           int& samplePosition) noexcept;
-
-    private:
-        //==============================================================================
-        const MidiBuffer& buffer;
-        MidiBufferIterator iterator;
-    };
-#endif
-
     /** The raw data holding this buffer.
         Obviously access to this data is provided at your own risk. Its internal format could
         change in future, so don't write code that relies on it!

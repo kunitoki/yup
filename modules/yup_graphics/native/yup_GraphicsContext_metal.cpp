@@ -23,6 +23,8 @@
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/metal/render_context_metal_impl.h"
 
+#include <TargetConditionals.h>
+
 namespace yup
 {
 
@@ -40,26 +42,33 @@ public:
             metalOptions.disableFramebufferReads = true;
 
         m_plsContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
-        printf ("==== MTLDevice: %s ====\n", m_gpu.name.UTF8String);
     }
 
     float dpiScale (void* window) const override
     {
+#if TARGET_OS_IOS
+        UIWindow* uiWindow = (__bridge UIWindow*) window;
+        UIScreen* screen = [uiWindow screen] ?: [UIScreen mainScreen];
+        return screen.nativeScale;
+#else
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         return m_fiddleOptions.retinaDisplay ? nsWindow.backingScaleFactor : 1.0f;
+#endif
     }
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* renderContextOrNull() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* renderTargetOrNull() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
+#if ! TARGET_OS_IOS
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
+#endif
 
         m_swapchain = [CAMetalLayer layer];
         m_swapchain.device = m_gpu;
@@ -67,9 +76,18 @@ public:
         m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
-        m_swapchain.displaySyncEnabled = NO;
         m_swapchain.maximumDrawableCount = 2;
+#if ! TARGET_OS_IOS
+        m_swapchain.displaySyncEnabled = NO;
+#endif
+
+#if TARGET_OS_IOS
+        UIView* view = (__bridge UIView*) window;
+        m_swapchain.frame = view.bounds;
+        [view.layer addSublayer:m_swapchain];
+#else
         view.layer = m_swapchain;
+#endif
 
         auto plsContextImpl = m_plsContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
         m_renderTarget = plsContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
@@ -87,21 +105,16 @@ public:
 
     void end (void*) override
     {
-        if (m_currentFrameSurface == nil)
-        {
-            m_currentFrameSurface = [m_swapchain nextDrawable];
-            assert (m_currentFrameSurface.texture.width == m_renderTarget->width());
-            assert (m_currentFrameSurface.texture.height == m_renderTarget->height());
-            m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
-        }
+        jassert (m_currentFrameSurface == nil);
+        m_currentFrameSurface = [m_swapchain nextDrawable];
+        jassert (m_currentFrameSurface.texture.width == m_renderTarget->width());
+        jassert (m_currentFrameSurface.texture.height == m_renderTarget->height());
+        m_renderTarget->setTargetTexture (m_currentFrameSurface.texture);
 
-        id<MTLCommandBuffer> flushCommandBuffer = [m_queue commandBuffer];
-        m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) flushCommandBuffer });
-        [flushCommandBuffer commit];
-
-        id<MTLCommandBuffer> presentCommandBuffer = [m_queue commandBuffer];
-        [presentCommandBuffer presentDrawable:m_currentFrameSurface];
-        [presentCommandBuffer commit];
+        id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
+        m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        [commandBuffer presentDrawable:m_currentFrameSurface];
+        [commandBuffer commit];
 
         m_currentFrameSurface = nil;
         m_renderTarget->setTargetTexture (nil);

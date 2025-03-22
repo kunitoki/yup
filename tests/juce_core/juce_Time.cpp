@@ -40,14 +40,14 @@ TEST (TimeTests, MillisecondsConstructor)
 
 TEST (TimeTests, DISABLED_DateComponentsConstructorUTC)
 {
-    Time time(2022, 11, 1, 19, 50, 50, 111, false);
-    EXPECT_EQ(time.getYear(), 2022);
-    EXPECT_EQ(time.getMonth(), 11);
-    EXPECT_EQ(time.getDayOfMonth(), 1);
-    EXPECT_EQ(time.getHours(), 20);
-    EXPECT_EQ(time.getMinutes(), 50);
-    EXPECT_EQ(time.getSeconds(), 50);
-    EXPECT_EQ(time.getMilliseconds(), 111);
+    Time time (2022, 11, 1, 19, 50, 50, 111, false);
+    EXPECT_EQ (time.getYear(), 2022);
+    EXPECT_EQ (time.getMonth(), 11);
+    EXPECT_EQ (time.getDayOfMonth(), 1);
+    EXPECT_EQ (time.getHours(), 20);
+    EXPECT_EQ (time.getMinutes(), 50);
+    EXPECT_EQ (time.getSeconds(), 50);
+    EXPECT_EQ (time.getMilliseconds(), 111);
 }
 
 TEST (TimeTests, DateComponentsConstructorLocalTime)
@@ -114,8 +114,8 @@ TEST (TimeTests, GetWeekdayName)
 
 TEST (TimeTests, DISABLED_GetHours)
 {
-    Time time(1625000000000);
-    EXPECT_EQ(time.getHours(), 22); // 10 PM UTC
+    Time time (1625000000000);
+    EXPECT_EQ (time.getHours(), 22); // 10 PM UTC
 }
 
 TEST (TimeTests, IsAfternoon)
@@ -128,8 +128,8 @@ TEST (TimeTests, IsAfternoon)
 
 TEST (TimeTests, DISABLED_GetHoursInAmPmFormat)
 {
-    Time time(1625000000000);
-    EXPECT_EQ(time.getHoursInAmPmFormat(), 10); // 10 AM
+    Time time (1625000000000);
+    EXPECT_EQ (time.getHoursInAmPmFormat(), 10); // 10 AM
 }
 
 TEST (TimeTests, GetMinutes)
@@ -152,8 +152,8 @@ TEST (TimeTests, GetMilliseconds)
 
 TEST (TimeTests, DISABLED_IsDaylightSavingTime)
 {
-    Time time(1625000000000);
-    EXPECT_FALSE(time.isDaylightSavingTime());
+    Time time (1625000000000);
+    EXPECT_FALSE (time.isDaylightSavingTime());
 }
 
 TEST (TimeTests, GetTimeZone)
@@ -164,8 +164,8 @@ TEST (TimeTests, GetTimeZone)
 
 TEST (TimeTests, DISABLED_GetUTCOffsetSeconds)
 {
-    Time time(1625000000000);
-    EXPECT_NE(time.getUTCOffsetSeconds(), 0);
+    Time time (1625000000000);
+    EXPECT_NE (time.getUTCOffsetSeconds(), 0);
 }
 
 TEST (TimeTests, GetUTCOffsetString)
@@ -299,4 +299,59 @@ TEST (TimeTests, DISABLED_SetSystemTimeToThisTime)
     Time now = Time::getCurrentTime();
     // This test may fail if the system does not have sufficient privileges
     EXPECT_TRUE (now.setSystemTimeToThisTime());
+}
+
+TEST (TimeTests, xxx)
+{
+    Time t = Time::getCurrentTime();
+    EXPECT_TRUE (t > Time());
+
+    Thread::sleep (15);
+    EXPECT_TRUE (Time::getCurrentTime() > t);
+
+    EXPECT_TRUE (t.getTimeZone().isNotEmpty());
+    EXPECT_TRUE (t.getUTCOffsetString (true) == "Z" || t.getUTCOffsetString (true).length() == 6);
+    EXPECT_TRUE (t.getUTCOffsetString (false) == "Z" || t.getUTCOffsetString (false).length() == 5);
+
+    //EXPECT_TRUE (TimeHelpers::getUTCOffsetString (-(3 * 60 + 15) * 60, true) == "-03:15");
+    //EXPECT_TRUE (TimeHelpers::getUTCOffsetString (-(3 * 60 + 30) * 60, true) == "-03:30");
+    //EXPECT_TRUE (TimeHelpers::getUTCOffsetString (-(3 * 60 + 45) * 60, true) == "-03:45");
+    //EXPECT_TRUE (TimeHelpers::getUTCOffsetString ((3 * 60 + 15) * 60, true) == "+03:15");
+
+    EXPECT_TRUE (Time::fromISO8601 (t.toISO8601 (true)) == t);
+    EXPECT_TRUE (Time::fromISO8601 (t.toISO8601 (false)) == t);
+
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16") == Time (2016, 1, 16, 0, 0, 0, 0, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216Z") == Time (2016, 1, 16, 0, 0, 0, 0, false));
+
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16T15:03:57+00:00") == Time (2016, 1, 16, 15, 3, 57, 0, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216T150357+0000") == Time (2016, 1, 16, 15, 3, 57, 0, false));
+
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16T15:03:57.999+00:00") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216T150357.999+0000") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16T15:03:57.999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16T15:03:57,999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216T150357.999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216T150357,999Z") == Time (2016, 1, 16, 15, 3, 57, 999, false));
+
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16T15:03:57.999-02:30") == Time (2016, 1, 16, 17, 33, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("2016-02-16T15:03:57,999-02:30") == Time (2016, 1, 16, 17, 33, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216T150357.999-0230") == Time (2016, 1, 16, 17, 33, 57, 999, false));
+    EXPECT_TRUE (Time::fromISO8601 ("20160216T150357,999-0230") == Time (2016, 1, 16, 17, 33, 57, 999, false));
+
+    EXPECT_TRUE (Time (1970, 0, 1, 0, 0, 0, 0, false) == Time (0));
+    EXPECT_TRUE (Time (2106, 1, 7, 6, 28, 15, 0, false) == Time (4294967295000));
+    EXPECT_TRUE (Time (2007, 10, 7, 1, 7, 20, 0, false) == Time (1194397640000));
+    EXPECT_TRUE (Time (2038, 0, 19, 3, 14, 7, 0, false) == Time (2147483647000));
+    EXPECT_TRUE (Time (2016, 2, 7, 11, 20, 8, 0, false) == Time (1457349608000));
+    EXPECT_TRUE (Time (1969, 11, 31, 23, 59, 59, 0, false) == Time (-1000));
+    EXPECT_TRUE (Time (1901, 11, 13, 20, 45, 53, 0, false) == Time (-2147483647000));
+
+    EXPECT_TRUE (Time (1982, 1, 1, 12, 0, 0, 0, true) + RelativeTime::days (365) == Time (1983, 1, 1, 12, 0, 0, 0, true));
+    EXPECT_TRUE (Time (1970, 1, 1, 12, 0, 0, 0, true) + RelativeTime::days (365) == Time (1971, 1, 1, 12, 0, 0, 0, true));
+    EXPECT_TRUE (Time (2038, 1, 1, 12, 0, 0, 0, true) + RelativeTime::days (365) == Time (2039, 1, 1, 12, 0, 0, 0, true));
+
+    EXPECT_TRUE (Time (1982, 1, 1, 12, 0, 0, 0, false) + RelativeTime::days (365) == Time (1983, 1, 1, 12, 0, 0, 0, false));
+    EXPECT_TRUE (Time (1970, 1, 1, 12, 0, 0, 0, false) + RelativeTime::days (365) == Time (1971, 1, 1, 12, 0, 0, 0, false));
+    EXPECT_TRUE (Time (2038, 1, 1, 12, 0, 0, 0, false) + RelativeTime::days (365) == Time (2039, 1, 1, 12, 0, 0, 0, false));
 }

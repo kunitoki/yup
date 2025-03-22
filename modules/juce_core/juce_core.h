@@ -58,8 +58,10 @@
   dependencies:       zlib
   osxFrameworks:      Cocoa Foundation IOKit Security
   iosFrameworks:      Foundation UIKit
+  iosSimFrameworks:   Foundation UIKit
   linuxLibs:          rt dl pthread
   androidLibs:        log android
+  androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures
   mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm
 
  END_JUCE_MODULE_DECLARATION
@@ -131,22 +133,6 @@
 #define JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES 0
 #endif
 
-/** Config: JUCE_INCLUDE_ZLIB_CODE
-    This can be used to disable Juce's embedded 3rd-party zlib code.
-    You might need to tweak this if you're linking to an external zlib library in your app,
-    but for normal apps, this option should be left alone.
-
-    If you disable this, you might also want to set a value for JUCE_ZLIB_INCLUDE_PATH, to
-    specify the path where your zlib headers live.
-*/
-#ifndef JUCE_INCLUDE_ZLIB_CODE
-#define JUCE_INCLUDE_ZLIB_CODE 1
-#endif
-
-#ifndef JUCE_ZLIB_INCLUDE_PATH
-#define JUCE_ZLIB_INCLUDE_PATH <zlib.h>
-#endif
-
 /** Config: JUCE_USE_CURL
     Enables http/https support via libcurl (Linux only). Enabling this will add an additional
     run-time dynamic dependency to libcurl.
@@ -200,6 +186,27 @@
 */
 #ifndef JUCE_ENABLE_ALLOCATION_HOOKS
 #define JUCE_ENABLE_ALLOCATION_HOOKS 0
+#endif
+
+/** Config: JUCE_PROFILING_CATEGORIES
+    If enabled, this will add global profiling categories to the profiler. The "yup" category should
+    always be defined, only additional categories should be provided (note the first comma).
+    Format of the categories is like:
+    ```
+        #define JUCE_PROFILING_CATEGORIES \
+            , perfetto::Category ("custom1") \
+            , perfetto::Category ("custom2")
+    ```
+*/
+#ifndef JUCE_PROFILING_CATEGORIES
+#define JUCE_PROFILING_CATEGORIES
+#endif
+
+/** Config: JUCE_PROFILING_FILE_PREFIX
+    If provided, it will be used as prefix for profilation files generated. By default it will use "yup-profile".
+*/
+#ifndef JUCE_PROFILING_FILE_PREFIX
+#define JUCE_PROFILING_FILE_PREFIX "yup-profile"
 #endif
 
 #ifndef JUCE_STRING_UTF_TYPE
@@ -256,6 +263,8 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "text/juce_String.h"
 #include "text/juce_StringRef.h"
 #include "logging/juce_Logger.h"
+#include "misc/juce_Functional.h"
+#include "containers/juce_Span.h"
 #include "memory/juce_LeakedObjectDetector.h"
 #include "memory/juce_ContainerDeletePolicy.h"
 #include "memory/juce_HeapBlock.h"
@@ -297,8 +306,6 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "text/juce_TextDiff.h"
 #include "text/juce_LocalisedStrings.h"
 #include "text/juce_Base64.h"
-#include "misc/juce_Functional.h"
-#include "containers/juce_Span.h"
 #include "misc/juce_FlagSet.h"
 #include "misc/juce_Result.h"
 #include "misc/juce_ResultValue.h"
@@ -312,6 +319,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "containers/juce_FixedSizeFunction.h"
 #include "time/juce_RelativeTime.h"
 #include "time/juce_Time.h"
+#include "time/juce_TimeoutDetector.h"
 #include "streams/juce_InputStream.h"
 #include "streams/juce_OutputStream.h"
 #include "streams/juce_BufferedInputStream.h"
@@ -378,8 +386,8 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "detail/juce_CallbackListenerList.h"
 
 #if JUCE_CORE_INCLUDE_OBJC_HELPERS && (JUCE_MAC || JUCE_IOS)
-#include "native/juce_CFHelpers_mac.h"
-#include "native/juce_ObjCHelpers_mac.h"
+#include "native/juce_CFHelpers_apple.h"
+#include "native/juce_ObjCHelpers_apple.h"
 #endif
 
 #if JUCE_CORE_INCLUDE_COM_SMART_PTR && JUCE_WINDOWS

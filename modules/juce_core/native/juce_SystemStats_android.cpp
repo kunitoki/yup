@@ -44,15 +44,15 @@ namespace juce
 namespace AndroidStatsHelpers
 {
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-STATICMETHOD (getProperty, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;")
+    STATICMETHOD (getProperty, "getProperty", "(Ljava/lang/String;)Ljava/lang/String;")
 
 DECLARE_JNI_CLASS (SystemClass, "java/lang/System")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-STATICMETHOD (getDefault, "getDefault", "()Ljava/util/Locale;")               \
-METHOD (getCountry, "getCountry", "()Ljava/lang/String;")                     \
-METHOD (getLanguage, "getLanguage", "()Ljava/lang/String;")
+    STATICMETHOD (getDefault, "getDefault", "()Ljava/util/Locale;")           \
+    METHOD (getCountry, "getCountry", "()Ljava/lang/String;")                 \
+    METHOD (getLanguage, "getLanguage", "()Ljava/lang/String;")
 
 DECLARE_JNI_CLASS (JavaLocale, "java/util/Locale")
 #undef JNI_CLASS_MEMBERS
@@ -106,7 +106,12 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 
 String SystemStats::getOperatingSystemName()
 {
-    return "Android " + AndroidStatsHelpers::getSystemProperty ("os.version");
+    return "Android " + getOperatingSystemVersionString();
+}
+
+String SystemStats::getOperatingSystemVersionString()
+{
+    return AndroidStatsHelpers::getSystemProperty ("os.version");
 }
 
 String SystemStats::getDeviceDescription()
@@ -157,12 +162,10 @@ int SystemStats::getCpuSpeedInMegahertz()
 
 int SystemStats::getMemorySizeInMegabytes()
 {
-#if __ANDROID_API__ >= 9
     struct sysinfo sysi;
 
     if (sysinfo (&sysi) == 0)
         return static_cast<int> ((sysi.totalram * sysi.mem_unit) / (1024 * 1024));
-#endif
 
     return 0;
 }

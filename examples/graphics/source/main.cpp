@@ -28,6 +28,10 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
+#if JUCE_ANDROID
+#include <BinaryData.h>
+#endif
+
 //==============================================================================
 
 class SineWaveGenerator
@@ -36,17 +40,25 @@ public:
     SineWaveGenerator()
         : sampleRate (44100.0)
         , currentAngle (0.0)
-        , angleDelta (0.0)
+        , frequency (0.0)
         , amplitude (0.0)
     {
     }
 
-    void setFrequency (double frequency, double newSampleRate)
+    void setSampleRate (double newSampleRate)
     {
         sampleRate = newSampleRate;
-        angleDelta = (juce::MathConstants<double>::twoPi * frequency) / sampleRate;
 
-        amplitude.reset (sampleRate, 0.1);
+        frequency.reset (newSampleRate, 0.1);
+        amplitude.reset (newSampleRate, 0.1);
+    }
+
+    void setFrequency (double newFrequency, bool immediate = false)
+    {
+        if (immediate)
+            frequency.setCurrentAndTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+        else
+            frequency.setTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
     }
 
     void setAmplitude (float newAmplitude)
@@ -54,11 +66,16 @@ public:
         amplitude.setTargetValue (newAmplitude);
     }
 
+    float getAmplitude() const
+    {
+        return amplitude.getCurrentValue();
+    }
+
     float getNextSample()
     {
         auto sample = std::sin (currentAngle) * amplitude.getNextValue();
 
-        currentAngle += angleDelta;
+        currentAngle += frequency.getNextValue();
         if (currentAngle >= juce::MathConstants<double>::twoPi)
             currentAngle -= juce::MathConstants<double>::twoPi;
 
@@ -68,7 +85,7 @@ public:
 private:
     double sampleRate;
     double currentAngle;
-    double angleDelta;
+    yup::SmoothedValue<float> frequency;
     yup::SmoothedValue<float> amplitude;
 };
 
@@ -77,12 +94,12 @@ private:
 class Oscilloscope : public yup::Component
 {
 public:
-    Oscilloscope ()
+    Oscilloscope()
         : Component ("Oscilloscope")
     {
     }
 
-    void setRenderData (const std::vector<float>& data)
+    void setRenderData (const std::vector<float>& data, int newReadPos)
     {
         renderData.resize (data.size());
 
@@ -100,11 +117,9 @@ public:
 
         float xSize = getWidth() / float (renderData.size());
 
-        yup::Path path;
+        path.reserveSpace ((int) renderData.size());
+        path.clear();
         path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
-
-        for (size_t i = 1; i < renderData.size(); ++i)
-            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
         g.setStrokeColor (0xff4b4bff);
         g.setStrokeWidth (2.0f);
@@ -113,6 +128,7 @@ public:
 
 private:
     std::vector<float> renderData;
+    yup::Path path;
 };
 
 //==============================================================================
@@ -126,32 +142,45 @@ public:
     CustomWindow()
         : yup::DocumentWindow ({}, yup::Color (0xff404040))
     {
-        rive::Factory* factory = getNativeComponent()->getFactory();
-        if (factory == nullptr)
-        {
-            yup::Logger::outputDebugString ("Failed to create a graphics context");
-
-            yup::YUPApplication::getInstance()->systemRequestedQuit();
-            return;
-        }
-
         setTitle ("main");
 
-        // Load the font
-        yup::File fontFilePath =
 #if JUCE_WASM
-            yup::File ("/data")
+        auto baseFilePath = yup::File ("/data");
 #else
-            yup::File (__FILE__).getParentDirectory().getSiblingFile ("data")
+        auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-            .getChildFile ("Roboto-Regular.ttf");
 
-        if (auto result = font.loadFromFile (fontFilePath, factory); result.failed())
-            yup::Logger::outputDebugString (result.getErrorMessage());
+        // Load the font
+        {
+#if JUCE_ANDROID
+            yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
+            if (auto result = font.loadFromData (mb); result.failed())
+                yup::Logger::outputDebugString (result.getErrorMessage());
+#else
+            auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
+            if (auto result = font.loadFromFile (fontFilePath); result.failed())
+                yup::Logger::outputDebugString (result.getErrorMessage());
+#endif
+        }
+
+        // Load an image
+        {
+            yup::MemoryBlock mb;
+            auto imageFile = baseFilePath.getChildFile ("logo.png");
+            if (imageFile.loadFileAsData (mb))
+            {
+                auto loadedImage = yup::Image::loadFromData (mb.asBytes());
+                if (loadedImage.wasOk())
+                    image = std::move (loadedImage.getReference());
+            }
+            else
+            {
+                yup::Logger::outputDebugString ("Unable to load requested image");
+            }
+        }
 
         // Initialize the audio device
-        deviceManager.addAudioCallback (this);
-        deviceManager.initialiseWithDefaultDevices (1, 0);
+        deviceManager.initialiseWithDefaultDevices (0, 2);
 
         // Initialize sine wave generators
         double sampleRate = deviceManager.getAudioDeviceSetup().sampleRate;
@@ -159,17 +188,21 @@ public:
         for (size_t i = 0; i < sineWaveGenerators.size(); ++i)
         {
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
-            sineWaveGenerators[i]->setFrequency(440.0 * std::pow(1.1, i), sampleRate);
+            sineWaveGenerators[i]->setSampleRate (sampleRate);
+            sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i + 1), true);
         }
+
+        deviceManager.addAudioCallback (this);
 
         // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
             auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i), font));
 
-            slider->onValueChanged = [this, i](float value)
+            slider->onValueChanged = [this, i, sampleRate] (float value)
             {
-                sineWaveGenerators[i]->setAmplitude (value);
+                sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1 + value, i + 1));
+                sineWaveGenerators[i]->setAmplitude (value * 0.5);
             };
 
             addAndMakeVisible (slider);
@@ -193,12 +226,13 @@ public:
 
     ~CustomWindow() override
     {
+        deviceManager.removeAudioCallback (this);
         deviceManager.closeAudioDevice();
     }
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced (100);
+        auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f), proportionOfHeight (0.2f));
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
@@ -213,19 +247,39 @@ public:
         }
 
         if (button != nullptr)
-            button->setBounds (getLocalBounds().removeFromTop (80).reduced (proportionOfWidth (0.4f), 0.0f));
+            button->setBounds (getLocalBounds()
+                                   .removeFromTop (proportionOfHeight (0.2f))
+                                   .reduced (proportionOfWidth (0.2f), 0.0f));
 
-        oscilloscope.setBounds (getLocalBounds().removeFromBottom (120).reduced (200, 10));
+        oscilloscope.setBounds (getLocalBounds()
+                                    .removeFromBottom (proportionOfHeight (0.2f))
+                                    .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
     }
 
+    void paint (yup::Graphics& g) override
+    {
+        yup::DocumentWindow::paint (g);
+        //g.drawImageAt (image, getLocalBounds().getCenter());
+    }
+
+    void paintOverChildren (yup::Graphics& g) override
+    {
+        if (! image.isValid())
+            return;
+
+        g.setBlendMode (yup::BlendMode::ColorDodge);
+        g.setOpacity (1.0f);
+        g.drawImageAt (image, getLocalBounds().getCenter());
+    }
 
     void mouseDown (const yup::MouseEvent& event) override
     {
         takeFocus();
     }
 
-    void mouseExit (const yup::MouseEvent& event) override
+    void mouseDoubleClick (const yup::MouseEvent& event) override
     {
+        DBG ("mouseDoubleClick");
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -257,10 +311,13 @@ public:
     void timerCallback() override
     {
         updateWindowTitle();
+    }
 
+    void refreshDisplay (double lastFrameTimeSeconds) override
+    {
         {
             const yup::CriticalSection::ScopedLockType sl (renderMutex);
-            oscilloscope.setRenderData (renderData);
+            oscilloscope.setRenderData (renderData, readPos);
         }
 
         oscilloscope.repaint();
@@ -281,17 +338,23 @@ public:
         for (int sample = 0; sample < numSamples; ++sample)
         {
             float mixedSample = 0.0f;
+            float totalScale = 0.0f;
 
             for (int i = 0; i < sineWaveGenerators.size(); ++i)
+            {
                 mixedSample += sineWaveGenerators[i]->getNextSample();
+                totalScale += sineWaveGenerators[i]->getAmplitude();
+            }
 
-            mixedSample /= static_cast<float> (sineWaveGenerators.size());
+            if (totalScale > 1.0f)
+                mixedSample /= static_cast<float> (totalScale);
 
             for (int channel = 0; channel < numOutputChannels; ++channel)
                 outputChannelData[channel][sample] = mixedSample;
 
-            inputData[readPos++] = mixedSample;
-            readPos %= inputData.size();
+            auto pos = readPos.fetch_add (1);
+            inputData[pos] = mixedSample;
+            readPos = readPos % inputData.size();
         }
 
         const yup::CriticalSection::ScopedLockType sl (renderMutex);
@@ -314,18 +377,22 @@ public:
 private:
     void updateWindowTitle()
     {
-        /*
         yup::String title;
 
-        title << "[" << yup::String (getNativeComponent()->getCurrentFrameRate(), 1) << " FPS]";
+        auto currentFps = getNativeComponent()->getCurrentFrameRate();
+        title << "[" << yup::String (currentFps, 1) << " FPS]";
+
+        title << " (x" << (totalRows * totalColumns) << " instances)";
         title << " | "
               << "YUP On Rive Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
+        auto [width, height] = getNativeComponent()->getContentSize();
+        title << " | " << width << " x " << height;
+
         setTitle (title);
-        */
     }
 
     yup::AudioDeviceManager deviceManager;
@@ -334,7 +401,7 @@ private:
     std::vector<float> renderData;
     std::vector<float> inputData;
     yup::CriticalSection renderMutex;
-    int readPos = 0;
+    std::atomic_int readPos = 0;
 
     yup::OwnedArray<yup::Slider> sliders;
     int totalRows = 4;
@@ -345,6 +412,8 @@ private:
 
     yup::Font font;
     yup::StyledText styleText;
+
+    yup::Image image;
 };
 
 //==============================================================================
@@ -370,7 +439,16 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
+
+#if JUCE_IOS
+        window->centreWithSize ({ 320, 480 });
+#elif JUCE_ANDROID
+        window->centreWithSize ({ 1080, 2400 });
+        // window->setFullScreen(true);
+#else
         window->centreWithSize ({ 800, 800 });
+#endif
+
         window->setVisible (true);
     }
 
@@ -388,4 +466,3 @@ private:
 };
 
 START_JUCE_APPLICATION (Application)
-

@@ -179,10 +179,10 @@ struct MathConstants
     static constexpr FloatType pi = static_cast<FloatType> (3.141592653589793238L);
 
     /** A predefined value for 2 * Pi */
-    static constexpr FloatType twoPi = static_cast<FloatType> (2 * 3.141592653589793238L);
+    static constexpr FloatType twoPi = static_cast<FloatType> (2.0L * 3.141592653589793238L);
 
     /** A predefined value for Pi / 2 */
-    static constexpr FloatType halfPi = static_cast<FloatType> (3.141592653589793238L / 2);
+    static constexpr FloatType halfPi = static_cast<FloatType> (3.141592653589793238L / 2.0L);
 
     /** A predefined value for Euler's number */
     static constexpr FloatType euler = static_cast<FloatType> (2.71828182845904523536L);
@@ -190,14 +190,6 @@ struct MathConstants
     /** A predefined value for sqrt (2) */
     static constexpr FloatType sqrt2 = static_cast<FloatType> (1.4142135623730950488L);
 };
-
-#ifndef DOXYGEN
-/** A double-precision constant for pi. */
-[[deprecated ("This is deprecated in favour of MathConstants<double>::pi.")]] const constexpr double double_Pi = MathConstants<double>::pi;
-
-/** A single-precision constant for pi. */
-[[deprecated ("This is deprecated in favour of MathConstants<float>::pi.")]] const constexpr float float_Pi = MathConstants<float>::pi;
-#endif
 
 /** Converts an angle in degrees to radians. */
 template <typename FloatType>
@@ -807,10 +799,10 @@ uint32 readLittleEndianBitsInBuffer (const void* sourceBuffer, uint32 startBit, 
      On CPUs that aren't vulnerable to denormalisation problems, this will have no effect.
  */
 #define JUCE_UNDENORMALISE(x) \
-{                             \
-(x) += 0.1f;                  \
-(x) -= 0.1f;                  \
-}
+    {                         \
+        (x) += 0.1f;          \
+        (x) -= 0.1f;          \
+    }
 #else
 #define JUCE_UNDENORMALISE(x)
 #endif
@@ -975,17 +967,6 @@ struct UnsignedTypeWithSize<8>
 } // namespace TypeHelpers
 
 //==============================================================================
-#ifndef DOXYGEN
-[[deprecated ("Use roundToInt instead.")]] inline int roundDoubleToInt (double value) noexcept
-{
-    return roundToInt (value);
-}
-
-[[deprecated ("Use roundToInt instead.")]] inline int roundFloatToInt (float value) noexcept { return roundToInt (value); }
-
-[[deprecated ("Use std::abs() instead.")]] inline int64 abs64 (int64 n) noexcept { return std::abs (n); }
-#endif
-
 /** Converts an enum to its underlying integral type.
     Similar to std::to_underlying, which is only available in C++23 and above.
 */

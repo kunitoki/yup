@@ -81,7 +81,11 @@ String SystemStats::getOperatingSystemName()
 #else
     return "WASM";
 #endif
+}
 
+String SystemStats::getOperatingSystemVersionString()
+{
+    return {};
 }
 
 bool SystemStats::isOperatingSystem64Bit()
@@ -244,16 +248,14 @@ void CPUInformation::initialise() noexcept
 //==============================================================================
 uint32 juce_millisecondsSinceStartup() noexcept
 {
-    const auto elapsed = std::chrono::duration<double>
-        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
+    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
-    return static_cast<uint32>(elapsed.count() * 1000.0);
+    return static_cast<uint32> (elapsed.count() * 1000.0);
 }
 
 int64 Time::getHighResolutionTicks() noexcept
 {
-    const auto elapsed = std::chrono::duration<double>
-        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
+    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
     return static_cast<int64> (elapsed.count() * double (getHighResolutionTicksPerSecond()));
 }
@@ -265,8 +267,7 @@ int64 Time::getHighResolutionTicksPerSecond() noexcept
 
 double Time::getMillisecondCounterHiRes() noexcept
 {
-    const auto elapsed = std::chrono::duration<double>
-        (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
+    const auto elapsed = std::chrono::duration<double> (std::chrono::steady_clock::now() - juce_getTimeSinceStartupFallback());
 
     return static_cast<double> (elapsed.count() * 1000.0);
 }

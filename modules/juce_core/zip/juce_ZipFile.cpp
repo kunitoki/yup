@@ -528,7 +528,7 @@ struct ZipFile::Builder::Item
 
             uncompressedSize = relativePath.length();
 
-            checksum = zlibNamespace::crc32 (0, (uint8_t*) relativePath.toRawUTF8(), (unsigned int) uncompressedSize);
+            checksum = crc32 (0, (uint8_t*) relativePath.toRawUTF8(), (unsigned int) uncompressedSize);
             compressedData << relativePath;
         }
         else if (compressionLevel > 0)
@@ -607,7 +607,7 @@ private:
             if (bytesRead < 0)
                 return false;
 
-            checksum = zlibNamespace::crc32 (checksum, buffer, (unsigned int) bytesRead);
+            checksum = crc32 (checksum, buffer, (unsigned int) bytesRead);
             target.write (buffer, (size_t) bytesRead);
             uncompressedSize += bytesRead;
         }

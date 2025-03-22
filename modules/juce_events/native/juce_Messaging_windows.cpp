@@ -261,6 +261,8 @@ private:
 
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> messageQueue;
+    std::function<void()> loopCallback;
+    std::atomic_bool loopCallbackRecursiveCheck = false;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InternalMessageQueue)
@@ -271,19 +273,15 @@ JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
 const TCHAR InternalMessageQueue::messageWindowName[] = _T("JUCEWindow");
 
 //==============================================================================
-namespace detail
+bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
 {
+    if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
+        return queue->dispatchNextMessage (returnIfNoPendingMessages);
 
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-    {
-        if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
-            return queue->dispatchNextMessage (returnIfNoPendingMessages);
+    return false;
+}
 
-        return false;
-    }
-
-} // namespace detail
-
+//==============================================================================
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {
     if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
@@ -305,6 +303,7 @@ void MessageManager::broadcastMessage (const String& value)
 void MessageManager::doPlatformSpecificInitialisation()
 {
     [[maybe_unused]] const auto result = OleInitialize (nullptr);
+
     InternalMessageQueue::getInstance();
 }
 

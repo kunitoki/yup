@@ -67,4 +67,11 @@ void DocumentWindow::paint (Graphics& g)
     g.fillAll();
 }
 
+//==============================================================================
+
+void DocumentWindow::userTriedToCloseWindow()
+{
+    jassertfalse; // Must implement this method to decide what to do when the window is closing !
+}
+
 } // namespace yup

@@ -45,9 +45,10 @@ Result Artboard::loadFromFile (const File& file, int defaultArtboardIndex, bool 
 
 Result Artboard::loadFromStream (InputStream& is, int defaultArtboardIndex, bool shouldUseStateMachines)
 {
-    jassert (getNativeComponent() != nullptr); // Must be added to a NativeComponent !
+    if (getNativeComponent() == nullptr)
+        return Result::fail ("Unable to access top level native component");
 
-    rive::Factory* factory = getNativeComponent()->getFactory();
+    auto factory = getNativeComponent()->getFactory();
     if (factory == nullptr)
         return Result::fail ("Failed to create a graphics context");
 
@@ -57,11 +58,9 @@ Result Artboard::loadFromStream (InputStream& is, int defaultArtboardIndex, bool
     rivFile = rive::File::import ({ static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
     artboardIndex = jlimit (-1, static_cast<int> (rivFile->artboardCount()) - 1, defaultArtboardIndex);
 
-    horzRepeat = 0;
-    vertRepeat = 0;
     useStateMachines = shouldUseStateMachines;
 
-    updateScenesFromFile (getNumInstances());
+    updateSceneFromFile();
     repaint();
 
     return Result::ok();
@@ -81,111 +80,90 @@ void Artboard::setPaused (bool shouldPause)
     repaint();
 }
 
+void Artboard::advanceAndApply (float elapsedSeconds)
+{
+    if (scene == nullptr)
+        return;
+
+    scene->advanceAndApply (elapsedSeconds);
+}
+
+float Artboard::durationSeconds() const
+{
+    if (scene == nullptr)
+        return 0.0f;
+
+    return scene->durationSeconds();
+}
+
 //==============================================================================
 
 void Artboard::setNumberInput (const String& name, double value)
 {
-    for (const auto& scene : scenes)
-    {
-        if (auto numberInput = scene->getNumber (name.toStdString()))
-            numberInput->value (static_cast<float> (value));
-    }
+    if (scene == nullptr)
+        return;
+
+    if (auto numberInput = scene->getNumber (name.toStdString()))
+        numberInput->value (static_cast<float> (value));
 
     repaint();
 }
 
 //==============================================================================
 
-void Artboard::addHorizontalRepeats (int repeatsToAdd)
+void Artboard::refreshDisplay (double lastFrameTimeSeconds)
 {
-    horzRepeat += repeatsToAdd;
-    horzRepeat = jmax (0, horzRepeat);
-
-    repaint();
-}
-
-void Artboard::addVerticalRepeats (int repeatsToAdd)
-{
-    vertRepeat += repeatsToAdd;
-    vertRepeat = jmax (0, vertRepeat);
-
-    repaint();
-}
-
-int Artboard::getNumInstances() const
-{
-    return (1 + horzRepeat * 2) * (1 + vertRepeat * 2);
-}
-
-//==============================================================================
-
-void Artboard::multiplyScale (float factor)
-{
-    scale *= factor;
-
-    repaint();
+    if (! paused)
+        advanceAndApply (static_cast<float> (lastFrameTimeSeconds));
 }
 
 //==============================================================================
 
 void Artboard::paint (Graphics& g)
 {
-    jassert (getNativeComponent() != nullptr); // Must be added to a NativeComponent !
-
-    double frameRate = getNativeComponent()->getDesiredFrameRate();
-    double time = Time::getMillisecondCounterHiRes() / 1000.0;
-
-    if (rivFile == nullptr)
+    if (scene == nullptr)
         return;
 
-    auto bounds = getBounds().withPosition (g.getDrawingArea().getTopLeft());
     auto* renderer = g.getRenderer();
 
-    const int instances = getNumInstances();
-    if (artboards.size() != instances || scenes.size() != instances)
-    {
-        updateScenesFromFile (instances);
-    }
-    else if (! paused)
-    {
-        for (const auto& scene : scenes)
-            scene->advanceAndApply (1.0f / frameRate);
-    }
+    renderer->save();
 
-    if (scenes.empty() || artboards.empty())
-        return;
+    renderer->transform (viewTransform);
 
-    rive::Mat2D m = rive::computeAlignment (rive::Fit::contain,
-                                            rive::Alignment::center,
-                                            rive::AABB (bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()),
-                                            artboards.front()->bounds());
+    scene->draw (renderer);
 
-    auto x = (bounds.getWidth() - bounds.getWidth() * scale) * 0.5f;
-    auto y = (bounds.getHeight() - bounds.getHeight() * scale) * 0.5f;
+    renderer->restore();
+}
 
-    m = rive::Mat2D (scale, 0, 0, scale, bounds.getX() + x, bounds.getY() + y) * m;
-    viewTransform = m;
+//==============================================================================
 
-    renderer->transform (m);
+void Artboard::resized()
+{
+    auto scaleDpi = getScaleDpi();
+    auto scaledBounds = getBounds() * scaleDpi;
 
-    const float spacing = 200 / m.findMaxScale();
+    auto frameBounds = rive::AABB (
+        scaledBounds.getX(),
+        scaledBounds.getY(),
+        scaledBounds.getX() + scaledBounds.getWidth(),
+        scaledBounds.getY() + scaledBounds.getHeight());
 
-    auto scene = scenes.begin();
-    for (int j = 0; j < vertRepeat + 1; ++j)
-    {
-        renderer->save();
+    rive::AABB artboardBounds;
+    if (artboard != nullptr)
+        artboardBounds = artboard->bounds();
 
-        renderer->transform (rive::Mat2D::fromTranslate (-spacing * horzRepeat, (j - (vertRepeat / 2)) * spacing));
+    viewTransform = rive::computeAlignment (
+        rive::Fit::contain,
+        rive::Alignment::center,
+        frameBounds,
+        artboardBounds);
+}
 
-        for (int i = 0; i < horzRepeat * 2 + 1; ++i)
-        {
-            (*scene++)->draw (renderer);
+//==============================================================================
 
-            renderer->transform (rive::Mat2D::fromTranslate (spacing, 0));
-        }
-
-        renderer->restore();
-    }
+void Artboard::contentScaleChanged (float dpiScale)
+{
+    resized();
 }
 
 //==============================================================================
@@ -202,56 +180,52 @@ void Artboard::mouseExit (const MouseEvent& event)
 
 void Artboard::mouseDown (const MouseEvent& event)
 {
-    if (scenes.empty() || ! event.isLeftButtoDown())
+    if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    for (auto& scene : scenes)
-        scene->pointerDown (xy);
+    scene->pointerDown (xy);
 
     repaint();
 }
 
 void Artboard::mouseUp (const MouseEvent& event)
 {
-    if (scenes.empty())
+    if (scene == nullptr)
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    for (auto& scene : scenes)
-        scene->pointerUp (xy);
+    scene->pointerUp (xy);
 
     repaint();
 }
 
 void Artboard::mouseMove (const MouseEvent& event)
 {
-    if (scenes.empty())
+    if (scene == nullptr)
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    for (auto& scene : scenes)
-        scene->pointerMove (xy);
+    scene->pointerMove (xy);
 
     repaint();
 }
 
 void Artboard::mouseDrag (const MouseEvent& event)
 {
-    if (scenes.empty() || ! event.isLeftButtoDown())
+    if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
-    auto [x, y] = event.getPosition();
+    auto [x, y] = event.getPosition() * getScaleDpi();
 
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    for (auto& scene : scenes)
-        scene->pointerMove (xy);
+    scene->pointerMove (xy);
 
     pullEventsFromStateMachines();
 
@@ -267,98 +241,93 @@ void Artboard::propertyChanged (const String& eventName, const String& propertyN
 
 //==============================================================================
 
-void Artboard::updateScenesFromFile (std::size_t count)
+void Artboard::updateSceneFromFile()
 {
     jassert (rivFile != nullptr);
 
-    artboards.clear();
-    scenes.clear();
-    stateMachines.clear();
-
+    artboard.reset();
+    scene.reset();
+    stateMachine = nullptr;
     eventProperties.clear();
 
-    for (size_t i = 0; i < count; ++i)
+    auto currentArtboard = (artboardIndex == -1)
+                             ? rivFile->artboardDefault()
+                             : rivFile->artboard (artboardIndex)->instance();
+
+    std::unique_ptr<rive::Scene> currentScene;
+    rive::StateMachineInstance* currentStateMachine = nullptr;
+
+    if (useStateMachines)
     {
-        auto currentArtboard = (artboardIndex == -1)
-                                 ? rivFile->artboardDefault()
-                                 : rivFile->artboard (artboardIndex)->instance();
-
-        std::unique_ptr<rive::Scene> scene;
-        rive::StateMachineInstance* stateMachine = nullptr;
-
-        if (useStateMachines)
+        if (yup::isPositiveAndBelow (stateMachineIndex, currentArtboard->stateMachineCount()))
         {
-            if (yup::isPositiveAndBelow (stateMachineIndex, currentArtboard->stateMachineCount()))
-            {
-                auto machine = currentArtboard->stateMachineAt (stateMachineIndex);
-                stateMachine = machine.get();
-                scene = std::move (machine);
-            }
-            else if (currentArtboard->stateMachineCount() > 0)
-            {
-                auto machine = currentArtboard->defaultStateMachine();
-                stateMachine = machine.get();
-                scene = std::move (machine);
-            }
+            auto machine = currentArtboard->stateMachineAt (stateMachineIndex);
+            currentStateMachine = machine.get();
+            currentScene = std::move (machine);
         }
-        else if (yup::isPositiveAndBelow (animationIndex, currentArtboard->animationCount()))
+        else if (currentArtboard->stateMachineCount() > 0)
         {
-            scene = currentArtboard->animationAt (animationIndex);
+            auto machine = currentArtboard->defaultStateMachine();
+            currentStateMachine = machine.get();
+            currentScene = std::move (machine);
         }
-        else if (currentArtboard->animationCount() > 0)
-        {
-            scene = currentArtboard->animationAt (0);
-        }
-
-        if (scene == nullptr)
-            scene = std::make_unique<rive::StaticScene> (currentArtboard.get());
-
-        scene->advanceAndApply (scene->durationSeconds() * i / count);
-
-        artboards.push_back (std::move (currentArtboard));
-        scenes.push_back (std::move (scene));
-
-        if (stateMachine)
-            stateMachines.push_back (stateMachine);
     }
+    else if (yup::isPositiveAndBelow (animationIndex, currentArtboard->animationCount()))
+    {
+        currentScene = currentArtboard->animationAt (animationIndex);
+    }
+    else if (currentArtboard->animationCount() > 0)
+    {
+        currentScene = currentArtboard->animationAt (0);
+    }
+
+    if (currentScene == nullptr)
+        currentScene = std::make_unique<rive::StaticScene> (currentArtboard.get());
+
+    currentScene->advanceAndApply (0.0f);
+
+    artboard = std::move (currentArtboard);
+    scene = std::move (currentScene);
+    if (currentStateMachine)
+        stateMachine = currentStateMachine;
 }
 
 //==============================================================================
 
 void Artboard::pullEventsFromStateMachines()
 {
-    for (const auto& stateMachine : stateMachines)
+    if (stateMachine == nullptr)
+        return;
+
+    for (std::size_t eventIndex = 0; eventIndex < stateMachine->reportedEventCount(); ++eventIndex)
     {
-        for (std::size_t eventIndex = 0; eventIndex < stateMachine->reportedEventCount(); ++eventIndex)
+        auto event = stateMachine->reportedEventAt (eventIndex).event();
+        if (event == nullptr)
+            continue;
+
+        const auto eventName = String (event->name());
+
+        for (const auto& child : event->children())
         {
-            auto event = stateMachine->reportedEventAt (eventIndex).event();
-            if (event == nullptr)
+            var newValue;
+            if (child->is<rive::CustomPropertyNumber>())
+                newValue = child->as<rive::CustomPropertyNumber>()->propertyValue();
+
+            else if (child->is<rive::CustomPropertyString>())
+                newValue = String (child->as<rive::CustomPropertyString>()->propertyValue());
+
+            else if (child->is<rive::CustomPropertyBoolean>())
+                newValue = child->as<rive::CustomPropertyBoolean>()->propertyValue();
+
+            else
                 continue;
 
-            const auto eventName = String (event->name());
+            var oldValue = eventProperties[eventName];
+            if (oldValue == newValue)
+                continue;
 
-            for (const auto& child : event->children())
-            {
-                var newValue;
-                if (child->is<rive::CustomPropertyNumber>())
-                    newValue = child->as<rive::CustomPropertyNumber>()->propertyValue();
-
-                else if (child->is<rive::CustomPropertyString>())
-                    newValue = String (child->as<rive::CustomPropertyString>()->propertyValue());
-
-                else if (child->is<rive::CustomPropertyBoolean>())
-                    newValue = child->as<rive::CustomPropertyBoolean>()->propertyValue();
-
-                else
-                    continue;
-
-                var oldValue = eventProperties[eventName];
-                if (oldValue == newValue)
-                    continue;
-
-                eventProperties.set (eventName, newValue);
-                propertyChanged (eventName, String (child->name()), oldValue, newValue);
-            }
+            eventProperties.set (eventName, newValue);
+            propertyChanged (eventName, String (child->name()), oldValue, newValue);
         }
     }
 }

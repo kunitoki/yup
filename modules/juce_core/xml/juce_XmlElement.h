@@ -760,30 +760,6 @@ public:
         return Iterator<GetNextElementWithTagName> { getChildByName (name), name };
     }
 
-#ifndef DOXYGEN
-    [[deprecated]] void macroBasedForLoop() const noexcept
-    {
-    }
-
-    [[deprecated ("This has been deprecated in favour of the toString method.")]] String createDocument (StringRef dtdToUse,
-                                                                                                         bool allOnOneLine = false,
-                                                                                                         bool includeXmlHeader = true,
-                                                                                                         StringRef encodingType = "UTF-8",
-                                                                                                         int lineWrapLength = 60) const;
-
-    [[deprecated ("This has been deprecated in favour of the writeTo method.")]] void writeToStream (OutputStream& output,
-                                                                                                     StringRef dtdToUse,
-                                                                                                     bool allOnOneLine = false,
-                                                                                                     bool includeXmlHeader = true,
-                                                                                                     StringRef encodingType = "UTF-8",
-                                                                                                     int lineWrapLength = 60) const;
-
-    [[deprecated ("This has been deprecated in favour of the writeTo method.")]] bool writeToFile (const File& destinationFile,
-                                                                                                   StringRef dtdToUse,
-                                                                                                   StringRef encodingType = "UTF-8",
-                                                                                                   int lineWrapLength = 60) const;
-#endif
-
 private:
     //==============================================================================
     struct XmlAttributeNode
@@ -849,7 +825,7 @@ private:
     @see forEachXmlChildElementWithTagName
 */
 #define forEachXmlChildElement(parentXmlElement, childElementVariableName) \
-for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
+    for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildIterator()))
 
 /** DEPRECATED: A macro that makes it easy to iterate all the child elements of an XmlElement
     which have a specified tag.
@@ -877,7 +853,7 @@ for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), 
     @see forEachXmlChildElement
 */
 #define forEachXmlChildElementWithTagName(parentXmlElement, childElementVariableName, requiredTagName) \
-for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
+    for (auto*(childElementVariableName) : ((parentXmlElement).macroBasedForLoop(), (parentXmlElement).getChildWithTagNameIterator ((requiredTagName))))
 
 #endif
 

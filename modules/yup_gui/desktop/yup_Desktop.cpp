@@ -36,7 +36,7 @@ int Desktop::getNumDisplays() const
     return displays.size();
 }
 
-Display* Desktop::getDisplay (int displayIndex) const
+Display::Ptr Desktop::getDisplay (int displayIndex) const
 {
     if (isPositiveAndBelow (displayIndex, displays.size()))
         return displays.getUnchecked (displayIndex);
@@ -44,9 +44,29 @@ Display* Desktop::getDisplay (int displayIndex) const
     return nullptr;
 }
 
-Display* Desktop::getPrimaryDisplay() const
+Display::Ptr Desktop::getPrimaryDisplay() const
 {
     return ! displays.isEmpty() ? getDisplay (0) : nullptr;
+}
+
+void Desktop::handleDisplayConnected (int displayIndex)
+{
+    updateDisplays();
+}
+
+void Desktop::handleDisplayDisconnected (int displayIndex)
+{
+    updateDisplays();
+}
+
+void Desktop::handleDisplayMoved (int displayIndex)
+{
+    updateDisplays();
+}
+
+void Desktop::handleDisplayOrientationChanged (int displayIndex)
+{
+    updateDisplays();
 }
 
 JUCE_IMPLEMENT_SINGLETON (Desktop)

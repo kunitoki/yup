@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-template <typename KeyType>
+template <class KeyType>
 class RandomKeys
 {
 public:
@@ -87,7 +87,7 @@ juce::String RandomKeys<juce::String>::generateRandomKey (juce::Random& rnd)
     return str;
 }
 
-template <typename KeyType, typename ValueType>
+template <class KeyType, class ValueType>
 struct AssociativeMap
 {
     struct KeyValuePair
@@ -117,7 +117,7 @@ struct AssociativeMap
     int size() const { return pairs.size(); }
 };
 
-template <typename KeyType, typename ValueType>
+template <class KeyType, class ValueType>
 void fillWithRandomValues (juce::HashMap<KeyType, int>& hashMap, AssociativeMap<KeyType, ValueType>& groundTruth)
 {
     RandomKeys<KeyType> keyOracle (300, 3827829);

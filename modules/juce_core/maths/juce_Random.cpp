@@ -40,40 +40,48 @@
 namespace juce
 {
 
-Random::Random (int64 seedValue) noexcept
-    : seed (seedValue)
-{
-}
-
 Random::Random()
     : seed (1)
 {
     setSeedRandomly();
 }
 
+Random::Random (int64 seedValue) noexcept
+    : seed (seedValue)
+{
+}
+
+Random::Random (const Random& other) noexcept
+    : seed (other.seed)
+{
+}
+
 void Random::setSeed (const int64 newSeed) noexcept
 {
-    if (this == &getSystemRandom())
-    {
-        // Resetting the system Random risks messing up
-        // JUCE's internal state. If you need a predictable
-        // stream of random numbers you should use a local
-        // Random object.
-        jassertfalse;
-        return;
-    }
+    // Resetting the system Random risks messing up JUCE's internal state.
+    // If you need a predictable stream of random numbers you should use a
+    // local Random object.
+    jassert (! isSystemRandom);
 
     seed = newSeed;
 }
 
 void Random::combineSeed (const int64 seedValue) noexcept
 {
+    // Resetting the system Random risks messing up JUCE's internal state.
+    // Consider using a local Random object instead.
+    jassert (! isSystemRandom);
+
     seed ^= nextInt64() ^ seedValue;
 }
 
 void Random::setSeedRandomly()
 {
     static std::atomic<int64> globalSeed { 0 };
+
+    // Resetting the system Random risks messing up JUCE's internal state.
+    // Consider using a local Random object instead.
+    jassert (! isSystemRandom);
 
     combineSeed (globalSeed ^ (int64) (pointer_sized_int) this);
     combineSeed (Time::getMillisecondCounter());
@@ -85,13 +93,28 @@ void Random::setSeedRandomly()
 
 Random& Random::getSystemRandom() noexcept
 {
-    static Random sysRand;
+    thread_local Random sysRand = []
+    {
+        Random random;
+#if JUCE_ASSERTIONS_ENABLED_OR_LOGGED
+        random.isSystemRandom = true;
+#endif
+        return random;
+    }();
+
     return sysRand;
 }
 
 //==============================================================================
 int Random::nextInt() noexcept
 {
+    // If you encounter this assertion you've likely stored a reference to the
+    // system random object and are accessing it from a thread other than the
+    // one it was first created on. This may lead to race conditions on the
+    // random object. To avoid this assertion call Random::getSystemRandom()
+    // directly instead of storing a reference.
+    jassert (! isSystemRandom || this == &getSystemRandom());
+
     seed = (int64) (((((uint64) seed) * 0x5deece66dLL) + 11) & 0xffffffffffffLL);
 
     return (int) (seed >> 16);
@@ -176,43 +199,5 @@ void Random::fillBitsRandomly (BigInteger& arrayToChange, int startBit, int numB
     while (--numBits >= 0)
         arrayToChange.setBit (startBit + numBits, nextBool());
 }
-
-//==============================================================================
-//==============================================================================
-#if JUCE_UNIT_TESTS
-
-class RandomTests final : public UnitTest
-{
-public:
-    RandomTests()
-        : UnitTest ("Random", UnitTestCategories::maths)
-    {
-    }
-
-    void runTest() override
-    {
-        beginTest ("Random");
-
-        Random r = getRandom();
-
-        for (int i = 2000; --i >= 0;)
-        {
-            expect (r.nextDouble() >= 0.0 && r.nextDouble() < 1.0);
-            expect (r.nextFloat() >= 0.0f && r.nextFloat() < 1.0f);
-            expect (r.nextInt (5) >= 0 && r.nextInt (5) < 5);
-            expect (r.nextInt (1) == 0);
-
-            int n = r.nextInt (50) + 1;
-            expect (r.nextInt (n) >= 0 && r.nextInt (n) < n);
-
-            n = r.nextInt (0x7ffffffe) + 1;
-            expect (r.nextInt (n) >= 0 && r.nextInt (n) < n);
-        }
-    }
-};
-
-static RandomTests randomTests;
-
-#endif
 
 } // namespace juce
