@@ -48,7 +48,7 @@ public:
 
         @return A pointer to the `Display` object, or nullptr if the index is out of range.
     */
-    Display* getDisplay (int displayIndex) const;
+    Display::Ptr getDisplay (int displayIndex) const;
 
     /** Retrieves a pointer to the primary `Display` object.
 
@@ -56,7 +56,7 @@ public:
 
         @return A pointer to the primary `Display` object.
     */
-    Display* getPrimaryDisplay() const;
+    Display::Ptr getPrimaryDisplay() const;
 
     //==============================================================================
     // TODO - doxygen
@@ -65,12 +65,22 @@ public:
     //==============================================================================
     JUCE_DECLARE_SINGLETON (Desktop, false)
 
+    //==============================================================================
+    /** @internal */
+    void handleDisplayConnected (int displayIndex);
+    /** @internal */
+    void handleDisplayDisconnected (int displayIndex);
+    /** @internal */
+    void handleDisplayMoved (int displayIndex);
+    /** @internal */
+    void handleDisplayOrientationChanged (int displayIndex);
+
 private:
     friend class YUPApplication;
 
     Desktop();
 
-    OwnedArray<Display> displays;
+    ReferenceCountedArray<Display> displays;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

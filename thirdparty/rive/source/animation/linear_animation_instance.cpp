@@ -42,8 +42,11 @@ bool LinearAnimationInstance::advanceAndApply(float seconds)
 {
     bool more = this->advance(seconds, this);
     this->apply();
-    m_artboardInstance->advance(seconds);
-    return more;
+    if (m_artboardInstance->advance(seconds))
+    {
+        more = true;
+    }
+    return more || keepGoing();
 }
 
 bool LinearAnimationInstance::advance(float elapsedSeconds,
@@ -51,11 +54,12 @@ bool LinearAnimationInstance::advance(float elapsedSeconds,
 {
     const LinearAnimation& animation = *m_animation;
     float deltaSeconds = elapsedSeconds * animation.speed() * m_direction;
+
     m_spilledTime = 0.0f;
     if (deltaSeconds == 0)
     {
         m_didLoop = false;
-        return true;
+        return false;
     }
 
     m_lastTotalTime = m_totalTime;

@@ -409,8 +409,8 @@ struct var::VariantType
 
     static var objectClone (const var& original)
     {
-        if (auto* d = original.getDynamicObject())
-            return d->clone().release();
+        if (auto d = original.getDynamicObject())
+            return d->clone();
 
         jassertfalse; // can only clone DynamicObjects!
         return {};
@@ -682,6 +682,12 @@ var::var (const String& v)
     new (value.stringValue) String (v);
 }
 
+var::var (StringRef v)
+    : type (&Instance::attributesString)
+{
+    new (value.stringValue) String (v);
+}
+
 var::var (const char* const v)
     : type (&Instance::attributesString)
 {
@@ -725,6 +731,15 @@ var::var (ReferenceCountedObject* const object)
 
     if (object != nullptr)
         object->incReferenceCount();
+}
+
+var::var (std::unique_ptr<DynamicObject> object)
+    : type (&Instance::attributesObject)
+{
+    value.objectValue = object.release();
+
+    if (value.objectValue != nullptr)
+        value.objectValue->incReferenceCount();
 }
 
 var var::undefined() noexcept { return var (Instance::attributesUndefined); }
@@ -845,6 +860,14 @@ var& var::operator= (const String& v)
     return *this;
 }
 
+var& var::operator= (StringRef v)
+{
+    type->cleanUp (value);
+    type = &Instance::attributesString;
+    new (value.stringValue) String (v);
+    return *this;
+}
+
 var& var::operator= (const MemoryBlock& v)
 {
     type->cleanUp (value);
@@ -863,6 +886,13 @@ var& var::operator= (const Array<var>& v)
 var& var::operator= (ReferenceCountedObject* v)
 {
     var v2 (v);
+    swapWith (v2);
+    return *this;
+}
+
+var& var::operator= (std::unique_ptr<DynamicObject> v)
+{
+    var v2 (std::move (v));
     swapWith (v2);
     return *this;
 }
@@ -947,7 +977,7 @@ bool operator== (const var& v1, const var& v2) { return v1.equals (v2); }
 
 bool operator!= (const var& v1, const var& v2) { return ! v1.equals (v2); }
 
-bool operator<(const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) < 0; }
+bool operator< (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) < 0; }
 
 bool operator> (const var& v1, const var& v2) { return canCompare (v1, v2) && compare (v1, v2) > 0; }
 
@@ -983,6 +1013,11 @@ const var& var::operator[] (const char* const propertyName) const
     return operator[] (Identifier (propertyName));
 }
 
+const var& var::operator[] (StringRef propertyName) const
+{
+    return operator[] (Identifier (propertyName));
+}
+
 var var::getProperty (const Identifier& propertyName, const var& defaultReturnValue) const
 {
     if (auto* o = getDynamicObject())
@@ -995,6 +1030,25 @@ bool var::hasProperty (const Identifier& propertyName) const noexcept
 {
     if (auto* o = getDynamicObject())
         return o->hasProperty (propertyName);
+
+    return false;
+}
+
+var var::getMethod (const Identifier& methodName, const var& defaultReturnValue) const
+{
+    if (auto* o = getDynamicObject())
+    {
+        if (auto method = o->getProperties().getWithDefault (methodName, var()); method.isMethod())
+            return method;
+    }
+
+    return defaultReturnValue;
+}
+
+bool var::hasMethod (const Identifier& methodName) const noexcept
+{
+    if (auto* o = getDynamicObject())
+        return o->hasMethod (methodName);
 
     return false;
 }
@@ -1191,18 +1245,5 @@ var::NativeFunctionArgs::NativeFunctionArgs (const var& t, const var* args, int 
     , numArguments (numArgs)
 {
 }
-
-//==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES
-
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4996)
-
-const var var::null;
-
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-JUCE_END_IGNORE_WARNINGS_MSVC
-
-#endif
 
 } // namespace juce

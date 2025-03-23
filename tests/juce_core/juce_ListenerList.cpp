@@ -42,6 +42,10 @@
 
 #include <juce_core/juce_core.h>
 
+using namespace juce;
+
+namespace
+{
 class MockListener
 {
 public:
@@ -109,11 +113,11 @@ protected:
 
     private:
         std::vector<std::unique_ptr<TestListener>> listeners;
-        juce::ListenerList<TestListener> listenerList;
+        ListenerList<TestListener> listenerList;
         int callLevel = 0;
     };
 
-    static std::set<int> chooseUnique (juce::Random& random, int max, int numChosen)
+    static std::set<int> chooseUnique (Random& random, int max, int numChosen)
     {
         std::set<int> result;
         while ((int) result.size() < numChosen)
@@ -122,9 +126,62 @@ protected:
     }
 };
 
+class MyListenerType
+{
+public:
+    void myCallbackMethod (int foo, bool bar)
+    {
+        std::lock_guard lock (mutex);
+
+        lastFoo = foo;
+        lastBar = bar;
+        callbackCount++;
+    }
+
+    int getCallbackCount() const
+    {
+        return callbackCount;
+    }
+
+    int getLastFoo() const
+    {
+        return lastFoo;
+    }
+
+    bool getLastBar() const
+    {
+        return lastBar;
+    }
+
+private:
+    std::mutex mutex;
+    int lastFoo = 0;
+    bool lastBar = false;
+    int callbackCount = 0;
+};
+
+using ThreadSafeList = yup::ListenerList<MyListenerType, yup::Array<MyListenerType*, yup::CriticalSection>>;
+
+class WeakListenerType
+{
+public:
+    void myCallbackMethod (int foo, bool bar)
+    {
+        callbackCount++;
+    }
+
+    static int callbackCount;
+
+    JUCE_DECLARE_WEAK_REFERENCEABLE (WeakListenerType);
+};
+
+int WeakListenerType::callbackCount = 0;
+
+} // namespace
+
 TEST_F (ListenerListTests, Add_Remove_Contains)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -143,7 +200,7 @@ TEST_F (ListenerListTests, Add_Remove_Contains)
 
 TEST_F (ListenerListTests, Call)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -157,7 +214,7 @@ TEST_F (ListenerListTests, Call)
 
 TEST_F (ListenerListTests, Call_Excluding)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -178,7 +235,7 @@ TEST_F (ListenerListTests, Call_Checked)
         bool shouldBailOut() const { return callCount > 0; }
     };
 
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
     BailOutChecker checker;
 
@@ -202,7 +259,7 @@ TEST_F (ListenerListTests, Call_Checked_Excluding)
         bool shouldBailOut() const { return callCount > 0; }
     };
 
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
     BailOutChecker checker;
 
@@ -219,7 +276,7 @@ TEST_F (ListenerListTests, Call_Checked_Excluding)
 
 TEST_F (ListenerListTests, Add_Scoped)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1;
 
     {
@@ -232,7 +289,7 @@ TEST_F (ListenerListTests, Add_Scoped)
 
 TEST_F (ListenerListTests, Size_Is_Empty)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     EXPECT_TRUE (listeners.isEmpty());
@@ -254,7 +311,7 @@ TEST_F (ListenerListTests, Size_Is_Empty)
 /*
 TEST_F (ListenerListTests, Null_Pointer_Handling)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener* nullListener = nullptr;
 
     listeners.add (nullListener);
@@ -267,7 +324,7 @@ TEST_F (ListenerListTests, Null_Pointer_Handling)
 
 TEST_F (ListenerListTests, Multiple_Add_Remove)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1;
 
     listeners.add (&listener1);
@@ -282,7 +339,7 @@ TEST_F (ListenerListTests, Multiple_Add_Remove)
 
 TEST_F (ListenerListTests, Call_During_Callback)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -301,7 +358,7 @@ TEST_F (ListenerListTests, Call_During_Callback)
 
 TEST_F (ListenerListTests, Remove_During_Callback)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -322,7 +379,7 @@ TEST_F (ListenerListTests, Remove_During_Callback)
 
 TEST_F (ListenerListTests, Clear_During_Callback)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -340,7 +397,7 @@ TEST_F (ListenerListTests, Clear_During_Callback)
 
 TEST_F (ListenerListTests, Nested_Call)
 {
-    juce::ListenerList<MockListener> listeners;
+    ListenerList<MockListener> listeners;
     MockListener listener1, listener2;
 
     listeners.add (&listener1);
@@ -410,7 +467,7 @@ TEST_F (ListenerListTests, RemoveMultipleListenersInCallback)
 
 TEST_F (ListenerListTests, RemovingListenersRandomly)
 {
-    auto random = juce::Random::getSystemRandom();
+    auto& random = Random::getSystemRandom();
     for (auto run = 0; run < 10; ++run)
     {
         const auto numListeners = random.nextInt ({ 10, 100 });
@@ -492,7 +549,7 @@ TEST_F (ListenerListTests, NestedCall)
 TEST_F (ListenerListTests, RandomCall)
 {
     const auto numListeners = 20;
-    auto random = juce::Random::getSystemRandom();
+    auto& random = Random::getSystemRandom();
 
     for (int run = 0; run < 10; ++run)
     {
@@ -539,7 +596,7 @@ TEST_F (ListenerListTests, DeletingListenerListFromCallback)
         void notify() { onCallback(); }
     };
 
-    auto listeners = std::make_unique<juce::ListenerList<Listener>>();
+    auto listeners = std::make_unique<ListenerList<Listener>>();
 
     const auto callback = [&]
     {
@@ -566,7 +623,7 @@ TEST_F (ListenerListTests, BailOutChecker)
         void notify() { onCallback(); }
     };
 
-    juce::ListenerList<Listener> listeners;
+    ListenerList<Listener> listeners;
     bool listener1Called = false;
     bool listener2Called = false;
     bool listener3Called = false;
@@ -628,7 +685,7 @@ TEST_F (ListenerListTests, CriticalSection)
             return true;
         }
 
-        using ScopedLockType = juce::GenericScopedLock<TestCriticalSection>;
+        using ScopedLockType = GenericScopedLock<TestCriticalSection>;
 
         static bool& isAlive()
         {
@@ -643,7 +700,7 @@ TEST_F (ListenerListTests, CriticalSection)
         }
     };
 
-    auto listeners = std::make_unique<juce::ListenerList<Listener, juce::Array<Listener*, TestCriticalSection>>>();
+    auto listeners = std::make_unique<ListenerList<Listener, Array<Listener*, TestCriticalSection>>>();
 
     const auto callback = [&]
     {
@@ -665,7 +722,7 @@ TEST_F (ListenerListTests, AddListenerDuringCallback)
     {
     };
 
-    juce::ListenerList<Listener> listeners;
+    ListenerList<Listener> listeners;
     EXPECT_EQ (listeners.size(), 0);
 
     Listener listener;
@@ -721,43 +778,6 @@ TEST_F (ListenerListTests, ClearListenersDuringCallback)
     listeners.call (&Listener::notify);
     EXPECT_FALSE (called);
 }
-
-#if ! JUCE_WASM
-class MyListenerType
-{
-public:
-    void myCallbackMethod (int foo, bool bar)
-    {
-        std::lock_guard lock (mutex);
-
-        lastFoo = foo;
-        lastBar = bar;
-        callbackCount++;
-    }
-
-    int getCallbackCount() const
-    {
-        return callbackCount;
-    }
-
-    int getLastFoo() const
-    {
-        return lastFoo;
-    }
-
-    bool getLastBar() const
-    {
-        return lastBar;
-    }
-
-private:
-    std::mutex mutex;
-    int lastFoo = 0;
-    bool lastBar = false;
-    int callbackCount = 0;
-};
-
-using ThreadSafeList = yup::ListenerList<MyListenerType, yup::Array<MyListenerType*, yup::CriticalSection>>;
 
 TEST_F (ListenerListTests, ThreadSafeAddRemoveListeners)
 {
@@ -876,4 +896,21 @@ TEST_F (ListenerListTests, ThreadSafeAddRemoveWhileCalling)
     EXPECT_GE (listener2.getCallbackCount(), 0);
     EXPECT_EQ (listener3.getCallbackCount(), 1000);
 }
-#endif
+
+TEST_F (ListenerListTests, ListOfWeakReferenceable)
+{
+    using WeakListenerList = ListenerList<WeakListenerType, Array<WeakReference<WeakListenerType>>>;
+
+    WeakListenerList listeners;
+
+    {
+        WeakListenerType listener1, listener2, listener3;
+        listeners.add (&listener1);
+        listeners.add (&listener2);
+        listeners.add (&listener3);
+    }
+
+    listeners.call (&WeakListenerType::myCallbackMethod, 1, false);
+
+    EXPECT_EQ (WeakListenerType::callbackCount, 0);
+}

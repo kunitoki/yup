@@ -143,6 +143,19 @@ public:
     const char* end() const noexcept { return begin() + getSize(); }
 
     //==============================================================================
+    /** Returns a span to the raw const data. */
+    Span<const uint8> asBytes() const noexcept
+    {
+        return { reinterpret_cast<const uint8*> (data.getData()), getSize() };
+    }
+
+    /** Returns a span to the raw data. */
+    Span<uint8> asWritableBytes() const noexcept
+    {
+        return { reinterpret_cast<uint8*> (data.getData()), getSize() };
+    }
+
+    //==============================================================================
     /** Returns true if the memory block has zero size. */
     bool isEmpty() const noexcept { return getSize() == 0; }
 
@@ -290,15 +303,6 @@ public:
         @see toBase64Encoding, Base64::convertFromBase64
     */
     bool fromBase64Encoding (StringRef encodedString);
-
-    //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("Use the replaceAll method instead, which will also replace the data when numBytes == 0.")]] void replaceWith (const void* srcData, size_t numBytes)
-    {
-        if (numBytes > 0)
-            replaceAll (srcData, numBytes);
-    }
-#endif
 
 private:
     //==============================================================================

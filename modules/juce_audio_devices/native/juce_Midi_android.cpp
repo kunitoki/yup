@@ -800,21 +800,21 @@ constexpr unsigned char javaMidiByteCode[]
 };
 // clang-format on
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                          \
-METHOD (getJuceAndroidMidiInputDeviceNameAndIDs, "getJuceAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
-METHOD (getJuceAndroidMidiOutputDeviceNameAndIDs, "getJuceAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
-METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")        \
-METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                              \
+    METHOD (getJuceAndroidMidiInputDeviceNameAndIDs, "getJuceAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
+    METHOD (getJuceAndroidMidiOutputDeviceNameAndIDs, "getJuceAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
+    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")        \
+    METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/rmsl/juce/JuceMidiSupport$MidiDeviceManager", 23)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (start, "start", "()V")                                                \
-METHOD (stop, "stop", "()V")                                                  \
-METHOD (close, "close", "()V")                                                \
-METHOD (sendMidi, "sendMidi", "([BII)V")                                      \
-METHOD (getName, "getName", "()Ljava/lang/String;")
+    METHOD (start, "start", "()V")                                            \
+    METHOD (stop, "stop", "()V")                                              \
+    METHOD (close, "close", "()V")                                            \
+    METHOD (sendMidi, "sendMidi", "([BII)V")                                  \
+    METHOD (getName, "getName", "()Ljava/lang/String;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiPort", 23)
 #undef JNI_CLASS_MEMBERS
@@ -936,7 +936,7 @@ private:
 
 //==============================================================================
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V")
+    CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiInputPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiInputPort", 23)
 #undef JNI_CLASS_MEMBERS
@@ -1006,10 +1006,10 @@ private:
         MidiDeviceListConnectionBroadcaster::get().notify();
     }
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                             \
-CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                            \
-STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$MidiDeviceManager;") \
-STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$BluetoothMidiManager;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                 \
+    CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                            \
+    STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$MidiDeviceManager;") \
+    STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$BluetoothMidiManager;")
 
     DECLARE_JNI_CLASS_WITH_BYTECODE (JuceMidiSupport, "com/rmsl/juce/JuceMidiSupport", 23, javaMidiByteCode)
 #undef JNI_CLASS_MEMBERS
@@ -1055,29 +1055,6 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     }
 
     return {};
-}
-
-StringArray MidiInput::getDevices()
-{
-    if (getAndroidSDKVersion() < 23)
-        return {};
-
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiInput::getDefaultDeviceIndex()
-{
-    return (getAndroidSDKVersion() < 23 ? -1 : 0);
-}
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* callback)
-{
-    return openDevice (getAvailableDevices()[index].identifier, callback);
 }
 
 MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
@@ -1134,29 +1111,6 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     }
 
     return {};
-}
-
-StringArray MidiOutput::getDevices()
-{
-    if (getAndroidSDKVersion() < 23)
-        return {};
-
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiOutput::getDefaultDeviceIndex()
-{
-    return (getAndroidSDKVersion() < 23 ? -1 : 0);
-}
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int index)
-{
-    return openDevice (getAvailableDevices()[index].identifier);
 }
 
 MidiOutput::~MidiOutput()

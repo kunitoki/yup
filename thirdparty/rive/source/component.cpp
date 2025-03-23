@@ -9,6 +9,12 @@
 
 using namespace rive;
 
+bool Component::validate(CoreContext* context)
+{
+    auto coreObject = context->resolve(parentId());
+    return coreObject != nullptr && coreObject->is<ContainerComponent>();
+}
+
 StatusCode Component::onAddedDirty(CoreContext* context)
 {
     m_Artboard = static_cast<Artboard*>(context);
@@ -18,12 +24,7 @@ StatusCode Component::onAddedDirty(CoreContext* context)
         // We're the artboard, don't parent to ourselves.
         return StatusCode::Ok;
     }
-    auto coreObject = context->resolve(parentId());
-    if (coreObject == nullptr || !coreObject->is<ContainerComponent>())
-    {
-        return StatusCode::MissingObject;
-    }
-    m_Parent = static_cast<ContainerComponent*>(coreObject);
+    m_Parent = context->resolve(parentId())->as<ContainerComponent>();
     m_Parent->addChild(this);
     return StatusCode::Ok;
 }
@@ -94,16 +95,4 @@ bool Component::collapse(bool value)
     onDirty(m_Dirt);
     m_DependencyHelper.onComponentDirty(this);
     return true;
-}
-
-AdvancingComponent* AdvancingComponent::from(Component* component)
-{
-    switch (component->coreType())
-    {
-        case LayoutComponent::typeKey:
-            return component->as<LayoutComponent>();
-        case Artboard::typeKey:
-            return component->as<Artboard>();
-    }
-    return nullptr;
 }

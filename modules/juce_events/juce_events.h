@@ -76,11 +76,11 @@
 #endif
 
 #if JUCE_WINDOWS && JUCE_EVENTS_INCLUDE_WINRT_WRAPPER
-    // If this header file is missing then you are probably attempting to use WinRT
-    // functionality without the WinRT libraries installed on your system. Try installing
-    // the latest Windows Standalone SDK and maybe also adding the path to the WinRT
-    // headers to your build system. This path should have the form
-    // "C:\Program Files (x86)\Windows Kits\10\Include\10.0.14393.0\winrt".
+// If this header file is missing then you are probably attempting to use WinRT
+// functionality without the WinRT libraries installed on your system. Try installing
+// the latest Windows Standalone SDK and maybe also adding the path to the WinRT
+// headers to your build system. This path should have the form
+// "C:\Program Files (x86)\Windows Kits\10\Include\10.0.14393.0\winrt".
 #include <inspectable.h>
 #include <hstring.h>
 #endif

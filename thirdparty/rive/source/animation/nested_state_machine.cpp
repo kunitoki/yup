@@ -10,12 +10,12 @@ namespace rive {
 NestedStateMachine::NestedStateMachine() {}
 NestedStateMachine::~NestedStateMachine() {}
 
-bool NestedStateMachine::advance(float elapsedSeconds)
+bool NestedStateMachine::advance(float elapsedSeconds, bool newFrame)
 {
     bool keepGoing = false;
     if (m_StateMachineInstance != nullptr)
     {
-        keepGoing = m_StateMachineInstance->advance(elapsedSeconds);
+        keepGoing = m_StateMachineInstance->advance(elapsedSeconds, newFrame);
     }
     return keepGoing;
 }
@@ -39,7 +39,6 @@ StateMachineInstance* NestedStateMachine::stateMachineInstance()
     return m_StateMachineInstance.get();
 }
 
-#ifdef WITH_RIVE_TOOLS
 bool NestedStateMachine::hitTest(Vec2D position) const
 {
     if (m_StateMachineInstance != nullptr)
@@ -48,7 +47,6 @@ bool NestedStateMachine::hitTest(Vec2D position) const
     }
     return false;
 }
-#endif
 
 HitResult NestedStateMachine::pointerMove(Vec2D position)
 {
@@ -127,6 +125,15 @@ void NestedStateMachine::dataContext(DataContext* dataContext)
     {
         m_StateMachineInstance->dataContext(dataContext);
     }
+}
+
+bool NestedStateMachine::tryChangeState()
+{
+    if (m_StateMachineInstance != nullptr)
+    {
+        return m_StateMachineInstance->tryChangeState();
+    }
+    return false;
 }
 
 } // namespace rive

@@ -46,7 +46,6 @@ public:
     GZIPCompressorHelper (int compressionLevel, int windowBits)
         : compLevel ((compressionLevel < 0 || compressionLevel > 9) ? -1 : compressionLevel)
     {
-        using namespace zlibNamespace;
         zerostruct (stream);
 
         streamIsValid = (deflateInit2 (&stream, compLevel, Z_DEFLATED, windowBits != 0 ? windowBits : MAX_WBITS, 8, strategy) == Z_OK);
@@ -55,7 +54,7 @@ public:
     ~GZIPCompressorHelper()
     {
         if (streamIsValid)
-            zlibNamespace::deflateEnd (&stream);
+            deflateEnd (&stream);
     }
 
     bool write (const uint8* data, size_t dataSize, OutputStream& out)
@@ -86,15 +85,13 @@ private:
         strategy = 0
     };
 
-    zlibNamespace::z_stream stream;
+    z_stream stream;
     const int compLevel;
     bool isFirstDeflate = true, streamIsValid = false, finished = false;
-    zlibNamespace::Bytef buffer[32768];
+    Bytef buffer[32768];
 
     bool doNextBlock (const uint8*& data, size_t& dataSize, OutputStream& out, const int flushMode)
     {
-        using namespace zlibNamespace;
-
         if (streamIsValid)
         {
             stream.next_in = const_cast<uint8*> (data);

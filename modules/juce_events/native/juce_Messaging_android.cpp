@@ -65,8 +65,6 @@ public:
 
         for (;;)
         {
-            glfwPollEvents();
-
             {
                 const ScopedLock sl (lock);
 
@@ -79,7 +77,7 @@ public:
                 if (returnIfNoPendingMessages)
                     return false;
 
-                Thread::sleep(1); // TODO - Make this better somehow ?
+                Thread::sleep (1); // TODO - Make this better somehow ?
             }
             else
             {
@@ -107,6 +105,12 @@ private:
 JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
 //==============================================================================
+bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
+}
+
+//==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
 {
     InternalMessageQueue::getInstance();
@@ -116,14 +120,6 @@ void MessageManager::doPlatformSpecificShutdown()
 {
     InternalMessageQueue::deleteInstance();
 }
-
-namespace detail
-{
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-    {
-        return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
-    }
-} // namespace detail
 
 bool MessageManager::postMessageToSystemQueue (MessageManager::MessageBase* const message)
 {

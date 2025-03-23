@@ -7,7 +7,8 @@ using namespace rive;
 Mat2D rive::computeAlignment(Fit fit,
                              Alignment alignment,
                              const AABB& frame,
-                             const AABB& content)
+                             const AABB& content,
+                             const float scaleFactor)
 {
     float contentWidth = content.width();
     float contentHeight = content.height();
@@ -51,6 +52,10 @@ Mat2D rive::computeAlignment(Fit fit,
             float minScale = frame.width() / contentWidth;
             scaleX = scaleY = minScale;
             break;
+        }
+        case Fit::layout:
+        {
+            return Mat2D::fromScale(scaleFactor, scaleFactor);
         }
         case Fit::none:
         {
@@ -135,7 +140,8 @@ RenderPath::~RenderPath() {}
 bool rive::isWhiteSpace(Unichar c) { return c <= ' ' || c == 0x2028; }
 
 SimpleArray<Paragraph> Font::shapeText(Span<const Unichar> text,
-                                       Span<const TextRun> runs) const
+                                       Span<const TextRun> runs,
+                                       int textDirectionFlag) const
 {
 #ifdef DEBUG
     size_t count = 0;
@@ -147,7 +153,8 @@ SimpleArray<Paragraph> Font::shapeText(Span<const Unichar> text,
     assert(count <= text.size());
 #endif
 
-    SimpleArray<Paragraph> paragraphs = onShapeText(text, runs);
+    SimpleArray<Paragraph> paragraphs =
+        onShapeText(text, runs, textDirectionFlag);
     bool wantWhiteSpace = false;
     GlyphRun* lastRun = nullptr;
     size_t reserveSize = text.size() / 4;

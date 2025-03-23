@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static inline bool is_big_endian(void)
+static bool is_big_endian(void)
 {
     union
     {

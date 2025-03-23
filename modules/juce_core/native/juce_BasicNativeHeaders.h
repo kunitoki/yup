@@ -45,10 +45,6 @@
 #if JUCE_MAC || JUCE_IOS
 
 #if JUCE_IOS
-#if JUCE_MODULE_AVAILABLE_juce_opengl
-#define GLES_SILENCE_DEPRECATION 1
-#endif
-
 #define Component CarbonDummyCompName
 #import <Foundation/Foundation.h>
 #undef Component
@@ -57,14 +53,12 @@
 #import <CoreData/CoreData.h>
 #import <MobileCoreServices/MobileCoreServices.h>
 #include <sys/fcntl.h>
-#else
-#if JUCE_MODULE_AVAILABLE_juce_opengl
-#define GL_SILENCE_DEPRECATION 1
-#endif
 
+#else
 #import <Cocoa/Cocoa.h>
 #import <CoreAudio/HostTime.h>
 #include <sys/dir.h>
+
 #endif
 
 #include <sys/socket.h>
@@ -132,6 +126,7 @@
 #include <shlwapi.h>
 #include <mmsystem.h>
 #include <winioctl.h>
+#include <pathcch.h>
 
 #ifndef SECURITY_WIN32
 #define SECURITY_WIN32
@@ -170,6 +165,7 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "secur32.lib")
+#pragma comment(lib, "pathcch.lib")
 
 #ifdef _NATIVE_WCHAR_T_DEFINED
 #ifdef _DEBUG
@@ -195,8 +191,8 @@
     params: list of params (bracketed)
  */
 #define JUCE_LOAD_WINAPI_FUNCTION(dll, functionName, localFunctionName, returnType, params) \
-typedef returnType (WINAPI* type##localFunctionName) params;                                \
-type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFunction (#functionName);
+    typedef returnType (WINAPI* type##localFunctionName) params;                            \
+    type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFunction (#functionName);
 
 //==============================================================================
 #elif JUCE_LINUX

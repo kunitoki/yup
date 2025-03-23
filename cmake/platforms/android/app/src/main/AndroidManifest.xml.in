@@ -5,31 +5,29 @@
     <!--
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@style/Theme.Application"
         android:fullBackupContent="@xml/backup_rules"
         android:screenOrientation="portrait"
     -->
 
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
-        android:hasCode="true"
         android:label="@YUP_ANDROID_TARGET_NAME@"
-        android:extractNativeLibs="true"
-        android:isGame="true">
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+        android:launchMode="singleInstance"
+        android:hardwareAccelerated="true"
+        android:configChanges="keyboard|keyboardHidden|orientation|density|screenSize|screenLayout">
         <activity
-            android:name="android.app.NativeActivity"
+            android:name="org.yup.YupActivity"
             android:exported="true">
-            <meta-data
-                android:name="android.app.lib_name"
-                android:value="@YUP_ANDROID_TARGET_NAME@" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
     </application>
-
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
 
 </manifest>

@@ -49,9 +49,9 @@
 #define notEqual(A, B) ((A) != (B))
 #define lessThanEqual(A, B) ((A) <= (B))
 #define lessThan(A, B) ((A) < (B))
+#define greaterThan(A, B) ((A) > (B))
 #define greaterThanEqual(A, B) ((A) >= (B))
 #define MUL(A, B) ((A) * (B))
-#define atan $atan2
 #define inversesqrt $rsqrt
 
 #define UNIFORM_BLOCK_BEGIN(IDX, NAME)                                         \
@@ -133,6 +133,10 @@
 #define TEXTURE_RGBA32UI(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<uint> NAME
 #define TEXTURE_RGBA32F(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<float> NAME
 #define TEXTURE_RGBA8(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<half> NAME
+#define TEXTURE_R16F(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<half> NAME
+#define SAMPLED_R16F_REF(NAME, SAMPLER_NAME)                                   \
+    $thread $const $texture2d<half>&NAME, $const $thread $sampler &SAMPLER_NAME
+#define SAMPLED_R16F(NAME, SAMPLER_NAME) _textures.NAME, SAMPLER_NAME
 
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
     $constexpr $sampler NAME($filter::$linear, $mip_filter::$none);
@@ -142,14 +146,19 @@
 #define TEXEL_FETCH(TEXTURE, COORD) _textures.TEXTURE.$read(uint2(COORD))
 #define TEXTURE_SAMPLE(TEXTURE, SAMPLER_NAME, COORD)                           \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD)
+#define TEXTURE_REF_SAMPLE_LOD(TEXTURE_REF, SAMPLER_NAME, COORD, LOD)          \
+    TEXTURE_REF.$sample(SAMPLER_NAME, COORD, $level(LOD))
 #define TEXTURE_SAMPLE_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)                  \
-    _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $level(LOD))
+    TEXTURE_REF_SAMPLE_LOD(_textures.TEXTURE, SAMPLER_NAME, COORD, LOD)
 #define TEXTURE_SAMPLE_GRAD(TEXTURE, SAMPLER_NAME, COORD, DDX, DDY)            \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $gradient2d(DDX, DDY))
+#define TEXTURE_GATHER(TEXTURE, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)     \
+    _textures.TEXTURE.$gather(SAMPLER_NAME, (COORD) * (TEXTURE_INVERSE_SIZE))
 
 #define VERTEX_CONTEXT_DECL                                                    \
-    , VertexTextures _textures, VertexStorageBuffers _buffers
-#define VERTEX_CONTEXT_UNPACK , _textures, _buffers
+    , $constant @FlushUniforms &uniforms, VertexTextures _textures,            \
+        VertexStorageBuffers _buffers
+#define VERTEX_CONTEXT_UNPACK , uniforms, _textures, _buffers
 
 #ifdef @ENABLE_INSTANCE_INDEX
 #define VERTEX_MAIN(NAME, Attrs, attrs, _vertexID, _instanceID)                \
@@ -160,7 +169,9 @@
         [[$buffer(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)]],                    \
         $constant @FlushUniforms& uniforms                                     \
         [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
-        $constant Attrs* attrs [[$buffer(0)]] VERTEX_CONTEXT_DECL)             \
+        $constant Attrs* attrs [[$buffer(0)]],                                 \
+        VertexTextures _textures,                                              \
+        VertexStorageBuffers _buffers)                                         \
     {                                                                          \
         _instanceID += _baseInstance;                                          \
         Varyings _varyings;
@@ -171,7 +182,9 @@
         uint _instanceID [[$instance_id]],                                     \
         $constant @FlushUniforms& uniforms                                     \
         [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
-        $constant Attrs* attrs [[$buffer(0)]] VERTEX_CONTEXT_DECL)             \
+        $constant Attrs* attrs [[$buffer(0)]],                                 \
+        VertexTextures _textures,                                              \
+        VertexStorageBuffers _buffers)                                         \
     {                                                                          \
         Varyings _varyings;
 #endif
@@ -183,7 +196,9 @@
         [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
         $constant @ImageDrawUniforms& imageDrawUniforms                        \
         [[$buffer(IMAGE_DRAW_UNIFORM_BUFFER_IDX)]],                            \
-        $constant Attrs* attrs [[$buffer(0)]] VERTEX_CONTEXT_DECL)             \
+        $constant Attrs* attrs [[$buffer(0)]],                                 \
+        VertexTextures _textures,                                              \
+        VertexStorageBuffers _buffers)                                         \
     {                                                                          \
         Varyings _varyings;
 
@@ -211,7 +226,8 @@
 
 #define FRAG_DATA_MAIN(DATA_TYPE, NAME)                                        \
     DATA_TYPE $__attribute__(($visibility("default"))) $fragment NAME(         \
-        Varyings _varyings [[$stage_in]])                                      \
+        Varyings _varyings [[$stage_in]],                                      \
+        FragmentTextures _textures)                                            \
     {
 
 #define EMIT_FRAG_DATA(VALUE)                                                  \
@@ -222,6 +238,9 @@
     , float2 _fragCoord, FragmentTextures _textures,                           \
         FragmentStorageBuffers _buffers
 #define FRAGMENT_CONTEXT_UNPACK , _fragCoord, _textures, _buffers
+
+#define TEXTURE_CONTEXT_DECL , FragmentTextures _textures
+#define TEXTURE_CONTEXT_FORWARD , _textures
 
 #ifdef @PLS_IMPL_DEVICE_BUFFER
 
@@ -386,6 +405,8 @@ INLINE uint pls_atomic_add($thread uint& dst, uint x)
 #define PLS_MAIN(NAME, ...)                                                    \
     PLS_METAL_MAIN(NAME,                                                       \
                    PLS _inpls,                                                 \
+                   $constant @FlushUniforms& uniforms                          \
+                   [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                      \
                    Varyings _varyings [[$stage_in]],                           \
                    FragmentTextures _textures,                                 \
                    FragmentStorageBuffers _buffers)
@@ -482,3 +503,13 @@ INLINE half3 mix(half3 a, half3 b, bool3 c)
         result[i] = c[i] ? b[i] : a[i];
     return result;
 }
+
+INLINE float2 mix(float2 a, float2 b, bool2 c)
+{
+    float2 result;
+    for (int i = 0; i < 2; ++i)
+        result[i] = c[i] ? b[i] : a[i];
+    return result;
+}
+
+INLINE float mod(float x, float y) { return $fmod(x, y); }

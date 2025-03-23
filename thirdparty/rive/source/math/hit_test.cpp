@@ -12,7 +12,7 @@
 // Should we make this an option at runtime?
 #define CULL_BOUNDS true
 
-using namespace rive;
+namespace rive {
 
 static inline float graphics_roundf(float x) { return std::floor(x + 0.5f); }
 
@@ -44,9 +44,9 @@ struct Point
     friend Point operator*(float s, Point v) { return {v.x * s, v.y * s}; }
 };
 
-template <typename T> T lerp(T a, T b, float t) { return a + (b - a) * t; }
+template <typename T> T lerpx(T a, T b, float t) { return a + (b - a) * t; }
 
-template <typename T> T ave(T a, T b) { return lerp(a, b, 0.5f); }
+template <typename T> T ave(T a, T b) { return lerpx(a, b, 0.5f); }
 
 static void append_line(const float height,
                         Point p0,
@@ -469,3 +469,5 @@ bool HitTester::testMesh(const IAABB& area,
     }
     return false;
 }
+
+} // namespace rive

@@ -210,8 +210,12 @@ public:
         std::ostringstream glsl;
         glsl << "#version 310 es\n";
         glsl << "#pragma shader_stage(fragment)\n";
-        glsl << "#define " GLSL_FRAGMENT "\n";
-        glsl << "#define " GLSL_ENABLE_CLIPPING "\n";
+        glsl << "#define " GLSL_FRAGMENT " true\n";
+        glsl << "#define " GLSL_ENABLE_CLIPPING " true\n";
+        if (context->m_contextOptions.invertRenderTargetY)
+        {
+            glsl << "#define " GLSL_POST_INVERT_Y " true\n";
+        }
         BuildLoadStoreEXTGLSL(glsl, actions);
         fragmentShader =
             m_fragmentShaderHandle.compileShaderModule(context->m_device,
@@ -241,7 +245,7 @@ public:
             .primitive =
                 {
                     .topology = wgpu::PrimitiveTopology::TriangleStrip,
-                    .frontFace = context->m_frontFaceForOnScreenDraws,
+                    .frontFace = context->frontFaceForRenderTargetDraws(),
                     .cullMode = wgpu::CullMode::Back,
                 },
             .fragment = &fragmentState,
@@ -366,10 +370,7 @@ public:
     {
         return m_bindGroupLayout;
     }
-    const wgpu::RenderPipeline& renderPipeline() const
-    {
-        return m_renderPipeline;
-    }
+    wgpu::RenderPipeline renderPipeline() const { return m_renderPipeline; }
 
 private:
     wgpu::BindGroupLayout m_bindGroupLayout;
@@ -456,9 +457,10 @@ public:
             std::ostringstream vertexGLSL;
             vertexGLSL << "#version 460\n";
             vertexGLSL << "#pragma shader_stage(vertex)\n";
-            vertexGLSL << "#define " GLSL_VERTEX "\n";
-            vertexGLSL << "#define " GLSL_DISABLE_SHADER_STORAGE_BUFFERS "\n";
-            vertexGLSL << "#define " GLSL_TARGET_VULKAN "\n";
+            vertexGLSL << "#define " GLSL_VERTEX " true\n";
+            vertexGLSL << "#define " GLSL_DISABLE_SHADER_STORAGE_BUFFERS
+                          " true\n";
+            vertexGLSL << "#define " GLSL_TARGET_VULKAN " true\n";
             vertexGLSL
                 << "#extension GL_EXT_samplerless_texture_functions : enable\n";
             vertexGLSL << glsl::glsl << "\n";
@@ -550,10 +552,7 @@ public:
     {
         return m_bindGroupLayout;
     }
-    const wgpu::RenderPipeline renderPipeline() const
-    {
-        return m_renderPipeline;
-    }
+    wgpu::RenderPipeline renderPipeline() const { return m_renderPipeline; }
 
 private:
     wgpu::BindGroupLayout m_bindGroupLayout;
@@ -579,22 +578,26 @@ public:
         {
             const char* language;
             const char* versionString;
+            std::ostringstream glsl;
+            auto addDefine = [&glsl](const char* name) {
+                glsl << "#define " << name << " true\n";
+            };
             if (plsType ==
                 PixelLocalStorageType::EXT_shader_pixel_local_storage)
             {
                 language = "glsl-raw";
                 versionString = "#version 310 es";
+                if (context->m_contextOptions.invertRenderTargetY)
+                {
+                    addDefine(GLSL_POST_INVERT_Y);
+                }
             }
             else
             {
                 language = "glsl";
                 versionString = "#version 460";
+                addDefine(GLSL_TARGET_VULKAN);
             }
-
-            std::ostringstream glsl;
-            auto addDefine = [&glsl](const char* name) {
-                glsl << "#define " << name << "\n";
-            };
             if (plsType ==
                 PixelLocalStorageType::EXT_shader_pixel_local_storage)
             {
@@ -603,7 +606,6 @@ public:
                 glsl << "#else\n";
                 glsl << "#extension GL_EXT_samplerless_texture_functions : "
                         "enable\n";
-                addDefine(GLSL_TARGET_VULKAN);
                 // If we are being compiled by SPIRV transpiler for
                 // introspection, GL_EXT_shader_pixel_local_storage will not be
                 // defined.
@@ -614,7 +616,6 @@ public:
             {
                 glsl << "#extension GL_EXT_samplerless_texture_functions : "
                         "enable\n";
-                addDefine(GLSL_TARGET_VULKAN);
                 addDefine(plsType == PixelLocalStorageType::subpassLoad
                               ? GLSL_PLS_IMPL_SUBPASS_LOAD
                               : GLSL_PLS_IMPL_NONE);
@@ -626,6 +627,7 @@ public:
             switch (drawType)
             {
                 case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
                 case DrawType::outerCurvePatches:
                     addDefine(GLSL_ENABLE_INSTANCE_INDEX);
                     if (plsType ==
@@ -641,13 +643,27 @@ public:
                     addDefine(GLSL_DRAW_INTERIOR_TRIANGLES);
                     break;
                 case DrawType::imageRect:
+                    addDefine(GLSL_DRAW_IMAGE);
+                    addDefine(GLSL_DRAW_IMAGE_RECT);
                     RIVE_UNREACHABLE();
+                    break;
                 case DrawType::imageMesh:
+                    addDefine(GLSL_DRAW_IMAGE);
+                    addDefine(GLSL_DRAW_IMAGE_MESH);
                     break;
                 case DrawType::atomicInitialize:
+                    addDefine(GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS);
+                    addDefine(GLSL_INITIALIZE_PLS);
+                    RIVE_UNREACHABLE();
+                    break;
                 case DrawType::atomicResolve:
+                    addDefine(GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS);
+                    addDefine(GLSL_RESOLVE_PLS);
+                    RIVE_UNREACHABLE();
+                    break;
                 case DrawType::stencilClipReset:
                     RIVE_UNREACHABLE();
+                    break;
             }
             for (size_t i = 0; i < gpu::kShaderFeatureCount; ++i)
             {
@@ -675,6 +691,7 @@ public:
             switch (drawType)
             {
                 case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
                 case DrawType::outerCurvePatches:
                     addDefine(GLSL_DRAW_PATH);
                     glsl << gpu::glsl::draw_path_common << '\n';
@@ -685,31 +702,21 @@ public:
                     glsl << gpu::glsl::draw_path_common << '\n';
                     glsl << gpu::glsl::draw_path << '\n';
                     break;
-                case DrawType::imageRect:
-                    addDefine(GLSL_DRAW_IMAGE);
-                    addDefine(GLSL_DRAW_IMAGE_RECT);
-                    RIVE_UNREACHABLE();
                 case DrawType::imageMesh:
-                    addDefine(GLSL_DRAW_IMAGE);
-                    addDefine(GLSL_DRAW_IMAGE_MESH);
                     glsl << gpu::glsl::draw_image_mesh << '\n';
                     break;
+                case DrawType::imageRect:
                 case DrawType::atomicInitialize:
-                    addDefine(GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS);
-                    addDefine(GLSL_INITIALIZE_PLS);
-                    RIVE_UNREACHABLE();
                 case DrawType::atomicResolve:
-                    addDefine(GLSL_DRAW_RENDER_TARGET_UPDATE_BOUNDS);
-                    addDefine(GLSL_RESOLVE_PLS);
-                    RIVE_UNREACHABLE();
                 case DrawType::stencilClipReset:
                     RIVE_UNREACHABLE();
+                    break;
             }
 
             std::ostringstream vertexGLSL;
             vertexGLSL << versionString << "\n";
             vertexGLSL << "#pragma shader_stage(vertex)\n";
-            vertexGLSL << "#define " GLSL_VERTEX "\n";
+            vertexGLSL << "#define " GLSL_VERTEX " true\n";
             vertexGLSL << glsl.str();
             vertexShader = m_vertexShaderHandle.compileShaderModule(
                 context->m_device,
@@ -719,7 +726,7 @@ public:
             std::ostringstream fragmentGLSL;
             fragmentGLSL << versionString << "\n";
             fragmentGLSL << "#pragma shader_stage(fragment)\n";
-            fragmentGLSL << "#define " GLSL_FRAGMENT "\n";
+            fragmentGLSL << "#define " GLSL_FRAGMENT " true\n";
             fragmentGLSL << glsl.str();
             fragmentShader = m_fragmentShaderHandle.compileShaderModule(
                 context->m_device,
@@ -731,6 +738,7 @@ public:
             switch (drawType)
             {
                 case DrawType::midpointFanPatches:
+                case DrawType::midpointFanCenterAAPatches:
                 case DrawType::outerCurvePatches:
                     vertexShader =
                         m_vertexShaderHandle.compileSPIRVShaderModule(
@@ -789,7 +797,7 @@ public:
         }
     }
 
-    const wgpu::RenderPipeline renderPipeline(
+    wgpu::RenderPipeline renderPipeline(
         wgpu::TextureFormat framebufferFormat) const
     {
         return m_renderPipelines[RenderPipelineIdx(framebufferFormat)];
@@ -812,36 +820,19 @@ private:
 RenderContextWebGPUImpl::RenderContextWebGPUImpl(
     wgpu::Device device,
     wgpu::Queue queue,
-    const ContextOptions& contextOptions,
-    const PlatformFeatures& baselinePlatformFeatures) :
+    const ContextOptions& contextOptions) :
     m_device(device),
     m_queue(queue),
     m_contextOptions(contextOptions),
-    m_frontFaceForOnScreenDraws(wgpu::FrontFace::CW),
     m_colorRampPipeline(std::make_unique<ColorRampPipeline>(m_device)),
     m_tessellatePipeline(
         std::make_unique<TessellatePipeline>(m_device, m_contextOptions))
 {
-    m_platformFeatures = baselinePlatformFeatures;
-    m_platformFeatures.invertOffscreenY = true;
-
-    if (m_contextOptions.plsType ==
-            PixelLocalStorageType::EXT_shader_pixel_local_storage &&
-        baselinePlatformFeatures.uninvertOnScreenY)
-    {
-        // We will use "glsl-raw" in order to access
-        // EXT_shader_pixel_local_storage, so the WebGPU layer won't actually
-        // get a chance to negate Y like it thinks it will.
-        m_platformFeatures.uninvertOnScreenY = false;
-        // PLS always expects CW, but in this case, we need to specify CCW. This
-        // is because the WebGPU layer thinks it's going to negate Y in our
-        // shader, and will therefore also flip our frontFace. However, since we
-        // will use raw-glsl shaders, the WebGPU layer won't actually get a
-        // chance to negate Y like it thinks it will. Therefore, we emit the
-        // wrong frontFace, in anticipation of it getting flipped into the
-        // correct frontFace on its way to the driver.
-        m_frontFaceForOnScreenDraws = wgpu::FrontFace::CCW;
-    }
+    // All backends currently use raster ordered shaders.
+    // TODO: update this flag once we have msaa and atomic modes.
+    m_platformFeatures.supportsRasterOrdering = true;
+    m_platformFeatures.clipSpaceBottomUp = true;
+    m_platformFeatures.framebufferBottomUp = false;
 }
 
 void RenderContextWebGPUImpl::initGPUObjects()
@@ -1076,13 +1067,17 @@ void RenderContextWebGPUImpl::initGPUObjects()
         std::ostringstream glsl;
         glsl << "#version 310 es\n";
         glsl << "#pragma shader_stage(vertex)\n";
-        glsl << "#define " GLSL_VERTEX "\n";
+        glsl << "#define " GLSL_VERTEX " true\n";
         // If we are being compiled by SPIRV transpiler for introspection, use
         // gl_VertexIndex instead of gl_VertexID.
         glsl << "#ifndef GL_EXT_shader_pixel_local_storage\n";
         glsl << "#define gl_VertexID gl_VertexIndex\n";
         glsl << "#endif\n";
-        glsl << "#define " GLSL_ENABLE_CLIPPING "\n";
+        glsl << "#define " GLSL_ENABLE_CLIPPING " true\n";
+        if (m_contextOptions.invertRenderTargetY)
+        {
+            glsl << "#define " GLSL_POST_INVERT_Y " true\n";
+        }
         BuildLoadStoreEXTGLSL(glsl, LoadStoreActionsEXT::none);
         m_loadStoreEXTVertexShader =
             m_loadStoreEXTVertexShaderHandle.compileShaderModule(
@@ -1507,15 +1502,6 @@ std::unique_ptr<BufferRing> RenderContextWebGPUImpl::makeVertexBufferRing(
                                           wgpu::BufferUsage::Vertex);
 }
 
-std::unique_ptr<BufferRing> RenderContextWebGPUImpl::
-    makeTextureTransferBufferRing(size_t capacityInBytes)
-{
-    return std::make_unique<BufferWebGPU>(m_device,
-                                          m_queue,
-                                          capacityInBytes,
-                                          wgpu::BufferUsage::CopySrc);
-}
-
 void RenderContextWebGPUImpl::resizeGradientTexture(uint32_t width,
                                                     uint32_t height)
 {
@@ -1524,8 +1510,7 @@ void RenderContextWebGPUImpl::resizeGradientTexture(uint32_t width,
 
     wgpu::TextureDescriptor desc{
         .usage = wgpu::TextureUsage::RenderAttachment |
-                 wgpu::TextureUsage::TextureBinding |
-                 wgpu::TextureUsage::CopyDst,
+                 wgpu::TextureUsage::TextureBinding,
         .size = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)},
         .format = wgpu::TextureFormat::RGBA8Unorm,
     };
@@ -1563,6 +1548,7 @@ wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline(
     switch (drawType)
     {
         case DrawType::midpointFanPatches:
+        case DrawType::midpointFanCenterAAPatches:
         case DrawType::outerCurvePatches:
         {
             attrs = {
@@ -1679,7 +1665,7 @@ wgpu::RenderPipeline RenderContextWebGPUImpl::makeDrawPipeline(
         .primitive =
             {
                 .topology = wgpu::PrimitiveTopology::TriangleList,
-                .frontFace = m_frontFaceForOnScreenDraws,
+                .frontFace = frontFaceForRenderTargetDraws(),
                 .cullMode = DrawTypeIsImageDraw(drawType)
                                 ? wgpu::CullMode::None
                                 : wgpu::CullMode::Back,
@@ -1807,7 +1793,7 @@ void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
     }
 
     // Render the complex color ramps to the gradient texture.
-    if (desc.complexGradSpanCount > 0)
+    if (desc.gradDataHeight > 0)
     {
         wgpu::BindGroupEntry bindingEntries[] = {
             {
@@ -1840,41 +1826,22 @@ void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
         wgpu::RenderPassEncoder gradPass =
             encoder.BeginRenderPass(&gradPassDesc);
         gradPass.SetViewport(0.f,
-                             static_cast<double>(desc.complexGradRowsTop),
+                             0.f,
                              gpu::kGradTextureWidth,
-                             static_cast<float>(desc.complexGradRowsHeight),
+                             static_cast<float>(desc.gradDataHeight),
                              0.0,
                              1.0);
         gradPass.SetPipeline(m_colorRampPipeline->renderPipeline());
         gradPass.SetVertexBuffer(0,
                                  webgpu_buffer(gradSpanBufferRing()),
-                                 desc.firstComplexGradSpan *
+                                 desc.firstGradSpan *
                                      sizeof(gpu::GradientSpan));
         gradPass.SetBindGroup(0, bindings);
-        gradPass.Draw(4, desc.complexGradSpanCount, 0, 0);
+        gradPass.Draw(gpu::GRAD_SPAN_TRI_STRIP_VERTEX_COUNT,
+                      desc.gradSpanCount,
+                      0,
+                      0);
         gradPass.End();
-    }
-
-    // Copy the simple color ramps to the gradient texture.
-    if (desc.simpleGradTexelsHeight > 0)
-    {
-        wgpu::ImageCopyBuffer srcBuffer = {
-            .layout =
-                {
-                    .offset = desc.simpleGradDataOffsetInBytes,
-                    .bytesPerRow = gpu::kGradTextureWidth * 4,
-                },
-            .buffer = webgpu_buffer(simpleColorRampsBufferRing()),
-        };
-        wgpu::ImageCopyTexture dstTexture = {
-            .texture = m_gradientTexture,
-            .origin = {0, 0, 0},
-        };
-        wgpu::Extent3D copySize = {
-            .width = desc.simpleGradTexelsWidth,
-            .height = desc.simpleGradTexelsHeight,
-        };
-        encoder.CopyBufferToTexture(&srcBuffer, &dstTexture, &copySize);
     }
 
     // Tessellate all curves into vertices in the tessellation texture.
@@ -2202,6 +2169,7 @@ void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
         switch (drawType)
         {
             case DrawType::midpointFanPatches:
+            case DrawType::midpointFanCenterAAPatches:
             case DrawType::outerCurvePatches:
             {
                 // Draw PLS patches that connect the tessellation vertices.
@@ -2273,8 +2241,7 @@ void RenderContextWebGPUImpl::flush(const FlushDescriptor& desc)
 std::unique_ptr<RenderContext> RenderContextWebGPUImpl::MakeContext(
     wgpu::Device device,
     wgpu::Queue queue,
-    const ContextOptions& contextOptions,
-    const gpu::PlatformFeatures& baselinePlatformFeatures)
+    const ContextOptions& contextOptions)
 {
     std::unique_ptr<RenderContextWebGPUImpl> impl;
     switch (contextOptions.plsType)
@@ -2282,19 +2249,13 @@ std::unique_ptr<RenderContext> RenderContextWebGPUImpl::MakeContext(
         case PixelLocalStorageType::subpassLoad:
 #ifdef RIVE_WEBGPU
             impl = std::unique_ptr<RenderContextWebGPUImpl>(
-                new RenderContextWebGPUVulkan(device,
-                                              queue,
-                                              contextOptions,
-                                              baselinePlatformFeatures));
+                new RenderContextWebGPUVulkan(device, queue, contextOptions));
             break;
 #endif
         case PixelLocalStorageType::EXT_shader_pixel_local_storage:
         case PixelLocalStorageType::none:
             impl = std::unique_ptr<RenderContextWebGPUImpl>(
-                new RenderContextWebGPUImpl(device,
-                                            queue,
-                                            contextOptions,
-                                            baselinePlatformFeatures));
+                new RenderContextWebGPUImpl(device, queue, contextOptions));
             break;
     }
     impl->initGPUObjects();

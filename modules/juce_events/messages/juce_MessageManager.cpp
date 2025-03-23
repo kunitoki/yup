@@ -97,12 +97,17 @@ bool MessageManager::MessageBase::post()
 }
 
 //==============================================================================
+void MessageManager::registerEventLoopCallback (std::function<void()> loopCallbackToSet)
+{
+    jassert (isThisTheMessageThread()); // must only be called by the message thread
+
+    loopCallback = std::move (loopCallbackToSet);
+}
+
+//==============================================================================
 #if ! (JUCE_MAC || JUCE_IOS || JUCE_WASM)
 // implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
-namespace detail
-{
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
-} // namespace detail
+bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 
 class MessageManager::QuitMessage final : public MessageManager::MessageBase
 {
@@ -126,7 +131,9 @@ void MessageManager::runDispatchLoop()
     {
         JUCE_TRY
         {
-            if (! detail::dispatchNextMessageOnSystemQueue (false))
+            loopCallback();
+
+            if (! juce_dispatchNextMessageOnSystemQueue (false))
                 Thread::sleep (1);
         }
         JUCE_CATCH_EXCEPTION
@@ -150,7 +157,9 @@ bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
     {
         JUCE_TRY
         {
-            if (! detail::dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
+            loopCallback();
+
+            if (! juce_dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
                 Thread::sleep (1);
         }
         JUCE_CATCH_EXCEPTION
@@ -259,7 +268,7 @@ void MessageManager::setCurrentThreadAsMessageThread()
 {
     auto thisThread = Thread::getCurrentThreadId();
 
-    messageThreadId.exchange(thisThread);
+    messageThreadId.exchange (thisThread);
 
     if (messageThreadId.get() != thisThread)
     {
@@ -319,17 +328,17 @@ struct MessageManager::Lock::BlockingMessage final : public MessageManager::Mess
             owner->setAcquired (true);
 
         condvar.wait (lock, [&]
-                      {
-                          return owner == nullptr;
-                      });
+        {
+            return owner == nullptr;
+        });
     }
 
     void stopWaiting()
     {
         const ScopeGuard scope { [&]
-                                 {
-                                     condvar.notify_one();
-                                 } };
+        {
+            condvar.notify_one();
+        } };
         const std::scoped_lock lock { mutex };
         owner = nullptr;
     }
@@ -378,10 +387,10 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
     }
 
     if (! lockIsMandatory && [&]
-        {
-            const std::scoped_lock lock { mutex };
-            return std::exchange (abortWait, false);
-        }())
+    {
+        const std::scoped_lock lock { mutex };
+        return std::exchange (abortWait, false);
+    }())
     {
         return false;
     }
@@ -412,9 +421,9 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
         {
             std::unique_lock lock { mutex };
             condvar.wait (lock, [&]
-                          {
-                              return std::exchange (abortWait, false);
-                          });
+            {
+                return std::exchange (abortWait, false);
+            });
         }
 
         if (acquired)
@@ -446,9 +455,9 @@ void MessageManager::Lock::exit() const noexcept
         return;
 
     const ScopeGuard unlocker { [&]
-                                {
-                                    entryMutex.exit();
-                                } };
+    {
+        entryMutex.exit();
+    } };
 
     if (blockingMessage == nullptr)
         return;
@@ -472,9 +481,9 @@ void MessageManager::Lock::abort() const noexcept
 void MessageManager::Lock::setAcquired (bool x) const noexcept
 {
     const ScopeGuard scope { [&]
-                             {
-                                 condvar.notify_one();
-                             } };
+    {
+        condvar.notify_one();
+    } };
     const std::scoped_lock lock { mutex };
     abortWait = true;
     acquired = x;

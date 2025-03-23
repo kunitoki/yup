@@ -1,6 +1,7 @@
 #ifndef _RIVE_ARTBOARD_HPP_
 #define _RIVE_ARTBOARD_HPP_
 
+#include "rive/advance_flags.hpp"
 #include "rive/animation/linear_animation.hpp"
 #include "rive/animation/state_machine.hpp"
 #include "rive/core_context.hpp"
@@ -66,10 +67,8 @@ private:
     std::vector<DataBind*> m_AllDataBinds;
     DataContext* m_DataContext = nullptr;
     bool m_JoysticksApplyBeforeUpdate = true;
-    bool m_HasChangedDrawOrderInLastUpdate = false;
 
     unsigned int m_DirtDepth = 0;
-    RawPath m_backgroundRawPath;
     Factory* m_Factory = nullptr;
     Drawable* m_FirstDrawable = nullptr;
     bool m_IsInstance = false;
@@ -81,6 +80,11 @@ private:
     Artboard* parentArtboard() const;
     NestedArtboard* m_host = nullptr;
     bool sharesLayoutWithHost() const;
+
+    // Variable that tracks whenever the draw order changes. It is used by the
+    // state machine controllers to sort their hittable components when they are
+    // out of sync
+    uint8_t m_drawOrderChangeCounter = 0;
 
 #ifdef EXTERNAL_RIVE_AUDIO_ENGINE
     rcp<AudioEngine> m_audioEngine;
@@ -96,6 +100,12 @@ public:
     void host(NestedArtboard* nestedArtboard);
     NestedArtboard* host() const;
 
+    // Implemented for ShapePaintContainer.
+    const Mat2D& shapeWorldTransform() const override
+    {
+        return worldTransform();
+    }
+
 private:
 #ifdef TESTING
 public:
@@ -108,6 +118,7 @@ public:
 public:
     Artboard();
     ~Artboard() override;
+    bool validateObjects();
     StatusCode initialize();
 
     Core* resolve(uint32_t id) const override;
@@ -126,6 +137,10 @@ public:
 
     /// Update components that depend on each other in DAG order.
     bool updateComponents();
+
+    // Update layouts and components. Returns true if it updated something.
+    bool updatePass(bool isRoot);
+
     void onDirty(ComponentDirt dirt) override;
 
     // Artboards don't update their world transforms in the same way
@@ -140,15 +155,15 @@ public:
     bool syncStyleChanges();
     bool canHaveOverrides() override { return true; }
 
-    bool advance(float elapsedSeconds, bool nested = true, bool animate = true);
+    bool advance(float elapsedSeconds,
+                 AdvanceFlags flags = AdvanceFlags::AdvanceNested |
+                                      AdvanceFlags::Animate |
+                                      AdvanceFlags::NewFrame);
     bool advanceInternal(float elapsedSeconds,
-                         bool isRoot,
-                         bool nested = true,
-                         bool animate = true);
-    bool hasChangedDrawOrderInLastUpdate()
-    {
-        return m_HasChangedDrawOrderInLastUpdate;
-    };
+                         AdvanceFlags flags = AdvanceFlags::AdvanceNested |
+                                              AdvanceFlags::Animate |
+                                              AdvanceFlags::NewFrame);
+    uint8_t drawOrderChangeCounter() { return m_drawOrderChangeCounter; }
     Drawable* firstDrawable() { return m_FirstDrawable; };
 
     enum class DrawOption
@@ -162,8 +177,8 @@ public:
     void addToRenderPath(RenderPath* path, const Mat2D& transform);
 
 #ifdef TESTING
-    RenderPath* clipPath() const { return m_clipPath.get(); }
-    RenderPath* backgroundPath() const { return m_backgroundPath.get(); }
+    ShapePaintPath* clipPath() { return &m_worldPath; }
+    ShapePaintPath* backgroundPath() { return &m_localPath; }
 #endif
 
     const std::vector<Core*>& objects() const { return m_Objects; }
@@ -201,7 +216,7 @@ public:
     void setDataContextFromInstance(ViewModelInstance* viewModelInstance);
     void addDataBind(DataBind* dataBind);
     void populateDataBinds(std::vector<DataBind*>* dataBinds);
-    void sortDataBinds(std::vector<DataBind*> dataBinds);
+    void sortDataBinds();
     void collectDataBinds();
 
     bool hasAudio() const;
@@ -314,7 +329,13 @@ public:
                         auto dataBindClone =
                             static_cast<DataBind*>(dataBind->clone());
                         dataBindClone->target(cloneObjects.back());
-                        dataBindClone->converter(dataBind->converter());
+                        if (dataBind->converter() != nullptr)
+                        {
+
+                            dataBindClone->converter(dataBind->converter()
+                                                         ->clone()
+                                                         ->as<DataConverter>());
+                        }
                         artboardClone->m_DataBinds.push_back(dataBindClone);
                     }
                 }

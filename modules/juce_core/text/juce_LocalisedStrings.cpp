@@ -108,6 +108,9 @@ std::unique_ptr<LocalisedStrings> currentMappings;
 
 static int findCloseQuote (const String& text, int startPos)
 {
+    if (startPos >= text.length())
+        return text.length();
+
     juce_wchar lastChar = 0;
     auto t = text.getCharPointer() + startPos;
 

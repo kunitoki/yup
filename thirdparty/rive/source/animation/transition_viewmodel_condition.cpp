@@ -9,13 +9,26 @@
 using namespace rive;
 
 bool TransitionViewModelCondition::evaluate(
-    const StateMachineInstance* stateMachineInstance) const
+    const StateMachineInstance* stateMachineInstance,
+    StateMachineLayerInstance* layerInstance) const
 {
     if (leftComparator() != nullptr && rightComparator() != nullptr)
     {
         return leftComparator()->compare(rightComparator(),
                                          op(),
-                                         stateMachineInstance);
+                                         stateMachineInstance,
+                                         layerInstance);
     }
     return false;
+}
+
+void TransitionViewModelCondition::useInLayer(
+    const StateMachineInstance* stateMachineInstance,
+    StateMachineLayerInstance* layerInstance) const
+{
+    if (leftComparator() != nullptr)
+    {
+        return leftComparator()->useInLayer(stateMachineInstance,
+                                            layerInstance);
+    }
 }

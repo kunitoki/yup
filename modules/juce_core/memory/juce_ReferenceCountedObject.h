@@ -457,13 +457,6 @@ public:
     operator ReferencedType*() const noexcept { return referencedObject; }
 #endif
 
-#ifndef DOXYGEN
-    [[deprecated ("Use the get method instead.")]] ReferencedType* getObject() const
-    {
-        return get();
-    }
-#endif
-
 private:
     //==============================================================================
     ReferencedType* referencedObject = nullptr;

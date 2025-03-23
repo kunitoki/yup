@@ -7,12 +7,16 @@ default:
 clean:
   rm -Rf build/*
 
-osx:
-  cmake -G Xcode -B build -DYUP_ENABLE_PROFILING=OFF
+osx PROFILING="OFF":
+  cmake -G Xcode -B build -DYUP_ENABLE_PROFILING={{PROFILING}}
   -open build/yup.xcodeproj
 
 ios:
   cmake -G Xcode -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64
+  -open build/yup.xcodeproj
+
+ios_simulator:
+  cmake -G Xcode -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=SIMULATORARM64
   -open build/yup.xcodeproj
 
 android:
@@ -25,4 +29,3 @@ emscripten CONFIG="Debug":
   cmake --build build --config {{CONFIG}}
   python3 -m http.server -d .
   #python3 tools/serve.py -p 8000 -d .
-

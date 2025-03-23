@@ -45,12 +45,6 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallba
 
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
 
-StringArray MidiInput::getDevices() { return {}; }
-
-int MidiInput::getDefaultDeviceIndex() { return 0; }
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int, MidiInputCallback*) { return {}; }
-
 class MidiOutput::Pimpl
 {
 };
@@ -66,12 +60,6 @@ MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
-
-StringArray MidiOutput::getDevices() { return {}; }
-
-int MidiOutput::getDefaultDeviceIndex() { return 0; }
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {

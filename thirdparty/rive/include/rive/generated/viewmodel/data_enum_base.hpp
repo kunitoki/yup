@@ -9,7 +9,7 @@ protected:
     typedef Core Super;
 
 public:
-    static const uint16_t typeKey = 438;
+    static const uint16_t typeKey = 510;
 
     /// Helper to quickly determine if a core object extends another without
     /// RTTI at runtime.

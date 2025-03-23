@@ -14,6 +14,7 @@ class StateTransitionImporter;
 class TransitionCondition;
 class StateInstance;
 class StateMachineInstance;
+class StateMachineLayerInstance;
 class LinearAnimation;
 class LinearAnimationInstance;
 
@@ -70,7 +71,7 @@ public:
     /// stateFrom with the given inputs.
     AllowTransition allowed(StateInstance* stateFrom,
                             StateMachineInstance* stateMachineInstance,
-                            bool ignoreTriggers) const;
+                            StateMachineLayerInstance* layerInstance) const;
 
     /// Whether the animation is held at exit or if it keeps advancing
     /// during mixing.
@@ -133,6 +134,10 @@ public:
     /// correct time to the animation instance in the stateFrom, when
     /// applicable (when it's an AnimationState).
     bool applyExitCondition(StateInstance* stateFrom) const;
+
+    /// Marks any trigger based condition as used for this layer
+    void useLayerInConditions(StateMachineInstance* stateMachineInstance,
+                              StateMachineLayerInstance* layerInstance) const;
 };
 } // namespace rive
 

@@ -76,30 +76,37 @@
 //==============================================================================
 #if defined(_WIN32) || defined(_WIN64)
 #define JUCE_WINDOWS 1
+
 #elif defined(ANDROID) || defined(__ANDROID__)
 #define JUCE_ANDROID 1
+
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 #define JUCE_BSD 1
+
 #elif defined(LINUX) || defined(__linux__)
 #define JUCE_LINUX 1
+
 #elif defined(__APPLE_CPP__) || defined(__APPLE_CC__)
 #define CF_EXCLUDE_CSTD_HEADERS 1
 #include <TargetConditionals.h> // (needed to find out what platform we're using)
 #include <AvailabilityMacros.h>
-
 #if TARGET_OS_IPHONE || TARGET_IPHONE_SIMULATOR
 #define JUCE_IPHONE 1
 #define JUCE_IOS 1
 #else
 #define JUCE_MAC 1
 #endif
+
 #elif defined(__wasm__) && defined(__EMSCRIPTEN__)
 #define JUCE_WASM 1
 #define JUCE_EMSCRIPTEN 1
+
 #elif defined(__wasm__)
 #define JUCE_WASM 1
+
 #else
 #error "Unknown platform!"
+
 #endif
 
 //==============================================================================
@@ -128,7 +135,7 @@
 /** If defined, this indicates that the processor is little-endian. */
 #define JUCE_LITTLE_ENDIAN 1
 
-#if defined(_M_ARM) || defined(_M_ARM64) || defined(__arm__) || defined(__aarch64__)
+#if defined(_M_ARM) || defined(_M_ARM64) || defined(_M_ARM64EC) || defined(__arm__) || defined(__aarch64__)
 #define JUCE_ARM 1
 #else
 #define JUCE_INTEL 1
@@ -137,6 +144,22 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
+
+// Expands to true if the API of the specified version is available at build time, false otherwise
+#define JUCE_MAC_API_VERSION_CAN_BE_BUILT(major, minor) \
+    ((major) * 10000 + (minor) * 100 <= MAC_OS_X_VERSION_MAX_ALLOWED)
+
+// Expands to true if the API of the specified version is available at build time, false otherwise
+#define JUCE_IOS_API_VERSION_CAN_BE_BUILT(major, minor) \
+    ((major) * 10000 + (minor) * 100 <= __IPHONE_OS_VERSION_MAX_ALLOWED)
+
+// Expands to true if the deployment target is greater or equal to the specified version, false otherwise
+#define JUCE_MAC_API_VERSION_MIN_REQUIRED_AT_LEAST(major, minor) \
+    ((major) * 10000 + (minor) * 100 <= MAC_OS_X_VERSION_MIN_REQUIRED)
+
+// Expands to true if the deployment target is greater or equal to the specified version, false otherwise
+#define JUCE_IOS_API_VERSION_MIN_REQUIRED_AT_LEAST(major, minor) \
+    ((major) * 10000 + (minor) * 100 <= __IPHONE_OS_VERSION_MIN_REQUIRED)
 
 #if defined(DEBUG) || defined(_DEBUG) || ! (defined(NDEBUG) || defined(_NDEBUG))
 #define JUCE_DEBUG 1
@@ -167,10 +190,10 @@
 #endif
 
 #if JUCE_MAC
-#if ! defined(MAC_OS_X_VERSION_10_14)
-#error "The 10.14 SDK (Xcode 10.1+) is required to build JUCE apps. You can create apps that run on macOS 10.9+ by changing the deployment target."
-#elif MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_9
-#error "Building for OSX 10.8 and earlier is no longer supported!"
+#if ! JUCE_MAC_API_VERSION_CAN_BE_BUILT(11, 1)
+#error "The macOS 11.1 SDK (Xcode 12.4+) is required to build JUCE apps. You can create apps that run on macOS 10.11+ by changing the deployment target."
+#elif ! JUCE_MAC_API_VERSION_MIN_REQUIRED_AT_LEAST(10, 11)
+#error "Building for OSX 10.10 and earlier is no longer supported!"
 #endif
 #endif
 #endif
@@ -191,7 +214,7 @@
 #define JUCE_BIG_ENDIAN 1
 #endif
 
-#if defined(__LP64__) || defined(_LP64) || defined(__arm64__)
+#if defined(__LP64__) || defined(_LP64) || defined(__arm64__) || defined(__aarch64__)
 #define JUCE_64BIT 1
 #else
 #define JUCE_32BIT 1

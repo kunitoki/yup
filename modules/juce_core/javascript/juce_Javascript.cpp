@@ -1208,9 +1208,9 @@ struct JavascriptEngine::RootObject final : public DynamicObject
                 }
 
                 auto len = (size_t) (end - p);
-#define JUCE_JS_COMPARE_KEYWORD(name, str)                         \
-if (len == sizeof (str) - 1 && matchToken (TokenTypes::name, len)) \
-return TokenTypes::name;
+#define JUCE_JS_COMPARE_KEYWORD(name, str)                             \
+    if (len == sizeof (str) - 1 && matchToken (TokenTypes::name, len)) \
+        return TokenTypes::name;
                 JUCE_JS_KEYWORDS (JUCE_JS_COMPARE_KEYWORD)
 
                 currentValue = String (p, end);
@@ -1229,9 +1229,9 @@ return TokenTypes::name;
             if (parseStringLiteral (*p) || (*p == '.' && parseFloatLiteral()))
                 return TokenTypes::literal;
 
-#define JUCE_JS_COMPARE_OPERATOR(name, str)          \
-if (matchToken (TokenTypes::name, sizeof (str) - 1)) \
-return TokenTypes::name;
+#define JUCE_JS_COMPARE_OPERATOR(name, str)              \
+    if (matchToken (TokenTypes::name, sizeof (str) - 1)) \
+        return TokenTypes::name;
             JUCE_JS_OPERATORS (JUCE_JS_COMPARE_OPERATOR)
 
             if (! p.isEmpty())

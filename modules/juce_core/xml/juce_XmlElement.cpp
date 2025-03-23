@@ -453,44 +453,6 @@ bool XmlElement::writeTo (const File& destinationFile, const TextFormat& options
     return tempFile.overwriteTargetFileWithTemporary();
 }
 
-String XmlElement::createDocument (StringRef dtdToUse, bool allOnOneLine, bool includeXmlHeader, StringRef encodingType, int lineWrapLength) const
-{
-    TextFormat options;
-    options.dtd = dtdToUse;
-    options.customEncoding = encodingType;
-    options.addDefaultHeader = includeXmlHeader;
-    options.lineWrapLength = lineWrapLength;
-
-    if (allOnOneLine)
-        options.newLineChars = nullptr;
-
-    return toString (options);
-}
-
-void XmlElement::writeToStream (OutputStream& output, StringRef dtdToUse, bool allOnOneLine, bool includeXmlHeader, StringRef encodingType, int lineWrapLength) const
-{
-    TextFormat options;
-    options.dtd = dtdToUse;
-    options.customEncoding = encodingType;
-    options.addDefaultHeader = includeXmlHeader;
-    options.lineWrapLength = lineWrapLength;
-
-    if (allOnOneLine)
-        options.newLineChars = nullptr;
-
-    writeTo (output, options);
-}
-
-bool XmlElement::writeToFile (const File& file, StringRef dtdToUse, StringRef encodingType, int lineWrapLength) const
-{
-    TextFormat options;
-    options.dtd = dtdToUse;
-    options.customEncoding = encodingType;
-    options.lineWrapLength = lineWrapLength;
-
-    return writeTo (file, options);
-}
-
 //==============================================================================
 bool XmlElement::hasTagName (StringRef possibleTagName) const noexcept
 {
@@ -1013,54 +975,5 @@ void XmlElement::deleteAllTextElements() noexcept
         child = next;
     }
 }
-
-//==============================================================================
-//==============================================================================
-#if JUCE_UNIT_TESTS
-
-class XmlElementTests final : public UnitTest
-{
-public:
-    XmlElementTests()
-        : UnitTest ("XmlElement", UnitTestCategories::xml)
-    {
-    }
-
-    void runTest() override
-    {
-        {
-            beginTest ("Float formatting");
-
-            auto element = std::make_unique<XmlElement> ("test");
-            Identifier number ("number");
-
-            std::map<double, String> tests;
-            tests[1] = "1.0";
-            tests[1.1] = "1.1";
-            tests[1.01] = "1.01";
-            tests[0.76378] = "0.76378";
-            tests[-10] = "-10.0";
-            tests[10.01] = "10.01";
-            tests[0.0123] = "0.0123";
-            tests[-3.7e-27] = "-3.7e-27";
-            tests[1e+40] = "1.0e40";
-            tests[-12345678901234567.0] = "-1.234567890123457e16";
-            tests[192000] = "192000.0";
-            tests[1234567] = "1.234567e6";
-            tests[0.00006] = "0.00006";
-            tests[0.000006] = "6.0e-6";
-
-            for (auto& test : tests)
-            {
-                element->setAttribute (number, test.first);
-                expectEquals (element->getStringAttribute (number), test.second);
-            }
-        }
-    }
-};
-
-static XmlElementTests xmlElementTests;
-
-#endif
 
 } // namespace juce

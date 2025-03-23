@@ -349,28 +349,6 @@ public:
         return this->currentValue;
     }
 
-    //==============================================================================
-#ifndef DOXYGEN
-    /** Using the new methods:
-
-        lsv.setValue (x, false); -> lsv.setTargetValue (x);
-        lsv.setValue (x, true);  -> lsv.setCurrentAndTargetValue (x);
-
-        @param newValue     The new target value
-        @param force        If true, the value will be set immediately, bypassing the ramp
-    */
-    [[deprecated ("Use setTargetValue and setCurrentAndTargetValue instead.")]] void setValue (FloatType newValue, bool force = false) noexcept
-    {
-        if (force)
-        {
-            this->setCurrentAndTargetValue (newValue);
-            return;
-        }
-
-        setTargetValue (newValue);
-    }
-#endif
-
 private:
     //==============================================================================
     template <typename T = SmoothingType>

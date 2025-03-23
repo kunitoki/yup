@@ -41,12 +41,12 @@ namespace juce
 {
 
 #if JUCE_COREAUDIO_LOGGING_ENABLED
-#define JUCE_COREAUDIOLOG(a)  \
-{                             \
-String camsg ("CoreAudio: "); \
-camsg << a;                   \
-Logger::writeToLog (camsg);   \
-}
+#define JUCE_COREAUDIOLOG(a)          \
+    {                                 \
+        String camsg ("CoreAudio: "); \
+        camsg << a;                   \
+        Logger::writeToLog (camsg);   \
+    }
 #else
 #define JUCE_COREAUDIOLOG(a)
 #endif
@@ -1236,7 +1236,45 @@ struct CoreAudioClasses
                     return std::make_unique<CoreAudioInternal> (*this, inputDeviceId, true, outputDeviceId != 0);
                 }
 
-                return std::make_unique<CoreAudioInternal> (*this, outputDeviceId, false, true);
+                if (inputDeviceId == 0)
+                    return std::make_unique<CoreAudioInternal> (*this, outputDeviceId, false, true);
+
+                // This used to be just "com.juce.aggregate", but macOS doesn't allow two different instances of an app with
+                // the same bundle ID to create the same aggregate device UID, even when it's private.
+                CFStringRef aggregateDeviceUid = Uuid().toString().toCFString();
+
+                // kAudioSubDeviceDriftCompensationMaxQuality has this value but for some reason in Xcode 15 started being
+                // marked available only since macOS 13.0, even though it's been available since forever (see
+                // https://github.com/phracker/MacOSX-SDKs/blob/master/MacOSX10.9.sdk/System/Library/Frameworks/CoreAudio.framework/Versions/A/Headers/AudioHardware.h)
+                // Maybe it's because the enum type changed?... So, just use our own constant with the same value.
+                static constexpr UInt32 kDriftCompensationMaxQuality = 0x7F;
+
+                // clang-format off
+                NSDictionary* description =
+                @{
+                    @(kAudioAggregateDeviceUIDKey) : (NSString*) aggregateDeviceUid,
+                    @(kAudioAggregateDeviceIsPrivateKey) : @(1),
+                    @(kAudioAggregateDeviceSubDeviceListKey):
+                    @[
+                        @{
+                            @(kAudioSubDeviceUIDKey) : getDeviceUID (inputDeviceId),
+                            @(kAudioSubDeviceDriftCompensationKey) : @(1),
+                            @(kAudioSubDeviceDriftCompensationQualityKey) : @(kDriftCompensationMaxQuality),
+                        },
+                        @{
+                            @(kAudioSubDeviceUIDKey) : getDeviceUID (outputDeviceId),
+                            @(kAudioSubDeviceDriftCompensationKey) : @(1),
+                            @(kAudioSubDeviceDriftCompensationQualityKey) : @(kDriftCompensationMaxQuality),
+                        },
+                    ]
+                };
+                // clang-format on
+
+                CFRelease (aggregateDeviceUid);
+
+                // Guaranteed available earlier in CoreAudioIODeviceType::createDevice()
+                OSStatus status = AudioHardwareCreateAggregateDevice ((CFDictionaryRef) description, &aggregateDeviceID);
+                return status == noErr ? std::make_unique<CoreAudioInternal> (*this, aggregateDeviceID, true, true) : nullptr;
             }();
 
             jassert (internal != nullptr);
@@ -1259,6 +1297,9 @@ struct CoreAudioClasses
             pa.mElement = kAudioObjectPropertyElementWildcard;
 
             AudioObjectRemovePropertyListener (kAudioObjectSystemObject, &pa, hardwareListenerProc, internal.get());
+
+            if (aggregateDeviceID != 0)
+                AudioHardwareDestroyAggregateDevice (aggregateDeviceID);
         }
 
         StringArray getOutputChannelNames() override { return internal->outStream != nullptr ? internal->outStream->chanNames : StringArray(); }
@@ -1416,6 +1457,7 @@ struct CoreAudioClasses
 
     private:
         std::unique_ptr<CoreAudioInternal> internal;
+        AudioDeviceID aggregateDeviceID = 0;
         bool isOpen_ = false, restartDevice = true;
         String lastError;
         AudioIODeviceCallback* previousCallback = nullptr;
@@ -1449,6 +1491,17 @@ struct CoreAudioClasses
                 static_cast<CoreAudioInternal*> (inClientData)->deviceDetailsChanged();
 
             return noErr;
+        }
+
+        static NSString* getDeviceUID (AudioDeviceID deviceID)
+        {
+            CFStringRef uid = nullptr;
+            UInt32 uidSize = sizeof (uid);
+
+            AudioObjectPropertyAddress pa { kAudioDevicePropertyDeviceUID, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMaster };
+            AudioObjectGetPropertyData (deviceID, &pa, 0, nullptr, &uidSize, &uid);
+
+            return [(NSString*) uid autorelease];
         }
 
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CoreAudioIODevice)
@@ -2269,7 +2322,17 @@ struct CoreAudioClasses
             auto combinedName = outputDeviceName.isEmpty() ? inputDeviceName
                                                            : outputDeviceName;
 
-            if (inputDeviceID == outputDeviceID)
+            // Newer Apple platforms can create aggregate audio devices
+            // clang-format off
+            bool canCreateAppleAggregateDevice = []
+            {
+                if (@available (macOS 10.9, iOS 7, *))
+                    return true;
+                return false;
+            }();
+            // clang-format on
+
+            if (inputDeviceID == outputDeviceID || canCreateAppleAggregateDevice)
                 return std::make_unique<CoreAudioIODevice> (this, combinedName, inputDeviceID, outputDeviceID).release();
 
             auto in = inputDeviceID != 0 ? std::make_unique<CoreAudioIODevice> (this, inputDeviceName, inputDeviceID, 0)

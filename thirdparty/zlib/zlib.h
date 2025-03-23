@@ -32,8 +32,6 @@
     website:          https://www.zlib.net/
     license:          Public Domain
 
-    dependencies:
-
   END_JUCE_MODULE_DECLARATION
 
   ==============================================================================
@@ -45,22 +43,14 @@
 #include <TargetConditionals.h>
 #endif
 
-namespace zlibNamespace {
+#if __cplusplus
+extern "C" {
+#endif
 
-#undef OS_CODE
-#undef fdopen
 #define ZLIB_INTERNAL
 #define NO_DUMMY_DECL
 #include "src/zlib.h"
 
-#if ! defined(YUP_ZLIB_INTERNAL_NOUNDEF)
-#undef Byte
-#undef fdopen
-#undef local
-#undef Freq
-#undef Code
-#undef Dad
-#undef Len
+#if __cplusplus
+} // extern "C"
 #endif
-
-} // namespace zlibNamespace

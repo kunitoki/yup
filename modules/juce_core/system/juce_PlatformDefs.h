@@ -216,6 +216,9 @@ constexpr bool isConstantEvaluated() noexcept
 //==============================================================================
 // clang-format off
 #if (JUCE_DEBUG && ! JUCE_DISABLE_ASSERTIONS) || DOXYGEN
+/** Assertion are enabled in debug unless explicitly disabled. */
+#define JUCE_ASSERTIONS_ENABLED 1
+
 /** Writes a string to the standard error stream.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
@@ -274,6 +277,7 @@ constexpr bool isConstantEvaluated() noexcept
 #else
 //==============================================================================
 /** If debugging is disabled, these dummy debug and assertion macros are used. */
+#define JUCE_ASSERTIONS_ENABLED 0
 
 #define DBG(textToWrite)
 #define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
@@ -288,6 +292,8 @@ constexpr bool isConstantEvaluated() noexcept
 
 #endif
 // clang-format on
+
+#define JUCE_ASSERTIONS_ENABLED_OR_LOGGED JUCE_ASSERTIONS_ENABLED || JUCE_LOG_ASSERTIONS
 
 //==============================================================================
 /** This is a shorthand macro for deleting a class's copy constructor and copy assignment operator.
@@ -318,38 +324,33 @@ constexpr bool isConstantEvaluated() noexcept
     @endcode
 */
 #define JUCE_DECLARE_NON_COPYABLE(className) \
-className (const className&) = delete;       \
-className& operator= (const className&) = delete;
+    className (const className&) = delete;   \
+    className& operator= (const className&) = delete;
 
 /** This is a shorthand macro for deleting a class's move constructor and
     move assignment operator. */
 #define JUCE_DECLARE_NON_MOVEABLE(className) \
-className (className&&) = delete;            \
-className& operator= (className&&) = delete;
+    className (className&&) = delete;        \
+    className& operator= (className&&) = delete;
 
 /** This is a shorthand way of writing both a JUCE_DECLARE_NON_COPYABLE and
     JUCE_LEAK_DETECTOR macro for a class. */
 #define JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(className) \
-JUCE_DECLARE_NON_COPYABLE (className)                           \
-JUCE_LEAK_DETECTOR (className)
+    JUCE_DECLARE_NON_COPYABLE (className)                       \
+    JUCE_LEAK_DETECTOR (className)
 
 /** This macro can be added to class definitions to disable the use of new/delete to
     allocate the object on the heap, forcing it to only be used as a stack or member variable. */
-#define JUCE_PREVENT_HEAP_ALLOCATION         \
-private:                                     \
-static void* operator new (size_t) = delete; \
-static void operator delete (void*) = delete;
+#define JUCE_PREVENT_HEAP_ALLOCATION             \
+private:                                         \
+    static void* operator new (size_t) = delete; \
+    static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_MSVC && ! defined(DOXYGEN)
-#define JUCE_WARNING_HELPER(file, line, mess) message (file "(" JUCE_STRINGIFY (line) ") : Warning: " #mess)
-#define JUCE_COMPILER_WARNING(message) __pragma (JUCE_WARNING_HELPER (__FILE__, __LINE__, message))
+#define JUCE_COMPILER_WARNING(msg) __pragma (message (__FILE__ "(" JUCE_STRINGIFY (__LINE__) ") : Warning: " msg))
 #else
-#ifndef DOXYGEN
-#define JUCE_WARNING_HELPER(mess) message (#mess)
-#endif
-
-    /** This macro allows you to emit a custom compiler warning message.
+/** This macro allows you to emit a custom compiler warning message.
 
     Very handy for marking bits of code as "to-do" items, or for shaming
     code written by your co-workers in a way that's hard to ignore.
@@ -357,12 +358,12 @@ static void operator delete (void*) = delete;
     GCC and Clang provide the \#warning directive, but MSVC doesn't, so this macro
     is a cross-compiler way to get the same functionality as \#warning.
 */
-#define JUCE_COMPILER_WARNING(message) _Pragma (JUCE_STRINGIFY (JUCE_WARNING_HELPER (message)))
+#define JUCE_COMPILER_WARNING(msg) _Pragma (JUCE_STRINGIFY (message (msg)))
 #endif
 
 //==============================================================================
 #if JUCE_DEBUG || DOXYGEN
-    /** A platform-independent way of forcing an inline function.
+/** A platform-independent way of forcing an inline function.
 
     Use the syntax:
 
@@ -380,9 +381,9 @@ static void operator delete (void*) = delete;
 #endif
 
 #if JUCE_MSVC || DOXYGEN
-    /** This can be placed before a stack or member variable declaration to tell the compiler
+/** This can be placed before a stack or member variable declaration to tell the compiler
     to align it to the specified number of bytes. */
-#define JUCE_ALIGN(bytes) __declspec(align (bytes))
+#define JUCE_ALIGN(bytes) __declspec (align (bytes))
 #else
 #define JUCE_ALIGN(bytes) __attribute__ ((aligned (bytes)))
 #endif
@@ -391,7 +392,7 @@ static void operator delete (void*) = delete;
 #if JUCE_ANDROID && ! defined(DOXYGEN)
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #elif ! defined(JUCE_MODAL_LOOPS_PERMITTED)
-    /** Some operating environments don't provide a modal loop mechanism, so this flag can be
+/** Some operating environments don't provide a modal loop mechanism, so this flag can be
     used to disable any functions that try to run a modal loop. */
 #define JUCE_MODAL_LOOPS_PERMITTED 0
 #endif
@@ -405,7 +406,7 @@ static void operator delete (void*) = delete;
 
 //==============================================================================
 #if JUCE_GCC || DOXYGEN
-    /** This can be appended to a function declaration to tell gcc to disable associative
+/** This can be appended to a function declaration to tell gcc to disable associative
     math optimisations which break some floating point algorithms. */
 #define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS __attribute__ ((__optimize__ ("no-associative-math")))
 #else

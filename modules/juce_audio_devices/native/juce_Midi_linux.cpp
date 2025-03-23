@@ -617,28 +617,6 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String& deviceName,
     return midiInput;
 }
 
-StringArray MidiInput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    deviceNames.appendNumbersToDuplicates (true, true);
-
-    return deviceNames;
-}
-
-int MidiInput::getDefaultDeviceIndex()
-{
-    return 0;
-}
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* callback)
-{
-    return openDevice (getAvailableDevices()[index].identifier, callback);
-}
-
 MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
     : deviceInfo (deviceName, deviceIdentifier)
 {
@@ -714,28 +692,6 @@ std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String& deviceNam
     return midiOutput;
 }
 
-StringArray MidiOutput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    deviceNames.appendNumbersToDuplicates (true, true);
-
-    return deviceNames;
-}
-
-int MidiOutput::getDefaultDeviceIndex()
-{
-    return 0;
-}
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int index)
-{
-    return openDevice (getAvailableDevices()[index].identifier);
-}
-
 MidiOutput::~MidiOutput()
 {
     stopBackgroundThread();
@@ -785,12 +741,6 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String&, MidiInputCallba
 
 std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputCallback*) { return {}; }
 
-StringArray MidiInput::getDevices() { return {}; }
-
-int MidiInput::getDefaultDeviceIndex() { return 0; }
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int, MidiInputCallback*) { return {}; }
-
 class MidiOutput::Pimpl
 {
 };
@@ -806,12 +756,6 @@ MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
-
-StringArray MidiOutput::getDevices() { return {}; }
-
-int MidiOutput::getDefaultDeviceIndex() { return 0; }
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int) { return {}; }
 
 MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> cb)
 {

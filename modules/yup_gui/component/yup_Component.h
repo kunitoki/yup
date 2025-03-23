@@ -58,12 +58,12 @@ public:
     //==============================================================================
     virtual void setSize (const Size<float>& newSize);
     Size<float> getSize() const;
-    Size<float> getContentSize() const;
     float getWidth() const;
     float getHeight() const;
     virtual void setBounds (const Rectangle<float>& newBounds);
     Rectangle<float> getBounds() const;
     Rectangle<float> getLocalBounds() const;
+    Rectangle<float> getBoundsRelativeToAncestor() const;
     float proportionOfWidth (float proportion) const;
     float proportionOfHeight (float proportion) const;
     virtual void resized();
@@ -74,6 +74,7 @@ public:
 
     //==============================================================================
     float getScaleDpi() const;
+    virtual void contentScaleChanged (float dpiScale);
 
     //==============================================================================
     float getOpacity() const;
@@ -102,6 +103,7 @@ public:
 
     //==============================================================================
     Component* getParentComponent();
+    const Component* getParentComponent() const;
 
     template <class T>
     T* getParentComponentOfType()
@@ -152,6 +154,7 @@ public:
 
     void setColor (const Identifier& colorId, const std::optional<Color>& color);
     std::optional<Color> getColor (const Identifier& colorId) const;
+    std::optional<Color> findColor (const Identifier& colorId) const;
 
     //==============================================================================
     NamedValueSet& getProperties();
@@ -162,36 +165,52 @@ public:
     virtual void paintOverChildren (Graphics& g);
 
     //==============================================================================
+    virtual void refreshDisplay (double lastFrameTimeSeconds);
+
+    //==============================================================================
     virtual void mouseEnter (const MouseEvent& event);
     virtual void mouseExit (const MouseEvent& event);
     virtual void mouseDown (const MouseEvent& event);
     virtual void mouseMove (const MouseEvent& event);
     virtual void mouseDrag (const MouseEvent& event);
     virtual void mouseUp (const MouseEvent& event);
+    virtual void mouseDoubleClick (const MouseEvent& event);
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
+
+    //==============================================================================
+    void addMouseListener (MouseListener* listener);
+    void removeMouseListener (MouseListener* listener);
 
     //==============================================================================
     virtual void keyDown (const KeyPress& keys, const Point<float>& position);
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+    virtual void textInput (const String& text);
 
 private:
-    void internalPaint (Graphics& g, bool renderContinuous);
+    void internalRefreshDisplay (double lastFrameTimeSeconds);
+    void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
     void internalMouseDown (const MouseEvent& event);
     void internalMouseMove (const MouseEvent& event);
     void internalMouseDrag (const MouseEvent& event);
     void internalMouseUp (const MouseEvent& event);
+    void internalMouseDoubleClick (const MouseEvent& event);
     void internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
-    void internalMoved (int xpos, int ypos, float scaleDpi);
-    void internalResized (int width, int height, float scaleDpi);
+    void internalTextInput (const String& text);
+    void internalMoved (int xpos, int ypos);
+    void internalResized (int width, int height);
+    void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
 
     friend class ComponentNative;
     friend class GLFWComponentNative;
+    friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
+
+    using MouseListenerList = ListenerList<MouseListener, Array<WeakReference<MouseListener>>>;
 
     String componentID, componentTitle;
     Component* parentComponent = nullptr;
@@ -199,6 +218,7 @@ private:
     Rectangle<float> boundsInParent;
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
+    MouseListenerList mouseListeners;
     NamedValueSet properties;
     uint8 opacity = 255;
 
@@ -211,6 +231,7 @@ private:
         bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool wantsTextInput : 1;
     };
 
     union
@@ -218,6 +239,11 @@ private:
         uint32 optionsValue;
         Options options;
     };
+
+#if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+    Color debugColor = Color::opaqueRandom();
+    int counter = 2;
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
 };

@@ -57,8 +57,13 @@
 
 #if YUP_RIVE_USE_METAL
 #import <Metal/Metal.h>
-#import <Cocoa/Cocoa.h>
 #import <QuartzCore/CAMetalLayer.h>
+
+#if JUCE_MAC
+#import <Cocoa/Cocoa.h>
+#else
+#import <UIKit/UIKit.h>
+#endif
 
 #include "native/yup_GraphicsContext_metal.cpp"
 #endif
@@ -95,6 +100,7 @@
 #include "primitives/yup_Path.cpp"
 #include "fonts/yup_Font.cpp"
 #include "fonts/yup_StyledText.cpp"
+#include "imaging/yup_Image.cpp"
 #include "graphics/yup_Color.cpp"
 #include "graphics/yup_Colors.cpp"
 #include "graphics/yup_Graphics.cpp"

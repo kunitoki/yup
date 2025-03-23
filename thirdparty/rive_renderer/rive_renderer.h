@@ -32,10 +32,12 @@
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
 
-    dependencies:       rive glad
+    dependencies:       rive rive_decoders glad
     searchpaths:        include source
     osxFrameworks:      Metal QuartzCore
-    defines:            WITH_RIVE_TEXT=1
+    defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
+    iosDefines:         RIVE_IOS=1
+    iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
     androidDefines:     RIVE_ANDROID=1
@@ -116,3 +118,15 @@
 #define RIVE_DAWN 1
 #endif
 #endif
+
+//==============================================================================
+// Public API
+#include <rive/renderer/texture.hpp>
+#include <rive/renderer/rive_render_image.hpp>
+#include <rive/renderer/render_context.hpp>
+#include <rive/renderer/render_context_impl.hpp>
+
+//==============================================================================
+// Internals
+#include <rive_renderer/source/rive_render_path.hpp>
+#include <rive_renderer/source/rive_render_paint.hpp>

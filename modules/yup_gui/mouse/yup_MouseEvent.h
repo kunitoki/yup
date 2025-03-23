@@ -69,6 +69,12 @@ public:
     MouseEvent withTranslatedPosition (const Point<float>& translation) const noexcept;
 
     //==============================================================================
+    Point<float> getLastMouseDownPosition() const noexcept;
+    MouseEvent withLastMouseDownPosition (const Point<float>& newPosition) const noexcept;
+    juce::Time getLastMouseDownTime() const noexcept;
+    MouseEvent withLastMouseDownTime (juce::Time newTime) const noexcept;
+
+    //==============================================================================
     Component* getSourceComponent() const noexcept;
     MouseEvent withSourceComponent (Component* newComponent) const noexcept;
 
@@ -77,9 +83,18 @@ public:
     bool operator!= (const MouseEvent& other) const noexcept;
 
 private:
+    MouseEvent (Buttons newButtons,
+                KeyModifiers newModifiers,
+                const Point<float>& newPosition,
+                const Point<float>& lastMouseDownPosition,
+                juce::Time lastMouseDownTime,
+                Component* sourceComponent) noexcept;
+
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;
+    Point<float> lastMouseDownPosition;
+    juce::Time lastMouseDownTime;
     Component* sourceComponent = nullptr;
 };
 

@@ -3,13 +3,18 @@ name: iOS
 on:
   push:
     paths:
+      - "CMakeLists.txt"
       - "**/workflows/build_ios.yml"
       - "**/cmake/**"
       - "**/modules/**"
       - "**/tests/**"
       - "**/thirdparty/**"
-      - "CMakeLists.txt"
-  pull_request:
+      - "!**/native/*_android.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_linux.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
     branches:
       - "**"
 
@@ -17,14 +22,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  DEVELOPER_DIR: /Applications/Xcode_15.1.app/Contents/Developer
+  IOS_PLATFORM: OS64
+
 jobs:
-  test:
+  configure:
     runs-on: macos-latest
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_15.1.app/Contents/Developer
 
     steps:
     - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: Create Build Environment
       run: cmake -E make_directory ${{runner.workspace}}/build
@@ -32,23 +40,82 @@ jobs:
     - name: Configure
       working-directory: ${{runner.workspace}}/build
       run: |
-        cmake ${{ github.workspace }} -G Xcode -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 \
-            -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=OFF
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
-    - name: Build Debug
-      working-directory: ${{runner.workspace}}/build
+    - name: Build SDL2
       run: |
-        cmake --build . --config Debug --parallel 4 --target yup_tests
+        cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target SDL2-static
+        cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target SDL2-static
 
-    #- name: Test Debug
-    #  working-directory: ${{runner.workspace}}/build/tests/Debug
-    #  run: ./yup_tests
+    - name: Cache Configure
+      id: cache-build
+      uses: actions/cache/save@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: ios-build-${{ github.sha }}
 
-    - name: Build Release
-      working-directory: ${{runner.workspace}}/build
-      run: |
-        cmake --build . --config Release --parallel 4 --target yup_tests
+  build_tests:
+    runs-on: macos-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: ios-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
 
-    #- name: Test Release
-    #  working-directory: ${{runner.workspace}}/build/tests/Release
-    #  run: ./yup_tests
+  build_console:
+    runs-on: macos-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: ios-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+
+  build_app:
+    runs-on: macos-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: ios-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+
+  build_graphics:
+    runs-on: macos-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: ios-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+
+  build_render:
+    runs-on: macos-latest
+    needs: [configure]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: ios-build-${{ github.sha }}
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render

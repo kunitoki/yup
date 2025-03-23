@@ -67,7 +67,7 @@
 #include <Accelerate/Accelerate.h>
 #endif
 
-#include "native/juce_AudioWorkgroup_mac.h"
+#include "native/juce_AudioWorkgroup_apple.h"
 
 #elif JUCE_USE_VDSP_FRAMEWORK
 #undef JUCE_USE_VDSP_FRAMEWORK

@@ -79,6 +79,9 @@ public:
     MemoryInputStream (const MemoryBlock& data,
                        bool keepInternalCopyOfData);
 
+    /** Creates a stream by a StringRef. */
+    MemoryInputStream (StringRef stringToTake);
+
     /** Creates a stream by moving from a MemoryBlock. */
     MemoryInputStream (MemoryBlock&& blockToTake);
 

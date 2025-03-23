@@ -542,7 +542,7 @@ public:
 
         @return A new Color object that is brighter than the original.
     */
-    constexpr Color brighter (float amount) noexcept
+    constexpr Color brighter (float amount) const noexcept
     {
         return {
             a,
@@ -561,7 +561,7 @@ public:
 
         @return A new Color object that is darker than the original.
     */
-    constexpr Color darker (float amount) noexcept
+    constexpr Color darker (float amount) const noexcept
     {
         return brighter (-amount);
     }

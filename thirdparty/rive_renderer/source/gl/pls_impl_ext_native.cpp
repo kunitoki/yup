@@ -34,10 +34,6 @@ public:
         std::ostringstream glsl;
         glsl << "#version 300 es\n";
         glsl << "#define " GLSL_FRAGMENT "\n";
-        if (combinedShaderFeatures & gpu::ShaderFeatures::ENABLE_CLIPPING)
-        {
-            glsl << "#define " GLSL_ENABLE_CLIPPING "\n";
-        }
         BuildLoadStoreEXTGLSL(glsl, actions);
         GLuint fragmentShader =
             glutils::CompileRawGLSL(GL_FRAGMENT_SHADER, glsl.str().c_str());
@@ -73,12 +69,9 @@ public:
 
     ~PLSImplEXTNative()
     {
-        for (GLuint shader : m_plsLoadStoreVertexShaders)
+        if (m_plsLoadStoreVertexShader != 0)
         {
-            if (shader != 0)
-            {
-                glDeleteShader(shader);
-            }
+            glDeleteShader(m_plsLoadStoreVertexShader);
         }
         m_state->deleteVAO(m_plsLoadStoreVAO);
     }
@@ -131,6 +124,7 @@ public:
                              clearColor4f.data());
             }
             m_state->bindVAO(m_plsLoadStoreVAO);
+            m_state->setCullFace(GL_BACK);
             glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
         }
     }
@@ -144,6 +138,8 @@ public:
         m_state->bindProgram(
             findLoadStoreProgram(actions, desc.combinedShaderFeatures).id());
         m_state->bindVAO(m_plsLoadStoreVAO);
+        m_state->setGLBlendMode(GLState::GLBlendMode::none);
+        m_state->setCullFace(GL_BACK);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
 
         glDisable(GL_SHADER_PIXEL_LOCAL_STORAGE_EXT);
@@ -160,30 +156,22 @@ private:
         LoadStoreActionsEXT actions,
         gpu::ShaderFeatures combinedShaderFeatures)
     {
-        bool hasClipping =
-            combinedShaderFeatures & gpu::ShaderFeatures::ENABLE_CLIPPING;
-        uint32_t programKey = (static_cast<uint32_t>(actions) << 1) |
-                              static_cast<uint32_t>(hasClipping);
-
-        if (m_plsLoadStoreVertexShaders[hasClipping] == 0)
+        if (m_plsLoadStoreVertexShader == 0)
         {
             std::ostringstream glsl;
             glsl << "#version 300 es\n";
             glsl << "#define " GLSL_VERTEX "\n";
-            if (hasClipping)
-            {
-                glsl << "#define " GLSL_ENABLE_CLIPPING "\n";
-            }
             BuildLoadStoreEXTGLSL(glsl, LoadStoreActionsEXT::none);
-            m_plsLoadStoreVertexShaders[hasClipping] =
+            m_plsLoadStoreVertexShader =
                 glutils::CompileRawGLSL(GL_VERTEX_SHADER, glsl.str().c_str());
             glGenVertexArrays(1, &m_plsLoadStoreVAO);
         }
 
+        const uint32_t programKey = static_cast<uint32_t>(actions);
         return m_plsLoadStorePrograms
             .try_emplace(programKey,
                          actions,
-                         m_plsLoadStoreVertexShaders[hasClipping],
+                         m_plsLoadStoreVertexShader,
                          combinedShaderFeatures,
                          m_state)
             .first->second;
@@ -191,8 +179,7 @@ private:
 
     const GLCapabilities m_capabilities;
     std::map<uint32_t, PLSLoadStoreProgram> m_plsLoadStorePrograms;
-    GLuint m_plsLoadStoreVertexShaders[2] = {
-        0}; // One with a clip plane and one without.
+    GLuint m_plsLoadStoreVertexShader = 0;
     GLuint m_plsLoadStoreVAO = 0;
     rcp<GLState> m_state;
 };
