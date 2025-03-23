@@ -50,6 +50,7 @@ public:
     void refreshDisplay (double lastFrameTimeSeconds) override;
     void paint (Graphics& g) override;
     void resized() override;
+    void contentScaleChanged (float dpiScale) override;
     void mouseEnter (const MouseEvent& event) override;
     void mouseExit (const MouseEvent& event) override;
     void mouseDown (const MouseEvent& event) override;

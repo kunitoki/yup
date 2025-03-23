@@ -139,7 +139,7 @@ void Artboard::paint (Graphics& g)
 
 void Artboard::resized()
 {
-    auto scaleDpi = getNativeComponent() ? getNativeComponent()->getScaleDpi() : 1.0f;
+    auto scaleDpi = getScaleDpi();
     auto scaledBounds = getBounds() * scaleDpi;
 
     auto frameBounds = rive::AABB (
@@ -157,6 +157,13 @@ void Artboard::resized()
         rive::Alignment::center,
         frameBounds,
         artboardBounds);
+}
+
+//==============================================================================
+
+void Artboard::contentScaleChanged (float dpiScale)
+{
+    resized();
 }
 
 //==============================================================================
@@ -334,7 +341,7 @@ void Artboard::pullEventsFromStateMachines()
 
 Point<float> Artboard::transformPoint (Point<float> point) const
 {
-    point *= getNativeComponent()->getScaleDpi();
+    point *= getScaleDpi();
 
     const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (point.getX(), point.getY());
     return { xy.x, xy.y };

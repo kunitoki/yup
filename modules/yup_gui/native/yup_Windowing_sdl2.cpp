@@ -883,6 +883,8 @@ void SDL2ComponentNative::handleContentScaleChanged()
     YUP_PROFILE_INTERNAL_TRACE();
 
     handleResized (screenBounds.getWidth(), screenBounds.getHeight());
+
+    component.internalContentScaleChanged(getScaleDpi());
 }
 
 void SDL2ComponentNative::handleUserTriedToCloseWindow()

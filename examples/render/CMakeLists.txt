@@ -67,6 +67,8 @@ yup_standalone_app (
         yup_audio_processors
         harfbuzz
         sheenbidi
+        libpng
+        libwebp
         rive
         rive_renderer
         ${link_libraries})

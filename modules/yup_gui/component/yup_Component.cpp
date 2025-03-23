@@ -255,6 +255,10 @@ float Component::getScaleDpi() const
     return parentComponent->getScaleDpi();
 }
 
+void Component::contentScaleChanged(float dpiScale)
+{
+}
+
 //==============================================================================
 
 void Component::setOpacity (float newOpacity)
@@ -782,6 +786,11 @@ void Component::internalMoved (int xpos, int ypos)
     boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos));
 
     moved();
+}
+
+void Component::internalContentScaleChanged(float dpiScale)
+{
+    contentScaleChanged(dpiScale);
 }
 
 void Component::internalUserTriedToCloseWindow()

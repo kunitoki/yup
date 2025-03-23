@@ -22,11 +22,14 @@ Example Rive animation display ([source code](./examples/render/source/main.cpp)
 [![Build And Test iOS](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml)
 [![Build And Test Android](https://github.com/kunitoki/yup/actions/workflows/build_android.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_android.yml)
 
+
 ## Introduction
 YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
 
+
 > [!CAUTION]
 > The project is still in embryonic stage, use it at your own risk!
+
 
 ## Features
 YUP brings a suite of powerful features, including:
@@ -37,10 +40,12 @@ YUP brings a suite of powerful features, including:
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
 
+
 ## Supported Platforms
 | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**        | **iOS**            |
 |--------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
 | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     | :construction:     |
+
 
 ## Supported Rendering Backends
 |                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
@@ -52,6 +57,7 @@ YUP brings a suite of powerful features, including:
 | **Direct3D 11**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **Vulkan**               | :construction:     |                    | :construction:     |                    | :construction:            |                       |
 | **WebGPU**               | :construction:     | :construction:     | :construction:     | :construction:     | :construction:            | :construction:        |
+
 
 ## Supported Audio Backends
 |                          | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**               | **iOS**               |
@@ -66,41 +72,187 @@ YUP brings a suite of powerful features, including:
 | **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
 
-## Getting Started
-To begin using YUP, follow these detailed steps to set up the environment and run a simple example application:
 
-### Prerequisites
-Ensure you have the following installed:
-- C++17 compatible compiler
+## Prerequisites
+Before building, ensure you have a:
+- C++17-compliant compiler
 - CMake 3.28 or later
 
-### Installation
-Clone the YUP repository and build the library using the following commands:
+
+### Windows
+Visual Studio 2022.
+
+
+### macOS and iOS
+Xcode 15.2 (and command-line tools).
+
+
+### Linux
+Required packages:
+
+```bash
+sudo apt-get update && sudo apt-get install -y \
+    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev \
+    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev \
+    libxrandr-dev libxrender-dev libglu1-mesa-dev mesa-common-dev
+```
+
+
+### Wasm
+Emscripten SDK (at least version 3.1.45).
+
+
+### Android
+JDK 17, Android SDK, and NDK (at least r26d).
+
+
+## Installation
+Clone the YUP repository:
 
 ```bash
 git clone https://github.com/kunitoki/yup.git
 cd yup
-mkdir build
-cmake -B build
 ```
 
-### Running Your First Application
-Here is a simple example of creating a basic window using YUP:
 
-```cpp
-// TODO
-```
-
-Save this as `main.cpp` and compile it using:
+## Preparing the build directory
+Create a Dedicated Build Directory:
 
 ```bash
+mkdir -p build
+```
+
+
+## Configure and Build
+Generate the build system files with CMake.
+
+
+### Windows / Linux / macOS
+For a standard desktop build with tests and examples enabled, run:
+
+```bash
+cmake . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cmake --build build --config Release --parallel 4
+```
+
+
+### Android
+Android will rely on cmake for configuration and gradlew will again call into cmake to build the native part of yup:
+
+```bash
+cmake -G "Ninja Multi-Config" . -B build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cd build/examples/render
+./gradlew assembleRelease
+# ./gradlew assembleDebug
+```
+
+
+### iOS
+You can either use Ninja or Xcode:
+
+```bash
+cmake -G "Ninja Multi-Config" . -B build -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake -DPLATFORM=OS64 -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cmake --build build --config Release --parallel 4
+```
+
+
+### Wasm
+Use Emscripten’s helper command, after having activated the emsdk (refer to https://emscripten.org/docs/getting_started/downloads.html how to install and activate Emscripten):
+
+```bash
+emcmake cmake -G "Ninja Multi-Config" . -B build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+cmake --build build --config Release --parallel 4
+python3 -m http.server -d build
+```
+
+These command builds the project in Release mode. Replace `Release` with `Debug` if you need a debug build.
+
+
+## Running Tests and Examples
+After compilation, you can validate the build and explore YUP’s features:
+
+- Run Tests:
+Build and execute the yup_tests target to run the automated test suite.
+
+- Build Examples:
+Compile example targets like example_app, example_console, or example_render to see practical implementations.
+
+
+## Running Your First Application
+Here is a simple example of creating a basic window using YUP, save this as `main.cpp`:
+
+```cpp
+#include <juce_core/juce_core.h>
+#include <juce_events/juce_events.h>
+#include <yup_graphics/yup_graphics.h>
+#include <yup_gui/yup_gui.h>
+
+class MyWindow : public yup::DocumentWindow
+{
+public:
+    MyWindow()
+        : yup::DocumentWindow (yup::ComponentNative::Options(), {})
+    {
+        setTitle ("MyWindow");
+
+        takeFocus();
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.fillAll (0xffffffff);
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        yup::YUPApplication::getInstance()->systemRequestedQuit();
+    }
+};
+
+struct MyApplication : yup::YUPApplication
+{
+    MyApplication() = default;
+
+    const yup::String getApplicationName() override
+    {
+        return "MyApplication";
+    }
+
+    const yup::String getApplicationVersion() override
+    {
+        return "1.0";
+    }
+
+    void initialise (const yup::String& commandLineParameters) override
+    {
+        window = std::make_unique<MyWindow>();
+        window->centreWithSize ({ 1080, 2400 });
+        window->setVisible (true);
+        window->toFront();
+    }
+
+    void shutdown() override
+    {
+        window.reset();
+    }
+
+private:
+    std::unique_ptr<MyWindow> window;
+};
+
+START_JUCE_APPLICATION (MyApplication)
+```
+
+And add this as `CMakeLists.txt`:
+
+```cmake
 # TODO
 ```
 
-This will open a window titled "Hello YUP" with dimensions 800x600.
 
 ## Documentation
 For full documentation, including more detailed tutorials and comprehensive API references, please visit [YUP Documentation](https://yup.github.io/docs).
+
 
 ## Community Engagement
 Join our growing community and contribute to the YUP project. Connect with us and other YUP developers:
@@ -109,16 +261,10 @@ Join our growing community and contribute to the YUP project. Connect with us an
 > [!IMPORTANT]
 > We are looking for collaborators to bring forward the framework!
 
-## Contributing
-Interested in contributing? Here's how you can help:
-1. Fork the repository.
-2. Create a new branch for your changes (`git checkout -b feature/AmazingFeature`).
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
-4. Push to the branch (`git push origin feature/AmazingFeature`).
-5. Open a Pull Request.
 
 ## License
 YUP is distributed under the ISC License, supporting both personal and commercial use, modification, and distribution without restrictions.
+
 
 ## Acknowledgments
 YUP was born in response to JUCE8’s shift to a more restrictive licensing model. By forking JUCE7’s community-driven, ISC-licensed modules, we aim to preserve and continue a legacy of high-quality, freely accessible software development. We are grateful to the JUCE7 community for laying the groundwork for this initiative.
