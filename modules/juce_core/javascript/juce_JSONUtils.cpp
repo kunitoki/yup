@@ -155,9 +155,9 @@ bool JSONUtils::deepEqual (const var& a, const var& b)
     if (auto* i = a.getArray())
         if (auto* j = b.getArray())
             return std::equal (i->begin(), i->end(), j->begin(), j->end(), [] (const var& x, const var& y)
-                               {
-                                   return deepEqual (x, y);
-                               });
+            {
+                return deepEqual (x, y);
+            });
 
     return a == b;
 }

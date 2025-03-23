@@ -84,9 +84,9 @@ static int findNumberOfPhysicalCores() noexcept
     }
 
     return (int) std::count_if (buffer.get(), buffer.get() + numBuffers, [] (const auto& info)
-                                {
-                                    return info.Relationship == RelationProcessorCore;
-                                });
+    {
+        return info.Relationship == RelationProcessorCore;
+    });
 
 #endif // JUCE_MINGW
 }

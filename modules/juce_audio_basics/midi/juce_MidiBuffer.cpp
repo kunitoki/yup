@@ -225,9 +225,9 @@ int MidiBuffer::getLastEventTime() const noexcept
 MidiBufferIterator MidiBuffer::findNextSamplePosition (int samplePosition) const noexcept
 {
     return std::find_if (cbegin(), cend(), [&] (const MidiMessageMetadata& metadata) noexcept
-                         {
-                             return metadata.samplePosition >= samplePosition;
-                         });
+    {
+        return metadata.samplePosition >= samplePosition;
+    });
 }
 
 } // namespace juce

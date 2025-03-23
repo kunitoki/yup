@@ -158,7 +158,7 @@ public:
                 yup::Logger::outputDebugString (result.getErrorMessage());
 #else
             auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
-        if (auto result = font.loadFromFile (fontFilePath); result.failed())
+            if (auto result = font.loadFromFile (fontFilePath); result.failed())
                 yup::Logger::outputDebugString (result.getErrorMessage());
 #endif
         }

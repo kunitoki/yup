@@ -654,9 +654,9 @@ int File::getNumberOfChildFiles (const int whatToLookFor, const String& wildCard
                             RangedDirectoryIterator(),
                             0,
                             [] (int acc, const DirectoryEntry&)
-                            {
-                                return acc + 1;
-                            });
+    {
+        return acc + 1;
+    });
 }
 
 bool File::containsSubDirectories() const

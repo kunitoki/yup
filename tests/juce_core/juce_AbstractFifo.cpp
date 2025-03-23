@@ -79,9 +79,9 @@ struct WriteThread : public Thread
                          || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
 
             writer.forEach ([this, &n] (int index)
-                            {
-                                this->buffer[index] = n++;
-                            });
+            {
+                this->buffer[index] = n++;
+            });
         }
     }
 
@@ -117,9 +117,9 @@ TEST (AbstractFifoTests, BasicFunctionality)
         bool failed = false;
 
         reader.forEach ([&failed, &buffer, &n] (int index)
-                        {
-                            failed = (buffer[index] != n++) || failed;
-                        });
+        {
+            failed = (buffer[index] != n++) || failed;
+        });
 
         ASSERT_FALSE (failed) << "Read values were incorrect";
     }
@@ -340,9 +340,9 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
                              || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
 
                 writer.forEach ([this, &n] (int index)
-                                {
-                                    this->buffer[index] = n++;
-                                });
+                {
+                    this->buffer[index] = n++;
+                });
             }
         }
 
@@ -379,9 +379,9 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
         bool failed = false;
 
         reader.forEach ([&failed, &buffer, &n] (int index)
-                        {
-                            failed = (buffer[index] != n++) || failed;
-                        });
+        {
+            failed = (buffer[index] != n++) || failed;
+        });
 
         if (failed)
         {
