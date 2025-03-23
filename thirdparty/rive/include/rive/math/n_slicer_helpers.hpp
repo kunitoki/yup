@@ -29,14 +29,15 @@ struct NSlicerHelpers
 
     static float mapValue(const std::vector<float>& stops,
                           const ScaleInfo& scaleInfo,
+                          float size,
                           float value);
 
     static bool isFixedSegment(int i) { return i % 2 == 0; };
-    static bool deformLocalRenderPathWithNSlicer(const NSlicedNode& nslicedNode,
+    static void deformLocalRenderPathWithNSlicer(const NSlicedNode& nslicedNode,
                                                  RawPath& localPath,
                                                  const Mat2D& world,
                                                  const Mat2D& inverseWorld);
-    static bool deformWorldRenderPathWithNSlicer(const NSlicedNode& nslicedNode,
+    static void deformWorldRenderPathWithNSlicer(const NSlicedNode& nslicedNode,
                                                  RawPath& worldPath);
 };
 } // namespace rive

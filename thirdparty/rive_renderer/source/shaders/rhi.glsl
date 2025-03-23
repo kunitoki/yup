@@ -76,10 +76,8 @@ $typedef $uint ushort;
 #define ATTR_LOAD(T, A, N, I)
 #define ATTR_UNPACK(ID, attrs, NAME, TYPE) TYPE NAME = attrs.NAME
 
-#define UNIFORM_BUFFER_REGISTER(IDX) $register(SPLAT($b, IDX))
-
 #define UNIFORM_BLOCK_BEGIN(IDX, NAME)                                         \
-    $cbuffer NAME : UNIFORM_BUFFER_REGISTER(IDX)                               \
+    $cbuffer NAME                                                              \
     {                                                                          \
         struct                                                                 \
         {
@@ -117,17 +115,18 @@ $typedef $uint ushort;
 #define FRAG_TEXTURE_BLOCK_END
 #endif
 
-#define TEXTURE_RGBA32UI(SET, IDX, NAME)                                       \
-    uniform $Texture2D<uint4> NAME : $register(SPLAT($t, IDX))
-#define TEXTURE_RGBA32F(SET, IDX, NAME)                                        \
-    uniform $Texture2D<float4> NAME : $register(SPLAT($t, IDX))
-#define TEXTURE_RGBA8(SET, IDX, NAME)                                          \
-    uniform $Texture2D<$unorm float4> NAME : $register(SPLAT($t, IDX))
+#define TEXTURE_RGBA32UI(SET, IDX, NAME) uniform $Texture2D<uint4> NAME
+#define TEXTURE_RGBA32F(SET, IDX, NAME) uniform $Texture2D<float4> NAME
+#define TEXTURE_RGBA8(SET, IDX, NAME) uniform $Texture2D<$unorm float4> NAME
+#define TEXTURE_R16F(SET, IDX, NAME)                                           \
+    uniform $Texture2D<half> NAME : $register($t##IDX)
+#define SAMPLED_R16F_REF(NAME, SAMPLER_NAME)                                   \
+    $Texture2D<half> NAME, $SamplerState SAMPLER_NAME
+#define SAMPLED_R16F(NAME, SAMPLER_NAME) NAME, SAMPLER_NAME
 
 // SAMPLER_LINEAR and SAMPLER_MIPMAP are the same because in d3d11, sampler
 // parameters are defined at the API level.
-#define SAMPLER(TEXTURE_IDX, NAME)                                             \
-    $SamplerState NAME : $register(SPLAT($s, TEXTURE_IDX));
+#define SAMPLER(TEXTURE_IDX, NAME) $SamplerState NAME;
 #define SAMPLER_LINEAR SAMPLER
 #define SAMPLER_MIPMAP SAMPLER
 
@@ -136,6 +135,7 @@ $typedef $uint ushort;
     NAME.$Sample(SAMPLER_NAME, COORD)
 #define TEXTURE_SAMPLE_LOD(NAME, SAMPLER_NAME, COORD, LOD)                     \
     NAME.$SampleLevel(SAMPLER_NAME, COORD, LOD)
+#define TEXTURE_REF_SAMPLE_LOD TEXTURE_SAMPLE_LOD
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     NAME.$SampleGrad(SAMPLER_NAME, COORD, DDX, DDY)
 
@@ -150,14 +150,11 @@ $typedef $uint ushort;
 
 #define PLS_BLOCK_BEGIN
 #ifdef @ENABLE_TYPED_UAV_LOAD_STORE
-#define PLS_DECL4F(IDX, NAME)                                                  \
-    uniform PLS_TEX2D<$unorm half4> NAME : $register($SPLAT(u, IDX))
+#define PLS_DECL4F(IDX, NAME) uniform PLS_TEX2D<$unorm half4> NAME
 #else
-#define PLS_DECL4F(IDX, NAME)                                                  \
-    uniform PLS_TEX2D<uint> NAME : $register(SPLAT($u, IDX))
+#define PLS_DECL4F(IDX, NAME) uniform PLS_TEX2D<uint> NAME
 #endif
-#define PLS_DECLUI(IDX, NAME)                                                  \
-    uniform PLS_TEX2D<uint> NAME : $register(SPLAT($u, IDX))
+#define PLS_DECLUI(IDX, NAME) uniform PLS_TEX2D<uint> NAME
 #define PLS_DECLUI_ATOMIC PLS_DECLUI
 #define PLS_LOADUI_ATOMIC PLS_LOADUI
 #define PLS_STOREUI_ATOMIC PLS_STOREUI
@@ -277,6 +274,7 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
 #define notEqual(A, B) ((A) != (B))
 #define lessThanEqual(A, B) ((A) <= (B))
 #define lessThan(A, B) ((A) < (B))
+#define greaterThan(A, B) ((A) > (B))
 #define greaterThanEqual(A, B) ((A) >= (B))
 
 // HLSL matrices are stored in row-major order, and therefore transposed from
@@ -291,11 +289,11 @@ INLINE uint pls_atomic_add(PLS_TEX2D<uint> plane, int2 _plsCoord, uint x)
 #define FRAG_STORAGE_BUFFER_BLOCK_END
 
 #define STORAGE_BUFFER_U32x2(IDX, GLSL_STRUCT_NAME, NAME)                      \
-    $StructuredBuffer<uint2> NAME : $register(SPLAT($t, IDX))
+    $StructuredBuffer<uint2> NAME
 #define STORAGE_BUFFER_U32x4(IDX, GLSL_STRUCT_NAME, NAME)                      \
-    $StructuredBuffer<uint4> NAME : $register(SPLAT($t, IDX))
+    $StructuredBuffer<uint4> NAME
 #define STORAGE_BUFFER_F32x4(IDX, GLSL_STRUCT_NAME, NAME)                      \
-    $StructuredBuffer<float4> NAME : $register(SPLAT($t, IDX))
+    $StructuredBuffer<float4> NAME
 
 #define STORAGE_BUFFER_LOAD4(NAME, I) NAME[I]
 #define STORAGE_BUFFER_LOAD2(NAME, I) NAME[I]
@@ -327,8 +325,6 @@ INLINE uint packUnorm4x8(half4 color)
     vals.r |= vals.g;
     return vals.r;
 }
-
-INLINE float atan(float y, float x) { return $atan2(y, x); }
 
 INLINE float2x2 inverse(float2x2 m)
 {

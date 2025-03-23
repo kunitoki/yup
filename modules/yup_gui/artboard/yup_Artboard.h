@@ -77,6 +77,7 @@ public:
 private:
     void updateSceneFromFile();
     void pullEventsFromStateMachines();
+    Point<float> transformPoint (Point<float> point) const;
 
     std::shared_ptr<ArtboardFile> artboardFile;
 

@@ -14,6 +14,7 @@ private:
     ViewModel* m_ViewModel;
 
 public:
+    ~ViewModelInstance();
     void addValue(ViewModelInstanceValue* value);
     ViewModelInstanceValue* propertyValue(const uint32_t id);
     ViewModelInstanceValue* propertyValue(const std::string& name);
@@ -27,6 +28,7 @@ public:
     void setRoot(ViewModelInstance* value);
     Core* clone() const override;
     StatusCode import(ImportStack& importStack) override;
+    void advanced();
 };
 } // namespace rive
 

@@ -5,10 +5,8 @@
 
 namespace rive {
 
-DataBindContextValueList::DataBindContextValueList(
-    ViewModelInstanceValue* source,
-    DataConverter* converter) :
-    DataBindContextValue(source, converter)
+DataBindContextValueList::DataBindContextValueList(DataBind* dataBind) :
+    DataBindContextValue(dataBind)
 {}
 
 std::unique_ptr<ArtboardInstance> DataBindContextValueList::createArtboard(
@@ -22,7 +20,7 @@ std::unique_ptr<ArtboardInstance> DataBindContextValueList::createArtboard(
         auto mainArtboard = target->artboard();
         auto dataContext = mainArtboard->dataContext();
         auto artboardCopy = artboard->instance();
-        artboardCopy->advanceInternal(0.0f, false);
+        artboardCopy->advanceInternal(0.0f);
         artboardCopy->setDataContextFromInstance(listItem->viewModelInstance(),
                                                  dataContext,
                                                  false);
@@ -37,7 +35,7 @@ std::unique_ptr<StateMachineInstance> DataBindContextValueList::
     if (artboard != nullptr)
     {
         auto stateMachineInstance = artboard->stateMachineAt(0);
-        stateMachineInstance->advance(0.0f);
+        stateMachineInstance->advance(0.0f, true);
         return stateMachineInstance;
     }
     return nullptr;
@@ -82,7 +80,8 @@ void DataBindContextValueList::update(Core* target)
 {
     if (target != nullptr)
     {
-        auto sourceList = m_source->as<ViewModelInstanceList>();
+        auto source = m_dataBind->source();
+        auto sourceList = source->as<ViewModelInstanceList>();
         auto listItems = sourceList->listItems();
 
         int listIndex = 0;

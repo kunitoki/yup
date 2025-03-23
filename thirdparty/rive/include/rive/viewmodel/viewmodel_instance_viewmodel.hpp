@@ -11,6 +11,7 @@ private:
     ViewModelInstance* m_referenceViewModelInstance;
 
 public:
+    ~ViewModelInstanceViewModel();
     void referenceViewModelInstance(ViewModelInstance* value)
     {
         m_referenceViewModelInstance = value;
@@ -20,6 +21,7 @@ public:
         return m_referenceViewModelInstance;
     }
     void setRoot(ViewModelInstance* value) override;
+    void advanced() override;
 };
 } // namespace rive
 

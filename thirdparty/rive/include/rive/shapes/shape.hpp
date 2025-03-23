@@ -3,6 +3,7 @@
 
 #include "rive/hit_info.hpp"
 #include "rive/generated/shapes/shape_base.hpp"
+#include "rive/animation/hittable.hpp"
 #include "rive/shapes/path_composer.hpp"
 #include "rive/shapes/shape_paint_container.hpp"
 #include "rive/drawable_flag.hpp"
@@ -13,21 +14,9 @@ namespace rive
 class Path;
 class PathComposer;
 class HitTester;
-class RawPath;
+class RenderPathDeformer;
 
-class ShapeDeformer
-{
-public:
-    static ShapeDeformer* from(Component* component);
-    virtual void deformLocalRenderPath(RawPath& path,
-                                       const Mat2D& worldTransform,
-                                       const Mat2D& inverseWorld) const = 0;
-    virtual void deformWorldRenderPath(RawPath& path) const = 0;
-
-    virtual ~ShapeDeformer() {}
-};
-
-class Shape : public ShapeBase, public ShapePaintContainer
+class Shape : public ShapeBase, public ShapePaintContainer, public Hittable
 {
 private:
     PathComposer m_PathComposer;
@@ -35,7 +24,7 @@ private:
     AABB m_WorldBounds;
 
     bool m_WantDifferencePath = false;
-    ShapeDeformer* m_deformer = nullptr;
+    RenderPathDeformer* m_deformer = nullptr;
 
     Artboard* getArtboard() override { return artboard(); }
 
@@ -53,12 +42,11 @@ public:
     void update(ComponentDirt value) override;
     void draw(Renderer* renderer) override;
     Core* hitTest(HitInfo*, const Mat2D&) override;
-    bool hitTest(const IAABB& area) const;
 
     const PathComposer* pathComposer() const { return &m_PathComposer; }
     PathComposer* pathComposer() { return &m_PathComposer; }
 
-    const ShapeDeformer* deformer() const { return m_deformer; }
+    RenderPathDeformer* deformer() const { return m_deformer; }
 
     void pathChanged();
     void addFlags(PathFlags flags);
@@ -92,6 +80,19 @@ public:
                         LayoutMeasureMode widthMode,
                         float height,
                         LayoutMeasureMode heightMode) override;
+
+    bool hitTestAABB(const Vec2D& position) override;
+    bool hitTestHiFi(const Vec2D& position, float hitRadius) override;
+    // Implemented for ShapePaintContainer.
+    const Mat2D& shapeWorldTransform() const override
+    {
+        return worldTransform();
+    }
+
+    ShapePaintPath* worldPath() override;
+    ShapePaintPath* localPath() override;
+    ShapePaintPath* localClockwisePath() override;
+    Component* pathBuilder() override;
 };
 } // namespace rive
 

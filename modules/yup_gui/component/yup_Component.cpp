@@ -255,7 +255,7 @@ float Component::getScaleDpi() const
     return parentComponent->getScaleDpi();
 }
 
-void Component::contentScaleChanged(float dpiScale)
+void Component::contentScaleChanged (float dpiScale)
 {
 }
 
@@ -788,9 +788,9 @@ void Component::internalMoved (int xpos, int ypos)
     moved();
 }
 
-void Component::internalContentScaleChanged(float dpiScale)
+void Component::internalContentScaleChanged (float dpiScale)
 {
-    contentScaleChanged(dpiScale);
+    contentScaleChanged (dpiScale);
 }
 
 void Component::internalUserTriedToCloseWindow()

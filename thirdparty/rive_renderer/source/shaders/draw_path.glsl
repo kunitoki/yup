@@ -17,20 +17,26 @@ ATTR_BLOCK_END
 
 VARYING_BLOCK_BEGIN
 NO_PERSPECTIVE VARYING(0, float4, v_paint);
-#ifndef @USING_DEPTH_STENCIL
+
+#ifdef @ATLAS_COVERAGE
+NO_PERSPECTIVE VARYING(1, float2, v_atlasCoord);
+#elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
 @OPTIONALLY_FLAT VARYING(1, half, v_windingWeight);
+#elif defined(@ENABLE_FEATHER)
+NO_PERSPECTIVE VARYING(2, float4, v_coverages);
 #else
-NO_PERSPECTIVE VARYING(2, half2, v_edgeDistance);
-#endif
+NO_PERSPECTIVE VARYING(2, half2, v_coverages);
+#endif //@DRAW_INTERIOR_TRIANGLES
 @OPTIONALLY_FLAT VARYING(3, half, v_pathID);
+#endif // !@RENDER_MODE_MSAA
+
 #ifdef @ENABLE_CLIPPING
 @OPTIONALLY_FLAT VARYING(4, half, v_clipID);
 #endif
 #ifdef @ENABLE_CLIP_RECT
 NO_PERSPECTIVE VARYING(5, float4, v_clipRect);
 #endif
-#endif // !USING_DEPTH_STENCIL
 #ifdef @ENABLE_ADVANCED_BLEND
 @OPTIONALLY_FLAT VARYING(6, half, v_blendMode);
 #endif
@@ -47,64 +53,92 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif
 
     VARYING_INIT(v_paint, float4);
-#ifndef USING_DEPTH_STENCIL
+
+#ifdef @ATLAS_COVERAGE
+    VARYING_INIT(v_atlasCoord, float2);
+#elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
     VARYING_INIT(v_windingWeight, half);
+#elif defined(@ENABLE_FEATHER)
+    VARYING_INIT(v_coverages, float4);
 #else
-    VARYING_INIT(v_edgeDistance, half2);
-#endif
+    VARYING_INIT(v_coverages, half2);
+#endif //@DRAW_INTERIOR_TRIANGLES
     VARYING_INIT(v_pathID, half);
+#endif // !@RENDER_MODE_MSAA
+
 #ifdef @ENABLE_CLIPPING
     VARYING_INIT(v_clipID, half);
 #endif
 #ifdef @ENABLE_CLIP_RECT
     VARYING_INIT(v_clipRect, float4);
 #endif
-#endif // !USING_DEPTH_STENCIL
 #ifdef @ENABLE_ADVANCED_BLEND
     VARYING_INIT(v_blendMode, half);
 #endif
 
     bool shouldDiscardVertex = false;
-    ushort pathID;
+    uint pathID;
     float2 vertexPosition;
-#ifdef @USING_DEPTH_STENCIL
+#ifdef @RENDER_MODE_MSAA
     ushort pathZIndex;
 #endif
 
-#ifdef @DRAW_INTERIOR_TRIANGLES
+#ifdef @ATLAS_COVERAGE
     vertexPosition =
-        unpack_interior_triangle_vertex(@a_triangleVertex,
-                                        pathID,
-                                        v_windingWeight VERTEX_CONTEXT_UNPACK);
+        unpack_atlas_coverage_vertex(@a_triangleVertex,
+                                     pathID,
+#ifdef @RENDER_MODE_MSAA
+                                     pathZIndex,
+#endif
+                                     v_atlasCoord VERTEX_CONTEXT_UNPACK);
+#elif defined(@DRAW_INTERIOR_TRIANGLES)
+    vertexPosition = unpack_interior_triangle_vertex(@a_triangleVertex,
+                                                     pathID
+#ifdef @RENDER_MODE_MSAA
+                                                     ,
+                                                     pathZIndex
 #else
+                                                     ,
+                                                     v_windingWeight
+#endif
+                                                         VERTEX_CONTEXT_UNPACK);
+#else // !@DRAW_INTERIOR_TRIANGLES
+    float4 coverages;
     shouldDiscardVertex =
         !unpack_tessellated_path_vertex(@a_patchVertexData,
                                         @a_mirroredVertexData,
                                         _instanceID,
                                         pathID,
                                         vertexPosition
-#ifndef @USING_DEPTH_STENCIL
+#ifndef @RENDER_MODE_MSAA
                                         ,
-                                        v_edgeDistance
+                                        coverages
 #else
                                         ,
                                         pathZIndex
 #endif
                                             VERTEX_CONTEXT_UNPACK);
+#ifndef @RENDER_MODE_MSAA
+#ifdef @ENABLE_FEATHER
+    v_coverages = coverages;
+#else
+    v_coverages.xy = cast_float2_to_half2(coverages.xy);
+#endif
+#endif
 #endif // !DRAW_INTERIOR_TRIANGLES
 
     uint2 paintData = STORAGE_BUFFER_LOAD2(@paintBuffer, pathID);
 
-#ifndef @USING_DEPTH_STENCIL
+#if !defined(@ATLAS_COVERAGE) && !defined(@RENDER_MODE_MSAA)
     // Encode the integral pathID as a "half" that we know the hardware will see
     // as a unique value in the fragment shader.
     v_pathID = id_bits_to_f16(pathID, uniforms.pathIDGranularity);
 
     // Indicate even-odd fill rule by making pathID negative.
-    if ((paintData.x & PAINT_FLAG_EVEN_ODD) != 0u)
+    if ((paintData.x & PAINT_FLAG_EVEN_ODD_FILL) != 0u)
         v_pathID = -v_pathID;
-#endif // !USING_DEPTH_STENCIL
+#endif // !@ATLAS_COVERAGE && !@RENDER_MODE_MSAA
 
     uint paintType = paintData.x & 0xfu;
 #ifdef @ENABLE_CLIPPING
@@ -130,7 +164,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     // Paint matrices operate on the fragment shader's "_fragCoord", which is
     // bottom-up in GL.
     float2 fragCoord = vertexPosition;
-#ifdef FRAG_COORD_BOTTOM_UP
+#ifdef @FRAMEBUFFER_BOTTOM_UP
     fragCoord.y = float(uniforms.renderTargetHeight) - fragCoord.y;
 #endif
 
@@ -143,16 +177,16 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer, pathID * 4u + 2u));
         float4 clipRectInverseTranslate =
             STORAGE_BUFFER_LOAD4(@paintAuxBuffer, pathID * 4u + 3u);
-#ifndef @USING_DEPTH_STENCIL
+#ifndef @RENDER_MODE_MSAA
         v_clipRect =
             find_clip_rect_coverage_distances(clipRectInverseMatrix,
                                               clipRectInverseTranslate.xy,
                                               fragCoord);
-#else  // USING_DEPTH_STENCIL
+#else  // @RENDER_MODE_MSAA
         set_clip_rect_plane_distances(clipRectInverseMatrix,
                                       clipRectInverseTranslate.xy,
                                       fragCoord);
-#endif // USING_DEPTH_STENCIL
+#endif // @RENDER_MODE_MSAA
     }
 #endif // ENABLE_CLIP_RECT
 
@@ -187,8 +221,11 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
             //   - 2 if the gradient ramp spans an entire row.
             //   - x0 of the gradient ramp in normalized space, if it's a simple
             //   2-texel ramp.
-            if (paintTranslate.z >
-                .9) // paintTranslate.z is either ~1 or ~1/GRAD_TEXTURE_WIDTH.
+            float gradientSpan = paintTranslate.z;
+            // gradientSpan is either ~1 (complex gradients span the whole width
+            // of the texture minus 1px), or 1/GRAD_TEXTURE_WIDTH (simple
+            // gradients span 1px).
+            if (gradientSpan > .9)
             {
                 // Complex ramps span an entire row. Set it to 2 to convey this.
                 v_paint.b = 2.;
@@ -231,7 +268,10 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     if (!shouldDiscardVertex)
     {
         pos = RENDER_TARGET_COORD_TO_CLIP_COORD(vertexPosition);
-#ifdef @USING_DEPTH_STENCIL
+#ifdef @POST_INVERT_Y
+        pos.y = -pos.y;
+#endif
+#ifdef @RENDER_MODE_MSAA
         pos.z = normalize_z_index(pathZIndex);
 #endif
     }
@@ -244,20 +284,25 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     }
 
     VARYING_PACK(v_paint);
-#ifndef @USING_DEPTH_STENCIL
+#ifdef @ATLAS_COVERAGE
+    VARYING_PACK(v_atlasCoord);
+#elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
     VARYING_PACK(v_windingWeight);
+#elif defined(@ENABLE_FEATHER)
+    VARYING_PACK(v_coverages);
 #else
-    VARYING_PACK(v_edgeDistance);
-#endif
+    VARYING_PACK(v_coverages);
+#endif //@DRAW_INTERIOR_TRIANGLES
     VARYING_PACK(v_pathID);
+#endif // !@RENDER_MODE_MSAA
+
 #ifdef @ENABLE_CLIPPING
     VARYING_PACK(v_clipID);
 #endif
 #ifdef @ENABLE_CLIP_RECT
     VARYING_PACK(v_clipRect);
 #endif
-#endif // !USING_DEPTH_STENCIL
 #ifdef @ENABLE_ADVANCED_BLEND
     VARYING_PACK(v_blendMode);
 #endif
@@ -266,19 +311,6 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif
 
 #ifdef @FRAGMENT
-FRAG_TEXTURE_BLOCK_BEGIN
-TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, GRAD_TEXTURE_IDX, @gradTexture);
-TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
-#ifdef @USING_DEPTH_STENCIL
-#ifdef @ENABLE_ADVANCED_BLEND
-TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, DST_COLOR_TEXTURE_IDX, @dstColorTexture);
-#endif
-#endif
-FRAG_TEXTURE_BLOCK_END
-
-SAMPLER_LINEAR(GRAD_TEXTURE_IDX, gradSampler)
-SAMPLER_MIPMAP(IMAGE_TEXTURE_IDX, imageSampler)
-
 FRAG_STORAGE_BUFFER_BLOCK_BEGIN
 FRAG_STORAGE_BUFFER_BLOCK_END
 
@@ -318,13 +350,11 @@ INLINE half4 find_paint_color(float4 paint FRAGMENT_CONTEXT_DECL)
     }
 }
 
-#ifndef @USING_DEPTH_STENCIL
+#ifndef @RENDER_MODE_MSAA
 
 PLS_BLOCK_BEGIN
 PLS_DECL4F(COLOR_PLANE_IDX, colorBuffer);
-#if defined(@ENABLE_CLIPPING) || defined(@PLS_IMPL_ANGLE)
 PLS_DECLUI(CLIP_PLANE_IDX, clipBuffer);
-#endif
 PLS_DECL4F(SCRATCH_COLOR_PLANE_IDX, scratchColorBuffer);
 PLS_DECLUI(COVERAGE_PLANE_IDX, coverageCountBuffer);
 PLS_BLOCK_END
@@ -332,12 +362,20 @@ PLS_BLOCK_END
 PLS_MAIN(@drawFragmentMain)
 {
     VARYING_UNPACK(v_paint, float4);
+
+#ifdef @ATLAS_COVERAGE
+    VARYING_UNPACK(v_atlasCoord, float2);
+#elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
     VARYING_UNPACK(v_windingWeight, half);
+#elif defined(@ENABLE_FEATHER)
+    VARYING_UNPACK(v_coverages, float4);
 #else
-    VARYING_UNPACK(v_edgeDistance, half2);
-#endif
+    VARYING_UNPACK(v_coverages, half2);
+#endif //@DRAW_INTERIOR_TRIANGLES
     VARYING_UNPACK(v_pathID, half);
+#endif // !@RENDER_MODE_MSAA
+
 #ifdef @ENABLE_CLIPPING
     VARYING_UNPACK(v_clipID, half);
 #endif
@@ -348,11 +386,17 @@ PLS_MAIN(@drawFragmentMain)
     VARYING_UNPACK(v_blendMode, half);
 #endif
 
-#ifndef @DRAW_INTERIOR_TRIANGLES
+#if !defined(@DRAW_INTERIOR_TRIANGLES) || defined(@ATLAS_COVERAGE)
     // Interior triangles don't overlap, so don't need raster ordering.
     PLS_INTERLOCK_BEGIN;
 #endif
 
+    half coverage;
+#ifdef @ATLAS_COVERAGE
+    coverage = filter_feather_atlas(
+        v_atlasCoord,
+        uniforms.atlasTextureInverseSize TEXTURE_CONTEXT_FORWARD);
+#else
     half2 coverageData = unpackHalf2x16(PLS_LOADUI(coverageCountBuffer));
     half coverageBufferID = coverageData.g;
     half coverageCount =
@@ -360,33 +404,66 @@ PLS_MAIN(@drawFragmentMain)
 
 #ifdef @DRAW_INTERIOR_TRIANGLES
     coverageCount += v_windingWeight;
+    PLS_PRESERVE_UI(coverageCountBuffer);
 #else
-    if (v_edgeDistance.y >= .0) // Stroke.
-        coverageCount =
-            max(min(v_edgeDistance.x, v_edgeDistance.y), coverageCount);
-    else // Fill. (Back-face culling ensures v_edgeDistance.x is appropriately
-         // signed.)
-        coverageCount += v_edgeDistance.x;
+    if (is_stroke(v_coverages))
+    {
+        half fragCoverage;
+#ifdef @ENABLE_FEATHER
+        if (@ENABLE_FEATHER && is_feathered_stroke(v_coverages))
+        {
+            fragCoverage =
+                eval_feathered_stroke(v_coverages TEXTURE_CONTEXT_FORWARD);
+        }
+        else
+#endif // @ENABLE_FEATHER
+        {
+            fragCoverage = min(v_coverages.x, v_coverages.y);
+        }
+        coverageCount = max(fragCoverage, coverageCount);
+    }
+    else // Fill. (Back-face culling handles the sign of v_coverages.x.)
+    {
+        half fragCoverage;
+#if defined(@ENABLE_FEATHER)
+        if (@ENABLE_FEATHER && is_feathered_fill(v_coverages))
+        {
+            fragCoverage =
+                eval_feathered_fill(v_coverages TEXTURE_CONTEXT_FORWARD);
+        }
+        else
+#endif // @CLOCKWISE_FILL && @ENABLE_FEATHER
+        {
+            fragCoverage = v_coverages.x;
+        }
+        coverageCount += fragCoverage;
+    }
 
     // Save the updated coverage.
     PLS_STOREUI(coverageCountBuffer,
                 packHalf2x16(make_half2(coverageCount, v_pathID)));
-#endif
+#endif // !@DRAW_INTERIOR_TRIANGLES
 
     // Convert coverageCount to coverage.
 #ifdef @CLOCKWISE_FILL
-    half coverage = clamp(coverageCount, make_half(.0), make_half(1.));
-#else
-    half coverage = abs(coverageCount);
-#ifdef @ENABLE_EVEN_ODD
-    if (@ENABLE_EVEN_ODD && v_pathID < .0 /*even-odd*/)
+    if (@CLOCKWISE_FILL)
     {
-        coverage = 1. - make_half(abs(fract(coverage * .5) * 2. + -1.));
+        coverage = clamp(coverageCount, make_half(.0), make_half(1.));
     }
+    else
+#endif // CLOCKWISE_FILL
+    {
+        coverage = abs(coverageCount);
+#ifdef @ENABLE_EVEN_ODD
+        if (@ENABLE_EVEN_ODD && v_pathID < .0 /*even-odd*/)
+        {
+            coverage = 1. - make_half(abs(fract(coverage * .5) * 2. + -1.));
+        }
 #endif
-    // This also caps stroke coverage, which can be >1.
-    coverage = min(coverage, make_half(1.));
-#endif // !CLOCKWISE_FILL
+        // This also caps stroke coverage, which can be >1.
+        coverage = min(coverage, make_half(1.));
+    }
+#endif // !@ATLAS_COVERAGE
 
 #ifdef @ENABLE_CLIPPING
     if (@ENABLE_CLIPPING && v_clipID < .0) // Update the clip buffer.
@@ -455,7 +532,6 @@ PLS_MAIN(@drawFragmentMain)
                                ? min(clipData.r, coverage)
                                : make_half(.0);
             }
-            PLS_PRESERVE_UI(clipBuffer);
         }
 #endif
 #ifdef @ENABLE_CLIP_RECT
@@ -470,6 +546,9 @@ PLS_MAIN(@drawFragmentMain)
         color.a *= coverage;
 
         half4 dstColor;
+#ifdef @ATLAS_COVERAGE
+        dstColor = PLS_LOAD4F(colorBuffer);
+#else
         if (coverageBufferID != v_pathID)
         {
             // This is the first fragment from pathID to touch this pixel.
@@ -490,6 +569,7 @@ PLS_MAIN(@drawFragmentMain)
             PLS_PRESERVE_4F(scratchColorBuffer);
 #endif
         }
+#endif // @ATLAS_COVERAGE
 
         // Blend with the framebuffer color.
 #ifdef @ENABLE_ADVANCED_BLEND
@@ -508,9 +588,10 @@ PLS_MAIN(@drawFragmentMain)
         }
 
         PLS_STORE4F(colorBuffer, color);
+        PLS_PRESERVE_UI(clipBuffer);
     }
 
-#ifndef @DRAW_INTERIOR_TRIANGLES
+#if !defined(@DRAW_INTERIOR_TRIANGLES) || defined(@ATLAS_COVERAGE)
     // Interior triangles don't overlap, so don't need raster ordering.
     PLS_INTERLOCK_END;
 #endif
@@ -518,16 +599,24 @@ PLS_MAIN(@drawFragmentMain)
     EMIT_PLS;
 }
 
-#else // USING_DEPTH_STENCIL
+#else // @RENDER_MODE_MSAA
 
 FRAG_DATA_MAIN(half4, @drawFragmentMain)
 {
     VARYING_UNPACK(v_paint, float4);
+#ifdef @ATLAS_COVERAGE
+    VARYING_UNPACK(v_atlasCoord, float2);
+#endif
 #ifdef @ENABLE_ADVANCED_BLEND
     VARYING_UNPACK(v_blendMode, half);
 #endif
 
     half4 color = find_paint_color(v_paint);
+#ifdef @ATLAS_COVERAGE
+    color.a *= filter_feather_atlas(
+        v_atlasCoord,
+        uniforms.atlasTextureInverseSize TEXTURE_CONTEXT_FORWARD);
+#endif
 
 #ifdef @ENABLE_ADVANCED_BLEND
     if (@ENABLE_ADVANCED_BLEND)
@@ -546,6 +635,6 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
     EMIT_FRAG_DATA(color);
 }
 
-#endif // !USING_DEPTH_STENCIL
+#endif // !RENDER_MODE_MSAA
 
 #endif // FRAGMENT

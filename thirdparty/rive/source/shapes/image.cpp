@@ -4,6 +4,7 @@
 #include "rive/importers/backboard_importer.hpp"
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/image_asset.hpp"
+#include "rive/layout/n_slicer.hpp"
 #include "rive/shapes/mesh_drawable.hpp"
 #include "rive/artboard.hpp"
 #include "rive/clip_result.hpp"
@@ -107,9 +108,14 @@ void Image::setAsset(FileAsset* asset)
         {
             m_Mesh->onAssetLoaded(imageAsset()->renderImage());
         }
-        asset->as<ImageAsset>()->onImageReady([&]() { updateImageScale(); });
         updateImageScale();
     }
+}
+
+void Image::assetUpdated()
+{
+    updateImageScale();
+    markWorldTransformDirty();
 }
 
 Core* Image::clone() const
@@ -189,7 +195,9 @@ Vec2D Image::measureLayout(float width,
     return Vec2D(measuredWidth, measuredHeight);
 }
 
-void Image::controlSize(Vec2D size)
+void Image::controlSize(Vec2D size,
+                        LayoutScaleType widthScaleType,
+                        LayoutScaleType heightScaleType)
 {
     // We store layout width/height because the image asset may not be available
     // yet (referenced images) and we have defer controlling its size
@@ -204,12 +212,16 @@ void Image::controlSize(Vec2D size)
 
 void Image::updateImageScale()
 {
+    // User-created meshes are not affected by scale
+    if (m_Mesh != nullptr && m_Mesh->type == MeshType::vertex)
+    {
+        return;
+    }
     if (imageAsset() != nullptr && imageAsset()->renderImage() != nullptr &&
         !std::isnan(m_layoutWidth) && !std::isnan(m_layoutHeight))
     {
-        auto renderImage = imageAsset()->renderImage();
-        auto newScaleX = m_layoutWidth / renderImage->width();
-        auto newScaleY = m_layoutHeight / renderImage->height();
+        auto newScaleX = m_layoutWidth / imageAsset()->renderImage()->width();
+        auto newScaleY = m_layoutHeight / imageAsset()->renderImage()->height();
         if (newScaleX != scaleX() || newScaleY != scaleY())
         {
             scaleX(newScaleX);

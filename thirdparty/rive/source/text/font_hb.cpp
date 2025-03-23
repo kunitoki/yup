@@ -48,8 +48,9 @@ rive::rcp<rive::Font> HBFont::Decode(rive::Span<const uint8_t> span)
     return nullptr;
 }
 
-#ifndef __APPLE__
+#if defined(RIVE_NO_CORETEXT) || !defined(__APPLE__)
 rive::rcp<rive::Font> HBFont::FromSystem(void* systemFont,
+                                         bool useSystemShaper,
                                          uint16_t weight,
                                          uint8_t width)
 {
@@ -57,6 +58,10 @@ rive::rcp<rive::Font> HBFont::FromSystem(void* systemFont,
 }
 #endif
 
+float HBFont::GetStyle(hb_font_t* font, uint32_t styleTag)
+{
+    return hb_style_get_value(font, (hb_style_tag_t)styleTag);
+}
 //////////////
 
 constexpr int kStdScale = 2048;
@@ -92,10 +97,10 @@ extern "C"
                               void*)
     {
         ((rive::RawPath*)rpath)
-            ->quadTo(x1 * gInvScale,
-                     -y1 * gInvScale,
-                     x2 * gInvScale,
-                     -y2 * gInvScale);
+            ->quadToCubic(x1 * gInvScale,
+                          -y1 * gInvScale,
+                          x2 * gInvScale,
+                          -y2 * gInvScale);
     }
     static void rpath_cubic_to(hb_draw_funcs_t*,
                                void* rpath,
@@ -320,6 +325,20 @@ uint32_t HBFont::getFeatureValue(uint32_t featureTag) const
     return (uint32_t)-1;
 }
 
+uint16_t HBFont::getWeight() const
+{
+    uint32_t tag = HB_TAG('w', 'g', 'h', 't');
+    float res = HBFont::GetStyle(m_font, tag);
+    return static_cast<uint16_t>(res);
+}
+
+bool HBFont::isItalic() const
+{
+    uint32_t tag = HB_TAG('i', 't', 'a', 'l');
+    float res = HBFont::GetStyle(m_font, tag);
+    return res != 0.0;
+}
+
 rive::rcp<rive::Font> HBFont::withOptions(
     rive::Span<const Coord> coords,
     rive::Span<const Feature> features) const
@@ -375,9 +394,7 @@ static rive::GlyphRun shape_run(const rive::Unichar text[],
     hb_buffer_add_utf32(buf, text, tr.unicharCount, 0, tr.unicharCount);
 
     hb_buffer_set_direction(buf,
-                            tr.dir == rive::TextDirection::rtl
-                                ? HB_DIRECTION_RTL
-                                : HB_DIRECTION_LTR);
+                            tr.level & 1 ? HB_DIRECTION_RTL : HB_DIRECTION_LTR);
     hb_buffer_set_script(buf, (hb_script_t)tr.script);
     hb_buffer_set_language(buf, hb_language_get_default());
 
@@ -400,13 +417,12 @@ static rive::GlyphRun shape_run(const rive::Unichar text[],
     gr.lineHeight = tr.lineHeight;
     gr.letterSpacing = tr.letterSpacing;
     gr.styleId = tr.styleId;
-    gr.dir = tr.dir;
+    gr.level = tr.level;
 
     const float scale = tr.size / kStdScale;
     for (unsigned int i = 0; i < glyph_count; i++)
     {
-        unsigned int index =
-            tr.dir == rive::TextDirection::rtl ? glyph_count - 1 - i : i;
+        unsigned int index = tr.level & 1 ? glyph_count - 1 - i : i;
         gr.glyphs[i] = (uint16_t)glyph_info[index].codepoint;
         gr.textIndices[i] = textOffset + glyph_info[index].cluster;
         gr.advances[i] = gr.xpos[i] =
@@ -434,7 +450,7 @@ static rive::GlyphRun extract_subset(const rive::GlyphRun& orig,
     subset.size = orig.size;
     subset.lineHeight = orig.lineHeight;
     subset.letterSpacing = orig.letterSpacing;
-    subset.dir = orig.dir;
+    subset.level = orig.level;
     subset.xpos.back() = 0; // since we're now the end of a run
     subset.styleId = orig.styleId;
 
@@ -445,10 +461,10 @@ static void perform_fallback(rive::rcp<rive::Font> fallbackFont,
                              rive::SimpleArrayBuilder<rive::GlyphRun>& gruns,
                              const rive::Unichar text[],
                              const rive::GlyphRun& orig,
-                             const rive::TextRun& origTextRun)
+                             const rive::TextRun& origTextRun,
+                             const uint32_t fallbackIndex)
 {
     assert(orig.glyphs.size() > 0);
-
     const size_t count = orig.glyphs.size();
     size_t startI = 0;
     while (startI < count)
@@ -470,13 +486,16 @@ static void perform_fallback(rive::rcp<rive::Font> fallbackFont,
                 textCount,
                 origTextRun.script,
                 orig.styleId,
-                orig.dir,
+                orig.level,
             };
-            auto gr = shape_run(&text[textStart], tr, textStart);
-            if (gr.glyphs.size() > 0)
-            {
-                gruns.add(std::move(gr));
-            }
+
+            static_cast<HBFont*>(fallbackFont.get())
+                ->shapeFallbackRun(gruns,
+                                   text,
+                                   textStart,
+                                   tr,
+                                   origTextRun,
+                                   fallbackIndex);
         }
         else
         {
@@ -490,9 +509,50 @@ static void perform_fallback(rive::rcp<rive::Font> fallbackFont,
     }
 }
 
+void HBFont::shapeFallbackRun(rive::SimpleArrayBuilder<rive::GlyphRun>& gruns,
+                              const rive::Unichar text[],
+                              const unsigned textStart,
+                              const rive::TextRun& textRun,
+                              const rive::TextRun& originalTextRun,
+                              const uint32_t fallbackIndex)
+{
+    auto gr = shape_run(&text[textStart], textRun, textStart);
+    auto end = gr.glyphs.end();
+    auto iter = std::find(gr.glyphs.begin(), end, 0);
+    if (iter == end)
+    {
+        if (gr.glyphs.size() > 0)
+        {
+            gruns.add(std::move(gr));
+        }
+    }
+    else
+    {
+        // found at least 1 zero in glyphs, so need to perform
+        // font-fallback
+        size_t index = iter - gr.glyphs.begin();
+        rive::Unichar missing = text[gr.textIndices[index]];
+        auto fallback = HBFont::gFallbackProc(missing, fallbackIndex, this);
+        if (fallback && fallback.get() != this)
+        {
+            perform_fallback(fallback,
+                             gruns,
+                             text,
+                             gr,
+                             originalTextRun,
+                             fallbackIndex + 1);
+        }
+        else if (gr.glyphs.size() > 0)
+        {
+            gruns.add(std::move(gr));
+        }
+    }
+}
+
 rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
     rive::Span<const rive::Unichar> text,
-    rive::Span<const rive::TextRun> truns) const
+    rive::Span<const rive::TextRun> truns,
+    int textDirectionFlag) const
 {
 
     rive::SimpleArrayBuilder<rive::Paragraph> paragraphs;
@@ -513,13 +573,26 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
     uint32_t unicharIndex = 0;
     uint32_t runTextIndex = 0;
 
+    SBLevel defaultLevel;
+    switch (textDirectionFlag)
+    {
+        case 0:
+            defaultLevel = 0;
+            break;
+        case 1:
+            defaultLevel = 1;
+            break;
+        default:
+            defaultLevel = SBLevelDefaultLTR;
+            break;
+    }
+
     while (paragraphStart < text.size())
     {
-        SBParagraphRef paragraph =
-            SBAlgorithmCreateParagraph(bidiAlgorithm,
-                                       paragraphStart,
-                                       INT32_MAX,
-                                       SBLevelDefaultLTR);
+        SBParagraphRef paragraph = SBAlgorithmCreateParagraph(bidiAlgorithm,
+                                                              paragraphStart,
+                                                              INT32_MAX,
+                                                              defaultLevel);
         SBUInteger paragraphLength = SBParagraphGetLength(paragraph);
         // Next iteration reads the next paragraph (if any remain).
         paragraphStart += paragraphLength;
@@ -535,7 +608,9 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
             const auto& tr = truns[runIndex];
             assert(tr.unicharCount != 0);
             SBLevel lastLevel = bidiLevels[paragraphTextIndex];
-            hb_script_t lastScript = hb_unicode_script(ufuncs, text[textIndex]);
+            auto point = text[textIndex];
+            hb_script_t lastScript = hb_unicode_script(ufuncs, point);
+
             rive::TextRun splitRun = {
                 tr.font,
                 tr.size,
@@ -544,8 +619,7 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
                 tr.unicharCount - runTextIndex,
                 (uint32_t)lastScript,
                 tr.styleId,
-                lastLevel & 1 ? rive::TextDirection::rtl
-                              : rive::TextDirection::ltr,
+                (uint8_t)lastLevel,
             };
 
             runStartTextIndex = textIndex;
@@ -558,7 +632,13 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
             while (runTextIndex < tr.unicharCount &&
                    paragraphTextIndex < paragraphLength)
             {
-                hb_script_t script = hb_unicode_script(ufuncs, text[textIndex]);
+                auto point = text[textIndex];
+                hb_script_t script =
+                    hb_unicode_general_category(ufuncs, point) ==
+                            HB_UNICODE_GENERAL_CATEGORY_NON_SPACING_MARK
+                        ? HB_SCRIPT_INHERITED
+                        : hb_unicode_script(ufuncs, point);
+
                 switch (script)
                 {
                     case HB_SCRIPT_COMMON:
@@ -585,8 +665,7 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
                         tr.unicharCount - runTextIndex,
                         (uint32_t)script,
                         back.styleId,
-                        lastLevel & 1 ? rive::TextDirection::rtl
-                                      : rive::TextDirection::ltr,
+                        (uint8_t)lastLevel,
                     };
                     runStartTextIndex = textIndex;
                     bidiRuns.push_back(backRun);
@@ -634,15 +713,15 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
                 size_t index = iter - gr.glyphs.begin();
                 rive::Unichar missing = text[gr.textIndices[index]];
                 // todo: consider sending more chars if that helps choose a font
-                auto fallback = gFallbackProc({&missing, 1});
+                auto fallback = gFallbackProc(missing, 0, this);
                 if (fallback)
                 {
-                    perform_fallback(fallback, gruns, text.data(), gr, tr);
+                    perform_fallback(fallback, gruns, text.data(), gr, tr, 1);
                 }
                 else if (gr.glyphs.size() > 0)
                 {
-                    gruns.add(
-                        std::move(gr)); // oh well, just keep the missing glyphs
+                    // oh well, just keep the missing glyphs
+                    gruns.add(std::move(gr));
                 }
             }
         }
@@ -662,8 +741,7 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
 
         paragraphs.add({
             std::move(gruns),
-            paragraphLevel & 1 ? rive::TextDirection::rtl
-                               : rive::TextDirection::ltr,
+            (uint8_t)paragraphLevel,
         });
         SBParagraphRelease(paragraph);
     }
@@ -672,11 +750,10 @@ rive::SimpleArray<rive::Paragraph> HBFont::onShapeText(
     return paragraphs;
 }
 
-bool HBFont::hasGlyph(rive::Span<const rive::Unichar> missing) const
+bool HBFont::hasGlyph(const rive::Unichar missing) const
 {
     hb_codepoint_t glyph;
-    return !missing.empty() &&
-           hb_font_get_nominal_glyph(m_font, missing[0], &glyph);
+    return hb_font_get_nominal_glyph(m_font, missing, &glyph);
 }
 
 #endif
