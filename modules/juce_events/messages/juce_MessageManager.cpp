@@ -328,17 +328,17 @@ struct MessageManager::Lock::BlockingMessage final : public MessageManager::Mess
             owner->setAcquired (true);
 
         condvar.wait (lock, [&]
-                      {
-                          return owner == nullptr;
-                      });
+        {
+            return owner == nullptr;
+        });
     }
 
     void stopWaiting()
     {
         const ScopeGuard scope { [&]
-                                 {
-                                     condvar.notify_one();
-                                 } };
+        {
+            condvar.notify_one();
+        } };
         const std::scoped_lock lock { mutex };
         owner = nullptr;
     }
@@ -387,10 +387,10 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
     }
 
     if (! lockIsMandatory && [&]
-        {
-            const std::scoped_lock lock { mutex };
-            return std::exchange (abortWait, false);
-        }())
+    {
+        const std::scoped_lock lock { mutex };
+        return std::exchange (abortWait, false);
+    }())
     {
         return false;
     }
@@ -421,9 +421,9 @@ bool MessageManager::Lock::tryAcquire (bool lockIsMandatory) const noexcept
         {
             std::unique_lock lock { mutex };
             condvar.wait (lock, [&]
-                          {
-                              return std::exchange (abortWait, false);
-                          });
+            {
+                return std::exchange (abortWait, false);
+            });
         }
 
         if (acquired)
@@ -455,9 +455,9 @@ void MessageManager::Lock::exit() const noexcept
         return;
 
     const ScopeGuard unlocker { [&]
-                                {
-                                    entryMutex.exit();
-                                } };
+    {
+        entryMutex.exit();
+    } };
 
     if (blockingMessage == nullptr)
         return;
@@ -481,9 +481,9 @@ void MessageManager::Lock::abort() const noexcept
 void MessageManager::Lock::setAcquired (bool x) const noexcept
 {
     const ScopeGuard scope { [&]
-                             {
-                                 condvar.notify_one();
-                             } };
+    {
+        condvar.notify_one();
+    } };
     const std::scoped_lock lock { mutex };
     abortWait = true;
     acquired = x;

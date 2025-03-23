@@ -55,7 +55,6 @@ StatusCode ClippingShape::onAddedClean(CoreContext* context)
             }
         }
     }
-    m_RenderPath = artboard->factory()->makeEmptyRenderPath();
 
     return StatusCode::Ok;
 }
@@ -90,12 +89,12 @@ void ClippingShape::update(ComponentDirt value)
 {
     static Mat2D identity;
 
-    if (hasDirt(value, ComponentDirt::Path | ComponentDirt::WorldTransform))
+    if (hasDirt(value,
+                ComponentDirt::Path | ComponentDirt::WorldTransform |
+                    ComponentDirt::NSlicer))
     {
-        m_RenderPath->rewind();
-
-        m_RenderPath->fillRule((FillRule)fillRule());
-        m_ClipRenderPath = nullptr;
+        m_path.rewind(false, (FillRule)fillRule());
+        m_clipPath = nullptr;
         for (auto shape : m_Shapes)
         {
             if (!shape->isEmpty())
@@ -105,8 +104,8 @@ void ClippingShape::update(ComponentDirt value)
                 {
                     continue;
                 }
-                m_RenderPath->addPath(path, identity);
-                m_ClipRenderPath = m_RenderPath.get();
+                m_path.addPath(path, &identity);
+                m_clipPath = &m_path;
             }
         }
     }

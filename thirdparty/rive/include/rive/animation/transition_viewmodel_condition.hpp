@@ -14,8 +14,10 @@ protected:
     TransitionComparator* m_rightComparator;
 
 public:
-    bool evaluate(
-        const StateMachineInstance* stateMachineInstance) const override;
+    bool evaluate(const StateMachineInstance* stateMachineInstance,
+                  StateMachineLayerInstance* layerInstance) const override;
+    void useInLayer(const StateMachineInstance* stateMachineInstance,
+                    StateMachineLayerInstance* layerInstance) const override;
     TransitionComparator* leftComparator() const { return m_leftComparator; };
     TransitionComparator* rightComparator() const { return m_rightComparator; };
     void comparator(TransitionComparator* value)

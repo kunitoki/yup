@@ -170,11 +170,23 @@ void Artboard::contentScaleChanged (float dpiScale)
 
 void Artboard::mouseEnter (const MouseEvent& event)
 {
+    if (scene == nullptr)
+        return;
+
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerMove (rive::Vec2D (x, y));
+
     repaint();
 }
 
 void Artboard::mouseExit (const MouseEvent& event)
 {
+    if (scene == nullptr)
+        return;
+
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerExit (rive::Vec2D (x, y));
+
     repaint();
 }
 
@@ -183,10 +195,8 @@ void Artboard::mouseDown (const MouseEvent& event)
     if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
-    auto [x, y] = event.getPosition() * getScaleDpi();
-
-    auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    scene->pointerDown (xy);
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerDown (rive::Vec2D (x, y));
 
     repaint();
 }
@@ -196,10 +206,8 @@ void Artboard::mouseUp (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
-    auto [x, y] = event.getPosition() * getScaleDpi();
-
-    auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    scene->pointerUp (xy);
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerUp (rive::Vec2D (x, y));
 
     repaint();
 }
@@ -209,10 +217,8 @@ void Artboard::mouseMove (const MouseEvent& event)
     if (scene == nullptr)
         return;
 
-    auto [x, y] = event.getPosition() * getScaleDpi();
-
-    const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    scene->pointerMove (xy);
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerMove (rive::Vec2D (x, y));
 
     repaint();
 }
@@ -222,10 +228,8 @@ void Artboard::mouseDrag (const MouseEvent& event)
     if (scene == nullptr || ! event.isLeftButtoDown())
         return;
 
-    auto [x, y] = event.getPosition() * getScaleDpi();
-
-    const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (x, y);
-    scene->pointerMove (xy);
+    auto [x, y] = transformPoint (event.getPosition());
+    scene->pointerMove (rive::Vec2D (x, y));
 
     pullEventsFromStateMachines();
 
@@ -288,6 +292,7 @@ void Artboard::updateSceneFromFile()
 
     artboard = std::move (currentArtboard);
     scene = std::move (currentScene);
+
     if (currentStateMachine)
         stateMachine = currentStateMachine;
 }
@@ -330,6 +335,16 @@ void Artboard::pullEventsFromStateMachines()
             propertyChanged (eventName, String (child->name()), oldValue, newValue);
         }
     }
+}
+
+//==============================================================================
+
+Point<float> Artboard::transformPoint (Point<float> point) const
+{
+    point *= getScaleDpi();
+
+    const auto xy = viewTransform.invertOrIdentity() * rive::Vec2D (point.getX(), point.getY());
+    return { xy.x, xy.y };
 }
 
 } // namespace yup

@@ -10,7 +10,8 @@ class TransitionValueStringComparator
 public:
     bool compare(TransitionComparator* comparand,
                  TransitionConditionOp operation,
-                 const StateMachineInstance* stateMachineInstance) override;
+                 const StateMachineInstance* stateMachineInstance,
+                 StateMachineLayerInstance* layerInstance) override;
 };
 } // namespace rive
 

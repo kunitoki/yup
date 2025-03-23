@@ -231,10 +231,10 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* output, const AffineTransform& transform)
 {
     auto newInput = input.morph ([&transform] (auto point)
-                                 {
-                                     transform.transformPoints (point.x, point.y);
-                                     return point;
-                                 });
+    {
+        transform.transformPoints (point.x, point.y);
+        return point;
+    });
 
     newInput.addTo (output);
 }

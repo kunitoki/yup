@@ -134,8 +134,6 @@ private:
 
     static std::unique_ptr<PixelLocalStorageImpl> MakePLSImplEXTNative(
         const GLCapabilities&);
-    static std::unique_ptr<PixelLocalStorageImpl> MakePLSImplFramebufferFetch(
-        const GLCapabilities&);
     static std::unique_ptr<PixelLocalStorageImpl> MakePLSImplWebGL();
     static std::unique_ptr<PixelLocalStorageImpl> MakePLSImplRWTexture();
 
@@ -207,11 +205,10 @@ private:
         gpu::StorageBufferStructure) override;
     std::unique_ptr<BufferRing> makeVertexBufferRing(
         size_t capacityInBytes) override;
-    std::unique_ptr<BufferRing> makeTextureTransferBufferRing(
-        size_t capacityInBytes) override;
 
     void resizeGradientTexture(uint32_t width, uint32_t height) override;
     void resizeTessellationTexture(uint32_t width, uint32_t height) override;
+    void resizeAtlasTexture(uint32_t width, uint32_t height) override;
 
     void flush(const FlushDescriptor&) override;
 
@@ -225,12 +222,45 @@ private:
     glutils::Framebuffer m_colorRampFBO;
     GLuint m_gradientTexture = 0;
 
+    // Gaussian integral table for feathering.
+    glutils::Texture m_featherTexture;
+
     // Tessellation texture rendering.
     glutils::Program m_tessellateProgram;
     glutils::VAO m_tessellateVAO;
     glutils::Buffer m_tessSpanIndexBuffer;
     glutils::Framebuffer m_tessellateFBO;
     GLuint m_tessVertexTexture = 0;
+
+    // Atlas rendering.
+    class AtlasProgram
+    {
+    public:
+        void compile(GLuint vertexShaderID,
+                     const char* defines[],
+                     size_t numDefines,
+                     const char* sources[],
+                     size_t numSources,
+                     const GLCapabilities&,
+                     GLState* state);
+
+        operator GLuint() const { return m_program; }
+
+        GLint spirvCrossBaseInstanceLocation() const
+        {
+            return m_spirvCrossBaseInstanceLocation;
+        }
+
+    private:
+        glutils::Program m_program = glutils::Program::Zero();
+        GLint m_spirvCrossBaseInstanceLocation = -1;
+    };
+
+    glutils::Shader m_atlasVertexShader;
+    AtlasProgram m_atlasFillProgram;
+    AtlasProgram m_atlasStrokeProgram;
+    glutils::Texture m_atlasTexture = glutils::Texture::Zero();
+    glutils::Framebuffer m_atlasFBO;
 
     // Not all programs have a unique vertex shader, so we cache and reuse them
     // where possible.
