@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class Artboard;
+
 //==============================================================================
 class JUCE_API ArtboardFile
 {

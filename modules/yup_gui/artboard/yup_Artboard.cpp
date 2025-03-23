@@ -358,7 +358,7 @@ void Artboard::mouseDrag (const MouseEvent& event)
 
 void Artboard::propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue)
 {
-    DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
+    // DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
 }
 
 //==============================================================================
