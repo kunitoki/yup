@@ -68,3 +68,12 @@ function (_yup_setup_platform)
     set (yup_platform "${yup_platform}" PARENT_SCOPE)
 endfunction()
 
+#==============================================================================
+
+include (${CMAKE_CURRENT_LIST_DIR}/yup_utilities.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_platforms.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_dependencies.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_modules.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_standalone.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_audio_plugin.cmake)
+include (${CMAKE_CURRENT_LIST_DIR}/yup_embed_binary.cmake)
