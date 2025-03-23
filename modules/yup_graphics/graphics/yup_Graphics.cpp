@@ -715,12 +715,10 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
         return unitRectPath;
     }();
 
-    /*
     rive::RiveRenderPaint paint;
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
     renderer.drawPath (unitRectPath.get(), &paint);
-    */
 
     renderer.restore();
 }
