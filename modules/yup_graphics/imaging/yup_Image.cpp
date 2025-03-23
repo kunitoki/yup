@@ -169,13 +169,11 @@ bool Image::createTextureIfNotPresent (GraphicsContext& context) const
     if (renderContext == nullptr || renderContext->impl() == nullptr)
         return false;
 
-    /*
     texture = renderContext->impl()->makeImageTexture (
         width,
         height,
         rive::math::msb (width | height),
         getRawData().data());
-    */
 
     return true;
 }
