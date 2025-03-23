@@ -134,26 +134,23 @@ StatusCode NestedArtboard::onAddedClean(CoreContext* context)
     return Super::onAddedClean(context);
 }
 
-bool NestedArtboard::advance(float elapsedSeconds)
-{
-    bool keepGoing = false;
-    if (m_Artboard == nullptr || isCollapsed())
-    {
-        return keepGoing;
-    }
-    for (auto animation : m_NestedAnimations)
-    {
-        keepGoing = animation->advance(elapsedSeconds) || keepGoing;
-    }
-    return m_Artboard->advanceInternal(elapsedSeconds, false) || keepGoing;
-}
-
 void NestedArtboard::update(ComponentDirt value)
 {
     Super::update(value);
-    if (hasDirt(value, ComponentDirt::RenderOpacity) && m_Artboard != nullptr)
+    if (m_Artboard == nullptr)
+    {
+        return;
+    }
+    if (hasDirt(value, ComponentDirt::RenderOpacity))
     {
         m_Artboard->opacity(renderOpacity());
+    }
+    if (hasDirt(value, ComponentDirt::Components))
+    {
+        // We intentionally discard whether or not this updated because by the
+        // end of the pass all the dirt is removed and only another advance of
+        // animations/statemachines can re-add it.
+        m_Artboard->updatePass(false);
     }
 }
 
@@ -270,7 +267,10 @@ void NestedArtboard::syncStyleChanges()
     m_Artboard->syncStyleChanges();
 }
 
-void NestedArtboard::controlSize(Vec2D size) {}
+void NestedArtboard::controlSize(Vec2D size,
+                                 LayoutScaleType widthScaleType,
+                                 LayoutScaleType heightScaleType)
+{}
 
 void NestedArtboard::decodeDataBindPathIds(Span<const uint8_t> value)
 {
@@ -320,4 +320,62 @@ void NestedArtboard::setDataContextFromInstance(
                 artboardInstance()->dataContext());
         }
     }
+}
+
+bool NestedArtboard::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
+{
+    if (m_Artboard == nullptr || isCollapsed())
+    {
+        return false;
+    }
+    bool keepGoing = false;
+    bool advanceNested =
+        (flags & AdvanceFlags::AdvanceNested) == AdvanceFlags::AdvanceNested;
+    if (advanceNested)
+    {
+        bool newFrame =
+            (flags & AdvanceFlags::NewFrame) == AdvanceFlags::NewFrame;
+        for (auto animation : m_NestedAnimations)
+        {
+            // If it is not a new frame, we only advance state machines. And we
+            // first validate whether their state has changed. Then and only
+            // then we advance the state machine. This avoids triggering dirt
+            // from advances that make intermediate value changes but finally
+            // settle in the same value
+            if (!newFrame)
+            {
+                if (animation->is<NestedStateMachine>())
+                {
+                    if (animation->as<NestedStateMachine>()->tryChangeState())
+                    {
+                        if (animation->advance(elapsedSeconds, newFrame))
+                        {
+                            keepGoing = true;
+                        }
+                    }
+                }
+            }
+            else
+            {
+
+                if (animation->advance(elapsedSeconds, newFrame))
+                {
+                    keepGoing = true;
+                }
+            }
+        }
+    }
+
+    auto advancingFlags = flags & ~AdvanceFlags::IsRoot;
+    if (m_Artboard->advanceInternal(elapsedSeconds, advancingFlags))
+    {
+        keepGoing = true;
+    }
+    if (m_Artboard->hasDirt(ComponentDirt::Components))
+    {
+        // The animation(s) caused the artboard to need an update.
+        addDirt(ComponentDirt::Components);
+    }
+
+    return keepGoing;
 }

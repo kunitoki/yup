@@ -18,6 +18,12 @@ public:
     void apply(Artboard* artboard) const;
     StatusCode onAddedClean(CoreContext* context) override;
     StatusCode onAddedDirty(CoreContext* context) override;
+    void xChanged() override;
+    void yChanged() override;
+    void posXChanged() override;
+    void posYChanged() override;
+    void widthChanged() override;
+    void heightChanged() override;
 
     bool isJoystickFlagged(JoystickFlags flag) const
     {
@@ -30,7 +36,9 @@ public:
                         LayoutMeasureMode widthMode,
                         float height,
                         LayoutMeasureMode heightMode) override;
-    void controlSize(Vec2D size) override;
+    void controlSize(Vec2D size,
+                     LayoutScaleType widthScaleType,
+                     LayoutScaleType heightScaleType) override;
     bool shouldPropagateSizeToChildren() override { return false; }
 
 protected:

@@ -1,6 +1,6 @@
 #include "rive/constraints/constraint.hpp"
 #include "rive/hittest_command_path.hpp"
-#include "rive/layout/n_sliced_node.hpp"
+#include "rive/shapes/deformer.hpp"
 #include "rive/shapes/path.hpp"
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/shape.hpp"
@@ -13,16 +13,6 @@
 #include <algorithm>
 
 using namespace rive;
-
-ShapeDeformer* ShapeDeformer::from(Component* component)
-{
-    switch (component->coreType())
-    {
-        case NSlicedNode::typeKey:
-            return component->as<NSlicedNode>();
-    }
-    return nullptr;
-}
 
 Shape::Shape() : m_PathComposer(this) {}
 
@@ -92,11 +82,12 @@ void Shape::addToRenderPath(RenderPath* path, const Mat2D& transform)
 {
     if (isFlagged(PathFlags::local))
     {
-        path->addPath(m_PathComposer.localPath(), transform * worldTransform());
+        path->addPath(m_PathComposer.localPath()->renderPath(this),
+                      transform * worldTransform());
     }
     else
     {
-        path->addPath(m_PathComposer.worldPath(), transform);
+        path->addPath(m_PathComposer.worldPath()->renderPath(this), transform);
     }
 }
 
@@ -116,18 +107,12 @@ void Shape::draw(Renderer* renderer)
             {
                 continue;
             }
-            renderer->save();
-            bool paintsInLocal = shapePaint->isFlagged(PathFlags::local);
-            if (paintsInLocal)
+            auto shapePaintPath = shapePaint->pickPath(this);
+            if (shapePaintPath == nullptr)
             {
-                renderer->transform(worldTransform());
+                continue;
             }
-            shapePaint->draw(renderer,
-                             paintsInLocal ? m_PathComposer.localPath()
-                                           : m_PathComposer.worldPath(),
-                             paintsInLocal ? &m_PathComposer.localRawPath()
-                                           : &m_PathComposer.worldRawPath());
-            renderer->restore();
+            shapePaint->draw(renderer, shapePaintPath, worldTransform());
         }
     }
 
@@ -137,9 +122,19 @@ void Shape::draw(Renderer* renderer)
     }
 }
 
-bool Shape::hitTest(const IAABB& area) const
+bool Shape::hitTestAABB(const Vec2D& position)
 {
-    HitTestCommandPath tester(area);
+    return worldBounds().contains(position);
+}
+
+bool Shape::hitTestHiFi(const Vec2D& position, float hitRadius)
+{
+    auto hitArea = AABB(position.x - hitRadius,
+                        position.y - hitRadius,
+                        position.x + hitRadius,
+                        position.y + hitRadius)
+                       .round();
+    HitTestCommandPath tester(hitArea);
 
     for (auto path : m_Paths)
     {
@@ -161,7 +156,8 @@ Core* Shape::hitTest(HitInfo* hinfo, const Mat2D& xform)
 
     // TODO: clip:
 
-    const bool shapeIsLocal = isFlagged(PathFlags::local);
+    const bool shapeIsLocal =
+        isFlagged(PathFlags::local | PathFlags::localClockwise);
 
     for (auto rit = m_ShapePaints.rbegin(); rit != m_ShapePaints.rend(); ++rit)
     {
@@ -175,7 +171,8 @@ Core* Shape::hitTest(HitInfo* hinfo, const Mat2D& xform)
             continue;
         }
 
-        auto paintIsLocal = shapePaint->isFlagged(PathFlags::local);
+        auto paintIsLocal =
+            shapePaint->isFlagged(PathFlags::local | PathFlags::localClockwise);
 
         auto mx = xform;
         if (paintIsLocal)
@@ -246,7 +243,7 @@ StatusCode Shape::onAddedClean(CoreContext* context)
     for (auto currentParent = parent(); currentParent != nullptr;
          currentParent = currentParent->parent())
     {
-        ShapeDeformer* deformer = ShapeDeformer::from(currentParent);
+        RenderPathDeformer* deformer = RenderPathDeformer::from(currentParent);
         if (deformer)
         {
             m_deformer = deformer;
@@ -301,6 +298,12 @@ public:
     void close() override { m_rawPath.close(); }
 
     RenderPath* renderPath() override
+    {
+        assert(false);
+        return nullptr;
+    }
+
+    const RenderPath* renderPath() const override
     {
         assert(false);
         return nullptr;
@@ -365,3 +368,12 @@ Vec2D Shape::measureLayout(float width,
     }
     return size;
 }
+
+ShapePaintPath* Shape::worldPath() { return m_PathComposer.worldPath(); }
+ShapePaintPath* Shape::localPath() { return m_PathComposer.localPath(); }
+ShapePaintPath* Shape::localClockwisePath()
+{
+    return m_PathComposer.localClockwisePath();
+}
+
+Component* Shape::pathBuilder() { return &m_PathComposer; }

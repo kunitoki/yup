@@ -17,3 +17,9 @@ void ViewModelInstanceTrigger::propertyValueChanged()
     }
 #endif
 }
+
+void ViewModelInstanceTrigger::advanced()
+{
+    propertyValue(0);
+    m_usedLayers.clear();
+}

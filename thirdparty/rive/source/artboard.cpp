@@ -16,6 +16,7 @@
 #include "rive/importers/import_stack.hpp"
 #include "rive/importers/backboard_importer.hpp"
 #include "rive/layout_component.hpp"
+#include "rive/foreground_layout_drawable.hpp"
 #include "rive/nested_artboard.hpp"
 #include "rive/nested_artboard_leaf.hpp"
 #include "rive/nested_artboard_layout.hpp"
@@ -30,6 +31,7 @@
 #include "rive/text/text_value_run.hpp"
 #include "rive/event.hpp"
 #include "rive/assets/audio_asset.hpp"
+#include "rive/layout/layout_data.hpp"
 
 #include <unordered_map>
 
@@ -57,7 +59,6 @@ Artboard::~Artboard()
         audioEngine->stop(this);
     }
 #endif
-
     for (auto object : m_Objects)
     {
         // First object is artboard
@@ -96,13 +97,59 @@ static bool canContinue(StatusCode code)
     return code != StatusCode::InvalidObject;
 }
 
+bool Artboard::validateObjects()
+{
+    auto size = m_Objects.size();
+    std::vector<bool> valid(size);
+
+    // Max iterations..
+    for (int cycle = 0; cycle < 100; cycle++)
+    {
+        bool changed = false;
+        for (size_t i = 1; i < size; i++)
+        {
+            auto object = m_Objects[i];
+            if (object == nullptr)
+            {
+                // objects can be null if they were not understood by this
+                // runtime.
+                continue;
+            }
+            bool wasValid = valid[i];
+            bool isValid = object->validate(this);
+            if (wasValid != isValid)
+            {
+                changed = true;
+                valid[i] = isValid;
+            }
+        }
+        if (changed)
+        {
+            // Delete invalid objects.
+            for (size_t i = 1; i < size; i++)
+            {
+                if (valid[i])
+                {
+                    continue;
+                }
+                delete m_Objects[i];
+                m_Objects[i] = nullptr;
+            }
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return true;
+}
+
 StatusCode Artboard::initialize()
 {
     StatusCode code;
 
     // these will be re-built in update() -- are they needed here?
-    m_backgroundPath = factory()->makeEmptyRenderPath();
-    m_clipPath = factory()->makeEmptyRenderPath();
     m_layout = Layout(0.0f, 0.0f, width(), height());
 
 #ifdef WITH_RIVE_LAYOUT
@@ -241,6 +288,24 @@ StatusCode Artboard::initialize()
         {
             Drawable* drawable = object->as<Drawable>();
             m_Drawables.push_back(drawable);
+            // Move the foreground drawable before its parent. We traverse the
+            // added list of drawables and swap their positions with the
+            // foreground drawable until we find the parent
+            if (drawable->is<ForegroundLayoutDrawable>())
+            {
+                auto parent = drawable->parent();
+                auto index = m_Drawables.size() - 1;
+                while (index >= 1)
+                {
+                    auto swappingDrawable = m_Drawables[index - 1];
+                    std::swap(m_Drawables[index - 1], m_Drawables[index]);
+                    if (swappingDrawable == parent)
+                    {
+                        break;
+                    }
+                    index--;
+                }
+            }
 
             for (ContainerComponent* parent = drawable; parent != nullptr;
                  parent = parent->parent())
@@ -277,12 +342,12 @@ StatusCode Artboard::initialize()
             {
                 m_Drawables.insert(m_Drawables.begin() + i,
                                    currentLayout->proxy());
+                i += 1;
                 layouts.pop_back();
                 if (!layouts.empty())
                 {
                     currentLayout = layouts.back();
                 }
-                i += 1;
             } while (!layouts.empty() &&
                      !drawable->isChildOfLayout(currentLayout));
         }
@@ -359,7 +424,10 @@ StatusCode Artboard::initialize()
 
 void Artboard::sortDrawOrder()
 {
-    m_HasChangedDrawOrderInLastUpdate = true;
+    m_drawOrderChangeCounter =
+        m_drawOrderChangeCounter == std::numeric_limits<uint8_t>::max()
+            ? 0
+            : m_drawOrderChangeCounter + 1;
     for (auto target : m_DrawTargets)
     {
         target->first = target->last = nullptr;
@@ -613,11 +681,10 @@ void Artboard::updateRenderPath()
     {
         clip = bg;
     }
-    m_clipPath = factory()->makeRenderPath(clip);
-    m_backgroundRawPath.rewind();
-    m_backgroundRawPath.addRect(bg);
-    m_backgroundPath->rewind();
-    m_backgroundRawPath.addTo(m_backgroundPath.get());
+    m_localPath.rewind();
+    m_localPath.addRect(bg);
+    m_worldPath.rewind();
+    m_worldPath.addRect(clip);
 }
 
 void Artboard::update(ComponentDirt value)
@@ -633,6 +700,19 @@ void Artboard::update(ComponentDirt value)
         cascadeAnimationStyle(interpolation(),
                               interpolator(),
                               interpolationTime());
+        // TODO: Explore whether we can remove the syncStyleChanges call in
+        // updatePass. Since updatePass calls updateComponents, where the first
+        // component is the artboard itself, hence calling update, we end up
+        // calling this twice. Although it is safe, because syncStyleChanges
+        // checks for the list of dirty layouts that would be empty at this
+        // point, it seems redundant.
+        if (syncStyleChanges() && m_updatesOwnLayout)
+        {
+            calculateLayout();
+            updateLayoutBounds(
+                /*animation*/ true); // maybe use a static to allow
+                                     // the editor to set this.
+        }
     }
 #endif
 }
@@ -654,50 +734,50 @@ void Artboard::updateDataBinds()
 
 bool Artboard::updateComponents()
 {
-    if (hasDirt(ComponentDirt::Components))
+    if (!hasDirt(ComponentDirt::Components))
     {
-        const int maxSteps = 100;
-        int step = 0;
-        auto count = m_DependencyOrder.size();
-        while (hasDirt(ComponentDirt::Components) && step < maxSteps)
-        {
-            m_Dirt = m_Dirt & ~ComponentDirt::Components;
-
-            // Track dirt depth here so that if something else marks
-            // dirty, we restart.
-            for (unsigned int i = 0; i < count; i++)
-            {
-                auto component = m_DependencyOrder[i];
-                m_DirtDepth = i;
-                auto d = component->m_Dirt;
-                if (d == ComponentDirt::None ||
-                    (d & ComponentDirt::Collapsed) == ComponentDirt::Collapsed)
-                {
-                    continue;
-                }
-                component->m_Dirt = ComponentDirt::None;
-                component->update(d);
-
-                // If the update changed the dirt depth by adding dirt
-                // to something before us (in the DAG), early out and
-                // re-run the update.
-                if (m_DirtDepth < i)
-                {
-                    break;
-                }
-            }
-            step++;
-        }
-        return true;
+        return false;
     }
-    return false;
+    const int maxSteps = 100;
+    int step = 0;
+    auto count = m_DependencyOrder.size();
+    while (hasDirt(ComponentDirt::Components) && step < maxSteps)
+    {
+        m_Dirt = m_Dirt & ~ComponentDirt::Components;
+
+        // Track dirt depth here so that if something else marks
+        // dirty, we restart.
+        for (unsigned int i = 0; i < count; i++)
+        {
+            auto component = m_DependencyOrder[i];
+            m_DirtDepth = i;
+            auto d = component->m_Dirt;
+            if (d == ComponentDirt::None ||
+                (d & ComponentDirt::Collapsed) == ComponentDirt::Collapsed)
+            {
+                continue;
+            }
+            component->m_Dirt = ComponentDirt::None;
+            component->update(d);
+
+            // If the update changed the dirt depth by adding dirt
+            // to something before us (in the DAG), early out and
+            // re-run the update.
+            if (m_DirtDepth < i)
+            {
+                break;
+            }
+        }
+        step++;
+    }
+    return true;
 }
 
 void* Artboard::takeLayoutNode()
 {
 #ifdef WITH_RIVE_LAYOUT
     m_updatesOwnLayout = false;
-    return static_cast<void*>(&layoutNode());
+    return static_cast<void*>(&m_layoutData->node);
 #else
     return nullptr;
 #endif
@@ -716,6 +796,7 @@ void Artboard::markLayoutDirty(LayoutComponent* layoutComponent)
     {
         m_host->as<NestedArtboardLayout>()->markNestedLayoutDirty();
     }
+    addDirt(ComponentDirt::Components);
 }
 
 bool Artboard::syncStyleChanges()
@@ -755,29 +836,16 @@ bool Artboard::syncStyleChanges()
     return updated;
 }
 
-bool Artboard::advanceInternal(float elapsedSeconds,
-                               bool isRoot,
-                               bool nested,
-                               bool animate)
+bool Artboard::updatePass(bool isRoot)
 {
     bool didUpdate = false;
-    m_HasChangedDrawOrderInLastUpdate = false;
 #ifdef WITH_RIVE_LAYOUT
     if (syncStyleChanges() && m_updatesOwnLayout)
     {
         calculateLayout();
-        updateLayoutBounds(animate);
+        updateLayoutBounds(/*animation*/ true); // maybe use a static to allow
+                                                // the editor to set this.
     }
-
-    for (auto dep : m_DependencyOrder)
-    {
-        auto adv = AdvancingComponent::from(dep);
-        if (adv != nullptr && adv->advanceComponent(elapsedSeconds, animate))
-        {
-            didUpdate = true;
-        }
-    }
-
 #endif
     if (m_JoysticksApplyBeforeUpdate)
     {
@@ -820,22 +888,42 @@ bool Artboard::advanceInternal(float elapsedSeconds,
             didUpdate = true;
         }
     }
-    if (nested)
-    {
-        for (auto nestedArtboard : m_NestedArtboards)
-        {
-            if (nestedArtboard->advance(elapsedSeconds))
-            {
-                didUpdate = true;
-            }
-        }
-    }
     return didUpdate;
 }
 
-bool Artboard::advance(float elapsedSeconds, bool nested, bool animate)
+bool Artboard::advanceInternal(float elapsedSeconds, AdvanceFlags flags)
 {
-    return advanceInternal(elapsedSeconds, true, nested, animate);
+    bool didUpdate = false;
+
+    for (auto dep : m_DependencyOrder)
+    {
+        auto adv = AdvancingComponent::from(dep);
+        if (adv != nullptr && adv->advanceComponent(elapsedSeconds, flags))
+        {
+            didUpdate = true;
+        }
+    }
+    for (auto dataBind : m_AllDataBinds)
+    {
+        if (dataBind->advance(elapsedSeconds))
+        {
+            didUpdate = true;
+        }
+    }
+
+    return didUpdate;
+}
+
+bool Artboard::advance(float elapsedSeconds, AdvanceFlags flags)
+{
+    AdvanceFlags advancingFlags = flags;
+    advancingFlags |= AdvanceFlags::IsRoot;
+    bool didUpdate = advanceInternal(elapsedSeconds, advancingFlags);
+    if (updatePass(true))
+    {
+        didUpdate = true;
+    }
+    return didUpdate || hasDirt(ComponentDirt::Components);
 }
 
 Core* Artboard::hitTest(HitInfo* hinfo, const Mat2D& xform)
@@ -885,7 +973,7 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
     renderer->save();
     if (clip())
     {
-        renderer->clipPath(m_clipPath.get());
+        renderer->clipPath(m_worldPath.renderPath(this));
     }
 
     if (m_FrameOrigin)
@@ -900,9 +988,16 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
     {
         for (auto shapePaint : m_ShapePaints)
         {
-            shapePaint->draw(renderer,
-                             m_backgroundPath.get(),
-                             &m_backgroundRawPath);
+            if (!shapePaint->isVisible())
+            {
+                continue;
+            }
+            auto shapePaintPath = shapePaint->pickPath(this);
+            if (shapePaintPath == nullptr)
+            {
+                continue;
+            }
+            shapePaint->draw(renderer, shapePaintPath, worldTransform());
         }
     }
 
@@ -1240,11 +1335,21 @@ void Artboard::clearDataContext()
     }
 }
 
-void Artboard::sortDataBinds(std::vector<DataBind*> dataBinds)
+void Artboard::sortDataBinds()
 {
-    for (auto dataBind : dataBinds)
+    size_t currentToSourceIndex = 0;
+    for (size_t i = 0; i < m_AllDataBinds.size(); i++)
     {
-        m_AllDataBinds.push_back(dataBind->as<DataBind>());
+        if (m_AllDataBinds[i]->toSource())
+        {
+            if (i != currentToSourceIndex)
+            {
+
+                std::iter_swap(m_AllDataBinds.begin() + currentToSourceIndex,
+                               m_AllDataBinds.begin() + i);
+            }
+            currentToSourceIndex += 1;
+        }
     }
 }
 
@@ -1280,9 +1385,8 @@ void Artboard::populateDataBinds(std::vector<DataBind*>* dataBinds)
 void Artboard::collectDataBinds()
 {
     m_AllDataBinds.clear();
-    std::vector<DataBind*> dataBinds;
-    populateDataBinds(&dataBinds);
-    sortDataBinds(dataBinds);
+    populateDataBinds(&m_AllDataBinds);
+    sortDataBinds();
 }
 
 void Artboard::addDataBind(DataBind* dataBind)

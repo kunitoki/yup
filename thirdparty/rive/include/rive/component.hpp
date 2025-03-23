@@ -29,6 +29,7 @@ public:
     DependencyHelper<Artboard, Component> m_DependencyHelper;
     virtual bool collapse(bool value);
     inline Artboard* artboard() const { return m_Artboard; }
+    bool validate(CoreContext* context) override;
     StatusCode onAddedDirty(CoreContext* context) override;
     inline ContainerComponent* parent() const { return m_Parent; }
     const std::vector<Component*>& dependents() const
@@ -59,18 +60,10 @@ public:
 
     StatusCode import(ImportStack& importStack) override;
 
-    bool isCollapsed() const
+    virtual bool isCollapsed() const
     {
         return (m_Dirt & ComponentDirt::Collapsed) == ComponentDirt::Collapsed;
     }
-};
-
-class AdvancingComponent
-{
-public:
-    virtual bool advanceComponent(float elapsedSeconds,
-                                  bool animate = true) = 0;
-    static AdvancingComponent* from(Component* component);
 };
 } // namespace rive
 

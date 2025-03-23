@@ -13,6 +13,7 @@
 #include "rive/data_bind/bindable_property_enum.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
 #include "rive/data_bind/bindable_property_trigger.hpp"
+#include "rive/viewmodel/viewmodel_instance_trigger.hpp"
 
 using namespace rive;
 
@@ -34,7 +35,8 @@ StatusCode TransitionPropertyViewModelComparator::import(
 bool TransitionPropertyViewModelComparator::compare(
     TransitionComparator* comparand,
     TransitionConditionOp operation,
-    const StateMachineInstance* stateMachineInstance)
+    const StateMachineInstance* stateMachineInstance,
+    StateMachineLayerInstance* layerInstance)
 {
     switch (m_bindableProperty->coreType())
     {
@@ -164,22 +166,49 @@ bool TransitionPropertyViewModelComparator::compare(
             }
             else if (comparand->is<TransitionValueTriggerComparator>())
             {
-                auto rightValue =
-                    comparand->as<TransitionValueTriggerComparator>()->value();
+                auto bindableInstance =
+                    stateMachineInstance->bindablePropertyInstance(
+                        m_bindableProperty);
+                auto dataBind = stateMachineInstance->bindableDataBindToTarget(
+                    bindableInstance);
+                if (dataBind != nullptr)
+                {
+                    auto source = dataBind->source();
+                    if (source != nullptr &&
+                        source->is<ViewModelInstanceTrigger>())
+                    {
+                        if (source->as<ViewModelInstanceTrigger>()
+                                ->isUsedInLayer(layerInstance))
+                        {
+
+                            return false;
+                        }
+                    }
+                }
                 auto leftValue = value<BindablePropertyTrigger, uint32_t>(
                     stateMachineInstance);
-                auto result = compareTriggers(leftValue, rightValue, operation);
-                // For trigger comparisons, the comparand is reset to the
-                // last propertyValue of the view model instance so it doesn't
-                // trigger more than once.
-                if (result)
+                if (leftValue != 0)
                 {
-                    comparand->as<TransitionValueTriggerComparator>()->value(
-                        leftValue);
+                    return true;
                 }
-                return result;
             }
             break;
     }
     return false;
+}
+
+void TransitionPropertyViewModelComparator::useInLayer(
+    const StateMachineInstance* stateMachineInstance,
+    StateMachineLayerInstance* layerInstance) const
+{
+
+    auto bindableInstance =
+        stateMachineInstance->bindablePropertyInstance(m_bindableProperty);
+    auto dataBind =
+        stateMachineInstance->bindableDataBindToTarget(bindableInstance);
+    auto source = dataBind->source();
+    if (source != nullptr && source->is<ViewModelInstanceTrigger>())
+    {
+        source->as<ViewModelInstanceTrigger>()->useInLayer(layerInstance);
+    }
 }

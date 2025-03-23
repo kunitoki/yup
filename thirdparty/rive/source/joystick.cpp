@@ -112,10 +112,25 @@ Vec2D Joystick::measureLayout(float width,
                           Joystick::height()));
 }
 
-void Joystick::controlSize(Vec2D size)
+void Joystick::controlSize(Vec2D size,
+                           LayoutScaleType widthScaleType,
+                           LayoutScaleType heightScaleType)
 {
     width(size.x);
     height(size.y);
     posX(size.x * originX());
     posY(size.y * originY());
+}
+
+void Joystick::xChanged() { artboard()->addDirt(ComponentDirt::Components); }
+void Joystick::yChanged() { artboard()->addDirt(ComponentDirt::Components); }
+void Joystick::posXChanged() { artboard()->addDirt(ComponentDirt::Components); }
+void Joystick::posYChanged() { artboard()->addDirt(ComponentDirt::Components); }
+void Joystick::widthChanged()
+{
+    artboard()->addDirt(ComponentDirt::Components);
+}
+void Joystick::heightChanged()
+{
+    artboard()->addDirt(ComponentDirt::Components);
 }

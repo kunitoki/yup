@@ -36,14 +36,13 @@ public:
 
     enum class Type : uint8_t
     {
-        midpointFanPath,
-        interiorTriangulationPath,
+        path,
         imageRect,
         imageMesh,
         stencilClipReset,
     };
 
-    Draw(AABB bounds,
+    Draw(IAABB pixelBounds,
          const Mat2D&,
          BlendMode,
          rcp<const Texture> imageTexture,
@@ -55,14 +54,6 @@ public:
     BlendMode blendMode() const { return m_blendMode; }
     Type type() const { return m_type; }
     gpu::DrawContents drawContents() const { return m_drawContents; }
-    bool isStroked() const
-    {
-        return m_drawContents & gpu::DrawContents::stroke;
-    }
-    bool isEvenOddFill() const
-    {
-        return m_drawContents & gpu::DrawContents::evenOddFill;
-    }
     bool isOpaque() const
     {
         return m_drawContents & gpu::DrawContents::opaquePaint;
@@ -77,7 +68,6 @@ public:
     {
         return m_simplePaintValue;
     }
-    const Gradient* gradient() const { return m_gradientRef; }
 
     // Clipping setup.
     void setClipID(uint32_t clipID);
@@ -90,10 +80,16 @@ public:
     using ResourceCounters = RenderContext::LogicalFlush::ResourceCounters;
     const ResourceCounters& resourceCounts() const { return m_resourceCounts; }
 
-    // Number of low-level draws required to render this object. The
-    // renderContext will call pushToRenderContext() this many times,
-    // potentially with other non-overlapping draws in between.
-    uint32_t subpassCount() const { return m_subpassCount; }
+    // Combined number of low-level draws required to render this object. The
+    // renderContext will call pushToRenderContext() "prepassCount() +
+    // subpassCount()" times, potentially with other non-overlapping draws in
+    // between.
+    //
+    // All prepasses from all draws are rendered first, before drawing any
+    // subpasses. Prepasses are rendered in front-to-back order and subpasses
+    // are drawn back-to-front.
+    int prepassCount() const { return m_prepassCount; }
+    int subpassCount() const { return m_subpassCount; }
 
     // When shaders don't have a mechanism to read the framebuffer (e.g.,
     // WebGL msaa), this is a linked list of all the draws from a single batch
@@ -107,12 +103,20 @@ public:
     };
     const Draw* nextDstRead() const { return m_nextDstRead; }
 
-    // Adds the gradient (if any) for this draw to the render context's gradient
-    // texture. Returns false if this draw needed a gradient but there wasn't
-    // room for it in the texture, at which point the gradient texture will need
-    // to be re-rendered mid flight.
-    bool allocateGradientIfNeeded(RenderContext::LogicalFlush*,
-                                  ResourceCounters*);
+    // Allocates any remaining resources necessary for the draw (gradients,
+    // coverage buffer ranges, etc.), and finalizes m_prepassCount and
+    // m_subpassCount.
+    //
+    // Returns false if any allocation failed due to resource constraints, at
+    // which point the caller will have to issue a logical flush and try again.
+    virtual bool allocateResourcesAndSubpasses(RenderContext::LogicalFlush*)
+    {
+        // The subclass must set m_prepassCount and m_subpassCount in this call
+        // if they are not 0 & 1.
+        assert(m_prepassCount == 0);
+        assert(m_subpassCount == 1);
+        return true;
+    }
 
     // Pushes the data for the given subpassIndex of this draw to the
     // renderContext. Called once the GPU buffers have been counted and
@@ -121,7 +125,7 @@ public:
     // NOTE: Subpasses are not necessarily rendered one after the other.
     // Separate, non-overlapping draws may have gotten sorted between subpasses.
     virtual void pushToRenderContext(RenderContext::LogicalFlush*,
-                                     uint32_t subpassIndex) = 0;
+                                     int subpassIndex) = 0;
 
     // We can't have a destructor because we're block-allocated. Instead, the
     // client calls this method before clearing the drawList to release all our
@@ -130,7 +134,6 @@ public:
 
 protected:
     const Texture* const m_imageTextureRef;
-    const AABB m_bounds;
     const IAABB m_pixelBounds;
     const Mat2D m_matrix;
     const BlendMode m_blendMode;
@@ -144,13 +147,22 @@ protected:
     // Filled in by the subclass constructor.
     ResourceCounters m_resourceCounts;
 
-    // Number of low-level draws required to render this object. Set by the
-    // subclass constructor if not 1.
-    uint32_t m_subpassCount = 1;
+    // Before issuing the main draws, the renderContext may do a front-to-back
+    // pass. Any draw who wants to participate in front-to-back rendering can
+    // register a positive prepass count during allocateResourcesAndSubpasses().
+    //
+    // For prepasses, pushToRenderContext() gets called with subpassIndex
+    // values: [-m_prepassCount, .., -1].
+    int m_prepassCount = 0;
 
-    // Gradient data used by some draws. Stored in the base class so
-    // allocateGradientIfNeeded() doesn't have to be virtual.
-    const Gradient* m_gradientRef = nullptr;
+    // This is the number of low-level draws that the draw requires during main
+    // (back-to-front) rendering. A draw can register the number of subpasses it
+    // requires during allocateResourcesAndSubpasses().
+    //
+    // For subpasses, pushToRenderContext() gets called with subpassIndex
+    // values: [0, .., m_subpassCount - 1].
+    int m_subpassCount = 1;
+
     gpu::SimplePaintValue m_simplePaintValue;
 
     // When shaders don't have a mechanism to read the framebuffer (e.g.,
@@ -166,7 +178,7 @@ inline void DrawReleaseRefs::operator()(Draw* draw) { draw->releaseRefs(); }
 
 // High level abstraction of a single path to be drawn (midpoint fan or interior
 // triangulation).
-class RiveRenderPathDraw : public Draw
+class PathDraw : public Draw
 {
 public:
     // Creates either a normal path draw or an interior triangulation if the
@@ -178,43 +190,85 @@ public:
                               const RiveRenderPaint*,
                               RawPath* scratchPath);
 
-    RiveRenderPathDraw(AABB,
-                       const Mat2D&,
-                       rcp<const RiveRenderPath>,
-                       FillRule,
-                       const RiveRenderPaint*,
-                       Type,
-                       const RenderContext::FrameDescriptor&,
-                       gpu::InterlockMode);
+    // Determines how coverage is calculated for antialiasing and feathers.
+    // CoverageType is mostly decided by the InterlockMode, but we keep these
+    // concepts separate because atlas coverage may be used with any
+    // InterlockMode.
+    enum class CoverageType
+    {
+        pixelLocalStorage, // InterlockMode::rasterOrdering and atomics
+        clockwiseAtomic,   // InterlockMode::clockwiseAtomic
+        msaa,              // InterlockMode::msaa
+        atlas, // Any InterlockMode may opt to use atlas coverage for large
+               // feathers; msaa always has to use an atlas for feathers.
+    };
 
-    // Copy constructor
-    RiveRenderPathDraw(const RiveRenderPathDraw&,
-                       float tx,
-                       float ty,
-                       rcp<const RiveRenderPath>,
-                       FillRule fillRule,
-                       const RiveRenderPaint* paint,
-                       const RenderContext::FrameDescriptor&,
-                       gpu::InterlockMode);
+    PathDraw(IAABB pixelBounds,
+             const Mat2D&,
+             rcp<const RiveRenderPath>,
+             FillRule,
+             const RiveRenderPaint*,
+             CoverageType,
+             const RenderContext::FrameDescriptor&);
 
-    FillRule fillRule() const { return m_fillRule; }
+    CoverageType coverageType() const { return m_coverageType; }
+
+    const Gradient* gradient() const { return m_gradientRef; }
     gpu::PaintType paintType() const { return m_paintType; }
+    bool isFeatheredFill() const
+    {
+        return m_featherRadius != 0 && m_strokeRadius == 0;
+    }
+    bool isStrokeOrFeather() const
+    {
+        return (math::bit_cast<uint32_t>(m_featherRadius) |
+                math::bit_cast<uint32_t>(m_strokeRadius)) != 0;
+    }
+    bool isStroke() const { return m_strokeRadius != 0; }
     float strokeRadius() const { return m_strokeRadius; }
+    float featherRadius() const { return m_featherRadius; }
     gpu::ContourDirections contourDirections() const
     {
         return m_contourDirections;
     }
+
+    // Only used when rendering coverage via the atlas.
+    const gpu::AtlasTransform& atlasTransform() const
+    {
+        return m_atlasTransform;
+    }
+    const TAABB<uint16_t>& atlasScissor() const { return m_atlasScissor; }
+    bool atlasScissorEnabled() const { return m_atlasScissorEnabled; }
+
+    // clockwiseAtomic only.
+    const gpu::CoverageBufferRange& coverageBufferRange() const
+    {
+        return m_coverageBufferRange;
+    }
+
     GrInnerFanTriangulator* triangulator() const { return m_triangulator; }
 
-    // Unique ID used by shaders for the current frame.
-    uint32_t pathID() const { return m_pathID; }
+    bool allocateResourcesAndSubpasses(RenderContext::LogicalFlush*) override;
 
     void pushToRenderContext(RenderContext::LogicalFlush*,
-                             uint32_t subpassIndex) override;
+                             int subpassIndex) override;
+
+    // Called after pushToRenderContext(), and only when this draw uses an atlas
+    // for tessellation. In the CoverageType::atlas case, pushToRenderContext()
+    // is where we emit the rectangle that reads the atlas (and writes to the
+    // main render target). So this method is where we push the tessellation
+    // that gets rendered separately to the offscreen atlas.
+    void pushAtlasTessellation(RenderContext::LogicalFlush*,
+                               uint32_t* tessVertexCount,
+                               uint32_t* tessBaseVertex);
 
     void releaseRefs() override;
 
 protected:
+    static CoverageType SelectCoverageType(const RiveRenderPaint*,
+                                           float matrixMaxScale,
+                                           gpu::InterlockMode);
+
     // Prepares to draw the path by tessellating a fan around its midpoint.
     void initForMidpointFan(RenderContext*, const RiveRenderPaint*);
 
@@ -231,10 +285,32 @@ protected:
                                       RawPath*,
                                       TriangulatorAxis);
 
+    void pushTessellationData(RenderContext::LogicalFlush*,
+                              uint32_t* tessVertexCount,
+                              uint32_t* tessLocation);
+
+    // Pushes the contours and cubics to the renderContext for a
+    // "midpointFanPatches" draw.
+    void pushMidpointFanTessellationData(RenderContext::TessellationWriter*);
+
+    // Emulates a stroke cap before the given cubic by pushing a copy of the
+    // cubic, reversed, with 0 tessellation segments leading up to the join
+    // section, and a 180-degree join that looks like the desired stroke cap.
+    void pushEmulatedStrokeCapAsJoinBeforeCubic(
+        RenderContext::TessellationWriter*,
+        const Vec2D cubic[],
+        uint32_t strokeCapSegmentCount,
+        uint32_t contourIDWithFlags);
+
     enum class InteriorTriangulationOp : bool
     {
+        // Fills in m_resourceCounts and runs a GrInnerFanTriangulator on the
+        // path's interior polygon.
         countDataAndTriangulate,
-        submitOuterCubics,
+
+        // Pushes the contours and cubics to the renderContext for an
+        // "outerCurvePatches" draw.
+        pushOuterCubicTessellationData,
     };
 
     // Called to processes the interior triangulation both during initialization
@@ -247,30 +323,32 @@ protected:
                                       TrivialBlockAllocator*,
                                       RawPath* scratchPath,
                                       TriangulatorAxis,
-                                      RenderContext::LogicalFlush*);
-
-    // Draws a path by fanning tessellation patches around the midpoint of each
-    // contour. Emulates a stroke cap before the given cubic by pushing a copy
-    // of the cubic, reversed, with 0 tessellation segments leading up to the
-    // join section, and a 180-degree join that looks like the desired stroke
-    // cap.
-    void pushEmulatedStrokeCapAsJoinBeforeCubic(RenderContext::LogicalFlush*,
-                                                const Vec2D cubic[],
-                                                uint32_t strokeCapSegmentCount,
-                                                uint32_t contourIDWithFlags);
+                                      RenderContext::TessellationWriter*);
 
     const RiveRenderPath* const m_pathRef;
-    const FillRule m_fillRule; // Bc RiveRenderPath fillRule can mutate during
-                               // the artboard draw process.
+    const FillRule m_pathFillRule; // Fill rule can mutate on RenderPath.
+    const Gradient* m_gradientRef;
     const gpu::PaintType m_paintType;
+    const CoverageType m_coverageType;
     float m_strokeRadius = 0;
+    float m_featherRadius = 0;
     gpu::ContourDirections m_contourDirections;
     uint32_t m_contourFlags = 0;
+
+    // Only used when rendering coverage via the atlas.
+    gpu::AtlasTransform m_atlasTransform;
+    TAABB<uint16_t> m_atlasScissor; // Scissor rect when rendering to the atlas.
+    bool m_atlasScissorEnabled;
+
+    // clockwiseAtomic only.
+    gpu::CoverageBufferRange m_coverageBufferRange;
+
     GrInnerFanTriangulator* m_triangulator = nullptr;
 
-    float m_strokeMatrixMaxScale;
     StrokeJoin m_strokeJoin;
     StrokeCap m_strokeCap;
+    float m_strokeMatrixMaxScale;
+    float m_polarSegmentsPerRadian;
 
     struct ContourInfo
     {
@@ -299,6 +377,11 @@ protected:
     // Unique ID used by shaders for the current frame.
     uint32_t m_pathID = 0;
 
+    // Used in clockwiseAtomic mode. The negative triangles get rendered in a
+    // separate prepass, and their tessellations need to be allocated before the
+    // main subpass pushes the path to the renderContext.
+    uint32_t m_prepassTessLocation = 0;
+
     // Used to guarantee m_pathRef doesn't change for the entire time we hold
     // it.
     RIVE_DEBUG_CODE(uint64_t m_rawPathMutationID;)
@@ -312,6 +395,7 @@ protected:
     // Counts how many additional curves were pushed by
     // pushEmulatedStrokeCapAsJoinBeforeCubic().
     RIVE_DEBUG_CODE(size_t m_pendingEmptyStrokeCountForCaps;)
+    RIVE_DEBUG_CODE(size_t m_numInteriorTriangleVerticesPushed = 0;)
 };
 
 // Pushes an imageRect to the render context.
@@ -330,7 +414,7 @@ public:
     float opacity() const { return m_opacity; }
 
     void pushToRenderContext(RenderContext::LogicalFlush*,
-                             uint32_t subpassIndex) override;
+                             int subpassIndex) override;
 
 protected:
     const float m_opacity;
@@ -357,7 +441,7 @@ public:
     float opacity() const { return m_opacity; }
 
     void pushToRenderContext(RenderContext::LogicalFlush*,
-                             uint32_t subpassIndex) override;
+                             int subpassIndex) override;
 
     void releaseRefs() override;
 
@@ -381,12 +465,15 @@ public:
         intersectPreviousClip,
     };
 
-    StencilClipReset(RenderContext*, uint32_t previousClipID, ResetAction);
+    StencilClipReset(RenderContext*,
+                     uint32_t previousClipID,
+                     gpu::DrawContents previousClipDrawContents,
+                     ResetAction);
 
     uint32_t previousClipID() const { return m_previousClipID; }
 
     void pushToRenderContext(RenderContext::LogicalFlush*,
-                             uint32_t subpassIndex) override;
+                             int subpassIndex) override;
 
 protected:
     const uint32_t m_previousClipID;

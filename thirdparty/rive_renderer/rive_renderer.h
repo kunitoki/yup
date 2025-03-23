@@ -135,7 +135,9 @@
 
 // Internals
 #include <rive_renderer/source/rive_render_path.hpp>
+#include <rive_renderer/source/rive_render_paint.hpp>
 
 #if __clang__
  #pragma clang diagnostic pop
 #endif
+

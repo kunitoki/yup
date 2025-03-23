@@ -10,19 +10,21 @@ class Feature():
         self.name = name
         self.index = index
 
-# Each feature has a specific index. These must stay in sync with pls_render_context_metal_impl.mm.
-DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 0)
-ENABLE_CLIPPING = Feature('ENABLE_CLIPPING', 1)
-ENABLE_CLIP_RECT =  Feature('ENABLE_CLIP_RECT', 2)
-ENABLE_ADVANCED_BLEND = Feature('ENABLE_ADVANCED_BLEND', 3)
+# Each feature has a specific index. These must stay in sync with render_context_metal_impl.mm.
+ENABLE_CLIPPING = Feature('ENABLE_CLIPPING', 0)
+ENABLE_CLIP_RECT =  Feature('ENABLE_CLIP_RECT', 1)
+ENABLE_ADVANCED_BLEND = Feature('ENABLE_ADVANCED_BLEND', 2)
+ENABLE_FEATHER = Feature('ENABLE_FEATHER', 3)
 ENABLE_EVEN_ODD = Feature('ENABLE_EVEN_ODD', 4)
 ENABLE_NESTED_CLIPPING = Feature('ENABLE_NESTED_CLIPPING', 5)
 ENABLE_HSL_BLEND_MODES = Feature('ENABLE_HSL_BLEND_MODES', 6)
+DRAW_INTERIOR_TRIANGLES = Feature('DRAW_INTERIOR_TRIANGLES', 7)
+ATLAS_COVERAGE = Feature('ATLAS_COVERAGE', 8)
 
-whole_program_features = {DRAW_INTERIOR_TRIANGLES,
-                          ENABLE_CLIPPING,
+whole_program_features = {ENABLE_CLIPPING,
                           ENABLE_CLIP_RECT,
-                          ENABLE_ADVANCED_BLEND}
+                          ENABLE_ADVANCED_BLEND,
+                          ENABLE_FEATHER}
 
 fragment_only_features = {ENABLE_EVEN_ODD,
                           ENABLE_NESTED_CLIPPING,
@@ -46,9 +48,15 @@ def is_unique_vertex_feature_set(feature_set):
         return False
     return True
 
-non_image_mesh_features = {DRAW_INTERIOR_TRIANGLES,
+non_atlas_coverage_features = {ENABLE_FEATHER,
+                               ENABLE_EVEN_ODD,
+                               ENABLE_NESTED_CLIPPING}
+
+non_image_mesh_features = {ENABLE_FEATHER,
                            ENABLE_EVEN_ODD,
-                           ENABLE_NESTED_CLIPPING}
+                           ENABLE_NESTED_CLIPPING,
+                           DRAW_INTERIOR_TRIANGLES,
+                           ATLAS_COVERAGE}
 
 # Returns whether the given feature set is compatible with an image mesh shader.
 def is_image_mesh_feature_set(feature_set):
@@ -56,8 +64,9 @@ def is_image_mesh_feature_set(feature_set):
 
 ShaderType = Enum('ShaderType', ['VERTEX', 'FRAGMENT'])
 DrawType = Enum('DrawType', ['PATH', 'IMAGE_MESH'])
+FillType = Enum('FillType', ['CLOCKWISE', 'LEGACY'])
 
-def emit_shader(out, shader_type, draw_type, feature_set):
+def emit_shader(out, shader_type, draw_type, fill_type, feature_set):
     assert(is_valid_feature_set(feature_set))
     if shader_type == ShaderType.VERTEX:
         assert(is_unique_vertex_feature_set(feature_set))
@@ -66,13 +75,17 @@ def emit_shader(out, shader_type, draw_type, feature_set):
         out.write('#define FRAGMENT\n')
     if draw_type == DrawType.IMAGE_MESH:
         assert(is_image_mesh_feature_set(feature_set))
-    namespace_id = ['0', '0', '0', '0', '0', '0', '0']
+    namespace_id = ['0', '0', '0', '0', '0', '0', '0', '0', '0']
     for feature in feature_set:
         namespace_id[feature.index] = '1'
     for feature in feature_set:
         out.write('#define %s 1\n' % feature.name)
+    if fill_type == FillType.CLOCKWISE:
+        out.write('#define CLOCKWISE_FILL 1\n')
     if draw_type == DrawType.PATH:
-        out.write('namespace p%s\n' % ''.join(namespace_id))
+        out.write('namespace %s%s\n' %
+                  ('c' if fill_type == FillType.CLOCKWISE else 'p',
+                   ''.join(namespace_id)))
         out.write('{\n')
         out.write('#include "draw_path.minified.glsl"\n')
         out.write('}\n')
@@ -87,6 +100,8 @@ def emit_shader(out, shader_type, draw_type, feature_set):
         out.write('#undef VERTEX\n')
     else:
         out.write('#undef FRAGMENT\n')
+    if fill_type == FillType.CLOCKWISE:
+        out.write('#undef CLOCKWISE_FILL\n')
     out.write('\n')
 
 # Organize all combinations of valid features into their own namespace.
@@ -95,15 +110,35 @@ out = open(sys.argv[1], 'w', newline='\n')
 # Precompile the bare minimum set of shaders required to draw everything. We can compile more
 # specialized shaders in the background at runtime, and use the fully-featured (slower) shaders
 # while waiting for the compilations to complete.
-emit_shader(out, ShaderType.VERTEX, DrawType.PATH, whole_program_features)
-emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH, all_features)
-emit_shader(out, ShaderType.VERTEX, DrawType.PATH,
-            whole_program_features.difference({DRAW_INTERIOR_TRIANGLES}))
-emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH,
-            all_features.difference({DRAW_INTERIOR_TRIANGLES}))
-emit_shader(out, ShaderType.VERTEX, DrawType.IMAGE_MESH,
+
+# Path tessellation shaders.
+emit_shader(out, ShaderType.VERTEX, DrawType.PATH, FillType.LEGACY,
+            whole_program_features)
+emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH, FillType.LEGACY, all_features)
+emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH, FillType.CLOCKWISE, all_features)
+
+# Interior triangulation shaders.
+emit_shader(out, ShaderType.VERTEX, DrawType.PATH, FillType.LEGACY,
+            whole_program_features.union({DRAW_INTERIOR_TRIANGLES}))
+emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH, FillType.LEGACY,
+            all_features.union({DRAW_INTERIOR_TRIANGLES}))
+emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH, FillType.CLOCKWISE,
+            all_features.union({DRAW_INTERIOR_TRIANGLES}))
+
+# Atlas coverage shaders.
+emit_shader(out, ShaderType.VERTEX, DrawType.PATH, FillType.LEGACY,
+            whole_program_features\
+                    .union({DRAW_INTERIOR_TRIANGLES, ATLAS_COVERAGE})\
+                    .difference(non_atlas_coverage_features))
+emit_shader(out, ShaderType.FRAGMENT, DrawType.PATH, FillType.CLOCKWISE,
+            all_features\
+                    .union({DRAW_INTERIOR_TRIANGLES, ATLAS_COVERAGE})\
+                    .difference(non_atlas_coverage_features))
+
+# Image mesh shaders.
+emit_shader(out, ShaderType.VERTEX, DrawType.IMAGE_MESH, FillType.LEGACY,
             whole_program_features.difference(non_image_mesh_features))
-emit_shader(out, ShaderType.FRAGMENT, DrawType.IMAGE_MESH,
+emit_shader(out, ShaderType.FRAGMENT, DrawType.IMAGE_MESH, FillType.LEGACY,
             all_features.difference(non_image_mesh_features))
 
 # If we wanted to emit all combos...
