@@ -1210,6 +1210,9 @@ void initialiseYup_Windowing()
     Desktop::getInstance()->updateDisplays();
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
+    // Set the default theme
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
     {
