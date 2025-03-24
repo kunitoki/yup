@@ -28,10 +28,6 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
-#if JUCE_ANDROID
-#include <BinaryData.h>
-#endif
-
 //==============================================================================
 
 class SineWaveGenerator
@@ -149,19 +145,6 @@ public:
 #else
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
-
-        // Load the font
-        {
-#if JUCE_ANDROID
-            yup::MemoryBlock mb (yup::RobotoRegularFont_data, yup::RobotoRegularFont_size);
-            if (auto result = font.loadFromData (mb); result.failed())
-                yup::Logger::outputDebugString (result.getErrorMessage());
-#else
-            auto fontFilePath = baseFilePath.getChildFile ("Roboto-Regular.ttf");
-            if (auto result = font.loadFromFile (fontFilePath); result.failed())
-                yup::Logger::outputDebugString (result.getErrorMessage());
-#endif
-        }
 
         // Load an image
         {
