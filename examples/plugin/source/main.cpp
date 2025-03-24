@@ -110,7 +110,7 @@ struct MyEditor : public yup::AudioProcessorEditor
     MyEditor (yup::AudioProcessor& processor)
         : audioProcessor (processor)
     {
-        x = std::make_unique<yup::Slider> ("Slider", yup::Font());
+        x = std::make_unique<yup::Slider> ("Slider");
         x->setValue (audioProcessor.getParameter (0).getValue());
         x->onValueChanged = [this] (float value)
         {
