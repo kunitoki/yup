@@ -114,6 +114,21 @@ git clone https://github.com/kunitoki/yup.git
 cd yup
 ```
 
+## Using just
+To ease bootstrapping, a provided `justfile` allows to quickly launch default configurations:
+
+```bash
+$ just
+Available recipes:
+    android
+    clean
+    c                         # alias for `clean`
+    default
+    emscripten CONFIG="Debug"
+    ios
+    ios_simulator
+    osx PROFILING="OFF"
+```
 
 ## Preparing the build directory
 Create a Dedicated Build Directory:
