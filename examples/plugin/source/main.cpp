@@ -28,8 +28,6 @@
 #include <yup_audio_processors/yup_audio_processors.h>
 #include <yup_gui/yup_gui.h>
 
-#include <BinaryData.h>
-
 template <class T>
 struct Array
 {
