@@ -114,6 +114,25 @@ git clone https://github.com/kunitoki/yup.git
 cd yup
 ```
 
+## Using just
+To ease bootstrapping, a provided `justfile` allows to quickly launch default configurations (see https://github.com/casey/just for more information):
+
+```bash
+$ just
+Available recipes:
+    android                                 # generate and open project for Android using Android Studio
+    build CONFIG="Debug"                    # build project using cmake
+    clean                                   # clean project build artifacts
+    c                                       # alias for `clean`
+    default                                 # list available recipes
+    emscripten CONFIG="Debug"               # generate build and serve project for WASM
+    emscripten_serve CONFIG="Debug"         # serve project for WASM
+    ios PLATFORM="OS64"                     # generate and open project for iOS using Xcode
+    ios_simulator PLATFORM="SIMULATORARM64" # generate and open project for iOS Simulator macOS using Xcode
+    linux PROFILING="OFF"                   # generate project in Linux using Ninja
+    osx PROFILING="OFF"                     # generate and open project in macOS using Xcode
+    win PROFILING="OFF"                     # generate and open project in Windows using Visual Studio
+```
 
 ## Preparing the build directory
 Create a Dedicated Build Directory:
