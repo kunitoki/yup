@@ -120,16 +120,16 @@ To ease bootstrapping, a provided `justfile` allows to quickly launch default co
 ```bash
 $ just
 Available recipes:
-    android
-    clean
+    android                                 # generate and open project for Android using Android Studio
+    clean                                   # clean project build artifacts
     c                                       # alias for `clean`
-    default
-    emscripten CONFIG="Debug"
-    ios PLATFORM="OS64"
-    ios_simulator PLATFORM="SIMULATORARM64"
-    linux PROFILING="OFF"
-    osx PROFILING="OFF"
-    win PROFILING="OFF"
+    default                                 # list available recipes
+    emscripten CONFIG="Debug"               # generate build and serve project for WASM
+    ios PLATFORM="OS64"                     # generate and open project for iOS using Xcode
+    ios_simulator PLATFORM="SIMULATORARM64" # generate and open project for iOS Simulator macOS using Xcode
+    linux PROFILING="OFF"                   # generate project in Linux using Ninja
+    osx PROFILING="OFF"                     # generate and open project in macOS using Xcode
+    win PROFILING="OFF"                     # generate and open project in Windows using Visual Studio
 ```
 
 ## Preparing the build directory
