@@ -115,19 +115,21 @@ cd yup
 ```
 
 ## Using just
-To ease bootstrapping, a provided `justfile` allows to quickly launch default configurations:
+To ease bootstrapping, a provided `justfile` allows to quickly launch default configurations (see https://github.com/casey/just for more information):
 
 ```bash
 $ just
 Available recipes:
     android
     clean
-    c                         # alias for `clean`
+    c                                       # alias for `clean`
     default
     emscripten CONFIG="Debug"
-    ios
-    ios_simulator
+    ios PLATFORM="OS64"
+    ios_simulator PLATFORM="SIMULATORARM64"
+    linux PROFILING="OFF"
     osx PROFILING="OFF"
+    win PROFILING="OFF"
 ```
 
 ## Preparing the build directory
