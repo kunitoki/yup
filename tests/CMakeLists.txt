@@ -75,3 +75,6 @@ endif()
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})
+set_target_properties (${target_name} PROPERTIES
+    XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
+    VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")

@@ -22,7 +22,7 @@
 function (yup_audio_plugin)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME TARGET_IDE_GROUP PLUGIN_CREATE_CLAP PLUGIN_CREATE_STANDALONE)
+    set (one_value_args TARGET_NAME TARGET_IDE_GROUP PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE)
     set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -51,8 +51,24 @@ function (yup_audio_plugin)
             list (APPEND additional_libraries clap ${target_name}_clap)
         endif()
 
-        if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT PLUGIN_CREATE_STANDALONE) #  AND NOT YUP_ARG_PLUGIN_CREATE_VST3 ...
-            _yup_message (FATAL_ERROR "Cannot enable audio plugins on WASM targets yet")
+        if (YUP_ARG_PLUGIN_CREATE_VST3)
+            set (SMTG_ADD_VST3_UTILITIES OFF)
+            set (SMTG_CREATE_MODULE_INFO ON)
+            set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
+            set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
+            set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
+            FetchContent_Declare (vst3sdk GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git GIT_TAG master GIT_SUBMODULES_RECURSE ON)
+            FetchContent_MakeAvailable (vst3sdk)
+
+            smtg_enable_vst3_sdk()
+
+            _yup_module_setup_plugin_client_vst3 (${target_name} yup_audio_plugin_client ${YUP_ARG_TARGET_IDE_GROUP} ${YUP_ARG_UNPARSED_ARGUMENTS})
+
+            list (APPEND additional_libraries base sdk pluginterfaces ${target_name}_vst3)
+        endif()
+
+        if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE) #  AND NOT YUP_ARG_PLUGIN_CREATE_VST3 ...
+            _yup_message (FATAL_ERROR "No valid plugin target defined")
         endif()
     endif()
 
@@ -66,30 +82,34 @@ function (yup_audio_plugin)
 
     # ==== Per platform configuration
     if ("${yup_platform}" MATCHES "^(osx)$")
-        #if (NOT YUP_ARG_CONSOLE)
         #    set_target_properties (${target_name} PROPERTIES
-        #        BUNDLE                                         ON
-        #        CXX_EXTENSIONS                                 OFF
-        #        MACOSX_BUNDLE_GUI_IDENTIFIER                   "org.kunitoki.yup.${target_name}"
-        #        MACOSX_BUNDLE_NAME                             "${target_name}"
-        #        MACOSX_BUNDLE_VERSION                          "1.0.0"
-        #        #MACOSX_BUNDLE_ICON_FILE                        "Icon.icns"
-        #        MACOSX_BUNDLE_INFO_PLIST                       "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist"
-        #        #RESOURCE                                       "${RESOURCE_FILES}"
-        #        #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY             ""
-        #        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED          OFF
-        #        XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
+        #        BUNDLE ON
+        #        CXX_EXTENSIONS OFF
+        #        MACOSX_BUNDLE_GUI_IDENTIFIER "org.kunitoki.yup.${target_name}"
+        #        MACOSX_BUNDLE_NAME "${target_name}"
+        #        MACOSX_BUNDLE_VERSION "1.0.0"
+        #        #MACOSX_BUNDLE_ICON_FILE "Icon.icns"
+        #        MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist"
+        #        #RESOURCE "${RESOURCE_FILES}"
+        #        #XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
+        #        XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED OFF
+        #        XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT dwarf
         #        XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
-        #        XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
-        #endif()
+        #        XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME OFF)
 
         set_target_properties (${target_name} PROPERTIES
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF)
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF
+            XCODE_GENERATE_SCHEME ON)
 
     endif()
 
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
         set_target_properties (${target_name} PROPERTIES SUFFIX ".clap")
+    endif()
+
+    if (YUP_ARG_PLUGIN_CREATE_VST3)
+        set_target_properties (${target_name} PROPERTIES SUFFIX ".vst3")
+        smtg_target_configure_version_file (${target_name})
     endif()
 
     if (YUP_ARG_TARGET_IDE_GROUP)

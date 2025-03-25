@@ -50,7 +50,8 @@ yup_audio_plugin (
     PLUGIN_URL "https://github.com/kunitoki/yup"
     PLUGING_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
-    PLUGIN_CREATE_CLAP ON
+    PLUGIN_CREATE_CLAP OFF
+    PLUGIN_CREATE_VST3 ON
     PLUGIN_CREATE_STANDALONE OFF
     MODULES
         juce_core

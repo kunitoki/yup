@@ -75,7 +75,7 @@ function (yup_standalone_app)
     endif()
 
     # ==== Find dependencies
-    if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
+    if (NOT "${target_console}" AND NOT "${yup_platform}" MATCHES "^(emscripten)$")
         _yup_message (STATUS "${target_name} - Fetching SDL2 library")
         _yup_fetch_sdl2()
         list (APPEND additional_libraries sdl2::sdl2)
@@ -139,7 +139,8 @@ function (yup_standalone_app)
             XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
             XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC          OFF
-            XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
+            XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF
+            XCODE_GENERATE_SCHEME                          ON)
 
     elseif ("${yup_platform}" MATCHES "^(emscripten)$")
         if (NOT "${target_console}")

@@ -24,6 +24,7 @@ _yup_setup_platform()
 
 if ("${yup_platform}" MATCHES "^(osx)$")
     set (CMAKE_OSX_DEPLOYMENT_TARGET 11.0)
+    set (CMAKE_XCODE_GENERATE_SCHEME OFF)
 endif()
 
 project (yup VERSION 1.0)
@@ -49,8 +50,8 @@ endif()
 # Targets
 if (YUP_BUILD_EXAMPLES)
     _yup_message (STATUS "Building examples")
-    add_subdirectory (examples/app)
     add_subdirectory (examples/console)
+    add_subdirectory (examples/app)
     add_subdirectory (examples/graphics)
     add_subdirectory (examples/render)
     if (NOT "${yup_platform}" MATCHES "^(emscripten|android)$" AND NOT YUP_TARGET_ANDROID)
