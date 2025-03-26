@@ -87,8 +87,10 @@ public:
     }
 
     Steinberg::tresult PLUGIN_API setBusArrangements (
-        Steinberg::Vst::SpeakerArrangement* inputs, int32 numIns,
-        Steinberg::Vst::SpeakerArrangement* outputs, int32 numOuts) SMTG_OVERRIDE
+        Steinberg::Vst::SpeakerArrangement* inputs,
+        int32 numIns,
+        Steinberg::Vst::SpeakerArrangement* outputs,
+        int32 numOuts) SMTG_OVERRIDE
     {
         if (numIns == 1
             && numOuts == 1
@@ -120,7 +122,7 @@ public:
             return Steinberg::kResultFalse;
 
         processor->releaseResources();
-        processor->prepareToPlay(setup.sampleRate, setup.maxSamplesPerBlock);
+        processor->prepareToPlay (setup.sampleRate, setup.maxSamplesPerBlock);
 
         return Steinberg::kResultOk;
     }
@@ -157,12 +159,12 @@ public:
             Steinberg::Vst::AudioBusBuffers& outBus = data.outputs[0];
 
             MidiBuffer midiBuffer;
-            AudioSampleBuffer audioBuffer(
+            AudioSampleBuffer audioBuffer (
                 reinterpret_cast<float**> (outBus.channelBuffers32),
                 data.numOutputs,
                 data.numSamples);
 
-            processor->processBlock(audioBuffer, midiBuffer);
+            processor->processBlock (audioBuffer, midiBuffer);
         }
 
         return Steinberg::kResultOk;
@@ -175,30 +177,30 @@ private:
 //==============================================================================
 // Unique identifier for our processor class (example GUID)
 // {D1F1C1B8-9F3D-4E0B-80A9-ABCD12345678}
-static const Steinberg::FUID ProcessorUID(0xD1F1C1B8, 0x9F3D4E0B, 0x80A9ABCD, 0x12345678);
+static const Steinberg::FUID ProcessorUID (0xD1F1C1B8, 0x9F3D4E0B, 0x80A9ABCD, 0x12345678);
 
 } // namespace yup
 
 //==============================================================================
 // Plugin Factory: Registers the processor class with the host.
-BEGIN_FACTORY_DEF(
+BEGIN_FACTORY_DEF (
     "My Company",
     "http://www.mycompany.com",
     "mailto:info@mycompany.com")
 
 // Register the VST3 processor component.
-DEF_CLASS2(
-    INLINE_UID_FROM_FUID(yup::ProcessorUID),
-    PClassInfo::kManyInstances,       // Supports multiple instances
-#if YupPlugin_IsSynth                 // Component category
+DEF_CLASS2 (
+    INLINE_UID_FROM_FUID (yup::ProcessorUID),
+    PClassInfo::kManyInstances, // Supports multiple instances
+#if YupPlugin_IsSynth           // Component category
     kVstPluginCategorySynth,
 #else
     kVstAudioEffectClass,
 #endif
-    YupPlugin_Name,                   // Plugin name
-    Vst::kDistributable,              // Distribution status
-    "Fx",                             // Subcategory (effect)
-    YupPlugin_Version,                // Plugin version
+    YupPlugin_Name,      // Plugin name
+    Vst::kDistributable, // Distribution status
+    "Fx",                // Subcategory (effect)
+    YupPlugin_Version,   // Plugin version
     kVstVersionString,
     yup::AudioPluginWrapperVST3::createInstance)
 
