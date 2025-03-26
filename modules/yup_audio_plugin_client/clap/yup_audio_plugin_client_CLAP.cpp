@@ -21,7 +21,9 @@
 
 #include "../yup_audio_plugin_client.h"
 
-#if YUP_AUDIO_PLUGIN_ENABLE_CLAP
+#if !defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
+#error "YUP_AUDIO_PLUGIN_ENABLE_CLAP must be defined"
+#endif
 
 #include <string_view>
 #include <optional>
@@ -907,5 +909,3 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
         return nullptr;
     },
 };
-
-#endif

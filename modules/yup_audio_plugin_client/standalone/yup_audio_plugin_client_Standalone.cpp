@@ -21,13 +21,11 @@
 
 #include "../yup_audio_plugin_client.h"
 
-#if !defined(YUP_AUDIO_PLUGIN_ENABLE_VST3)
-#error "YUP_AUDIO_PLUGIN_ENABLE_VST3 must be defined"
+#if !defined(YUP_AUDIO_PLUGIN_ENABLE_STANDALONE)
+#error "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE must be defined"
 #endif
 
-#include <public.sdk/source/vst/vstaudioeffect.h>
-#include <public.sdk/source/main/pluginfactory.h>
-#include <pluginterfaces/base/ftypes.h>
-#include <pluginterfaces/base/funknown.h>
-#include <pluginterfaces/vst/ivstprocesscontext.h>
-#include <pluginterfaces/vst/ivstparameterchanges.h>
+int main (int argc, char* argv[])
+{
+    return 0;
+}

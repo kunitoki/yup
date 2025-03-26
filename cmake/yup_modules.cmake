@@ -219,7 +219,7 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_module_setup_plugin_client_clap target_name plugin_client_target folder_name)
+function (_yup_module_setup_plugin_client target_name plugin_client_target folder_name plugin_type)
     if (NOT "${yup_platform}" MATCHES "^(osx|linux|windows)$")
         return()
     endif()
@@ -230,7 +230,18 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    set (custom_target_name "${target_name}_clap")
+    if (plugin_type STREQUAL "vst3")
+        set (custom_target_name "${target_name}_vst3")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_VST3=1")
+    elseif (plugin_type STREQUAL "clap")
+        set (custom_target_name "${target_name}_clap")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_CLAP=1")
+    elseif (plugin_type STREQUAL "standalone")
+        set (custom_target_name "${target_name}_standalone")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1")
+    else()
+        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap' or 'standalone'")
+    endif()
 
     add_library (${custom_target_name} INTERFACE)
     set_target_properties (${custom_target_name} PROPERTIES FOLDER "${folder_name}")
@@ -245,7 +256,7 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
     get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
 
-    list (APPEND module_defines YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
+    list (APPEND module_defines ${plugin_define})
     list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
     list (APPEND module_defines YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}")
     list (APPEND module_defines YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}")
@@ -264,12 +275,12 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     endif()
 
     if ("${yup_platform}" MATCHES "^(ios|osx)$")
-        _yup_glob_recurse ("${module_path}/clap/*.mm" module_sources)
+        _yup_glob_recurse ("${module_path}/${plugin_type}/*.mm" module_sources)
     else()
-        _yup_glob_recurse ("${module_path}/clap/*.cpp" module_sources)
+        _yup_glob_recurse ("${module_path}/${plugin_type}/*.cpp" module_sources)
     endif()
 
-    _yup_module_setup_target (${custom_target_name}
+    _yup_module_setup_target ("${custom_target_name}"
                               "${module_cpp_standard}"
                               "${module_include_paths}"
                               "${module_options}"
@@ -280,85 +291,11 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
                               "${module_dependencies}"
                               "${module_arc_enabled}")
 
-
-    _yup_glob_recurse ("${module_path}/clap/*" all_module_files_clap)
-    target_sources (${custom_target_name} PRIVATE ${all_module_files_clap})
-    source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
-    list (REMOVE_ITEM all_module_files_clap ${module_sources})
-    set_source_files_properties (${all_module_files_clap} PROPERTIES HEADER_FILE_ONLY TRUE)
-
-endfunction()
-
-#==============================================================================
-
-function (_yup_module_setup_plugin_client_vst3 target_name plugin_client_target folder_name)
-    if (NOT "${yup_platform}" MATCHES "^(osx|linux|windows)$")
-        return()
-    endif()
-
-    set (options "")
-    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGING_IS_SYNTH PLUGIN_IS_MONO)
-    set (multi_value_args "")
-
-    cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
-
-    set (custom_target_name "${target_name}_vst3")
-
-    add_library (${custom_target_name} INTERFACE)
-    set_target_properties (${custom_target_name} PROPERTIES FOLDER "${folder_name}")
-
-    get_target_property (module_path ${plugin_client_target} YUP_MODULE_PATH)
-    get_target_property (module_cpp_standard ${plugin_client_target} YUP_MODULE_CPP_STANDARD)
-    get_target_property (module_include_paths ${plugin_client_target} YUP_MODULE_INCLUDE_PATHS)
-    get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
-    get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
-    get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
-    get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
-    get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
-    get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
-
-    list (APPEND module_defines YUP_AUDIO_PLUGIN_ENABLE_VST3=1)
-    list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
-    list (APPEND module_defines YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}")
-    list (APPEND module_defines YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}")
-    list (APPEND module_defines YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}")
-    list (APPEND module_defines YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}")
-    list (APPEND module_defines YupPlugin_URL="${YUP_ARG_PLUGIN_URL}")
-    if (YUP_ARG_PLUGIN_IS_SYNTH)
-        list (APPEND module_defines YupPlugin_IsSynth=1)
-    else()
-        list (APPEND module_defines YupPlugin_IsSynth=0)
-    endif()
-    if (YUP_ARG_PLUGIN_IS_MONO)
-        list (APPEND module_defines YupPlugin_IsMono=1)
-    else()
-        list (APPEND module_defines YupPlugin_IsMono=0)
-    endif()
-
-    if ("${yup_platform}" MATCHES "^(ios|osx)$")
-        _yup_glob_recurse ("${module_path}/vst3/*.mm" module_sources)
-    else()
-        _yup_glob_recurse ("${module_path}/vst3/*.cpp" module_sources)
-    endif()
-
-    _yup_module_setup_target (${custom_target_name}
-                              "${module_cpp_standard}"
-                              "${module_include_paths}"
-                              "${module_options}"
-                              "${module_defines}"
-                              "${module_sources}"
-                              "${module_libs}"
-                              "${module_frameworks}"
-                              "${module_dependencies}"
-                              "${module_arc_enabled}")
-
-
-    _yup_glob_recurse ("${module_path}/vst3/*" all_module_files_vst3)
-    target_sources (${custom_target_name} PRIVATE ${all_module_files_vst3})
-    source_group (TREE ${module_path}/vst3/ FILES ${all_module_files_vst3})
-    list (REMOVE_ITEM all_module_files_vst3 ${module_sources})
-    set_source_files_properties (${all_module_files_vst3} PROPERTIES HEADER_FILE_ONLY TRUE)
-
+    _yup_glob_recurse ("${module_path}/${plugin_type}/*" all_module_files)
+    target_sources (${custom_target_name} PRIVATE ${all_module_files})
+    source_group (TREE ${module_path}/${plugin_type}/ FILES ${all_module_files})
+    list (REMOVE_ITEM all_module_files ${module_sources})
+    set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 endfunction()
 
 #==============================================================================

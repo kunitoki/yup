@@ -19,15 +19,4 @@
   ==============================================================================
 */
 
-#include "../yup_audio_plugin_client.h"
-
-#if !defined(YUP_AUDIO_PLUGIN_ENABLE_VST3)
-#error "YUP_AUDIO_PLUGIN_ENABLE_VST3 must be defined"
-#endif
-
-#include <public.sdk/source/vst/vstaudioeffect.h>
-#include <public.sdk/source/main/pluginfactory.h>
-#include <pluginterfaces/base/ftypes.h>
-#include <pluginterfaces/base/funknown.h>
-#include <pluginterfaces/vst/ivstprocesscontext.h>
-#include <pluginterfaces/vst/ivstparameterchanges.h>
+#include "yup_audio_plugin_client_Standalone.cpp"
