@@ -121,14 +121,22 @@ public:
         if (processor == nullptr)
             return Steinberg::kResultFalse;
 
+        processSetup = setup;
+
         processor->releaseResources();
         processor->prepareToPlay (setup.sampleRate, setup.maxSamplesPerBlock);
+
+        midiBuffer.ensureSize (4096);
+        midiBuffer.clear();
 
         return Steinberg::kResultOk;
     }
 
     Steinberg::tresult PLUGIN_API process (Steinberg::Vst::ProcessData& data) SMTG_OVERRIDE
     {
+        if (data.processContext != nullptr)
+            processContext = *data.processContext;
+
         if (data.inputParameterChanges)
         {
             int32 numParams = data.inputParameterChanges->getParameterCount();
@@ -158,7 +166,6 @@ public:
             Steinberg::Vst::AudioBusBuffers& inBus = data.inputs[0];
             Steinberg::Vst::AudioBusBuffers& outBus = data.outputs[0];
 
-            MidiBuffer midiBuffer;
             AudioSampleBuffer audioBuffer (
                 reinterpret_cast<float**> (outBus.channelBuffers32),
                 data.numOutputs,
@@ -171,10 +178,16 @@ public:
     }
 
 private:
-    AudioProcessor* processor;
+    AudioProcessor* processor = nullptr;
+
+    Steinberg::Vst::ProcessContext processContext;
+    Steinberg::Vst::ProcessSetup processSetup;
+
+    MidiBuffer midiBuffer;
 };
 
 //==============================================================================
+
 // Unique identifier for our processor class (example GUID)
 // {D1F1C1B8-9F3D-4E0B-80A9-ABCD12345678}
 static const Steinberg::FUID ProcessorUID (0xD1F1C1B8, 0x9F3D4E0B, 0x80A9ABCD, 0x12345678);
@@ -182,7 +195,7 @@ static const Steinberg::FUID ProcessorUID (0xD1F1C1B8, 0x9F3D4E0B, 0x80A9ABCD, 0
 } // namespace yup
 
 //==============================================================================
-// Plugin Factory: Registers the processor class with the host.
+
 BEGIN_FACTORY_DEF (
     "My Company",
     "http://www.mycompany.com",
