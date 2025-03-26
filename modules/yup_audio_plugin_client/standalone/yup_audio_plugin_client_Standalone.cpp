@@ -21,7 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
-#if !defined(YUP_AUDIO_PLUGIN_ENABLE_STANDALONE)
+#if ! defined(YUP_AUDIO_PLUGIN_ENABLE_STANDALONE)
 #error "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE must be defined"
 #endif
 

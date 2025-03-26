@@ -21,7 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
-#if !defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
+#if ! defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
 #error "YUP_AUDIO_PLUGIN_ENABLE_CLAP must be defined"
 #endif
 
@@ -146,19 +146,19 @@ bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 
 static const char* pluginFeatures[] = {
 #if YupPlugin_IsSynth
-        CLAP_PLUGIN_FEATURE_INSTRUMENT,
-        CLAP_PLUGIN_FEATURE_SYNTHESIZER,
+    CLAP_PLUGIN_FEATURE_INSTRUMENT,
+    CLAP_PLUGIN_FEATURE_SYNTHESIZER,
 #else
-        CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
+    CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
 #endif
 
 #if YupPlugin_IsMono
-        CLAP_PLUGIN_FEATURE_MONO,
+    CLAP_PLUGIN_FEATURE_MONO,
 #else
-        CLAP_PLUGIN_FEATURE_STEREO,
+    CLAP_PLUGIN_FEATURE_STEREO,
 #endif
 
-        nullptr
+    nullptr
 };
 
 static const clap_plugin_descriptor_t pluginDescriptor = {
@@ -851,29 +851,29 @@ const clap_plugin_t* AudioPluginWrapperCLAP::getPlugin() const
 
 static const clap_plugin_factory_t pluginFactory = {
     .get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
-    {
-        DBG ("clap_plugin_factory_t::get_plugin_count");
+{
+    DBG ("clap_plugin_factory_t::get_plugin_count");
 
-        return 1;
-    },
+    return 1;
+},
 
     .get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
-    {
-        DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
+{
+    DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
 
-        return index == 0 ? &yup::pluginDescriptor : nullptr;
-    },
+    return index == 0 ? &yup::pluginDescriptor : nullptr;
+},
 
     .create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginID) -> const clap_plugin_t*
-    {
-        DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
+{
+    DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
 
-        if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
-            return nullptr;
+    if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
+        return nullptr;
 
-        auto wrapper = new yup::AudioPluginWrapperCLAP (host);
-        return wrapper->getPlugin();
-    },
+    auto wrapper = new yup::AudioPluginWrapperCLAP (host);
+    return wrapper->getPlugin();
+},
 };
 
 //==============================================================================
@@ -882,30 +882,30 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
     .clap_version = CLAP_VERSION_INIT,
 
     .init = [] (const char* path) -> bool
-    {
-        DBG ("clap_plugin_entry_t::init " << path);
+{
+    DBG ("clap_plugin_entry_t::init " << path);
 
-        yup::initialiseJuce_GUI();
-        yup::initialiseYup_Windowing();
+    yup::initialiseJuce_GUI();
+    yup::initialiseYup_Windowing();
 
-        return true;
-    },
+    return true;
+},
 
     .deinit = []
-    {
-        DBG ("clap_plugin_entry_t::deinit");
+{
+    DBG ("clap_plugin_entry_t::deinit");
 
-        yup::shutdownYup_Windowing();
-        yup::shutdownJuce_GUI();
-    },
+    yup::shutdownYup_Windowing();
+    yup::shutdownJuce_GUI();
+},
 
     .get_factory = [] (const char* factoryID) -> const void*
-    {
-        DBG ("clap_plugin_entry_t::get_factory " << factoryID);
+{
+    DBG ("clap_plugin_entry_t::get_factory " << factoryID);
 
-        if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
-            return std::addressof (pluginFactory);
+    if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
+        return std::addressof (pluginFactory);
 
-        return nullptr;
-    },
+    return nullptr;
+},
 };
