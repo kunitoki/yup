@@ -73,6 +73,14 @@ YUP brings a suite of powerful features, including:
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
 
 
+## Supported Plugin Formats
+|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+| **macOS**                | :white_check_mark: | :construction:     |                    |                    | :construction:            |                       |                       |
+| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+
+
 ## Prerequisites
 Before building, ensure you have a:
 - C++17-compliant compiler
