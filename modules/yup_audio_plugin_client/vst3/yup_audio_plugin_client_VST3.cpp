@@ -114,7 +114,7 @@ public:
             setVisible (false);
             removeFromDesktop();
 
-            removeChildComponent(editor.get());
+            removeChildComponent (editor.get());
             editor.reset();
         }
     }
@@ -232,18 +232,18 @@ public:
         return Steinberg::kResultTrue;
     }
 
-	Steinberg::tresult PLUGIN_API onFocus (Steinberg::TBool state) override
+    Steinberg::tresult PLUGIN_API onFocus (Steinberg::TBool state) override
     {
         return Steinberg::kResultFalse;
     }
 
-	Steinberg::tresult PLUGIN_API setFrame (Steinberg::IPlugFrame* frame) override
-	{
-		plugFrame = frame;
-		return Steinberg::kResultTrue;
-	}
+    Steinberg::tresult PLUGIN_API setFrame (Steinberg::IPlugFrame* frame) override
+    {
+        plugFrame = frame;
+        return Steinberg::kResultTrue;
+    }
 
-    Steinberg::tresult PLUGIN_API isPlatformTypeSupported(Steinberg::FIDString type) override
+    Steinberg::tresult PLUGIN_API isPlatformTypeSupported (Steinberg::FIDString type) override
     {
 #if JUCE_WINDOWS
         if (std::strcmp (type, Steinberg::kPlatformTypeHWND) == 0)
@@ -696,4 +696,3 @@ DEF_CLASS2 (
     yup::AudioPluginEditorVST3::createInstance)
 
 END_FACTORY
-
