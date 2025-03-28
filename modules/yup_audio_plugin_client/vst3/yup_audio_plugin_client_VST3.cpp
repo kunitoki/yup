@@ -39,25 +39,32 @@
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivstplugview.h>
 
+//==============================================================================
+
 extern "C" yup::AudioProcessor* createPluginProcessor();
 
 namespace yup
 {
 
+//==============================================================================
+
 class AudioPluginEditorVST3
+/*
     : public Steinberg::Vst::EditController
     , public Steinberg::Vst::IMidiMapping
     , public Steinberg::Vst::IUnitInfo
     , public Steinberg::Vst::IRemapParamID
     , public Steinberg::Vst::ChannelContext::IInfoListener
+*/
 {
 public:
+    /*
     AudioPluginEditorVST3()
     {
         processor = createPluginProcessor();
         if (processor != nullptr)
         {
-            /*
+#if 0
             for (int i = 0; i < processor->getNumParameters(); ++i)
             {
                 auto& param = processor->getParameter(i);
@@ -73,7 +80,7 @@ public:
                     Steinberg::Vst::kRootUnitId,
                     nullptr);
             }
-            */
+#endif
         }
     }
 
@@ -189,7 +196,7 @@ public:
 
     Steinberg::int32 PLUGIN_API getProgramListCount() SMTG_OVERRIDE
     {
-        return 0;
+        return 1;
     }
 
     Steinberg::tresult PLUGIN_API getProgramName (Steinberg::Vst::ProgramListID listId,
@@ -244,9 +251,9 @@ public:
     //    return Steinberg::kResultFalse;
     //}
 
-    Steinberg::tresult PLUGIN_API getCompatibleParamID (const Steinberg::TUID pluginToReplaceUID /*in*/,
-                                                        Steinberg::Vst::ParamID oldParamID /*in*/,
-                                                        Steinberg::Vst::ParamID& newParamID /*out*/) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API getCompatibleParamID (const Steinberg::TUID pluginToReplaceUID,
+                                                        Steinberg::Vst::ParamID oldParamID,
+                                                        Steinberg::Vst::ParamID& newParamID) SMTG_OVERRIDE
     {
         return Steinberg::kResultFalse;
     }
@@ -254,7 +261,10 @@ public:
 private:
     AudioProcessor* processor = nullptr;
     AudioProcessorEditor* editor = nullptr;
+*/
 };
+
+//==============================================================================
 
 class AudioPluginWrapperVST3 : public Steinberg::Vst::AudioEffect
 {
@@ -425,6 +435,9 @@ private:
 
 // Unique identifier for our processor class (example GUID)
 // {D1F1C1B8-9F3D-4E0B-80A9-ABCD12345678}
+
+// static auto ProcessorUUID = juce::Uuid::fromSHA1 (juce::SHA1 (CharPointer_UTF8 (YupPlugin_Id)));
+
 static const Steinberg::FUID YupPlugin_Processor_UID (0xc9a84cd4, 0xc7c34936, 0xbf0b3315, 0x2de1ef58);
 static const Steinberg::FUID YupPlugin_Controller_UID (0xa7c40810, 0xbf604829, 0xab2b5329, 0xb3f3a131);
 
@@ -448,6 +461,7 @@ DEF_CLASS2 (
     kVstVersionString,             // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginWrapperVST3::createInstance)
 
+/*
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Controller_UID),
     PClassInfo::kManyInstances,   // Supports multiple instances
@@ -458,5 +472,6 @@ DEF_CLASS2 (
     YupPlugin_Version,            // Plug-in version (to be changed)
     kVstVersionString,            // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginEditorVST3::createInstance)
+*/
 
 END_FACTORY

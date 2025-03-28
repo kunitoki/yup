@@ -303,6 +303,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "text/juce_StringPairArray.h"
 #include "system/juce_SystemStats.h"
 #include "memory/juce_HeavyweightLeakedObjectDetector.h"
+#include "cryptography/juce_SHA1.h"
 #include "text/juce_TextDiff.h"
 #include "text/juce_LocalisedStrings.h"
 #include "text/juce_Base64.h"
