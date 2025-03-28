@@ -225,7 +225,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     endif()
 
     set (options "")
-    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGING_IS_SYNTH PLUGIN_IS_MONO)
+    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_SYNTH PLUGIN_IS_MONO)
     set (multi_value_args "")
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -263,6 +263,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     list (APPEND module_defines YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}")
     list (APPEND module_defines YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}")
     list (APPEND module_defines YupPlugin_URL="${YUP_ARG_PLUGIN_URL}")
+    list (APPEND module_defines YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}")
     if (YUP_ARG_PLUGIN_IS_SYNTH)
         list (APPEND module_defines YupPlugin_IsSynth=1)
     else()

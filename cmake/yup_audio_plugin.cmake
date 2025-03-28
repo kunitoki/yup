@@ -36,17 +36,19 @@ function (yup_audio_plugin)
     # ==== Validation stage
     if ("${yup_platform}" MATCHES "^(emscripten|android)$")
         _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or android.")
+        return()
     endif()
 
     if (NOT YUP_ARG_PLUGIN_CREATE_CLAP AND NOT YUP_ARG_PLUGIN_CREATE_VST3 AND NOT YUP_ARG_PLUGIN_CREATE_STANDALONE)
         _yup_message (FATAL_ERROR "At least one plugin type must be enabled (CLAP, VST3, or Standalone).")
+        return()
     endif()
 
     # ==== Create static library for user's plugin code
     _yup_message (STATUS "Creating static library for user's plugin code")
     add_library (${target_name}_shared INTERFACE)
 
-    target_compile_features (${target_name}_shared INTERFACE cxx_std_17)
+    target_compile_features (${target_name}_shared INTERFACE cxx_std_20)
 
     target_compile_definitions (${target_name}_shared INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
@@ -95,7 +97,7 @@ function (yup_audio_plugin)
         _yup_message (STATUS "Creating CLAP plugin target")
         add_library (${target_name}_clap_plugin SHARED)
 
-        target_compile_features (${target_name}_clap_plugin PRIVATE cxx_std_17)
+        target_compile_features (${target_name}_clap_plugin PRIVATE cxx_std_20)
 
         target_compile_definitions (${target_name}_clap_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_CLAP=1
@@ -113,12 +115,14 @@ function (yup_audio_plugin)
             SUFFIX ".clap"
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
+
+        #yup_audio_plugin_copy_bundle (${target_name} clap)
     endif()
 
     # ==== Fetch vst3 SDK and build vst3 target
     if (YUP_ARG_PLUGIN_CREATE_VST3)
         _yup_message (STATUS "Fetching VST3 SDK")
-        set (SMTG_CREATE_MODULE_INFO ON)
+        set (SMTG_CREATE_MODULE_INFO OFF)
         set (SMTG_ADD_VST3_UTILITIES OFF)
         set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
@@ -142,9 +146,11 @@ function (yup_audio_plugin)
 
         # Create VST3 plugin target
         _yup_message (STATUS "Creating VST3 plugin target")
-        add_library (${target_name}_vst3_plugin SHARED)
 
-        target_compile_features (${target_name}_vst3_plugin PRIVATE cxx_std_17)
+        smtg_add_vst3plugin(${target_name}_vst3_plugin)
+        #smtg_target_configure_version_file (${target_name}_vst3_plugin)
+
+        target_compile_features (${target_name}_vst3_plugin PRIVATE cxx_std_20)
 
         target_compile_definitions (${target_name}_vst3_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_VST3=1
@@ -153,19 +159,26 @@ function (yup_audio_plugin)
         target_link_libraries (${target_name}_vst3_plugin PRIVATE
             ${target_name}_shared
             yup_audio_plugin_client
-            base
             sdk
-            pluginterfaces
             ${target_name}_vst3
             ${additional_libraries}
             ${YUP_ARG_MODULES})
+
+        if (SMTG_MAC)
+            smtg_target_set_bundle (${target_name}_vst3_plugin
+                BUNDLE_IDENTIFIER org.kunitoki.yup.${target_name}
+                COMPANY_NAME "kunitoki")
+            #smtg_target_set_debug_executable(MyPlugin
+            #    "/Applications/VST3PluginTestHost.app"
+            #    "--pluginfolder;$(BUILT_PRODUCTS_DIR)")
+        endif()
 
         set_target_properties (${target_name}_vst3_plugin PROPERTIES
             SUFFIX ".vst3"
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
 
-        smtg_target_configure_version_file (${target_name}_vst3_plugin)
+        #yup_audio_plugin_copy_bundle (${target_name} vst3)
     endif()
 
     # ==== Build standalone plugin target
@@ -181,7 +194,7 @@ function (yup_audio_plugin)
         _yup_message (STATUS "Creating standalone plugin target")
         add_executable (${target_name}_app)
 
-        target_compile_features (${target_name}_app PRIVATE cxx_std_17)
+        target_compile_features (${target_name}_app PRIVATE cxx_std_20)
 
         target_compile_definitions (${target_name}_app PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1
@@ -212,4 +225,35 @@ function (yup_audio_plugin)
         endif()
     endif()
 
+endfunction()
+
+#==============================================================================
+
+function (yup_audio_plugin_copy_bundle target_name plugin_type)
+    if (NOT "${yup_platform}" MATCHES "^(osx)$")
+        return()
+    endif()
+
+    _yup_message (STATUS "Generating rule to copy ${plugin_type} plugin ${target_name}")
+
+    string (TOUPPER "${plugin_type}" plugin_type_upper)
+    set (dependency_target ${target_name}_${plugin_type}_plugin)
+    set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
+    set (plugin_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}/${target_file_name}")
+
+    if ("${plugin_type}" STREQUAL "clap")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND unlink ${plugin_path}
+            COMMAND cmake -E create_symlink "$<TARGET_FILE:${dependency_target}>" ${plugin_path}
+            COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
+            VERBATIM)
+    elseif ("${plugin_type}" STREQUAL "vst3")
+        add_custom_command(TARGET ${dependency_target} POST_BUILD
+            COMMAND unlink ${plugin_path}
+            COMMAND cmake -E create_symlink "$<TARGET_FILE_DIR:${dependency_target}>/../../../${target_file_name}" ${plugin_path}
+            COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
+            VERBATIM)
+    else()
+        _yup_message (FATAL_ERROR "Unsupported plugin type ${plugin_type} for copying bundle")
+    endif()
 endfunction()

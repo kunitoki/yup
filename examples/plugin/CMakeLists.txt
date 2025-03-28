@@ -45,14 +45,15 @@ yup_audio_plugin (
     PLUGIN_ID "org.yup.YupCLAP"
     PLUGIN_NAME "YupCLAPPZ"
     PLUGIN_VENDOR "org.yup"
+    PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"
     PLUGIN_DESCRIPTION "The best audio plugin ever."
     PLUGIN_URL "https://github.com/kunitoki/yup"
-    PLUGING_IS_SYNTH ON
+    PLUGIN_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
-    PLUGIN_CREATE_STANDALONE ON
+    PLUGIN_CREATE_STANDALONE OFF
     MODULES
         yup_gui
         yup_audio_processors
