@@ -48,7 +48,15 @@ namespace yup
 
 //==============================================================================
 
-class AudioPluginEditorVST3
+static const auto Processor_UID = juce::Uuid::fromSHA1 (juce::SHA1 (CharPointer_UTF8 (YupPlugin_Id)));
+static const Steinberg::FUID YupPlugin_Processor_UID (Processor_UID.getPart (0), Processor_UID.getPart (1), Processor_UID.getPart (2), Processor_UID.getPart (3));
+
+static const auto Controller_UID = juce::Uuid::fromSHA1 (juce::SHA1 (CharPointer_UTF8 (YupPlugin_Id ".controller")));
+static const Steinberg::FUID YupPlugin_Controller_UID (Controller_UID.getPart (0), Controller_UID.getPart (1), Controller_UID.getPart (2), Controller_UID.getPart (3));
+
+//==============================================================================
+
+class AudioPluginEditorVST3 : public Steinberg::CPluginView, public Steinberg::Vst::EditController
 /*
     : public Steinberg::Vst::EditController
     , public Steinberg::Vst::IMidiMapping
@@ -58,6 +66,15 @@ class AudioPluginEditorVST3
 */
 {
 public:
+    OBJ_METHODS(AudioPluginEditorVST3, Steinberg::CPluginView)
+    REFCOUNT_METHODS(Steinberg::CPluginView)
+
+    DEFINE_INTERFACES
+        DEF_INTERFACE(Steinberg::IPlugView)
+        DEF_INTERFACE(Steinberg::Vst::IEditController)
+    END_DEFINE_INTERFACES(Steinberg::CPluginView)
+
+
     /*
     AudioPluginEditorVST3()
     {
@@ -101,12 +118,14 @@ public:
             processor = nullptr;
         }
     }
+*/
 
     static Steinberg::FUnknown* createInstance ([[maybe_unused]] void* context)
     {
         return (Steinberg::Vst::IEditController*) new AudioPluginEditorVST3;
     }
 
+/*
     Steinberg::tresult PLUGIN_API queryInterface (const Steinberg::TUID iid, void** obj) SMTG_OVERRIDE
     {
         QUERY_INTERFACE (iid, obj, Steinberg::Vst::IEditController::iid, Steinberg::Vst::IEditController)
@@ -275,6 +294,8 @@ public:
         yup::initialiseYup_Windowing();
 
         processor = createPluginProcessor();
+
+        setControllerClass (YupPlugin_Controller_UID);
     }
 
     virtual ~AudioPluginWrapperVST3()
@@ -413,7 +434,7 @@ public:
 
             AudioSampleBuffer audioBuffer (
                 reinterpret_cast<float**> (outBus.channelBuffers32),
-                data.numOutputs,
+                outBus.numChannels,
                 data.numSamples);
 
             processor->processBlock (audioBuffer, midiBuffer);
@@ -431,16 +452,6 @@ private:
     MidiBuffer midiBuffer;
 };
 
-//==============================================================================
-
-// Unique identifier for our processor class (example GUID)
-// {D1F1C1B8-9F3D-4E0B-80A9-ABCD12345678}
-
-// static auto ProcessorUUID = juce::Uuid::fromSHA1 (juce::SHA1 (CharPointer_UTF8 (YupPlugin_Id)));
-
-static const Steinberg::FUID YupPlugin_Processor_UID (0xc9a84cd4, 0xc7c34936, 0xbf0b3315, 0x2de1ef58);
-static const Steinberg::FUID YupPlugin_Controller_UID (0xa7c40810, 0xbf604829, 0xab2b5329, 0xb3f3a131);
-
 } // namespace yup
 
 //==============================================================================
@@ -452,26 +463,24 @@ BEGIN_FACTORY_DEF (
 
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Processor_UID),
-    PClassInfo::kManyInstances,    // Supports multiple instances
-    kVstAudioEffectClass,          // Component category
-    YupPlugin_Name,                // Plugin name
-    Vst::kDistributable,           // Distribution status
-    Steinberg::Vst::PlugType::kFx, // Subcategory (effect)
-    YupPlugin_Version,             // Plugin version
-    kVstVersionString,             // The VST 3 SDK version (do not change this, always use this define)
+    PClassInfo::kManyInstances,     // Supports multiple instances
+    kVstAudioEffectClass,           // Component category
+    YupPlugin_Name,                 // Plugin name
+    Steinberg::Vst::kDistributable, // Distribution status
+    Steinberg::Vst::PlugType::kFx,  // Subcategory (effect)
+    YupPlugin_Version,              // Plugin version
+    kVstVersionString,              // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginWrapperVST3::createInstance)
 
-/*
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Controller_UID),
-    PClassInfo::kManyInstances,   // Supports multiple instances
-    kVstComponentControllerClass, // Controller category (do not change this)
-    YupPlugin_Name "Controller",  // Controller name (can be the same as the component name)
-    0,                            // Not used here
-    "",                           // Not used here
-    YupPlugin_Version,            // Plug-in version (to be changed)
-    kVstVersionString,            // The VST 3 SDK version (do not change this, always use this define)
+    PClassInfo::kManyInstances,     // Supports multiple instances
+    kVstComponentControllerClass,   // Controller category (do not change this)
+    YupPlugin_Name "Controller",    // Controller name (can be the same as the component name)
+    0,                              // Not used here
+    "",                             // Not used here
+    YupPlugin_Version,              // Plug-in version (to be changed)
+    kVstVersionString,              // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginEditorVST3::createInstance)
-*/
 
 END_FACTORY

@@ -158,6 +158,12 @@ Uuid& Uuid::operator= (const uint8* const rawData) noexcept
     return *this;
 }
 
+uint32 Uuid::getPart (size_t section) const noexcept
+{
+    jassert (section < sizeof (uuid) / sizeof (uint32));
+    return ByteOrder::bigEndianInt (uuid + sizeof (uint32) * section);
+}
+
 uint32 Uuid::getTimeLow() const noexcept { return ByteOrder::bigEndianInt (uuid); }
 
 uint16 Uuid::getTimeMid() const noexcept { return ByteOrder::bigEndianShort (uuid + 4); }

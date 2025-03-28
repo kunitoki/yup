@@ -113,6 +113,8 @@ public:
     Uuid& operator= (const String& uuidString);
 
     //==============================================================================
+    /** Returns an indexed section of the UUID. Section might be inside the range `[0..3]`. */
+    uint32 getPart (size_t section) const noexcept;
     /** Returns the time-low section of the UUID. */
     uint32 getTimeLow() const noexcept;
     /** Returns the time-mid section of the UUID. */
