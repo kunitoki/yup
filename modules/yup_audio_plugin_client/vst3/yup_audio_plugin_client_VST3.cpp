@@ -154,8 +154,8 @@ public:
             flags.set (ComponentNative::renderContinuous);
 
         auto options = ComponentNative::Options()
-            .withFlags (flags)
-            .withResizableWindow (editor->isResizable());
+                           .withFlags (flags)
+                           .withResizableWindow (editor->isResizable());
 
         addToDesktop (options, parent);
         setVisible (true);
@@ -217,12 +217,10 @@ public:
 
         rect = *newSize;
 
-        setBounds ({
-            static_cast<float> (rect.left),
-            static_cast<float> (rect.top),
-            static_cast<float> (rect.getWidth()),
-            static_cast<float> (rect.getHeight())
-        });
+        setBounds ({ static_cast<float> (rect.left),
+                     static_cast<float> (rect.top),
+                     static_cast<float> (rect.getWidth()),
+                     static_cast<float> (rect.getHeight()) });
 
         return Steinberg::kResultTrue;
     }
@@ -502,7 +500,7 @@ public:
         return Steinberg::kResultTrue;
     }
 
-	Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override
+    Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override
     {
         if (message == nullptr)
             return Steinberg::kResultFalse;
@@ -517,7 +515,7 @@ public:
             uint32 msgSize;
 
             auto result = attributes->getBinary ("data", msgData, msgSize);
-            if (result == Steinberg::kResultTrue && msgSize == sizeof(void*))
+            if (result == Steinberg::kResultTrue && msgSize == sizeof (void*))
             {
                 void* ptrValue = *reinterpret_cast<void* const*> (msgData);
                 processor = static_cast<AudioProcessor*> (ptrValue);
@@ -734,7 +732,7 @@ public:
     {
         auto result = AudioEffect::connect (other);
 
-        if (Steinberg::IPtr<Steinberg::Vst::IMessage> message = owned(allocateMessage()))
+        if (Steinberg::IPtr<Steinberg::Vst::IMessage> message = owned (allocateMessage()))
         {
             message->setMessageID ("processor");
 
@@ -755,7 +753,7 @@ public:
         return AudioEffect::disconnect (other);
     }
 
-	Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override
+    Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override
     {
         return AudioEffect::notify (message);
     }
