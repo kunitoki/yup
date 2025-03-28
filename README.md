@@ -44,7 +44,7 @@ YUP brings a suite of powerful features, including:
 ## Supported Platforms
 | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**        | **iOS**            |
 |--------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
-| :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     | :construction:     |
+| :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
 
 ## Supported Rendering Backends
