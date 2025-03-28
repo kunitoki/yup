@@ -230,6 +230,8 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin_copy_bundle target_name plugin_type)
+    return()
+
     if (NOT "${yup_platform}" MATCHES "^(osx)$")
         return()
     endif()

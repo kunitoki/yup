@@ -644,8 +644,8 @@ static int getMonthNumberForCompileDate (const String& m)
     return 0;
 }
 
-extern const char* const juce_compilationDate;
-extern const char* const juce_compilationTime;
+extern const char* juce_compilationDate;
+extern const char* juce_compilationTime;
 
 Time Time::getCompilationDate()
 {

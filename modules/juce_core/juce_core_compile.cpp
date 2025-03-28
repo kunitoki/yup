@@ -27,7 +27,7 @@ namespace juce
 
 namespace
 {
-consteval uint64_t constexprHash (uint64_t in) noexcept
+constexpr uint64_t constexprHash (uint64_t in) noexcept
 {
     constexpr uint64_t r[] {
         0xdf15236c16d16793ull, 0x3a697614e0fe08e4ull, 0xa3a53275ccc10ff9ull, 0xb92fae55ecf491deull, 0x36e867730ed24a6aull, 0xd7153d8084adf386ull, 0x17110e766d411a6aull, 0xcbd41fed4b1d6b30ull
@@ -44,9 +44,9 @@ consteval uint64_t constexprHash (uint64_t in) noexcept
 }
 
 template <size_t N>
-consteval uint64_t constexprHash (const char (&str)[N]) noexcept
+constexpr uint64_t constexprHash (const char (&str) [N]) noexcept
 {
-    uint64_t h {};
+    uint64_t h{};
 
     for (uint64_t i = 0; i < N; ++i)
         h ^= uint64_t (str[i]) << (i % 8 * 8);
@@ -55,19 +55,15 @@ consteval uint64_t constexprHash (const char (&str)[N]) noexcept
 }
 
 template <size_t N>
-consteval uint64_t constexprRandomImplementation (const char (&file)[N], uint64_t line, uint64_t column = 0x8dc97987) noexcept
+constexpr uint64_t constexprRandomImplementation (const char (&file) [N], uint64_t line, uint64_t column = 0x8dc97987) noexcept
 {
     return constexprHash (
         constexprHash (__DATE__) ^ constexprHash (__TIME__) ^ constexprHash (file) ^ constexprHash (line) ^ constexprHash (column));
 }
+} // namespace detail
 
-#define JUCE_CONSTEXPR_RANDOM [] {                             \
-    return constexprRandomImplementation (__FILE__, __LINE__); \
-}()
-} // namespace
-
-const char* const juce_compilationDate = __DATE__;
-const char* const juce_compilationTime = __TIME__;
-const uint64_t juce_compilationUniqueId = JUCE_CONSTEXPR_RANDOM;
+const char* juce_compilationDate = __DATE__;
+const char* juce_compilationTime = __TIME__;
+uint64_t juce_compilationUniqueId = constexprRandomImplementation(__FILE__, __LINE__);
 
 } // namespace juce
