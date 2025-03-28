@@ -56,29 +56,105 @@ static const Steinberg::FUID YupPlugin_Controller_UID (Controller_UID.getPart (0
 
 //==============================================================================
 
-class AudioPluginEditorVST3 : public Steinberg::CPluginView
-    , public Steinberg::Vst::EditController
-/*
+class AudioPluginEditorViewVST3 : public Steinberg::Vst::EditorView
+{
+public:
+    AudioPluginEditorViewVST3(AudioProcessor* processor, Steinberg::Vst::EditController* controller, Steinberg::ViewRect* size = nullptr)
+        : Steinberg::Vst::EditorView (controller, size)
+        , processor (processor)
+    {
+        jassert (processor != nullptr);
+
+        editor.reset (processor->createEditor());
+    }
+
+    ~AudioPluginEditorViewVST3()
+    {
+        if (editor != nullptr)
+        {
+            editor->removeFromDesktop();
+
+            editor.reset();
+        }
+   }
+  
+    Steinberg::tresult PLUGIN_API attached (void* parent, Steinberg::FIDString type) SMTG_OVERRIDE
+    {
+        // editor->addToDesktop (0 /*ComponentPeer::windowIgnoresKeyPresses*/, parent);
+        //mComponent->setOpaque(false);
+        //mComponent->setVisible (true);
+        //mComponent->toFront (false);
+
+        return Steinberg::kResultTrue;
+    }
+
+    Steinberg::tresult PLUGIN_API removed() SMTG_OVERRIDE
+    {
+        if (editor != nullptr)
+            editor->removeFromDesktop();
+
+        return Steinberg::CPluginView::removed();
+    }
+
+    Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) SMTG_OVERRIDE
+    {
+        if (newSize)
+        {
+            rect = *newSize;
+            editor->setSize ({ static_cast<float> (rect.getWidth()), static_cast<float> (rect.getHeight()) });
+        }
+
+        return Steinberg::kResultTrue;
+    }
+
+    Steinberg::tresult PLUGIN_API getSize (Steinberg::ViewRect* size) SMTG_OVERRIDE
+    {
+        *size = Steinberg::ViewRect (0, 0, editor->getWidth(), editor->getHeight());
+        return Steinberg::kResultTrue;
+    }
+
+    Steinberg::tresult PLUGIN_API isPlatformTypeSupported(Steinberg::FIDString type) SMTG_OVERRIDE
+    {
+#if JUCE_WINDOWS
+        if (std::strcmp (type, Steinberg::kPlatformTypeHWND) == 0)
+            return Steinberg::kResultTrue;
+#elif JUCE_MAC
+        if (std::strcmp (type, Steinberg::kPlatformTypeNSView) == 0)
+            return Steinberg::kResultTrue;
+        else if (std::strcmp (type, Steinberg::kPlatformTypeHIView) == 0)
+            return Steinberg::kResultFalse;
+#endif
+
+        return Steinberg::kResultFalse;
+    }
+
+private:
+    AudioProcessor* processor = nullptr;
+    std::unique_ptr<AudioProcessorEditor> editor;
+};
+
+class AudioPluginEditorVST3
     : public Steinberg::Vst::EditController
     , public Steinberg::Vst::IMidiMapping
     , public Steinberg::Vst::IUnitInfo
     , public Steinberg::Vst::IRemapParamID
     , public Steinberg::Vst::ChannelContext::IInfoListener
-*/
 {
 public:
-    OBJ_METHODS (AudioPluginEditorVST3, Steinberg::CPluginView)
-    REFCOUNT_METHODS (Steinberg::CPluginView)
+    OBJ_METHODS (AudioPluginEditorVST3, Steinberg::Vst::EditController)
+    REFCOUNT_METHODS (Steinberg::Vst::EditController)
 
     DEFINE_INTERFACES
-    DEF_INTERFACE (Steinberg::IPlugView)
     DEF_INTERFACE (Steinberg::Vst::IEditController)
-    END_DEFINE_INTERFACES (Steinberg::CPluginView)
+    DEF_INTERFACE (Steinberg::Vst::IMidiMapping)
+    DEF_INTERFACE (Steinberg::Vst::IUnitInfo)
+    DEF_INTERFACE (Steinberg::Vst::IRemapParamID)
+    DEF_INTERFACE (Steinberg::Vst::ChannelContext::IInfoListener)
+    END_DEFINE_INTERFACES (Steinberg::Vst::EditController)
 
-    /*
     AudioPluginEditorVST3()
     {
-        processor = createPluginProcessor();
+        processor.reset (createPluginProcessor());
         if (processor != nullptr)
         {
 #if 0
@@ -103,52 +179,25 @@ public:
 
     ~AudioPluginEditorVST3()
     {
-        if (editor != nullptr)
-        {
-            if (editor->isOnDesktop())
-                editor->removeFromDesktop();
-
-            delete editor;
-            editor = nullptr;
-        }
-
-        if (processor != nullptr)
-        {
-            delete processor;
-            processor = nullptr;
-        }
+        processor.reset();
     }
-*/
 
     static Steinberg::FUnknown* createInstance ([[maybe_unused]] void* context)
     {
         return (Steinberg::Vst::IEditController*) new AudioPluginEditorVST3;
     }
 
-    /*
-    Steinberg::tresult PLUGIN_API queryInterface (const Steinberg::TUID iid, void** obj) SMTG_OVERRIDE
+    Steinberg::IPlugView* PLUGIN_API createView (Steinberg::FIDString name) SMTG_OVERRIDE
     {
-        QUERY_INTERFACE (iid, obj, Steinberg::Vst::IEditController::iid, Steinberg::Vst::IEditController)
-        QUERY_INTERFACE (iid, obj, Steinberg::Vst::IMidiMapping::iid, Steinberg::Vst::IMidiMapping)
-        QUERY_INTERFACE (iid, obj, Steinberg::Vst::IUnitInfo::iid, Steinberg::Vst::IUnitInfo)
-        QUERY_INTERFACE (iid, obj, Steinberg::Vst::IRemapParamID::iid, Steinberg::Vst::IRemapParamID)
-        QUERY_INTERFACE (iid, obj, Steinberg::Vst::ChannelContext::IInfoListener::iid, Steinberg::Vst::ChannelContext::IInfoListener)
-        return Steinberg::kNoInterface;
-    }
+        if (std::strcmp (name, Steinberg::Vst::ViewType::kEditor) == 0)
+            return new AudioPluginEditorViewVST3 (processor.get(), this);
 
-    Steinberg::uint32 PLUGIN_API addRef() SMTG_OVERRIDE
-    {
-        return 1;
-    }
-
-    Steinberg::uint32 PLUGIN_API release() SMTG_OVERRIDE
-    {
-        return 1;
+        return nullptr;
     }
 
     Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) SMTG_OVERRIDE
     {
-        auto result = EditController::initialize (context);
+        auto result = Steinberg::Vst::EditController::initialize (context);
         if (result != Steinberg::kResultOk)
             return result;
 
@@ -157,7 +206,7 @@ public:
 
     Steinberg::tresult PLUGIN_API terminate() SMTG_OVERRIDE
     {
-        return EditController::terminate();
+        return Steinberg::Vst::EditController::terminate();
     }
 
     Steinberg::tresult PLUGIN_API setComponentState (Steinberg::IBStream* state) SMTG_OVERRIDE
@@ -278,9 +327,7 @@ public:
     }
 
 private:
-    AudioProcessor* processor = nullptr;
-    AudioProcessorEditor* editor = nullptr;
-*/
+    std::unique_ptr<AudioProcessor> processor;
 };
 
 //==============================================================================
