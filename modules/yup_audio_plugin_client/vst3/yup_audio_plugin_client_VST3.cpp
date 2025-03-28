@@ -56,7 +56,8 @@ static const Steinberg::FUID YupPlugin_Controller_UID (Controller_UID.getPart (0
 
 //==============================================================================
 
-class AudioPluginEditorVST3 : public Steinberg::CPluginView, public Steinberg::Vst::EditController
+class AudioPluginEditorVST3 : public Steinberg::CPluginView
+    , public Steinberg::Vst::EditController
 /*
     : public Steinberg::Vst::EditController
     , public Steinberg::Vst::IMidiMapping
@@ -66,14 +67,13 @@ class AudioPluginEditorVST3 : public Steinberg::CPluginView, public Steinberg::V
 */
 {
 public:
-    OBJ_METHODS(AudioPluginEditorVST3, Steinberg::CPluginView)
-    REFCOUNT_METHODS(Steinberg::CPluginView)
+    OBJ_METHODS (AudioPluginEditorVST3, Steinberg::CPluginView)
+    REFCOUNT_METHODS (Steinberg::CPluginView)
 
     DEFINE_INTERFACES
-        DEF_INTERFACE(Steinberg::IPlugView)
-        DEF_INTERFACE(Steinberg::Vst::IEditController)
-    END_DEFINE_INTERFACES(Steinberg::CPluginView)
-
+    DEF_INTERFACE (Steinberg::IPlugView)
+    DEF_INTERFACE (Steinberg::Vst::IEditController)
+    END_DEFINE_INTERFACES (Steinberg::CPluginView)
 
     /*
     AudioPluginEditorVST3()
@@ -125,7 +125,7 @@ public:
         return (Steinberg::Vst::IEditController*) new AudioPluginEditorVST3;
     }
 
-/*
+    /*
     Steinberg::tresult PLUGIN_API queryInterface (const Steinberg::TUID iid, void** obj) SMTG_OVERRIDE
     {
         QUERY_INTERFACE (iid, obj, Steinberg::Vst::IEditController::iid, Steinberg::Vst::IEditController)
@@ -474,13 +474,13 @@ DEF_CLASS2 (
 
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Controller_UID),
-    PClassInfo::kManyInstances,     // Supports multiple instances
-    kVstComponentControllerClass,   // Controller category (do not change this)
-    YupPlugin_Name "Controller",    // Controller name (can be the same as the component name)
-    0,                              // Not used here
-    "",                             // Not used here
-    YupPlugin_Version,              // Plug-in version (to be changed)
-    kVstVersionString,              // The VST 3 SDK version (do not change this, always use this define)
+    PClassInfo::kManyInstances,   // Supports multiple instances
+    kVstComponentControllerClass, // Controller category (do not change this)
+    YupPlugin_Name "Controller",  // Controller name (can be the same as the component name)
+    0,                            // Not used here
+    "",                           // Not used here
+    YupPlugin_Version,            // Plug-in version (to be changed)
+    kVstVersionString,            // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginEditorVST3::createInstance)
 
 END_FACTORY
