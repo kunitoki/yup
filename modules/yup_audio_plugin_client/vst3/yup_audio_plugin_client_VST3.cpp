@@ -77,7 +77,9 @@ void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destinati
 
 //==============================================================================
 
-class AudioPluginEditorViewVST3 : public Steinberg::Vst::EditorView
+class AudioPluginEditorViewVST3
+    : public Component
+    , public Steinberg::Vst::EditorView
 {
 public:
     AudioPluginEditorViewVST3 (AudioProcessor* processor, Steinberg::Vst::EditController* controller, Steinberg::ViewRect* size = nullptr)
@@ -92,14 +94,16 @@ public:
         if (editor == nullptr)
             return;
 
+        addAndMakeVisible (editor.get());
+
         if (size != nullptr)
         {
-            editor->setSize ({ static_cast<float> (size->getWidth()), static_cast<float> (size->getHeight()) });
+            setSize ({ static_cast<float> (size->getWidth()), static_cast<float> (size->getHeight()) });
         }
         else
         {
             const auto preferredSize = editor->getPreferredSize();
-            editor->setSize ({ static_cast<float> (preferredSize.getWidth()), static_cast<float> (preferredSize.getHeight()) });
+            setSize ({ static_cast<float> (preferredSize.getWidth()), static_cast<float> (preferredSize.getHeight()) });
         }
     }
 
@@ -107,12 +111,30 @@ public:
     {
         if (editor != nullptr)
         {
-            editor->removeFromDesktop();
+            setVisible (false);
+            removeFromDesktop();
+
+            removeChildComponent(editor.get());
             editor.reset();
         }
     }
 
-    Steinberg::tresult PLUGIN_API attached (void* parent, Steinberg::FIDString type) SMTG_OVERRIDE
+    void resized() override
+    {
+        if (plugFrame != nullptr)
+        {
+            Steinberg::ViewRect viewRect;
+            viewRect.left = getX();
+            viewRect.top = getY();
+            viewRect.right = viewRect.left + getWidth();
+            viewRect.bottom = viewRect.top + getHeight();
+            plugFrame->resizeView (this, std::addressof (viewRect));
+        }
+
+        editor->setBounds (getLocalBounds());
+    }
+
+    Steinberg::tresult PLUGIN_API attached (void* parent, Steinberg::FIDString type) override
     {
         if (editor == nullptr)
             return Steinberg::kResultFalse;
@@ -124,38 +146,53 @@ public:
 
         yup::ComponentNative::Options options;
         options.flags = flags;
-        editor->addToDesktop (options, parent);
+
+        addToDesktop (options, parent);
+        setVisible (true);
+
         editor->attachedToNative();
-        editor->setVisible (true);
 
         return Steinberg::kResultTrue;
     }
 
-    Steinberg::tresult PLUGIN_API removed() SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API removed() override
     {
         if (editor != nullptr)
         {
-            editor->removeFromDesktop();
-            editor->setVisible (false);
+            setVisible (false);
+            removeFromDesktop();
         }
 
         return Steinberg::CPluginView::removed();
     }
 
-    Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API canResize() override
+    {
+        if (editor != nullptr && editor->isResizable())
+            return Steinberg::kResultTrue;
+
+        return Steinberg::kResultFalse;
+    }
+
+    Steinberg::tresult PLUGIN_API checkSizeConstraint (Steinberg::ViewRect* rect) override
+    {
+        return Steinberg::kResultFalse;
+    }
+
+    Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) override
     {
         if (editor == nullptr || newSize == nullptr)
             return Steinberg::kResultFalse;
 
+        const auto preferredSize = editor->getPreferredSize();
+
         if (! editor->isResizable())
         {
-            const auto preferredSize = editor->getPreferredSize();
             newSize->right = newSize->left + preferredSize.getWidth();
             newSize->bottom = newSize->top + preferredSize.getHeight();
         }
         else if (editor->shouldPreserveAspectRatio())
         {
-            const auto preferredSize = editor->getPreferredSize();
             const auto width = newSize->getWidth();
             const auto height = newSize->getHeight();
 
@@ -166,24 +203,28 @@ public:
         }
 
         rect = *newSize;
-        editor->setSize ({ static_cast<float> (rect.getWidth()), static_cast<float> (rect.getHeight()) });
+        setSize ({ static_cast<float> (rect.getWidth()), static_cast<float> (rect.getHeight()) });
 
         return Steinberg::kResultTrue;
     }
 
-    Steinberg::tresult PLUGIN_API getSize (Steinberg::ViewRect* size) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API getSize (Steinberg::ViewRect* size) override
     {
         if (editor == nullptr || size == nullptr)
             return Steinberg::kResultFalse;
 
         if (editor->isResizable() && editor->getWidth() != 0)
         {
-            size->right = size->left + editor->getWidth();
-            size->bottom = size->top + editor->getHeight();
+            size->left = getX();
+            size->top = getY();
+            size->right = size->left + getWidth();
+            size->bottom = size->top + getHeight();
         }
         else
         {
             const auto preferredSize = editor->getPreferredSize();
+            size->left = 0;
+            size->top = 0;
             size->right = size->left + preferredSize.getWidth();
             size->bottom = size->top + preferredSize.getHeight();
         }
@@ -191,7 +232,18 @@ public:
         return Steinberg::kResultTrue;
     }
 
-    Steinberg::tresult PLUGIN_API isPlatformTypeSupported (Steinberg::FIDString type) SMTG_OVERRIDE
+	Steinberg::tresult PLUGIN_API onFocus (Steinberg::TBool state) override
+    {
+        return Steinberg::kResultFalse;
+    }
+
+	Steinberg::tresult PLUGIN_API setFrame (Steinberg::IPlugFrame* frame) override
+	{
+		plugFrame = frame;
+		return Steinberg::kResultTrue;
+	}
+
+    Steinberg::tresult PLUGIN_API isPlatformTypeSupported(Steinberg::FIDString type) override
     {
 #if JUCE_WINDOWS
         if (std::strcmp (type, Steinberg::kPlatformTypeHWND) == 0)
@@ -267,7 +319,7 @@ public:
         return (Steinberg::Vst::IEditController*) new AudioPluginEditorVST3;
     }
 
-    Steinberg::IPlugView* PLUGIN_API createView (Steinberg::FIDString name) SMTG_OVERRIDE
+    Steinberg::IPlugView* PLUGIN_API createView (Steinberg::FIDString name) override
     {
         if (std::strcmp (name, Steinberg::Vst::ViewType::kEditor) == 0)
             return new AudioPluginEditorViewVST3 (processor.get(), this);
@@ -275,7 +327,7 @@ public:
         return nullptr;
     }
 
-    Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) override
     {
         auto result = Steinberg::Vst::EditController::initialize (context);
         if (result != Steinberg::kResultOk)
@@ -284,12 +336,12 @@ public:
         return Steinberg::kResultOk;
     }
 
-    Steinberg::tresult PLUGIN_API terminate() SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API terminate() override
     {
         return Steinberg::Vst::EditController::terminate();
     }
 
-    Steinberg::tresult PLUGIN_API setComponentState (Steinberg::IBStream* state) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API setComponentState (Steinberg::IBStream* state) override
     {
         if (processor == nullptr)
             return Steinberg::kResultFalse;
@@ -304,12 +356,12 @@ public:
     Steinberg::tresult PLUGIN_API getMidiControllerAssignment (Steinberg::int32 busIndex,
                                                                Steinberg::int16 channel,
                                                                Steinberg::Vst::CtrlNumber midiControllerNumber,
-                                                               Steinberg::Vst::ParamID& id) SMTG_OVERRIDE
+                                                               Steinberg::Vst::ParamID& id) override
     {
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API getUnitInfo (Steinberg::int32 unitIndex, Steinberg::Vst::UnitInfo& info) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API getUnitInfo (Steinberg::int32 unitIndex, Steinberg::Vst::UnitInfo& info) override
     {
         if (unitIndex == 0)
         {
@@ -323,17 +375,17 @@ public:
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::Vst::UnitID PLUGIN_API getSelectedUnit() SMTG_OVERRIDE
+    Steinberg::Vst::UnitID PLUGIN_API getSelectedUnit() override
     {
         return {};
     }
 
-    Steinberg::int32 PLUGIN_API getUnitCount() SMTG_OVERRIDE
+    Steinberg::int32 PLUGIN_API getUnitCount() override
     {
         return 1;
     }
 
-    Steinberg::tresult PLUGIN_API selectUnit (Steinberg::Vst::UnitID unitId) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API selectUnit (Steinberg::Vst::UnitID unitId) override
     {
         if (unitId == Steinberg::Vst::kRootUnitId)
             return Steinberg::kResultOk;
@@ -345,7 +397,7 @@ public:
                                                 Steinberg::Vst::BusDirection dir,
                                                 Steinberg::int32 busIndex,
                                                 Steinberg::int32 channel,
-                                                Steinberg::Vst::UnitID& unitId) SMTG_OVERRIDE
+                                                Steinberg::Vst::UnitID& unitId) override
     {
         if (type == Steinberg::Vst::kAudio && dir == Steinberg::Vst::kInput && busIndex == 0)
         {
@@ -362,24 +414,24 @@ public:
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API setUnitProgramData (Steinberg::int32 listOrUnitId, Steinberg::int32 programIndex, Steinberg::IBStream* data) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API setUnitProgramData (Steinberg::int32 listOrUnitId, Steinberg::int32 programIndex, Steinberg::IBStream* data) override
     {
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API getProgramListInfo (Steinberg::int32 listIndex, Steinberg::Vst::ProgramListInfo& info) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API getProgramListInfo (Steinberg::int32 listIndex, Steinberg::Vst::ProgramListInfo& info) override
     {
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::int32 PLUGIN_API getProgramListCount() SMTG_OVERRIDE
+    Steinberg::int32 PLUGIN_API getProgramListCount() override
     {
         return 1;
     }
 
     Steinberg::tresult PLUGIN_API getProgramName (Steinberg::Vst::ProgramListID listId,
                                                   Steinberg::int32 programIndex,
-                                                  Steinberg::Vst::String128 name) SMTG_OVERRIDE
+                                                  Steinberg::Vst::String128 name) override
     {
         if (listId == Steinberg::Vst::kNoProgramListId && programIndex == 0)
         {
@@ -393,7 +445,7 @@ public:
     Steinberg::tresult PLUGIN_API getProgramInfo (Steinberg::Vst::ProgramListID listId,
                                                   Steinberg::int32 programIndex,
                                                   Steinberg::Vst::CString attributeId,
-                                                  Steinberg::Vst::String128 attributeValue) SMTG_OVERRIDE
+                                                  Steinberg::Vst::String128 attributeValue) override
     {
         if (listId == Steinberg::Vst::kNoProgramListId && programIndex == 0)
         {
@@ -407,7 +459,7 @@ public:
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API hasProgramPitchNames (Steinberg::Vst::ProgramListID listId, Steinberg::int32 programIndex) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API hasProgramPitchNames (Steinberg::Vst::ProgramListID listId, Steinberg::int32 programIndex) override
     {
         return Steinberg::kResultFalse;
     }
@@ -415,19 +467,19 @@ public:
     Steinberg::tresult PLUGIN_API getProgramPitchName (Steinberg::Vst::ProgramListID listId,
                                                        Steinberg::int32 programIndex,
                                                        Steinberg::int16 midiPitch,
-                                                       Steinberg::Vst::String128 name) SMTG_OVERRIDE
+                                                       Steinberg::Vst::String128 name) override
     {
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API setChannelContextInfos (Steinberg::Vst::IAttributeList* list) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API setChannelContextInfos (Steinberg::Vst::IAttributeList* list) override
     {
         return Steinberg::kResultFalse;
     }
 
     Steinberg::tresult PLUGIN_API getCompatibleParamID (const Steinberg::TUID pluginToReplaceUID,
                                                         Steinberg::Vst::ParamID oldParamID,
-                                                        Steinberg::Vst::ParamID& newParamID) SMTG_OVERRIDE
+                                                        Steinberg::Vst::ParamID& newParamID) override
     {
         if (processor == nullptr)
             return Steinberg::kResultFalse;
@@ -456,18 +508,14 @@ public:
         yup::initialiseJuce_GUI();
         yup::initialiseYup_Windowing();
 
-        processor = createPluginProcessor();
+        processor.reset (::createPluginProcessor());
 
         setControllerClass (YupPlugin_Controller_UID);
     }
 
     virtual ~AudioPluginWrapperVST3()
     {
-        if (processor != nullptr)
-        {
-            delete processor;
-            processor = nullptr;
-        }
+        processor.reset();
 
         yup::shutdownYup_Windowing();
         yup::shutdownJuce_GUI();
@@ -478,10 +526,10 @@ public:
         return (Steinberg::Vst::IAudioProcessor*) new AudioPluginWrapperVST3();
     }
 
-    Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) override
     {
         auto result = AudioEffect::initialize (context);
-        if (result != Steinberg::kResultOk)
+        if (result != Steinberg::kResultOk || processor == nullptr)
             return result;
 
         addAudioInput (STR16 ("Stereo In"), Steinberg::Vst::SpeakerArr::kStereo);
@@ -510,9 +558,10 @@ public:
         return Steinberg::kResultOk;
     }
 
-    Steinberg::tresult PLUGIN_API terminate() SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API terminate() override
     {
-        processor->releaseResources();
+        if (processor != nullptr)
+            processor->releaseResources();
 
         return AudioEffect::terminate();
     }
@@ -521,7 +570,7 @@ public:
         Steinberg::Vst::SpeakerArrangement* inputs,
         int32 numIns,
         Steinberg::Vst::SpeakerArrangement* outputs,
-        int32 numOuts) SMTG_OVERRIDE
+        int32 numOuts) override
     {
         if (numIns == 1
             && numOuts == 1
@@ -534,7 +583,7 @@ public:
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API setActive (Steinberg::TBool state) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API setActive (Steinberg::TBool state) override
     {
         if (state)
         {
@@ -548,7 +597,7 @@ public:
         return AudioEffect::setActive (state);
     }
 
-    Steinberg::tresult PLUGIN_API setupProcessing (Steinberg::Vst::ProcessSetup& setup) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API setupProcessing (Steinberg::Vst::ProcessSetup& setup) override
     {
         if (processor == nullptr)
             return Steinberg::kResultFalse;
@@ -564,7 +613,7 @@ public:
         return Steinberg::kResultOk;
     }
 
-    Steinberg::tresult PLUGIN_API process (Steinberg::Vst::ProcessData& data) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API process (Steinberg::Vst::ProcessData& data) override
     {
         if (data.processContext != nullptr)
             processContext = *data.processContext;
@@ -607,7 +656,7 @@ public:
     }
 
 private:
-    AudioProcessor* processor = nullptr;
+    std::unique_ptr<AudioProcessor> processor;
 
     Steinberg::Vst::ProcessContext processContext;
     Steinberg::Vst::ProcessSetup processSetup;
@@ -647,3 +696,4 @@ DEF_CLASS2 (
     yup::AudioPluginEditorVST3::createInstance)
 
 END_FACTORY
+
