@@ -57,7 +57,8 @@ static const Steinberg::FUID YupPlugin_Controller_UID (Controller_UID.getPart (0
 
 //==============================================================================
 
-namespace {
+namespace
+{
 void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destination)
 {
     if (source.isEmpty())
@@ -79,7 +80,7 @@ void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destinati
 class AudioPluginEditorViewVST3 : public Steinberg::Vst::EditorView
 {
 public:
-    AudioPluginEditorViewVST3(AudioProcessor* processor, Steinberg::Vst::EditController* controller, Steinberg::ViewRect* size = nullptr)
+    AudioPluginEditorViewVST3 (AudioProcessor* processor, Steinberg::Vst::EditController* controller, Steinberg::ViewRect* size = nullptr)
         : Steinberg::Vst::EditorView (controller, size)
         , processor (processor)
     {
@@ -190,7 +191,7 @@ public:
         return Steinberg::kResultTrue;
     }
 
-    Steinberg::tresult PLUGIN_API isPlatformTypeSupported(Steinberg::FIDString type) SMTG_OVERRIDE
+    Steinberg::tresult PLUGIN_API isPlatformTypeSupported (Steinberg::FIDString type) SMTG_OVERRIDE
     {
 #if JUCE_WINDOWS
         if (std::strcmp (type, Steinberg::kPlatformTypeHWND) == 0)
@@ -315,7 +316,7 @@ public:
             info.id = Steinberg::Vst::kRootUnitId;
             info.parentUnitId = Steinberg::Vst::kNoParentUnitId;
             info.programListId = Steinberg::Vst::kNoProgramListId;
-            copyStringToVST3("root", info.name);
+            copyStringToVST3 ("root", info.name);
             return Steinberg::kResultOk;
         }
 
@@ -360,7 +361,6 @@ public:
 
         return Steinberg::kResultFalse;
     }
-
 
     Steinberg::tresult PLUGIN_API setUnitProgramData (Steinberg::int32 listOrUnitId, Steinberg::int32 programIndex, Steinberg::IBStream* data) SMTG_OVERRIDE
     {
@@ -647,4 +647,3 @@ DEF_CLASS2 (
     yup::AudioPluginEditorVST3::createInstance)
 
 END_FACTORY
-
