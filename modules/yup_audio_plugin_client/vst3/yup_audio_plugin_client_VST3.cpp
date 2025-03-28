@@ -38,6 +38,7 @@
 #include <pluginterfaces/vst/ivstremapparamid.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivstplugview.h>
+#include <pluginterfaces/vst/vstpresetkeys.h>
 
 //==============================================================================
 
@@ -56,6 +57,25 @@ static const Steinberg::FUID YupPlugin_Controller_UID (Controller_UID.getPart (0
 
 //==============================================================================
 
+namespace {
+void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destination)
+{
+    if (source.isEmpty())
+    {
+        destination[0] = 0;
+        return;
+    }
+
+    // Convert UTF-8 to UTF-16
+    CharPointer_UTF16 utf16 (source.toUTF16());
+    const size_t length = std::min (static_cast<size_t> (sizeof (Steinberg::Vst::String128) - 1), utf16.length());
+    std::memcpy (destination, utf16.getAddress(), length * sizeof (Steinberg::Vst::TChar));
+    destination[length] = 0;
+}
+} // namespace
+
+//==============================================================================
+
 class AudioPluginEditorViewVST3 : public Steinberg::Vst::EditorView
 {
 public:
@@ -64,8 +84,22 @@ public:
         , processor (processor)
     {
         jassert (processor != nullptr);
+        if (! processor->hasEditor())
+            return;
 
         editor.reset (processor->createEditor());
+        if (editor == nullptr)
+            return;
+
+        if (size != nullptr)
+        {
+            editor->setSize ({ static_cast<float> (size->getWidth()), static_cast<float> (size->getHeight()) });
+        }
+        else
+        {
+            const auto preferredSize = editor->getPreferredSize();
+            editor->setSize ({ static_cast<float> (preferredSize.getWidth()), static_cast<float> (preferredSize.getHeight()) });
+        }
     }
 
     ~AudioPluginEditorViewVST3()
@@ -73,17 +107,25 @@ public:
         if (editor != nullptr)
         {
             editor->removeFromDesktop();
-
             editor.reset();
         }
-   }
-  
+    }
+
     Steinberg::tresult PLUGIN_API attached (void* parent, Steinberg::FIDString type) SMTG_OVERRIDE
     {
-        // editor->addToDesktop (0 /*ComponentPeer::windowIgnoresKeyPresses*/, parent);
-        //mComponent->setOpaque(false);
-        //mComponent->setVisible (true);
-        //mComponent->toFront (false);
+        if (editor == nullptr)
+            return Steinberg::kResultFalse;
+
+        yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow;
+
+        if (editor->shouldRenderContinuous())
+            flags.set (yup::ComponentNative::renderContinuous);
+
+        yup::ComponentNative::Options options;
+        options.flags = flags;
+        editor->addToDesktop (options, parent);
+        editor->attachedToNative();
+        editor->setVisible (true);
 
         return Steinberg::kResultTrue;
     }
@@ -91,25 +133,60 @@ public:
     Steinberg::tresult PLUGIN_API removed() SMTG_OVERRIDE
     {
         if (editor != nullptr)
+        {
             editor->removeFromDesktop();
+            editor->setVisible (false);
+        }
 
         return Steinberg::CPluginView::removed();
     }
 
     Steinberg::tresult PLUGIN_API onSize (Steinberg::ViewRect* newSize) SMTG_OVERRIDE
     {
-        if (newSize)
+        if (editor == nullptr || newSize == nullptr)
+            return Steinberg::kResultFalse;
+
+        if (! editor->isResizable())
         {
-            rect = *newSize;
-            editor->setSize ({ static_cast<float> (rect.getWidth()), static_cast<float> (rect.getHeight()) });
+            const auto preferredSize = editor->getPreferredSize();
+            newSize->right = newSize->left + preferredSize.getWidth();
+            newSize->bottom = newSize->top + preferredSize.getHeight();
         }
+        else if (editor->shouldPreserveAspectRatio())
+        {
+            const auto preferredSize = editor->getPreferredSize();
+            const auto width = newSize->getWidth();
+            const auto height = newSize->getHeight();
+
+            if (preferredSize.getWidth() > preferredSize.getHeight())
+                newSize->bottom = newSize->top + static_cast<Steinberg::int32> (width * (preferredSize.getHeight() / static_cast<float> (preferredSize.getWidth())));
+            else
+                newSize->right = newSize->left + static_cast<Steinberg::int32> (height * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
+        }
+
+        rect = *newSize;
+        editor->setSize ({ static_cast<float> (rect.getWidth()), static_cast<float> (rect.getHeight()) });
 
         return Steinberg::kResultTrue;
     }
 
     Steinberg::tresult PLUGIN_API getSize (Steinberg::ViewRect* size) SMTG_OVERRIDE
     {
-        *size = Steinberg::ViewRect (0, 0, editor->getWidth(), editor->getHeight());
+        if (editor == nullptr || size == nullptr)
+            return Steinberg::kResultFalse;
+
+        if (editor->isResizable() && editor->getWidth() != 0)
+        {
+            size->right = size->left + editor->getWidth();
+            size->bottom = size->top + editor->getHeight();
+        }
+        else
+        {
+            const auto preferredSize = editor->getPreferredSize();
+            size->right = size->left + preferredSize.getWidth();
+            size->bottom = size->top + preferredSize.getHeight();
+        }
+
         return Steinberg::kResultTrue;
     }
 
@@ -132,6 +209,8 @@ private:
     AudioProcessor* processor = nullptr;
     std::unique_ptr<AudioProcessorEditor> editor;
 };
+
+//==============================================================================
 
 class AudioPluginEditorVST3
     : public Steinberg::Vst::EditController
@@ -236,9 +315,10 @@ public:
             info.id = Steinberg::Vst::kRootUnitId;
             info.parentUnitId = Steinberg::Vst::kNoParentUnitId;
             info.programListId = Steinberg::Vst::kNoProgramListId;
-            info.name[0] = 0;
+            copyStringToVST3("root", info.name);
             return Steinberg::kResultOk;
         }
+
         return Steinberg::kResultFalse;
     }
 
@@ -251,6 +331,36 @@ public:
     {
         return 1;
     }
+
+    Steinberg::tresult PLUGIN_API selectUnit (Steinberg::Vst::UnitID unitId) SMTG_OVERRIDE
+    {
+        if (unitId == Steinberg::Vst::kRootUnitId)
+            return Steinberg::kResultOk;
+
+        return Steinberg::kResultFalse;
+    }
+
+    Steinberg::tresult PLUGIN_API getUnitByBus (Steinberg::Vst::MediaType type,
+                                                Steinberg::Vst::BusDirection dir,
+                                                Steinberg::int32 busIndex,
+                                                Steinberg::int32 channel,
+                                                Steinberg::Vst::UnitID& unitId) SMTG_OVERRIDE
+    {
+        if (type == Steinberg::Vst::kAudio && dir == Steinberg::Vst::kInput && busIndex == 0)
+        {
+            unitId = Steinberg::Vst::kRootUnitId;
+            return Steinberg::kResultOk;
+        }
+
+        if (type == Steinberg::Vst::kAudio && dir == Steinberg::Vst::kOutput && busIndex == 0)
+        {
+            unitId = Steinberg::Vst::kRootUnitId;
+            return Steinberg::kResultOk;
+        }
+
+        return Steinberg::kResultFalse;
+    }
+
 
     Steinberg::tresult PLUGIN_API setUnitProgramData (Steinberg::int32 listOrUnitId, Steinberg::int32 programIndex, Steinberg::IBStream* data) SMTG_OVERRIDE
     {
@@ -271,6 +381,12 @@ public:
                                                   Steinberg::int32 programIndex,
                                                   Steinberg::Vst::String128 name) SMTG_OVERRIDE
     {
+        if (listId == Steinberg::Vst::kNoProgramListId && programIndex == 0)
+        {
+            copyStringToVST3 ("Default", name);
+            return Steinberg::kResultOk;
+        }
+
         return Steinberg::kResultFalse;
     }
 
@@ -279,6 +395,15 @@ public:
                                                   Steinberg::Vst::CString attributeId,
                                                   Steinberg::Vst::String128 attributeValue) SMTG_OVERRIDE
     {
+        if (listId == Steinberg::Vst::kNoProgramListId && programIndex == 0)
+        {
+            if (std::strcmp (attributeId, Steinberg::Vst::PresetAttributes::kName) == 0)
+            {
+                copyStringToVST3 ("Default", attributeValue);
+                return Steinberg::kResultOk;
+            }
+        }
+
         return Steinberg::kResultFalse;
     }
 
@@ -295,34 +420,25 @@ public:
         return Steinberg::kResultFalse;
     }
 
-    Steinberg::tresult PLUGIN_API selectUnit (Steinberg::Vst::UnitID unitId) SMTG_OVERRIDE
-    {
-        return Steinberg::kResultFalse;
-    }
-
-    Steinberg::tresult PLUGIN_API getUnitByBus (Steinberg::Vst::MediaType type,
-                                                Steinberg::Vst::BusDirection dir,
-                                                Steinberg::int32 busIndex,
-                                                Steinberg::int32 channel,
-                                                Steinberg::Vst::UnitID& unitId) SMTG_OVERRIDE
-    {
-        return Steinberg::kResultFalse;
-    }
-
     Steinberg::tresult PLUGIN_API setChannelContextInfos (Steinberg::Vst::IAttributeList* list) SMTG_OVERRIDE
     {
         return Steinberg::kResultFalse;
     }
 
-    //Steinberg::tresult PLUGIN_API remapParamID (Steinberg::Vst::ParamID id, Steinberg::Vst::UnitID fromUnit, Steinberg::Vst::UnitID toUnit) SMTG_OVERRIDE
-    //{
-    //    return Steinberg::kResultFalse;
-    //}
-
     Steinberg::tresult PLUGIN_API getCompatibleParamID (const Steinberg::TUID pluginToReplaceUID,
                                                         Steinberg::Vst::ParamID oldParamID,
                                                         Steinberg::Vst::ParamID& newParamID) SMTG_OVERRIDE
     {
+        if (processor == nullptr)
+            return Steinberg::kResultFalse;
+
+        const int numParams = processor->getNumParameters();
+        if (oldParamID >= 0 && oldParamID < numParams)
+        {
+            newParamID = oldParamID;
+            return Steinberg::kResultOk;
+        }
+
         return Steinberg::kResultFalse;
     }
 
@@ -531,3 +647,4 @@ DEF_CLASS2 (
     yup::AudioPluginEditorVST3::createInstance)
 
 END_FACTORY
+
