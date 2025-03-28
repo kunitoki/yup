@@ -25,6 +25,8 @@
 #error "YUP_AUDIO_PLUGIN_ENABLE_VST3 must be defined"
 #endif
 
+#include <atomic>
+
 #include <public.sdk/source/vst/vstaudioeffect.h>
 #include <public.sdk/source/vst/vsteditcontroller.h>
 #include <public.sdk/source/main/pluginfactory.h>
@@ -37,6 +39,7 @@
 #include <pluginterfaces/vst/ivsteditcontroller.h>
 #include <pluginterfaces/vst/ivstremapparamid.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
+#include <pluginterfaces/vst/ivstmessage.h>
 #include <pluginterfaces/vst/ivstplugview.h>
 #include <pluginterfaces/vst/vstpresetkeys.h>
 
@@ -49,16 +52,15 @@ namespace yup
 
 //==============================================================================
 
-static const auto Processor_UID = juce::Uuid::fromSHA1 (juce::SHA1 (CharPointer_UTF8 (YupPlugin_Id)));
-static const Steinberg::FUID YupPlugin_Processor_UID (Processor_UID.getPart (0), Processor_UID.getPart (1), Processor_UID.getPart (2), Processor_UID.getPart (3));
-
-static const auto Controller_UID = juce::Uuid::fromSHA1 (juce::SHA1 (CharPointer_UTF8 (YupPlugin_Id ".controller")));
-static const Steinberg::FUID YupPlugin_Controller_UID (Controller_UID.getPart (0), Controller_UID.getPart (1), Controller_UID.getPart (2), Controller_UID.getPart (3));
-
-//==============================================================================
-
 namespace
 {
+
+Steinberg::FUID stringToFUID (const String& source)
+{
+    const auto uid = juce::Uuid::fromSHA1 (juce::SHA1 (source.toUTF8()));
+    return { uid.getPart (0), uid.getPart (1), uid.getPart (2), uid.getPart (3) };
+}
+
 void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destination)
 {
     if (source.isEmpty())
@@ -73,7 +75,13 @@ void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destinati
     std::memcpy (destination, utf16.getAddress(), length * sizeof (Steinberg::Vst::TChar));
     destination[length] = 0;
 }
+
 } // namespace
+
+//==============================================================================
+
+static const auto YupPlugin_Processor_UID = stringToFUID (YupPlugin_Id);
+static const auto YupPlugin_Controller_UID = stringToFUID (YupPlugin_Id ".controller");
 
 //==============================================================================
 
@@ -128,6 +136,7 @@ public:
             viewRect.top = getY();
             viewRect.right = viewRect.left + getWidth();
             viewRect.bottom = viewRect.top + getHeight();
+
             plugFrame->resizeView (this, std::addressof (viewRect));
         }
 
@@ -139,13 +148,14 @@ public:
         if (editor == nullptr)
             return Steinberg::kResultFalse;
 
-        yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags & ~yup::ComponentNative::decoratedWindow;
+        ComponentNative::Flags flags = ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
 
         if (editor->shouldRenderContinuous())
-            flags.set (yup::ComponentNative::renderContinuous);
+            flags.set (ComponentNative::renderContinuous);
 
-        yup::ComponentNative::Options options;
-        options.flags = flags;
+        auto options = ComponentNative::Options()
+            .withFlags (flags)
+            .withResizableWindow (editor->isResizable());
 
         addToDesktop (options, parent);
         setVisible (true);
@@ -176,6 +186,9 @@ public:
 
     Steinberg::tresult PLUGIN_API checkSizeConstraint (Steinberg::ViewRect* rect) override
     {
+        if (editor == nullptr)
+            return Steinberg::kResultFalse;
+
         return Steinberg::kResultFalse;
     }
 
@@ -203,7 +216,13 @@ public:
         }
 
         rect = *newSize;
-        setSize ({ static_cast<float> (rect.getWidth()), static_cast<float> (rect.getHeight()) });
+
+        setBounds ({
+            static_cast<float> (rect.left),
+            static_cast<float> (rect.top),
+            static_cast<float> (rect.getWidth()),
+            static_cast<float> (rect.getHeight())
+        });
 
         return Steinberg::kResultTrue;
     }
@@ -223,8 +242,8 @@ public:
         else
         {
             const auto preferredSize = editor->getPreferredSize();
-            size->left = 0;
-            size->top = 0;
+            size->left = getX();
+            size->top = getY();
             size->right = size->left + preferredSize.getWidth();
             size->bottom = size->top + preferredSize.getHeight();
         }
@@ -265,7 +284,7 @@ private:
 
 //==============================================================================
 
-class AudioPluginEditorVST3
+class AudioPluginControllerVST3
     : public Steinberg::Vst::EditController
     , public Steinberg::Vst::IMidiMapping
     , public Steinberg::Vst::IUnitInfo
@@ -273,7 +292,7 @@ class AudioPluginEditorVST3
     , public Steinberg::Vst::ChannelContext::IInfoListener
 {
 public:
-    OBJ_METHODS (AudioPluginEditorVST3, Steinberg::Vst::EditController)
+    OBJ_METHODS (AudioPluginControllerVST3, Steinberg::Vst::EditController)
     REFCOUNT_METHODS (Steinberg::Vst::EditController)
 
     DEFINE_INTERFACES
@@ -284,45 +303,23 @@ public:
     DEF_INTERFACE (Steinberg::Vst::ChannelContext::IInfoListener)
     END_DEFINE_INTERFACES (Steinberg::Vst::EditController)
 
-    AudioPluginEditorVST3()
+    AudioPluginControllerVST3()
     {
-        processor.reset (createPluginProcessor());
-        if (processor != nullptr)
-        {
-#if 0
-            for (int i = 0; i < processor->getNumParameters(); ++i)
-            {
-                auto& param = processor->getParameter(i);
-                parameters.addParameter(
-                    param.getName().toRawUTF8(),
-                    nullptr,
-                    0,
-                    param.getValue(),
-                    Steinberg::Vst::ParameterInfo::kCanAutomate,
-                    i,
-                    Steinberg::Vst::ParameterInfo::kNoFlags,
-                    nullptr,
-                    Steinberg::Vst::kRootUnitId,
-                    nullptr);
-            }
-#endif
-        }
     }
 
-    ~AudioPluginEditorVST3()
+    ~AudioPluginControllerVST3()
     {
-        processor.reset();
     }
 
     static Steinberg::FUnknown* createInstance ([[maybe_unused]] void* context)
     {
-        return (Steinberg::Vst::IEditController*) new AudioPluginEditorVST3;
+        return (Steinberg::Vst::IEditController*) new AudioPluginControllerVST3;
     }
 
     Steinberg::IPlugView* PLUGIN_API createView (Steinberg::FIDString name) override
     {
         if (std::strcmp (name, Steinberg::Vst::ViewType::kEditor) == 0)
-            return new AudioPluginEditorViewVST3 (processor.get(), this);
+            return new AudioPluginEditorViewVST3 (processor, this);
 
         return nullptr;
     }
@@ -494,36 +491,114 @@ public:
         return Steinberg::kResultFalse;
     }
 
+    Steinberg::tresult PLUGIN_API connect (Steinberg::Vst::IConnectionPoint* other) override
+    {
+        return Steinberg::kResultTrue;
+    }
+
+    Steinberg::tresult PLUGIN_API disconnect (Steinberg::Vst::IConnectionPoint* other) override
+    {
+        processor = nullptr;
+        return Steinberg::kResultTrue;
+    }
+
+	Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override
+    {
+        if (message == nullptr)
+            return Steinberg::kResultFalse;
+
+        auto msgID = message->getMessageID();
+        if (std::strcmp (msgID, "processor") != 0)
+            return Steinberg::kResultFalse;
+
+        if (auto attributes = message->getAttributes())
+        {
+            const void* msgData;
+            uint32 msgSize;
+
+            auto result = attributes->getBinary ("data", msgData, msgSize);
+            if (result == Steinberg::kResultTrue && msgSize == sizeof(void*))
+            {
+                void* ptrValue = *reinterpret_cast<void* const*> (msgData);
+                processor = static_cast<AudioProcessor*> (ptrValue);
+
+#if 0
+                if (processor != nullptr)
+                {
+                    for (int i = 0; i < processor->getNumParameters(); ++i)
+                    {
+                        auto& param = processor->getParameter(i);
+                        parameters.addParameter(
+                            param.getName().toRawUTF8(),
+                            nullptr,
+                            0,
+                            param.getValue(),
+                            Steinberg::Vst::ParameterInfo::kCanAutomate,
+                            i,
+                            Steinberg::Vst::ParameterInfo::kNoFlags,
+                            nullptr,
+                            Steinberg::Vst::kRootUnitId,
+                            nullptr);
+                    }
+                }
+#endif
+
+                return result;
+            }
+        }
+
+        return Steinberg::kResultFalse;
+    }
+
 private:
-    std::unique_ptr<AudioProcessor> processor;
+    AudioProcessor* processor = nullptr;
 };
 
 //==============================================================================
 
-class AudioPluginWrapperVST3 : public Steinberg::Vst::AudioEffect
+static std::atomic_int numScopedInitInstancesGui = 0;
+
+struct ScopedYupInitialiser_GUI
+{
+    ScopedYupInitialiser_GUI()
+    {
+        if (numScopedInitInstancesGui.fetch_add (1) == 0)
+        {
+            yup::initialiseJuce_GUI();
+            yup::initialiseYup_Windowing();
+        }
+    }
+
+    ~ScopedYupInitialiser_GUI()
+    {
+        if (numScopedInitInstancesGui.fetch_add (-1) == 1)
+        {
+            yup::shutdownYup_Windowing();
+            yup::shutdownJuce_GUI();
+        }
+    }
+};
+
+//==============================================================================
+
+class AudioPluginProcessorVST3 : public Steinberg::Vst::AudioEffect
 {
 public:
-    AudioPluginWrapperVST3()
+    AudioPluginProcessorVST3()
     {
-        yup::initialiseJuce_GUI();
-        yup::initialiseYup_Windowing();
-
         processor.reset (::createPluginProcessor());
 
         setControllerClass (YupPlugin_Controller_UID);
     }
 
-    virtual ~AudioPluginWrapperVST3()
+    virtual ~AudioPluginProcessorVST3()
     {
         processor.reset();
-
-        yup::shutdownYup_Windowing();
-        yup::shutdownJuce_GUI();
     }
 
     static Steinberg::FUnknown* createInstance ([[maybe_unused]] void* context)
     {
-        return (Steinberg::Vst::IAudioProcessor*) new AudioPluginWrapperVST3();
+        return (Steinberg::Vst::IAudioProcessor*) new AudioPluginProcessorVST3();
     }
 
     Steinberg::tresult PLUGIN_API initialize (Steinberg::FUnknown* context) override
@@ -655,7 +730,39 @@ public:
         return Steinberg::kResultOk;
     }
 
+    Steinberg::tresult PLUGIN_API connect (Steinberg::Vst::IConnectionPoint* other) override
+    {
+        auto result = AudioEffect::connect (other);
+
+        if (Steinberg::IPtr<Steinberg::Vst::IMessage> message = owned(allocateMessage()))
+        {
+            message->setMessageID ("processor");
+
+            if (auto attributes = message->getAttributes())
+            {
+                void* ptrValue = static_cast<void*> (processor.get());
+                attributes->setBinary ("data", std::addressof (ptrValue), sizeof (ptrValue));
+            }
+
+            sendMessage (message);
+        }
+
+        return result;
+    }
+
+    Steinberg::tresult PLUGIN_API disconnect (Steinberg::Vst::IConnectionPoint* other) override
+    {
+        return AudioEffect::disconnect (other);
+    }
+
+	Steinberg::tresult PLUGIN_API notify (Steinberg::Vst::IMessage* message) override
+    {
+        return AudioEffect::notify (message);
+    }
+
 private:
+    ScopedYupInitialiser_GUI scopeInitialiser;
+
     std::unique_ptr<AudioProcessor> processor;
 
     Steinberg::Vst::ProcessContext processContext;
@@ -682,7 +789,7 @@ DEF_CLASS2 (
     Steinberg::Vst::PlugType::kFx,  // Subcategory (effect)
     YupPlugin_Version,              // Plugin version
     kVstVersionString,              // The VST 3 SDK version (do not change this, always use this define)
-    yup::AudioPluginWrapperVST3::createInstance)
+    yup::AudioPluginProcessorVST3::createInstance)
 
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Controller_UID),
@@ -693,6 +800,6 @@ DEF_CLASS2 (
     "",                           // Not used here
     YupPlugin_Version,            // Plug-in version (to be changed)
     kVstVersionString,            // The VST 3 SDK version (do not change this, always use this define)
-    yup::AudioPluginEditorVST3::createInstance)
+    yup::AudioPluginControllerVST3::createInstance)
 
 END_FACTORY
