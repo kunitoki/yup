@@ -37,6 +37,7 @@
 #include <pluginterfaces/vst/ivstprocesscontext.h>
 #include <pluginterfaces/vst/ivstparameterchanges.h>
 #include <pluginterfaces/vst/ivsteditcontroller.h>
+#include <pluginterfaces/vst/ivstevents.h>
 #include <pluginterfaces/vst/ivstremapparamid.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 #include <pluginterfaces/vst/ivstmessage.h>
@@ -608,6 +609,10 @@ public:
         addAudioInput (STR16 ("Stereo In"), Steinberg::Vst::SpeakerArr::kStereo);
         addAudioOutput (STR16 ("Stereo Out"), Steinberg::Vst::SpeakerArr::kStereo);
 
+#if YupPlugin_IsSynth
+        addEventInput(STR16 ("Midi In"));
+#endif
+
         // Add parameter definitions
         for (int i = 0; i < processor->getNumParameters(); ++i)
         {
@@ -711,6 +716,46 @@ public:
             }
         }
 
+        midiBuffer.clear();
+
+        if (data.inputEvents)
+        {
+            int32 numEvents = data.inputEvents->getEventCount();
+
+            for (int32 i = 0; i < numEvents; ++i)
+            {
+                Steinberg::Vst::Event e;
+                if (data.inputEvents->getEvent(i, e) == Steinberg::kResultOk)
+                {
+                    switch (e.type)
+                    {
+                        case Steinberg::Vst::Event::kNoteOnEvent:
+                            midiBuffer.addEvent (MidiMessage::noteOn (e.noteOn.channel + 1, e.noteOn.pitch, e.noteOn.velocity), e.sampleOffset);
+                            break;
+
+                        case Steinberg::Vst::Event::kNoteOffEvent:
+                            midiBuffer.addEvent (MidiMessage::noteOff (e.noteOff.channel + 1, e.noteOff.pitch, e.noteOff.velocity), e.sampleOffset);
+                            break;
+
+                        case Steinberg::Vst::Event::kPolyPressureEvent:
+                            // handle poly pressure if needed
+                            break;
+
+                        case Steinberg::Vst::Event::kDataEvent:
+                            // optional: handle MIDI SysEx or other custom events
+                            break;
+
+                        case Steinberg::Vst::Event::kLegacyMIDICCOutEvent:
+                            // handle legacy CC output
+                            break;
+
+                        default:
+                            break;
+                    }
+                }
+            }
+        }
+
         // --- Process Audio ---
         if (data.numSamples > 0 && data.inputs && data.outputs)
         {
@@ -769,6 +814,12 @@ private:
     MidiBuffer midiBuffer;
 };
 
+#if YupPlugin_IsSynth
+const auto YupPlugin_Category = Steinberg::Vst::PlugType::kInstrument;
+#else
+const auto YupPlugin_Category = Steinberg::Vst::PlugType::kFx;
+#endif
+
 } // namespace yup
 
 //==============================================================================
@@ -780,24 +831,24 @@ BEGIN_FACTORY_DEF (
 
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Processor_UID),
-    PClassInfo::kManyInstances,     // Supports multiple instances
-    kVstAudioEffectClass,           // Component category
-    YupPlugin_Name,                 // Plugin name
-    Steinberg::Vst::kDistributable, // Distribution status
-    Steinberg::Vst::PlugType::kFx,  // Subcategory (effect)
-    YupPlugin_Version,              // Plugin version
-    kVstVersionString,              // The VST 3 SDK version (do not change this, always use this define)
+    Steinberg::PClassInfo::kManyInstances, // Supports multiple instances
+    kVstAudioEffectClass,                  // Component category (do not change this)
+    YupPlugin_Name,                        // Plugin name
+    Steinberg::Vst::kDistributable,        // Distribution status
+    yup::YupPlugin_Category,               // Subcategory (effect)
+    YupPlugin_Version,                     // Plugin version
+    kVstVersionString,                     // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginProcessorVST3::createInstance)
 
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Controller_UID),
-    PClassInfo::kManyInstances,   // Supports multiple instances
-    kVstComponentControllerClass, // Controller category (do not change this)
-    YupPlugin_Name "Controller",  // Controller name (can be the same as the component name)
-    0,                            // Not used here
-    "",                           // Not used here
-    YupPlugin_Version,            // Plug-in version (to be changed)
-    kVstVersionString,            // The VST 3 SDK version (do not change this, always use this define)
+    Steinberg::PClassInfo::kManyInstances, // Supports multiple instances
+    kVstComponentControllerClass,          // Controller category (do not change this)
+    YupPlugin_Name "Controller",           // Controller name (can be the same as the component name)
+    0,                                     // Not used here
+    "",                                    // Not used here
+    YupPlugin_Version,                     // Plug-in version
+    kVstVersionString,                     // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginControllerVST3::createInstance)
 
 END_FACTORY
