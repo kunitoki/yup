@@ -610,7 +610,7 @@ public:
         addAudioOutput (STR16 ("Stereo Out"), Steinberg::Vst::SpeakerArr::kStereo);
 
 #if YupPlugin_IsSynth
-        addEventInput(STR16 ("Midi In"));
+        addEventInput (STR16 ("Midi In"));
 #endif
 
         // Add parameter definitions
@@ -725,7 +725,7 @@ public:
             for (int32 i = 0; i < numEvents; ++i)
             {
                 Steinberg::Vst::Event e;
-                if (data.inputEvents->getEvent(i, e) == Steinberg::kResultOk)
+                if (data.inputEvents->getEvent (i, e) == Steinberg::kResultOk)
                 {
                     switch (e.type)
                     {
