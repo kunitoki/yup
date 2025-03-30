@@ -18,6 +18,15 @@ jobs:
       contents: write
 
     steps:
+      - name: Install dependencies
+        run: |
+          which clang-format
+          pipx --version
+          pipx install clang-format
+          pipx run clang-format --version
+          which clang-format
+          clang-format --version
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:

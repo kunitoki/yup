@@ -78,7 +78,10 @@ public:
     int getNumChannels() const noexcept { return numChannels; }
 
     /** Returns true if the bus is mono. */
-    bool isMono() const noexcept { return numChannels == 1; }
+    bool isMono() const noexcept {
+        return numChannels
+        ==
+1; }
 
     /** Returns true if the bus is stereo. */
     bool isStereo() const noexcept { return numChannels == 2; }
