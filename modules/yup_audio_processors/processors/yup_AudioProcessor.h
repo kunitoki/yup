@@ -22,29 +22,69 @@
 namespace yup
 {
 
+class AudioProcessorEditor;
+
 //==============================================================================
+/**
+    Base class for all audio processors.
+
+    @see AudioProcessorEditor
+*/
 class JUCE_API AudioProcessor
 {
 public:
-    AudioProcessor();
+    //==============================================================================
+
+    /** Constructs an AudioProcessor. */
+    AudioProcessor (StringRef name, AudioBusLayout busLayout);
+
+    /** Destructs an AudioProcessor. */
     virtual ~AudioProcessor();
 
-    virtual int getNumParameters() const = 0;
-    virtual AudioProcessorParameter& getParameter (int index) = 0;
+    //==============================================================================
 
-    virtual int getNumAudioOutputs() const = 0;
-    virtual int getNumAudioInputs() const = 0;
+    Span<const AudioParameter::Ptr> getParameters() const { return parameters; }
 
+    void addParameter (AudioParameter::Ptr parameter);
+
+    //==============================================================================
+
+    /** Returns the bus layout. */
+    const AudioBusLayout& getBusLayout() const noexcept { return busLayout; }
+
+    /** Returns the number of audio outputs. */
+    int getNumAudioOutputs() const;
+
+    /** Returns the number of audio inputs. */
+    int getNumAudioInputs() const;
+
+    //==============================================================================
+
+    /** Prepares the processor for playback. */
     virtual void prepareToPlay (float sampleRate, int maxBlockSize) = 0;
+
+    /** Releases resources. */
     virtual void releaseResources() = 0;
 
-    virtual void processBlock (yup::AudioSampleBuffer& audioBuffer, yup::MidiBuffer& midiBuffer) = 0;
+    /** Processes a block of audio. */
+    virtual void processBlock (AudioSampleBuffer& audioBuffer, MidiBuffer& midiBuffer) = 0;
 
+    /** Flushes the processor. */
     virtual void flush() {}
 
+    //==============================================================================
+
+    /** Returns true if the processor has an editor. */
     virtual bool hasEditor() const = 0;
 
+    /** Creates an editor for the processor. */
     virtual AudioProcessorEditor* createEditor() { return nullptr; }
+
+private:
+    String processorName;
+    std::vector<AudioParameter::Ptr> parameters;
+    std::unordered_map<String, AudioParameter::Ptr> parameterMap;
+    AudioBusLayout busLayout;
 };
 
 } // namespace yup

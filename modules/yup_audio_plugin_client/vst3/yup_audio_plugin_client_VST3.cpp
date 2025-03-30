@@ -480,7 +480,7 @@ public:
         if (processor == nullptr)
             return Steinberg::kResultFalse;
 
-        const int numParams = processor->getNumParameters();
+        const auto numParams = static_cast<int> (processor->getParameters().size());
         if (oldParamID >= 0 && oldParamID < numParams)
         {
             newParamID = oldParamID;
@@ -614,7 +614,7 @@ public:
 #endif
 
         // Add parameter definitions
-        for (int i = 0; i < processor->getNumParameters(); ++i)
+        for (auto parameter : processor->getParameters())
         {
             /*
             auto& param = processor->getParameter (i);
@@ -711,8 +711,10 @@ public:
 
                 int32 sampleOffset;
                 Steinberg::Vst::ParamValue value;
-                if (queue->getPoint (numPoints - 1, sampleOffset, value) == Steinberg::kResultOk)
+                /*
+                if (queue->getPoint (numPoints - 1, sampleOffset, value) == Steinberg::kResultOk) // TODO
                     processor->getParameter (i).setValue (static_cast<float> (value));
+                */
             }
         }
 

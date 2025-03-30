@@ -24,12 +24,39 @@ namespace yup
 
 //==============================================================================
 
-AudioProcessor::AudioProcessor()
+AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
+    : processorName (name)
+    , busLayout (std::move (busLayout))
 {
 }
 
+//==============================================================================
+
 AudioProcessor::~AudioProcessor()
 {
+}
+
+//==============================================================================
+
+void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
+{
+    jassert (parameter != nullptr);
+
+    parameterMap[parameter->getID()] = parameter;
+
+    parameters.emplace_back (std::move (parameter));
+}
+
+//==============================================================================
+
+int AudioProcessor::getNumAudioOutputs() const
+{
+    return static_cast<int> (busLayout.getOutputBuses().size());
+}
+
+int AudioProcessor::getNumAudioInputs() const
+{
+    return static_cast<int> (busLayout.getInputBuses().size());
 }
 
 } // namespace yup

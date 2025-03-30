@@ -47,6 +47,10 @@
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================
-#include "processors/yup_AudioProcessorParameter.h"
-#include "processors/yup_AudioProcessorEditor.h"
+#include "processors/yup_AudioBus.h"
+#include "processors/yup_AudioBusLayout.h"
+#include "processors/yup_AudioParameter.h"
+#include "processors/yup_AudioParameterBuilder.h"
+#include "processors/yup_AudioParameterHandle.h"
 #include "processors/yup_AudioProcessor.h"
+#include "processors/yup_AudioProcessorEditor.h"
