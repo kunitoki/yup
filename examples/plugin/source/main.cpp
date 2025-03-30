@@ -190,7 +190,7 @@ public:
         int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
         auto midiIterator = midiBuffer.begin();
 
-        gainHandle.update(); // call once per block
+        gainHandle.update();
 
         for (int currentSample = 0; currentSample < numSamples;)
         {
