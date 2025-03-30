@@ -57,7 +57,8 @@ public:
     /** Updates the smoothed value of the parameter. */
     void update() noexcept
     {
-        if (parameter == nullptr) return;
+        if (parameter == nullptr)
+            return;
 
         smoothed.setTargetValue (parameter->getValue());
     }

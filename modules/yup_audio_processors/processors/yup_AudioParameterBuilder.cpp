@@ -77,9 +77,9 @@ AudioParameterBuilder& AudioParameterBuilder::withSmoothing (float smoothingTime
 
 AudioParameter::Ptr AudioParameterBuilder::build() const
 {
-    jassert (!id.isEmpty() && !name.isEmpty());
+    jassert (! id.isEmpty() && ! name.isEmpty());
 
-    return AudioParameter::Ptr (new AudioParameter(
+    return AudioParameter::Ptr (new AudioParameter (
         id,
         name,
         valueRange,

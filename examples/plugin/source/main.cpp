@@ -154,15 +154,15 @@ class MyPlugin : public yup::AudioProcessor
 public:
     MyPlugin()
         : yup::AudioProcessor ("MyPlugin",
-                               yup::AudioBusLayout({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
+                               yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
         addParameter (gainParameter = yup::AudioParameterBuilder()
-                      .withID ("volume")
-                      .withName ("Volume")
-                      .withRange (0.0f, 1.0f)
-                      .withDefault (0.5f)
-                      .withSmoothing (20.0f)
-                      .build());
+                                          .withID ("volume")
+                                          .withName ("Volume")
+                                          .withRange (0.0f, 1.0f)
+                                          .withDefault (0.5f)
+                                          .withSmoothing (20.0f)
+                                          .build());
     }
 
     ~MyPlugin()
@@ -333,7 +333,6 @@ MyEditor::MyEditor (MyPlugin& processor)
 
     setSize (getPreferredSize().to<float>());
 }
-
 
 extern "C" yup::AudioProcessor* createPluginProcessor()
 {

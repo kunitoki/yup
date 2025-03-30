@@ -38,7 +38,8 @@ public:
 
     /** Constructs an AudioBusLayout from lists of buses. */
     AudioBusLayout (std::vector<AudioBus> inputs, std::vector<AudioBus> outputs)
-        : inputBuses (std::move (inputs)), outputBuses (std::move (outputs))
+        : inputBuses (std::move (inputs))
+        , outputBuses (std::move (outputs))
     {
     }
 

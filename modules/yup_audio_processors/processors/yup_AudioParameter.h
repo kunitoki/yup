@@ -136,7 +136,7 @@ public:
 
         @param normalizedValue The new normalized value.
     */
-    void setNormalizedValue(float normalizedValue)
+    void setNormalizedValue (float normalizedValue)
     {
         setValue (valueRange.convertFrom0to1 (normalizedValue));
     }
