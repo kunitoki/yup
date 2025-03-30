@@ -122,7 +122,7 @@ jobs:
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
 
-  build_plugin:
+  build_plugins:
     runs-on: macos-latest
     needs: [configure]
     steps:
@@ -132,5 +132,7 @@ jobs:
       with:
         path: ${{runner.workspace}}/build
         key: macos-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_clap_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
