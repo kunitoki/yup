@@ -36,5 +36,5 @@ TEST (SHA1Tests, All)
 
     MemoryInputStream m ("The quick brown fox jumps over the lazy dog", std::strlen ("The quick brown fox jumps over the lazy dog"), false);
     SHA1 hash3 (m);
-    EXPECT_EQ (hash3.toHexString(), String ("408d94384216f890ff7a0c3528e8bed1e0b01621"));
+    EXPECT_EQ (hash3.toHexString(), String ("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12"));
 }

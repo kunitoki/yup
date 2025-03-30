@@ -20,13 +20,42 @@
 */
 
 #include <cstdint>
-#include <bit>
+#include <limits>
 
 namespace juce
 {
 
 namespace
 {
+
+constexpr uint64_t constexprRotl (uint64_t x, int k) noexcept;
+
+constexpr uint64_t constexprRotr (uint64_t x, int k) noexcept
+{
+    constexpr int N = std::numeric_limits<uint64_t>::digits;
+
+    const int r = k % N;
+    if (r == 0)
+        return x;
+    else if (r > 0)
+        return (x >> r) | (x << (N - r));
+    else
+        return constexprRotl (x, -r);
+}
+
+constexpr uint64_t constexprRotl (uint64_t x, int k) noexcept
+{
+    constexpr int N = std::numeric_limits<uint64_t>::digits;
+
+    const int r = k % N;
+    if (r == 0)
+        return x;
+    else if (r > 0)
+        return (x << r) | (x >> (N - r));
+    else
+        return constexprRotr (x, -r);
+}
+
 constexpr uint64_t constexprHash (uint64_t in) noexcept
 {
     constexpr uint64_t r[] {
@@ -34,12 +63,12 @@ constexpr uint64_t constexprHash (uint64_t in) noexcept
     };
 
     uint64_t out { in ^ r[in & 0x7] };
-    out ^= std::rotl (in, 32) ^ r[(in >> 8) & 0x7];
-    out ^= std::rotl (in, 16) ^ r[(in >> 16) & 0x7];
-    out ^= std::rotl (in, 8) ^ r[(in >> 24) & 0x7];
-    out ^= std::rotl (in, 4) ^ r[(in >> 32) & 0x7];
-    out ^= std::rotl (in, 2) ^ r[(in >> 40) & 0x7];
-    out ^= std::rotl (in, 1) ^ r[(in >> 48) & 0x7];
+    out ^= constexprRotl (in, 32) ^ r[(in >> 8) & 0x7];
+    out ^= constexprRotl (in, 16) ^ r[(in >> 16) & 0x7];
+    out ^= constexprRotl (in, 8) ^ r[(in >> 24) & 0x7];
+    out ^= constexprRotl (in, 4) ^ r[(in >> 32) & 0x7];
+    out ^= constexprRotl (in, 2) ^ r[(in >> 40) & 0x7];
+    out ^= constexprRotl (in, 1) ^ r[(in >> 48) & 0x7];
     return out;
 }
 
