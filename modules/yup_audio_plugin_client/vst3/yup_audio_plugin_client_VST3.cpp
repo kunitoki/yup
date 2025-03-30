@@ -711,10 +711,8 @@ public:
 
                 int32 sampleOffset;
                 Steinberg::Vst::ParamValue value;
-                /*
-                if (queue->getPoint (numPoints - 1, sampleOffset, value) == Steinberg::kResultOk) // TODO
-                    processor->getParameter (i).setValue (static_cast<float> (value));
-                */
+                if (queue->getPoint (numPoints - 1, sampleOffset, value) == Steinberg::kResultOk)
+                    processor->getParameters()[i]->setNormalizedValue (static_cast<float> (value));
             }
         }
 
