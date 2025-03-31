@@ -70,48 +70,48 @@ function (_yup_module_collect_sources folder output_variable)
     foreach (extension ${source_extensions})
         file (GLOB found_source_files "${base_path}*${extension}")
 
-        if (NOT "${yup_platform}" MATCHES "^(windows|uwp)$")
+        if (NOT YUP_PLATFORM_MSFT)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_microsoft${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(windows)$")
+        if (NOT YUP_PLATFORM_WINDOWS)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(uwp)$")
+        if (NOT YUP_PLATFORM_UWP)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_uwp${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|osx)$")
+        if (NOT YUP_PLATFORM_APPLE)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_apple${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios)$")
+        if (NOT YUP_PLATFORM_IOS)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(osx)$")
+        if (NOT YUP_PLATFORM_OSX)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(linux)$")
+        if (NOT YUP_PLATFORM_LINUX)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_linux${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
+        if (NOT YUP_PLATFORM_MOBILE)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mobile${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(android)$")
+        if (NOT YUP_PLATFORM_ANDROID)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_android${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
+        if (NOT YUP_PLATFORM_EMSCRIPTEN)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_emscripten${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
+        if (NOT YUP_PLATFORM_POSIX)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
 
@@ -171,7 +171,7 @@ function (_yup_module_setup_target module_name
                                    module_frameworks
                                    module_dependencies
                                    module_arc_enabled)
-    if ("${yup_platform}" MATCHES "^(windows|uwp)$")
+    if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
     endif()
 
@@ -188,7 +188,7 @@ function (_yup_module_setup_target module_name
         CXX_VISIBILITY_PRESET hidden
         VISIBILITY_INLINES_HIDDEN ON)
 
-    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
         set_target_properties (${module_name} PROPERTIES
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled}
             XCODE_GENERATE_SCHEME OFF)
@@ -220,7 +220,7 @@ endfunction()
 #==============================================================================
 
 function (_yup_module_setup_plugin_client target_name plugin_client_target folder_name plugin_type)
-    if (NOT "${yup_platform}" MATCHES "^(osx|linux|windows)$")
+    if (NOT YUP_PLATFORM_DESKTOP)
         return()
     endif()
 
@@ -275,7 +275,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
         list (APPEND module_defines YupPlugin_IsMono=0)
     endif()
 
-    if ("${yup_platform}" MATCHES "^(ios|osx)$")
+    if (YUP_PLATFORM_APPLE)
         _yup_glob_recurse ("${module_path}/${plugin_type}/*.mm" module_sources)
     else()
         _yup_glob_recurse ("${module_path}/${plugin_type}/*.cpp" module_sources)
@@ -353,7 +353,7 @@ function (yup_add_module module_path)
     _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
 
     # ==== Setup Platform-Specific Configurations
-    if ("${yup_platform}" MATCHES "^(ios)$")
+    if (YUP_PLATFORM_IOS)
         if (PLATFORM MATCHES "^(SIMULATOR.*)$")
             list (APPEND module_dependencies ${module_iosSimDeps})
             list (APPEND module_defines ${module_iosSimDefines})
@@ -372,7 +372,7 @@ function (yup_add_module module_path)
             _yup_module_prepare_frameworks ("${module_iosFrameworks}" "${module_iosWeakFrameworks}" module_frameworks)
         endif()
 
-    elseif ("${yup_platform}" MATCHES "^(osx)$")
+    elseif (YUP_PLATFORM_OSX)
         list (APPEND module_dependencies ${module_osxDeps})
         list (APPEND module_defines ${module_osxDefines})
         list (APPEND module_options ${module_osxOptions})
@@ -381,7 +381,7 @@ function (yup_add_module module_path)
         list (APPEND module_searchpaths ${module_osxSearchpaths})
         _yup_module_prepare_frameworks ("${module_osxFrameworks}" "${module_osxWeakFrameworks}" module_frameworks)
 
-    elseif ("${yup_platform}" MATCHES "^(linux)$")
+    elseif (YUP_PLATFORM_LINUX)
         list (APPEND module_dependencies ${module_linuxDeps})
         list (APPEND module_defines ${module_linuxDefines})
         list (APPEND module_options ${module_linuxOptions})
@@ -393,7 +393,7 @@ function (yup_add_module module_path)
             list (APPEND module_libs ${package_libs})
         endforeach()
 
-    elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+    elseif (YUP_PLATFORM_EMSCRIPTEN)
         list (APPEND module_dependencies ${module_wasmDeps})
         list (APPEND module_defines ${module_wasmDefines})
         list (APPEND module_options ${module_wasmOptions})
@@ -401,7 +401,7 @@ function (yup_add_module module_path)
         _yup_resolve_variable_paths ("${module_wasmSearchpaths}" module_wasmSearchpaths)
         list (APPEND module_searchpaths ${module_wasmSearchpaths})
 
-    elseif ("${yup_platform}" MATCHES "^(android)$")
+    elseif (YUP_PLATFORM_ANDROID)
         list (APPEND module_dependencies ${module_androidDeps})
         list (APPEND module_defines ${module_androidDefines})
         list (APPEND module_options ${module_androidOptions})
@@ -409,7 +409,7 @@ function (yup_add_module module_path)
         _yup_resolve_variable_paths ("${module_androidSearchpaths}" module_androidSearchpaths)
         list (APPEND module_searchpaths ${module_androidSearchpaths})
 
-    elseif ("${yup_platform}" MATCHES "^(windows|uwp)$")
+    elseif (YUP_PLATFORM_MSFT)
         list (APPEND module_dependencies ${module_windowsDeps})
         list (APPEND module_defines ${module_windowsDefines})
         list (APPEND module_options ${module_windowsOptions})

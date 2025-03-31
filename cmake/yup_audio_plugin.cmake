@@ -34,7 +34,7 @@ function (yup_audio_plugin)
     set (additional_link_options "")
 
     # ==== Validation stage
-    if ("${yup_platform}" MATCHES "^(emscripten|android)$")
+    if (NOT YUP_PLATFORM_DESKTOP)
         _yup_message (FATAL_ERROR "Audio plugins are not supported on emscripten or android.")
         return()
     endif()
@@ -127,7 +127,7 @@ function (yup_audio_plugin)
         set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
         set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
-        if (NOT "${yup_platform}" MATCHES "^(osx)$" OR XCODE)
+        if (NOT YUP_PLATFORM_OSX OR XCODE)
             set (SMTG_RUN_VST_VALIDATOR ON)
         else()
             set (SMTG_RUN_VST_VALIDATOR OFF)
@@ -169,7 +169,7 @@ function (yup_audio_plugin)
             ${additional_libraries}
             ${YUP_ARG_MODULES})
 
-        if ("${yup_platform}" MATCHES "^(osx)$")
+        if (YUP_PLATFORM_OSX)
             smtg_target_set_bundle (${target_name}_vst3_plugin
                 BUNDLE_IDENTIFIER org.kunitoki.yup.${target_name}
                 COMPANY_NAME "kunitoki")
@@ -228,13 +228,13 @@ function (yup_audio_plugin)
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
 
-        if ("${yup_platform}" MATCHES "^(osx)$")
+        if (YUP_PLATFORM_OSX)
             set_target_properties (${target_name}_app PROPERTIES
                 BUNDLE ON
                 MACOSX_BUNDLE_GUI_IDENTIFIER "org.kunitoki.yup.${target_name}"
                 MACOSX_BUNDLE_NAME "${target_name}"
                 MACOSX_BUNDLE_VERSION "1.0.0"
-                MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist"
+                MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/Info.plist"
                 XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED OFF
                 XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT dwarf
                 XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
@@ -249,7 +249,7 @@ endfunction()
 function (yup_audio_plugin_copy_bundle target_name plugin_type)
     return()
 
-    if (NOT "${yup_platform}" MATCHES "^(osx)$")
+    if (NOT YUP_PLATFORM_OSX)
         return()
     endif()
 
