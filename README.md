@@ -35,8 +35,8 @@ YUP is an open-source library dedicated to empowering developers with advanced t
 YUP brings a suite of powerful features, including:
 - **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source [Rive](https://rive.app/) Renderer, backed by Metal, Direct3D, OpenGL, Vulkan and WebGPU.
 - **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more. Based on the JUCE7 module for audio/midi input and output.
-- **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://cleveraudio.org/) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
-- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux, Wasm (iOS and Android are in the pipe).
+- **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://cleveraudio.org/) and [VST3](https://github.com/steinbergmedia/vst3sdk) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
+- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux, Wasm, iOS and Android.
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
 
