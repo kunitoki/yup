@@ -67,7 +67,7 @@ YUP brings a suite of powerful features, including:
 | **DirectSound**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **WASAPI**               | :white_check_mark: |                    |                    |                    |                           |                       |
 | **ALSA**                 |                    |                    | :white_check_mark: |                    |                           |                       |
-| **JACK**                 |                    |                    | :white_check_mark: |                    |                           |                       |
+| **JACK**                 | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                           |                       |
 | **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
