@@ -21,7 +21,7 @@ public:
     MyPluginProcessor()
     {
         // Add parameters
-        addParameter (gain = yup::AudioParameterBuilder{}
+        addParameter (gainParameter = yup::AudioParameterBuilder{}
             .withID ("gain")
             .withName ("Gain")
             .withRange (0.0f, 1.0f)
@@ -32,6 +32,8 @@ public:
     void prepareToPlay (double sampleRate, int samplesPerBlock) override
     {
         // Initialize processing resources
+
+        gain = yup::AudioParameterHandle (*gainParameter, sampleRate);
     }
 
     void releaseResources() override
@@ -39,17 +41,27 @@ public:
         // Clean up resources
     }
 
-    void processBlock (yup::AudioBuffer<float>& buffer, yup::MidiBuffer& midiMessages) override
+    void processBlock (yup::AudioBuffer<float>& audioBuffer, yup::MidiBuffer& midiMessages) override
     {
-        // Process audio
-        buffer.applyGain (gain->getValue());
+        if (gain.updateNextAudioBlock())
+        {
+            float currentGain = gain.getCurrentValue();
+            float destinationGain = gain.skip (audioBuffer.getNumSamples());
+
+            audioBuffer.applyGainRamp (0, audioBuffer.getNumSamples(), currentGain, destinationGain);
+        }
+        else
+        {
+            audioBuffer.applyGain (gain.getCurrentValue());
+        }
     }
 
     bool hasEditor() const override { return true; }
     yup::AudioProcessorEditor* createEditor() override;
 
 private:
-    yup::AudioParameter::Ptr gain;
+    yup::AudioParameter::Ptr gainParameter;
+    yup::AudioParameterHandle gain;
 };
 
 class MyPluginEditor : public yup::AudioProcessorEditor

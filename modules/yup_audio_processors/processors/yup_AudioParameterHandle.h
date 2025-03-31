@@ -54,25 +54,55 @@ public:
         smoothed.setCurrentAndTargetValue (parameter.getValue());
     }
 
-    /** Updates the smoothed value of the parameter. */
-    void update() noexcept
+    /** Constructs a new AudioParameterHandle. */
+    AudioParameterHandle (const AudioParameterHandle& other) = default;
+
+    /** Constructs a new AudioParameterHandle. */
+    AudioParameterHandle& operator= (const AudioParameterHandle& other) = default;
+
+    /** Destructs the AudioParameterHandle. */
+    ~AudioParameterHandle() = default;
+
+    /**
+        Updates the smoothed value of the parameter.
+
+        This must be called on the audio thread once per audio block.
+
+        @returns true if the parameter is currently being smoothed, false otherwise.
+    */
+    forcedinline bool updateNextAudioBlock() noexcept
     {
-        if (parameter == nullptr)
-            return;
+        jassert (parameter != nullptr);
 
         smoothed.setTargetValue (parameter->getValue());
+
+        return smoothed.isSmoothing();
     }
 
     /** Returns the next value of the parameter. */
-    float getNextValue() noexcept
+    forcedinline float getNextValue() noexcept
     {
         return smoothed.getNextValue();
     }
 
     /** Returns the current value of the parameter. */
-    float getCurrentValue() const noexcept
+    forcedinline float getCurrentValue() const noexcept
     {
         return smoothed.getCurrentValue();
+    }
+
+    /**
+        Skips the next numSamples samples of the parameter.
+
+        This is identical to calling getNextValue numSamples times.
+
+        @param numSamples The number of samples to skip.
+
+        @returns The current value of the parameter after skipping the samples.
+    */
+    forcedinline float skip (int numSamples) noexcept
+    {
+        return smoothed.skip (numSamples);
     }
 
 private:

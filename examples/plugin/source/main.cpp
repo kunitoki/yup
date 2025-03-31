@@ -190,7 +190,7 @@ public:
         int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
         auto midiIterator = midiBuffer.begin();
 
-        gainHandle.update();
+        gainHandle.updateNextAudioBlock();
 
         for (int currentSample = 0; currentSample < numSamples;)
         {
@@ -259,7 +259,7 @@ public:
 
             while (--remainingSamples >= 0)
             {
-                float gainValue = gainHandle.getNextValue();
+                const float gainValue = gainHandle.getNextValue();
 
                 float sum = 0.0f;
 
