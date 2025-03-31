@@ -127,6 +127,11 @@ function (yup_audio_plugin)
         set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
         set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
+        if (NOT "${yup_platform}" MATCHES "^(osx)$" OR XCODE)
+            set (SMTG_RUN_VST_VALIDATOR ON)
+        else()
+            set (SMTG_RUN_VST_VALIDATOR OFF)
+        endif()
         FetchContent_Declare (
             vst3sdk
             GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
@@ -164,13 +169,25 @@ function (yup_audio_plugin)
             ${additional_libraries}
             ${YUP_ARG_MODULES})
 
-        if (SMTG_MAC)
+        if ("${yup_platform}" MATCHES "^(osx)$")
             smtg_target_set_bundle (${target_name}_vst3_plugin
                 BUNDLE_IDENTIFIER org.kunitoki.yup.${target_name}
                 COMPANY_NAME "kunitoki")
+
             #smtg_target_set_debug_executable(MyPlugin
             #    "/Applications/VST3PluginTestHost.app"
             #    "--pluginfolder;$(BUILT_PRODUCTS_DIR)")
+
+            if (NOT XCODE)
+                add_custom_command(
+                    TARGET ${target_name}_vst3_plugin POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E echo [SMTG] Validator started...
+                    COMMAND
+                        $<TARGET_FILE:validator>
+                        "${CMAKE_BINARY_DIR}/VST3/${CMAKE_BUILD_TYPE}/${CMAKE_BUILD_TYPE}/${target_name}_vst3_plugin.vst3"
+                        WORKING_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}"
+                    COMMAND ${CMAKE_COMMAND} -E echo [SMTG] Validator finished.)
+            endif()
         endif()
 
         set_target_properties (${target_name}_vst3_plugin PROPERTIES
