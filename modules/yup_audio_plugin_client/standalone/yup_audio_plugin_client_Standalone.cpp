@@ -133,7 +133,7 @@ public:
         MidiBuffer midiBuffer;
         processor->processBlock (audioBuffer, midiBuffer);
 
-        AudioBuffer<float> outputBuffer{ outputChannelData, numOutputChannels, numSamples };
+        AudioBuffer<float> outputBuffer { outputChannelData, numOutputChannels, numSamples };
         for (int outputIndex = 0; outputIndex < numOutputChannels; ++outputIndex)
             outputBuffer.copyFrom (outputIndex, 0, audioBuffer, outputIndex, 0, numSamples);
     }
@@ -155,7 +155,6 @@ public:
     {
         processor->releaseResources();
     }
-
 
 private:
     AudioDeviceManager deviceManager;
