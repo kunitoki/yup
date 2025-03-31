@@ -59,7 +59,7 @@ if (YUP_BUILD_EXAMPLES)
     endif()
 endif()
 
-if (YUP_BUILD_TESTS AND YUP_PLATFORM_DESKTOP)
+if (YUP_BUILD_TESTS AND NOT YUP_PLATFORM_MOBILE)
     _yup_message (STATUS "Building tests")
     add_subdirectory (tests)
 endif()
