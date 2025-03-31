@@ -42,6 +42,7 @@ yup_audio_plugin (
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
+    TARGET_CXX_STANDARD 17
     PLUGIN_ID "org.yup.YupCLAP"
     PLUGIN_NAME "YupCLAPPZ"
     PLUGIN_VENDOR "org.yup"
@@ -53,7 +54,7 @@ yup_audio_plugin (
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
-    PLUGIN_CREATE_STANDALONE OFF
+    PLUGIN_CREATE_STANDALONE ON
     MODULES
         yup_gui
         yup_audio_processors

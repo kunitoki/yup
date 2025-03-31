@@ -22,12 +22,28 @@
 function (yup_audio_plugin)
     # ==== Fetch options
     set (options CONSOLE)
-    set (one_value_args TARGET_NAME TARGET_IDE_GROUP PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE)
-    set (multi_value_args DEFINITIONS MODULES LINK_OPTIONS)
+
+    set (one_value_args
+        # Globals
+        TARGET_NAME TARGET_VERSION TARGET_IDE_GROUP TARGET_APP_ID TARGET_APP_NAMESPACE TARGET_CXX_STANDARD
+        # Plugin types
+        PLUGIN_CREATE_CLAP PLUGIN_CREATE_VST3 PLUGIN_CREATE_STANDALONE)
+
+    set (multi_value_args
+        DEFINITIONS
+        MODULES
+        LINK_OPTIONS)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
+    _yup_set_default (YUP_ARG_TARGET_CXX_STANDARD 17)
+
     set (target_name "${YUP_ARG_TARGET_NAME}")
+    set (target_version "${YUP_ARG_TARGET_VERSION}")
+    set (target_ide_group "${YUP_ARG_TARGET_IDE_GROUP}")
+    set (target_app_id "${YUP_ARG_TARGET_APP_ID}")
+    set (target_app_namespace "${YUP_ARG_TARGET_APP_NAMESPACE}")
+    set (target_cxx_standard "${YUP_ARG_TARGET_CXX_STANDARD}")
     set (additional_definitions "")
     set (additional_options "")
     set (additional_libraries "")
@@ -48,7 +64,7 @@ function (yup_audio_plugin)
     _yup_message (STATUS "Creating static library for user's plugin code")
     add_library (${target_name}_shared INTERFACE)
 
-    target_compile_features (${target_name}_shared INTERFACE cxx_std_20)
+    target_compile_features (${target_name}_shared INTERFACE cxx_std_${target_cxx_standard})
 
     target_compile_definitions (${target_name}_shared INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
@@ -155,7 +171,7 @@ function (yup_audio_plugin)
         smtg_add_vst3plugin(${target_name}_vst3_plugin)
         #smtg_target_configure_version_file (${target_name}_vst3_plugin)
 
-        target_compile_features (${target_name}_vst3_plugin PRIVATE cxx_std_20)
+        target_compile_features (${target_name}_vst3_plugin PRIVATE cxx_std_${target_cxx_standard})
 
         target_compile_definitions (${target_name}_vst3_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_VST3=1
@@ -209,37 +225,22 @@ function (yup_audio_plugin)
             ${YUP_ARG_UNPARSED_ARGUMENTS})
 
         _yup_message (STATUS "Creating standalone plugin target")
-        add_executable (${target_name}_app)
-
-        target_compile_features (${target_name}_app PRIVATE cxx_std_20)
-
-        target_compile_definitions (${target_name}_app PRIVATE
-            YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1
-            JUCE_STANDALONE_APPLICATION=1)
-
-        target_link_libraries (${target_name}_app PRIVATE
-            ${target_name}_shared
-            ${target_name}_standalone
-            yup_audio_plugin_client
-            ${additional_libraries}
-            ${YUP_ARG_MODULES})
-
-        set_target_properties (${target_name}_app PROPERTIES
-            FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
-            XCODE_GENERATE_SCHEME ON)
-
-        if (YUP_PLATFORM_OSX)
-            set_target_properties (${target_name}_app PROPERTIES
-                BUNDLE ON
-                MACOSX_BUNDLE_GUI_IDENTIFIER "org.kunitoki.yup.${target_name}"
-                MACOSX_BUNDLE_NAME "${target_name}"
-                MACOSX_BUNDLE_VERSION "1.0.0"
-                MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/Info.plist"
-                XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED OFF
-                XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT dwarf
-                XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
-                XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME OFF)
-        endif()
+        yup_standalone_app (
+            TARGET_NAME ${target_name}_standalone_plugin
+            TARGET_VERSION ${target_version}
+            TARGET_IDE_GROUP ${target_ide_group}
+            TARGET_APP_ID ${target_app_id}
+            TARGET_APP_NAMESPACE ${target_app_namespace}
+            TARGET_CXX_STANDARD ${target_cxx_standard}
+            DEFINITIONS
+                YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1
+            MODULES
+                ${target_name}_shared
+                ${target_name}_standalone
+                yup_audio_plugin_client
+                juce_audio_devices
+                ${additional_libraries}
+                ${YUP_ARG_MODULES})
     endif()
 
 endfunction()

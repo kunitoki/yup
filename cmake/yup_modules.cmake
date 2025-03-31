@@ -264,11 +264,13 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     list (APPEND module_defines YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}")
     list (APPEND module_defines YupPlugin_URL="${YUP_ARG_PLUGIN_URL}")
     list (APPEND module_defines YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}")
+
     if (YUP_ARG_PLUGIN_IS_SYNTH)
         list (APPEND module_defines YupPlugin_IsSynth=1)
     else()
         list (APPEND module_defines YupPlugin_IsSynth=0)
     endif()
+
     if (YUP_ARG_PLUGIN_IS_MONO)
         list (APPEND module_defines YupPlugin_IsMono=1)
     else()

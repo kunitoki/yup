@@ -43,8 +43,14 @@ public:
 
     //==============================================================================
 
+    String getName() const { return processorName; }
+
+    //==============================================================================
+
+    /** Returns the parameters. */
     Span<const AudioParameter::Ptr> getParameters() const { return parameters; }
 
+    /** Adds a parameter. */
     void addParameter (AudioParameter::Ptr parameter);
 
     //==============================================================================
@@ -66,8 +72,21 @@ public:
     /** Releases resources. */
     virtual void releaseResources() = 0;
 
-    /** Processes a block of audio. */
-    virtual void processBlock (AudioSampleBuffer& audioBuffer, MidiBuffer& midiBuffer) = 0;
+    /**
+        Processes a block of audio.
+
+        @param audioBuffer The audio buffer to process.
+        @param midiBuffer The MIDI buffer to process.
+    */
+    virtual void processBlock (AudioBuffer<float>& audioBuffer, MidiBuffer& midiBuffer) = 0;
+
+    /**
+        Processes a block of audio.
+
+        @param audioBuffer The audio buffer to process.
+        @param midiBuffer The MIDI buffer to process.
+    */
+    virtual void processBlock (AudioBuffer<double>& audioBuffer, MidiBuffer& midiBuffer) {}
 
     /** Flushes the processor. */
     virtual void flush() {}
