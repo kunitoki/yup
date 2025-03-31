@@ -562,17 +562,17 @@ JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI()
     }
 }
 
-static int numScopedInitInstances = 0;
+static std::atomic_int numScopedInitInstances = 0;
 
 ScopedJuceInitialiser_GUI::ScopedJuceInitialiser_GUI()
 {
-    if (numScopedInitInstances++ == 0)
+    if (numScopedInitInstances.fetch_add (1) == 0)
         initialiseJuce_GUI();
 }
 
 ScopedJuceInitialiser_GUI::~ScopedJuceInitialiser_GUI()
 {
-    if (--numScopedInitInstances == 0)
+    if (numScopedInitInstances.fetch_add (-1) == 1)
         shutdownJuce_GUI();
 }
 

@@ -75,7 +75,7 @@ function (yup_standalone_app)
     endif()
 
     # ==== Find dependencies
-    if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
+    if (NOT "${target_console}" AND NOT YUP_PLATFORM_EMSCRIPTEN)
         _yup_message (STATUS "${target_name} - Fetching SDL2 library")
         _yup_fetch_sdl2()
         list (APPEND additional_libraries sdl2::sdl2)
@@ -90,14 +90,14 @@ function (yup_standalone_app)
     # ==== Prepare executable
     set (executable_options "")
     if (NOT "${target_console}")
-        if ("${yup_platform}" MATCHES "^(windows)$")
+        if (YUP_PLATFORM_WINDOWS)
             set (executable_options "WIN32")
-        elseif ("${yup_platform}" MATCHES "^(osx)$")
+        elseif (YUP_PLATFORM_OSX)
             set (executable_options "MACOSX_BUNDLE")
         endif()
     endif()
 
-    if ("${yup_platform}" MATCHES "^(android)$")
+    if (YUP_PLATFORM_ANDROID)
         add_library (${target_name} SHARED)
     else()
         add_executable (${target_name} ${executable_options})
@@ -106,9 +106,9 @@ function (yup_standalone_app)
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
 
     # ==== Per platform configuration
-    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
         if (NOT "${target_console}")
-            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/Info.plist")
+            _yup_set_default (YUP_ARG_CUSTOM_PLIST "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/Info.plist")
             _yup_valid_identifier_string ("${target_app_identifier}" target_app_identifier)
 
             _yup_message (STATUS "${target_name} - Converting application input icon to apple .icns format")
@@ -139,9 +139,10 @@ function (yup_standalone_app)
             XCODE_ATTRIBUTE_DEBUG_INFORMATION_FORMAT       dwarf
             XCODE_ATTRIBUTE_GCC_INLINES_ARE_PRIVATE_EXTERN ON
             XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC          OFF
-            XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF)
+            XCODE_ATTRIBUTE_CLANG_LINK_OBJC_RUNTIME        OFF
+            XCODE_GENERATE_SCHEME                          ON)
 
-    elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+    elseif (YUP_PLATFORM_EMSCRIPTEN)
         if (NOT "${target_console}")
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
 
@@ -149,7 +150,7 @@ function (yup_standalone_app)
             list (APPEND additional_link_options -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2)
         endif()
 
-        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/shell.html")
+        _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/shell.html")
         _yup_set_default (YUP_ARG_INITIAL_MEMORY 33554432) # 32mb
         _yup_set_default (YUP_ARG_PTHREAD_POOL_SIZE 8)
 
@@ -193,7 +194,7 @@ function (yup_standalone_app)
         add_custom_command(
             TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy
-                "${CMAKE_SOURCE_DIR}/cmake/platforms/${yup_platform}/mini-coi.js"
+                "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/mini-coi.js"
                 "${target_copy_dest}/mini-coi.js")
 
     endif()

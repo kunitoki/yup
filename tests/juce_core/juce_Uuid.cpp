@@ -178,3 +178,18 @@ TEST (UuidTests, Hash)
     uint64 hash = uuid.hash();
     EXPECT_NE (hash, 0);
 }
+
+TEST (UuidTests, Deterministic)
+{
+    String test ("www.example.org");
+
+    MemoryBlock block;
+    block.append (Uuid::namespaceDns.getRawData(), Uuid::getRawDataSize());
+    block.append (test.toRawUTF8(), test.getNumBytesAsUTF8());
+
+    SHA1 hash (block);
+    EXPECT_EQ (hash.toHexString(), String ("74738ff55367e9589aee98fffdcd187694028007"));
+
+    Uuid uuid = Uuid::fromSHA1 (hash);
+    EXPECT_EQ (uuid.toDashedString(), String ("74738ff5-5367-5958-9aee-98fffdcd1876"));
+}

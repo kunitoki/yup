@@ -206,6 +206,14 @@ bool SystemStats::hasAVX512VPOPCNTDQ() noexcept { return getCPUInformation().has
 bool SystemStats::hasNeon() noexcept { return getCPUInformation().hasNeon; }
 
 //==============================================================================
+extern uint64_t juce_compilationUniqueId;
+
+uint64 SystemStats::getCompileUniqueId()
+{
+    return juce_compilationUniqueId;
+}
+
+//==============================================================================
 #if JUCE_ANDROID
 struct BacktraceState
 {

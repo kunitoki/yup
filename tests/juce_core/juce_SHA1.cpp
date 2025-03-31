@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,26 +19,22 @@
   ==============================================================================
 */
 
-namespace yup
-{
+#include <gtest/gtest.h>
 
-//==============================================================================
+#include <juce_core/juce_core.h>
 
-AudioProcessorParameter::AudioProcessorParameter (
-    StringRef name,
-    float minValue,
-    float maxValue,
-    float defaultValue)
-    : currentValue (defaultValue)
-    , minValue (minValue)
-    , maxValue (maxValue)
-    , defaultValue (defaultValue)
-    , name (name)
+using namespace juce;
+
+TEST (SHA1Tests, All)
 {
+    SHA1 hash1 ("", std::strlen (""));
+    EXPECT_EQ (hash1.toHexString(), String ("da39a3ee5e6b4b0d3255bfef95601890afd80709"));
+
+    CharPointer_UTF8 utf8 ("The quick brown fox jumps over the lazy dog");
+    SHA1 hash2 (utf8);
+    EXPECT_EQ (hash2.toHexString(), String ("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12"));
+
+    MemoryInputStream m ("The quick brown fox jumps over the lazy dog", std::strlen ("The quick brown fox jumps over the lazy dog"), false);
+    SHA1 hash3 (m);
+    EXPECT_EQ (hash3.toHexString(), String ("2fd4e1c67a2d28fced849ee1bb76e7391b93eb12"));
 }
-
-AudioProcessorParameter::~AudioProcessorParameter()
-{
-}
-
-} // namespace yup

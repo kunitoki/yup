@@ -30,6 +30,8 @@
 
 #include <BinaryData.h>
 
+//==============================================================================
+
 template <class T>
 struct Array
 {
@@ -92,6 +94,8 @@ private:
     size_t allocated = 0;
 };
 
+//==============================================================================
+
 // Parameters.
 #define P_VOLUME (0)
 #define P_COUNT (1)
@@ -105,21 +109,13 @@ struct Voice
     float parameterOffsets[P_COUNT];
 };
 
+//==============================================================================
+
+class MyPlugin;
+
 struct MyEditor : public yup::AudioProcessorEditor
 {
-    MyEditor (yup::AudioProcessor& processor)
-        : audioProcessor (processor)
-    {
-        x = std::make_unique<yup::Slider> ("Slider", yup::Font());
-        x->setValue (audioProcessor.getParameter (0).getValue());
-        x->onValueChanged = [this] (float value)
-        {
-            audioProcessor.getParameter (0).setValue (value);
-        };
-        addAndMakeVisible (*x);
-
-        setSize (getPreferredSize().to<float>());
-    }
+    MyEditor (MyPlugin& processor);
 
     bool isResizable() const override
     {
@@ -147,21 +143,26 @@ struct MyEditor : public yup::AudioProcessorEditor
         g.fillAll();
     }
 
-    yup::AudioProcessor& audioProcessor;
+    MyPlugin& audioProcessor;
     std::unique_ptr<yup::Slider> x;
 };
 
-struct MyPlugin : public yup::AudioProcessor
-{
-    float sampleRate;
-    Array<Voice> voices;
-    yup::AudioProcessorParameter currentParameters[P_COUNT];
+//==============================================================================
 
+class MyPlugin : public yup::AudioProcessor
+{
+public:
     MyPlugin()
-        : currentParameters {
-            { "Volume", 0.0f, 1.0f, 0.5f }
-        }
+        : yup::AudioProcessor ("MyPlugin",
+                               yup::AudioBusLayout ({}, { yup::AudioBus ("main", yup::AudioBus::Audio, yup::AudioBus::Output, 2) }))
     {
+        addParameter (gainParameter = yup::AudioParameterBuilder()
+                                          .withID ("volume")
+                                          .withName ("Volume")
+                                          .withRange (0.0f, 1.0f)
+                                          .withDefault (0.5f)
+                                          .withSmoothing (20.0f)
+                                          .build());
     }
 
     ~MyPlugin()
@@ -169,30 +170,11 @@ struct MyPlugin : public yup::AudioProcessor
         voices.Free();
     }
 
-    int getNumParameters() const override
-    {
-        return P_COUNT;
-    }
-
-    yup::AudioProcessorParameter& getParameter (int index) override
-    {
-        jassert (index < P_COUNT);
-        return currentParameters[index];
-    }
-
-    int getNumAudioInputs() const override
-    {
-        return 0;
-    }
-
-    int getNumAudioOutputs() const override
-    {
-        return 1; // One but stereo
-    }
-
     void prepareToPlay (float sampleRate, int maxBlockSize) override
     {
         this->sampleRate = sampleRate;
+
+        gainHandle = yup::AudioParameterHandle (*gainParameter, sampleRate);
     }
 
     void releaseResources() override
@@ -207,6 +189,8 @@ struct MyPlugin : public yup::AudioProcessor
 
         int nextEventSample = midiBuffer.getNumEvents() ? 0 : numSamples;
         auto midiIterator = midiBuffer.begin();
+
+        gainHandle.update();
 
         for (int currentSample = 0; currentSample < numSamples;)
         {
@@ -253,6 +237,7 @@ struct MyPlugin : public yup::AudioProcessor
                 }
 
                 // If this is a controller, set the corresponding parameter
+                /*
                 if (message.isController())
                 {
                     const int controllerNumber = message.getControllerNumber();
@@ -261,6 +246,7 @@ struct MyPlugin : public yup::AudioProcessor
                         getParameter (controllerNumber).setValue (message.getControllerValue() / 127.0f);
                     }
                 }
+                */
 
                 // TODO - clap supports per voice modulations: clap_event_param_mod_t
             }
@@ -273,6 +259,8 @@ struct MyPlugin : public yup::AudioProcessor
 
             while (--remainingSamples >= 0)
             {
+                float gainValue = gainHandle.getNextValue();
+
                 float sum = 0.0f;
 
                 for (int i = 0; i < voices.Length(); i++)
@@ -281,7 +269,7 @@ struct MyPlugin : public yup::AudioProcessor
                     if (! voice->held)
                         continue;
 
-                    float volume = yup::jlimit (0.0f, 1.0f, getParameter (P_VOLUME).getValue() + 0.0f); // parameterOffsets[P_VOLUME]);
+                    float volume = yup::jlimit (0.0f, 1.0f, gainValue + 0.0f); // parameterOffsets[P_VOLUME]);
                     sum += std::sin (voice->phase * 2.0f * 3.14159f) * 0.2f * volume;
 
                     voice->phase += 440.0f * std::exp2 ((voice->key - 57.0f) / 12.0f) / sampleRate;
@@ -322,7 +310,29 @@ struct MyPlugin : public yup::AudioProcessor
     {
         return new MyEditor (*this);
     }
+
+private:
+    friend MyEditor;
+    yup::AudioParameter::Ptr gainParameter;
+    yup::AudioParameterHandle gainHandle;
+
+    Array<Voice> voices;
+    float sampleRate;
 };
+
+MyEditor::MyEditor (MyPlugin& processor)
+    : audioProcessor (processor)
+{
+    x = std::make_unique<yup::Slider> ("Slider", yup::Font());
+    x->setValue (audioProcessor.gainParameter->getValue());
+    x->onValueChanged = [this] (float value)
+    {
+        audioProcessor.gainParameter->setValueNotifyingHost (value);
+    };
+    addAndMakeVisible (*x);
+
+    setSize (getPreferredSize().to<float>());
+}
 
 extern "C" yup::AudioProcessor* createPluginProcessor()
 {

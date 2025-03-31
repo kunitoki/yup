@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,19 +19,4 @@
   ==============================================================================
 */
 
-#ifdef YUP_AUDIO_PROCESSORS_H_INCLUDED
-/* When you add this cpp file to your project, you mustn't include it in a file where you've
-    already included any other headers - just put it inside a file on its own, possibly with your config
-    flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
-    header files that the compiler may be using.
- */
-#error "Incorrect use of YUP cpp file"
-#endif
-
-#include "yup_audio_processors.h"
-
-//==============================================================================
-#include "processors/yup_AudioParameter.cpp"
-#include "processors/yup_AudioParameterBuilder.cpp"
-#include "processors/yup_AudioProcessor.cpp"
-#include "processors/yup_AudioProcessorEditor.cpp"
+#include "yup_audio_plugin_client_VST3.cpp"

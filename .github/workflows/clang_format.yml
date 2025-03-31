@@ -5,6 +5,7 @@ on:
     paths:
       - "**/examples/**"
       - "**/modules/**"
+      - "**/standalone/**"
       - "**/tests/**"
     branches:
       - "**"
@@ -18,12 +19,6 @@ jobs:
       contents: write
 
     steps:
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get -y install clang-format
-          clang-format --version
-
       - name: Checkout code
         uses: actions/checkout@v4
         with:
@@ -50,7 +45,8 @@ jobs:
         run: |
           if [ -n "${ALL_CHANGED_FILES}" ]; then
             echo ${ALL_CHANGED_FILES}
-            clang-format -style=file -i ${ALL_CHANGED_FILES}
+            pipx run clang-format --version
+            pipx run clang-format -style=file -i ${ALL_CHANGED_FILES}
             git diff
           fi
 

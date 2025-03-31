@@ -21,7 +21,9 @@
 
 #include "../yup_audio_plugin_client.h"
 
-#if YUP_AUDIO_PLUGIN_ENABLE_CLAP
+#if ! defined(YUP_AUDIO_PLUGIN_ENABLE_CLAP)
+#error "YUP_AUDIO_PLUGIN_ENABLE_CLAP must be defined"
+#endif
 
 #include <string_view>
 #include <optional>
@@ -79,12 +81,13 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
 
     const clap_event_param_value_t* paramEvent = reinterpret_cast<const clap_event_param_value_t*> (event);
 
+    auto parameters = audioProcessor.getParameters();
+
     auto parameterIndex = static_cast<int> (paramEvent->param_id);
-    if (! yup::isPositiveAndBelow (parameterIndex, audioProcessor.getNumParameters()))
+    if (! yup::isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         return;
 
-    auto parameterValue = static_cast<float> (paramEvent->value);
-    audioProcessor.getParameter (parameterIndex).setValue (parameterValue);
+    parameters[parameterIndex]->setValue (static_cast<float> (paramEvent->value));
 }
 
 //==============================================================================
@@ -144,19 +147,19 @@ bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 
 static const char* pluginFeatures[] = {
 #if YupPlugin_IsSynth
-        CLAP_PLUGIN_FEATURE_INSTRUMENT,
-        CLAP_PLUGIN_FEATURE_SYNTHESIZER,
+    CLAP_PLUGIN_FEATURE_INSTRUMENT,
+    CLAP_PLUGIN_FEATURE_SYNTHESIZER,
 #else
-        CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
+    CLAP_PLUGIN_FEATURE_AUDIO_EFFECT,
 #endif
 
 #if YupPlugin_IsMono
-        CLAP_PLUGIN_FEATURE_MONO,
+    CLAP_PLUGIN_FEATURE_MONO,
 #else
-        CLAP_PLUGIN_FEATURE_STEREO,
+    CLAP_PLUGIN_FEATURE_STEREO,
 #endif
 
-        nullptr
+    nullptr
 };
 
 static const clap_plugin_descriptor_t pluginDescriptor = {
@@ -388,7 +391,7 @@ bool AudioPluginWrapperCLAP::initialise()
     // ==== Setup extensions: parameters
     extensionParams.count = [] (const clap_plugin_t* plugin) -> uint32_t
     {
-        return static_cast<uint32_t> (getWrapper (plugin)->audioProcessor->getNumParameters());
+        return static_cast<uint32_t> (getWrapper (plugin)->audioProcessor->getParameters().size());
     };
 
     extensionParams.get_info = [] (const clap_plugin_t* plugin, uint32_t index, clap_param_info_t* information) -> bool
@@ -396,17 +399,18 @@ bool AudioPluginWrapperCLAP::initialise()
         std::memset (information, 0, sizeof (clap_param_info_t));
 
         auto wrapper = getWrapper (plugin);
+        auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (yup::isPositiveAndBelow (index, wrapper->audioProcessor->getNumParameters()))
+        if (yup::isPositiveAndBelow (index, static_cast<uint32_t> (parameters.size())))
         {
-            const auto& parameter = wrapper->audioProcessor->getParameter (index);
+            auto parameter = parameters[index];
 
             information->id = index;
             information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
-            information->min_value = parameter.getMinimumValue();
-            information->max_value = parameter.getMaximumValue();
-            information->default_value = parameter.getDefaultValue();
-            std::strncpy (information->name, parameter.getName().toRawUTF8(), CLAP_NAME_SIZE);
+            information->min_value = parameter->getMinimumValue();
+            information->max_value = parameter->getMaximumValue();
+            information->default_value = parameter->getDefaultValue();
+            std::strncpy (information->name, parameter->getName().toRawUTF8(), CLAP_NAME_SIZE);
 
             return true;
         }
@@ -419,21 +423,23 @@ bool AudioPluginWrapperCLAP::initialise()
     extensionParams.get_value = [] (const clap_plugin_t* plugin, clap_id id, double* value) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        auto parameters = wrapper->audioProcessor->getParameters();
 
         const int index = static_cast<int> (id);
-        if (! yup::isPositiveAndBelow (index, wrapper->audioProcessor->getNumParameters()))
+        if (! yup::isPositiveAndBelow (index, static_cast<int> (parameters.size())))
             return false;
 
-        *value = wrapper->audioProcessor->getParameter (index).getValue();
+        *value = parameters[index]->getValue();
         return true;
     };
 
     extensionParams.value_to_text = [] (const clap_plugin_t* plugin, clap_id id, double value, char* display, uint32_t size) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        auto parameters = wrapper->audioProcessor->getParameters();
 
         const int index = static_cast<int> (id);
-        if (! yup::isPositiveAndBelow (index, wrapper->audioProcessor->getNumParameters()))
+        if (! yup::isPositiveAndBelow (index, static_cast<int> (parameters.size())))
             return false;
 
         std::snprintf (display, size, "%f", value);
@@ -511,12 +517,13 @@ bool AudioPluginWrapperCLAP::initialise()
     extensionState.save = [] (const clap_plugin_t* plugin, const clap_ostream_t* stream) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        auto parameters = wrapper->audioProcessor->getParameters();
 
         yup::Array<float> params;
-        params.resize (wrapper->audioProcessor->getNumParameters());
+        params.resize (static_cast<int> (parameters.size()));
 
-        for (int i = 0; i < wrapper->audioProcessor->getNumParameters(); ++i)
-            params.set (i, wrapper->audioProcessor->getParameter (i).getValue());
+        for (int i = 0; i < static_cast<int> (parameters.size()); ++i)
+            params.set (i, parameters[i]->getNormalizedValue());
 
         const auto totalSize = sizeof (float) * params.size();
         return stream->write (stream, params.data(), totalSize) == totalSize;
@@ -525,15 +532,16 @@ bool AudioPluginWrapperCLAP::initialise()
     extensionState.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream) -> bool
     {
         auto wrapper = getWrapper (plugin);
+        auto parameters = wrapper->audioProcessor->getParameters();
 
         yup::Array<float> params;
-        params.resize (wrapper->audioProcessor->getNumParameters());
+        params.resize (static_cast<int> (parameters.size()));
 
         const auto totalSize = sizeof (float) * params.size();
         bool success = stream->read (stream, params.data(), totalSize) == totalSize;
 
-        for (int i = 0; i < wrapper->audioProcessor->getNumParameters(); ++i)
-            wrapper->audioProcessor->getParameter (i).setValue (params.getReference (i));
+        for (int i = 0; i < static_cast<int> (parameters.size()); ++i)
+            parameters[i]->setNormalizedValue (params.getReference (i));
 
         return success;
     };
@@ -849,29 +857,29 @@ const clap_plugin_t* AudioPluginWrapperCLAP::getPlugin() const
 
 static const clap_plugin_factory_t pluginFactory = {
     .get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
-    {
-        DBG ("clap_plugin_factory_t::get_plugin_count");
+{
+    DBG ("clap_plugin_factory_t::get_plugin_count");
 
-        return 1;
-    },
+    return 1;
+},
 
     .get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
-    {
-        DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
+{
+    DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
 
-        return index == 0 ? &yup::pluginDescriptor : nullptr;
-    },
+    return index == 0 ? &yup::pluginDescriptor : nullptr;
+},
 
     .create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginID) -> const clap_plugin_t*
-    {
-        DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
+{
+    DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
 
-        if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
-            return nullptr;
+    if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
+        return nullptr;
 
-        auto wrapper = new yup::AudioPluginWrapperCLAP (host);
-        return wrapper->getPlugin();
-    },
+    auto wrapper = new yup::AudioPluginWrapperCLAP (host);
+    return wrapper->getPlugin();
+},
 };
 
 //==============================================================================
@@ -880,32 +888,30 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
     .clap_version = CLAP_VERSION_INIT,
 
     .init = [] (const char* path) -> bool
-    {
-        DBG ("clap_plugin_entry_t::init " << path);
+{
+    DBG ("clap_plugin_entry_t::init " << path);
 
-        yup::initialiseJuce_GUI();
-        yup::initialiseYup_Windowing();
+    yup::initialiseJuce_GUI();
+    yup::initialiseYup_Windowing();
 
-        return true;
-    },
+    return true;
+},
 
     .deinit = []
-    {
-        DBG ("clap_plugin_entry_t::deinit");
+{
+    DBG ("clap_plugin_entry_t::deinit");
 
-        yup::shutdownYup_Windowing();
-        yup::shutdownJuce_GUI();
-    },
+    yup::shutdownYup_Windowing();
+    yup::shutdownJuce_GUI();
+},
 
     .get_factory = [] (const char* factoryID) -> const void*
-    {
-        DBG ("clap_plugin_entry_t::get_factory " << factoryID);
+{
+    DBG ("clap_plugin_entry_t::get_factory " << factoryID);
 
-        if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
-            return std::addressof (pluginFactory);
+    if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
+        return std::addressof (pluginFactory);
 
-        return nullptr;
-    },
+    return nullptr;
+},
 };
-
-#endif

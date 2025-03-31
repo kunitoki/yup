@@ -62,6 +62,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
+    SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
     // Create the window, renderer and parent it
     window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
@@ -1040,6 +1041,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEMOTION:
         {
+            // YUP_DBG_WINDOWING ("SDL_MOUSEMOTION");
+
             if (event->window.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag ({ static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) });
 
@@ -1048,6 +1051,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEBUTTONDOWN:
         {
+            YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONDOWN");
+
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
@@ -1058,6 +1063,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEBUTTONUP:
         {
+            YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONUP");
+
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))

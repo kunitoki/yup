@@ -150,7 +150,7 @@ void Component::setSize (const Size<float>& newSize)
 {
     boundsInParent = boundsInParent.withSize (newSize);
 
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
     resized();
@@ -158,7 +158,7 @@ void Component::setSize (const Size<float>& newSize)
 
 Size<float> Component::getSize() const
 {
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         return native->getSize().to<float>();
 
     return boundsInParent.getSize();
@@ -178,7 +178,7 @@ void Component::setBounds (const Rectangle<float>& newBounds)
 {
     boundsInParent = newBounds;
 
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         native->setBounds (newBounds.to<int>());
 
     resized();
@@ -237,7 +237,7 @@ void Component::setFullScreen (bool shouldBeFullScreen)
     {
         options.isFullScreen = shouldBeFullScreen;
 
-        if (options.onDesktop)
+        if (options.onDesktop && native != nullptr)
             native->setFullScreen (shouldBeFullScreen);
     }
 }
@@ -310,7 +310,7 @@ void Component::repaint (const Rectangle<float>& rect)
 
 void* Component::getNativeHandle() const
 {
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         return native->getNativeHandle();
 
     return nullptr;

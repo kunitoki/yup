@@ -42,32 +42,25 @@ yup_audio_plugin (
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
+    TARGET_CXX_STANDARD 17
     PLUGIN_ID "org.yup.YupCLAP"
     PLUGIN_NAME "YupCLAPPZ"
     PLUGIN_VENDOR "org.yup"
+    PLUGIN_EMAIL "kunitoki@gmail.com"
     PLUGIN_VERSION "${target_version}"
     PLUGIN_DESCRIPTION "The best audio plugin ever."
     PLUGIN_URL "https://github.com/kunitoki/yup"
-    PLUGING_IS_SYNTH ON
+    PLUGIN_IS_SYNTH ON
     PLUGIN_IS_MONO OFF
     PLUGIN_CREATE_CLAP ON
-    PLUGIN_CREATE_STANDALONE OFF
+    PLUGIN_CREATE_VST3 ON
+    PLUGIN_CREATE_STANDALONE ON
     MODULES
-        juce_core
-        juce_events
-        juce_audio_basics
-        juce_audio_devices
-        yup_graphics
         yup_gui
         yup_audio_processors
-        harfbuzz
-        sheenbidi
-        rive
-        rive_renderer
-        "${target_name}_binary_data"
-)
+        "${target_name}_binary_data")
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
-target_sources (${target_name} PRIVATE ${sources})
+target_sources (${target_name}_shared PUBLIC ${sources})
