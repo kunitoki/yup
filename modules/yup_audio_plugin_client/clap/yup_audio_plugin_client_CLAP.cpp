@@ -986,44 +986,47 @@ void AudioPluginEditorCLAP::resized()
 
 //==============================================================================
 
-static const clap_plugin_factory_t pluginFactory = []
+static const clap_plugin_factory_t plugin_factory = []
 {
-    return clap_plugin_factory_t {
-        .get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
+    clap_plugin_factory_t factory;
+
+    factory.get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
     {
         DBG ("clap_plugin_factory_t::get_plugin_count");
 
         return 1;
-    },
+    };
 
-        .get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
+    factory.get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
     {
         DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
 
         return index == 0 ? &yup::pluginDescriptor : nullptr;
-    },
+    };
 
-        .create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginID) -> const clap_plugin_t*
+    factory.create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginId) -> const clap_plugin_t*
     {
-        DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
+        DBG ("clap_plugin_factory_t::create_plugin " << pluginId);
 
-        if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
+        if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginId) != yup::pluginDescriptor.id)
             return nullptr;
 
-            auto wrapper = new yup::AudioPluginProcessorCLAP (host);
+        auto wrapper = new yup::AudioPluginProcessorCLAP (host);
         return wrapper->getPlugin();
-    }
     };
+
+    return factory;
 }();
 
 //==============================================================================
 
 extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
 {
-    return clap_plugin_entry_t {
-        .clap_version = CLAP_VERSION_INIT,
+    clap_plugin_entry_t plugin;
 
-        .init = [] (const char* path) -> bool
+    plugin.clap_version = CLAP_VERSION_INIT;
+
+    plugin.init = [] (const char* path) -> bool
     {
         DBG ("clap_plugin_entry_t::init " << path);
 
@@ -1031,24 +1034,25 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
         yup::initialiseYup_Windowing();
 
         return true;
-    },
+    };
 
-        .deinit = []
+    plugin.deinit = []
     {
         DBG ("clap_plugin_entry_t::deinit");
 
         yup::shutdownYup_Windowing();
         yup::shutdownJuce_GUI();
-    },
+    };
 
-        .get_factory = [] (const char* factoryID) -> const void*
+    plugin.get_factory = [] (const char* factoryId) -> const void*
     {
-        DBG ("clap_plugin_entry_t::get_factory " << factoryID);
+        DBG ("clap_plugin_entry_t::get_factory " << factoryId);
 
-        if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
-            return std::addressof (pluginFactory);
+        if (std::string_view (factoryId) == CLAP_PLUGIN_FACTORY_ID)
+            return std::addressof (plugin_factory);
 
         return nullptr;
-    }
     };
+
+    return plugin;
 }();
