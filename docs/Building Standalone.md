@@ -139,8 +139,6 @@ YUP provides several ways to manage application resources:
 
 1. **Embedded Resources**
 
-For embedding resources,
-
 ```cmake
 // In your CMakeLists.txt
 yup_add_embedded_binary_resources (
