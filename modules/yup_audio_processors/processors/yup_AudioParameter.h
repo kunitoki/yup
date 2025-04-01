@@ -155,6 +155,12 @@ public:
     /** Parses a string into a real parameter value. */
     void fromString (const String& string) { setValue (stringToValue (string)); }
 
+    /** */
+    String convertToString (float value) const { return valueToString (value); }
+
+    /** */
+    float convertFromString (const String& string) const { return stringToValue (string); }
+
     //==============================================================================
 
     /** Returns true if smoothing is enabled. */

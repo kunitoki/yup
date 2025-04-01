@@ -94,6 +94,14 @@ public:
 
     //==============================================================================
 
+    CriticalSection& getProcessLock() { return processLock; }
+
+    void suspendProcessing (bool shouldSuspend);
+
+    bool isSuspended() const;
+
+    //==============================================================================
+
     /**
         Returns the current preset index.
     */
@@ -147,9 +155,14 @@ public:
 
 private:
     String processorName;
+
     std::vector<AudioParameter::Ptr> parameters;
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
+
     AudioBusLayout busLayout;
+
+    CriticalSection processLock;
+    bool processIsSuspended = false;
 };
 
 } // namespace yup

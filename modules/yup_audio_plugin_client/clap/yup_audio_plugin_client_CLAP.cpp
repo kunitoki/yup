@@ -84,7 +84,7 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
     auto parameters = audioProcessor.getParameters();
 
     auto parameterIndex = static_cast<int> (paramEvent->param_id);
-    if (! yup::isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
+    if (! isPositiveAndBelow (parameterIndex, static_cast<int> (parameters.size())))
         return;
 
     parameters[parameterIndex]->setValue (static_cast<float> (paramEvent->value));
@@ -95,7 +95,7 @@ void clapEventToParameterChange (const clap_event_header_t* event, AudioProcesso
 /*
 void pluginSyncMainToAudio (AudioProcessor& audioProcessor, const clap_output_events_t* out)
 {
-    auto sl = yup::CriticalSection::ScopedLockType (plugin->syncParameters);
+    auto sl = CriticalSection::ScopedLockType (plugin->syncParameters);
 
     for (uint32_t i = 0; i < P_COUNT; i++)
     {
@@ -125,7 +125,7 @@ void pluginSyncMainToAudio (AudioProcessor& audioProcessor, const clap_output_ev
 bool pluginSyncAudioToMain (AudioProcessor& audioProcessor)
 {
     bool anyChanged = false;
-    auto sl = yup::CriticalSection::ScopedLockType (plugin->syncParameters);
+    auto sl = CriticalSection::ScopedLockType (plugin->syncParameters);
 
     for (uint32_t i = 0; i < P_COUNT; i++)
     {
@@ -183,13 +183,36 @@ static const char* const preferredApi = CLAP_WINDOW_API_WIN32;
 static const char* const preferredApi = CLAP_WINDOW_API_X11;
 #endif
 
+class AudioPluginProcessorCLAP;
+
 //==============================================================================
 
-class AudioPluginWrapperCLAP
+class AudioPluginEditorCLAP : public Component
 {
 public:
-    AudioPluginWrapperCLAP (const clap_host_t* host);
-    ~AudioPluginWrapperCLAP();
+    AudioPluginEditorCLAP (AudioPluginProcessorCLAP* wrapper, AudioProcessorEditor* editor)
+        : wrapper (wrapper)
+        , processorEditor (editor)
+    {
+        addAndMakeVisible(*processorEditor);
+    }
+
+    AudioProcessorEditor* getAudioProcessorEditor() { return processorEditor.get(); }
+
+    void resized() override;
+
+private:
+    AudioPluginProcessorCLAP* wrapper = nullptr;
+    std::unique_ptr<AudioProcessorEditor> processorEditor;
+};
+
+//==============================================================================
+
+class AudioPluginProcessorCLAP
+{
+public:
+    AudioPluginProcessorCLAP (const clap_host_t* host);
+    ~AudioPluginProcessorCLAP();
 
     bool initialise();
     void destroy();
@@ -202,44 +225,57 @@ public:
 
     void reset();
 
+    void registerTimer (uint32_t periodMs, clap_id timerId);
+    void unregisterTimer (clap_id timerId);
+
     const void* getExtension (std::string_view id);
     const clap_plugin_t* getPlugin() const;
 
+    void editorResized();
+
 private:
     std::unique_ptr<AudioProcessor> audioProcessor;
-    std::unique_ptr<AudioProcessorEditor> audioProcessorEditor;
+    std::unique_ptr<AudioPluginEditorCLAP> audioPluginEditor;
 
     const clap_host_t* host = nullptr;
+
     clap_plugin_t plugin;
 
-    clap_plugin_params_t extensionParams;
     clap_plugin_note_ports_t extensionNotePorts;
     clap_plugin_audio_ports_t extensionAudioPorts;
+    clap_plugin_params_t extensionParams;
     clap_plugin_state_t extensionState;
-
+    clap_plugin_tail_t extensionTail;
+    clap_plugin_latency_t extensionLatency;
     clap_plugin_timer_support_t extensionTimerSupport;
     clap_plugin_gui_t extensionGUI;
 
+    const clap_host_params_t* hostParams = nullptr;
+    const clap_host_state_t* hostState = nullptr;
+    const clap_host_tail_t* hostTail = nullptr;
+    const clap_host_latency_t* hostLatency = nullptr;
     const clap_host_timer_support_t* hostTimerSupport = nullptr;
-    clap_id timerID;
+    const clap_host_gui_t* hostGUI = nullptr;
 
-    yup::MidiBuffer midiEvents;
+    clap_id guiTimerId;
+
+    MidiBuffer midiEvents;
 
     static std::atomic_int instancesCount;
 };
 
 //==============================================================================
 
-std::atomic_int AudioPluginWrapperCLAP::instancesCount = 0;
+std::atomic_int AudioPluginProcessorCLAP::instancesCount = 0;
 
-AudioPluginWrapperCLAP* getWrapper (const clap_plugin_t* plugin)
+AudioPluginProcessorCLAP* getWrapper (const clap_plugin_t* plugin)
 {
-    return reinterpret_cast<yup::AudioPluginWrapperCLAP*> (plugin->plugin_data);
+    return reinterpret_cast<AudioPluginProcessorCLAP*> (plugin->plugin_data);
 }
 
 //==============================================================================
 
-AudioPluginWrapperCLAP::AudioPluginWrapperCLAP (const clap_host_t* host)
+AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
     : host (host)
 {
     jassert (host != nullptr);
@@ -251,57 +287,61 @@ AudioPluginWrapperCLAP::AudioPluginWrapperCLAP (const clap_host_t* host)
     {
         DBG ("clap_plugin_t::init");
 
-        return yup::getWrapper (plugin)->initialise();
+        return getWrapper (plugin)->initialise();
     };
 
     plugin.destroy = [] (const clap_plugin* plugin)
     {
         DBG ("clap_plugin_t::destroy");
 
-        yup::getWrapper (plugin)->destroy();
+        getWrapper (plugin)->destroy();
     };
 
     plugin.activate = [] (const clap_plugin* plugin, double sampleRate, uint32_t minimumFramesCount, uint32_t maximumFramesCount) -> bool
     {
         DBG ("clap_plugin_t::activate " << sampleRate << "hz (" << (int) minimumFramesCount << ".." << (int) maximumFramesCount << ")");
 
-        return yup::getWrapper (plugin)->activate (static_cast<float> (sampleRate), static_cast<int> (maximumFramesCount));
+        return getWrapper (plugin)->activate (static_cast<float> (sampleRate), static_cast<int> (maximumFramesCount));
     };
 
     plugin.deactivate = [] (const clap_plugin* plugin)
     {
         DBG ("clap_plugin_t::deactivate");
 
-        yup::getWrapper (plugin)->deactivate();
+        getWrapper (plugin)->deactivate();
     };
 
     plugin.start_processing = [] (const clap_plugin* plugin) -> bool
     {
         DBG ("clap_plugin_t::start_processing");
 
-        return yup::getWrapper (plugin)->startProcessing();
+        return getWrapper (plugin)->startProcessing();
     };
 
     plugin.stop_processing = [] (const clap_plugin* plugin)
     {
         DBG ("clap_plugin_t::stop_processing");
 
-        yup::getWrapper (plugin)->stopProcessing();
+        getWrapper (plugin)->stopProcessing();
     };
 
     plugin.reset = [] (const clap_plugin* plugin)
     {
         DBG ("clap_plugin_t::reset");
 
-        yup::getWrapper (plugin)->reset();
+        getWrapper (plugin)->reset();
     };
 
     plugin.process = [] (const clap_plugin* plugin, const clap_process_t* process) -> clap_process_status
     {
-        auto wrapper = yup::getWrapper (plugin);
+        auto wrapper = getWrapper (plugin);
 
         auto& audioProcessor = *wrapper->audioProcessor;
         auto& midiBuffer = wrapper->midiEvents;
+
+        auto lock = CriticalSection::ScopedTryLockType (audioProcessor.getProcessLock());
+        if (! lock.isLocked() || audioProcessor.isSuspended())
+            return CLAP_PROCESS_CONTINUE;
 
         jassert (process->audio_outputs_count == audioProcessor.getNumAudioOutputs());
         jassert (process->audio_inputs_count == audioProcessor.getNumAudioInputs());
@@ -363,7 +403,7 @@ AudioPluginWrapperCLAP::AudioPluginWrapperCLAP (const clap_host_t* host)
     {
         DBG ("clap_plugin_t::get_extension " << id);
 
-        return yup::getWrapper (plugin)->getExtension (id);
+        return getWrapper (plugin)->getExtension (id);
     };
 
     plugin.on_main_thread = [] (const clap_plugin* plugin)
@@ -374,17 +414,17 @@ AudioPluginWrapperCLAP::AudioPluginWrapperCLAP (const clap_host_t* host)
 
 //==============================================================================
 
-AudioPluginWrapperCLAP::~AudioPluginWrapperCLAP()
+AudioPluginProcessorCLAP::~AudioPluginProcessorCLAP()
 {
 }
 
 //==============================================================================
 
-bool AudioPluginWrapperCLAP::initialise()
+bool AudioPluginProcessorCLAP::initialise()
 {
     jassert (audioProcessor == nullptr);
 
-    audioProcessor.reset (createPluginProcessor());
+    audioProcessor.reset (::createPluginProcessor());
     if (audioProcessor == nullptr)
         return false;
 
@@ -401,62 +441,69 @@ bool AudioPluginWrapperCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (yup::isPositiveAndBelow (index, static_cast<uint32_t> (parameters.size())))
-        {
-            auto parameter = parameters[index];
-
-            information->id = index;
-            information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
-            information->min_value = parameter->getMinimumValue();
-            information->max_value = parameter->getMaximumValue();
-            information->default_value = parameter->getDefaultValue();
-            std::strncpy (information->name, parameter->getName().toRawUTF8(), CLAP_NAME_SIZE);
-
-            return true;
-        }
-        else
-        {
+        if (! isPositiveAndBelow (index, static_cast<uint32_t> (parameters.size())))
             return false;
-        }
+
+        auto& parameter = parameters[index];
+
+        information->id = index;
+        information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
+        information->min_value = parameter->getMinimumValue();
+        information->max_value = parameter->getMaximumValue();
+        information->default_value = parameter->getDefaultValue();
+        parameter->getName().copyToUTF8(information->name, CLAP_NAME_SIZE);
+
+        return true;
     };
 
-    extensionParams.get_value = [] (const clap_plugin_t* plugin, clap_id id, double* value) -> bool
+    extensionParams.get_value = [] (const clap_plugin_t* plugin, clap_id parameterId, double* value) -> bool
     {
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        const int index = static_cast<int> (id);
-        if (! yup::isPositiveAndBelow (index, static_cast<int> (parameters.size())))
+        const int index = static_cast<int> (parameterId);
+        if (! isPositiveAndBelow (index, static_cast<int> (parameters.size())))
             return false;
 
         *value = parameters[index]->getValue();
+
         return true;
     };
 
-    extensionParams.value_to_text = [] (const clap_plugin_t* plugin, clap_id id, double value, char* display, uint32_t size) -> bool
+    extensionParams.value_to_text = [] (const clap_plugin_t* plugin, clap_id parameterId, double value, char* display, uint32_t size) -> bool
     {
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        const int index = static_cast<int> (id);
-        if (! yup::isPositiveAndBelow (index, static_cast<int> (parameters.size())))
+        const int index = static_cast<int> (parameterId);
+        if (! isPositiveAndBelow (index, static_cast<int> (parameters.size())))
             return false;
 
-        std::snprintf (display, size, "%f", value);
+        const auto text = parameters[index]->convertToString (static_cast<float> (value));
+        text.copyToUTF8(display, size);
 
         return true;
     };
 
-    extensionParams.text_to_value = [] (const clap_plugin_t* plugin, clap_id param_id, const char* display, double* value) -> bool
+    extensionParams.text_to_value = [] (const clap_plugin_t* plugin, clap_id parameterId, const char* display, double* value) -> bool
     {
-        return false;
+        auto wrapper = getWrapper (plugin);
+        auto parameters = wrapper->audioProcessor->getParameters();
+
+        const int index = static_cast<int> (parameterId);
+        if (! isPositiveAndBelow (index, static_cast<int> (parameters.size())))
+            return false;
+
+        *value = static_cast<double> (parameters[index]->convertFromString (display));
+
+        return true;
     };
 
     extensionParams.flush = [] (const clap_plugin_t* plugin, const clap_input_events_t* in, const clap_output_events_t* out)
     {
+        /* // TODO
         auto wrapper = getWrapper (plugin);
 
-        /*
         MyPlugin *plugin = (MyPlugin *) _plugin->plugin_data;
         const uint32_t eventCount = in->size(in);
 
@@ -474,6 +521,7 @@ bool AudioPluginWrapperCLAP::initialise()
     // ==== Setup extensions: note ports
     extensionNotePorts.count = [] (const clap_plugin_t* plugin, bool isInput) -> uint32_t
     {
+        // TODO - this depends on the YupPlugin_IsSynth, but we might want to probe for midi input buses
         return isInput ? 1 : 0;
     };
 
@@ -495,24 +543,33 @@ bool AudioPluginWrapperCLAP::initialise()
     extensionAudioPorts.count = [] (const clap_plugin_t* plugin, bool isInput) -> uint32_t
     {
         auto wrapper = getWrapper (plugin);
-        return isInput ? wrapper->audioProcessor->getNumAudioInputs() : wrapper->audioProcessor->getNumAudioOutputs();
+        auto* audioProcessor = wrapper->audioProcessor.get();
+
+        return static_cast<uint32_t> (isInput
+            ? audioProcessor->getBusLayout().getInputBuses().size()
+            : audioProcessor->getBusLayout().getOutputBuses().size());
     };
 
     extensionAudioPorts.get = [] (const clap_plugin_t* plugin, uint32_t index, bool isInput, clap_audio_port_info_t* info) -> bool
     {
-        if (isInput || index)
-            return false;
-
         auto wrapper = getWrapper (plugin);
         auto* audioProcessor = wrapper->audioProcessor.get();
 
-        info->id = 0;
-        info->channel_count = 2;
-        info->flags = CLAP_AUDIO_PORT_IS_MAIN;
-        info->port_type = CLAP_PORT_STEREO;
-        info->in_place_pair = CLAP_INVALID_ID;
+        Span<const AudioBus> busses = isInput
+            ? audioProcessor->getBusLayout().getInputBuses()
+            : audioProcessor->getBusLayout().getOutputBuses();
 
-        std::snprintf (info->name, sizeof (info->name), "%s", "Audio Output");
+        if (! isPositiveAndBelow(index, static_cast<uint32_t> (busses.size())))
+            return false;
+
+        const AudioBus& bus = busses[index];
+
+        info->id = index;
+        info->channel_count = bus.getNumChannels();
+        info->flags = (index == 0) ? CLAP_AUDIO_PORT_IS_MAIN : 0;
+        info->port_type = bus.isStereo() ? CLAP_PORT_STEREO : CLAP_PORT_MONO;
+        info->in_place_pair = CLAP_INVALID_ID;
+        bus.getName().copyToUTF8(info->name, sizeof (info->name));
 
         return true;
     };
@@ -522,7 +579,7 @@ bool AudioPluginWrapperCLAP::initialise()
     {
         auto wrapper = getWrapper (plugin);
 
-        yup::MemoryBlock data;
+        MemoryBlock data;
 
         // TODO - should we suspend ?
 
@@ -539,7 +596,7 @@ bool AudioPluginWrapperCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        yup::MemoryBlock data;
+        MemoryBlock data;
         if (auto result = stream->read (stream, data.getData(), data.getSize()); result <= 0)
             return false;
 
@@ -552,11 +609,24 @@ bool AudioPluginWrapperCLAP::initialise()
         return result.wasOk();
     };
 
+    // ==== Setup extensions: tail
+    extensionTail.get = [](const clap_plugin_t* plugin) -> uint32_t
+    {
+        return 0;
+    };
+
+    // ==== Setup extensions: latency
+    extensionLatency.get = [](const clap_plugin_t* plugin) -> uint32_t
+    {
+        return 0;
+    };
+
     // ==== Setup extensions: timer support
-    extensionTimerSupport.on_timer = [] (const clap_plugin_t* plugin, clap_id timerID)
+    extensionTimerSupport.on_timer = [] (const clap_plugin_t* plugin, clap_id timerId)
     {
 #if JUCE_LINUX
-        yup::MessageManager::getInstance()->runDispatchLoopUntil (10);
+        if ( auto wrapper = getWrapper (plugin); wrapper->guiTimerId == timerId)
+            MessageManager::getInstance()->runDispatchLoopUntil (10);
 #endif
     };
 
@@ -586,9 +656,11 @@ bool AudioPluginWrapperCLAP::initialise()
 
         auto wrapper = getWrapper (plugin);
 
-        wrapper->audioProcessorEditor.reset (wrapper->audioProcessor->createEditor());
-        if (wrapper->audioProcessorEditor == nullptr)
+        auto processorEditor = wrapper->audioProcessor->createEditor();
+        if (processorEditor == nullptr)
             return false;
+
+        wrapper->audioPluginEditor = std::make_unique<AudioPluginEditorCLAP> (wrapper, processorEditor);
 
         return true;
     };
@@ -598,7 +670,7 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::destroy");
 
         auto wrapper = getWrapper (plugin);
-        wrapper->audioProcessorEditor.reset();
+        wrapper->audioPluginEditor.reset();
     };
 
     extensionGUI.set_scale = [] (const clap_plugin_t* plugin, double scale) -> bool
@@ -613,18 +685,20 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::get_size");
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        if (wrapper->audioProcessorEditor->isResizable() && wrapper->audioProcessorEditor->getWidth() != 0)
+        auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
+
+        if (audioProcessorEditor->isResizable() && audioProcessorEditor->getWidth() != 0)
         {
-            *width = static_cast<uint32_t> (wrapper->audioProcessorEditor->getWidth());
-            *height = static_cast<uint32_t> (wrapper->audioProcessorEditor->getHeight());
+            *width = static_cast<uint32_t> (audioProcessorEditor->getWidth());
+            *height = static_cast<uint32_t> (audioProcessorEditor->getHeight());
         }
         else
         {
-            *width = static_cast<uint32_t> (wrapper->audioProcessorEditor->getPreferredSize().getWidth());
-            *height = static_cast<uint32_t> (wrapper->audioProcessorEditor->getPreferredSize().getHeight());
+            *width = static_cast<uint32_t> (audioProcessorEditor->getPreferredSize().getWidth());
+            *height = static_cast<uint32_t> (audioProcessorEditor->getPreferredSize().getHeight());
         }
 
         return true;
@@ -635,10 +709,10 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::can_resize");
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        return wrapper->audioProcessorEditor->isResizable();
+        return wrapper->audioPluginEditor->getAudioProcessorEditor()->isResizable();
     };
 
     extensionGUI.get_resize_hints = [] (const clap_plugin_t* plugin, clap_gui_resize_hints_t* hints) -> bool
@@ -646,14 +720,16 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::get_resize_hints");
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        hints->can_resize_horizontally = wrapper->audioProcessorEditor->isResizable();
-        hints->can_resize_vertically = wrapper->audioProcessorEditor->isResizable();
-        hints->preserve_aspect_ratio = wrapper->audioProcessorEditor->shouldPreserveAspectRatio();
-        hints->aspect_ratio_width = wrapper->audioProcessorEditor->getPreferredSize().getWidth();
-        hints->aspect_ratio_height = wrapper->audioProcessorEditor->getPreferredSize().getHeight();
+        auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
+
+        hints->can_resize_horizontally = audioProcessorEditor->isResizable();
+        hints->can_resize_vertically = audioProcessorEditor->isResizable();
+        hints->preserve_aspect_ratio = audioProcessorEditor->shouldPreserveAspectRatio();
+        hints->aspect_ratio_width = audioProcessorEditor->getPreferredSize().getWidth();
+        hints->aspect_ratio_height = audioProcessorEditor->getPreferredSize().getHeight();
 
         return true;
     };
@@ -663,17 +739,19 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::adjust_size " << (int32_t) *width << "," << (int32_t) *height);
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        const auto preferredSize = wrapper->audioProcessorEditor->getPreferredSize();
+        auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        if (! wrapper->audioProcessorEditor->isResizable())
+        const auto preferredSize = audioProcessorEditor->getPreferredSize();
+
+        if (! audioProcessorEditor->isResizable())
         {
             *width = static_cast<uint32_t> (preferredSize.getWidth());
             *height = static_cast<uint32_t> (preferredSize.getHeight());
         }
-        else if (wrapper->audioProcessorEditor->shouldPreserveAspectRatio())
+        else if (audioProcessorEditor->shouldPreserveAspectRatio())
         {
             if (preferredSize.getWidth() > preferredSize.getHeight())
                 *height = static_cast<uint32_t> (*width * (preferredSize.getWidth() / static_cast<float> (preferredSize.getHeight())));
@@ -689,18 +767,20 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::set_size " << (int32_t) width << "," << (int32_t) height);
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        if (! wrapper->audioProcessorEditor->isResizable())
+        auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
+
+        if (! audioProcessorEditor->isResizable())
         {
-            const auto preferredSize = wrapper->audioProcessorEditor->getPreferredSize();
+            const auto preferredSize = audioProcessorEditor->getPreferredSize();
 
             width = static_cast<uint32_t> (preferredSize.getWidth());
             height = static_cast<uint32_t> (preferredSize.getHeight());
         }
 
-        wrapper->audioProcessorEditor->setSize ({ static_cast<float> (width), static_cast<float> (height) });
+        wrapper->audioPluginEditor->setSize ({ static_cast<float> (width), static_cast<float> (height) });
 
         return true;
     };
@@ -712,19 +792,22 @@ bool AudioPluginWrapperCLAP::initialise()
         jassert (std::string_view (window->api) == preferredApi);
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        yup::ComponentNative::Flags flags = yup::ComponentNative::defaultFlags
-                                          & ~yup::ComponentNative::decoratedWindow;
+        auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
 
-        if (wrapper->audioProcessorEditor->shouldRenderContinuous())
-            flags.set (yup::ComponentNative::renderContinuous);
+        ComponentNative::Flags flags =
+            ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
 
-        yup::ComponentNative::Options options;
+        if (audioProcessorEditor->shouldRenderContinuous())
+            flags.set (ComponentNative::renderContinuous);
+
+        ComponentNative::Options options;
         options.flags = flags;
-        wrapper->audioProcessorEditor->addToDesktop (options, window->cocoa);
-        wrapper->audioProcessorEditor->attachedToNative();
+        wrapper->audioPluginEditor->addToDesktop (options, window->cocoa);
+
+        audioProcessorEditor->attachedToNative();
 
         return true;
     };
@@ -746,10 +829,10 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::show");
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        wrapper->audioProcessorEditor->setVisible (true);
+        wrapper->audioPluginEditor->setVisible (true);
         return true;
     };
 
@@ -758,37 +841,40 @@ bool AudioPluginWrapperCLAP::initialise()
         DBG ("clap_plugin_gui_t::hide");
 
         auto wrapper = getWrapper (plugin);
-        if (wrapper->audioProcessorEditor == nullptr)
+        if (wrapper->audioPluginEditor == nullptr)
             return false;
 
-        wrapper->audioProcessorEditor->setVisible (false);
+        wrapper->audioPluginEditor->setVisible (false);
         return true;
     };
+
+    // ==== Setup extensions: host
+    hostParams = reinterpret_cast<const clap_host_params_t*> (host->get_extension (host, CLAP_EXT_PARAMS));
+    hostState = reinterpret_cast<const clap_host_state_t*> (host->get_extension (host, CLAP_EXT_STATE));
+    hostTail = reinterpret_cast<const clap_host_tail_t*> (host->get_extension (host, CLAP_EXT_TAIL));
+    hostLatency = reinterpret_cast<const clap_host_latency_t*> (host->get_extension (host, CLAP_EXT_LATENCY));
+    hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
+    hostGUI = reinterpret_cast<const clap_host_gui_t*> (host->get_extension (host, CLAP_EXT_GUI));
 
     return true;
 }
 
 //==============================================================================
 
-void AudioPluginWrapperCLAP::destroy()
+void AudioPluginProcessorCLAP::destroy()
 {
     plugin.plugin_data = nullptr;
-
     delete this;
 }
 
 //==============================================================================
 
-bool AudioPluginWrapperCLAP::activate (float sampleRate, int samplesPerBlock)
+bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 {
+#if JUCE_LINUX
     if (instancesCount.fetch_add (1) == 0)
-    {
-        hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (
-            host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
-
-        if (hostTimerSupport != nullptr && hostTimerSupport->register_timer)
-            hostTimerSupport->register_timer (host, 16, &timerID);
-    }
+        registerTimer (16, &guiTimerId);
+#endif
 
     audioProcessor->prepareToPlay (sampleRate, samplesPerBlock);
     return true;
@@ -796,45 +882,55 @@ bool AudioPluginWrapperCLAP::activate (float sampleRate, int samplesPerBlock)
 
 //==============================================================================
 
-void AudioPluginWrapperCLAP::deactivate()
+void AudioPluginProcessorCLAP::deactivate()
 {
     audioProcessor->releaseResources();
 
+#if JUCE_LINUX
     if (instancesCount.fetch_sub (1) == 1)
-    {
-        if (hostTimerSupport && hostTimerSupport->register_timer)
-        {
-            hostTimerSupport->unregister_timer (host, timerID);
-            hostTimerSupport = nullptr;
-        }
-    }
+        unregisterTimer (&guiTimerId);
+#endif
 }
 
 //==============================================================================
 
-bool AudioPluginWrapperCLAP::startProcessing()
+bool AudioPluginProcessorCLAP::startProcessing()
 {
-    // audioProcessor->setSuspended (false);
+    audioProcessor->suspendProcessing (false);
     return true;
 }
 
 //==============================================================================
 
-void AudioPluginWrapperCLAP::stopProcessing()
+void AudioPluginProcessorCLAP::stopProcessing()
 {
-    // audioProcessor->setSuspended (true);
+    audioProcessor->suspendProcessing (true);
 }
 
 //==============================================================================
 
-void AudioPluginWrapperCLAP::reset()
+void AudioPluginProcessorCLAP::reset()
 {
     audioProcessor->flush(); // TODO - should we just call releaseResources()?
 }
 
 //==============================================================================
 
-const void* AudioPluginWrapperCLAP::getExtension (std::string_view id)
+void AudioPluginProcessorCLAP::registerTimer (uint32_t periodMs, clap_id timerId)
+{
+    if (hostTimerSupport != nullptr && hostTimerSupport->register_timer)
+        hostTimerSupport->register_timer (host, periodMs, &timerId);
+}
+
+void AudioPluginProcessorCLAP::unregisterTimer (clap_id timerId)
+{
+    if (hostTimerSupport != nullptr && hostTimerSupport->register_timer)
+        hostTimerSupport->unregister_timer (host, timerId);
+}
+
+//==============================================================================
+
+const void* AudioPluginProcessorCLAP::getExtension (std::string_view id)
 {
     if (id == CLAP_EXT_NOTE_PORTS)
         return std::addressof (extensionNotePorts);
@@ -844,6 +940,10 @@ const void* AudioPluginWrapperCLAP::getExtension (std::string_view id)
         return std::addressof (extensionParams);
     if (id == CLAP_EXT_STATE)
         return std::addressof (extensionState);
+    if (id == CLAP_EXT_TAIL)
+        return std::addressof (extensionTail);
+    if (id == CLAP_EXT_LATENCY)
+        return std::addressof (extensionLatency);
     if (id == CLAP_EXT_TIMER_SUPPORT)
         return std::addressof (extensionTimerSupport);
     if (id == CLAP_EXT_GUI)
@@ -854,9 +954,32 @@ const void* AudioPluginWrapperCLAP::getExtension (std::string_view id)
 
 //==============================================================================
 
-const clap_plugin_t* AudioPluginWrapperCLAP::getPlugin() const
+const clap_plugin_t* AudioPluginProcessorCLAP::getPlugin() const
 {
     return std::addressof (plugin);
+}
+
+//==============================================================================
+
+void AudioPluginProcessorCLAP::editorResized()
+{
+    if (audioPluginEditor == nullptr)
+        return;
+
+    if (hostGUI != nullptr && hostGUI->request_resize != nullptr)
+        hostGUI->request_resize (host, audioPluginEditor->getWidth(), audioPluginEditor->getHeight());
+}
+
+//==============================================================================
+
+void AudioPluginEditorCLAP::resized()
+{
+    if (processorEditor == nullptr)
+        return;
+
+    processorEditor->setBounds (getLocalBounds());
+
+    wrapper->editorResized();
 }
 
 } // namespace yup
@@ -887,7 +1010,7 @@ static const clap_plugin_factory_t pluginFactory = []
         if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
             return nullptr;
 
-        auto wrapper = new yup::AudioPluginWrapperCLAP (host);
+            auto wrapper = new yup::AudioPluginProcessorCLAP (host);
         return wrapper->getPlugin();
     }
     };

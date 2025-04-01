@@ -59,4 +59,18 @@ int AudioProcessor::getNumAudioInputs() const
     return static_cast<int> (busLayout.getInputBuses().size());
 }
 
+//==============================================================================
+
+void AudioProcessor::suspendProcessing (bool shouldSuspend)
+{
+     auto lock = CriticalSection::ScopedLockType (processLock);
+
+     processIsSuspended = shouldSuspend;
+}
+
+bool AudioProcessor::isSuspended() const
+{
+    return processIsSuspended;
+}
+
 } // namespace yup

@@ -51,16 +51,18 @@ extern "C" yup::AudioProcessor* createPluginProcessor();
 namespace yup
 {
 
-//==============================================================================
-
 namespace
 {
+
+//==============================================================================
 
 Steinberg::FUID stringToFUID (const String& source)
 {
     const auto uid = juce::Uuid::fromSHA1 (juce::SHA1 (source.toUTF8()));
     return { uid.getPart (0), uid.getPart (1), uid.getPart (2), uid.getPart (3) };
 }
+
+//==============================================================================
 
 void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destination)
 {
@@ -76,6 +78,31 @@ void copyStringToVST3 (const String& source, Steinberg::Vst::String128 destinati
     std::memcpy (destination, utf16.getAddress(), length * sizeof (Steinberg::Vst::TChar));
     destination[length] = 0;
 }
+
+//==============================================================================
+
+static std::atomic_int numScopedInitInstancesGui = 0;
+
+struct ScopedYupInitialiser_GUI
+{
+    ScopedYupInitialiser_GUI()
+    {
+        if (numScopedInitInstancesGui.fetch_add (1) == 0)
+        {
+            yup::initialiseJuce_GUI();
+            yup::initialiseYup_Windowing();
+        }
+    }
+
+    ~ScopedYupInitialiser_GUI()
+    {
+        if (numScopedInitInstancesGui.fetch_add (-1) == 1)
+        {
+            yup::shutdownYup_Windowing();
+            yup::shutdownJuce_GUI();
+        }
+    }
+};
 
 } // namespace
 
@@ -551,31 +578,6 @@ public:
 
 private:
     AudioProcessor* processor = nullptr;
-};
-
-//==============================================================================
-
-static std::atomic_int numScopedInitInstancesGui = 0;
-
-struct ScopedYupInitialiser_GUI
-{
-    ScopedYupInitialiser_GUI()
-    {
-        if (numScopedInitInstancesGui.fetch_add (1) == 0)
-        {
-            yup::initialiseJuce_GUI();
-            yup::initialiseYup_Windowing();
-        }
-    }
-
-    ~ScopedYupInitialiser_GUI()
-    {
-        if (numScopedInitInstancesGui.fetch_add (-1) == 1)
-        {
-            yup::shutdownYup_Windowing();
-            yup::shutdownJuce_GUI();
-        }
-    }
 };
 
 //==============================================================================

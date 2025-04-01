@@ -167,9 +167,25 @@ bool SDL2ComponentNative::isVisible() const
 
 //==============================================================================
 
-void SDL2ComponentNative::setSize (const Size<int>& size)
+Size<int> SDL2ComponentNative::getContentSize() const
 {
-    setBounds (screenBounds.withSize (size));
+    const auto dpiScale = getScaleDpi();
+    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
+
+    return { width, height };
+}
+
+//==============================================================================
+
+void SDL2ComponentNative::setSize (const Size<int>& newSize)
+{
+    if (window == nullptr || screenBounds.getSize() == newSize)
+        return;
+
+    SDL_SetWindowSize (window, newSize.getWidth(), newSize.getHeight());
+
+    screenBounds = screenBounds.withSize (newSize);
 }
 
 Size<int> SDL2ComponentNative::getSize() const
@@ -182,20 +198,6 @@ Size<int> SDL2ComponentNative::getSize() const
     return { width, height };
 }
 
-Size<int> SDL2ComponentNative::getContentSize() const
-{
-    const auto dpiScale = getScaleDpi();
-    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
-    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
-
-    return { width, height };
-}
-
-Point<int> SDL2ComponentNative::getPosition() const
-{
-    return screenBounds.getPosition();
-}
-
 void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
     if (window == nullptr || screenBounds.getPosition() == newPosition)
@@ -206,9 +208,15 @@ void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
     screenBounds = screenBounds.withPosition (newPosition);
 }
 
-Rectangle<int> SDL2ComponentNative::getBounds() const
+Point<int> SDL2ComponentNative::getPosition() const
 {
-    return screenBounds;
+    if (window == nullptr)
+        return screenBounds.getPosition();
+
+    int x = 0, y = 0;
+    SDL_GetWindowPosition (window, &x, &y);
+
+    return { x, y };
 }
 
 void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
@@ -248,6 +256,11 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     screenBounds = newBounds;
 
 #endif
+}
+
+Rectangle<int> SDL2ComponentNative::getBounds() const
+{
+    return screenBounds;
 }
 
 //==============================================================================
