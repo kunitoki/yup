@@ -61,6 +61,8 @@ yup_audio_plugin (
         "${target_name}_binary_data")
 
 # ==== Prepare sources
-file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
+file (GLOB_RECURSE sources
+    "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name}_shared PUBLIC ${sources})

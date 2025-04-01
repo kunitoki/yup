@@ -494,13 +494,17 @@ bool AudioPluginWrapperCLAP::initialise()
     // ==== Setup extensions: audio ports
     extensionAudioPorts.count = [] (const clap_plugin_t* plugin, bool isInput) -> uint32_t
     {
-        return isInput ? 0 : 1;
+        auto wrapper = getWrapper (plugin);
+        return isInput ? wrapper->audioProcessor->getNumAudioInputs() : wrapper->audioProcessor->getNumAudioOutputs();
     };
 
     extensionAudioPorts.get = [] (const clap_plugin_t* plugin, uint32_t index, bool isInput, clap_audio_port_info_t* info) -> bool
     {
         if (isInput || index)
             return false;
+
+        auto wrapper = getWrapper (plugin);
+        auto* audioProcessor = wrapper->audioProcessor.get();
 
         info->id = 0;
         info->channel_count = 2;
@@ -517,16 +521,17 @@ bool AudioPluginWrapperCLAP::initialise()
     extensionState.save = [] (const clap_plugin_t* plugin, const clap_ostream_t* stream) -> bool
     {
         auto wrapper = getWrapper (plugin);
-        auto parameters = wrapper->audioProcessor->getParameters();
 
-        yup::Array<float> params;
-        params.resize (static_cast<int> (parameters.size()));
+        yup::MemoryBlock data;
 
-        for (int i = 0; i < static_cast<int> (parameters.size()); ++i)
-            params.set (i, parameters[i]->getNormalizedValue());
+        // TODO - should we suspend ?
 
-        const auto totalSize = sizeof (float) * params.size();
-        return stream->write (stream, params.data(), totalSize) == totalSize;
+        if (auto result = wrapper->audioProcessor->saveStateIntoMemory (data); result.failed())
+            return false;
+
+        // TODO - should we resume ?
+
+        return stream->write (stream, data.getData(), data.getSize()) == data.getSize();
     };
 
     extensionState.load = [] (const clap_plugin_t* plugin, const clap_istream_t* stream) -> bool
@@ -534,16 +539,17 @@ bool AudioPluginWrapperCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        yup::Array<float> params;
-        params.resize (static_cast<int> (parameters.size()));
+        yup::MemoryBlock data;
+        if (auto result = stream->read (stream, data.getData(), data.getSize()); result <= 0)
+            return false;
 
-        const auto totalSize = sizeof (float) * params.size();
-        bool success = stream->read (stream, params.data(), totalSize) == totalSize;
+        // TODO - should we suspend ?
 
-        for (int i = 0; i < static_cast<int> (parameters.size()); ++i)
-            parameters[i]->setNormalizedValue (params.getReference (i));
+        auto result = wrapper->audioProcessor->loadStateFromMemory (data);
 
-        return success;
+        // TODO - should we resume ?
+
+        return result.wasOk();
     };
 
     // ==== Setup extensions: timer support
@@ -575,7 +581,7 @@ bool AudioPluginWrapperCLAP::initialise()
     {
         DBG ("clap_plugin_gui_t::create");
 
-        if (std::string_view (api) != preferredApi || isFloating)
+        if (api == nullptr || std::string_view (api) != preferredApi || isFloating)
             return false;
 
         auto wrapper = getWrapper (plugin);
@@ -780,7 +786,7 @@ bool AudioPluginWrapperCLAP::activate (float sampleRate, int samplesPerBlock)
         hostTimerSupport = reinterpret_cast<const clap_host_timer_support_t*> (
             host->get_extension (host, CLAP_EXT_TIMER_SUPPORT));
 
-        if (hostTimerSupport && hostTimerSupport->register_timer)
+        if (hostTimerSupport != nullptr && hostTimerSupport->register_timer)
             hostTimerSupport->register_timer (host, 16, &timerID);
     }
 
@@ -808,6 +814,7 @@ void AudioPluginWrapperCLAP::deactivate()
 
 bool AudioPluginWrapperCLAP::startProcessing()
 {
+    // audioProcessor->setSuspended (false);
     return true;
 }
 
@@ -815,13 +822,14 @@ bool AudioPluginWrapperCLAP::startProcessing()
 
 void AudioPluginWrapperCLAP::stopProcessing()
 {
+    // audioProcessor->setSuspended (true);
 }
 
 //==============================================================================
 
 void AudioPluginWrapperCLAP::reset()
 {
-    audioProcessor->flush();
+    audioProcessor->flush(); // TODO - should we just call releaseResources()?
 }
 
 //==============================================================================
@@ -855,63 +863,71 @@ const clap_plugin_t* AudioPluginWrapperCLAP::getPlugin() const
 
 //==============================================================================
 
-static const clap_plugin_factory_t pluginFactory = {
-    .get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
+static const clap_plugin_factory_t pluginFactory = []
 {
-    DBG ("clap_plugin_factory_t::get_plugin_count");
+    return clap_plugin_factory_t
+    {
+        .get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
+        {
+            DBG ("clap_plugin_factory_t::get_plugin_count");
 
-    return 1;
-},
+            return 1;
+        },
 
-    .get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
-{
-    DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
+        .get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
+        {
+            DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
 
-    return index == 0 ? &yup::pluginDescriptor : nullptr;
-},
+            return index == 0 ? &yup::pluginDescriptor : nullptr;
+        },
 
-    .create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginID) -> const clap_plugin_t*
-{
-    DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
+        .create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginID) -> const clap_plugin_t*
+        {
+            DBG ("clap_plugin_factory_t::create_plugin " << pluginID);
 
-    if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
-        return nullptr;
+            if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginID) != yup::pluginDescriptor.id)
+                return nullptr;
 
-    auto wrapper = new yup::AudioPluginWrapperCLAP (host);
-    return wrapper->getPlugin();
-},
-};
+            auto wrapper = new yup::AudioPluginWrapperCLAP (host);
+            return wrapper->getPlugin();
+        }
+    };
+}();
 
 //==============================================================================
 
-extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = {
-    .clap_version = CLAP_VERSION_INIT,
-
-    .init = [] (const char* path) -> bool
+extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
 {
-    DBG ("clap_plugin_entry_t::init " << path);
+    return clap_plugin_entry_t
+    {
+        .clap_version = CLAP_VERSION_INIT,
 
-    yup::initialiseJuce_GUI();
-    yup::initialiseYup_Windowing();
+        .init = [] (const char* path) -> bool
+        {
+            DBG ("clap_plugin_entry_t::init " << path);
 
-    return true;
-},
+            yup::initialiseJuce_GUI();
+            yup::initialiseYup_Windowing();
 
-    .deinit = []
-{
-    DBG ("clap_plugin_entry_t::deinit");
+            return true;
+        },
 
-    yup::shutdownYup_Windowing();
-    yup::shutdownJuce_GUI();
-},
+        .deinit = []
+        {
+            DBG ("clap_plugin_entry_t::deinit");
 
-    .get_factory = [] (const char* factoryID) -> const void*
-{
-    DBG ("clap_plugin_entry_t::get_factory " << factoryID);
+            yup::shutdownYup_Windowing();
+            yup::shutdownJuce_GUI();
+        },
 
-    if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
-        return std::addressof (pluginFactory);
+        .get_factory = [] (const char* factoryID) -> const void*
+        {
+            DBG ("clap_plugin_entry_t::get_factory " << factoryID);
 
-    return nullptr;
-},
-};
+            if (std::string_view (factoryID) == CLAP_PLUGIN_FACTORY_ID)
+                return std::addressof (pluginFactory);
+
+            return nullptr;
+        }
+    };
+}();
