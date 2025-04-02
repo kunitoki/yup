@@ -290,7 +290,7 @@ public:
 
     void reset();
 
-    void registerTimer (uint32_t periodMs, clap_id timerId);
+    void registerTimer (uint32_t periodMs, clap_id* timerId);
     void unregisterTimer (clap_id timerId);
 
     const void* getExtension (std::string_view id);
@@ -957,7 +957,7 @@ void AudioPluginProcessorCLAP::deactivate()
 
 #if JUCE_LINUX
     if (instancesCount.fetch_sub (1) == 1)
-        unregisterTimer (&guiTimerId);
+        unregisterTimer (guiTimerId);
 #endif
 }
 
@@ -985,10 +985,10 @@ void AudioPluginProcessorCLAP::reset()
 
 //==============================================================================
 
-void AudioPluginProcessorCLAP::registerTimer (uint32_t periodMs, clap_id timerId)
+void AudioPluginProcessorCLAP::registerTimer (uint32_t periodMs, clap_id* timerId)
 {
     if (hostTimerSupport != nullptr && hostTimerSupport->register_timer)
-        hostTimerSupport->register_timer (host, periodMs, &timerId);
+        hostTimerSupport->register_timer (host, periodMs, timerId);
 }
 
 void AudioPluginProcessorCLAP::unregisterTimer (clap_id timerId)
