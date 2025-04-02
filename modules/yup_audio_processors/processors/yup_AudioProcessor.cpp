@@ -70,9 +70,9 @@ void AudioProcessor::setPlayHead (AudioPlayHead* playHead)
 
 void AudioProcessor::suspendProcessing (bool shouldSuspend)
 {
-     auto lock = CriticalSection::ScopedLockType (processLock);
+    auto lock = CriticalSection::ScopedLockType (processLock);
 
-     processIsSuspended = shouldSuspend;
+    processIsSuspended = shouldSuspend;
 }
 
 bool AudioProcessor::isSuspended() const

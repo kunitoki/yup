@@ -230,10 +230,10 @@ public:
 
         result.setTimeInSeconds (process.transport->song_pos_seconds / (double) CLAP_SECTIME_FACTOR);
         result.setTimeInSamples ((int64) (sampleRate * (process.transport->song_pos_seconds / (double) CLAP_SECTIME_FACTOR)));
-        result.setTimeSignature (TimeSignature{ process.transport->tsig_num, process.transport->tsig_denom });
-        result.setBpm(process.transport->tempo);
-        result.setBarCount(process.transport->bar_number);
-        result.setPpqPositionOfLastBarStart(process.transport->bar_start / (double) CLAP_BEATTIME_FACTOR);
+        result.setTimeSignature (TimeSignature { process.transport->tsig_num, process.transport->tsig_denom });
+        result.setBpm (process.transport->tempo);
+        result.setBarCount (process.transport->bar_number);
+        result.setPpqPositionOfLastBarStart (process.transport->bar_start / (double) CLAP_BEATTIME_FACTOR);
         result.setIsPlaying (process.transport->flags & CLAP_TRANSPORT_IS_PLAYING);
         result.setIsRecording (process.transport->flags & CLAP_TRANSPORT_IS_RECORDING);
         result.setIsLooping (process.transport->flags & CLAP_TRANSPORT_IS_LOOP_ACTIVE);
@@ -259,7 +259,7 @@ public:
         : wrapper (wrapper)
         , processorEditor (editor)
     {
-        addAndMakeVisible(*processorEditor);
+        addAndMakeVisible (*processorEditor);
     }
 
     AudioProcessorEditor* getAudioProcessorEditor() { return processorEditor.get(); }
@@ -520,7 +520,7 @@ bool AudioPluginProcessorCLAP::initialise()
         information->min_value = parameter->getMinimumValue();
         information->max_value = parameter->getMaximumValue();
         information->default_value = parameter->getDefaultValue();
-        parameter->getName().copyToUTF8(information->name, CLAP_NAME_SIZE);
+        parameter->getName().copyToUTF8 (information->name, CLAP_NAME_SIZE);
 
         return true;
     };
@@ -549,7 +549,7 @@ bool AudioPluginProcessorCLAP::initialise()
             return false;
 
         const auto text = parameters[index]->convertToString (static_cast<float> (value));
-        text.copyToUTF8(display, size);
+        text.copyToUTF8 (display, size);
 
         return true;
     };
@@ -615,8 +615,8 @@ bool AudioPluginProcessorCLAP::initialise()
         auto* audioProcessor = wrapper->audioProcessor.get();
 
         return static_cast<uint32_t> (isInput
-            ? audioProcessor->getBusLayout().getInputBuses().size()
-            : audioProcessor->getBusLayout().getOutputBuses().size());
+                                          ? audioProcessor->getBusLayout().getInputBuses().size()
+                                          : audioProcessor->getBusLayout().getOutputBuses().size());
     };
 
     extensionAudioPorts.get = [] (const clap_plugin_t* plugin, uint32_t index, bool isInput, clap_audio_port_info_t* info) -> bool
@@ -625,10 +625,10 @@ bool AudioPluginProcessorCLAP::initialise()
         auto* audioProcessor = wrapper->audioProcessor.get();
 
         Span<const AudioBus> busses = isInput
-            ? audioProcessor->getBusLayout().getInputBuses()
-            : audioProcessor->getBusLayout().getOutputBuses();
+                                        ? audioProcessor->getBusLayout().getInputBuses()
+                                        : audioProcessor->getBusLayout().getOutputBuses();
 
-        if (! isPositiveAndBelow(index, static_cast<uint32_t> (busses.size())))
+        if (! isPositiveAndBelow (index, static_cast<uint32_t> (busses.size())))
             return false;
 
         const AudioBus& bus = busses[index];
@@ -638,7 +638,7 @@ bool AudioPluginProcessorCLAP::initialise()
         info->flags = (index == 0) ? CLAP_AUDIO_PORT_IS_MAIN : 0;
         info->port_type = bus.isStereo() ? CLAP_PORT_STEREO : CLAP_PORT_MONO;
         info->in_place_pair = CLAP_INVALID_ID;
-        bus.getName().copyToUTF8(info->name, sizeof (info->name));
+        bus.getName().copyToUTF8 (info->name, sizeof (info->name));
 
         return true;
     };
@@ -679,13 +679,13 @@ bool AudioPluginProcessorCLAP::initialise()
     };
 
     // ==== Setup extensions: tail
-    extensionTail.get = [](const clap_plugin_t* plugin) -> uint32_t
+    extensionTail.get = [] (const clap_plugin_t* plugin) -> uint32_t
     {
         return 0;
     };
 
     // ==== Setup extensions: latency
-    extensionLatency.get = [](const clap_plugin_t* plugin) -> uint32_t
+    extensionLatency.get = [] (const clap_plugin_t* plugin) -> uint32_t
     {
         return 0;
     };
@@ -694,7 +694,7 @@ bool AudioPluginProcessorCLAP::initialise()
     extensionTimerSupport.on_timer = [] (const clap_plugin_t* plugin, clap_id timerId)
     {
 #if JUCE_LINUX
-        if ( auto wrapper = getWrapper (plugin); wrapper->guiTimerId == timerId)
+        if (auto wrapper = getWrapper (plugin); wrapper->guiTimerId == timerId)
             MessageManager::getInstance()->runDispatchLoopUntil (10);
 #endif
     };
