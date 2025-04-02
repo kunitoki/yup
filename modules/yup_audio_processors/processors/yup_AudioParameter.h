@@ -100,6 +100,12 @@ public:
 
     //==============================================================================
 
+    int getIndexInContainer() const { return paramIndex; }
+
+    void setIndexInContainer (int newIndex) { paramIndex = newIndex; }
+
+    //==============================================================================
+
     /** Returns the minimum value. */
     float getMinimumValue() const { return valueRange.start; }
 
@@ -108,6 +114,12 @@ public:
 
     /** Returns the default value. */
     float getDefaultValue() const { return defaultValue; }
+
+    //==============================================================================
+
+    void beginChangeGesture();
+
+    void endChangeGesture();
 
     //==============================================================================
 
@@ -178,13 +190,13 @@ public:
         virtual ~Listener() = default;
 
         /** Called when the parameter value changes. */
-        virtual void parameterValueChanged (const AudioParameter::Ptr& parameter) = 0;
+        virtual void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) = 0;
 
         /** Called when a gesture begins. */
-        virtual void parameterGestureBegin (const AudioParameter::Ptr& parameter) = 0;
+        virtual void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) = 0;
 
         /** Called when a gesture ends. */
-        virtual void parameterGestureEnd (const AudioParameter::Ptr& parameter) = 0;
+        virtual void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) = 0;
     };
 
     /** Adds a listener to the parameter. */
@@ -194,8 +206,12 @@ public:
     void removeListener (Listener* listener);
 
 private:
+    using ListenersType = ListenerList<Listener, Array<Listener*, CriticalSection>>;
+
     String paramID;
     String paramName;
+    int paramVersion = 0;
+    int paramIndex = -1;
     std::atomic<float> currentValue = 0.0f;
     NormalisableRange<float> valueRange = { 0.0f, 1.0f };
     float defaultValue = 0.0f;
@@ -203,7 +219,7 @@ private:
     StringToValue stringToValue = nullptr;
     bool smoothingEnabled = false;
     float smoothingTimeMs = 0.0f;
-    ListenerList<Listener> listeners;
+    ListenersType listeners;
 };
 
 } // namespace yup

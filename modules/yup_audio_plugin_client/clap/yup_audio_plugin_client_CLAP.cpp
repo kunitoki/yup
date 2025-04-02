@@ -65,6 +65,12 @@ std::optional<MidiMessage> clapEventToMidiNoteMessage (const clap_event_header_t
             return MidiMessage::noteOff (channel, noteEvent->key);
         }
 
+        case CLAP_EVENT_NOTE_END:
+        case CLAP_EVENT_NOTE_EXPRESSION:
+        case CLAP_EVENT_PARAM_VALUE:
+        case CLAP_EVENT_PARAM_MOD:
+        case CLAP_EVENT_MIDI:
+        case CLAP_EVENT_MIDI_SYSEX:
         default:
             break;
     }
@@ -681,13 +687,15 @@ bool AudioPluginProcessorCLAP::initialise()
     // ==== Setup extensions: tail
     extensionTail.get = [] (const clap_plugin_t* plugin) -> uint32_t
     {
-        return 0;
+        auto wrapper = getWrapper (plugin);
+        return static_cast<uint32_t> (wrapper->audioProcessor->getTailSamples());
     };
 
     // ==== Setup extensions: latency
     extensionLatency.get = [] (const clap_plugin_t* plugin) -> uint32_t
     {
-        return 0;
+        auto wrapper = getWrapper (plugin);
+        return static_cast<uint32_t> (wrapper->audioProcessor->getLatencySamples());
     };
 
     // ==== Setup extensions: timer support

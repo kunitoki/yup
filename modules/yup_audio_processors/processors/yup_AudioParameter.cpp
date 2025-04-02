@@ -84,11 +84,23 @@ AudioParameter::AudioParameter (const String& id,
 
 //==============================================================================
 
+void AudioParameter::beginChangeGesture()
+{
+    listeners.call (&Listener::parameterGestureBegin, this, paramIndex);
+}
+
+void AudioParameter::endChangeGesture()
+{
+    listeners.call (&Listener::parameterGestureEnd, this, paramIndex);
+}
+
+//==============================================================================
+
 void AudioParameter::setValueNotifyingHost (float value)
 {
     setValue (value);
 
-    listeners.call (&Listener::parameterValueChanged, this);
+    listeners.call (&Listener::parameterValueChanged, this, paramIndex);
 }
 
 //==============================================================================

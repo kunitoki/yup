@@ -27,7 +27,9 @@
 
 //==============================================================================
 
-class ExampleEditor : public yup::AudioProcessorEditor
+class ExampleEditor
+    : public yup::AudioProcessorEditor
+    , public yup::Timer
 {
 public:
     ExampleEditor (ExamplePlugin& processor);
@@ -40,6 +42,9 @@ public:
     // yup::Component
     void paint (yup::Graphics& g) override;
     void resized() override;
+
+    // yup::Timer
+    void timerCallback() override;
 
 private:
     ExamplePlugin& audioProcessor;

@@ -35,6 +35,8 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     addAndMakeVisible (*x);
 
     setSize (getPreferredSize().to<float>());
+
+    startTimerHz (60);
 }
 
 bool ExampleEditor::isResizable() const
@@ -61,4 +63,9 @@ void ExampleEditor::paint (yup::Graphics& g)
 {
     g.setFillColor (0xff404040);
     g.fillAll();
+}
+
+void ExampleEditor::timerCallback()
+{
+    x->setValue (audioProcessor.getParameters()[0]->getValue());
 }

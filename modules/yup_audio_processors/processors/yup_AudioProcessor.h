@@ -96,15 +96,21 @@ public:
 
     CriticalSection& getProcessLock() { return processLock; }
 
-    void suspendProcessing (bool shouldSuspend);
-
     bool isSuspended() const;
+
+    virtual void suspendProcessing (bool shouldSuspend);
 
     //==============================================================================
 
     float getSampleRate() const { return sampleRate; }
 
     int getSamplesPerBlock() const { return samplesPerBlock; }
+
+    //==============================================================================
+
+    virtual int getTailSamples() { return 0; }
+
+    virtual int getLatencySamples() { return 0; }
 
     //==============================================================================
 
