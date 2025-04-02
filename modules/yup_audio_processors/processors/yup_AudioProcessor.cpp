@@ -61,6 +61,13 @@ int AudioProcessor::getNumAudioInputs() const
 
 //==============================================================================
 
+void AudioProcessor::setPlayHead (AudioPlayHead* playHead)
+{
+    this->playHead = playHead;
+}
+
+//==============================================================================
+
 void AudioProcessor::suspendProcessing (bool shouldSuspend)
 {
      auto lock = CriticalSection::ScopedLockType (processLock);
@@ -71,6 +78,16 @@ void AudioProcessor::suspendProcessing (bool shouldSuspend)
 bool AudioProcessor::isSuspended() const
 {
     return processIsSuspended;
+}
+
+//==============================================================================
+
+void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
+{
+    this->sampleRate = sampleRate;
+    this->samplesPerBlock = samplesPerBlock;
+
+    prepareToPlay (sampleRate, samplesPerBlock);
 }
 
 } // namespace yup

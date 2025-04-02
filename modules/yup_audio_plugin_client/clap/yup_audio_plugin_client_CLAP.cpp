@@ -183,11 +183,76 @@ static const char* const preferredApi = CLAP_WINDOW_API_WIN32;
 static const char* const preferredApi = CLAP_WINDOW_API_X11;
 #endif
 
+//==============================================================================
+
 class AudioPluginProcessorCLAP;
 
 //==============================================================================
 
-class AudioPluginEditorCLAP : public Component
+class AudioPluginPlayHeadCLAP final : public AudioPlayHead
+{
+public:
+    explicit AudioPluginPlayHeadCLAP (float sampleRate, const clap_process_t* process)
+        : process (*process)
+        , sampleRate (sampleRate)
+    {
+    }
+
+    bool canControlTransport() override
+    {
+        return false;
+    }
+
+    void transportPlay (bool shouldSartPlaying) override
+    {
+        if (! canControlTransport())
+            return;
+    }
+
+    void transportRecord (bool shouldStartRecording) override
+    {
+        if (! canControlTransport())
+            return;
+    }
+
+    void transportRewind() override
+    {
+        if (! canControlTransport())
+            return;
+    }
+
+    Optional<PositionInfo> getPosition() const override
+    {
+        if (process.transport == nullptr)
+            return {};
+
+        PositionInfo result;
+
+        result.setTimeInSeconds (process.transport->song_pos_seconds / (double) CLAP_SECTIME_FACTOR);
+        result.setTimeInSamples ((int64) (sampleRate * (process.transport->song_pos_seconds / (double) CLAP_SECTIME_FACTOR)));
+        result.setTimeSignature (TimeSignature{ process.transport->tsig_num, process.transport->tsig_denom });
+        result.setBpm(process.transport->tempo);
+        result.setBarCount(process.transport->bar_number);
+        result.setPpqPositionOfLastBarStart(process.transport->bar_start / (double) CLAP_BEATTIME_FACTOR);
+        result.setIsPlaying (process.transport->flags & CLAP_TRANSPORT_IS_PLAYING);
+        result.setIsRecording (process.transport->flags & CLAP_TRANSPORT_IS_RECORDING);
+        result.setIsLooping (process.transport->flags & CLAP_TRANSPORT_IS_LOOP_ACTIVE);
+        result.setLoopPoints (LoopPoints {
+            process.transport->loop_start_beats / (double) CLAP_BEATTIME_FACTOR,
+            process.transport->loop_end_beats / (double) CLAP_BEATTIME_FACTOR });
+        result.setFrameRate (AudioPlayHead::fpsUnknown);
+
+        return result;
+    }
+
+private:
+    clap_process_t process;
+    float sampleRate = 44100.0f;
+};
+
+//==============================================================================
+
+class AudioPluginEditorCLAP final : public Component
 {
 public:
     AudioPluginEditorCLAP (AudioPluginProcessorCLAP* wrapper, AudioProcessorEditor* editor)
@@ -208,7 +273,7 @@ private:
 
 //==============================================================================
 
-class AudioPluginProcessorCLAP
+class AudioPluginProcessorCLAP final
 {
 public:
     AudioPluginProcessorCLAP (const clap_host_t* host);
@@ -365,7 +430,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
                 clapEventToParameterChange (event, audioProcessor);
         }
 
-        // Prepare audio buffers
+        // Prepare audio buffers, play head and process block
         float* buffers[2] = {
             process->audio_outputs[0].data32[0],
             process->audio_outputs[0].data32[1]
@@ -373,8 +438,12 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
         AudioSampleBuffer audioBuffer (&buffers[0], 2, 0, static_cast<int> (process->frames_count));
 
-        // Process block
+        AudioPluginPlayHeadCLAP playHead (audioProcessor.getSampleRate(), process);
+        audioProcessor.setPlayHead (&playHead);
+
         audioProcessor.processBlock (audioBuffer, midiBuffer);
+
+        audioProcessor.setPlayHead (nullptr);
 
         // Send back note end to host
         for (const MidiMessageMetadata metadata : midiBuffer)
@@ -876,7 +945,7 @@ bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
         registerTimer (16, &guiTimerId);
 #endif
 
-    audioProcessor->prepareToPlay (sampleRate, samplesPerBlock);
+    audioProcessor->setPlaybackConfiguration (sampleRate, samplesPerBlock);
     return true;
 }
 

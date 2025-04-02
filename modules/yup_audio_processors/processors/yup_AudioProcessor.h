@@ -102,6 +102,18 @@ public:
 
     //==============================================================================
 
+    float getSampleRate() const { return sampleRate; }
+
+    int getSamplesPerBlock() const { return samplesPerBlock; }
+
+    //==============================================================================
+
+    void setPlayHead (AudioPlayHead* playHead);
+
+    AudioPlayHead* getPlayHead() { return playHead; }
+
+    //==============================================================================
+
     /**
         Returns the current preset index.
     */
@@ -153,6 +165,11 @@ public:
     /** Creates an editor for the processor. */
     virtual AudioProcessorEditor* createEditor() { return nullptr; }
 
+    //==============================================================================
+
+    /** @internal Used by plugin wrappers. */
+    void setPlaybackConfiguration (float sampleRate, int samplesPerBlock);
+
 private:
     String processorName;
 
@@ -160,6 +177,11 @@ private:
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
 
     AudioBusLayout busLayout;
+
+    float sampleRate = 44100.0f;
+    int samplesPerBlock = 1024;
+
+    AudioPlayHead* playHead = nullptr;
 
     CriticalSection processLock;
     bool processIsSuspended = false;
