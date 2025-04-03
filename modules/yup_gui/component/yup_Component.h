@@ -50,6 +50,7 @@ public:
     virtual void setTitle (const String& title);
 
     //==============================================================================
+    virtual void setPosition (const Point<float>& newPosition);
     Point<float> getPosition() const;
     float getX() const;
     float getY() const;
@@ -143,11 +144,18 @@ public:
     void toBack();
 
     //==============================================================================
+    void setMouseCursor (const MouseCursor& cursorType);
+    virtual MouseCursor getMouseCursor() const;
+
+    //==============================================================================
     void setWantsKeyboardFocus (bool wantsFocus);
 
     void takeFocus();
     void leaveFocus();
     bool hasFocus() const;
+
+    virtual void focusGained();
+    virtual void focusLost();
 
     //==============================================================================
     void setColor (const Identifier& colorId, const std::optional<Color>& color);
@@ -184,6 +192,19 @@ public:
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
     virtual void textInput (const String& text);
 
+    //==============================================================================
+    template <class F, class... Args>
+    auto createSafeCallback (F&& func, Args&&... args)
+    {
+        return [weakThis = WeakReference<Component> (this),
+                func = std::forward<F> (func),
+                args = std::forward_as_tuple (std::forward<Args> (args)...)]
+        {
+            if (weakThis.get() != nullptr)
+                std::apply (func, args);
+        };
+    }
+
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
     void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
@@ -203,6 +224,8 @@ private:
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
 
+    void updateMouseCursor();
+
     friend class ComponentNative;
     friend class GLFWComponentNative;
     friend class SDL2ComponentNative;
@@ -218,6 +241,7 @@ private:
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
     NamedValueSet properties;
+    MouseCursor mouseCursor;
     uint8 opacity = 255;
 
     struct Options

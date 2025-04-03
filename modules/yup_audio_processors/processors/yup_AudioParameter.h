@@ -90,6 +90,9 @@ public:
                     bool smoothingEnabled = false,
                     float smoothingTimeMs = 0.0f);
 
+    /** Destructor. */
+    ~AudioParameter();
+
     //==============================================================================
 
     /** Returns the parameter ID. */
@@ -97,6 +100,12 @@ public:
 
     /** Returns the parameter name. */
     const String& getName() const { return paramName; }
+
+    //==============================================================================
+
+    int getIndexInContainer() const { return paramIndex; }
+
+    void setIndexInContainer (int newIndex) { paramIndex = newIndex; }
 
     //==============================================================================
 
@@ -108,6 +117,14 @@ public:
 
     /** Returns the default value. */
     float getDefaultValue() const { return defaultValue; }
+
+    //==============================================================================
+
+    void beginChangeGesture();
+
+    void endChangeGesture();
+
+    bool isPerformingChangeGesture() const { return isInsideGesture != 0; }
 
     //==============================================================================
 
@@ -138,13 +155,27 @@ public:
     */
     void setNormalizedValue (float normalizedValue)
     {
-        setValue (valueRange.convertFrom0to1 (normalizedValue));
+        setValue (convertToDenormalizedValue (normalizedValue));
     }
 
     /** Gets the normalized [0..1] value. */
     float getNormalizedValue() const
     {
-        return valueRange.convertTo0to1 (getValue());
+        return convertToNormalizedValue (getValue());
+    }
+
+    //==============================================================================
+
+    /** */
+    float convertToNormalizedValue (float denormalizedValue) const
+    {
+        return valueRange.convertTo0to1 (denormalizedValue);
+    }
+
+    /** */
+    float convertToDenormalizedValue (float normalizedValue) const
+    {
+        return valueRange.convertFrom0to1 (normalizedValue);
     }
 
     //==============================================================================
@@ -154,6 +185,14 @@ public:
 
     /** Parses a string into a real parameter value. */
     void fromString (const String& string) { setValue (stringToValue (string)); }
+
+    //==============================================================================
+
+    /** */
+    String convertToString (float value) const { return valueToString (value); }
+
+    /** */
+    float convertFromString (const String& string) const { return stringToValue (string); }
 
     //==============================================================================
 
@@ -172,13 +211,13 @@ public:
         virtual ~Listener() = default;
 
         /** Called when the parameter value changes. */
-        virtual void parameterValueChanged (const AudioParameter::Ptr& parameter) = 0;
+        virtual void parameterValueChanged (const AudioParameter::Ptr& parameter, int indexInContainer) = 0;
 
         /** Called when a gesture begins. */
-        virtual void parameterGestureBegin (const AudioParameter::Ptr& parameter) = 0;
+        virtual void parameterGestureBegin (const AudioParameter::Ptr& parameter, int indexInContainer) = 0;
 
         /** Called when a gesture ends. */
-        virtual void parameterGestureEnd (const AudioParameter::Ptr& parameter) = 0;
+        virtual void parameterGestureEnd (const AudioParameter::Ptr& parameter, int indexInContainer) = 0;
     };
 
     /** Adds a listener to the parameter. */
@@ -188,16 +227,21 @@ public:
     void removeListener (Listener* listener);
 
 private:
+    using ListenersType = ListenerList<Listener, Array<Listener*, CriticalSection>>;
+
     String paramID;
     String paramName;
+    int paramVersion = 0;
+    int paramIndex = -1;
     std::atomic<float> currentValue = 0.0f;
     NormalisableRange<float> valueRange = { 0.0f, 1.0f };
     float defaultValue = 0.0f;
     ValueToString valueToString = nullptr;
     StringToValue stringToValue = nullptr;
-    bool smoothingEnabled = false;
+    ListenersType listeners;
     float smoothingTimeMs = 0.0f;
-    ListenerList<Listener> listeners;
+    bool smoothingEnabled = false;
+    int isInsideGesture = 0;
 };
 
 } // namespace yup

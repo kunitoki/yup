@@ -82,13 +82,38 @@ AudioParameter::AudioParameter (const String& id,
     setValue (defaultValue);
 }
 
+AudioParameter::~AudioParameter()
+{
+    jassert (isInsideGesture == 0); // Unbalanced calls to begin and end change gesture found!
+}
+
+//==============================================================================
+
+void AudioParameter::beginChangeGesture()
+{
+    ++isInsideGesture;
+
+    if (isInsideGesture == 1)
+        listeners.call (&Listener::parameterGestureBegin, this, paramIndex);
+}
+
+void AudioParameter::endChangeGesture()
+{
+    jassert (isInsideGesture > 0); // Unbalanced calls to begin and end change gesture found!
+
+    --isInsideGesture;
+
+    if (isInsideGesture == 0)
+        listeners.call (&Listener::parameterGestureEnd, this, paramIndex);
+}
+
 //==============================================================================
 
 void AudioParameter::setValueNotifyingHost (float value)
 {
     setValue (value);
 
-    listeners.call (&Listener::parameterValueChanged, this);
+    listeners.call (&Listener::parameterValueChanged, this, paramIndex);
 }
 
 //==============================================================================
