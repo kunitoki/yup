@@ -24,6 +24,43 @@ namespace yup
 
 //==============================================================================
 
+void yup_setMouseCursor (const MouseCursor& mouseCursor)
+{
+    static const auto cursors = []
+    {
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*>
+        {
+            { MouseCursor::Default, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW) },
+            { MouseCursor::IBeam, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAITARROW) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NO) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW) }
+        };
+    }();
+
+    if (mouseCursor.getType() == MouseCursor::None)
+    {
+        SDL_ShowCursor (SDL_DISABLE);
+    }
+    else
+    {
+        auto it = cursors.find (mouseCursor.getType());
+        if (it != cursors.end())
+            SDL_SetCursor (it->second);
+
+        SDL_ShowCursor (SDL_ENABLE);
+    }
+}
+
+//==============================================================================
+
 std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
@@ -62,6 +99,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
+    SDL_SetHint (SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, String (doubleClickTime.inMilliseconds()).toRawUTF8());
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
     // Create the window, renderer and parent it
@@ -329,9 +367,18 @@ float SDL2ComponentNative::getOpacity() const
 void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
     if (lastComponentFocused != nullptr)
-        ; // TODO
+        lastComponentFocused->focusLost();
 
     lastComponentFocused = comp;
+
+    if (lastComponentFocused)
+        lastComponentFocused->focusGained();
+
+    if (window != nullptr)
+    {
+        if ((SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) == 0) // SDL_WINDOW_MOUSE_FOCUS
+            SDL_SetWindowInputFocus (window);
+    }
 }
 
 Component* SDL2ComponentNative::getFocusedComponent() const
@@ -1214,6 +1261,8 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
+    SDL_SetHint (SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+
     // Initialise SDL
     SDL_SetMainReady();
     if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)

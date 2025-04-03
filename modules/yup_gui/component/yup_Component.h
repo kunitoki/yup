@@ -144,11 +144,18 @@ public:
     void toBack();
 
     //==============================================================================
+    void setMouseCursor (const MouseCursor& cursorType);
+    virtual MouseCursor getMouseCursor() const;
+
+    //==============================================================================
     void setWantsKeyboardFocus (bool wantsFocus);
 
     void takeFocus();
     void leaveFocus();
     bool hasFocus() const;
+
+    virtual void focusGained();
+    virtual void focusLost();
 
     //==============================================================================
     void setColor (const Identifier& colorId, const std::optional<Color>& color);
@@ -217,6 +224,8 @@ private:
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
 
+    void updateMouseCursor();
+
     friend class ComponentNative;
     friend class GLFWComponentNative;
     friend class SDL2ComponentNative;
@@ -232,6 +241,7 @@ private:
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
     NamedValueSet properties;
+    MouseCursor mouseCursor;
     uint8 opacity = 255;
 
     struct Options

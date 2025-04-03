@@ -28,6 +28,7 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     , gainParameter (audioProcessor.getParameters()[0])
 {
     x = std::make_unique<yup::Slider> ("Slider", yup::Font());
+    x->setMouseCursor (yup::MouseCursor::Hand);
     x->setValue (gainParameter->getValue());
     x->onDragStart = [this]
     {
