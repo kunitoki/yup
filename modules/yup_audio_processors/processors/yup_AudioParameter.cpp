@@ -82,16 +82,29 @@ AudioParameter::AudioParameter (const String& id,
     setValue (defaultValue);
 }
 
+AudioParameter::~AudioParameter()
+{
+    jassert (isInsideGesture == 0); // Unbalanced calls to begin and end change gesture found!
+}
+
 //==============================================================================
 
 void AudioParameter::beginChangeGesture()
 {
-    listeners.call (&Listener::parameterGestureBegin, this, paramIndex);
+    ++isInsideGesture;
+
+    if (isInsideGesture == 1)
+        listeners.call (&Listener::parameterGestureBegin, this, paramIndex);
 }
 
 void AudioParameter::endChangeGesture()
 {
-    listeners.call (&Listener::parameterGestureEnd, this, paramIndex);
+    jassert (isInsideGesture > 0); // Unbalanced calls to begin and end change gesture found!
+
+    --isInsideGesture;
+
+    if (isInsideGesture == 0)
+        listeners.call (&Listener::parameterGestureEnd, this, paramIndex);
 }
 
 //==============================================================================

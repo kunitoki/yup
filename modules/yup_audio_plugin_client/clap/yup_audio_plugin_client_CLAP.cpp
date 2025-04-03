@@ -522,6 +522,7 @@ bool AudioPluginProcessorCLAP::initialise()
         auto& parameter = parameters[index];
 
         information->id = index;
+        information->cookie = parameter.get();
         information->flags = CLAP_PARAM_IS_AUTOMATABLE | CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID;
         information->min_value = parameter->getMinimumValue();
         information->max_value = parameter->getMaximumValue();

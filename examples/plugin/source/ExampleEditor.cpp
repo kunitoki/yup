@@ -25,13 +25,13 @@
 
 ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     : audioProcessor (processor)
+    , gainParameter (audioProcessor.getParameters()[0])
 {
     x = std::make_unique<yup::Slider> ("Slider", yup::Font());
-    x->setValue (audioProcessor.getParameters()[0]->getValue());
-    x->onValueChanged = [this] (float value)
-    {
-        audioProcessor.getParameters()[0]->setValueNotifyingHost (value);
-    };
+    x->setValue (gainParameter->getValue());
+    x->onDragStart = [this] { gainParameter->beginChangeGesture(); };
+    x->onValueChanged = [this] (float value) { gainParameter->setValueNotifyingHost (value); };
+    x->onDragEnd = [this] { gainParameter->endChangeGesture(); };
     addAndMakeVisible (*x);
 
     setSize (getPreferredSize().to<float>());
@@ -67,5 +67,5 @@ void ExampleEditor::paint (yup::Graphics& g)
 
 void ExampleEditor::timerCallback()
 {
-    x->setValue (audioProcessor.getParameters()[0]->getValue());
+    x->setValue (gainParameter->getValue(), yup::dontSendNotification);
 }

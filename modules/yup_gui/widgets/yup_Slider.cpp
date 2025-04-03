@@ -33,11 +33,11 @@ Slider::Slider (StringRef componentID, const Font& font)
 
 //==============================================================================
 
-void Slider::setValue (float newValue)
+void Slider::setValue (float newValue, NotificationType notification)
 {
     value = jlimit (0.0f, 1.0f, newValue);
 
-    sendValueChanged();
+    sendValueChanged (notification);
 
     updateRenderItems (false);
 
@@ -76,6 +76,9 @@ void Slider::mouseExit (const MouseEvent& event)
 
 void Slider::mouseDown (const MouseEvent& event)
 {
+    if (onDragStart)
+        onDragStart();
+
     origin = event.getPosition();
 
     takeFocus();
@@ -85,12 +88,12 @@ void Slider::mouseDown (const MouseEvent& event)
 
 void Slider::mouseUp (const MouseEvent& event)
 {
+    if (onDragEnd)
+        onDragEnd();
 }
 
 void Slider::mouseDrag (const MouseEvent& event)
 {
-    //auto [x, y] = event.getPosition();
-
     const float multiplier =
         (event.getModifiers().isShiftDown() || event.isRightButtonDown()) ? 0.0001f : 0.0025f;
 
@@ -105,8 +108,6 @@ void Slider::mouseDrag (const MouseEvent& event)
 
 void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 {
-    //auto [x, y] = event.getPosition();
-
     const float multiplier = event.getModifiers().isShiftDown() ? 0.001f : 0.0025f;
     const float distance = (data.getDeltaX() + data.getDeltaY()) * multiplier;
 
@@ -212,12 +213,23 @@ void Slider::updateRenderItems (bool forceAll)
 
 //==============================================================================
 
-void Slider::sendValueChanged()
+void Slider::sendValueChanged (NotificationType notification)
 {
-    valueChanged();
+    if (notification == dontSendNotification)
+        return;
 
-    if (onValueChanged)
-        onValueChanged (getValue());
+    auto notificationSender = [this]
+    {
+        valueChanged();
+
+        if (onValueChanged)
+            onValueChanged (getValue());
+    };
+
+    if (notification == sendNotification || notification == sendNotificationSync)
+        notificationSender();
+    else if (notification == sendNotificationAsync)
+        MessageManager::callAsync (createSafeCallback (notificationSender));
 }
 
 } // namespace yup

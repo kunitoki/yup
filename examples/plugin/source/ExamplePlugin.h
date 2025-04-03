@@ -137,4 +137,14 @@ private:
 
     Array<Voice> voices;
     float sampleRate;
+
+    int currentPreset = 0;
+    struct Preset
+    {
+        yup::String name;
+        float gainValue;
+    } presets [2] = {
+        { "Full Volume", 1.0f },
+        { "Half Volume", 0.5f }
+    };
 };

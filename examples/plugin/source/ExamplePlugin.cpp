@@ -117,7 +117,8 @@ void ExamplePlugin::processBlock (yup::AudioSampleBuffer& audioBuffer, yup::Midi
                 const int controllerNumber = message.getControllerNumber();
                 if (yup::isPositiveAndBelow (controllerNumber, static_cast<int> (getParameters().size())))
                 {
-                    getParameters()[controllerNumber]->setValue (message.getControllerValue() / 127.0f);
+                    getParameters()[controllerNumber]->setNormalizedValue (message.getControllerValue() / 127.0f);
+                    // gainHandle.updateNextAudioBlock();
                 }
             }
 
@@ -178,25 +179,35 @@ void ExamplePlugin::flush()
 
 int ExamplePlugin::getCurrentPreset() const noexcept
 {
-    return 0;
+    return currentPreset;
 }
 
 void ExamplePlugin::setCurrentPreset (int index) noexcept
 {
+    if (currentPreset == index)
+        return;
+
+    if (yup::isPositiveAndBelow (index, yup::numElementsInArray (presets)))
+        gainParameter->setValue (presets[index].gainValue);
 }
 
 int ExamplePlugin::getNumPresets() const
 {
-    return 0;
+    return yup::numElementsInArray (presets);
 }
 
 yup::String ExamplePlugin::getPresetName (int index) const
 {
-    return {};
+    if (yup::isPositiveAndBelow (index, yup::numElementsInArray (presets)))
+        return presets[index].name;
+
+    return "Invalid Preset";
 }
 
 void ExamplePlugin::setPresetName (int index, yup::StringRef newName)
 {
+    if (yup::isPositiveAndBelow (index, yup::numElementsInArray (presets)))
+        presets[index].name = newName;
 }
 
 //==============================================================================

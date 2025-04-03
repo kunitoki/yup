@@ -48,5 +48,7 @@ public:
 
 private:
     ExamplePlugin& audioProcessor;
+
+    yup::AudioParameter::Ptr gainParameter;
     std::unique_ptr<yup::Slider> x;
 };

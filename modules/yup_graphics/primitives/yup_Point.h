@@ -1180,6 +1180,21 @@ public:
     }
 
     //==============================================================================
+    /** Returns true if the two points are approximately equal. */
+    constexpr bool approximatelyEqualTo (const Point& other) const noexcept
+    {
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            return approximatelyEqual (x, other.x)
+                && approximatelyEqual (y, other.y);
+        }
+        else
+        {
+            return *this == other;
+        }
+    }
+
+    //==============================================================================
     /** Checks for equality between this point and another point based on their coordinates.
 
         This operator determines if both the x and y coordinates of this point are exactly equal to those of another point.

@@ -50,6 +50,7 @@ public:
     virtual void setTitle (const String& title);
 
     //==============================================================================
+    virtual void setPosition (const Point<float>& newPosition);
     Point<float> getPosition() const;
     float getX() const;
     float getY() const;
@@ -183,6 +184,20 @@ public:
     virtual void keyDown (const KeyPress& keys, const Point<float>& position);
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
     virtual void textInput (const String& text);
+
+    //==============================================================================
+    template <class F, class... Args>
+    auto createSafeCallback (F&& func, Args&&... args)
+    {
+        return [
+            weakThis = WeakReference<Component> (this),
+            func = std::forward<F> (func),
+            args = std::forward_as_tuple (std::forward<Args> (args)...)]
+        {
+            if (weakThis.get() != nullptr)
+                std::apply (func, args);
+        };
+    }
 
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);

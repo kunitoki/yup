@@ -125,6 +125,19 @@ void Component::setTitle (const String& title)
 
 //==============================================================================
 
+void Component::setPosition (const Point<float>& newPosition)
+{
+    if (! boundsInParent.getPosition().approximatelyEqualTo (newPosition))
+    {
+        boundsInParent = boundsInParent.withPosition (newPosition);
+
+        if (options.onDesktop && native != nullptr)
+            native->setPosition (newPosition.to<int>());
+
+        moved();
+    }
+}
+
 float Component::getX() const
 {
     return boundsInParent.getX();
@@ -148,12 +161,15 @@ void Component::moved()
 
 void Component::setSize (const Size<float>& newSize)
 {
-    boundsInParent = boundsInParent.withSize (newSize);
+    if (! boundsInParent.getSize().approximatelyEqualTo (newSize))
+    {
+        boundsInParent = boundsInParent.withSize (newSize);
 
-    if (options.onDesktop && native != nullptr)
-        native->setSize (newSize.to<int>());
+        if (options.onDesktop && native != nullptr)
+            native->setSize (newSize.to<int>());
 
-    resized();
+        resized();
+    }
 }
 
 Size<float> Component::getSize() const
@@ -174,14 +190,20 @@ float Component::getHeight() const
     return boundsInParent.getHeight();
 }
 
+//==============================================================================
+
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
-    boundsInParent = newBounds;
+    if (! boundsInParent.approximatelyEqualTo (newBounds))
+    {
+        boundsInParent = newBounds;
 
-    if (options.onDesktop && native != nullptr)
-        native->setBounds (newBounds.to<int>());
+        if (options.onDesktop && native != nullptr)
+            native->setBounds (newBounds.to<int>());
 
-    resized();
+        resized();
+        moved();
+    }
 }
 
 Rectangle<float> Component::getBounds() const
