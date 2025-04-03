@@ -568,6 +568,7 @@ bool Component::hasFocus() const
 }
 
 void Component::focusGained() {}
+
 void Component::focusLost() {}
 
 //==============================================================================

@@ -28,20 +28,19 @@ void yup_setMouseCursor (const MouseCursor& mouseCursor)
 {
     static const auto cursors = []
     {
-        return std::unordered_map<MouseCursor::Type, SDL_Cursor*>
-        {
-            { MouseCursor::Default, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW) },
-            { MouseCursor::IBeam, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_IBEAM) },
-            { MouseCursor::Wait, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAIT) },
-            { MouseCursor::WaitArrow, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAITARROW) },
-            { MouseCursor::Hand, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_HAND) },
-            { MouseCursor::Crosshair, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_CROSSHAIR) },
-            { MouseCursor::Crossbones, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_NO) },
-            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZEWE) },
-            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENS) },
-            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENWSE) },
-            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_SIZENESW) },
-            { MouseCursor::ResizeAll, SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW) }
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
+            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
         };
     }();
 
