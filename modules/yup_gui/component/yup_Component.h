@@ -189,10 +189,9 @@ public:
     template <class F, class... Args>
     auto createSafeCallback (F&& func, Args&&... args)
     {
-        return [
-            weakThis = WeakReference<Component> (this),
-            func = std::forward<F> (func),
-            args = std::forward_as_tuple (std::forward<Args> (args)...)]
+        return [weakThis = WeakReference<Component> (this),
+                func = std::forward<F> (func),
+                args = std::forward_as_tuple (std::forward<Args> (args)...)]
         {
             if (weakThis.get() != nullptr)
                 std::apply (func, args);

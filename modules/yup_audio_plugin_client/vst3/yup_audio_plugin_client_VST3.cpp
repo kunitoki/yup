@@ -149,20 +149,16 @@ public:
 
         if (size != nullptr)
         {
-            setBounds ({
-                static_cast<float> (size->left),
-                static_cast<float> (size->top),
-                static_cast<float> (size->getWidth()),
-                static_cast<float> (size->getHeight())
-            });
+            setBounds ({ static_cast<float> (size->left),
+                         static_cast<float> (size->top),
+                         static_cast<float> (size->getWidth()),
+                         static_cast<float> (size->getHeight()) });
         }
         else
         {
             const auto preferredSize = editor->getPreferredSize();
-            setSize ({
-                static_cast<float> (preferredSize.getWidth()),
-                static_cast<float> (preferredSize.getHeight())
-            });
+            setSize ({ static_cast<float> (preferredSize.getWidth()),
+                       static_cast<float> (preferredSize.getHeight()) });
         }
     }
 
@@ -276,14 +272,12 @@ public:
 
             rect = *newSize;
 
-            const auto scoped = ScopedValueSetter<bool>(hostTriggeredResizing, true);
+            const auto scoped = ScopedValueSetter<bool> (hostTriggeredResizing, true);
 
-            setBounds ({
-                static_cast<float> (rect.left),
-                static_cast<float> (rect.top),
-                static_cast<float> (rect.getWidth()),
-                static_cast<float> (rect.getHeight())
-            });
+            setBounds ({ static_cast<float> (rect.left),
+                         static_cast<float> (rect.top),
+                         static_cast<float> (rect.getWidth()),
+                         static_cast<float> (rect.getHeight()) });
         }
 
         return kResultTrue;
@@ -454,19 +448,19 @@ public:
 
     //==============================================================================
 
-	tresult PLUGIN_API setState (IBStream* state) override
+    tresult PLUGIN_API setState (IBStream* state) override
     {
         return kResultFalse;
     }
 
-	tresult PLUGIN_API getState (IBStream* state) override
+    tresult PLUGIN_API getState (IBStream* state) override
     {
         return kResultFalse;
     }
 
     //==============================================================================
 
-	int32 PLUGIN_API getParameterCount() override
+    int32 PLUGIN_API getParameterCount() override
     {
         if (processor == nullptr)
             return 0;
@@ -474,7 +468,7 @@ public:
         return static_cast<int32> (processor->getParameters().size());
     }
 
-	tresult PLUGIN_API getParameterInfo (int32 paramIndex, Vst::ParameterInfo& info) override
+    tresult PLUGIN_API getParameterInfo (int32 paramIndex, Vst::ParameterInfo& info) override
     {
         if (processor == nullptr)
             return kInternalError;
@@ -491,7 +485,7 @@ public:
         return kResultFalse;
     }
 
-	tresult PLUGIN_API getParamStringByValue (Vst::ParamID tag, Vst::ParamValue valueNormalized, Vst::String128 string) override
+    tresult PLUGIN_API getParamStringByValue (Vst::ParamID tag, Vst::ParamValue valueNormalized, Vst::String128 string) override
     {
         if (processor == nullptr)
             return kInternalError;
@@ -509,7 +503,7 @@ public:
         return kResultFalse;
     }
 
-	tresult PLUGIN_API getParamValueByString (Vst::ParamID tag, Vst::TChar* string, Vst::ParamValue& valueNormalized) override
+    tresult PLUGIN_API getParamValueByString (Vst::ParamID tag, Vst::TChar* string, Vst::ParamValue& valueNormalized) override
     {
         if (processor == nullptr)
             return kInternalError;
@@ -527,7 +521,7 @@ public:
         return kResultFalse;
     }
 
-	Vst::ParamValue PLUGIN_API normalizedParamToPlain (Vst::ParamID tag, Vst::ParamValue valueNormalized) override
+    Vst::ParamValue PLUGIN_API normalizedParamToPlain (Vst::ParamID tag, Vst::ParamValue valueNormalized) override
     {
         if (processor == nullptr)
             return valueNormalized;
@@ -541,7 +535,7 @@ public:
         return valueNormalized;
     }
 
-	Vst::ParamValue PLUGIN_API plainParamToNormalized (Vst::ParamID tag, Vst::ParamValue plainValue) override
+    Vst::ParamValue PLUGIN_API plainParamToNormalized (Vst::ParamID tag, Vst::ParamValue plainValue) override
     {
         if (processor == nullptr)
             return plainValue;
@@ -555,7 +549,7 @@ public:
         return plainValue;
     }
 
-	Vst::ParamValue PLUGIN_API getParamNormalized (Vst::ParamID tag) override
+    Vst::ParamValue PLUGIN_API getParamNormalized (Vst::ParamID tag) override
     {
         if (processor == nullptr)
             return 0.0;
@@ -569,7 +563,7 @@ public:
         return 0.0;
     }
 
-	tresult PLUGIN_API setParamNormalized (Vst::ParamID tag, Vst::ParamValue value) override
+    tresult PLUGIN_API setParamNormalized (Vst::ParamID tag, Vst::ParamValue value) override
     {
         if (processor == nullptr)
             return kInternalError;
@@ -778,7 +772,7 @@ private:
         {
             const auto parameter = processor->getParameters()[parameterIndex];
 
-            parameters.addParameter(
+            parameters.addParameter (
                 reinterpret_cast<const Vst::TChar*> (parameter->getName().toUTF16().getAddress()),
                 nullptr,                           // units
                 0,                                 // step count
@@ -1062,23 +1056,23 @@ BEGIN_FACTORY_DEF (
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Processor_UID),
     PClassInfo::kManyInstances, // Supports multiple instances
-    kVstAudioEffectClass,                  // Component category (do not change this)
-    YupPlugin_Name,                        // Plugin name
+    kVstAudioEffectClass,       // Component category (do not change this)
+    YupPlugin_Name,             // Plugin name
     Vst::kDistributable,        // Distribution status
-    yup::YupPlugin_Category,               // Subcategory (effect)
-    YupPlugin_Version,                     // Plugin version
-    kVstVersionString,                     // The VST 3 SDK version (do not change this, always use this define)
+    yup::YupPlugin_Category,    // Subcategory (effect)
+    YupPlugin_Version,          // Plugin version
+    kVstVersionString,          // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginProcessorVST3::createInstance)
 
 DEF_CLASS2 (
     INLINE_UID_FROM_FUID (yup::YupPlugin_Controller_UID),
-    PClassInfo::kManyInstances, // Supports multiple instances
-    kVstComponentControllerClass,          // Controller category (do not change this)
-    YupPlugin_Name "Controller",           // Controller name (can be the same as the component name)
-    0,                                     // Not used here
-    "",                                    // Not used here
-    YupPlugin_Version,                     // Plug-in version
-    kVstVersionString,                     // The VST 3 SDK version (do not change this, always use this define)
+    PClassInfo::kManyInstances,   // Supports multiple instances
+    kVstComponentControllerClass, // Controller category (do not change this)
+    YupPlugin_Name "Controller",  // Controller name (can be the same as the component name)
+    0,                            // Not used here
+    "",                           // Not used here
+    YupPlugin_Version,            // Plug-in version
+    kVstVersionString,            // The VST 3 SDK version (do not change this, always use this define)
     yup::AudioPluginControllerVST3::createInstance)
 
 END_FACTORY

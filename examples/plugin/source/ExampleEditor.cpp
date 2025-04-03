@@ -29,9 +29,18 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
 {
     x = std::make_unique<yup::Slider> ("Slider", yup::Font());
     x->setValue (gainParameter->getValue());
-    x->onDragStart = [this] { gainParameter->beginChangeGesture(); };
-    x->onValueChanged = [this] (float value) { gainParameter->setValueNotifyingHost (value); };
-    x->onDragEnd = [this] { gainParameter->endChangeGesture(); };
+    x->onDragStart = [this]
+    {
+        gainParameter->beginChangeGesture();
+    };
+    x->onValueChanged = [this] (float value)
+    {
+        gainParameter->setValueNotifyingHost (value);
+    };
+    x->onDragEnd = [this]
+    {
+        gainParameter->endChangeGesture();
+    };
     addAndMakeVisible (*x);
 
     setSize (getPreferredSize().to<float>());

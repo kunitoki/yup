@@ -44,7 +44,7 @@ void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
 
     parameter->setIndexInContainer (static_cast<int> (parameters.size()));
 
-    auto [iterator, inserted] = parameterMap.try_emplace(parameter->getID(), parameter);
+    auto [iterator, inserted] = parameterMap.try_emplace (parameter->getID(), parameter);
     if (! inserted)
         jassertfalse; // You added a parameter with the same id twice!
 
