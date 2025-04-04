@@ -126,6 +126,8 @@ public:
     void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
     void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
     void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
+    void handleMouseEnter (const Point<float>& localPosition);
+    void handleMouseLeave (const Point<float>& localPosition);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);

@@ -845,6 +845,34 @@ void SDL2ComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 
 //==============================================================================
 
+void SDL2ComponentNative::handleMouseEnter (const Point<float>& localPosition)
+{
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
+
+    updateComponentUnderMouse (event);
+
+    if (lastComponentUnderMouse != nullptr)
+        lastComponentUnderMouse->mouseEnter (event);
+}
+
+void SDL2ComponentNative::handleMouseLeave (const Point<float>& localPosition)
+{
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (localPosition);
+
+    if (lastComponentUnderMouse != nullptr)
+        lastComponentUnderMouse->mouseExit (event);
+
+    updateComponentUnderMouse (event);
+}
+
+//==============================================================================
+
 void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
 {
     currentKeyModifiers = keys.getModifiers();
@@ -1017,6 +1045,24 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
             handleMoved (windowEvent.data1, windowEvent.data2);
             break;
+
+        case SDL_WINDOWEVENT_ENTER:
+        {
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_ENTER");
+            int x = 0, y = 0;
+            SDL_GetMouseState (&x, &y);
+            handleMouseEnter ({ x, y });
+            break;
+        }
+
+        case SDL_WINDOWEVENT_LEAVE:
+        {
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_LEAVE");
+            int x = 0, y = 0;
+            SDL_GetMouseState (&x, &y);
+            handleMouseLeave ({ x, y });
+            break;
+        }
 
         case SDL_WINDOWEVENT_SHOWN:
             YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SHOWN");
