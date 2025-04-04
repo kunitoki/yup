@@ -97,7 +97,7 @@ public:
 
     //==============================================================================
     bool isOnDesktop() const;
-    void addToDesktop (const ComponentNative::Options& nativeOptions, void* parent);
+    void addToDesktop (const ComponentNative::Options& nativeOptions, void* parent = nullptr);
     void removeFromDesktop();
 
     virtual void userTriedToCloseWindow();

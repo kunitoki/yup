@@ -56,6 +56,15 @@ public:
             return *this;
         }
 
+        Options& withDecoration (bool shouldHaveDecoration) noexcept
+        {
+            if (shouldHaveDecoration)
+                flags |= decoratedWindow;
+            else
+                flags &= ~decoratedWindow;
+            return *this;
+        }
+
         Options& withResizableWindow (bool shouldAllowResizing) noexcept
         {
             if (shouldAllowResizing)
