@@ -78,11 +78,11 @@ function (yup_audio_plugin)
         ${YUP_ARG_OPTIONS})
 
     target_link_libraries (${target_name}_shared INTERFACE
-        ${additional_libraries}
         ${YUP_ARG_MODULES})
 
     set_target_properties (${target_name}_shared PROPERTIES
         FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+        CXX_VISIBILITY_PRESET hidden
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC OFF
         XCODE_GENERATE_SCHEME ON)
 
@@ -130,6 +130,7 @@ function (yup_audio_plugin)
         set_target_properties (${target_name}_clap_plugin PROPERTIES
             SUFFIX ".clap"
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+            CXX_VISIBILITY_PRESET hidden
             XCODE_GENERATE_SCHEME ON)
 
         #yup_audio_plugin_copy_bundle (${target_name} clap)
@@ -209,6 +210,7 @@ function (yup_audio_plugin)
         set_target_properties (${target_name}_vst3_plugin PROPERTIES
             SUFFIX ".vst3"
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
+            CXX_VISIBILITY_PRESET hidden
             XCODE_GENERATE_SCHEME ON)
 
         #yup_audio_plugin_copy_bundle (${target_name} vst3)

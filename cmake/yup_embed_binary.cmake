@@ -21,7 +21,7 @@
 
 function (yup_add_embedded_binary_resources library_name)
     set (options "")
-    set (one_value_args OUT_DIR HEADER NAMESPACE)
+    set (one_value_args OUT_DIR HEADER NAMESPACE IDE_GROUP)
     set (multi_value_args RESOURCE_NAMES RESOURCES)
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
@@ -29,6 +29,12 @@ function (yup_add_embedded_binary_resources library_name)
     set (binary_path "${CMAKE_CURRENT_BINARY_DIR}/${YUP_ARG_OUT_DIR}")
     set (binary_header_path "${binary_path}/${YUP_ARG_HEADER}")
     set (binary_sources "")
+
+    if (YUP_ARG_IDE_GROUP)
+        set (folder_property "${YUP_ARG_IDE_GROUP}")
+    else()
+        set (folder_property "Resources")
+    endif()
 
     add_library (${library_name} OBJECT)
 
@@ -112,7 +118,7 @@ function (yup_add_embedded_binary_resources library_name)
     add_custom_target ("${library_name}_content" DEPENDS "${resources_hex_files}")
     add_dependencies (${library_name} "${library_name}_content")
 
-    set_target_properties ("${library_name}_content" PROPERTIES FOLDER "EmbeddedResources")
-    set_target_properties (${library_name} PROPERTIES FOLDER "EmbeddedResources")
+    set_target_properties ("${library_name}_content" PROPERTIES FOLDER "${folder_property}")
+    set_target_properties (${library_name} PROPERTIES FOLDER "${folder_property}")
 
 endfunction()

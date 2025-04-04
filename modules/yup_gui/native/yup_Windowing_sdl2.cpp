@@ -62,8 +62,19 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (! options.flags.test (skipTaskbar))
         windowFlags |= SDL_WINDOW_UTILITY;
 
+    if (clearColor.isSemiTransparent())
+        windowFlags |= SDL_WINDOW_TRANSPARENT;
+
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
+
+    //SDL_WINDOW_FULLSCREEN: fullscreen window at desktop resolution
+    //SDL_WINDOW_HIGH_PIXEL_DENSITY: window uses high pixel density back buffer if possible
+    //SDL_WINDOW_MODAL: window is modal
+    //SDL_WINDOW_ALWAYS_ON_TOP: window should always be above others
+    //SDL_WINDOW_TOOLTIP: window should be treated as a tooltip and does not get mouse or keyboard focus, requires a parent window
+    //SDL_WINDOW_UTILITY: window should be treated as a utility window, not showing in the task bar and window list
+    //SDL_WINDOW_NOT_FOCUSABLE: window should not be focusable
 
     // Create the window, renderer and parent it
     SDL_PropertiesID windowProperties = SDL_CreateProperties();
@@ -71,7 +82,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     SDL_SetNumberProperty (windowProperties, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 1);
     SDL_SetNumberProperty (windowProperties, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 1);
     SDL_SetNumberProperty (windowProperties, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, windowFlags);
-    SDL_SetPointerProperty (windowProperties, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, this);
+    SDL_SetPointerProperty (windowProperties, "yup.window.self", this);
     window = SDL_CreateWindowWithProperties (windowProperties);
     SDL_DestroyProperties (windowProperties);
     if (window == nullptr)
@@ -185,6 +196,7 @@ Size<int> SDL2ComponentNative::getSize() const
 Size<int> SDL2ComponentNative::getContentSize() const
 {
     const auto dpiScale = getScaleDpi();
+
     int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
     int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
@@ -957,7 +969,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_EVENT_MOUSE_MOTION:
         {
-            // YUP_DBG_WINDOWING ("SDL_MOUSEMOTION");
+            // YUP_DBG_WINDOWING ("SDL_EVENT_MOUSE_MOTION");
 
             if (event->window.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag ({ static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) });
@@ -967,7 +979,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         {
-            YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONDOWN");
+            YUP_DBG_WINDOWING ("SDL_EVENT_MOUSE_BUTTON_DOWN");
 
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
@@ -979,7 +991,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_EVENT_MOUSE_BUTTON_UP:
         {
-            YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONUP");
+            YUP_DBG_WINDOWING ("SDL_EVENT_MOUSE_BUTTON_UP");
 
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
