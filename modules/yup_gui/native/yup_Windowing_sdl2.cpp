@@ -50,31 +50,32 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     if (options.flags.test (resizableWindow))
         windowFlags |= SDL_WINDOW_RESIZABLE;
 
-    if (component.isVisible())
-        windowFlags |= SDL_WINDOW_SHOWN;
-    else
+    if (! component.isVisible())
         windowFlags |= SDL_WINDOW_HIDDEN;
 
     if (options.flags.test (allowHighDensityDisplay))
-        windowFlags |= SDL_WINDOW_ALLOW_HIGHDPI;
+        windowFlags |= SDL_WINDOW_HIGH_PIXEL_DENSITY;
 
     if (! options.flags.test (decoratedWindow))
         windowFlags |= SDL_WINDOW_BORDERLESS;
+
+    if (! options.flags.test (skipTaskbar))
+        windowFlags |= SDL_WINDOW_UTILITY;
 
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
     SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
     // Create the window, renderer and parent it
-    window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
-                               SDL_WINDOWPOS_UNDEFINED,
-                               SDL_WINDOWPOS_UNDEFINED,
-                               1,
-                               1,
-                               windowFlags);
+    SDL_PropertiesID windowProperties = SDL_CreateProperties();
+    SDL_SetStringProperty (windowProperties, SDL_PROP_WINDOW_CREATE_TITLE_STRING, component.getTitle().toRawUTF8());
+    SDL_SetNumberProperty (windowProperties, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, 1);
+    SDL_SetNumberProperty (windowProperties, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, 1);
+    SDL_SetNumberProperty (windowProperties, SDL_PROP_WINDOW_CREATE_FLAGS_NUMBER, windowFlags);
+    SDL_SetPointerProperty (windowProperties, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, this);
+    window = SDL_CreateWindowWithProperties (windowProperties);
+    SDL_DestroyProperties (windowProperties);
     if (window == nullptr)
         return; // TODO - raise something ?
-
-    SDL_SetWindowData (window, "self", this);
 
     if (parent != nullptr)
         setNativeParent (nullptr, parent, window);
@@ -110,12 +111,11 @@ SDL2ComponentNative::~SDL2ComponentNative()
     stopRendering();
 
     // Remove event watch
-    SDL_DelEventWatch (eventDispatcher, this);
+    SDL_RemoveEventWatch (eventDispatcher, this);
 
     // Destroy the window
     if (window != nullptr)
     {
-        SDL_SetWindowData (window, "self", nullptr);
         SDL_DestroyWindow (window);
         window = nullptr;
     }
@@ -162,7 +162,7 @@ void SDL2ComponentNative::setVisible (bool shouldBeVisible)
 
 bool SDL2ComponentNative::isVisible() const
 {
-    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_SHOWN) != 0;
+    return window != nullptr && (SDL_GetWindowFlags (window) & SDL_WINDOW_HIDDEN) == 0;
 }
 
 //==============================================================================
@@ -306,7 +306,7 @@ float SDL2ComponentNative::getOpacity() const
     float opacity = 1.0f;
 
     if (window != nullptr)
-        SDL_GetWindowOpacity (window, &opacity);
+        opacity = SDL_GetWindowOpacity (window);
 
     return opacity;
 }
@@ -403,14 +403,11 @@ float SDL2ComponentNative::getDesiredFrameRate() const
 
 Point<float> SDL2ComponentNative::getCursorPosition() const
 {
-    int x = 0, y = 0;
+    float x = 0.0f, y = 0.0f;
 
     SDL_GetMouseState (&x, &y);
 
-    return {
-        static_cast<float> (x),
-        static_cast<float> (y)
-    };
+    return { x, y };
 }
 
 //==============================================================================
@@ -934,112 +931,31 @@ std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& componen
 
 //==============================================================================
 
-void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
-{
-    YUP_PROFILE_INTERNAL_TRACE();
-
-    switch (windowEvent.event)
-    {
-        case SDL_WINDOWEVENT_CLOSE:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_CLOSE");
-            component.internalUserTriedToCloseWindow();
-            break;
-
-        case SDL_WINDOWEVENT_RESIZED:
-            //YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
-            break;
-
-        case SDL_WINDOWEVENT_SIZE_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleResized (windowEvent.data1, windowEvent.data2);
-            break;
-
-        case SDL_WINDOWEVENT_MOVED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
-            handleMoved (windowEvent.data1, windowEvent.data2);
-            break;
-
-        case SDL_WINDOWEVENT_SHOWN:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SHOWN");
-            // repaint();
-            break;
-
-        case SDL_WINDOWEVENT_HIDDEN:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_HIDDEN");
-            break;
-
-        case SDL_WINDOWEVENT_MINIMIZED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MINIMIZED");
-            handleMinimized();
-            break;
-
-        case SDL_WINDOWEVENT_MAXIMIZED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MAXIMIZED");
-            handleMaximized();
-            break;
-
-        case SDL_WINDOWEVENT_RESTORED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESTORED");
-            handleRestored();
-            break;
-
-        case SDL_WINDOWEVENT_EXPOSED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_EXPOSED");
-            repaint();
-            break;
-
-        case SDL_WINDOWEVENT_FOCUS_GAINED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_FOCUS_GAINED");
-            handleFocusChanged (true);
-            break;
-
-        case SDL_WINDOWEVENT_FOCUS_LOST:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_FOCUS_LOST");
-            handleFocusChanged (false);
-            break;
-
-        case SDL_WINDOWEVENT_DISPLAY_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
-            handleContentScaleChanged();
-            break;
-    }
-}
-
-//==============================================================================
-
 void SDL2ComponentNative::handleEvent (SDL_Event* event)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
     switch (event->type)
     {
-        case SDL_QUIT:
+        case SDL_EVENT_QUIT:
         {
             YUP_DBG_WINDOWING ("SDL_QUIT");
             break;
         }
 
-        case SDL_WINDOWEVENT:
+        case SDL_EVENT_RENDER_TARGETS_RESET:
         {
-            if (event->window.windowID == SDL_GetWindowID (window))
-                handleWindowEvent (event->window);
-
+            YUP_DBG_WINDOWING ("SDL_EVENT_RENDER_TARGETS_RESET");
             break;
         }
 
-        case SDL_RENDER_TARGETS_RESET:
-        {
-            YUP_DBG_WINDOWING ("SDL_RENDER_TARGETS_RESET");
-            break;
-        }
-
-        case SDL_RENDER_DEVICE_RESET:
+        case SDL_EVENT_RENDER_DEVICE_RESET:
         {
             YUP_DBG_WINDOWING ("SDL_RENDER_DEVICE_RESET");
             break;
         }
 
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
         {
             // YUP_DBG_WINDOWING ("SDL_MOUSEMOTION");
 
@@ -1049,7 +965,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
-        case SDL_MOUSEBUTTONDOWN:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
         {
             YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONDOWN");
 
@@ -1061,7 +977,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
         {
             YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONUP");
 
@@ -1073,7 +989,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
-        case SDL_MOUSEWHEEL:
+        case SDL_EVENT_MOUSE_WHEEL:
         {
             auto cursorPosition = getCursorPosition();
 
@@ -1083,29 +999,29 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
-        case SDL_KEYDOWN:
+        case SDL_EVENT_KEY_DOWN:
         {
             auto cursorPosition = getCursorPosition();
-            auto modifiers = toKeyModifiers (event->key.keysym.mod);
+            auto modifiers = toKeyModifiers (event->key.mod);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                handleKeyDown (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
+                handleKeyDown (toKeyPress (event->key.key, event->key.scancode, modifiers), cursorPosition);
 
             break;
         }
 
-        case SDL_KEYUP:
+        case SDL_EVENT_KEY_UP:
         {
             auto cursorPosition = getCursorPosition();
-            auto modifiers = toKeyModifiers (event->key.keysym.mod);
+            auto modifiers = toKeyModifiers (event->key.mod);
 
             if (event->key.windowID == SDL_GetWindowID (window))
-                handleKeyUp (toKeyPress (event->key.keysym.sym, event->key.keysym.scancode, modifiers), cursorPosition);
+                handleKeyUp (toKeyPress (event->key.key, event->key.scancode, modifiers), cursorPosition);
 
             break;
         }
 
-        case SDL_TEXTINPUT:
+        case SDL_EVENT_TEXT_INPUT:
         {
             // auto cursorPosition = getCursorPosition();
             // auto modifiers = toKeyModifiers (getKeyModifiers());
@@ -1116,6 +1032,89 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             break;
         }
 
+        case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_CLOSE_REQUESTED");
+            component.internalUserTriedToCloseWindow();
+            break;
+
+        case SDL_EVENT_WINDOW_RESIZED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_RESIZED " << event->window.data1 << " " << event->window.data2);
+            handleResized (event->window.data1, event->window.data2);
+            break;
+
+        case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << event->window.data1 << " " << event->window.data2);
+            handleContentScaleChanged();
+            break;
+
+        case SDL_EVENT_WINDOW_MOVED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MOVED " << event->window.data1 << " " << event->window.data2);
+            handleMoved (event->window.data1, event->window.data2);
+            break;
+
+        case SDL_EVENT_WINDOW_MOUSE_ENTER:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MOUSE_ENTER");
+            //handleWindowMouseEnter();
+            break;
+
+        case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MOUSE_LEAVE");
+            //handleWindowMouseLeave();
+            break;
+
+        case SDL_EVENT_WINDOW_SHOWN:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_SHOWN");
+            // handleVisibilityChanged (true);
+            break;
+
+        case SDL_EVENT_WINDOW_HIDDEN:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_HIDDEN");
+            // handleVisibilityChanged (false);
+            break;
+
+        case SDL_EVENT_WINDOW_MINIMIZED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MINIMIZED");
+            handleMinimized();
+            break;
+
+        case SDL_EVENT_WINDOW_MAXIMIZED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MAXIMIZED");
+            handleMaximized();
+            break;
+
+        case SDL_EVENT_WINDOW_RESTORED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESTORED");
+            handleRestored();
+            break;
+
+        case SDL_EVENT_WINDOW_EXPOSED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_EXPOSED");
+            repaint();
+            break;
+
+        case SDL_EVENT_WINDOW_FOCUS_GAINED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_FOCUS_GAINED");
+            handleFocusChanged (true);
+            break;
+
+        case SDL_EVENT_WINDOW_FOCUS_LOST:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_FOCUS_LOST");
+            handleFocusChanged (false);
+            break;
+
+        case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
+            handleContentScaleChanged();
+            break;
+
+        case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_ENTER_FULLSCREEN");
+            break;
+
+        case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
+            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_LEAVE_FULLSCREEN");
+            break;
+
         default:
             break;
     }
@@ -1123,10 +1122,10 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
 //==============================================================================
 
-int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
+bool SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 {
     static_cast<SDL2ComponentNative*> (userdata)->handleEvent (event);
-    return 0;
+    return true;
 }
 
 //==============================================================================
@@ -1134,53 +1133,78 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 namespace
 {
 
-int displayEventDispatcher (void* userdata, SDL_Event* event)
+bool displayEventDispatcher (void* userdata, SDL_Event* event)
 {
-    if (event->type != SDL_DISPLAYEVENT)
-        return 0;
+    if (event->type < SDL_EVENT_DISPLAY_FIRST || event->type > SDL_EVENT_DISPLAY_LAST)
+        return true;
 
     auto desktop = static_cast<Desktop*> (userdata);
 
-    switch (event->display.event)
+    switch (event->type)
     {
-        case SDL_DISPLAYEVENT_CONNECTED:
-            desktop->handleDisplayConnected (event->display.display);
+        case SDL_EVENT_DISPLAY_ADDED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_ADDED");
+            desktop->handleDisplayConnected (event->display.displayID);
             break;
 
-        case SDL_DISPLAYEVENT_DISCONNECTED:
-            desktop->handleDisplayDisconnected (event->display.display);
+        case SDL_EVENT_DISPLAY_REMOVED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_REMOVED");
+            desktop->handleDisplayDisconnected (event->display.displayID);
             break;
 
-        case SDL_DISPLAYEVENT_ORIENTATION:
-            desktop->handleDisplayOrientationChanged (event->display.display);
+        case SDL_EVENT_DISPLAY_ORIENTATION:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_ORIENTATION");
+            desktop->handleDisplayOrientationChanged (event->display.displayID);
             break;
 
 #if ! JUCE_EMSCRIPTEN
-        case SDL_DISPLAYEVENT_MOVED:
-            desktop->handleDisplayMoved (event->display.display);
+        case SDL_EVENT_DISPLAY_MOVED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_MOVED");
+            desktop->handleDisplayMoved (event->display.displayID);
             break;
 #endif
+        case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED");
+            break;
+
+        case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED");
+            break;
+
+        case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED");
+            break;
+
+        default:
+            break;
     }
 
-    return 0;
+    return true;
 }
 
 } // namespace
 
 void Desktop::updateDisplays()
 {
-    const int numDisplays = SDL_GetNumVideoDisplays();
-    for (int i = 0; i < numDisplays; ++i)
+    int numberOfDisplays = 0;
+    SDL_DisplayID* sdlDisplays = SDL_GetDisplays (&numberOfDisplays);
+
+    for (int i = 0; i < numberOfDisplays; ++i)
     {
+        SDL_DisplayID currentDisplay = sdlDisplays[i];
+
         SDL_Rect bounds;
-        if (SDL_GetDisplayBounds (i, &bounds) != 0)
+        if (SDL_GetDisplayBounds (currentDisplay, &bounds))
             continue;
 
         auto display = std::make_unique<Display>();
-        display->name = String::fromUTF8 (SDL_GetDisplayName (i));
-        display->isPrimary = (i == 0);
+        display->name = String::fromUTF8 (SDL_GetDisplayName (currentDisplay));
+        display->isPrimary = (currentDisplay == SDL_GetPrimaryDisplay());
         display->virtualPosition = Point<int> (bounds.x, bounds.y);
         display->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
+
+        /* TODO
+        // SDL_GetWindowDisplayScale() times 160 on iPhone and Android, and 96 on other platforms.
 
         float ddpi, hdpi, vdpi;
         if (SDL_GetDisplayDPI (i, &ddpi, &hdpi, &vdpi) == 0)
@@ -1192,6 +1216,7 @@ void Desktop::updateDisplays()
 
         display->contentScaleX = hdpi / 96.0f; // Assuming 96 DPI as standard
         display->contentScaleY = vdpi / 96.0f;
+        */
 
         displays.add (display.release());
     }
@@ -1203,7 +1228,7 @@ void initialiseYup_Windowing()
 {
     // Initialise SDL
     SDL_SetMainReady();
-    if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
+    if (! SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS))
     {
         DBG ("Error initialising SDL: " << SDL_GetError());
 
@@ -1247,7 +1272,7 @@ void shutdownYup_Windowing()
     SDL2ComponentNative::isInitialised.clear();
 
     // Shutdown desktop
-    SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
+    SDL_RemoveEventWatch (displayEventDispatcher, Desktop::getInstance());
     Desktop::getInstance()->deleteInstance();
 
     // Unregister event loop

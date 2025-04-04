@@ -67,8 +67,7 @@ function (yup_standalone_app)
             APPLICATION_NAMESPACE ${target_app_namespace}
             APPLICATION_VERSION ${target_version})
 
-        _yup_message (STATUS "${target_name} - Copying SDL2 java activity to application")
-        _yup_fetch_sdl2()
+        _yup_fetch_sdl3()
         _yup_copy_sdl2_activity_android()
 
         return()
@@ -76,9 +75,8 @@ function (yup_standalone_app)
 
     # ==== Find dependencies
     if (NOT "${target_console}" AND NOT YUP_PLATFORM_EMSCRIPTEN)
-        _yup_message (STATUS "${target_name} - Fetching SDL2 library")
-        _yup_fetch_sdl2()
-        list (APPEND additional_libraries sdl2::sdl2)
+        _yup_fetch_sdl3()
+        list (APPEND additional_libraries sdl3::sdl3)
     endif()
 
     # ==== Enable profiling

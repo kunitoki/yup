@@ -48,16 +48,16 @@ KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept
 {
     int modifiers;
 
-    if (sdlMod & KMOD_CTRL)
+    if (sdlMod & SDL_KMOD_CTRL)
         modifiers |= KeyModifiers::controlMask;
 
-    if (sdlMod & KMOD_SHIFT)
+    if (sdlMod & SDL_KMOD_SHIFT)
         modifiers |= KeyModifiers::shiftMask;
 
-    if (sdlMod & KMOD_ALT)
+    if (sdlMod & SDL_KMOD_ALT)
         modifiers |= KeyModifiers::altMask;
 
-    if (sdlMod & KMOD_GUI)
+    if (sdlMod & SDL_KMOD_GUI)
         modifiers |= KeyModifiers::superMask;
 
     return modifiers;
@@ -88,32 +88,32 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
     case SDLK_9:                return { KeyPress::number9Key, modifiers, sc };
     case SDLK_SEMICOLON:        return { KeyPress::semicolonKey, modifiers, sc };
     case SDLK_EQUALS:           return { KeyPress::equalKey, modifiers, sc };
-    case SDLK_a:                return { KeyPress::textAKey, modifiers, sc };
-    case SDLK_b:                return { KeyPress::textBKey, modifiers, sc };
-    case SDLK_c:                return { KeyPress::textCKey, modifiers, sc };
-    case SDLK_d:                return { KeyPress::textDKey, modifiers, sc };
-    case SDLK_e:                return { KeyPress::textEKey, modifiers, sc };
-    case SDLK_f:                return { KeyPress::textFKey, modifiers, sc };
-    case SDLK_g:                return { KeyPress::textGKey, modifiers, sc };
-    case SDLK_h:                return { KeyPress::textHKey, modifiers, sc };
-    case SDLK_i:                return { KeyPress::textIKey, modifiers, sc };
-    case SDLK_j:                return { KeyPress::textJKey, modifiers, sc };
-    case SDLK_k:                return { KeyPress::textKKey, modifiers, sc };
-    case SDLK_l:                return { KeyPress::textLKey, modifiers, sc };
-    case SDLK_m:                return { KeyPress::textMKey, modifiers, sc };
-    case SDLK_n:                return { KeyPress::textNKey, modifiers, sc };
-    case SDLK_o:                return { KeyPress::textOKey, modifiers, sc };
-    case SDLK_p:                return { KeyPress::textPKey, modifiers, sc };
-    case SDLK_q:                return { KeyPress::textQKey, modifiers, sc };
-    case SDLK_r:                return { KeyPress::textRKey, modifiers, sc };
-    case SDLK_s:                return { KeyPress::textSKey, modifiers, sc };
-    case SDLK_t:                return { KeyPress::textTKey, modifiers, sc };
-    case SDLK_u:                return { KeyPress::textUKey, modifiers, sc };
-    case SDLK_v:                return { KeyPress::textVKey, modifiers, sc };
-    case SDLK_w:                return { KeyPress::textWKey, modifiers, sc };
-    case SDLK_x:                return { KeyPress::textXKey, modifiers, sc };
-    case SDLK_y:                return { KeyPress::textYKey, modifiers, sc };
-    case SDLK_z:                return { KeyPress::textZKey, modifiers, sc };
+    case SDLK_A:                return { KeyPress::textAKey, modifiers, sc };
+    case SDLK_B:                return { KeyPress::textBKey, modifiers, sc };
+    case SDLK_C:                return { KeyPress::textCKey, modifiers, sc };
+    case SDLK_D:                return { KeyPress::textDKey, modifiers, sc };
+    case SDLK_E:                return { KeyPress::textEKey, modifiers, sc };
+    case SDLK_F:                return { KeyPress::textFKey, modifiers, sc };
+    case SDLK_G:                return { KeyPress::textGKey, modifiers, sc };
+    case SDLK_H:                return { KeyPress::textHKey, modifiers, sc };
+    case SDLK_I:                return { KeyPress::textIKey, modifiers, sc };
+    case SDLK_J:                return { KeyPress::textJKey, modifiers, sc };
+    case SDLK_K:                return { KeyPress::textKKey, modifiers, sc };
+    case SDLK_L:                return { KeyPress::textLKey, modifiers, sc };
+    case SDLK_M:                return { KeyPress::textMKey, modifiers, sc };
+    case SDLK_N:                return { KeyPress::textNKey, modifiers, sc };
+    case SDLK_O:                return { KeyPress::textOKey, modifiers, sc };
+    case SDLK_P:                return { KeyPress::textPKey, modifiers, sc };
+    case SDLK_Q:                return { KeyPress::textQKey, modifiers, sc };
+    case SDLK_R:                return { KeyPress::textRKey, modifiers, sc };
+    case SDLK_S:                return { KeyPress::textSKey, modifiers, sc };
+    case SDLK_T:                return { KeyPress::textTKey, modifiers, sc };
+    case SDLK_U:                return { KeyPress::textUKey, modifiers, sc };
+    case SDLK_V:                return { KeyPress::textVKey, modifiers, sc };
+    case SDLK_W:                return { KeyPress::textWKey, modifiers, sc };
+    case SDLK_X:                return { KeyPress::textXKey, modifiers, sc };
+    case SDLK_Y:                return { KeyPress::textYKey, modifiers, sc };
+    case SDLK_Z:                return { KeyPress::textZKey, modifiers, sc };
     case SDLK_LEFTBRACKET:      return { KeyPress::leftBracketKey, modifiers, sc };
     case SDLK_BACKSLASH:        return { KeyPress::backslashKey, modifiers, sc };
     case SDLK_RIGHTBRACKET:     return { KeyPress::rightBracketKey, modifiers, sc };
@@ -207,29 +207,39 @@ void* getNativeWindowHandle (SDL_Window* window)
     if (window == nullptr)
         return nullptr;
 
-    SDL_SysWMinfo wmInfo;
-    SDL_VERSION (&wmInfo.version);
-    if (SDL_GetWindowWMInfo (window, &wmInfo))
-    {
+    SDL_PropertiesID props = SDL_GetWindowProperties (window);
+
 #if JUCE_MAC
-        return (__bridge void*) wmInfo.info.cocoa.window; // NSWindow*
+    return (__bridge NSWindow*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, nullptr);
 
 #elif JUCE_IOS
-        return (__bridge void*) wmInfo.info.uikit.window; // UIWindow*
+    return (__bridge UIWindow*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_UIKIT_WINDOW_POINTER, nullptr);
 
 #elif JUCE_WINDOWS
-        return wmInfo.info.win.window; // HWND
+    return (HWND) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
 
 #elif JUCE_LINUX
-        return reinterpret_cast<void*> (wmInfo.info.x11.window); // X11 Window
-
-#elif JUCE_ANDROID
-        return reinterpret_cast<void*> (wmInfo.info.android.window); // ANativeWindow*
-
-#endif
+    const auto videoDriver = StringRef (SDL_GetCurrentVideoDriver());
+    if (videoDriver == "x11")
+    {
+        //Display* xdisplay = (Display*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_X11_DISPLAY_POINTER, nullptr);
+        Window xwindow = static_cast<Window> (SDL_GetNumberProperty (props, SDL_PROP_WINDOW_X11_WINDOW_NUMBER, 0));
+        return reinterpret_cast<void*> (xwindow);
+    }
+    else if (videoDriver == "wayland")
+    {
+        //struct wl_display* display = (struct wl_display*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WAYLAND_DISPLAY_POINTER, nullptr);
+        struct wl_surface* surface = (struct wl_surface*) SDL_GetPointerProperty (props, SDL_PROP_WINDOW_WAYLAND_SURFACE_POINTER, nullptr);
+        return surface;
     }
 
+#elif JUCE_ANDROID
+    return reinterpret_cast<void*> (SDL_GetPointerProperty (props, SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr));
+
+#else
     return nullptr;
+
+#endif
 }
 
 Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)

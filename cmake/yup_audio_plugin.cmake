@@ -88,8 +88,8 @@ function (yup_audio_plugin)
 
     # ==== Find dependencies
     include (FetchContent)
-    _yup_fetch_sdl2()
-    list (APPEND additional_libraries sdl2::sdl2)
+    _yup_fetch_sdl3()
+    list (APPEND additional_libraries sdl3::sdl3)
 
     # ==== Fetch clap SDK and build clap target
     if (YUP_ARG_PLUGIN_CREATE_CLAP)

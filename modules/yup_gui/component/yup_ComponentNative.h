@@ -29,16 +29,23 @@ class JUCE_API ComponentNative
 {
     struct decoratedWindowTag;
     struct resizableWindowTag;
+    struct skipTaskbarTag;
     struct renderContinuousTag;
     struct allowHighDensityDisplayTag;
 
 public:
     //==============================================================================
-    using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
+    using Flags = FlagSet<uint32,
+        decoratedWindowTag,
+        resizableWindowTag,
+        skipTaskbarTag,
+        renderContinuousTag,
+        allowHighDensityDisplayTag>;
 
     static inline constexpr Flags noFlags = Flags();
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
+    static inline constexpr Flags skipTaskbar = Flags::declareValue<skipTaskbarTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
     static inline constexpr Flags defaultFlags = renderContinuous | decoratedWindow | resizableWindow | allowHighDensityDisplay;
@@ -71,6 +78,15 @@ public:
                 flags |= renderContinuous;
             else
                 flags &= ~renderContinuous;
+            return *this;
+        }
+
+        Options& withSkipTaskbar (bool shouldSkipTaskbar) noexcept
+        {
+            if (shouldSkipTaskbar)
+                flags |= skipTaskbar;
+            else
+                flags &= ~skipTaskbar;
             return *this;
         }
 

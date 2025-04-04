@@ -39,9 +39,11 @@
 #include <rive/animation/state_machine_input_instance.hpp>
 
 //==============================================================================
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_syswm.h>
-#include <SDL2/SDL_main.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_system.h>
+#include <SDL3/SDL_video.h>
+#include <SDL3/SDL_main.h>
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
