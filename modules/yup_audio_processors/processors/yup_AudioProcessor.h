@@ -43,6 +43,7 @@ public:
 
     //==============================================================================
 
+    /** Returns the name of the processor. */
     String getName() const { return processorName; }
 
     //==============================================================================
@@ -93,17 +94,103 @@ public:
 
     //==============================================================================
 
+    CriticalSection& getProcessLock() { return processLock; }
+
+    bool isSuspended() const;
+
+    virtual void suspendProcessing (bool shouldSuspend);
+
+    //==============================================================================
+
+    float getSampleRate() const { return sampleRate; }
+
+    int getSamplesPerBlock() const { return samplesPerBlock; }
+
+    //==============================================================================
+
+    virtual int getTailSamples() { return 0; }
+
+    virtual int getLatencySamples() { return 0; }
+
+    //==============================================================================
+
+    void setPlayHead (AudioPlayHead* playHead);
+
+    AudioPlayHead* getPlayHead() { return playHead; }
+
+    //==============================================================================
+
+    /**
+        Returns the current preset index.
+    */
+    virtual int getCurrentPreset() const noexcept = 0;
+
+    /**
+        Sets the current preset index.
+    */
+    virtual void setCurrentPreset (int index) noexcept = 0;
+
+    /**
+        Returns the number of available user presets.
+    */
+    virtual int getNumPresets() const = 0;
+
+    /**
+        Returns the name of a preset by index.
+    */
+    virtual String getPresetName (int index) const = 0;
+
+    /**
+        Returns the name of a preset by index.
+    */
+    virtual void setPresetName (int index, StringRef newName) = 0;
+
+    //==============================================================================
+
+    /**
+        Loads a preset from a memory block.
+
+        @param memoryBlock The memory block to load the state from.
+        @return The result of the operation.
+    */
+    virtual Result loadStateFromMemory (const MemoryBlock& memoryBlock) = 0;
+
+    /**
+        Saves the current state as a memory block.
+
+        @param memoryBlock The memory block to save the state to.
+        @return The result of the operation.
+    */
+    virtual Result saveStateIntoMemory (MemoryBlock& memoryBlock) = 0;
+
+    //==============================================================================
+
     /** Returns true if the processor has an editor. */
     virtual bool hasEditor() const = 0;
 
     /** Creates an editor for the processor. */
     virtual AudioProcessorEditor* createEditor() { return nullptr; }
 
+    //==============================================================================
+
+    /** @internal Used by plugin wrappers. */
+    void setPlaybackConfiguration (float sampleRate, int samplesPerBlock);
+
 private:
     String processorName;
+
     std::vector<AudioParameter::Ptr> parameters;
     std::unordered_map<String, AudioParameter::Ptr> parameterMap;
+
     AudioBusLayout busLayout;
+
+    float sampleRate = 44100.0f;
+    int samplesPerBlock = 1024;
+
+    AudioPlayHead* playHead = nullptr;
+
+    CriticalSection processLock;
+    bool processIsSuspended = false;
 };
 
 } // namespace yup

@@ -22,6 +22,8 @@
 namespace yup
 {
 
+extern void yup_setMouseCursor (const MouseCursor& mouseCursor);
+
 //==============================================================================
 
 Component::Component()
@@ -125,6 +127,19 @@ void Component::setTitle (const String& title)
 
 //==============================================================================
 
+void Component::setPosition (const Point<float>& newPosition)
+{
+    if (! boundsInParent.getPosition().approximatelyEqualTo (newPosition))
+    {
+        boundsInParent = boundsInParent.withPosition (newPosition);
+
+        if (options.onDesktop && native != nullptr)
+            native->setPosition (newPosition.to<int>());
+
+        moved();
+    }
+}
+
 float Component::getX() const
 {
     return boundsInParent.getX();
@@ -148,12 +163,15 @@ void Component::moved()
 
 void Component::setSize (const Size<float>& newSize)
 {
-    boundsInParent = boundsInParent.withSize (newSize);
+    if (! boundsInParent.getSize().approximatelyEqualTo (newSize))
+    {
+        boundsInParent = boundsInParent.withSize (newSize);
 
-    if (options.onDesktop && native != nullptr)
-        native->setSize (newSize.to<int>());
+        if (options.onDesktop && native != nullptr)
+            native->setSize (newSize.to<int>());
 
-    resized();
+        resized();
+    }
 }
 
 Size<float> Component::getSize() const
@@ -174,14 +192,20 @@ float Component::getHeight() const
     return boundsInParent.getHeight();
 }
 
+//==============================================================================
+
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
-    boundsInParent = newBounds;
+    if (! boundsInParent.approximatelyEqualTo (newBounds))
+    {
+        boundsInParent = newBounds;
 
-    if (options.onDesktop && native != nullptr)
-        native->setBounds (newBounds.to<int>());
+        if (options.onDesktop && native != nullptr)
+            native->setBounds (newBounds.to<int>());
 
-    resized();
+        resized();
+        moved();
+    }
 }
 
 Rectangle<float> Component::getBounds() const
@@ -491,6 +515,24 @@ void Component::toBack()
 
 //==============================================================================
 
+void Component::setMouseCursor (const MouseCursor& cursorType)
+{
+    mouseCursor = cursorType;
+
+    if (auto nativeComponent = getNativeComponent())
+    {
+        if (nativeComponent->getFocusedComponent() == this)
+            updateMouseCursor();
+    }
+}
+
+MouseCursor Component::getMouseCursor() const
+{
+    return mouseCursor;
+}
+
+//==============================================================================
+
 void Component::setWantsKeyboardFocus (bool wantsFocus)
 {
     options.wantsKeyboardFocus = wantsFocus;
@@ -508,7 +550,10 @@ void Component::takeFocus()
 void Component::leaveFocus()
 {
     if (auto nativeComponent = getNativeComponent())
-        nativeComponent->setFocusedComponent (nullptr);
+    {
+        if (nativeComponent->getFocusedComponent() == this)
+            nativeComponent->setFocusedComponent (nullptr);
+    }
 }
 
 bool Component::hasFocus() const
@@ -521,6 +566,10 @@ bool Component::hasFocus() const
 
     return false;
 }
+
+void Component::focusGained() {}
+
+void Component::focusLost() {}
 
 //==============================================================================
 
@@ -670,65 +719,91 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 #endif
 }
 
+//==============================================================================
+
 void Component::internalMouseEnter (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    updateMouseCursor();
 
     mouseEnter (event);
 
     mouseListeners.call (&MouseListener::mouseEnter, event);
 }
 
+//==============================================================================
+
 void Component::internalMouseExit (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    updateMouseCursor();
 
     mouseExit (event);
 
     mouseListeners.call (&MouseListener::mouseExit, event);
 }
 
+//==============================================================================
+
 void Component::internalMouseDown (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    updateMouseCursor();
 
     mouseDown (event);
 
     mouseListeners.call (&MouseListener::mouseDown, event);
 }
 
+//==============================================================================
+
 void Component::internalMouseMove (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    updateMouseCursor();
 
     mouseMove (event);
 
     mouseListeners.call (&MouseListener::mouseMove, event);
 }
 
+//==============================================================================
+
 void Component::internalMouseDrag (const MouseEvent& event)
 {
     if (! isVisible())
         return;
+
+    updateMouseCursor();
 
     mouseDrag (event);
 
     mouseListeners.call (&MouseListener::mouseDrag, event);
 }
 
+//==============================================================================
+
 void Component::internalMouseUp (const MouseEvent& event)
 {
     if (! isVisible())
         return;
 
+    updateMouseCursor();
+
     mouseUp (event);
 
     mouseListeners.call (&MouseListener::mouseUp, event);
 }
+
+//==============================================================================
 
 void Component::internalMouseDoubleClick (const MouseEvent& event)
 {
@@ -740,6 +815,8 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
     mouseListeners.call (&MouseListener::mouseDoubleClick, event);
 }
 
+//==============================================================================
+
 void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
 {
     if (! isVisible())
@@ -750,6 +827,8 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
     mouseListeners.call (&MouseListener::mouseWheel, event, wheelData);
 }
 
+//==============================================================================
+
 void Component::internalKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     if (! isVisible())
@@ -757,6 +836,8 @@ void Component::internalKeyDown (const KeyPress& keys, const Point<float>& posit
 
     keyDown (keys, position);
 }
+
+//==============================================================================
 
 void Component::internalKeyUp (const KeyPress& keys, const Point<float>& position)
 {
@@ -766,6 +847,8 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
     keyUp (keys, position);
 }
 
+//==============================================================================
+
 void Component::internalTextInput (const String& text)
 {
     if (! isVisible() || ! options.wantsTextInput)
@@ -774,12 +857,16 @@ void Component::internalTextInput (const String& text)
     textInput (text);
 }
 
+//==============================================================================
+
 void Component::internalResized (int width, int height)
 {
     boundsInParent = boundsInParent.withSize (Size<float> (width, height));
 
     resized();
 }
+
+//==============================================================================
 
 void Component::internalMoved (int xpos, int ypos)
 {
@@ -788,14 +875,25 @@ void Component::internalMoved (int xpos, int ypos)
     moved();
 }
 
+//==============================================================================
+
 void Component::internalContentScaleChanged (float dpiScale)
 {
     contentScaleChanged (dpiScale);
 }
 
+//==============================================================================
+
 void Component::internalUserTriedToCloseWindow()
 {
     userTriedToCloseWindow();
+}
+
+//==============================================================================
+
+void Component::updateMouseCursor()
+{
+    yup_setMouseCursor (mouseCursor);
 }
 
 } // namespace yup

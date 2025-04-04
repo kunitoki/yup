@@ -119,6 +119,11 @@
 #endif
 #endif
 
+#if __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 //==============================================================================
 // Public API
 #include <rive/renderer/texture.hpp>
@@ -130,3 +135,7 @@
 // Internals
 #include <rive_renderer/source/rive_render_path.hpp>
 #include <rive_renderer/source/rive_render_paint.hpp>
+
+#if __GNUC__
+ #pragma GCC diagnostic pop
+#endif

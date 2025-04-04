@@ -524,6 +524,21 @@ public:
     }
 
     //==============================================================================
+    /** Returns true if the two sizes are approximately equal. */
+    constexpr bool approximatelyEqualTo (const Size& other) const noexcept
+    {
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            return approximatelyEqual (width, other.width)
+                && approximatelyEqual (height, other.height);
+        }
+        else
+        {
+            return *this == other;
+        }
+    }
+
+    //==============================================================================
     /** Equality operator
 
         Compares this Size object with another Size object for equality.

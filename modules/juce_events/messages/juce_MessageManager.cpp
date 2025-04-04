@@ -216,12 +216,14 @@ void* MessageManager::callFunctionOnMessageThread (MessageCallbackFunction* func
         return message->result.load();
     }
 
-    jassertfalse; // the OS message queue failed to send the message!
+    jassertfalse; // The OS message queue failed to send the message!
     return nullptr;
 }
 
 bool MessageManager::callAsync (std::function<void()> fn)
 {
+    jassert (fn != nullptr);
+
     struct AsyncCallInvoker final : public MessageBase
     {
         AsyncCallInvoker (std::function<void()> f)
