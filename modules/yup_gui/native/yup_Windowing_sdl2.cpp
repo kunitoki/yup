@@ -247,7 +247,6 @@ Size<int> SDL2ComponentNative::getSize() const
     return { width, height };
 }
 
-
 void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
     if (window == nullptr || screenBounds.getPosition() == newPosition)
