@@ -228,8 +228,11 @@ void Slider::sendValueChanged (NotificationType notification)
     if (notification == dontSendNotification)
         return;
 
-    auto notificationSender = [this]
+    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
     {
+        if (bailOutChecker.shouldBailOut())
+            return;
+
         valueChanged();
 
         if (onValueChanged)
@@ -237,7 +240,7 @@ void Slider::sendValueChanged (NotificationType notification)
     };
 
     if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
-        MessageManager::callAsync (createSafeCallback (notificationSender));
+        MessageManager::callAsync (std::move (notificationSender));
     else
         notificationSender();
 }
