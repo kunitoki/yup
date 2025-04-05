@@ -91,5 +91,6 @@
 
 //==============================================================================
 #include "native/yup_Windowing_utils.h"
+#include "native/yup_Windowing_utils.cpp"
 #include "native/yup_Windowing_sdl2.h"
 #include "native/yup_Windowing_sdl2.cpp"

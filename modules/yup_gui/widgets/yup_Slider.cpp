@@ -76,8 +76,13 @@ void Slider::mouseExit (const MouseEvent& event)
 
 void Slider::mouseDown (const MouseEvent& event)
 {
-    if (onDragStart)
-        onDragStart();
+    if (! isDragging)
+    {
+        isDragging = true;
+
+        if (onDragStart)
+            onDragStart (event);
+    }
 
     origin = event.getPosition();
 
@@ -88,8 +93,13 @@ void Slider::mouseDown (const MouseEvent& event)
 
 void Slider::mouseUp (const MouseEvent& event)
 {
-    if (onDragEnd)
-        onDragEnd();
+    if (isDragging && ! event.isAnyButtonDown())
+    {
+        if (onDragEnd)
+            onDragEnd (event);
+
+        isDragging = false;
+    }
 }
 
 void Slider::mouseDrag (const MouseEvent& event)
@@ -226,10 +236,10 @@ void Slider::sendValueChanged (NotificationType notification)
             onValueChanged (getValue());
     };
 
-    if (notification == sendNotification || notification == sendNotificationSync)
-        notificationSender();
-    else if (notification == sendNotificationAsync)
+    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
         MessageManager::callAsync (createSafeCallback (notificationSender));
+    else
+        notificationSender();
 }
 
 } // namespace yup

@@ -701,12 +701,12 @@ bool SDL2ComponentNative::isRendering() const
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
+void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
@@ -728,10 +728,10 @@ void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& localPositi
             lastComponentUnderMouse->internalMouseMove (event);
     }
 
-    lastMouseMovePosition = localPosition;
+    lastMouseMovePosition = position;
 }
 
-void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
     currentKeyModifiers = modifiers;
@@ -739,11 +739,11 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastComponentClicked == nullptr)
     {
-        if (auto child = component.findComponentAt (localPosition))
+        if (auto child = component.findComponentAt (position))
             lastComponentClicked = child;
     }
 
@@ -768,14 +768,14 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
             lastComponentClicked->internalMouseDown (event);
         }
 
-        lastMouseDownPosition = localPosition;
+        lastMouseDownPosition = position;
         lastMouseDownTime = currentMouseDownTime;
     }
 
-    lastMouseMovePosition = localPosition;
+    lastMouseMovePosition = position;
 }
 
-void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
     currentKeyModifiers = modifiers;
@@ -783,7 +783,7 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
@@ -805,19 +805,22 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
         lastComponentClicked = nullptr;
     }
 
-    lastMouseMovePosition = localPosition;
+    lastMouseMovePosition = position;
     lastMouseDownPosition.reset();
     lastMouseDownTime.reset();
+
+    if (isMouseOutsideWindow (window))
+        handleFocusChanged (false);
 }
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
+void SDL2ComponentNative::handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
@@ -845,12 +848,12 @@ void SDL2ComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseEnter (const Point<float>& localPosition)
+void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     updateComponentUnderMouse (event);
 
@@ -858,12 +861,12 @@ void SDL2ComponentNative::handleMouseEnter (const Point<float>& localPosition)
         lastComponentUnderMouse->mouseEnter (event);
 }
 
-void SDL2ComponentNative::handleMouseLeave (const Point<float>& localPosition)
+void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastComponentUnderMouse != nullptr)
         lastComponentUnderMouse->mouseExit (event);
@@ -873,26 +876,26 @@ void SDL2ComponentNative::handleMouseLeave (const Point<float>& localPosition)
 
 //==============================================================================
 
-void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
+void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 1);
 
     if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalKeyDown (keys, cursorPosition);
+        lastComponentFocused->internalKeyDown (keys, position);
     else
-        component.internalKeyDown (keys, cursorPosition);
+        component.internalKeyDown (keys, position);
 }
 
-void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
+void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& position)
 {
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 0);
 
     if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalKeyUp (keys, cursorPosition);
+        lastComponentFocused->internalKeyUp (keys, position);
     else
-        component.internalKeyUp (keys, cursorPosition);
+        component.internalKeyUp (keys, position);
 }
 
 void SDL2ComponentNative::handleTextInput (const String& textInput)
@@ -937,12 +940,16 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
     if (gotFocus)
     {
-        startRendering();
+        if (! isRendering())
+            startRendering();
     }
     else
     {
         if (updateOnlyWhenFocused)
-            stopRendering();
+        {
+            if (isRendering())
+                stopRendering();
+        }
     }
 }
 
@@ -1001,10 +1008,8 @@ void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
     }
     else
     {
-        if (lastComponentUnderMouse)
-        {
+        if (lastComponentUnderMouse != nullptr)
             lastComponentUnderMouse->internalMouseExit (event);
-        }
     }
 
     lastComponentUnderMouse = child;
@@ -1103,6 +1108,10 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             handleFocusChanged (false);
             break;
 
+        case SDL_WINDOWEVENT_TAKE_FOCUS:
+            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_TAKE_FOCUS");
+            break;
+
         case SDL_WINDOWEVENT_DISPLAY_CHANGED:
             YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
             handleContentScaleChanged();
@@ -1146,8 +1155,6 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEMOTION:
         {
-            // YUP_DBG_WINDOWING ("SDL_MOUSEMOTION");
-
             if (event->window.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag ({ static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) });
 
@@ -1156,8 +1163,6 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEBUTTONDOWN:
         {
-            YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONDOWN");
-
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
@@ -1168,8 +1173,6 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEBUTTONUP:
         {
-            YUP_DBG_WINDOWING ("SDL_MOUSEBUTTONUP");
-
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
@@ -1306,6 +1309,7 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
+    // Do not install signal handlers
     SDL_SetHint (SDL_HINT_NO_SIGNAL_HANDLERS, "1");
 
     // Initialise SDL
