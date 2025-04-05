@@ -516,7 +516,7 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        if (! isPositiveAndBelow (index, static_cast<uint32_t> (parameters.size())))
+        if (index >= static_cast<uint32_t> (parameters.size()))
             return false;
 
         auto& parameter = parameters[index];
@@ -537,11 +537,10 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        const int index = static_cast<int> (parameterId);
-        if (! isPositiveAndBelow (index, static_cast<int> (parameters.size())))
+        if (parameterId >= static_cast<uint32_t> (parameters.size()))
             return false;
 
-        *value = parameters[index]->getValue();
+        *value = parameters[parameterId]->getValue();
 
         return true;
     };
@@ -551,11 +550,10 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        const int index = static_cast<int> (parameterId);
-        if (! isPositiveAndBelow (index, static_cast<int> (parameters.size())))
+        if (parameterId >= static_cast<uint32_t> (parameters.size()))
             return false;
 
-        const auto text = parameters[index]->convertToString (static_cast<float> (value));
+        const auto text = parameters[parameterId]->convertToString (static_cast<float> (value));
         text.copyToUTF8 (display, size);
 
         return true;
@@ -566,11 +564,10 @@ bool AudioPluginProcessorCLAP::initialise()
         auto wrapper = getWrapper (plugin);
         auto parameters = wrapper->audioProcessor->getParameters();
 
-        const int index = static_cast<int> (parameterId);
-        if (! isPositiveAndBelow (index, static_cast<int> (parameters.size())))
+        if (parameterId >= static_cast<uint32_t> (parameters.size()))
             return false;
 
-        *value = static_cast<double> (parameters[index]->convertFromString (display));
+        *value = static_cast<double> (parameters[parameterId]->convertFromString (display));
 
         return true;
     };
@@ -635,7 +632,7 @@ bool AudioPluginProcessorCLAP::initialise()
                                         ? audioProcessor->getBusLayout().getInputBuses()
                                         : audioProcessor->getBusLayout().getOutputBuses();
 
-        if (! isPositiveAndBelow (index, static_cast<uint32_t> (busses.size())))
+        if (index >= static_cast<uint32_t> (busses.size()))
             return false;
 
         const AudioBus& bus = busses[index];
