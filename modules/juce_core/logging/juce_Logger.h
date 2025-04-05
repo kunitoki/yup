@@ -85,8 +85,8 @@ public:
     //==============================================================================
     /** Writes a message to the standard error stream.
 
-        This can be called directly, or by using the DBG() macro in
-        juce_PlatformDefs.h (which will avoid calling the method in non-debug builds).
+        This can be called directly, or by using the `JUCE_DBG()` macro in
+        `juce_PlatformDefs.h` (which will avoid calling the method in non-debug builds).
     */
     static void JUCE_CALLTYPE outputDebugString (const String& text);
 

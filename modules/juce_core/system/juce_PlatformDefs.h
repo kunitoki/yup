@@ -224,7 +224,7 @@ constexpr bool isConstantEvaluated() noexcept
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
 
     @code
-        DBG ("foo = " << foo << "bar = " << bar);
+        JUCE_DBG ("foo = " << foo << "bar = " << bar);
     @endcode
 
     The macro is only enabled in a debug build, so be careful not to use it with expressions
@@ -232,9 +232,9 @@ constexpr bool isConstantEvaluated() noexcept
 
     @see Logger::outputDebugString
 */
-#define DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    juce::String tempDbgBuf;                               \
-    tempDbgBuf << textToWrite;                             \
+#define JUCE_DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
+    juce::String tempDbgBuf;                                    \
+    tempDbgBuf << textToWrite;                                  \
     juce::Logger::outputDebugString (tempDbgBuf);)
 
 //==============================================================================
@@ -279,7 +279,7 @@ constexpr bool isConstantEvaluated() noexcept
 /** If debugging is disabled, these dummy debug and assertion macros are used. */
 #define JUCE_ASSERTIONS_ENABLED 0
 
-#define DBG(textToWrite)
+#define JUCE_DBG(textToWrite)
 #define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
 
 #if JUCE_LOG_ASSERTIONS

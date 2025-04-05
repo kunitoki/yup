@@ -301,7 +301,8 @@ class URLConnectionStatePreYosemite final : public URLConnectionStateBase
 
     void didFailWithError([[maybe_unused]] NSError* error)
     {
-        DBG(nsStringToJuce([error description]));
+        JUCE_DBG(nsStringToJuce([error description]));
+
         nsUrlErrorCode = [error code];
         hasFailed = true;
         initialised = true;
@@ -553,7 +554,7 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
 
 #if JUCE_DEBUG
         if (error != nullptr)
-            DBG(nsStringToJuce([error description]));
+            JUCE_DBG(nsStringToJuce([error description]));
 #endif
 
         hasFailed = (error != nullptr);

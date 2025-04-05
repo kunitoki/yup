@@ -70,7 +70,7 @@ public:
     {
         if (--(getCounter().numObjects) < 0)
         {
-            DBG ("*** Dangling pointer deletion! Class: " << getLeakedObjectClassName());
+            JUCE_DBG ("*** Dangling pointer deletion! Class: " << getLeakedObjectClassName());
 
             /** If you hit this, then you've managed to delete more instances of this class than you've
                 created.. That indicates that you're deleting some dangling pointers.
@@ -98,7 +98,7 @@ private:
         {
             if (numObjects.value > 0)
             {
-                DBG ("*** Leaked objects detected: " << numObjects.value << " instance(s) of class " << getLeakedObjectClassName());
+                JUCE_DBG ("*** Leaked objects detected: " << numObjects.value << " instance(s) of class " << getLeakedObjectClassName());
 
                 /** If you hit this, then you've leaked one or more objects of the type specified by
                     the 'OwnerClass' template parameter - the name should have been printed by the line above.
