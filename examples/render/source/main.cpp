@@ -224,7 +224,7 @@ struct Application : yup::YUPApplication
         //window2 = std::make_unique<CustomWindow2>();
         //window2->centreWithSize ({ 300, 300 });
         //window2->setVisible (true);
-        //window2->toFront();
+        //window2->toFront(true);
     }
 
     void shutdown() override
