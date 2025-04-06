@@ -358,7 +358,7 @@ public:
     /**
         Bring the component to the front.
      */
-    void toFront(bool shouldGainKeyboardFocus);
+    void toFront (bool shouldGainKeyboardFocus);
 
     /**
         Bring the component to the back.

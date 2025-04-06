@@ -30,7 +30,9 @@ namespace yup
 #if YUP_WINDOWING_LOGGING
 #define YUP_WINDOWING_LOG(textToWrite) JUCE_DBG (textToWrite)
 #else
-#define YUP_WINDOWING_LOG(textToWrite) {}
+#define YUP_WINDOWING_LOG(textToWrite) \
+    {                                  \
+    }
 #endif
 
 //==============================================================================
