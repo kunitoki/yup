@@ -23,15 +23,14 @@ namespace yup
 {
 
 //==============================================================================
-#define YUP_VERBOSE_WINDOWING_DBG 1
+#ifndef YUP_WINDOWING_LOGGING
+#define YUP_WINDOWING_LOGGING 1
+#endif
 
-#if YUP_VERBOSE_WINDOWING_DBG
-#define YUP_DBG_WINDOWING(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
-    juce::String tempDbgBuf;                                              \
-    tempDbgBuf << textToWrite;                                            \
-    juce::Logger::outputDebugString (tempDbgBuf);)
+#if YUP_WINDOWING_LOGGING
+#define YUP_WINDOWING_LOG(textToWrite) JUCE_DBG (textToWrite)
 #else
-#define YUP_DBG_WINDOWING(textToWrite)
+#define YUP_WINDOWING_LOG(textToWrite) {}
 #endif
 
 //==============================================================================
@@ -64,7 +63,7 @@ public:
     bool isVisible() const override;
 
     //==============================================================================
-    void setSize (const Size<int>& size) override;
+    void setSize (const Size<int>& newSize) override;
     Size<int> getSize() const override;
     Size<int> getContentSize() const override;
 
@@ -122,10 +121,12 @@ public:
     Point<float> getCursorPosition() const;
 
     //==============================================================================
-    void handleMouseMoveOrDrag (const Point<float>& localPosition);
-    void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
+    void handleMouseMoveOrDrag (const Point<float>& position);
+    void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData);
+    void handleMouseEnter (const Point<float>& position);
+    void handleMouseLeave (const Point<float>& position);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);

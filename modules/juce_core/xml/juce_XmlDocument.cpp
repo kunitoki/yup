@@ -119,7 +119,7 @@ static bool isIdentifierChar (juce_wchar c) noexcept
         for (int i = 0; i < 8; ++i)
             s << "0x" << String::toHexString ((int) n[i]) << ", ";
 
-        DBG (s);
+        JUCE_DBG (s);
     }*/
 
 static String::CharPointerType findEndOfToken (String::CharPointerType p) noexcept

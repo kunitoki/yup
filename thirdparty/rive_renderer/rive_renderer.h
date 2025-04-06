@@ -122,7 +122,10 @@
 
 //==============================================================================
 
-#if __clang__
+#if __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wattributes"
 #endif
@@ -137,7 +140,8 @@
 #include <rive_renderer/source/rive_render_path.hpp>
 #include <rive_renderer/source/rive_render_paint.hpp>
 
-#if __clang__
+#if __GNUC__
+ #pragma GCC diagnostic pop
+#elif __clang__
  #pragma clang diagnostic pop
 #endif
-

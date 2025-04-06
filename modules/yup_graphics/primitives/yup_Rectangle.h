@@ -1273,6 +1273,21 @@ public:
     }
 
     //==============================================================================
+    /** Returns true if the two rectangles are approximately equal. */
+    constexpr bool approximatelyEqualTo (const Rectangle& other) const noexcept
+    {
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            return xy.approximatelyEqualTo (other.xy)
+                && size.approximatelyEqualTo (other.size);
+        }
+        else
+        {
+            return *this == other;
+        }
+    }
+
+    //==============================================================================
     /** Checks for equality between this rectangle and another rectangle.
 
         This operator returns true if both the position and size of this rectangle are equal to those of the other rectangle.

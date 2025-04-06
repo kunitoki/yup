@@ -279,6 +279,12 @@ public:
     static int getPageSize();
 
     //==============================================================================
+    /** Returns a unique identifier for the current compile.
+        This should be used to identify a specific build of the application.
+    */
+    static uint64 getCompileUniqueId();
+
+    //==============================================================================
     /** Returns a backtrace of the current call-stack.
         The usefulness of the result will depend on the level of debug symbols
         that are available in the executable.

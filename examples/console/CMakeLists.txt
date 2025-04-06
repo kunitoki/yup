@@ -44,8 +44,7 @@ yup_standalone_app (
         juce_core
         juce_events
         juce_audio_basics
-        juce_audio_devices
-)
+        juce_audio_devices)
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)

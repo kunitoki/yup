@@ -120,8 +120,8 @@ public:
                 numDeviceInputChannelsAvailable = 0;
         }
 
-        DBG ("Audio device - min buffers: " << minBufferSizeOut << ", " << minBufferSizeIn << "; "
-                                            << sampleRate << " Hz; input chans: " << numDeviceInputChannelsAvailable);
+        JUCE_DBG ("Audio device - min buffers: " << minBufferSizeOut << ", " << minBufferSizeIn << "; "
+                                                 << sampleRate << " Hz; input chans: " << numDeviceInputChannelsAvailable);
     }
 
     ~AndroidAudioIODevice() override
@@ -364,7 +364,7 @@ public:
 
                 if (numRead < actualBufferSize * numDeviceInputChannels)
                 {
-                    DBG ("Audio read under-run! " << numRead);
+                    JUCE_DBG ("Audio read under-run! " << numRead);
                 }
 
                 jshort* const src = env->GetShortArrayElements (audioBuffer, nullptr);
@@ -413,7 +413,7 @@ public:
 
                 if (numWritten < actualBufferSize * numDeviceOutputChannels)
                 {
-                    DBG ("Audio write underrun! " << numWritten);
+                    JUCE_DBG ("Audio write underrun! " << numWritten);
                 }
             }
         }

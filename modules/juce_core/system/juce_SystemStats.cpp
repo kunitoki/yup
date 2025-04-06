@@ -66,7 +66,7 @@ struct JuceVersionPrinter
 {
     JuceVersionPrinter()
     {
-        DBG (SystemStats::getJUCEVersion());
+        JUCE_DBG (SystemStats::getJUCEVersion());
     }
 };
 
@@ -204,6 +204,14 @@ bool SystemStats::hasAVX512VL() noexcept { return getCPUInformation().hasAVX512V
 bool SystemStats::hasAVX512VPOPCNTDQ() noexcept { return getCPUInformation().hasAVX512VPOPCNTDQ; }
 
 bool SystemStats::hasNeon() noexcept { return getCPUInformation().hasNeon; }
+
+//==============================================================================
+extern uint64_t juce_compilationUniqueId;
+
+uint64 SystemStats::getCompileUniqueId()
+{
+    return juce_compilationUniqueId;
+}
 
 //==============================================================================
 #if JUCE_ANDROID

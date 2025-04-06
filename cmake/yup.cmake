@@ -35,37 +35,53 @@ endfunction()
 #==============================================================================
 
 function (_yup_setup_platform)
+    set (platforms "")
+
     if (IOS OR CMAKE_SYSTEM_NAME MATCHES "iOS" OR CMAKE_TOOLCHAIN_FILE MATCHES ".*ios\.cmake$")
-        set (yup_platform "ios")
+        set (platform "ios")
+        list (APPEND platforms "ios" "apple" "posix" "mobile")
 
     elseif (ANDROID OR YUP_TARGET_ANDROID)
-        set (yup_platform "android")
+        set (platform "android")
+        list (APPEND platforms "android" "posix" "mobile")
 
     elseif (EMSCRIPTEN OR CMAKE_TOOLCHAIN_FILE MATCHES ".*Emscripten\.cmake$")
-        set (yup_platform "emscripten")
+        set (platform "emscripten")
+        list (APPEND platforms "emscripten" "posix" "web")
 
     elseif (APPLE)
-        set (yup_platform "osx")
-
-    elseif (UNIX)
-        set (yup_platform "linux")
+        set (platform "osx")
+        list (APPEND platforms "osx" "apple" "posix" "desktop")
 
     elseif (WIN32)
         if (CMAKE_SYSTEM_NAME MATCHES "WindowsStore")
-            set (yup_platform "uwp")
+            set (platform "uwp")
+            list (APPEND platforms "uwp" "msft" "desktop")
         else()
-            set (yup_platform "windows")
+            set (platform "windows")
+            list (APPEND platforms "windows" "msft" "desktop")
         endif()
 
+    elseif (UNIX)
+        set (platform "linux")
+        list (APPEND platforms "linux" "posix" "desktop")
+
     else()
-        set (yup_platform "unknown")
+        set (platform "unknown")
+        list (APPEND platforms "unknown")
 
     endif()
 
-    _yup_message (STATUS "Setting up for ${yup_platform} platform")
+    _yup_message (STATUS "Setting up for ${platform} platform")
     _yup_message (STATUS "Running on cmake ${CMAKE_VERSION}")
 
-    set (yup_platform "${yup_platform}" PARENT_SCOPE)
+    set (YUP_PLATFORM "${platform}" PARENT_SCOPE)
+
+    foreach (platform_name ${platforms})
+        string (TOUPPER "${platform_name}" platform_name_upper)
+        set (YUP_PLATFORM_${platform_name_upper} ON PARENT_SCOPE)
+    endforeach()
+
 endfunction()
 
 #==============================================================================

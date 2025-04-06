@@ -24,6 +24,42 @@ namespace yup
 
 //==============================================================================
 
+void yup_setMouseCursor (const MouseCursor& mouseCursor)
+{
+    static const auto cursors = []
+    {
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
+            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
+        };
+    }();
+
+    if (mouseCursor.getType() == MouseCursor::None)
+    {
+        SDL_ShowCursor (SDL_DISABLE);
+    }
+    else
+    {
+        auto it = cursors.find (mouseCursor.getType());
+        if (it != cursors.end())
+            SDL_SetCursor (it->second);
+
+        SDL_ShowCursor (SDL_ENABLE);
+    }
+}
+
+//==============================================================================
+
 std::atomic_flag SDL2ComponentNative::isInitialised = ATOMIC_FLAG_INIT;
 
 //==============================================================================
@@ -62,6 +98,8 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
         windowFlags |= SDL_WINDOW_BORDERLESS;
 
     SDL_SetHint (SDL_HINT_ORIENTATIONS, "Portrait PortraitUpsideDown LandscapeLeft LandscapeRight");
+    SDL_SetHint (SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, String (doubleClickTime.inMilliseconds()).toRawUTF8());
+    SDL_SetHint (SDL_HINT_MOUSE_FOCUS_CLICKTHROUGH, "1");
 
     // Create the window, renderer and parent it
     window = SDL_CreateWindow (component.getTitle().toRawUTF8(),
@@ -166,9 +204,25 @@ bool SDL2ComponentNative::isVisible() const
 
 //==============================================================================
 
-void SDL2ComponentNative::setSize (const Size<int>& size)
+Size<int> SDL2ComponentNative::getContentSize() const
 {
-    setBounds (screenBounds.withSize (size));
+    const auto dpiScale = getScaleDpi();
+    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
+
+    return { width, height };
+}
+
+//==============================================================================
+
+void SDL2ComponentNative::setSize (const Size<int>& newSize)
+{
+    if (window == nullptr || screenBounds.getSize() == newSize)
+        return;
+
+    SDL_SetWindowSize (window, newSize.getWidth(), newSize.getHeight());
+
+    screenBounds = screenBounds.withSize (newSize);
 }
 
 Size<int> SDL2ComponentNative::getSize() const
@@ -181,20 +235,6 @@ Size<int> SDL2ComponentNative::getSize() const
     return { width, height };
 }
 
-Size<int> SDL2ComponentNative::getContentSize() const
-{
-    const auto dpiScale = getScaleDpi();
-    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
-    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
-
-    return { width, height };
-}
-
-Point<int> SDL2ComponentNative::getPosition() const
-{
-    return screenBounds.getPosition();
-}
-
 void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
     if (window == nullptr || screenBounds.getPosition() == newPosition)
@@ -205,9 +245,15 @@ void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
     screenBounds = screenBounds.withPosition (newPosition);
 }
 
-Rectangle<int> SDL2ComponentNative::getBounds() const
+Point<int> SDL2ComponentNative::getPosition() const
 {
-    return screenBounds;
+    if (window == nullptr)
+        return screenBounds.getPosition();
+
+    int x = 0, y = 0;
+    SDL_GetWindowPosition (window, &x, &y);
+
+    return { x, y };
 }
 
 void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
@@ -247,6 +293,11 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     screenBounds = newBounds;
 
 #endif
+}
+
+Rectangle<int> SDL2ComponentNative::getBounds() const
+{
+    return screenBounds;
 }
 
 //==============================================================================
@@ -315,9 +366,18 @@ float SDL2ComponentNative::getOpacity() const
 void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
     if (lastComponentFocused != nullptr)
-        ; // TODO
+        lastComponentFocused->focusLost();
 
     lastComponentFocused = comp;
+
+    if (lastComponentFocused)
+        lastComponentFocused->focusGained();
+
+    if (window != nullptr)
+    {
+        if ((SDL_GetWindowFlags (window) & SDL_WINDOW_INPUT_FOCUS) == 0) // SDL_WINDOW_MOUSE_FOCUS
+            SDL_SetWindowInputFocus (window);
+    }
 }
 
 Component* SDL2ComponentNative::getFocusedComponent() const
@@ -641,12 +701,12 @@ bool SDL2ComponentNative::isRendering() const
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& localPosition)
+void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
@@ -668,10 +728,10 @@ void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& localPositi
             lastComponentUnderMouse->internalMouseMove (event);
     }
 
-    lastMouseMovePosition = localPosition;
+    lastMouseMovePosition = position;
 }
 
-void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons | button);
     currentKeyModifiers = modifiers;
@@ -679,11 +739,11 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastComponentClicked == nullptr)
     {
-        if (auto child = component.findComponentAt (localPosition))
+        if (auto child = component.findComponentAt (position))
             lastComponentClicked = child;
     }
 
@@ -708,14 +768,14 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& localPosition, Mo
             lastComponentClicked->internalMouseDown (event);
         }
 
-        lastMouseDownPosition = localPosition;
+        lastMouseDownPosition = position;
         lastMouseDownTime = currentMouseDownTime;
     }
 
-    lastMouseMovePosition = localPosition;
+    lastMouseMovePosition = position;
 }
 
-void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers)
+void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers)
 {
     currentMouseButtons = static_cast<MouseEvent::Buttons> (currentMouseButtons & ~button);
     currentKeyModifiers = modifiers;
@@ -723,7 +783,7 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
@@ -745,19 +805,22 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& localPosition, Mous
         lastComponentClicked = nullptr;
     }
 
-    lastMouseMovePosition = localPosition;
+    lastMouseMovePosition = position;
     lastMouseDownPosition.reset();
     lastMouseDownTime.reset();
+
+    if (isMouseOutsideWindow (window))
+        handleFocusChanged (false);
 }
 
 //==============================================================================
 
-void SDL2ComponentNative::handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData)
+void SDL2ComponentNative::handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData)
 {
     auto event = MouseEvent()
                      .withButtons (currentMouseButtons)
                      .withModifiers (currentKeyModifiers)
-                     .withPosition (localPosition);
+                     .withPosition (position);
 
     if (lastMouseDownPosition)
         event = event.withLastMouseDownPosition (*lastMouseDownPosition);
@@ -785,26 +848,54 @@ void SDL2ComponentNative::handleMouseWheel (const Point<float>& localPosition, c
 
 //==============================================================================
 
-void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& cursorPosition)
+void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
+{
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (position);
+
+    updateComponentUnderMouse (event);
+
+    if (lastComponentUnderMouse != nullptr)
+        lastComponentUnderMouse->mouseEnter (event);
+}
+
+void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
+{
+    auto event = MouseEvent()
+                     .withButtons (currentMouseButtons)
+                     .withModifiers (currentKeyModifiers)
+                     .withPosition (position);
+
+    if (lastComponentUnderMouse != nullptr)
+        lastComponentUnderMouse->mouseExit (event);
+
+    updateComponentUnderMouse (event);
+}
+
+//==============================================================================
+
+void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float>& position)
 {
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 1);
 
     if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalKeyDown (keys, cursorPosition);
+        lastComponentFocused->internalKeyDown (keys, position);
     else
-        component.internalKeyDown (keys, cursorPosition);
+        component.internalKeyDown (keys, position);
 }
 
-void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& cursorPosition)
+void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>& position)
 {
     currentKeyModifiers = keys.getModifiers();
     keyState.set (keys.getKey(), 0);
 
     if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalKeyUp (keys, cursorPosition);
+        lastComponentFocused->internalKeyUp (keys, position);
     else
-        component.internalKeyUp (keys, cursorPosition);
+        component.internalKeyUp (keys, position);
 }
 
 void SDL2ComponentNative::handleTextInput (const String& textInput)
@@ -849,12 +940,16 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
     if (gotFocus)
     {
-        startRendering();
+        if (! isRendering())
+            startRendering();
     }
     else
     {
         if (updateOnlyWhenFocused)
-            stopRendering();
+        {
+            if (isRendering())
+                stopRendering();
+        }
     }
 }
 
@@ -913,10 +1008,8 @@ void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
     }
     else
     {
-        if (lastComponentUnderMouse)
-        {
+        if (lastComponentUnderMouse != nullptr)
             lastComponentUnderMouse->internalMouseExit (event);
-        }
     }
 
     lastComponentUnderMouse = child;
@@ -940,65 +1033,87 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
     switch (windowEvent.event)
     {
         case SDL_WINDOWEVENT_CLOSE:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_CLOSE");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_CLOSE");
             component.internalUserTriedToCloseWindow();
             break;
 
         case SDL_WINDOWEVENT_RESIZED:
-            //YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
+            //YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_SIZE_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_SIZE_CHANGED " << windowEvent.data1 << " " << windowEvent.data2);
             handleResized (windowEvent.data1, windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_MOVED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_MOVED " << windowEvent.data1 << " " << windowEvent.data2);
             handleMoved (windowEvent.data1, windowEvent.data2);
             break;
 
+        case SDL_WINDOWEVENT_ENTER:
+        {
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_ENTER");
+            int x = 0, y = 0;
+            SDL_GetMouseState (&x, &y);
+            handleMouseEnter ({ x, y });
+            break;
+        }
+
+        case SDL_WINDOWEVENT_LEAVE:
+        {
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_LEAVE");
+            int x = 0, y = 0;
+            SDL_GetMouseState (&x, &y);
+            handleMouseLeave ({ x, y });
+            break;
+        }
+
         case SDL_WINDOWEVENT_SHOWN:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_SHOWN");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_SHOWN");
             // repaint();
             break;
 
         case SDL_WINDOWEVENT_HIDDEN:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_HIDDEN");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_HIDDEN");
             break;
 
         case SDL_WINDOWEVENT_MINIMIZED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MINIMIZED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_MINIMIZED");
             handleMinimized();
             break;
 
         case SDL_WINDOWEVENT_MAXIMIZED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_MAXIMIZED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_MAXIMIZED");
             handleMaximized();
             break;
 
         case SDL_WINDOWEVENT_RESTORED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESTORED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESTORED");
             handleRestored();
             break;
 
         case SDL_WINDOWEVENT_EXPOSED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_EXPOSED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_EXPOSED");
             repaint();
             break;
 
         case SDL_WINDOWEVENT_FOCUS_GAINED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_FOCUS_GAINED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_FOCUS_GAINED");
             handleFocusChanged (true);
             break;
 
         case SDL_WINDOWEVENT_FOCUS_LOST:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_FOCUS_LOST");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_FOCUS_LOST");
             handleFocusChanged (false);
             break;
 
+        case SDL_WINDOWEVENT_TAKE_FOCUS:
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_TAKE_FOCUS");
+            break;
+
         case SDL_WINDOWEVENT_DISPLAY_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
             handleContentScaleChanged();
             break;
     }
@@ -1014,7 +1129,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
     {
         case SDL_QUIT:
         {
-            YUP_DBG_WINDOWING ("SDL_QUIT");
+            YUP_WINDOWING_LOG ("SDL_QUIT");
             break;
         }
 
@@ -1028,13 +1143,13 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_RENDER_TARGETS_RESET:
         {
-            YUP_DBG_WINDOWING ("SDL_RENDER_TARGETS_RESET");
+            YUP_WINDOWING_LOG ("SDL_RENDER_TARGETS_RESET");
             break;
         }
 
         case SDL_RENDER_DEVICE_RESET:
         {
-            YUP_DBG_WINDOWING ("SDL_RENDER_DEVICE_RESET");
+            YUP_WINDOWING_LOG ("SDL_RENDER_DEVICE_RESET");
             break;
         }
 
@@ -1194,11 +1309,14 @@ void Desktop::updateDisplays()
 
 void initialiseYup_Windowing()
 {
+    // Do not install signal handlers
+    SDL_SetHint (SDL_HINT_NO_SIGNAL_HANDLERS, "1");
+
     // Initialise SDL
     SDL_SetMainReady();
     if (SDL_Init (SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
     {
-        DBG ("Error initialising SDL: " << SDL_GetError());
+        JUCE_DBG ("Error initialising SDL: " << SDL_GetError());
 
         jassertfalse;
         JUCEApplicationBase::quit();

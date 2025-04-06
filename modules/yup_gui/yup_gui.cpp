@@ -80,6 +80,7 @@
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "mouse/yup_MouseEvent.cpp"
+#include "mouse/yup_MouseCursor.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"
 #include "widgets/yup_Button.cpp"
@@ -90,5 +91,6 @@
 
 //==============================================================================
 #include "native/yup_Windowing_utils.h"
+#include "native/yup_Windowing_utils.cpp"
 #include "native/yup_Windowing_sdl2.h"
 #include "native/yup_Windowing_sdl2.cpp"

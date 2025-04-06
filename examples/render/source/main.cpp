@@ -219,7 +219,7 @@ struct Application : yup::YUPApplication
         window->centreWithSize ({ 1280, 866 });
 #endif
         window->setVisible (true);
-        window->toFront();
+        window->toFront(true);
 
         //window2 = std::make_unique<CustomWindow2>();
         //window2->centreWithSize ({ 300, 300 });

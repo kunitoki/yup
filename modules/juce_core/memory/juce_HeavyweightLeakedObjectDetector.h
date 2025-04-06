@@ -80,8 +80,8 @@ private:
         {
             if (map.size() > 0)
             {
-                DBG ("*** Leaked objects detected: " << map.size() << " instance(s) of class " << getLeakedObjectClassName());
-                DBG (getFormattedBacktracesString());
+                JUCE_DBG ("*** Leaked objects detected: " << map.size() << " instance(s) of class " << getLeakedObjectClassName());
+                JUCE_DBG (getFormattedBacktracesString());
 
                 /** If you hit this, then you've leaked one or more objects of the type specified by
                     the 'OwnerClass' template parameter - the name and stack trace of its creation should

@@ -2054,7 +2054,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         static var dump ([[maybe_unused]] Args a)
         {
-            DBG (JSON::toString (a.thisObject));
+            JUCE_DBG (JSON::toString (a.thisObject));
             return var::undefined();
         }
 
