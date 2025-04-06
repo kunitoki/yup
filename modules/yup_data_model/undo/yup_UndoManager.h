@@ -43,9 +43,13 @@ namespace yup
 
     @see UndoableAction
 */
-class UndoManager : private Timer
+class UndoManager
+    : public ReferenceCountedObject
+    , private Timer
 {
 public:
+    using Ptr = ReferenceCountedObjectPtr<UndoManager>;
+
     //==============================================================================
     /**
         Creates a new UndoManager and starts the timer.
@@ -323,6 +327,7 @@ private:
 
     bool isUndoEnabled = false;
 
+    JUCE_DECLARE_WEAK_REFERENCEABLE (UndoManager)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoManager)
 };
 
