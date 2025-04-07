@@ -66,6 +66,14 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
             JUCE_END_IGNORE_WARNINGS_GCC_LIKE
         });
 
+        addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification*)
+        {
+            [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
+                                                               andSelector:@selector(handleQuitEvent:withReplyEvent:)
+                                                             forEventClass:kCoreEventClass
+                                                                andEventID:kAEQuitApplication];
+        });
+
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
         {
             if (auto* app = JUCEApplicationBase::getInstance())
@@ -82,6 +90,11 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         addMethod(@selector(applicationWillTerminate:), [](id /*self*/, SEL, NSNotification*)
         {
             JUCEApplicationBase::appWillTerminateByForce();
+        });
+
+        addMethod(@selector(handleQuitEvent:), [](id self, SEL, NSAppleEventDescriptor* /*event*/, NSAppleEventDescriptor*)
+        {
+            [self terminate:self];
         });
 
         addMethod(@selector(application:openFile:), [](id /*self*/, SEL, NSApplication*, NSString* filename)
@@ -476,8 +489,6 @@ void MessageManager::doPlatformSpecificInitialisation()
 {
     if (appDelegate == nil)
         appDelegate.reset(new AppDelegate());
-
-    // MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()

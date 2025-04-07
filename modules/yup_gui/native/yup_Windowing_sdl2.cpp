@@ -1382,7 +1382,7 @@ void initialiseYup_Windowing()
         while (SDL_PollEvent (&event))
         {
             if (MessageManager::getInstance()->hasStopMessageBeenSent())
-                break;
+                return;
 
             if (timeoutDetector.hasTimedOut())
                 break;
