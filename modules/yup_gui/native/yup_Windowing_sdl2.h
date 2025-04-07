@@ -184,6 +184,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
+    bool internalBoundsChange = false;
 
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;

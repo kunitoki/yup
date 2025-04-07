@@ -303,6 +303,7 @@ public:
     const clap_plugin_t* getPlugin() const;
 
     void editorResized();
+    ScopedValueSetter<bool> scopedHostEditorResizing();
 
 private:
     std::unique_ptr<AudioProcessor> audioProcessor;
@@ -329,6 +330,7 @@ private:
     const clap_host_gui_t* hostGUI = nullptr;
 
     clap_id guiTimerId;
+    bool hostTriggeredResizing = false;
 
     MidiBuffer midiEvents;
 
@@ -338,6 +340,8 @@ private:
 //==============================================================================
 
 std::atomic_int AudioPluginProcessorCLAP::instancesCount = 0;
+
+//==============================================================================
 
 AudioPluginProcessorCLAP* getWrapper (const clap_plugin_t* plugin)
 {
@@ -356,50 +360,36 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
     plugin.init = [] (const clap_plugin* plugin) -> bool
     {
-        JUCE_DBG ("clap_plugin_t::init");
-
         return getWrapper (plugin)->initialise();
     };
 
     plugin.destroy = [] (const clap_plugin* plugin)
     {
-        JUCE_DBG ("clap_plugin_t::destroy");
-
         getWrapper (plugin)->destroy();
     };
 
     plugin.activate = [] (const clap_plugin* plugin, double sampleRate, uint32_t minimumFramesCount, uint32_t maximumFramesCount) -> bool
     {
-        JUCE_DBG ("clap_plugin_t::activate " << sampleRate << "hz (" << (int) minimumFramesCount << ".." << (int) maximumFramesCount << ")");
-
         return getWrapper (plugin)->activate (static_cast<float> (sampleRate), static_cast<int> (maximumFramesCount));
     };
 
     plugin.deactivate = [] (const clap_plugin* plugin)
     {
-        JUCE_DBG ("clap_plugin_t::deactivate");
-
         getWrapper (plugin)->deactivate();
     };
 
     plugin.start_processing = [] (const clap_plugin* plugin) -> bool
     {
-        JUCE_DBG ("clap_plugin_t::start_processing");
-
         return getWrapper (plugin)->startProcessing();
     };
 
     plugin.stop_processing = [] (const clap_plugin* plugin)
     {
-        JUCE_DBG ("clap_plugin_t::stop_processing");
-
         getWrapper (plugin)->stopProcessing();
     };
 
     plugin.reset = [] (const clap_plugin* plugin)
     {
-        JUCE_DBG ("clap_plugin_t::reset");
-
         getWrapper (plugin)->reset();
     };
 
@@ -476,14 +466,11 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
 
     plugin.get_extension = [] (const clap_plugin* plugin, const char* id) -> const void*
     {
-        JUCE_DBG ("clap_plugin_t::get_extension " << id);
-
         return getWrapper (plugin)->getExtension (id);
     };
 
     plugin.on_main_thread = [] (const clap_plugin* plugin)
     {
-        JUCE_DBG ("clap_plugin_t::on_main_thread");
     };
 }
 
@@ -724,8 +711,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.create = [] (const clap_plugin_t* plugin, const char* api, bool isFloating) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::create");
-
         if (api == nullptr || std::string_view (api) != preferredApi || isFloating)
             return false;
 
@@ -737,28 +722,43 @@ bool AudioPluginProcessorCLAP::initialise()
 
         wrapper->audioPluginEditor = std::make_unique<AudioPluginEditorCLAP> (wrapper, processorEditor);
 
+        if (isFloating)
+        {
+            auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
+            if (audioProcessorEditor == nullptr)
+                return false;
+
+            ComponentNative::Flags flags = ComponentNative::defaultFlags;
+
+            if (audioProcessorEditor->shouldRenderContinuous())
+                flags.set (ComponentNative::renderContinuous);
+
+            auto options = ComponentNative::Options()
+                           .withFlags (flags)
+                           .withResizableWindow (audioProcessorEditor->isResizable());
+
+            wrapper->audioPluginEditor->addToDesktop (options);
+            wrapper->audioPluginEditor->setVisible (true);
+
+            audioProcessorEditor->attachedToNative();
+        }
+
         return true;
     };
 
     extensionGUI.destroy = [] (const clap_plugin_t* plugin)
     {
-        JUCE_DBG ("clap_plugin_gui_t::destroy");
-
         auto wrapper = getWrapper (plugin);
         wrapper->audioPluginEditor.reset();
     };
 
     extensionGUI.set_scale = [] (const clap_plugin_t* plugin, double scale) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::set_scale " << scale);
-
         return false;
     };
 
     extensionGUI.get_size = [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::get_size");
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -781,8 +781,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.can_resize = [] (const clap_plugin_t* plugin) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::can_resize");
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -792,8 +790,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.get_resize_hints = [] (const clap_plugin_t* plugin, clap_gui_resize_hints_t* hints) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::get_resize_hints");
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -811,8 +807,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.adjust_size = [] (const clap_plugin_t* plugin, uint32_t* width, uint32_t* height) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::adjust_size " << (int32_t) *width << "," << (int32_t) *height);
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -839,8 +833,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.set_size = [] (const clap_plugin_t* plugin, uint32_t width, uint32_t height) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::set_size " << (int32_t) width << "," << (int32_t) height);
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -855,6 +847,8 @@ bool AudioPluginProcessorCLAP::initialise()
             height = static_cast<uint32_t> (preferredSize.getHeight());
         }
 
+        const auto scoped = wrapper->scopedHostEditorResizing();
+
         wrapper->audioPluginEditor->setSize ({ static_cast<float> (width), static_cast<float> (height) });
 
         return true;
@@ -862,8 +856,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.set_parent = [] (const clap_plugin_t* plugin, const clap_window_t* window) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::set_parent");
-
         jassert (std::string_view (window->api) == preferredApi);
 
         auto wrapper = getWrapper (plugin);
@@ -871,16 +863,31 @@ bool AudioPluginProcessorCLAP::initialise()
             return false;
 
         auto audioProcessorEditor = wrapper->audioPluginEditor->getAudioProcessorEditor();
+        if (audioProcessorEditor == nullptr)
+            return false;
 
-        ComponentNative::Flags flags =
-            ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
+        ComponentNative::Flags flags = ComponentNative::defaultFlags & ~ComponentNative::decoratedWindow;
 
         if (audioProcessorEditor->shouldRenderContinuous())
             flags.set (ComponentNative::renderContinuous);
 
-        ComponentNative::Options options;
-        options.flags = flags;
-        wrapper->audioPluginEditor->addToDesktop (options, window->cocoa);
+        auto options = ComponentNative::Options()
+                           .withFlags (flags)
+                           .withResizableWindow (audioProcessorEditor->isResizable());
+
+        wrapper->audioPluginEditor->addToDesktop (
+            options,
+#if JUCE_MAC
+            window->cocoa);
+#elif JUCE_WINDOWS
+            window->win32);
+#elif JUCE_LINUX
+            window->x11);
+#else
+            nullptr);
+#endif
+
+        wrapper->audioPluginEditor->setVisible (true);
 
         audioProcessorEditor->attachedToNative();
 
@@ -889,20 +896,15 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.set_transient = [] (const clap_plugin_t* plugin, const clap_window_t* window) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::set_transient");
-
         return false;
     };
 
     extensionGUI.suggest_title = [] (const clap_plugin_t* plugin, const char* title)
     {
-        JUCE_DBG ("clap_plugin_gui_t::suggest_title " << title);
     };
 
     extensionGUI.show = [] (const clap_plugin_t* plugin) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::show");
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -913,8 +915,6 @@ bool AudioPluginProcessorCLAP::initialise()
 
     extensionGUI.hide = [] (const clap_plugin_t* plugin) -> bool
     {
-        JUCE_DBG ("clap_plugin_gui_t::hide");
-
         auto wrapper = getWrapper (plugin);
         if (wrapper->audioPluginEditor == nullptr)
             return false;
@@ -1038,11 +1038,16 @@ const clap_plugin_t* AudioPluginProcessorCLAP::getPlugin() const
 
 void AudioPluginProcessorCLAP::editorResized()
 {
-    if (audioPluginEditor == nullptr)
+    if (audioPluginEditor == nullptr || hostTriggeredResizing)
         return;
 
     if (hostGUI != nullptr && hostGUI->request_resize != nullptr)
         hostGUI->request_resize (host, audioPluginEditor->getWidth(), audioPluginEditor->getHeight());
+}
+
+ScopedValueSetter<bool> AudioPluginProcessorCLAP::scopedHostEditorResizing()
+{
+    return { hostTriggeredResizing, true };
 }
 
 //==============================================================================
@@ -1067,22 +1072,16 @@ static const clap_plugin_factory_t plugin_factory = []
 
     factory.get_plugin_count = [] (const clap_plugin_factory* factory) -> uint32_t
     {
-        JUCE_DBG ("clap_plugin_factory_t::get_plugin_count");
-
         return 1;
     };
 
     factory.get_plugin_descriptor = [] (const clap_plugin_factory* factory, uint32_t index) -> const clap_plugin_descriptor_t*
     {
-        JUCE_DBG ("clap_plugin_factory_t::get_plugin_descriptor " << (int32_t) index);
-
         return index == 0 ? &yup::pluginDescriptor : nullptr;
     };
 
     factory.create_plugin = [] (const clap_plugin_factory* factory, const clap_host_t* host, const char* pluginId) -> const clap_plugin_t*
     {
-        JUCE_DBG ("clap_plugin_factory_t::create_plugin " << pluginId);
-
         if (! clap_version_is_compatible (host->clap_version) || std::string_view (pluginId) != yup::pluginDescriptor.id)
             return nullptr;
 
@@ -1103,8 +1102,6 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
 
     plugin.init = [] (const char* path) -> bool
     {
-        JUCE_DBG ("clap_plugin_entry_t::init " << path);
-
         yup::initialiseJuce_GUI();
         yup::initialiseYup_Windowing();
 
@@ -1113,16 +1110,12 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
 
     plugin.deinit = []
     {
-        JUCE_DBG ("clap_plugin_entry_t::deinit");
-
         yup::shutdownYup_Windowing();
         yup::shutdownJuce_GUI();
     };
 
     plugin.get_factory = [] (const char* factoryId) -> const void*
     {
-        JUCE_DBG ("clap_plugin_entry_t::get_factory " << factoryId);
-
         if (std::string_view (factoryId) == CLAP_PLUGIN_FACTORY_ID)
             return std::addressof (plugin_factory);
 

@@ -92,7 +92,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     SDL_SetWindowData (window, "self", this);
 
     if (parent != nullptr)
-        setNativeParent (nullptr, parent, window);
+        setNativeParent (parent, window);
 
     if (currentGraphicsApi == GraphicsContext::OpenGL)
     {
@@ -196,12 +196,13 @@ Size<int> SDL2ComponentNative::getContentSize() const
 
 void SDL2ComponentNative::setSize (const Size<int>& newSize)
 {
-    if (window == nullptr || screenBounds.getSize() == newSize)
+    if (window == nullptr)
         return;
 
-    SDL_SetWindowSize (window, newSize.getWidth(), newSize.getHeight());
-
     screenBounds = screenBounds.withSize (newSize);
+
+    if (auto currentSize = getSize(); currentSize != newSize)
+        SDL_SetWindowSize (window, jmax (1, newSize.getWidth()), jmax (1, newSize.getHeight()));
 }
 
 Size<int> SDL2ComponentNative::getSize() const
@@ -216,21 +217,21 @@ Size<int> SDL2ComponentNative::getSize() const
 
 void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
-    if (window == nullptr || screenBounds.getPosition() == newPosition)
+    if (window == nullptr)
         return;
 
-    SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
-
     screenBounds = screenBounds.withPosition (newPosition);
+
+    if (auto currentPosition = getPosition(); currentPosition != newPosition)
+        SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
 }
 
 Point<int> SDL2ComponentNative::getPosition() const
 {
-    if (window == nullptr)
-        return screenBounds.getPosition();
-
     int x = 0, y = 0;
-    SDL_GetWindowPosition (window, &x, &y);
+
+    if (window != nullptr)
+        SDL_GetWindowPosition (window, &x, &y);
 
     return { x, y };
 }
@@ -260,14 +261,21 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (! isFullScreen() && isDecorated())
         SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
-    SDL_SetWindowSize (window,
-                       jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
-                       jmax (1, newBounds.getHeight() - topMargin - bottomMargin));
+    auto adjustedBounds = Rectangle<int>
+    {
+        newBounds.getX() + leftMargin,
+        newBounds.getY() + topMargin,
+        jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
+        jmax (1, newBounds.getHeight() - topMargin - bottomMargin)
+    };
+
+    if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
+        SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
 
 #endif
 
-    //setPosition (newBounds.getPosition().translated (leftMargin, topMargin));
-    SDL_SetWindowPosition (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
+    if (auto currentPosition = getPosition(); currentPosition != adjustedBounds.getPosition())
+        SDL_SetWindowPosition (window, adjustedBounds.getX(), adjustedBounds.getY());
 
     screenBounds = newBounds;
 
@@ -480,7 +488,7 @@ void SDL2ComponentNative::run()
         renderEvent.reset();
         cancelPendingUpdate();
         triggerAsyncUpdate();
-        renderEvent.wait (maxFrameTimeMs - 2.0f);
+        renderEvent.wait (maxFrameTimeMs);
 
         // Measure spent time and cap the framerate
         double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -491,11 +499,8 @@ void SDL2ComponentNative::run()
         {
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
-            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
-                Thread::sleep (1);
-
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
-                Thread::sleep (0);
+                Thread::sleep (1);
         }
     }
 }
@@ -891,13 +896,18 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
+    if (internalBoundsChange)
+        return;
+
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
 
     if (parentWindow != nullptr)
     {
-        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
+
+        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
         setPosition (nativeWindowPos.getTopLeft());
     }
 }
@@ -912,7 +922,9 @@ void SDL2ComponentNative::handleResized (int width, int height)
 
     if (parentWindow != nullptr)
     {
-        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
+
+        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
         setPosition (nativeWindowPos.getTopLeft());
     }
 

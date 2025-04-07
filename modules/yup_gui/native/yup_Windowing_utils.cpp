@@ -203,7 +203,7 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
 
 //==============================================================================
 
-bool isMouseOutsideWindow(SDL_Window* window)
+bool isMouseOutsideWindow (SDL_Window* window)
 {
     int windowX, windowY, windowW, windowH;
     SDL_GetWindowPosition (window, &windowX, &windowY);
@@ -250,7 +250,24 @@ void* getNativeWindowHandle (SDL_Window* window)
 
 //==============================================================================
 
-Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
+#if JUCE_LINUX
+void* getNativeDisplayHandle (SDL_Window* window)
+{
+    if (window == nullptr)
+        return nullptr;
+
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION (&wmInfo.version);
+    if (SDL_GetWindowWMInfo (window, &wmInfo))
+        return reinterpret_cast<void*> (wmInfo.info.x11.display); // X11 Display
+
+    return nullptr;
+}
+#endif
+
+//==============================================================================
+
+Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 {
 #if JUCE_WINDOWS
     RECT windowRect;
@@ -266,16 +283,21 @@ Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
 
 #elif JUCE_MAC
     NSView* view = reinterpret_cast<NSView*> (nativeWindow);
-    NSRect viewRect = [view convertRect:[view bounds] toView:nil];
+    NSWindow* window = [view window];
 
-    NSRect windowRect = [[view window] convertRectToScreen:viewRect];
-    windowRect.origin.y = CGDisplayBounds (CGMainDisplayID()).size.height - (windowRect.origin.y + windowRect.size.height);
+    NSRect viewRectInWindow = [view convertRect:[view bounds] toView:nil];
+    NSRect windowRect = [window convertRectToScreen:viewRectInWindow];
+
+    NSScreen* mainScreen = [NSScreen screens].firstObject;
+    NSScreen* screen = [window screen] ?: mainScreen;
+    CGFloat adjustedY = NSMaxY ([screen frame]) - NSMaxY ([mainScreen frame]);
+    windowRect.origin.y = NSMaxY ([screen frame]) - NSMaxY (windowRect) - adjustedY;
 
     return {
         static_cast<int> (windowRect.origin.x),
         static_cast<int> (windowRect.origin.y),
-        static_cast<int> (windowRect.size.width),
-        static_cast<int> (windowRect.size.height)
+        static_cast<int> (NSWidth (windowRect)),
+        static_cast<int> (NSHeight (windowRect))
     };
 
 #elif JUCE_LINUX
@@ -289,7 +311,7 @@ Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
 
 //==============================================================================
 
-void setNativeParent (void* nativeDisplay, void* nativeWindow, SDL_Window* window)
+void setNativeParent (void* nativeWindow, SDL_Window* window)
 {
 #if JUCE_WINDOWS
     HWND hpar = reinterpret_cast<HWND> (nativeWindow);

@@ -38,9 +38,9 @@ bool isMouseOutsideWindow (SDL_Window* window);
 
 void* getNativeWindowHandle (SDL_Window* window);
 
-Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow);
+Rectangle<int> getNativeWindowPosition (void* nativeWindow);
 
-void setNativeParent (void* nativeDisplay, void* nativeWindow, SDL_Window* window);
+void setNativeParent (void* nativeWindow, SDL_Window* window);
 
 //==============================================================================
 
