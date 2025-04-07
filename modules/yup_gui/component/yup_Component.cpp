@@ -22,8 +22,6 @@
 namespace yup
 {
 
-extern void yup_setMouseCursor (const MouseCursor& mouseCursor);
-
 //==============================================================================
 
 Component::Component()
@@ -1055,7 +1053,7 @@ void Component::internalUserTriedToCloseWindow()
 
 void Component::updateMouseCursor()
 {
-    yup_setMouseCursor (mouseCursor);
+    Desktop::getInstance()->setMouseCursor (mouseCursor);
 }
 
 } // namespace yup

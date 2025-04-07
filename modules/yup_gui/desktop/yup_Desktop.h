@@ -58,6 +58,19 @@ public:
     */
     Display::Ptr getPrimaryDisplay() const;
 
+    /** Retries a pointer to the display containing the mouse cursor.
+
+        @return A pointer to the `Display` object which contains the mouse cursor..
+     */
+    Display::Ptr getDisplayContainingMouseCursor() const;
+
+    //==============================================================================
+
+    void setMouseCursor (const MouseCursor& cursorToSet);
+    MouseCursor getMouseCursor() const;
+
+    Point<float> getCurrentMouseLocation() const;
+
     //==============================================================================
     // TODO - doxygen
     void updateDisplays();
@@ -81,6 +94,7 @@ private:
     Desktop();
 
     ReferenceCountedArray<Display> displays;
+    std::optional<MouseCursor> currentMouseCursor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

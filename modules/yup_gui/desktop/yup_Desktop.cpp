@@ -49,6 +49,24 @@ Display::Ptr Desktop::getPrimaryDisplay() const
     return ! displays.isEmpty() ? getDisplay (0) : nullptr;
 }
 
+Display::Ptr Desktop::getDisplayContainingMouseCursor() const
+{
+    auto cursorLocation = getCurrentMouseLocation();
+
+    for (auto& display : displays)
+    {
+        if (display->workArea.contains (cursorLocation.to<int>()))
+            return display;
+    }
+
+    return ! displays.isEmpty() ? getDisplay (0) : nullptr;
+}
+
+MouseCursor Desktop::getMouseCursor() const
+{
+    return currentMouseCursor.value_or (MouseCursor (MouseCursor::Default));
+}
+
 void Desktop::handleDisplayConnected (int displayIndex)
 {
     updateDisplays();

@@ -24,39 +24,15 @@ namespace yup
 
 //==============================================================================
 
-void yup_setMouseCursor (const MouseCursor& mouseCursor)
-{
-    static const auto cursors = []
-    {
-        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
-            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
-            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
-            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
-            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
-            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
-            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
-            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
-            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
-            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
-            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
-            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
-            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
-        };
-    }();
+#ifndef YUP_WINDOWING_LOGGING
+#define YUP_WINDOWING_LOGGING 1
+#endif
 
-    if (mouseCursor.getType() == MouseCursor::None)
-    {
-        SDL_ShowCursor (SDL_DISABLE);
-    }
-    else
-    {
-        auto it = cursors.find (mouseCursor.getType());
-        if (it != cursors.end())
-            SDL_SetCursor (it->second);
-
-        SDL_ShowCursor (SDL_ENABLE);
-    }
-}
+#if YUP_WINDOWING_LOGGING
+#define YUP_WINDOWING_LOG(textToWrite) JUCE_DBG (textToWrite)
+#else
+#define YUP_WINDOWING_LOG(textToWrite) {}
+#endif
 
 //==============================================================================
 
@@ -1317,6 +1293,51 @@ void Desktop::updateDisplays()
 
         displays.add (display.release());
     }
+}
+
+void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
+{
+    static const auto cursors = []
+    {
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
+            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
+        };
+    }();
+
+    currentMouseCursor = cursorToSet;
+
+    if (cursorToSet.getType() == MouseCursor::None)
+    {
+        SDL_ShowCursor (SDL_DISABLE);
+    }
+    else
+    {
+        auto it = cursors.find (cursorToSet.getType());
+        if (it != cursors.end())
+            SDL_SetCursor (it->second);
+
+        SDL_ShowCursor (SDL_ENABLE);
+    }
+}
+
+Point<float> Desktop::getCurrentMouseLocation() const
+{
+    int x = 0, y = 0;
+
+    SDL_GetGlobalMouseState (&x, &y);
+
+    return { static_cast<float> (x), static_cast<float> (y) };
 }
 
 //==============================================================================

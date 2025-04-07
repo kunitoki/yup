@@ -23,17 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-#ifndef YUP_WINDOWING_LOGGING
-#define YUP_WINDOWING_LOGGING 1
-#endif
-
-#if YUP_WINDOWING_LOGGING
-#define YUP_WINDOWING_LOG(textToWrite) JUCE_DBG (textToWrite)
-#else
-#define YUP_WINDOWING_LOG(textToWrite) {}
-#endif
-
-//==============================================================================
 class SDL2ComponentNative final
     : public ComponentNative
     , public Timer
