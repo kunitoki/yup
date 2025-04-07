@@ -395,7 +395,7 @@ static void runNSApplication()
     }
 }
 
-static bool runNSApplicationSlice (int millisecondsToRunFor, Atomic<int>& quitMessagePosted)
+static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMessagePosted)
 {
     jassert(millisecondsToRunFor >= 0);
 
@@ -438,11 +438,11 @@ void MessageManager::runDispatchLoop()
     // must only be called by the message thread!
     jassert(isThisTheMessageThread());
 
-    constexpr int millisecondsToRunFor = static_cast<int> (1000.0f / 60.0f);
+    constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f);
 
     while (quitMessagePosted.get() == 0)
     {
-        if (runNSApplicationSlice (millisecondsToRunFor, quitMessagePosted))
+        if (runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted))
         {
             if (loopCallback)
                 loopCallback();
@@ -478,7 +478,7 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
     jassert(millisecondsToRunFor >= 0);
     jassert(isThisTheMessageThread()); // must only be called by the message thread
 
-    return runNSApplicationSlice (millisecondsToRunFor, quitMessagePosted);
+    return runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted);
 }
 #endif
 
