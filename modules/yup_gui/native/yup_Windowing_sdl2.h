@@ -138,6 +138,7 @@ public:
     void handleRestored();
     void handleExposed();
     void handleContentScaleChanged();
+    void handleDisplayChanged();
     void handleUserTriedToCloseWindow();
 
     //==============================================================================

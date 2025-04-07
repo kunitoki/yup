@@ -207,8 +207,9 @@ bool SDL2ComponentNative::isVisible() const
 Size<int> SDL2ComponentNative::getContentSize() const
 {
     const auto dpiScale = getScaleDpi();
-    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
-    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
+
+    const auto width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    const auto  height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
     return { width, height };
 }
@@ -910,6 +911,8 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
@@ -923,6 +926,8 @@ void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 
 void SDL2ComponentNative::handleResized (int width, int height)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
@@ -938,6 +943,8 @@ void SDL2ComponentNative::handleResized (int width, int height)
 
 void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     if (gotFocus)
     {
         if (! isRendering())
@@ -977,9 +984,16 @@ void SDL2ComponentNative::handleContentScaleChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
-
     component.internalContentScaleChanged (getScaleDpi());
+
+    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
+}
+
+void SDL2ComponentNative::handleDisplayChanged()
+{
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    component.internalDisplayChanged();
 }
 
 void SDL2ComponentNative::handleUserTriedToCloseWindow()
@@ -1038,7 +1052,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_WINDOWEVENT_RESIZED:
-            //YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_SIZE_CHANGED:
