@@ -880,7 +880,7 @@ bool AudioPluginProcessorCLAP::initialise()
 #elif JUCE_WINDOWS
             window->win32);
 #elif JUCE_LINUX
-            window->x11);
+            reinterpret_cast<void*> (window->x11));
 #else
             nullptr);
 #endif
