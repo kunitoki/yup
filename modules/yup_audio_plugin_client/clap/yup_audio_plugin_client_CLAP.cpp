@@ -469,9 +469,7 @@ AudioPluginProcessorCLAP::AudioPluginProcessorCLAP (const clap_host_t* host)
         return getWrapper (plugin)->getExtension (id);
     };
 
-    plugin.on_main_thread = [] (const clap_plugin* plugin)
-    {
-    };
+    plugin.on_main_thread = [] (const clap_plugin* plugin) {};
 }
 
 //==============================================================================
@@ -734,8 +732,8 @@ bool AudioPluginProcessorCLAP::initialise()
                 flags.set (ComponentNative::renderContinuous);
 
             auto options = ComponentNative::Options()
-                           .withFlags (flags)
-                           .withResizableWindow (audioProcessorEditor->isResizable());
+                               .withFlags (flags)
+                               .withResizableWindow (audioProcessorEditor->isResizable());
 
             wrapper->audioPluginEditor->addToDesktop (options);
             wrapper->audioPluginEditor->setVisible (true);
@@ -899,9 +897,7 @@ bool AudioPluginProcessorCLAP::initialise()
         return false;
     };
 
-    extensionGUI.suggest_title = [] (const clap_plugin_t* plugin, const char* title)
-    {
-    };
+    extensionGUI.suggest_title = [] (const clap_plugin_t* plugin, const char* title) {};
 
     extensionGUI.show = [] (const clap_plugin_t* plugin) -> bool
     {

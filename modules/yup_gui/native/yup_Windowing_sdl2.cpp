@@ -261,8 +261,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (! isFullScreen() && isDecorated())
         SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
-    auto adjustedBounds = Rectangle<int>
-    {
+    auto adjustedBounds = Rectangle<int> {
         newBounds.getX() + leftMargin,
         newBounds.getY() + topMargin,
         jmax (1, newBounds.getWidth() - leftMargin - rightMargin),

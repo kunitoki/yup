@@ -199,6 +199,7 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
 
     return {};
 }
+
 // clang-format on
 
 //==============================================================================
@@ -212,8 +213,7 @@ bool isMouseOutsideWindow (SDL_Window* window)
     int mouseX, mouseY;
     Uint32 mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
-    return (mouseX < windowX || mouseX > windowX + windowW ||
-            mouseY < windowY || mouseY > windowY + windowH);
+    return (mouseX < windowX || mouseX > windowX + windowW || mouseY < windowY || mouseY > windowY + windowH);
 }
 
 //==============================================================================

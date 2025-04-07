@@ -503,7 +503,7 @@ void Component::removeFromDesktop()
 
 //==============================================================================
 
-void Component::toFront(bool shouldGainKeyboardFocus)
+void Component::toFront (bool shouldGainKeyboardFocus)
 {
     if (parentComponent == nullptr)
         return;
@@ -642,7 +642,7 @@ void Component::removeChildComponent (Component* component)
 
 void Component::removeChildComponent (int index)
 {
-    if (! isPositiveAndBelow(index, children.size()))
+    if (! isPositiveAndBelow (index, children.size()))
         return;
 
     auto component = children.removeAndReturn (index);
