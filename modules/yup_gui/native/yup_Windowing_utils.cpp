@@ -347,7 +347,8 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
         display,
         reinterpret_cast<Window> (getNativeWindowHandle (window)),
         reinterpret_cast<Window> (nativeWindow),
-        0, 0);
+        0,
+        0);
 
 #else
 
