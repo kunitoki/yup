@@ -31,7 +31,9 @@ namespace yup
 #if YUP_WINDOWING_LOGGING
 #define YUP_WINDOWING_LOG(textToWrite) JUCE_DBG (textToWrite)
 #else
-#define YUP_WINDOWING_LOG(textToWrite) {}
+#define YUP_WINDOWING_LOG(textToWrite) \
+    {                                  \
+    }
 #endif
 
 //==============================================================================
@@ -185,7 +187,7 @@ Size<int> SDL2ComponentNative::getContentSize() const
     const auto dpiScale = getScaleDpi();
 
     const auto width = static_cast<int> (screenBounds.getWidth() * dpiScale);
-    const auto  height = static_cast<int> (screenBounds.getHeight() * dpiScale);
+    const auto height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
     return { width, height };
 }
