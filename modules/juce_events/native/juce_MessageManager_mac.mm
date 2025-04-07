@@ -72,6 +72,8 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                                                                andSelector:@selector(handleQuitEvent:withReplyEvent:)
                                                              forEventClass:kCoreEventClass
                                                                 andEventID:kAEQuitApplication];
+
+            [NSApp stop:nil];
         });
 
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
@@ -92,9 +94,10 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
             JUCEApplicationBase::appWillTerminateByForce();
         });
 
-        addMethod(@selector(handleQuitEvent:), [](id self, SEL, NSAppleEventDescriptor* /*event*/, NSAppleEventDescriptor*)
+        addMethod(@selector(handleQuitEvent:withReplyEvent:), [](id self, SEL, NSAppleEventDescriptor*, NSAppleEventDescriptor*)
         {
-            [self terminate:self];
+            if (auto* app = JUCEApplicationBase::getInstance())
+                app->systemRequestedQuit();
         });
 
         addMethod(@selector(application:openFile:), [](id /*self*/, SEL, NSApplication*, NSString* filename)
@@ -439,6 +442,8 @@ void MessageManager::runDispatchLoop()
     jassert(isThisTheMessageThread());
 
     constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f);
+
+    runNSApplication();
 
     while (quitMessagePosted.get() == 0)
     {
