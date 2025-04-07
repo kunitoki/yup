@@ -142,14 +142,14 @@ void Component::setTitle (const String& title)
 
 //==============================================================================
 
+Point<float> Component::getPosition() const
+{
+    return boundsInParent.getTopLeft();
+}
+
 void Component::setPosition (const Point<float>& newPosition)
 {
-    boundsInParent = boundsInParent.withPosition (newPosition);
-
-    if (options.onDesktop && native != nullptr)
-        native->setPosition (newPosition.to<int>());
-
-    moved();
+    boundsInParent.setTopLeft (newPosition);
 }
 
 float Component::getX() const
@@ -182,9 +182,79 @@ float Component::getBottom() const
     return boundsInParent.getY() + boundsInParent.getHeight();
 }
 
-Point<float> Component::getPosition() const
+Point<float> Component::getTopLeft() const
 {
-    return boundsInParent.getPosition();
+    return boundsInParent.getTopLeft();
+}
+
+void Component::setTopLeft (const Point<float>& newTopLeft)
+{
+    boundsInParent.setTopLeft (newTopLeft);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newTopLeft.to<int>());
+
+    moved();
+}
+
+Point<float> Component::getBottomLeft() const
+{
+    return boundsInParent.getBottomLeft();
+}
+
+void Component::setBottomLeft (const Point<float>& newBottomLeft)
+{
+    boundsInParent.setBottomLeft (newBottomLeft);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newBottomLeft.to<int>().translated (0, -getHeight()));
+
+    moved();
+}
+
+Point<float> Component::getTopRight() const
+{
+    return boundsInParent.getTopRight();
+}
+
+void Component::setTopRight (const Point<float>& newTopRight)
+{
+    boundsInParent.setTopRight (newTopRight);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newTopRight.to<int>().translated (-getWidth(), 0));
+
+    moved();
+}
+
+Point<float> Component::getBottomRight() const
+{
+    return boundsInParent.getBottomRight();
+}
+
+void Component::setBottomRight (const Point<float>& newBottomRight)
+{
+    boundsInParent.setBottomRight (newBottomRight);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newBottomRight.to<int>().translated (-getWidth(), -getHeight()));
+
+    moved();
+}
+
+Point<float> Component::getCenter() const
+{
+    return boundsInParent.getBottomRight();
+}
+
+void Component::setCenter (const Point<float>& newCenter)
+{
+    boundsInParent.setCenter (newCenter);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newCenter.to<int>().translated (-getWidth() / 2, -getHeight() / 2));
+
+    moved();
 }
 
 void Component::moved()

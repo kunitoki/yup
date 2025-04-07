@@ -180,6 +180,21 @@ public:
      */
     float getBottom() const;
 
+    Point<float> getTopLeft() const;
+    void setTopLeft (const Point<float>& newTopLeft);
+
+    Point<float> getBottomLeft() const;
+    void setBottomLeft (const Point<float>& newBottomLeft);
+
+    Point<float> getTopRight() const;
+    void setTopRight (const Point<float>& newTopRight);
+
+    Point<float> getBottomRight() const;
+    void setBottomRight (const Point<float>& newBottomRight);
+
+    Point<float> getCenter() const;
+    void setCenter (const Point<float>& newCenter);
+
     /**
         Called when the position of the component changes.
      */
