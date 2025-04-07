@@ -22,6 +22,12 @@
 namespace yup
 {
 
+//==============================================================================
+
+JUCE_IMPLEMENT_SINGLETON (Desktop)
+
+//==============================================================================
+
 Desktop::Desktop()
 {
 }
@@ -31,10 +37,14 @@ Desktop::~Desktop()
     clearSingletonInstance();
 }
 
+//==============================================================================
+
 int Desktop::getNumDisplays() const
 {
     return displays.size();
 }
+
+//==============================================================================
 
 Display::Ptr Desktop::getDisplay (int displayIndex) const
 {
@@ -44,28 +54,48 @@ Display::Ptr Desktop::getDisplay (int displayIndex) const
     return nullptr;
 }
 
+//==============================================================================
+
+Span<const Display* const> Desktop::getDisplays() const
+{
+    return { displays.data(), static_cast<size_t> (displays.size()) };
+}
+
+//==============================================================================
+
 Display::Ptr Desktop::getPrimaryDisplay() const
 {
     return ! displays.isEmpty() ? getDisplay (0) : nullptr;
 }
 
+//==============================================================================
+
 Display::Ptr Desktop::getDisplayContainingMouseCursor() const
 {
-    auto cursorLocation = getCurrentMouseLocation();
+    return getDisplayContaining (getCurrentMouseLocation());
+}
 
+//==============================================================================
+
+Display::Ptr Desktop::getDisplayContaining (const Point<float>& location) const
+{
     for (auto& display : displays)
     {
-        if (display->workArea.contains (cursorLocation.to<int>()))
+        if (display->workArea.contains (location.to<int>()))
             return display;
     }
 
     return ! displays.isEmpty() ? getDisplay (0) : nullptr;
 }
 
+//==============================================================================
+
 MouseCursor Desktop::getMouseCursor() const
 {
     return currentMouseCursor.value_or (MouseCursor (MouseCursor::Default));
 }
+
+//==============================================================================
 
 void Desktop::handleDisplayConnected (int displayIndex)
 {
@@ -86,7 +116,5 @@ void Desktop::handleDisplayOrientationChanged (int displayIndex)
 {
     updateDisplays();
 }
-
-JUCE_IMPLEMENT_SINGLETON (Desktop)
 
 } // namespace yup
