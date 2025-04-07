@@ -245,6 +245,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (window == nullptr)
         return;
 
+    auto adjustedBounds = newBounds;
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
 #if JUCE_EMSCRIPTEN && RIVE_WEBGL
@@ -261,12 +262,11 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (! isFullScreen() && isDecorated())
         SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
-    auto adjustedBounds = Rectangle<int> {
-        newBounds.getX() + leftMargin,
-        newBounds.getY() + topMargin,
-        jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
-        jmax (1, newBounds.getHeight() - topMargin - bottomMargin)
-    };
+    adjustedBounds.translate (leftMargin, topMargin);
+    adjustedBounds.setSize({
+        jmax (1, adjustedBounds.getWidth() - leftMargin - rightMargin),
+        jmax (1, adjustedBounds.getHeight() - topMargin - bottomMargin)
+    });
 
     if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
         SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
