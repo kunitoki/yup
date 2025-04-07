@@ -263,10 +263,8 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
         SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
     adjustedBounds.translate (leftMargin, topMargin);
-    adjustedBounds.setSize({
-        jmax (1, adjustedBounds.getWidth() - leftMargin - rightMargin),
-        jmax (1, adjustedBounds.getHeight() - topMargin - bottomMargin)
-    });
+    adjustedBounds.setSize ({ jmax (1, adjustedBounds.getWidth() - leftMargin - rightMargin),
+                              jmax (1, adjustedBounds.getHeight() - topMargin - bottomMargin) });
 
     if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
         SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
