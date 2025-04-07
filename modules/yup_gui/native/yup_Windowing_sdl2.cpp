@@ -1340,6 +1340,11 @@ Point<float> Desktop::getCurrentMouseLocation() const
     return { static_cast<float> (x), static_cast<float> (y) };
 }
 
+void Desktop::setCurrentMouseLocation (const Point<float>& location)
+{
+    SDL_WarpMouseGlobal (static_cast<int> (location.getX()), static_cast<int> (location.getY()));
+}
+
 //==============================================================================
 
 void initialiseYup_Windowing()

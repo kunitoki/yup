@@ -97,6 +97,12 @@ public:
     */
     Point<float> getCurrentMouseLocation() const;
 
+    /** Retrieves the current absolute mouse location.
+
+        @return The current absolute mouse location.
+    */
+    void setCurrentMouseLocation (const Point<float>& location);
+
     //==============================================================================
     /** Updates the list of displays. */
     void updateDisplays();
