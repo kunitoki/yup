@@ -1250,6 +1250,21 @@ public:
     }
 
     //==============================================================================
+    /** Aligns a Size to this rectangle.
+
+        @return A Rectangle representing the center aligned rectangle with specificed size..
+    */
+    [[nodiscard]] constexpr Rectangle centeredRectangleWithSize (const Size<ValueType>& sizeOfRectangleToCenter) const noexcept
+    {
+        return {
+            getX() + jmax (ValueType (0), static_cast<ValueType> (getWidth() - sizeOfRectangleToCenter.getWidth()) / ValueType (2)),
+            getY() + jmax (ValueType (0), static_cast<ValueType> (getHeight() - sizeOfRectangleToCenter.getHeight()) / ValueType (2)),
+            sizeOfRectangleToCenter.getWidth(),
+            sizeOfRectangleToCenter.getHeight()
+        };
+    }
+
+    //==============================================================================
     // TODO - doxygen
     [[nodiscard]] Rectangle& transform (const AffineTransform& t) noexcept
     {
@@ -1297,6 +1312,13 @@ public:
     [[nodiscard]] constexpr Rectangle<T> to() const noexcept
     {
         return { xy.template to<T>(), size.template to<T>() };
+    }
+
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<int>>
+    {
+        return { xy.roundToInt(), size.roundToInt() };
     }
 
     //==============================================================================
