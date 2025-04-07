@@ -339,14 +339,14 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
 #elif JUCE_LINUX
-    Display* display = reinterpret_cast<Display*> (getNativeDisplayHandle (window));
+    auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window));
     if (display == nullptr)
         return;
 
     ::XReparentWindow (
         display,
-        reinterpret_cast<Window> (getNativeWindowHandle (window)),
-        reinterpret_cast<Window> (nativeWindow),
+        reinterpret_cast<::Window> (getNativeWindowHandle (window)),
+        reinterpret_cast<::Window> (nativeWindow),
         0,
         0);
 
