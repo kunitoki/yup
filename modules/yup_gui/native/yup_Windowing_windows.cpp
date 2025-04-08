@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -24,28 +24,18 @@ namespace yup
 
 //==============================================================================
 
-MouseEvent::Buttons toMouseButton (Uint8 sdlButton) noexcept;
+Rectangle<int> getNativeWindowPosition (void* nativeWindow)
+{
+    RECT windowRect;
 
-KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept;
+    GetWindowRect (reinterpret_cast<HWND> (nativeWindow), &windowRect);
 
-KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifiers) noexcept;
-
-//==============================================================================
-
-bool isMouseOutsideWindow (SDL_Window* window);
-
-//==============================================================================
-
-void* getNativeWindowHandle (SDL_Window* window);
-
-Rectangle<int> getNativeWindowPosition (void* nativeWindow);
-
-void setNativeParent (void* nativeWindow, SDL_Window* window);
-
-//==============================================================================
-
-GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext::Api>& forceContextApi);
-
-Uint32 setContextWindowHints (GraphicsContext::Api desiredApi);
+    return {
+        windowRect.left,
+        windowRect.top,
+        windowRect.right - windowRect.left,
+        windowRect.bottom - windowRect.top
+    };
+}
 
 } // namespace yup

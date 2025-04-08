@@ -244,7 +244,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
 
 Point<float> Component::getCenter() const
 {
-    return boundsInParent.getBottomRight();
+    return boundsInParent.getCenter();
 }
 
 void Component::setCenter (const Point<float>& newCenter)

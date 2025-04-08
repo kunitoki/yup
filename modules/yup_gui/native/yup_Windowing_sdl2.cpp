@@ -49,7 +49,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , Thread ("YUP Render Thread")
     , parentWindow (parent)
     , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
-    , clearColor (options.clearColor.value_or (Colors::black))
+    , clearColor (options.clearColor.value_or (Colors::transparentBlack))
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
@@ -485,19 +485,25 @@ void SDL2ComponentNative::run()
         renderEvent.reset();
         cancelPendingUpdate();
         triggerAsyncUpdate();
-        renderEvent.wait (maxFrameTimeMs);
+        renderEvent.wait (maxFrameTimeMs - 4.0);
 
         // Measure spent time and cap the framerate
         double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
-        if (secondsToWait > 0.0f)
+        if (secondsToWait > 0.0)
         {
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
+            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
+                std::this_thread::sleep_for (std::chrono::milliseconds (2));
+
+            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
+                std::this_thread::sleep_for (std::chrono::milliseconds (1));
+
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
-                Thread::sleep (1);
+                std::this_thread::sleep_for (std::chrono::milliseconds (0));
         }
     }
 }

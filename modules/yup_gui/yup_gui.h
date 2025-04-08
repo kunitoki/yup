@@ -84,3 +84,6 @@
 #include "widgets/yup_Slider.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
+
+//==============================================================================
+#include "native/yup_WindowingHelpers.h"

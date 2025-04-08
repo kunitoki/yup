@@ -51,18 +51,27 @@
 #if JUCE_MAC
 #import <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
-#else
+
+#include "native/yup_Windowing_mac.mm"
+#endif
+
+#if JUCE_IOS
 #include "native/yup_Windowing_ios.mm"
 #endif
 
 //==============================================================================
 #elif JUCE_LINUX
+#include <X11/Xlib.h>
+
 #undef None
 #undef KeyPress
 #undef SIZEOF
 
+#include "native/yup_Windowing_linux.cpp"
+
 //==============================================================================
 #elif JUCE_WINDOWS
+#include "native/yup_Windowing_windows.cpp"
 
 //==============================================================================
 #elif JUCE_ANDROID
@@ -91,7 +100,6 @@
 #include "windowing/yup_DocumentWindow.cpp"
 
 //==============================================================================
-#include "native/yup_Windowing_utils.h"
-#include "native/yup_Windowing_utils.cpp"
+#include "native/yup_WindowingUtilities_sdl2.cpp"
 #include "native/yup_Windowing_sdl2.h"
 #include "native/yup_Windowing_sdl2.cpp"

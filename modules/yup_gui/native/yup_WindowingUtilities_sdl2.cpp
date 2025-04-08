@@ -267,55 +267,12 @@ void* getNativeDisplayHandle (SDL_Window* window)
 
 //==============================================================================
 
+#if !JUCE_WINDOWS && !JUCE_MAC && !JUCE_LINUX
 Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 {
-#if JUCE_WINDOWS
-    RECT windowRect;
-
-    GetWindowRect (reinterpret_cast<HWND> (nativeWindow), &windowRect);
-
-    return {
-        windowRect.left,
-        windowRect.top,
-        windowRect.right - windowRect.left,
-        windowRect.bottom - windowRect.top
-    };
-
-#elif JUCE_MAC
-    NSView* view = reinterpret_cast<NSView*> (nativeWindow);
-    NSWindow* window = [view window];
-
-    // Convert view bounds to window coordinates
-    NSRect viewRectInWindow = [view convertRect:[view bounds] toView:nil];
-
-    // Convert window coordinates to global macOS screen coordinates
-    NSRect windowRect = [window convertRectToScreen:viewRectInWindow];
-
-    // Get main screen (primary) and current screen (window's screen)
-    NSScreen* mainScreen = [NSScreen screens].firstObject;
-    NSScreen* screen = [window screen] ?: mainScreen;
-
-    // Calculate vertical offset between current screen and main screen
-    CGFloat adjustedY = NSMaxY ([screen frame]) - NSMaxY ([mainScreen frame]);
-
-    // Correctly flip Y coordinate relative to main screen's top-left origin
-    windowRect.origin.y = NSMaxY ([screen frame]) - NSMaxY (windowRect) - adjustedY;
-
-    return {
-        static_cast<int> (windowRect.origin.x),
-        static_cast<int> (windowRect.origin.y),
-        static_cast<int> (NSWidth (windowRect)),
-        static_cast<int> (NSHeight (windowRect))
-    };
-
-#elif JUCE_LINUX
     return {};
-
-#else
-    return {};
-
-#endif
 }
+#endif
 
 //==============================================================================
 
@@ -339,11 +296,14 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
 #elif JUCE_LINUX
+    if (! X11Functions::getInstance()->isX11Available())
+        return;
+
     auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window));
     if (display == nullptr)
         return;
 
-    ::XReparentWindow (
+    X11Functions::getInstance()->XReparentWindow (
         display,
         reinterpret_cast<::Window> (getNativeWindowHandle (window)),
         reinterpret_cast<::Window> (nativeWindow),
