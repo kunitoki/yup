@@ -41,7 +41,7 @@ public:
     static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
     static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
-    static inline constexpr Flags defaultFlags = renderContinuous | decoratedWindow | resizableWindow | allowHighDensityDisplay;
+    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Configuration options for creating a native component. */
@@ -179,7 +179,7 @@ public:
     //==============================================================================
     virtual void repaint() = 0;
     virtual void repaint (const Rectangle<float>& rect) = 0;
-    virtual Rectangle<float> getRepaintArea() const = 0;
+    virtual const RectangleList<float>& getRepaintAreas() const = 0;
 
     //==============================================================================
     virtual float getScaleDpi() const = 0;

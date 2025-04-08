@@ -80,7 +80,7 @@ public:
     //==============================================================================
     void repaint() override;
     void repaint (const Rectangle<float>& rect) override;
-    Rectangle<float> getRepaintArea() const override;
+    const RectangleList<float>& getRepaintAreas() const override;
 
     //==============================================================================
     float getScaleDpi() const override;
@@ -177,6 +177,8 @@ private:
 
     RelativeTime doubleClickTime;
 
+    RectangleList<float> currentRepaintAreas;
+
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
     double frameRateStartTimeSeconds = 0.0;
@@ -192,8 +194,6 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     bool updateOnlyWhenFocused = false;
-
-    Rectangle<float> currentRepaintArea;
 };
 
 } // namespace yup

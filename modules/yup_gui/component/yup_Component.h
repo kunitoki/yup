@@ -377,6 +377,12 @@ public:
      */
     const ComponentNative* getNativeComponent() const;
 
+    /** */
+    virtual void attachedToNative();
+
+    /** */
+    virtual void detachedFromNative();
+
     //==============================================================================
     /**
         Check if the component is on the desktop.

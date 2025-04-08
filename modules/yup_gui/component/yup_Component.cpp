@@ -466,6 +466,14 @@ const ComponentNative* Component::getNativeComponent() const
     return parentComponent->getNativeComponent();
 }
 
+void Component::attachedToNative()
+{
+}
+
+void Component::detachedFromNative()
+{
+}
+
 //==============================================================================
 
 bool Component::isOnDesktop() const
@@ -488,6 +496,8 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
+    attachedToNative();
+
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
 
@@ -499,6 +509,8 @@ void Component::removeFromDesktop()
     options.onDesktop = false;
 
     native.reset();
+
+    detachedFromNative();
 }
 
 //==============================================================================

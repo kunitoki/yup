@@ -409,20 +409,19 @@ void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 
 void SDL2ComponentNative::repaint()
 {
-    currentRepaintArea = Rectangle<float>().withSize (getSize().to<float>());
+    currentRepaintAreas.clearQuick();
+
+    currentRepaintAreas.add (Rectangle<float>().withSize (getSize().to<float>()));
 }
 
 void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
 {
-    if (! currentRepaintArea.isEmpty())
-        currentRepaintArea = currentRepaintArea.smallestContainingRectangle (rect);
-    else
-        currentRepaintArea = rect;
+    currentRepaintAreas.add (rect);
 }
 
-Rectangle<float> SDL2ComponentNative::getRepaintArea() const
+const RectangleList<float>& SDL2ComponentNative::getRepaintAreas() const
 {
-    return currentRepaintArea;
+    return currentRepaintAreas;
 }
 
 //==============================================================================
@@ -497,13 +496,13 @@ void SDL2ComponentNative::run()
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
-                std::this_thread::sleep_for (std::chrono::milliseconds (2));
+                std::this_thread::sleep_for (std::chrono::microseconds (1000));
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
-                std::this_thread::sleep_for (std::chrono::milliseconds (1));
+                std::this_thread::sleep_for (std::chrono::microseconds (500));
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
-                std::this_thread::sleep_for (std::chrono::milliseconds (0));
+                std::this_thread::sleep_for (std::chrono::microseconds (10));
         }
     }
 }
@@ -565,7 +564,7 @@ void SDL2ComponentNative::renderContext()
 
     if (renderContinuous)
         repaint();
-    else if (currentRepaintArea.isEmpty())
+    else if (currentRepaintAreas.isEmpty())
         return;
 
     auto renderFrame = [&]
@@ -573,7 +572,7 @@ void SDL2ComponentNative::renderContext()
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
         // Setup frame description
-        const auto loadAction = renderContinuous
+        const auto loadAction = (renderContinuous && currentGraphicsApi != GraphicsContext::Metal)
                                   ? rive::gpu::LoadAction::clear
                                   : rive::gpu::LoadAction::preserveRenderTarget;
 
@@ -598,10 +597,13 @@ void SDL2ComponentNative::renderContext()
         // Repaint components hierarchy
         if (renderer != nullptr)
         {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+            for (auto& repaintArea : currentRepaintAreas)
+            {
+                YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
 
-            Graphics g (*context, *renderer, dpiScale);
-            component.internalPaint (g, currentRepaintArea, renderContinuous);
+                Graphics g (*context, *renderer, dpiScale);
+                component.internalPaint (g, repaintArea, renderContinuous);
+            }
         }
 
         // Finish context drawing
@@ -614,8 +616,8 @@ void SDL2ComponentNative::renderContext()
     };
 
     renderFrame();
-    if (! renderContinuous)
-        renderFrame(); // This is needed on double buffered platforms
+    if (! renderContinuous && currentGraphicsApi != GraphicsContext::Metal)
+        renderFrame(); // This is needed on double buffered platforms until we render on a single texture!
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
@@ -634,7 +636,7 @@ void SDL2ComponentNative::renderContext()
         frameRateCounter = 0;
     }
 
-    currentRepaintArea = {};
+    currentRepaintAreas.clearQuick();
 }
 
 //==============================================================================

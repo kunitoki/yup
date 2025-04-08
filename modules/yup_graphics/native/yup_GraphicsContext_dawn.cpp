@@ -198,9 +198,9 @@ public:
 
     Factory* factory() override { return m_plsContext.get(); }
 
-    rive::pls::PLSRenderContext* renderContextOrNull() override { return m_plsContext.get(); }
+    rive::pls::PLSRenderContext* renderContext() override { return m_plsContext.get(); }
 
-    rive::pls::PLSRenderTarget* renderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::pls::PLSRenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {

@@ -412,15 +412,21 @@ static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMes
             if (msRemaining <= 0)
                 break;
 
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
+            NSDate* untilDate = [NSDate dateWithTimeIntervalSinceNow:(msRemaining * 0.001)];
 
-            if (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                                untilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]
+            NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                                untilDate:untilDate
                                                    inMode:NSDefaultRunLoopMode
-                                                  dequeue:YES])
+                                                  dequeue:YES];
+            if (event)
             {
-                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(e))
-                    [NSApp sendEvent:e];
+                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(event))
+                    [NSApp sendEvent:event];
+            }
+            else
+            {
+                // No event received within timeout, exit loop
+                break;
             }
         }
     }
