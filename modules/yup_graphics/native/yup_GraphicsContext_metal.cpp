@@ -23,12 +23,14 @@
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/metal/render_context_metal_impl.h"
 
-#include <TargetConditionals.h>
-
 #if JUCE_MAC
 #include "yup_RenderShader_mac.c"
-#else
+#elif JUCE_IOS_SIMULATOR
+#include "yup_RenderShader_iossim.c"
+#elif JUCE_IOS
 #include "yup_RenderShader_ios.c"
+#else
+#error Unsupported target sdk!
 #endif
 
 #import <simd/simd.h>
@@ -137,7 +139,7 @@ public:
 
     float dpiScale (void* window) const override
     {
-#if TARGET_OS_IOS
+#if JUCE_IOS
         UIWindow* uiWindow = (__bridge UIWindow*) window;
         UIScreen* screen = [uiWindow screen] ?: [UIScreen mainScreen];
         return screen.nativeScale;
@@ -159,7 +161,7 @@ public:
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-#if ! TARGET_OS_IOS
+#if JUCE_MAC
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
@@ -172,11 +174,11 @@ public:
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
         m_swapchain.maximumDrawableCount = 2;
-#if ! TARGET_OS_IOS
+#if JUCE_MAC
         m_swapchain.displaySyncEnabled = NO;
 #endif
 
-#if TARGET_OS_IOS
+#if JUCE_IOS
         UIView* view = (__bridge UIView*) window;
         m_swapchain.frame = view.bounds;
         [view.layer addSublayer:m_swapchain];
