@@ -62,6 +62,7 @@
 //==============================================================================
 #elif JUCE_LINUX
 #include <X11/Xlib.h>
+#include <dlfcn.h>
 
 #undef None
 #undef KeyPress
