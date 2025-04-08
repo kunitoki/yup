@@ -49,7 +49,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , Thread ("YUP Render Thread")
     , parentWindow (parent)
     , currentGraphicsApi (getGraphicsContextApi (options.graphicsApi))
-    , clearColor (options.clearColor.value_or (Colors::transparentBlack))
+    , clearColor (options.clearColor.value_or (Colors::black))
     , screenBounds (component.getBounds().to<int>())
     , doubleClickTime (options.doubleClickTime.value_or (RelativeTime::milliseconds (200)))
     , desiredFrameRate (options.framerateRedraw.value_or (60.0f))
@@ -572,7 +572,7 @@ void SDL2ComponentNative::renderContext()
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
         // Setup frame description
-        const auto loadAction = (renderContinuous && currentGraphicsApi != GraphicsContext::Metal)
+        const auto loadAction = (renderContinuous)
                                   ? rive::gpu::LoadAction::clear
                                   : rive::gpu::LoadAction::preserveRenderTarget;
 

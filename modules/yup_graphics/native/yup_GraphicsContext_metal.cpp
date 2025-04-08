@@ -41,7 +41,8 @@ namespace
 
 //==============================================================================
 
-typedef struct {
+typedef struct
+{
     vector_float2 position;
     vector_float2 texCoord;
 } Vertex;
@@ -54,6 +55,16 @@ const Vertex quadVertices[] =
     { {  1.0f,  1.0f }, { 1.0f, 0.0f } }, // Top-right
     { {  1.0f, -1.0f }, { 1.0f, 1.0f } } // Bottom-right
 };
+
+MTLClearColor MTLClearColorFromARGB (uint32_t argb)
+{
+    double a = ((argb >> 24) & 0xFF) / 255.0;
+    double r = ((argb >> 16) & 0xFF) / 255.0;
+    double g = ((argb >> 8)  & 0xFF) / 255.0;
+    double b = ((argb >> 0)  & 0xFF) / 255.0;
+
+    return MTLClearColorMake (r, g, b, a);
+}
 
 } // namespace
 
@@ -88,7 +99,8 @@ public:
         auto* plsPrecompiledLibrary = [m_gpu newLibraryWithData:metallibData error:&error];
         if (plsPrecompiledLibrary == nil || error != nil)
         {
-            JUCE_DBG ([[error localizedDescription] UTF8String]);
+            NSLog(@"Failed to load binary shaders: %@", error);
+
             jassertfalse;
             return;
         }
@@ -113,7 +125,8 @@ public:
         m_pipelineState = [m_gpu newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
         if (m_pipelineState == nil || error != nil)
         {
-            JUCE_DBG ([[error localizedDescription] UTF8String]);
+            NSLog(@"Failed to create pipeline state: %@", error);
+
             jassertfalse;
             return;
         }
@@ -195,6 +208,23 @@ public:
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_plsContext->beginFrame (frameDescriptor);
+
+        if (frameDescriptor.loadAction == rive::gpu::LoadAction::clear)
+        {
+            id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
+
+            MTLRenderPassDescriptor* passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
+            passDescriptor.colorAttachments[0].texture = m_currentTexture;
+            passDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+            passDescriptor.colorAttachments[0].clearColor = MTLClearColorFromARGB (frameDescriptor.clearColor);
+            passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
+
+            id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:passDescriptor];
+            [encoder setRenderPipelineState:m_pipelineState];
+            [encoder endEncoding];
+
+            [commandBuffer commit];
+        }
     }
 
     void end (void*) override
@@ -217,7 +247,7 @@ public:
 
         MTLRenderPassDescriptor* renderPassDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
         renderPassDescriptor.colorAttachments[0].texture = m_currentFrameSurface.texture;
-        renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionClear;
+        renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionDontCare;
         renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
 
         id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
