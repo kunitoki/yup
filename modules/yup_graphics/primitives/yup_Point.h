@@ -902,6 +902,13 @@ public:
         return { static_cast<T> (x), static_cast<T> (y) };
     }
 
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point<int>>
+    {
+        return { yup::roundToInt (x), yup::roundToInt (y) };
+    }
+
     //==============================================================================
     /** Adds the coordinates of another point to this point and returns the result.
 

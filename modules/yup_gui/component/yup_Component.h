@@ -72,7 +72,7 @@ public:
 
         @param shouldBeEnabled True if the component should be enabled, false otherwise.
      */
-    virtual void setEnabled (bool shouldBeEnabled);
+    void setEnabled (bool shouldBeEnabled);
 
     /**
         Called when the enabled state of the component changes.
@@ -92,12 +92,7 @@ public:
 
         @param shouldBeVisible True if the component should be visible, false otherwise.
      */
-    virtual void setVisible (bool shouldBeVisible);
-
-    /**
-        Called when the visible state of the component changes.
-     */
-    virtual void visibilityChanged();
+    void setVisible (bool shouldBeVisible);
 
     /**
         Check if the component is showing.
@@ -107,6 +102,11 @@ public:
         @return True if the component is showing, false otherwise.
      */
     bool isShowing() const;
+
+    /**
+        Called when the visible state of the component changes.
+     */
+    virtual void visibilityChanged();
 
     //==============================================================================
     /**
@@ -121,7 +121,7 @@ public:
 
         @param title The new title of the component.
      */
-    virtual void setTitle (const String& title);
+    void setTitle (const String& title);
 
     //==============================================================================
     /**
@@ -136,7 +136,7 @@ public:
 
         @param newPosition The new position of the component relative to its parent.
      */
-    virtual void setPosition (const Point<float>& newPosition);
+    void setPosition (const Point<float>& newPosition);
 
     /**
         Get the x position of the component relative to its parent.
@@ -151,6 +151,49 @@ public:
         @return The y position of the component relative to its parent.
      */
     float getY() const;
+
+    /**
+        Get the left position of the component relative to its parent.
+
+        @return The left position of the component relative to its parent.
+     */
+    float getLeft() const;
+
+    /**
+        Get the top position of the component relative to its parent.
+
+        @return The top position of the component relative to its parent.
+     */
+    float getTop() const;
+
+    /**
+        Get the right position of the component relative to its parent.
+
+        @return The right position of the component relative to its parent.
+     */
+    float getRight() const;
+
+    /**
+        Get the bottom position of the component relative to its parent.
+
+        @return The bottom position of the component relative to its parent.
+     */
+    float getBottom() const;
+
+    Point<float> getTopLeft() const;
+    void setTopLeft (const Point<float>& newTopLeft);
+
+    Point<float> getBottomLeft() const;
+    void setBottomLeft (const Point<float>& newBottomLeft);
+
+    Point<float> getTopRight() const;
+    void setTopRight (const Point<float>& newTopRight);
+
+    Point<float> getBottomRight() const;
+    void setBottomRight (const Point<float>& newBottomRight);
+
+    Point<float> getCenter() const;
+    void setCenter (const Point<float>& newCenter);
 
     /**
         Called when the position of the component changes.
@@ -168,7 +211,7 @@ public:
 
         @param newSize The new size of the component.
      */
-    virtual void setSize (const Size<float>& newSize);
+    void setSize (const Size<float>& newSize);
 
     /**
         Get the width of the component.
@@ -213,7 +256,7 @@ public:
 
         @param newBounds The new bounds of the component.
      */
-    virtual void setBounds (const Rectangle<float>& newBounds);
+    void setBounds (const Rectangle<float>& newBounds);
 
     /**
         Get the bounds of the component, relative to its parent.
@@ -242,12 +285,18 @@ public:
 
         @param shouldBeFullScreen True if the component should be full screen, false otherwise.
      */
-    virtual void setFullScreen (bool shouldBeFullScreen);
+    void setFullScreen (bool shouldBeFullScreen);
 
     /**
         Check if the component is full screen.
      */
     bool isFullScreen() const;
+
+    //==============================================================================
+    /**
+        Called when the component changes display.
+     */
+    virtual void displayChanged();
 
     //==============================================================================
     /**
@@ -277,7 +326,7 @@ public:
 
         @param opacity The new opacity of the component.
      */
-    virtual void setOpacity (float opacity);
+    void setOpacity (float opacity);
 
     //==============================================================================
     /**
@@ -328,6 +377,12 @@ public:
      */
     const ComponentNative* getNativeComponent() const;
 
+    /** */
+    virtual void attachedToNative();
+
+    /** */
+    virtual void detachedFromNative();
+
     //==============================================================================
     /**
         Check if the component is on the desktop.
@@ -358,7 +413,7 @@ public:
     /**
         Bring the component to the front.
      */
-    void toFront(bool shouldGainKeyboardFocus);
+    void toFront (bool shouldGainKeyboardFocus);
 
     /**
         Bring the component to the back.
@@ -562,7 +617,9 @@ public:
      */
     Component* findComponentAt (const Point<float>& p);
 
-    /** */
+    /**
+        Returns the top level component.
+    */
     Component* getTopLevelComponent();
 
     //==============================================================================
@@ -657,6 +714,11 @@ public:
      */
     virtual void mouseMove (const MouseEvent& event);
 
+    /**
+        Called when the mouse is dragged.
+
+        @param event The mouse event.
+     */
     virtual void mouseDrag (const MouseEvent& event);
 
     /**
@@ -776,6 +838,7 @@ private:
     void internalTextInput (const String& text);
     void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
+    void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();

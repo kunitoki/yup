@@ -22,8 +22,6 @@
 namespace yup
 {
 
-extern void yup_setMouseCursor (const MouseCursor& mouseCursor);
-
 //==============================================================================
 
 Component::Component()
@@ -73,7 +71,7 @@ void Component::setEnabled (bool shouldBeEnabled)
     {
         options.isDisabled = ! shouldBeEnabled;
 
-        //if (native != nullptr)
+        //if (options.onDesktop && native != nullptr)
         //    native->setEnabled (shouldBeEnabled);
 
         enablementChanged();
@@ -97,7 +95,7 @@ void Component::setVisible (bool shouldBeVisible)
     {
         options.isVisible = shouldBeVisible;
 
-        if (native != nullptr)
+        if (options.onDesktop && native != nullptr)
             native->setVisible (shouldBeVisible);
 
         visibilityChanged();
@@ -144,17 +142,14 @@ void Component::setTitle (const String& title)
 
 //==============================================================================
 
+Point<float> Component::getPosition() const
+{
+    return boundsInParent.getTopLeft();
+}
+
 void Component::setPosition (const Point<float>& newPosition)
 {
-    if (! boundsInParent.getPosition().approximatelyEqualTo (newPosition))
-    {
-        boundsInParent = boundsInParent.withPosition (newPosition);
-
-        if (options.onDesktop && native != nullptr)
-            native->setPosition (newPosition.to<int>());
-
-        moved();
-    }
+    boundsInParent.setTopLeft (newPosition);
 }
 
 float Component::getX() const
@@ -167,9 +162,99 @@ float Component::getY() const
     return boundsInParent.getY();
 }
 
-Point<float> Component::getPosition() const
+float Component::getLeft() const
 {
-    return boundsInParent.getPosition();
+    return boundsInParent.getX();
+}
+
+float Component::getTop() const
+{
+    return boundsInParent.getY();
+}
+
+float Component::getRight() const
+{
+    return boundsInParent.getX() + boundsInParent.getWidth();
+}
+
+float Component::getBottom() const
+{
+    return boundsInParent.getY() + boundsInParent.getHeight();
+}
+
+Point<float> Component::getTopLeft() const
+{
+    return boundsInParent.getTopLeft();
+}
+
+void Component::setTopLeft (const Point<float>& newTopLeft)
+{
+    boundsInParent.setTopLeft (newTopLeft);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newTopLeft.to<int>());
+
+    moved();
+}
+
+Point<float> Component::getBottomLeft() const
+{
+    return boundsInParent.getBottomLeft();
+}
+
+void Component::setBottomLeft (const Point<float>& newBottomLeft)
+{
+    boundsInParent.setBottomLeft (newBottomLeft);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newBottomLeft.to<int>().translated (0, -getHeight()));
+
+    moved();
+}
+
+Point<float> Component::getTopRight() const
+{
+    return boundsInParent.getTopRight();
+}
+
+void Component::setTopRight (const Point<float>& newTopRight)
+{
+    boundsInParent.setTopRight (newTopRight);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newTopRight.to<int>().translated (-getWidth(), 0));
+
+    moved();
+}
+
+Point<float> Component::getBottomRight() const
+{
+    return boundsInParent.getBottomRight();
+}
+
+void Component::setBottomRight (const Point<float>& newBottomRight)
+{
+    boundsInParent.setBottomRight (newBottomRight);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newBottomRight.to<int>().translated (-getWidth(), -getHeight()));
+
+    moved();
+}
+
+Point<float> Component::getCenter() const
+{
+    return boundsInParent.getCenter();
+}
+
+void Component::setCenter (const Point<float>& newCenter)
+{
+    boundsInParent.setCenter (newCenter);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newCenter.to<int>().translated (-getWidth() / 2, -getHeight() / 2));
+
+    moved();
 }
 
 void Component::moved()
@@ -180,15 +265,12 @@ void Component::moved()
 
 void Component::setSize (const Size<float>& newSize)
 {
-    if (! boundsInParent.getSize().approximatelyEqualTo (newSize))
-    {
-        boundsInParent = boundsInParent.withSize (newSize);
+    boundsInParent = boundsInParent.withSize (newSize);
 
-        if (options.onDesktop && native != nullptr)
-            native->setSize (newSize.to<int>());
+    if (options.onDesktop && native != nullptr)
+        native->setSize (newSize.to<int>());
 
-        resized();
-    }
+    resized();
 }
 
 Size<float> Component::getSize() const
@@ -213,16 +295,13 @@ float Component::getHeight() const
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
-    if (! boundsInParent.approximatelyEqualTo (newBounds))
-    {
-        boundsInParent = newBounds;
+    boundsInParent = newBounds;
 
-        if (options.onDesktop && native != nullptr)
-            native->setBounds (newBounds.to<int>());
+    if (options.onDesktop && native != nullptr)
+        native->setBounds (newBounds.to<int>());
 
-        resized();
-        moved();
-    }
+    resized();
+    moved();
 }
 
 Rectangle<float> Component::getBounds() const
@@ -281,6 +360,12 @@ void Component::setFullScreen (bool shouldBeFullScreen)
         if (options.onDesktop && native != nullptr)
             native->setFullScreen (shouldBeFullScreen);
     }
+}
+
+//==============================================================================
+
+void Component::displayChanged()
+{
 }
 
 //==============================================================================
@@ -381,6 +466,14 @@ const ComponentNative* Component::getNativeComponent() const
     return parentComponent->getNativeComponent();
 }
 
+void Component::attachedToNative()
+{
+}
+
+void Component::detachedFromNative()
+{
+}
+
 //==============================================================================
 
 bool Component::isOnDesktop() const
@@ -403,6 +496,8 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
+    attachedToNative();
+
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
 
@@ -414,11 +509,13 @@ void Component::removeFromDesktop()
     options.onDesktop = false;
 
     native.reset();
+
+    detachedFromNative();
 }
 
 //==============================================================================
 
-void Component::toFront(bool shouldGainKeyboardFocus)
+void Component::toFront (bool shouldGainKeyboardFocus)
 {
     if (parentComponent == nullptr)
         return;
@@ -557,7 +654,7 @@ void Component::removeChildComponent (Component* component)
 
 void Component::removeChildComponent (int index)
 {
-    if (! isPositiveAndBelow(index, children.size()))
+    if (! isPositiveAndBelow (index, children.size()))
         return;
 
     auto component = children.removeAndReturn (index);
@@ -1016,6 +1113,12 @@ void Component::internalMoved (int xpos, int ypos)
 
 //==============================================================================
 
+void Component::internalDisplayChanged()
+{
+}
+
+//==============================================================================
+
 void Component::internalContentScaleChanged (float dpiScale)
 {
     contentScaleChanged (dpiScale);
@@ -1032,7 +1135,7 @@ void Component::internalUserTriedToCloseWindow()
 
 void Component::updateMouseCursor()
 {
-    yup_setMouseCursor (mouseCursor);
+    Desktop::getInstance()->setMouseCursor (mouseCursor);
 }
 
 } // namespace yup

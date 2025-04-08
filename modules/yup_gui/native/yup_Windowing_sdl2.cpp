@@ -24,39 +24,17 @@ namespace yup
 
 //==============================================================================
 
-void yup_setMouseCursor (const MouseCursor& mouseCursor)
-{
-    static const auto cursors = []
-    {
-        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
-            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
-            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
-            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
-            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
-            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
-            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
-            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
-            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
-            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
-            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
-            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
-            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
-        };
-    }();
+#ifndef YUP_WINDOWING_LOGGING
+#define YUP_WINDOWING_LOGGING 1
+#endif
 
-    if (mouseCursor.getType() == MouseCursor::None)
-    {
-        SDL_ShowCursor (SDL_DISABLE);
+#if YUP_WINDOWING_LOGGING
+#define YUP_WINDOWING_LOG(textToWrite) JUCE_DBG (textToWrite)
+#else
+#define YUP_WINDOWING_LOG(textToWrite) \
+    {                                  \
     }
-    else
-    {
-        auto it = cursors.find (mouseCursor.getType());
-        if (it != cursors.end())
-            SDL_SetCursor (it->second);
-
-        SDL_ShowCursor (SDL_ENABLE);
-    }
-}
+#endif
 
 //==============================================================================
 
@@ -114,7 +92,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     SDL_SetWindowData (window, "self", this);
 
     if (parent != nullptr)
-        setNativeParent (nullptr, parent, window);
+        setNativeParent (parent, window);
 
     if (currentGraphicsApi == GraphicsContext::OpenGL)
     {
@@ -207,8 +185,9 @@ bool SDL2ComponentNative::isVisible() const
 Size<int> SDL2ComponentNative::getContentSize() const
 {
     const auto dpiScale = getScaleDpi();
-    int width = static_cast<int> (screenBounds.getWidth() * dpiScale);
-    int height = static_cast<int> (screenBounds.getHeight() * dpiScale);
+
+    const auto width = static_cast<int> (screenBounds.getWidth() * dpiScale);
+    const auto height = static_cast<int> (screenBounds.getHeight() * dpiScale);
 
     return { width, height };
 }
@@ -217,12 +196,13 @@ Size<int> SDL2ComponentNative::getContentSize() const
 
 void SDL2ComponentNative::setSize (const Size<int>& newSize)
 {
-    if (window == nullptr || screenBounds.getSize() == newSize)
+    if (window == nullptr)
         return;
 
-    SDL_SetWindowSize (window, newSize.getWidth(), newSize.getHeight());
-
     screenBounds = screenBounds.withSize (newSize);
+
+    if (auto currentSize = getSize(); currentSize != newSize)
+        SDL_SetWindowSize (window, jmax (1, newSize.getWidth()), jmax (1, newSize.getHeight()));
 }
 
 Size<int> SDL2ComponentNative::getSize() const
@@ -237,21 +217,21 @@ Size<int> SDL2ComponentNative::getSize() const
 
 void SDL2ComponentNative::setPosition (const Point<int>& newPosition)
 {
-    if (window == nullptr || screenBounds.getPosition() == newPosition)
+    if (window == nullptr)
         return;
 
-    SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
-
     screenBounds = screenBounds.withPosition (newPosition);
+
+    if (auto currentPosition = getPosition(); currentPosition != newPosition)
+        SDL_SetWindowPosition (window, newPosition.getX(), newPosition.getY());
 }
 
 Point<int> SDL2ComponentNative::getPosition() const
 {
-    if (window == nullptr)
-        return screenBounds.getPosition();
-
     int x = 0, y = 0;
-    SDL_GetWindowPosition (window, &x, &y);
+
+    if (window != nullptr)
+        SDL_GetWindowPosition (window, &x, &y);
 
     return { x, y };
 }
@@ -265,6 +245,7 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (window == nullptr)
         return;
 
+    auto adjustedBounds = newBounds;
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
 #if JUCE_EMSCRIPTEN && RIVE_WEBGL
@@ -281,14 +262,17 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     if (! isFullScreen() && isDecorated())
         SDL_GetWindowBordersSize (window, &leftMargin, &topMargin, &rightMargin, &bottomMargin);
 
-    SDL_SetWindowSize (window,
-                       jmax (1, newBounds.getWidth() - leftMargin - rightMargin),
-                       jmax (1, newBounds.getHeight() - topMargin - bottomMargin));
+    adjustedBounds.translate (leftMargin, topMargin);
+    adjustedBounds.setSize ({ jmax (1, adjustedBounds.getWidth() - leftMargin - rightMargin),
+                              jmax (1, adjustedBounds.getHeight() - topMargin - bottomMargin) });
+
+    if (auto currentSize = getSize(); currentSize != adjustedBounds.getSize())
+        SDL_SetWindowSize (window, adjustedBounds.getWidth(), adjustedBounds.getHeight());
 
 #endif
 
-    //setPosition (newBounds.getPosition().translated (leftMargin, topMargin));
-    SDL_SetWindowPosition (window, newBounds.getX() + leftMargin, newBounds.getY() + topMargin);
+    if (auto currentPosition = getPosition(); currentPosition != adjustedBounds.getPosition())
+        SDL_SetWindowPosition (window, adjustedBounds.getX(), adjustedBounds.getY());
 
     screenBounds = newBounds;
 
@@ -425,20 +409,19 @@ void SDL2ComponentNative::enableWireframe (bool shouldBeEnabled)
 
 void SDL2ComponentNative::repaint()
 {
-    currentRepaintArea = Rectangle<float>().withSize (getSize().to<float>());
+    currentRepaintAreas.clearQuick();
+
+    currentRepaintAreas.add (Rectangle<float>().withSize (getSize().to<float>()));
 }
 
 void SDL2ComponentNative::repaint (const Rectangle<float>& rect)
 {
-    if (! currentRepaintArea.isEmpty())
-        currentRepaintArea = currentRepaintArea.smallestContainingRectangle (rect);
-    else
-        currentRepaintArea = rect;
+    currentRepaintAreas.add (rect);
 }
 
-Rectangle<float> SDL2ComponentNative::getRepaintArea() const
+const RectangleList<float>& SDL2ComponentNative::getRepaintAreas() const
 {
-    return currentRepaintArea;
+    return currentRepaintAreas;
 }
 
 //==============================================================================
@@ -501,22 +484,25 @@ void SDL2ComponentNative::run()
         renderEvent.reset();
         cancelPendingUpdate();
         triggerAsyncUpdate();
-        renderEvent.wait (maxFrameTimeMs - 2.0f);
+        renderEvent.wait (maxFrameTimeMs - 4.0);
 
         // Measure spent time and cap the framerate
         double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
         double timeSpentSeconds = currentTimeSeconds - frameStartTimeSeconds;
 
         const double secondsToWait = maxFrameTimeSeconds - timeSpentSeconds;
-        if (secondsToWait > 0.0f)
+        if (secondsToWait > 0.0)
         {
             const auto waitUntilMs = (currentTimeSeconds + secondsToWait) * 1000.0;
 
+            while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 4.0)
+                std::this_thread::sleep_for (std::chrono::microseconds (1000));
+
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs - 2.0)
-                Thread::sleep (1);
+                std::this_thread::sleep_for (std::chrono::microseconds (500));
 
             while (juce::Time::getMillisecondCounterHiRes() < waitUntilMs)
-                Thread::sleep (0);
+                std::this_thread::sleep_for (std::chrono::microseconds (10));
         }
     }
 }
@@ -578,7 +564,7 @@ void SDL2ComponentNative::renderContext()
 
     if (renderContinuous)
         repaint();
-    else if (currentRepaintArea.isEmpty())
+    else if (currentRepaintAreas.isEmpty())
         return;
 
     auto renderFrame = [&]
@@ -586,7 +572,7 @@ void SDL2ComponentNative::renderContext()
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RenderFrame);
 
         // Setup frame description
-        const auto loadAction = renderContinuous
+        const auto loadAction = (renderContinuous)
                                   ? rive::gpu::LoadAction::clear
                                   : rive::gpu::LoadAction::preserveRenderTarget;
 
@@ -611,10 +597,13 @@ void SDL2ComponentNative::renderContext()
         // Repaint components hierarchy
         if (renderer != nullptr)
         {
-            YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
+            for (auto& repaintArea : currentRepaintAreas)
+            {
+                YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
 
-            Graphics g (*context, *renderer, dpiScale);
-            component.internalPaint (g, currentRepaintArea, renderContinuous);
+                Graphics g (*context, *renderer, dpiScale);
+                component.internalPaint (g, repaintArea, renderContinuous);
+            }
         }
 
         // Finish context drawing
@@ -627,8 +616,8 @@ void SDL2ComponentNative::renderContext()
     };
 
     renderFrame();
-    if (! renderContinuous)
-        renderFrame(); // This is needed on double buffered platforms
+    if (! renderContinuous && currentGraphicsApi != GraphicsContext::Metal)
+        renderFrame(); // This is needed on double buffered platforms until we render on a single texture!
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
@@ -647,7 +636,7 @@ void SDL2ComponentNative::renderContext()
         frameRateCounter = 0;
     }
 
-    currentRepaintArea = {};
+    currentRepaintAreas.clearQuick();
 }
 
 //==============================================================================
@@ -910,26 +899,37 @@ void SDL2ComponentNative::handleTextInput (const String& textInput)
 
 void SDL2ComponentNative::handleMoved (int xpos, int ypos)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    if (internalBoundsChange)
+        return;
+
     component.internalMoved (xpos, ypos);
 
     screenBounds = screenBounds.withPosition (xpos, ypos);
 
     if (parentWindow != nullptr)
     {
-        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
+
+        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
         setPosition (nativeWindowPos.getTopLeft());
     }
 }
 
 void SDL2ComponentNative::handleResized (int width, int height)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     component.internalResized (width, height);
 
     screenBounds = screenBounds.withSize (width, height);
 
     if (parentWindow != nullptr)
     {
-        auto nativeWindowPos = getNativeWindowPosition (nullptr, parentWindow);
+        auto preventBoundsChange = ScopedValueSetter<bool> (internalBoundsChange, true);
+
+        auto nativeWindowPos = getNativeWindowPosition (parentWindow);
         setPosition (nativeWindowPos.getTopLeft());
     }
 
@@ -938,6 +938,8 @@ void SDL2ComponentNative::handleResized (int width, int height)
 
 void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 {
+    YUP_PROFILE_INTERNAL_TRACE();
+
     if (gotFocus)
     {
         if (! isRendering())
@@ -977,9 +979,16 @@ void SDL2ComponentNative::handleContentScaleChanged()
 {
     YUP_PROFILE_INTERNAL_TRACE();
 
-    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
-
     component.internalContentScaleChanged (getScaleDpi());
+
+    handleResized (screenBounds.getWidth(), screenBounds.getHeight());
+}
+
+void SDL2ComponentNative::handleDisplayChanged()
+{
+    YUP_PROFILE_INTERNAL_TRACE();
+
+    component.internalDisplayChanged();
 }
 
 void SDL2ComponentNative::handleUserTriedToCloseWindow()
@@ -1038,7 +1047,7 @@ void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
             break;
 
         case SDL_WINDOWEVENT_RESIZED:
-            //YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESIZED " << windowEvent.data1 << " " << windowEvent.data2);
             break;
 
         case SDL_WINDOWEVENT_SIZE_CHANGED:
@@ -1252,20 +1261,20 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
     switch (event->display.event)
     {
         case SDL_DISPLAYEVENT_CONNECTED:
-            desktop->handleDisplayConnected (event->display.display);
+            desktop->handleScreenConnected (event->display.display);
             break;
 
         case SDL_DISPLAYEVENT_DISCONNECTED:
-            desktop->handleDisplayDisconnected (event->display.display);
+            desktop->handleScreenDisconnected (event->display.display);
             break;
 
         case SDL_DISPLAYEVENT_ORIENTATION:
-            desktop->handleDisplayOrientationChanged (event->display.display);
+            desktop->handleScreenOrientationChanged (event->display.display);
             break;
 
 #if ! JUCE_EMSCRIPTEN
         case SDL_DISPLAYEVENT_MOVED:
-            desktop->handleDisplayMoved (event->display.display);
+            desktop->handleScreenMoved (event->display.display);
             break;
 #endif
     }
@@ -1275,34 +1284,84 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
 
 } // namespace
 
-void Desktop::updateDisplays()
+void Desktop::updateScreens()
 {
-    const int numDisplays = SDL_GetNumVideoDisplays();
-    for (int i = 0; i < numDisplays; ++i)
+    const int numScreens = SDL_GetNumVideoDisplays();
+    for (int i = 0; i < numScreens; ++i)
     {
         SDL_Rect bounds;
         if (SDL_GetDisplayBounds (i, &bounds) != 0)
             continue;
 
-        auto display = std::make_unique<Display>();
-        display->name = String::fromUTF8 (SDL_GetDisplayName (i));
-        display->isPrimary = (i == 0);
-        display->virtualPosition = Point<int> (bounds.x, bounds.y);
-        display->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
+        auto screen = std::make_unique<Screen>();
+        screen->name = String::fromUTF8 (SDL_GetDisplayName (i));
+        screen->isPrimary = (i == 0);
+        screen->virtualPosition = Point<int> (bounds.x, bounds.y);
+        screen->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
 
         float ddpi, hdpi, vdpi;
         if (SDL_GetDisplayDPI (i, &ddpi, &hdpi, &vdpi) == 0)
         {
-            display->physicalSizeMillimeters = Size<int> (
+            screen->physicalSizeMillimeters = Size<int> (
                 static_cast<int> (bounds.w * 25.4f / hdpi),
                 static_cast<int> (bounds.h * 25.4f / vdpi));
         }
 
-        display->contentScaleX = hdpi / 96.0f; // Assuming 96 DPI as standard
-        display->contentScaleY = vdpi / 96.0f;
+        screen->contentScaleX = hdpi / 96.0f; // Assuming 96 DPI as standard
+        screen->contentScaleY = vdpi / 96.0f;
 
-        displays.add (display.release());
+        screens.add (screen.release());
     }
+}
+
+void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
+{
+    static const auto cursors = []
+    {
+        return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
+            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
+            { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
+        };
+    }();
+
+    currentMouseCursor = cursorToSet;
+
+    if (cursorToSet.getType() == MouseCursor::None)
+    {
+        SDL_ShowCursor (SDL_DISABLE);
+    }
+    else
+    {
+        auto it = cursors.find (cursorToSet.getType());
+        if (it != cursors.end())
+            SDL_SetCursor (it->second);
+
+        SDL_ShowCursor (SDL_ENABLE);
+    }
+}
+
+Point<float> Desktop::getCurrentMouseLocation() const
+{
+    int x = 0, y = 0;
+
+    SDL_GetGlobalMouseState (&x, &y);
+
+    return { static_cast<float> (x), static_cast<float> (y) };
+}
+
+void Desktop::setCurrentMouseLocation (const Point<float>& location)
+{
+    SDL_WarpMouseGlobal (static_cast<int> (location.getX()), static_cast<int> (location.getY()));
 }
 
 //==============================================================================
@@ -1325,7 +1384,7 @@ void initialiseYup_Windowing()
     }
 
     // Update available displays
-    Desktop::getInstance()->updateDisplays();
+    Desktop::getInstance()->updateScreens();
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
     // Inject the event loop
@@ -1340,7 +1399,7 @@ void initialiseYup_Windowing()
         while (SDL_PollEvent (&event))
         {
             if (MessageManager::getInstance()->hasStopMessageBeenSent())
-                break;
+                return;
 
             if (timeoutDetector.hasTimedOut())
                 break;

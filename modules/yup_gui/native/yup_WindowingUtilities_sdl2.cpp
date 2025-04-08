@@ -199,11 +199,12 @@ KeyPress toKeyPress (SDL_Keycode key, SDL_Scancode scancode, KeyModifiers modifi
 
     return {};
 }
+
 // clang-format on
 
 //==============================================================================
 
-bool isMouseOutsideWindow(SDL_Window* window)
+bool isMouseOutsideWindow (SDL_Window* window)
 {
     int windowX, windowY, windowW, windowH;
     SDL_GetWindowPosition (window, &windowX, &windowY);
@@ -212,8 +213,7 @@ bool isMouseOutsideWindow(SDL_Window* window)
     int mouseX, mouseY;
     Uint32 mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
-    return (mouseX < windowX || mouseX > windowX + windowW ||
-            mouseY < windowY || mouseY > windowY + windowH);
+    return (mouseX < windowX || mouseX > windowX + windowW || mouseY < windowY || mouseY > windowY + windowH);
 }
 
 //==============================================================================
@@ -250,46 +250,33 @@ void* getNativeWindowHandle (SDL_Window* window)
 
 //==============================================================================
 
-Rectangle<int> getNativeWindowPosition (void* nativeDisplay, void* nativeWindow)
+#if JUCE_LINUX
+void* getNativeDisplayHandle (SDL_Window* window)
 {
-#if JUCE_WINDOWS
-    RECT windowRect;
+    if (window == nullptr)
+        return nullptr;
 
-    GetWindowRect (reinterpret_cast<HWND> (nativeWindow), &windowRect);
+    SDL_SysWMinfo wmInfo;
+    SDL_VERSION (&wmInfo.version);
+    if (SDL_GetWindowWMInfo (window, &wmInfo))
+        return reinterpret_cast<void*> (wmInfo.info.x11.display); // X11 Display
 
-    return {
-        windowRect.left,
-        windowRect.top,
-        windowRect.right - windowRect.left,
-        windowRect.bottom - windowRect.top
-    };
-
-#elif JUCE_MAC
-    NSView* view = reinterpret_cast<NSView*> (nativeWindow);
-    NSRect viewRect = [view convertRect:[view bounds] toView:nil];
-
-    NSRect windowRect = [[view window] convertRectToScreen:viewRect];
-    windowRect.origin.y = CGDisplayBounds (CGMainDisplayID()).size.height - (windowRect.origin.y + windowRect.size.height);
-
-    return {
-        static_cast<int> (windowRect.origin.x),
-        static_cast<int> (windowRect.origin.y),
-        static_cast<int> (windowRect.size.width),
-        static_cast<int> (windowRect.size.height)
-    };
-
-#elif JUCE_LINUX
-    return {};
-
-#else
-    return {};
-
-#endif
+    return nullptr;
 }
+#endif
 
 //==============================================================================
 
-void setNativeParent (void* nativeDisplay, void* nativeWindow, SDL_Window* window)
+#if !JUCE_WINDOWS && !JUCE_MAC && !JUCE_LINUX
+Rectangle<int> getNativeWindowPosition (void* nativeWindow)
+{
+    return {};
+}
+#endif
+
+//==============================================================================
+
+void setNativeParent (void* nativeWindow, SDL_Window* window)
 {
 #if JUCE_WINDOWS
     HWND hpar = reinterpret_cast<HWND> (nativeWindow);
@@ -309,6 +296,19 @@ void setNativeParent (void* nativeDisplay, void* nativeWindow, SDL_Window* windo
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
 #elif JUCE_LINUX
+    if (! X11Functions::getInstance()->isX11Available())
+        return;
+
+    auto* display = reinterpret_cast<::Display*> (getNativeDisplayHandle (window));
+    if (display == nullptr)
+        return;
+
+    X11Functions::getInstance()->XReparentWindow (
+        display,
+        reinterpret_cast<::Window> (getNativeWindowHandle (window)),
+        reinterpret_cast<::Window> (nativeWindow),
+        0,
+        0);
 
 #else
 

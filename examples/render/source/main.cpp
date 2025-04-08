@@ -38,7 +38,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : yup::DocumentWindow (yup::ComponentNative::Options(), {})
+        : yup::DocumentWindow (yup::ComponentNative::Options{}.withRenderContinuous (true), {})
     {
         // Set title
         setTitle ("main");
@@ -179,7 +179,7 @@ class CustomWindow2
 {
 public:
     CustomWindow2()
-        : yup::DocumentWindow (yup::ComponentNative::Options(), {})
+        : yup::DocumentWindow (yup::ComponentNative::Options{}.withRenderContinuous (true), {})
     {
         setTitle ("secondary");
     }
