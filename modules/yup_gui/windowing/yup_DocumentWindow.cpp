@@ -40,9 +40,9 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 {
     auto desktop = Desktop::getInstance();
 
-    if (auto display = desktop->getDisplayContainingMouseCursor())
+    if (auto screen = desktop->getScreenContainingMouseCursor())
     {
-        auto bounds = display->workArea.centeredRectangleWithSize (size);
+        auto bounds = screen->workArea.centeredRectangleWithSize (size);
         // TODO - take into account the frame and taskbar
         setBounds (bounds.to<float>());
     }

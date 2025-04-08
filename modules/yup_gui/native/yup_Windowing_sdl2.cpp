@@ -1261,20 +1261,20 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
     switch (event->display.event)
     {
         case SDL_DISPLAYEVENT_CONNECTED:
-            desktop->handleDisplayConnected (event->display.display);
+            desktop->handleScreenConnected (event->display.display);
             break;
 
         case SDL_DISPLAYEVENT_DISCONNECTED:
-            desktop->handleDisplayDisconnected (event->display.display);
+            desktop->handleScreenDisconnected (event->display.display);
             break;
 
         case SDL_DISPLAYEVENT_ORIENTATION:
-            desktop->handleDisplayOrientationChanged (event->display.display);
+            desktop->handleScreenOrientationChanged (event->display.display);
             break;
 
 #if ! JUCE_EMSCRIPTEN
         case SDL_DISPLAYEVENT_MOVED:
-            desktop->handleDisplayMoved (event->display.display);
+            desktop->handleScreenMoved (event->display.display);
             break;
 #endif
     }
@@ -1284,33 +1284,33 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
 
 } // namespace
 
-void Desktop::updateDisplays()
+void Desktop::updateScreens()
 {
-    const int numDisplays = SDL_GetNumVideoDisplays();
-    for (int i = 0; i < numDisplays; ++i)
+    const int numScreens = SDL_GetNumVideoDisplays();
+    for (int i = 0; i < numScreens; ++i)
     {
         SDL_Rect bounds;
         if (SDL_GetDisplayBounds (i, &bounds) != 0)
             continue;
 
-        auto display = std::make_unique<Display>();
-        display->name = String::fromUTF8 (SDL_GetDisplayName (i));
-        display->isPrimary = (i == 0);
-        display->virtualPosition = Point<int> (bounds.x, bounds.y);
-        display->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
+        auto screen = std::make_unique<Screen>();
+        screen->name = String::fromUTF8 (SDL_GetDisplayName (i));
+        screen->isPrimary = (i == 0);
+        screen->virtualPosition = Point<int> (bounds.x, bounds.y);
+        screen->workArea = Rectangle<int> (bounds.x, bounds.y, bounds.w, bounds.h);
 
         float ddpi, hdpi, vdpi;
         if (SDL_GetDisplayDPI (i, &ddpi, &hdpi, &vdpi) == 0)
         {
-            display->physicalSizeMillimeters = Size<int> (
+            screen->physicalSizeMillimeters = Size<int> (
                 static_cast<int> (bounds.w * 25.4f / hdpi),
                 static_cast<int> (bounds.h * 25.4f / vdpi));
         }
 
-        display->contentScaleX = hdpi / 96.0f; // Assuming 96 DPI as standard
-        display->contentScaleY = vdpi / 96.0f;
+        screen->contentScaleX = hdpi / 96.0f; // Assuming 96 DPI as standard
+        screen->contentScaleY = vdpi / 96.0f;
 
-        displays.add (display.release());
+        screens.add (screen.release());
     }
 }
 
@@ -1384,7 +1384,7 @@ void initialiseYup_Windowing()
     }
 
     // Update available displays
-    Desktop::getInstance()->updateDisplays();
+    Desktop::getInstance()->updateScreens();
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
     // Inject the event loop

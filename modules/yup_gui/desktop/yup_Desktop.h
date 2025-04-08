@@ -23,11 +23,11 @@ namespace yup
 {
 
 //==============================================================================
-/** Represents the desktop environment, providing access to display information and management.
+/** Represents the desktop environment, providing access to screen information and management.
 
     This class encapsulates functionality related to the desktop environment, including
-    access to multiple displays connected to the system. It allows querying and management
-    of different display properties through the `Display` objects.
+    access to multiple screens connected to the system. It allows querying and management
+    of different screen properties through the `Screen` objects.
 */
 class JUCE_API Desktop
 {
@@ -37,46 +37,46 @@ public:
     ~Desktop();
 
     //==============================================================================
-    /** Returns the number of displays connected to the system.
+    /** Returns the number of screens connected to the system.
 
-        @return The number of available displays.
+        @return The number of available screens.
     */
-    int getNumDisplays() const;
+    int getNumScreens() const;
 
-    /** Retrieves a pointer to the `Display` object at the specified index.
+    /** Retrieves a pointer to the `Screen` object at the specified index.
 
-        @param displayIndex The zero-based index of the display to retrieve.
+        @param screenIndex The zero-based index of the screen to retrieve.
 
-        @return A pointer to the `Display` object, or nullptr if the index is out of range.
+        @return A pointer to the `Screen` object, or nullptr if the index is out of range.
     */
-    Display::Ptr getDisplay (int displayIndex) const;
+   Screen::Ptr getScreen (int screenIndex) const;
 
-    /** Retrieves a span of pointers to all `Display` objects.
+    /** Retrieves a span of pointers to all `Screen` objects.
 
-        @return A span of pointers to all `Display` objects.
+        @return A span of pointers to all `Screen` objects.
     */
-    Span<const Display* const> getDisplays() const;
+    Span<const Screen* const> getScreens() const;
 
     //==============================================================================
-    /** Retrieves a pointer to the primary `Display` object.
+    /** Retrieves a pointer to the primary `Screen` object.
 
-        The primary display is typically the main screen of the system where applications are initially displayed.
+        The primary screen is typically the main screen of the system where applications are initially screened.
 
-        @return A pointer to the primary `Display` object.
+        @return A pointer to the primary `Screen` object.
     */
-    Display::Ptr getPrimaryDisplay() const;
+   Screen::Ptr getPrimaryScreen() const;
 
-    /** Retries a pointer to the display containing the mouse cursor.
+    /** Retries a pointer to the screen containing the mouse cursor.
 
-        @return A pointer to the `Display` object which contains the mouse cursor.
+        @return A pointer to the `Screen` object which contains the mouse cursor.
     */
-    Display::Ptr getDisplayContainingMouseCursor() const;
+   Screen::Ptr getScreenContainingMouseCursor() const;
 
-    /** Retries a pointer to the display containing an absolute location.
+    /** Retries a pointer to the screen containing an absolute location.
 
-        @return A pointer to the `Display` object which contains the location.
+        @return A pointer to the `Screen` object which contains the location.
     */
-    Display::Ptr getDisplayContaining (const Point<float>& location) const;
+   Screen::Ptr getScreenContaining (const Point<float>& location) const;
 
     //==============================================================================
     /** Sets the mouse cursor to the specified cursor.
@@ -104,18 +104,18 @@ public:
     void setCurrentMouseLocation (const Point<float>& location);
 
     //==============================================================================
-    /** Updates the list of displays. */
-    void updateDisplays();
+    /** Updates the list of screens. */
+    void updateScreens();
 
     //==============================================================================
     /** @internal */
-    void handleDisplayConnected (int displayIndex);
+    void handleScreenConnected (int screenIndex);
     /** @internal */
-    void handleDisplayDisconnected (int displayIndex);
+    void handleScreenDisconnected (int screenIndex);
     /** @internal */
-    void handleDisplayMoved (int displayIndex);
+    void handleScreenMoved (int screenIndex);
     /** @internal */
-    void handleDisplayOrientationChanged (int displayIndex);
+    void handleScreenOrientationChanged (int screenIndex);
 
     //==============================================================================
     JUCE_DECLARE_SINGLETON (Desktop, false)
@@ -125,7 +125,7 @@ private:
 
     Desktop();
 
-    Display::Array displays;
+    Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)

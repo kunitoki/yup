@@ -39,53 +39,53 @@ Desktop::~Desktop()
 
 //==============================================================================
 
-int Desktop::getNumDisplays() const
+int Desktop::getNumScreens() const
 {
-    return displays.size();
+    return screens.size();
 }
 
 //==============================================================================
 
-Display::Ptr Desktop::getDisplay (int displayIndex) const
+Screen::Ptr Desktop::getScreen (int screenIndex) const
 {
-    if (isPositiveAndBelow (displayIndex, displays.size()))
-        return displays.getUnchecked (displayIndex);
+    if (isPositiveAndBelow (screenIndex, screens.size()))
+        return screens.getUnchecked (screenIndex);
 
     return nullptr;
 }
 
 //==============================================================================
 
-Span<const Display* const> Desktop::getDisplays() const
+Span<const Screen* const> Desktop::getScreens() const
 {
-    return { displays.data(), static_cast<size_t> (displays.size()) };
+    return { screens.data(), static_cast<size_t> (screens.size()) };
 }
 
 //==============================================================================
 
-Display::Ptr Desktop::getPrimaryDisplay() const
+Screen::Ptr Desktop::getPrimaryScreen() const
 {
-    return ! displays.isEmpty() ? getDisplay (0) : nullptr;
+    return ! screens.isEmpty() ? getScreen (0) : nullptr;
 }
 
 //==============================================================================
 
-Display::Ptr Desktop::getDisplayContainingMouseCursor() const
+Screen::Ptr Desktop::getScreenContainingMouseCursor() const
 {
-    return getDisplayContaining (getCurrentMouseLocation());
+    return getScreenContaining (getCurrentMouseLocation());
 }
 
 //==============================================================================
 
-Display::Ptr Desktop::getDisplayContaining (const Point<float>& location) const
+Screen::Ptr Desktop::getScreenContaining (const Point<float>& location) const
 {
-    for (auto& display : displays)
+    for (auto& screen : screens)
     {
-        if (display->workArea.contains (location.to<int>()))
-            return display;
+        if (screen->workArea.contains (location.to<int>()))
+            return screen;
     }
 
-    return ! displays.isEmpty() ? getDisplay (0) : nullptr;
+    return ! screens.isEmpty() ? getScreen (0) : nullptr;
 }
 
 //==============================================================================
@@ -97,24 +97,24 @@ MouseCursor Desktop::getMouseCursor() const
 
 //==============================================================================
 
-void Desktop::handleDisplayConnected (int displayIndex)
+void Desktop::handleScreenConnected (int screenIndex)
 {
-    updateDisplays();
+    updateScreens();
 }
 
-void Desktop::handleDisplayDisconnected (int displayIndex)
+void Desktop::handleScreenDisconnected (int screenIndex)
 {
-    updateDisplays();
+    updateScreens();
 }
 
-void Desktop::handleDisplayMoved (int displayIndex)
+void Desktop::handleScreenMoved (int screenIndex)
 {
-    updateDisplays();
+    updateScreens();
 }
 
-void Desktop::handleDisplayOrientationChanged (int displayIndex)
+void Desktop::handleScreenOrientationChanged (int screenIndex)
 {
-    updateDisplays();
+    updateScreens();
 }
 
 } // namespace yup
