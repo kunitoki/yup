@@ -78,7 +78,7 @@ public:
             s[0] = temp;
         }
 
-        for (int i = 0; i < 6; ++i)
+        for (int i = 0; i < 5; ++i)
             state[i] += s[i];
 
         length += 64;
