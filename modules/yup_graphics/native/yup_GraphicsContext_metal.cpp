@@ -48,20 +48,19 @@ typedef struct
 } Vertex;
 
 // Full-screen quad covering clip space, with texture coordinates mapping the texture.
-const Vertex quadVertices[] =
-{
-    { { -1.0f,  1.0f }, { 0.0f, 0.0f } }, // Top-left
+const Vertex quadVertices[] = {
+    { { -1.0f, 1.0f }, { 0.0f, 0.0f } },  // Top-left
     { { -1.0f, -1.0f }, { 0.0f, 1.0f } }, // Bottom-left
-    { {  1.0f,  1.0f }, { 1.0f, 0.0f } }, // Top-right
-    { {  1.0f, -1.0f }, { 1.0f, 1.0f } } // Bottom-right
+    { { 1.0f, 1.0f }, { 1.0f, 0.0f } },   // Top-right
+    { { 1.0f, -1.0f }, { 1.0f, 1.0f } }   // Bottom-right
 };
 
 MTLClearColor MTLClearColorFromARGB (uint32_t argb)
 {
     double a = ((argb >> 24) & 0xFF) / 255.0;
     double r = ((argb >> 16) & 0xFF) / 255.0;
-    double g = ((argb >> 8)  & 0xFF) / 255.0;
-    double b = ((argb >> 0)  & 0xFF) / 255.0;
+    double g = ((argb >> 8) & 0xFF) / 255.0;
+    double b = ((argb >> 0) & 0xFF) / 255.0;
 
     return MTLClearColorMake (r, g, b, a);
 }
@@ -90,29 +89,29 @@ public:
 
         NSError* error = nil;
 
-        dispatch_data_t metallibData = dispatch_data_create(
+        dispatch_data_t metallibData = dispatch_data_create (
             yup_RenderShader_data,
-            sizeof(yup_RenderShader_data),
+            sizeof (yup_RenderShader_data),
             nil,
             nil);
 
         auto* plsPrecompiledLibrary = [m_gpu newLibraryWithData:metallibData error:&error];
         if (plsPrecompiledLibrary == nil || error != nil)
         {
-            NSLog(@"Failed to load binary shaders: %@", error);
+            NSLog (@"Failed to load binary shaders: %@", error);
 
             jassertfalse;
             return;
         }
 
-        MTLVertexDescriptor *vertexDescriptor = [[MTLVertexDescriptor alloc] init];
+        MTLVertexDescriptor* vertexDescriptor = [[MTLVertexDescriptor alloc] init];
         vertexDescriptor.attributes[0].format = MTLVertexFormatFloat2;
         vertexDescriptor.attributes[0].offset = 0;
         vertexDescriptor.attributes[0].bufferIndex = 0;
         vertexDescriptor.attributes[1].format = MTLVertexFormatFloat2;
-        vertexDescriptor.attributes[1].offset = sizeof(vector_float2);
+        vertexDescriptor.attributes[1].offset = sizeof (vector_float2);
         vertexDescriptor.attributes[1].bufferIndex = 0;
-        vertexDescriptor.layouts[0].stride = sizeof(Vertex);
+        vertexDescriptor.layouts[0].stride = sizeof (Vertex);
         vertexDescriptor.layouts[0].stepFunction = MTLVertexStepFunctionPerVertex;
 
         MTLRenderPipelineDescriptor* pipelineDescriptor = [[MTLRenderPipelineDescriptor alloc] init];
@@ -125,13 +124,13 @@ public:
         m_pipelineState = [m_gpu newRenderPipelineStateWithDescriptor:pipelineDescriptor error:&error];
         if (m_pipelineState == nil || error != nil)
         {
-            NSLog(@"Failed to create pipeline state: %@", error);
+            NSLog (@"Failed to create pipeline state: %@", error);
 
             jassertfalse;
             return;
         }
 
-        m_quadVertexBuffer = [m_gpu newBufferWithBytes:quadVertices length:sizeof(quadVertices) options:MTLResourceStorageModeShared];
+        m_quadVertexBuffer = [m_gpu newBufferWithBytes:quadVertices length:sizeof (quadVertices) options:MTLResourceStorageModeShared];
     }
 
     //==============================================================================
