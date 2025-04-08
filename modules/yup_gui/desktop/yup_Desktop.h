@@ -49,7 +49,7 @@ public:
 
         @return A pointer to the `Screen` object, or nullptr if the index is out of range.
     */
-   Screen::Ptr getScreen (int screenIndex) const;
+    Screen::Ptr getScreen (int screenIndex) const;
 
     /** Retrieves a span of pointers to all `Screen` objects.
 
@@ -64,19 +64,19 @@ public:
 
         @return A pointer to the primary `Screen` object.
     */
-   Screen::Ptr getPrimaryScreen() const;
+    Screen::Ptr getPrimaryScreen() const;
 
     /** Retries a pointer to the screen containing the mouse cursor.
 
         @return A pointer to the `Screen` object which contains the mouse cursor.
     */
-   Screen::Ptr getScreenContainingMouseCursor() const;
+    Screen::Ptr getScreenContainingMouseCursor() const;
 
     /** Retries a pointer to the screen containing an absolute location.
 
         @return A pointer to the `Screen` object which contains the location.
     */
-   Screen::Ptr getScreenContaining (const Point<float>& location) const;
+    Screen::Ptr getScreenContaining (const Point<float>& location) const;
 
     //==============================================================================
     /** Sets the mouse cursor to the specified cursor.
