@@ -49,12 +49,10 @@ private:
     template <typename F>
     bool lookupFunction (const char* functionName, F& function)
     {
-        using Func = std::remove_reference_t<F>;
-
         if (libraryHandle == nullptr)
             return false;
 
-        function = reinterpret_cast<decltype (Func)> (dlsym (libraryHandle, functionName));
+        function = reinterpret_cast<std::remove_reference_t<F>> (dlsym (libraryHandle, functionName));
         if (function == nullptr)
         {
             JUCE_DBG ("Failed to load " << functionName);
