@@ -158,6 +158,12 @@ Uuid& Uuid::operator= (const uint8* const rawData) noexcept
     return *this;
 }
 
+uint32 Uuid::getPart (size_t section) const noexcept
+{
+    jassert (section < sizeof (uuid) / sizeof (uint32));
+    return ByteOrder::bigEndianInt (uuid + sizeof (uint32) * section);
+}
+
 uint32 Uuid::getTimeLow() const noexcept { return ByteOrder::bigEndianInt (uuid); }
 
 uint16 Uuid::getTimeMid() const noexcept { return ByteOrder::bigEndianShort (uuid + 4); }
@@ -179,5 +185,66 @@ uint64 Uuid::hash() const noexcept
 
     return result;
 }
+
+Uuid Uuid::fromSHA1 (const SHA1& hash)
+{
+    uint8 buffer[16];
+
+    auto hashData = hash.getRawData();
+    std::memcpy (buffer, hashData.data(), sizeof (buffer));
+
+    // To make it RFC 4122 compliant, need to force a few bits...
+    buffer[6] = (buffer[6] & 0x0f) | 0x50;
+    buffer[8] = (buffer[8] & 0x3f) | 0x80;
+
+    return Uuid (buffer);
+}
+
+Uuid Uuid::fromSHA1 (const MemoryBlock& hash)
+{
+    uint8 buffer[16];
+
+    jassert (hash.getSize() == 20);
+    hash.copyTo (buffer, 0, sizeof (buffer));
+
+    // To make it RFC 4122 compliant, need to force a few bits...
+    buffer[6] = (buffer[6] & 0x0f) | 0x50;
+    buffer[8] = (buffer[8] & 0x3f) | 0x80;
+
+    return Uuid (buffer);
+}
+
+Uuid Uuid::fromHexStringSHA1 (const String& hash)
+{
+    MemoryBlock mb;
+    mb.loadFromHexString (hash);
+    return fromSHA1 (mb);
+}
+
+Uuid Uuid::fromMD5 (const MemoryBlock& hash)
+{
+    uint8 buffer[16];
+
+    jassert (hash.getSize() == 16);
+    hash.copyTo (buffer, 0, sizeof (buffer));
+
+    // To make it RFC 4122 compliant, need to force a few bits...
+    buffer[6] = (buffer[6] & 0x0f) | 0x30;
+    buffer[8] = (buffer[8] & 0x3f) | 0x80;
+
+    return Uuid (buffer);
+}
+
+Uuid Uuid::fromHexStringMD5 (const String& hash)
+{
+    MemoryBlock mb;
+    mb.loadFromHexString (hash);
+    return fromMD5 (mb);
+}
+
+const Uuid Uuid::namespaceDns = Uuid ("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+const Uuid Uuid::namespaceUrl = Uuid ("6ba7b811-9dad-11d1-80b4-00c04fd430c8");
+const Uuid Uuid::namespaceIsoOid = Uuid ("6ba7b812-9dad-11d1-80b4-00c04fd430c8");
+const Uuid Uuid::namespaceX500Dn = Uuid ("6ba7b814-9dad-11d1-80b4-00c04fd430c8");
 
 } // namespace juce

@@ -42,11 +42,9 @@
 #endif
 
 #if JUCE_OBOE_LOG_ENABLED
-#define JUCE_OBOE_LOG(x) DBG (x)
+#define JUCE_OBOE_LOG(x) JUCE_DBG (x)
 #else
-#define JUCE_OBOE_LOG(x) \
-{                        \
-}
+#define JUCE_OBOE_LOG(x) {}
 #endif
 
 namespace juce

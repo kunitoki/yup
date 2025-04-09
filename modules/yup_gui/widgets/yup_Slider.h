@@ -30,12 +30,14 @@ public:
     Slider (StringRef componentID, const Font& font);
 
     //==============================================================================
-    void setValue (float newValue);
+    void setValue (float newValue, NotificationType notification = sendNotification);
     float getValue() const;
 
     virtual void valueChanged();
 
     std::function<void (float)> onValueChanged;
+    std::function<void (const MouseEvent&)> onDragStart;
+    std::function<void (const MouseEvent&)> onDragEnd;
 
     //==============================================================================
     void resized() override;
@@ -49,7 +51,7 @@ public:
 
 private:
     void updateRenderItems (bool forceAll);
-    void sendValueChanged();
+    void sendValueChanged (NotificationType notification);
 
     Path backgroundPath;
     Path backgroundArc;
@@ -60,8 +62,8 @@ private:
     Point<float> origin;
     const Font& font;
     float value = 0.0f;
-    int index = 0;
     bool isInside = false;
+    bool isDragging = false;
 };
 
 } // namespace yup

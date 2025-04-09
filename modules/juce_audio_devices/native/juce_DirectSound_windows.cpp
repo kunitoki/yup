@@ -270,7 +270,7 @@ static String getErrorMessage (HRESULT hr)
 static void logMessage (String message)
 {
     message = "DSOUND: " + message;
-    DBG (message);
+    JUCE_DBG (message);
     Logger::writeToLog (message);
 }
 

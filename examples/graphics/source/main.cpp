@@ -109,20 +109,29 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        auto bounds = getLocalBounds();
+
         g.setFillColor (0xff101010);
         g.fillAll();
+
+        g.setStrokeColor (0xff4b4bff);
+        g.setStrokeWidth (1.0f);
+        g.strokeRect (bounds);
 
         if (renderData.empty())
             return;
 
         float xSize = getWidth() / float (renderData.size());
 
-        path.reserveSpace ((int) renderData.size());
         path.clear();
+        path.reserveSpace ((int) renderData.size());
+
         path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
 
-        g.setStrokeColor (0xff4b4bff);
-        g.setStrokeWidth (2.0f);
+        for (std::size_t i = 1; i < renderData.size(); ++i)
+            path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
+
+        g.setStrokeWidth (1.0f);
         g.strokePath (path);
     }
 
@@ -189,7 +198,7 @@ public:
         {
             sineWaveGenerators[i] = std::make_unique<SineWaveGenerator>();
             sineWaveGenerators[i]->setSampleRate (sampleRate);
-            sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i + 1), true);
+            sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), true);
         }
 
         deviceManager.addAudioCallback (this);
@@ -201,7 +210,7 @@ public:
 
             slider->onValueChanged = [this, i, sampleRate] (float value)
             {
-                sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1 + value, i + 1));
+                sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i + value));
                 sineWaveGenerators[i]->setAmplitude (value * 0.5);
             };
 
@@ -256,9 +265,10 @@ public:
                                     .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
     }
 
+    /*
     void paint (yup::Graphics& g) override
     {
-        yup::DocumentWindow::paint (g);
+        //yup::DocumentWindow::paint (g);
         //g.drawImageAt (image, getLocalBounds().getCenter());
     }
 
@@ -271,6 +281,7 @@ public:
         g.setOpacity (1.0f);
         g.drawImageAt (image, getLocalBounds().getCenter());
     }
+    */
 
     void mouseDown (const yup::MouseEvent& event) override
     {
@@ -279,7 +290,7 @@ public:
 
     void mouseDoubleClick (const yup::MouseEvent& event) override
     {
-        DBG ("mouseDoubleClick");
+        JUCE_DBG ("mouseDoubleClick");
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override

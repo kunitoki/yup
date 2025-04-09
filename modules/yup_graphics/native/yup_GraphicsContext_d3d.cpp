@@ -45,9 +45,9 @@ public:
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderContext* renderContextOrNull() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* renderContext() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderTarget* renderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {

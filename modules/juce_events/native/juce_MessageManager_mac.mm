@@ -66,6 +66,16 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
             JUCE_END_IGNORE_WARNINGS_GCC_LIKE
         });
 
+        addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification*)
+        {
+            [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
+                                                               andSelector:@selector(handleQuitEvent:withReplyEvent:)
+                                                             forEventClass:kCoreEventClass
+                                                                andEventID:kAEQuitApplication];
+
+            [NSApp stop:nil];
+        });
+
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
         {
             if (auto* app = JUCEApplicationBase::getInstance())
@@ -82,6 +92,12 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         addMethod(@selector(applicationWillTerminate:), [](id /*self*/, SEL, NSNotification*)
         {
             JUCEApplicationBase::appWillTerminateByForce();
+        });
+
+        addMethod(@selector(handleQuitEvent:withReplyEvent:), [](id self, SEL, NSAppleEventDescriptor*, NSAppleEventDescriptor*)
+        {
+            if (auto* app = JUCEApplicationBase::getInstance())
+                app->systemRequestedQuit();
         });
 
         addMethod(@selector(application:openFile:), [](id /*self*/, SEL, NSApplication*, NSString* filename)
@@ -382,6 +398,42 @@ static void runNSApplication()
     }
 }
 
+static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMessagePosted)
+{
+    jassert(millisecondsToRunFor >= 0);
+
+    auto endTime = Time::currentTimeMillis() + millisecondsToRunFor;
+
+    while (quitMessagePosted.get() == 0)
+    {
+        JUCE_AUTORELEASEPOOL
+        {
+            auto msRemaining = endTime - Time::currentTimeMillis();
+            if (msRemaining <= 0)
+                break;
+
+            NSDate* untilDate = [NSDate dateWithTimeIntervalSinceNow:(msRemaining * 0.001)];
+
+            NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                                untilDate:untilDate
+                                                   inMode:NSDefaultRunLoopMode
+                                                  dequeue:YES];
+            if (event)
+            {
+                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(event))
+                    [NSApp sendEvent:event];
+            }
+            else
+            {
+                // No event received within timeout, exit loop
+                break;
+            }
+        }
+    }
+
+    return quitMessagePosted.get() == 0;
+}
+
 static void shutdownNSApp()
 {
     [NSApp terminate:nil];
@@ -392,12 +444,20 @@ static void shutdownNSApp()
 //==============================================================================
 void MessageManager::runDispatchLoop()
 {
-    while (!MessageManager::getInstance()->hasStopMessageBeenSent())
-    {
-        // must only be called by the message thread!
-        jassert(isThisTheMessageThread());
+    // must only be called by the message thread!
+    jassert(isThisTheMessageThread());
 
-        loopCallback();
+    constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f);
+
+    runNSApplication();
+
+    while (quitMessagePosted.get() == 0)
+    {
+        if (runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted))
+        {
+            if (loopCallback)
+                loopCallback();
+        }
     }
 }
 
@@ -429,29 +489,7 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
     jassert(millisecondsToRunFor >= 0);
     jassert(isThisTheMessageThread()); // must only be called by the message thread
 
-    auto endTime = Time::currentTimeMillis() + millisecondsToRunFor;
-
-    while (quitMessagePosted.get() == 0)
-    {
-        JUCE_AUTORELEASEPOOL
-        {
-            auto msRemaining = endTime - Time::currentTimeMillis();
-
-            if (msRemaining <= 0)
-                break;
-
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
-
-            if (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                                untilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]
-                                                   inMode:NSDefaultRunLoopMode
-                                                  dequeue:YES])
-                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(e))
-                    [NSApp sendEvent:e];
-        }
-    }
-
-    return quitMessagePosted.get() == 0;
+    return runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted);
 }
 #endif
 
@@ -462,8 +500,6 @@ void MessageManager::doPlatformSpecificInitialisation()
 {
     if (appDelegate == nil)
         appDelegate.reset(new AppDelegate());
-
-    MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()

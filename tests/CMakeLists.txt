@@ -19,7 +19,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-if ("${yup_platform}" MATCHES "^(emscripten)$")
+if (YUP_PLATFORM_EMSCRIPTEN)
     add_definitions (-DTEST_HAS_PTHREAD=0)
     set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
 endif()
@@ -37,7 +37,7 @@ set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
 set_target_properties (gmock PROPERTIES FOLDER "Tests")
 set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 
-if ("${yup_platform}" MATCHES "^(emscripten)$")
+if (YUP_PLATFORM_EMSCRIPTEN)
     target_compile_options (gmock PRIVATE -pthread)
     target_compile_options (gtest PRIVATE -pthread)
 endif()
@@ -67,7 +67,7 @@ file (GLOB_RECURSE sources
       "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
       "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
 
-if ("${yup_platform}" MATCHES "^(osx|ios)$")
+if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
     file (GLOB_RECURSE apple_sources
         "${CMAKE_CURRENT_LIST_DIR}/*.mm")
     list (APPEND sources ${apple_sources})
@@ -75,3 +75,6 @@ endif()
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name} PRIVATE ${sources})
+set_target_properties (${target_name} PROPERTIES
+    XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
+    VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")

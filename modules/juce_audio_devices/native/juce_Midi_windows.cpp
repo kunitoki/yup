@@ -769,9 +769,9 @@ Array<Win32MidiService::MidiInCollector*, CriticalSection> Win32MidiService::Mid
 #endif
 
 #if JUCE_WINRT_MIDI_LOGGING
-#define JUCE_WINRT_MIDI_LOG(x) DBG (x)
+#define JUCE_WINRT_MIDI_LOG(x) JUCE_DBG (x)
 #else
-#define JUCE_WINRT_MIDI_LOG(x)
+#define JUCE_WINRT_MIDI_LOG(x) {}
 #endif
 
 using namespace Microsoft::WRL;
