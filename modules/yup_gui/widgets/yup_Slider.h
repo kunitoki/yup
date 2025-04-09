@@ -62,7 +62,6 @@ public:
     void setStyle (Style::Ptr newStyle);
     Style::Ptr getStyle() const;
 
-
     //==============================================================================
     void resized() override;
     void paint (Graphics& g) override;

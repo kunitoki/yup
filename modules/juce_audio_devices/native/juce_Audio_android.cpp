@@ -40,29 +40,29 @@
 namespace juce
 {
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-STATICMETHOD (getMinBufferSize, "getMinBufferSize", "(III)I")                 \
-STATICMETHOD (getNativeOutputSampleRate, "getNativeOutputSampleRate", "(I)I") \
-METHOD (constructor, "<init>", "(IIIIII)V")                                   \
-METHOD (getState, "getState", "()I")                                          \
-METHOD (play, "play", "()V")                                                  \
-METHOD (stop, "stop", "()V")                                                  \
-METHOD (release, "release", "()V")                                            \
-METHOD (flush, "flush", "()V")                                                \
-METHOD (write, "write", "([SII)I")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)     \
+    STATICMETHOD (getMinBufferSize, "getMinBufferSize", "(III)I")                 \
+    STATICMETHOD (getNativeOutputSampleRate, "getNativeOutputSampleRate", "(I)I") \
+    METHOD (constructor, "<init>", "(IIIIII)V")                                   \
+    METHOD (getState, "getState", "()I")                                          \
+    METHOD (play, "play", "()V")                                                  \
+    METHOD (stop, "stop", "()V")                                                  \
+    METHOD (release, "release", "()V")                                            \
+    METHOD (flush, "flush", "()V")                                                \
+    METHOD (write, "write", "([SII)I")
 
 DECLARE_JNI_CLASS (AudioTrack, "android/media/AudioTrack")
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-STATICMETHOD (getMinBufferSize, "getMinBufferSize", "(III)I")                 \
-METHOD (constructor, "<init>", "(IIIII)V")                                    \
-METHOD (getState, "getState", "()I")                                          \
-METHOD (startRecording, "startRecording", "()V")                              \
-METHOD (stop, "stop", "()V")                                                  \
-METHOD (read, "read", "([SII)I")                                              \
-METHOD (release, "release", "()V")
+    STATICMETHOD (getMinBufferSize, "getMinBufferSize", "(III)I")             \
+    METHOD (constructor, "<init>", "(IIIII)V")                                \
+    METHOD (getState, "getState", "()I")                                      \
+    METHOD (startRecording, "startRecording", "()V")                          \
+    METHOD (stop, "stop", "()V")                                              \
+    METHOD (read, "read", "([SII)I")                                          \
+    METHOD (release, "release", "()V")
 
 DECLARE_JNI_CLASS (AudioRecord, "android/media/AudioRecord")
 #undef JNI_CLASS_MEMBERS

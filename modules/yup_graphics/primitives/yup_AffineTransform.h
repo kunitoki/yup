@@ -589,8 +589,7 @@ public:
     /** @internal Conversion to Rive Mat2D class.  */
     rive::Mat2D toMat2D() const
     {
-        return
-        {
+        return {
             getScaleX(),     // xx
             getShearX(),     // xy
             getShearY(),     // yx

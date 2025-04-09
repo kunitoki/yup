@@ -109,7 +109,7 @@ void convertRawPathToRenderPath (const rive::RawPath& input, rive::RenderPath* o
 {
     if (transform.isIdentity())
     {
-        convertRawPathToRenderPath(input, output);
+        convertRawPathToRenderPath (input, output);
     }
     else
     {

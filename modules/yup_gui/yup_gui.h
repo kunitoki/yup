@@ -94,4 +94,3 @@
 
 #include "themes/yup_ApplicationTheme.h"
 #include "themes/theme_v1/yup_ThemeVersion1.h"
-
