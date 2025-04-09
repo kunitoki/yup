@@ -93,7 +93,7 @@ public:
     //==============================================================================
     void repaint() override;
     void repaint (const Rectangle<float>& rect) override;
-    Rectangle<float> getRepaintArea() const override;
+    const RectangleList<float>& getRepaintAreas() const override;
 
     //==============================================================================
     float getScaleDpi() const override;
@@ -140,6 +140,7 @@ public:
     void handleRestored();
     void handleExposed();
     void handleContentScaleChanged();
+    void handleDisplayChanged();
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
@@ -189,6 +190,8 @@ private:
 
     RelativeTime doubleClickTime;
 
+    RectangleList<float> currentRepaintAreas;
+
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
     double frameRateStartTimeSeconds = 0.0;
@@ -196,6 +199,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
+    bool internalBoundsChange = false;
 
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;
@@ -203,8 +207,6 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     bool updateOnlyWhenFocused = false;
-
-    Rectangle<float> currentRepaintArea;
 };
 
 } // namespace yup

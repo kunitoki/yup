@@ -67,8 +67,7 @@ function (_yup_setup_platform)
         list (APPEND platforms "linux" "posix" "desktop")
 
     else()
-        set (platform "unknown")
-        list (APPEND platforms "unknown")
+        _yup_message (FATAL_ERROR "Invalid unsupported platform")
 
     endif()
 

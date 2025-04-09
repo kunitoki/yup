@@ -24,61 +24,60 @@ namespace yup
 
 //==============================================================================
 
-Path::Path (float x, float y) noexcept
+Path::Path()
+    : path (rive::make_rcp<rive::RiveRenderPath>())
+{
+}
+
+Path::Path (float x, float y)
+    : Path()
 {
     moveTo (x, y);
 }
 
-Path::Path (const Point<float>& p) noexcept
+Path::Path (const Point<float>& p)
+    : Path()
 {
     moveTo (p);
+}
+
+Path::Path (rive::rcp<rive::RiveRenderPath> newPath)
+    : path (newPath)
+{
+    auto points = path->getRawPath().points();
+
 }
 
 //==============================================================================
 
 void Path::reserveSpace (int numSegments)
 {
-    data.reserve (static_cast<std::size_t> (numSegments));
+    auto& rawPath = const_cast<rive::RawPath&> (path->getRawPath());
+
+    rawPath.reserve (
+        rawPath.verbs().size() + static_cast<std::size_t> (numSegments),
+        rawPath.points().size() + static_cast<std::size_t> (numSegments) + 1u);
 }
 
 //==============================================================================
 
 int Path::size() const
 {
-    return static_cast<int> (data.size());
+    return static_cast<int> (path->getRawPath().verbs().size());
 }
 
 //==============================================================================
 
 void Path::clear()
 {
-    data.clear();
-
-    lastSubpathIndex = -1;
-    resetBoundingBox();
+    path->rewind();
 }
 
 //==============================================================================
 
 void Path::moveTo (float x, float y)
 {
-    if (! data.empty())
-    {
-        auto& segment = data.back();
-        if (segment.type == SegmentType::MoveTo)
-        {
-            segment.x = x;
-            segment.y = y;
-
-            updateBoundingBox (x, y); // TODO this is wrong
-            return;
-        }
-    }
-
-    lastSubpathIndex = static_cast<int> (data.size());
-    data.emplace_back (SegmentType::MoveTo, x, y);
-
-    updateBoundingBox (x, y);
+    path->moveTo (x, y);
 }
 
 void Path::moveTo (const Point<float>& p)
@@ -90,9 +89,7 @@ void Path::moveTo (const Point<float>& p)
 
 void Path::lineTo (float x, float y)
 {
-    data.emplace_back (SegmentType::LineTo, x, y);
-
-    updateBoundingBox (x, y);
+    path->lineTo (x, y);
 }
 
 void Path::lineTo (const Point<float>& p)
@@ -104,9 +101,15 @@ void Path::lineTo (const Point<float>& p)
 
 void Path::quadTo (float x, float y, float x1, float y1)
 {
-    data.emplace_back (SegmentType::QuadTo, x, y, x1, y1);
+    const auto& rawPath = path->getRawPath();
+    if (rawPath.points().empty())
+        moveTo (x, y);
 
-    updateBoundingBox (x, y);
+    const rive::Vec2D& last = rawPath.points().back();
+
+    path->cubic (rive::Vec2D::lerp (last, rive::Vec2D (x1, y1), 2 / 3.f),
+                 rive::Vec2D::lerp (rive::Vec2D (x, y), rive::Vec2D (x1, y1), 2 / 3.f),
+                 rive::Vec2D (x, y));
 }
 
 void Path::quadTo (const Point<float>& p, float x1, float y1)
@@ -118,9 +121,7 @@ void Path::quadTo (const Point<float>& p, float x1, float y1)
 
 void Path::cubicTo (float x, float y, float x1, float y1, float x2, float y2)
 {
-    data.emplace_back (SegmentType::CubicTo, x, y, x1, y1, x2, y2);
-
-    updateBoundingBox (x, y);
+    path->cubicTo (x, y, x1, y1, x2, y2);
 }
 
 void Path::cubicTo (const Point<float>& p, float x1, float y1, float x2, float y2)
@@ -132,14 +133,7 @@ void Path::cubicTo (const Point<float>& p, float x1, float y1, float x2, float y
 
 void Path::close()
 {
-    if (data.empty())
-        return;
-
-    if (isPositiveAndBelow (lastSubpathIndex, static_cast<int> (data.size())))
-    {
-        const auto& segment = data[lastSubpathIndex];
-        lineTo (segment.x, segment.y);
-    }
+    path->close();
 }
 
 //==============================================================================
@@ -336,94 +330,35 @@ void Path::addCenteredArc (const Point<float>& center, const Size<float>& diamet
 //==============================================================================
 void Path::appendPath (const Path& other)
 {
-    reserveSpace (size() + other.size());
-
-    for (const auto& segment : other)
-        data.push_back (segment);
-
-    minX = jmin (minX, other.minX);
-    maxX = jmax (maxX, other.maxX);
-    minY = jmin (minY, other.minY);
-    maxY = jmax (maxY, other.maxY);
+    path->addRenderPath (other.getRenderPath(), rive::Mat2D());
 }
 
 void Path::appendPath (const Path& other, const AffineTransform& transform)
 {
-    reserveSpace (size() + other.size());
-
-    for (auto segment : other)
-    {
-        if (segment.type == Path::SegmentType::MoveTo)
-        {
-            transform.transformPoints (segment.x, segment.y);
-            moveTo (segment.x, segment.y);
-        }
-        else if (segment.type == Path::SegmentType::LineTo)
-        {
-            transform.transformPoints (segment.x, segment.y);
-            lineTo (segment.x, segment.y);
-        }
-        else if (segment.type == Path::SegmentType::QuadTo)
-        {
-            transform.transformPoints (segment.x, segment.y, segment.x1, segment.y1);
-            quadTo (segment.x, segment.y, segment.x1, segment.y1);
-        }
-        else if (segment.type == Path::SegmentType::CubicTo)
-        {
-            transform.transformPoints (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
-            cubicTo (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
-        }
-    }
+    path->addRenderPath (other.getRenderPath(), transform.toMat2D());
 }
 
 //==============================================================================
 Path& Path::transform (const AffineTransform& t)
 {
-    if (t.isIdentity())
-        return *this;
-
-    for (auto& segment : data)
-    {
-        if (segment.type == SegmentType::MoveTo || segment.type == SegmentType::LineTo)
-            t.transformPoints (segment.x, segment.y);
-
-        else if (segment.type == Path::SegmentType::QuadTo)
-            t.transformPoints (segment.x, segment.y, segment.x1, segment.y1);
-
-        else if (segment.type == Path::SegmentType::CubicTo)
-            t.transformPoints (segment.x, segment.y, segment.x1, segment.y1, segment.x2, segment.y2);
-    }
-
+    auto newPath = rive::make_rcp<rive::RiveRenderPath>();
+    newPath->addRenderPath (path.get(), t.toMat2D());
+    path = newPath;
     return *this;
 }
 
 Path Path::transformed (const AffineTransform& t) const
 {
-    Path result (*this);
-    result.transform (t);
-    return result;
+    auto newPath = rive::make_rcp<rive::RiveRenderPath>();
+    newPath->addRenderPath (path.get(), t.toMat2D());
+    return Path{ std::move (newPath) };
 }
 
 //==============================================================================
 Rectangle<float> Path::getBoundingBox() const
 {
-    return { minX, minY, maxX - minX, maxY - minY };
-}
-
-void Path::updateBoundingBox (float x, float y)
-{
-    minX = jmin (minX, x);
-    maxX = jmax (maxX, x);
-    minY = jmin (minY, y);
-    maxY = jmax (maxY, y);
-}
-
-void Path::resetBoundingBox()
-{
-    minX = std::numeric_limits<float>::max();
-    maxX = std::numeric_limits<float>::min();
-    minY = std::numeric_limits<float>::max();
-    maxY = std::numeric_limits<float>::min();
+    const auto& aabb = path->getBounds();
+    return { aabb.left(), aabb.top(), aabb.width(), aabb.height() };
 }
 
 //==============================================================================

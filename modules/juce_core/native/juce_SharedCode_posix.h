@@ -94,19 +94,13 @@ StringPairArray SystemStats::getEnvironmentVariables()
 //==============================================================================
 void JUCE_CALLTYPE Thread::sleep (int millisecs)
 {
-    while (millisecs > 0)
-    {
-        struct timespec time;
-        time.tv_sec = millisecs / 1000;
-        time.tv_nsec = (millisecs % 1000) * 1000000;
+    struct timespec time;
+    time.tv_sec = millisecs / 1000;
+    time.tv_nsec = (millisecs % 1000) * 1000000;
 
-        struct timespec remaining;
-
-        if (nanosleep (&time, &remaining) == -1)
-            millisecs = int (remaining.tv_sec * 1000 + time.tv_nsec / 1000000);
-        else
-            break;
-    }
+    struct timespec remaining;
+    while (nanosleep (&time, &remaining) == -1)
+        time = remaining;
 }
 
 void JUCE_CALLTYPE Process::terminate()

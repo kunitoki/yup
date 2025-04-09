@@ -40,10 +40,21 @@ ios PLATFORM="OS64":
 ios_simulator PLATFORM="SIMULATORARM64":
   @just ios {{PLATFORM}}
 
-[doc("generate and open project for Android using Android Studio")]
+[doc("generate and open project for Android using Android Studio (macos)")]
+[macos]
+android:
+  cmake -G Xcode -B build -DYUP_TARGET_ANDROID=ON
+  -open -a /Applications/Android\ Studio.app build/examples/render
+
+[doc("generate and open project for Android using Android Studio (windows)")]
+[windows]
+android:
+  cmake -G "Visual Studio 17 2022" -B build -DYUP_TARGET_ANDROID=ON
+
+[doc("generate and open project for Android using Android Studio (linux)")]
+[linux]
 android:
   cmake -G "Unix Makefiles" -B build -DYUP_TARGET_ANDROID=ON
-  -open -a /Applications/Android\ Studio.app build/examples/render
 
 [doc("generate and build project for WASM")]
 emscripten CONFIG="Debug":
