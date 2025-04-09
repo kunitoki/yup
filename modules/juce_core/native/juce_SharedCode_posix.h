@@ -97,7 +97,10 @@ void JUCE_CALLTYPE Thread::sleep (int millisecs)
     struct timespec time;
     time.tv_sec = millisecs / 1000;
     time.tv_nsec = (millisecs % 1000) * 1000000;
-    nanosleep (&time, nullptr);
+
+    struct timespec remaining;
+    while (nanosleep (&time, &remaining) == -1)
+        time = remaining;
 }
 
 void JUCE_CALLTYPE Process::terminate()
@@ -1065,8 +1068,7 @@ public:
     void apply ([[maybe_unused]] PosixThreadAttribute& attr) const
     {
 #if JUCE_LINUX || JUCE_BSD
-        const struct sched_param param
-        {
+        const struct sched_param param {
             getPriority()
         };
 

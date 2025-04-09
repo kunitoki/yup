@@ -40,18 +40,11 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 {
     auto desktop = Desktop::getInstance();
 
-    if (auto display = desktop->getPrimaryDisplay())
+    if (auto screen = desktop->getScreenContainingMouseCursor())
     {
-        auto bounds = Rectangle<float> {
-            jmax (0.0f, static_cast<float> (display->workArea.getWidth() - size.getWidth()) / 2),
-            jmax (0.0f, static_cast<float> (display->workArea.getHeight() - size.getHeight()) / 2),
-            static_cast<float> (size.getWidth()),
-            static_cast<float> (size.getHeight())
-        };
-
+        auto bounds = screen->workArea.centeredRectangleWithSize (size);
         // TODO - take into account the frame and taskbar
-
-        setBounds (bounds);
+        setBounds (bounds.to<float>());
     }
     else
     {

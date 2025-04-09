@@ -30,12 +30,14 @@ public:
     Slider (StringRef componentID);
 
     //==============================================================================
-    void setValue (float newValue);
+    void setValue (float newValue, NotificationType notification = sendNotification);
     float getValue() const;
 
     virtual void valueChanged();
 
     std::function<void (float)> onValueChanged;
+    std::function<void (const MouseEvent&)> onDragStart;
+    std::function<void (const MouseEvent&)> onDragEnd;
 
     //==============================================================================
 
@@ -60,6 +62,7 @@ public:
     void setStyle (Style::Ptr newStyle);
     Style::Ptr getStyle() const;
 
+
     //==============================================================================
     void resized() override;
     void paint (Graphics& g) override;
@@ -71,14 +74,14 @@ public:
     void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
 
 private:
-    void sendValueChanged();
+    void sendValueChanged (NotificationType notification);
 
     Style::Ptr style;
 
     Point<float> origin;
     float value = 0.0f;
-    int index = 0;
     bool isMouseOverSlider = false;
+    bool isDragging = false;
 };
 
 } // namespace yup

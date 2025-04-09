@@ -72,7 +72,7 @@ void JUCE_API JUCE_CALLTYPE logAssertion (const char* const filename, const int 
 #if JUCE_LOG_ASSERTIONS
     Logger::writeToLog (m);
 #else
-    DBG (m);
+    JUCE_DBG (m);
 #endif
 }
 
@@ -84,7 +84,7 @@ void JUCE_API JUCE_CALLTYPE logAssertion (const wchar_t* const filename, const i
 #if JUCE_LOG_ASSERTIONS
     Logger::writeToLog (m);
 #else
-    DBG (m);
+    JUCE_DBG (m);
 #endif
 }
 #endif

@@ -52,18 +52,29 @@
 
 #if JUCE_MAC
 #import <AppKit/AppKit.h>
-#else
+#import <Cocoa/Cocoa.h>
+
+#include "native/yup_Windowing_mac.mm"
+#endif
+
+#if JUCE_IOS
 #include "native/yup_Windowing_ios.mm"
 #endif
 
 //==============================================================================
 #elif JUCE_LINUX
+#include <X11/Xlib.h>
+#include <dlfcn.h>
+
 #undef None
 #undef KeyPress
 #undef SIZEOF
 
+#include "native/yup_Windowing_linux.cpp"
+
 //==============================================================================
 #elif JUCE_WINDOWS
+#include "native/yup_Windowing_windows.cpp"
 
 //==============================================================================
 #elif JUCE_ANDROID
@@ -82,6 +93,7 @@
 #include "application/yup_Application.cpp"
 #include "desktop/yup_Desktop.cpp"
 #include "mouse/yup_MouseEvent.cpp"
+#include "mouse/yup_MouseCursor.cpp"
 #include "component/yup_ComponentNative.cpp"
 #include "component/yup_Component.cpp"
 #include "widgets/yup_Button.cpp"
@@ -94,6 +106,6 @@
 #include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"
 
 //==============================================================================
-#include "native/yup_Windowing_utils.h"
+#include "native/yup_WindowingUtilities_sdl2.cpp"
 #include "native/yup_Windowing_sdl2.h"
 #include "native/yup_Windowing_sdl2.cpp"

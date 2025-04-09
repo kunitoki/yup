@@ -55,19 +55,6 @@ jobs:
         path: ${{runner.workspace}}/build
         key: ios-build-${{ github.sha }}
 
-  build_tests:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
-    - uses: actions/cache/restore@v4
-      with:
-        path: ${{runner.workspace}}/build
-        key: ios-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
-
   build_console:
     runs-on: macos-latest
     needs: [configure]

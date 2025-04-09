@@ -24,12 +24,76 @@ namespace yup
 
 //==============================================================================
 
-AudioProcessor::AudioProcessor()
+AudioProcessor::AudioProcessor (StringRef name, AudioBusLayout busLayout)
+    : processorName (name)
+    , busLayout (std::move (busLayout))
 {
 }
 
+//==============================================================================
+
 AudioProcessor::~AudioProcessor()
 {
+}
+
+//==============================================================================
+
+void AudioProcessor::addParameter (AudioParameter::Ptr parameter)
+{
+    jassert (parameter != nullptr);
+
+    parameter->setIndexInContainer (static_cast<int> (parameters.size()));
+
+    auto [iterator, inserted] = parameterMap.try_emplace (parameter->getID(), parameter);
+    if (! inserted)
+        jassertfalse; // You added a parameter with the same id twice!
+
+    parameters.emplace_back (std::move (parameter));
+}
+
+//==============================================================================
+
+int AudioProcessor::getNumAudioOutputs() const
+{
+    return static_cast<int> (busLayout.getOutputBuses().size());
+}
+
+int AudioProcessor::getNumAudioInputs() const
+{
+    return static_cast<int> (busLayout.getInputBuses().size());
+}
+
+//==============================================================================
+
+void AudioProcessor::setPlayHead (AudioPlayHead* playHead)
+{
+    this->playHead = playHead;
+}
+
+//==============================================================================
+
+void AudioProcessor::suspendProcessing (bool shouldSuspend)
+{
+    auto lock = CriticalSection::ScopedLockType (processLock);
+
+    processIsSuspended = shouldSuspend;
+}
+
+bool AudioProcessor::isSuspended() const
+{
+    return processIsSuspended;
+}
+
+//==============================================================================
+
+void AudioProcessor::setPlaybackConfiguration (float sampleRate, int samplesPerBlock)
+{
+    releaseResources();
+
+    this->sampleRate = sampleRate;
+    this->samplesPerBlock = samplesPerBlock;
+
+    prepareToPlay (sampleRate, samplesPerBlock);
 }
 
 } // namespace yup

@@ -446,6 +446,13 @@ public:
         return { static_cast<T> (width), static_cast<T> (height) };
     }
 
+    template <class T = ValueType>
+    constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    {
+        return { yup::roundToInt (width), yup::roundToInt (height) };
+    }
+
     //==============================================================================
     /** Multiplication operator
 
@@ -521,6 +528,21 @@ public:
         width = static_cast<ValueType> (width / scaleFactor);
         height = static_cast<ValueType> (height / scaleFactor);
         return *this;
+    }
+
+    //==============================================================================
+    /** Returns true if the two sizes are approximately equal. */
+    constexpr bool approximatelyEqualTo (const Size& other) const noexcept
+    {
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            return approximatelyEqual (width, other.width)
+                && approximatelyEqual (height, other.height);
+        }
+        else
+        {
+            return *this == other;
+        }
     }
 
     //==============================================================================

@@ -54,7 +54,7 @@ class MidiDeviceListConnectionBroadcaster;
     auto connection = MidiDeviceListConnection::make ([]
     {
         // This will print a message when devices are connected/disconnected
-        DBG ("MIDI devices changed");
+        JUCE_DBG ("MIDI devices changed");
     });
 
     // Stop listening

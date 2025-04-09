@@ -216,12 +216,14 @@ void* MessageManager::callFunctionOnMessageThread (MessageCallbackFunction* func
         return message->result.load();
     }
 
-    jassertfalse; // the OS message queue failed to send the message!
+    jassertfalse; // The OS message queue failed to send the message!
     return nullptr;
 }
 
 bool MessageManager::callAsync (std::function<void()> fn)
 {
+    jassert (fn != nullptr);
+
     struct AsyncCallInvoker final : public MessageBase
     {
         AsyncCallInvoker (std::function<void()> f)
@@ -562,17 +564,17 @@ JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI()
     }
 }
 
-static int numScopedInitInstances = 0;
+static std::atomic_int numScopedInitInstances = 0;
 
 ScopedJuceInitialiser_GUI::ScopedJuceInitialiser_GUI()
 {
-    if (numScopedInitInstances++ == 0)
+    if (numScopedInitInstances.fetch_add (1) == 0)
         initialiseJuce_GUI();
 }
 
 ScopedJuceInitialiser_GUI::~ScopedJuceInitialiser_GUI()
 {
-    if (--numScopedInitInstances == 0)
+    if (numScopedInitInstances.fetch_add (-1) == 1)
         shutdownJuce_GUI();
 }
 

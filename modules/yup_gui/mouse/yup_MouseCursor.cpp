@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -23,35 +23,22 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API AudioProcessorParameter
+
+MouseCursor::MouseCursor (Type newType) noexcept
+    : currentType (newType)
 {
-public:
-    AudioProcessorParameter (
-        StringRef name,
-        float minValue,
-        float maxValue,
-        float defaultValue);
+}
 
-    virtual ~AudioProcessorParameter();
+//==============================================================================
 
-    float getValue() const { return currentValue; }
+bool MouseCursor::operator== (const MouseCursor& other) const noexcept
+{
+    return currentType == other.currentType;
+}
 
-    void setValue (float value) { currentValue = jlimit (minValue, maxValue, value); }
-
-    float getMinimumValue() const { return minValue; }
-
-    float getMaximumValue() const { return maxValue; }
-
-    float getDefaultValue() const { return defaultValue; }
-
-    const String& getName() const { return name; }
-
-private:
-    std::atomic<float> currentValue;
-    const float minValue;
-    const float maxValue;
-    const float defaultValue;
-    String name;
-};
+bool MouseCursor::operator!= (const MouseCursor& other) const noexcept
+{
+    return ! operator== (other);
+}
 
 } // namespace yup

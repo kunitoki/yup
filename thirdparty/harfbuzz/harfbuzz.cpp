@@ -21,6 +21,11 @@
 
 #include "harfbuzz.h"
 
+#if __GNUC__
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wempty-body"
+#endif
+
 #include "upstream/graph/gsubgpos-context.cc"
 //#include "upstream/harfbuzz-subset.cc"
 //#include "upstream/harfbuzz.cc"
@@ -99,3 +104,7 @@
 #include "upstream/hb-uniscribe.cc"
 #include "upstream/hb-wasm-api.cc"
 #include "upstream/hb-wasm-shape.cc"
+
+#if __GNUC__
+ #pragma GCC diagnostic pop
+#endif

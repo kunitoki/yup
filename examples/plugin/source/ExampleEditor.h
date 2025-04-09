@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,26 +19,36 @@
   ==============================================================================
 */
 
-namespace yup
-{
+#pragma once
+
+#include <yup_gui/yup_gui.h>
+
+#include "ExamplePlugin.h"
 
 //==============================================================================
 
-AudioProcessorParameter::AudioProcessorParameter (
-    StringRef name,
-    float minValue,
-    float maxValue,
-    float defaultValue)
-    : currentValue (defaultValue)
-    , minValue (minValue)
-    , maxValue (maxValue)
-    , defaultValue (defaultValue)
-    , name (name)
+class ExampleEditor
+    : public yup::AudioProcessorEditor
+    , public yup::Timer
 {
-}
+public:
+    ExampleEditor (ExamplePlugin& processor);
 
-AudioProcessorParameter::~AudioProcessorParameter()
-{
-}
+    // yup::AudioProcessorEditor
+    bool isResizable() const override;
+    bool shouldPreserveAspectRatio() const override;
+    yup::Size<int> getPreferredSize() const override;
 
-} // namespace yup
+    // yup::Component
+    void paint (yup::Graphics& g) override;
+    void resized() override;
+
+    // yup::Timer
+    void timerCallback() override;
+
+private:
+    ExamplePlugin& audioProcessor;
+
+    yup::AudioParameter::Ptr gainParameter;
+    std::unique_ptr<yup::Slider> x;
+};

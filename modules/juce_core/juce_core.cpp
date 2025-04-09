@@ -172,6 +172,7 @@ extern char** environ;
 #include "maths/juce_Random.cpp"
 #include "memory/juce_MemoryBlock.cpp"
 #include "memory/juce_AllocationHooks.cpp"
+#include "cryptography/juce_SHA1.cpp"
 #include "misc/juce_RuntimePermissions.cpp"
 #include "misc/juce_Result.cpp"
 #include "misc/juce_Uuid.cpp"

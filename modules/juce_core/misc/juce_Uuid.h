@@ -113,6 +113,8 @@ public:
     Uuid& operator= (const String& uuidString);
 
     //==============================================================================
+    /** Returns an indexed section of the UUID. Section might be inside the range `[0..3]`. */
+    uint32 getPart (size_t section) const noexcept;
     /** Returns the time-low section of the UUID. */
     uint32 getTimeLow() const noexcept;
     /** Returns the time-mid section of the UUID. */
@@ -137,6 +139,10 @@ public:
     */
     const uint8* getRawData() const noexcept { return uuid; }
 
+    /** Returns the Raw Data Size, which is always 16.
+    */
+    static const size_t getRawDataSize() noexcept { return 16; }
+
     /** Creates a UUID from a 16-byte array.
         @see getRawData
     */
@@ -144,6 +150,73 @@ public:
 
     /** Sets this UUID from 16-bytes of raw data. */
     Uuid& operator= (const uint8* rawData) noexcept;
+
+    //==============================================================================
+    /** Creates a deterministic unique ID based on a SHA-1 hash. You can use
+        this function to make a RFC 4122 version 5 compliant Uuid if you
+        concatenate a Uuid defining a 'namespace' wih the 'name' (the data
+        you are using) as follows.
+ 
+        @code
+        String test ("www.example.org");
+
+        MemoryBlock block;
+        block.append (Uuid::namespaceDns.getRawData(), Uuid::getRawDataSize());
+        block.append (test.toRawUTF8(), test.getNumBytesAsUTF8());
+
+        SHA1 hash (block);
+        Uuid uuid = Uuid::fromSHA1 (hash);
+        @endcode
+    */
+    static Uuid fromSHA1 (const SHA1& hash);
+    static Uuid fromSHA1 (const MemoryBlock& hash);
+
+    /** Creates a deterministic unique ID based on the string representation of
+        a SHA-1 hash. You can use this function to make a RFC 4122 version 5
+        compliant Uuid.
+        @see fromSHA1
+    */
+    static Uuid fromHexStringSHA1 (const String& hash);
+
+    /** Creates a deterministic unique ID based on an MD5 hash. You can use this
+        function to make a RFC 4122 version 3 compliant Uuid. SHA-1 based
+        (version 5) are preferred.
+        @see fromSHA1
+    */
+    static Uuid fromMD5 (const MemoryBlock& hash);
+
+    /** Creates a deterministic unique ID based on the string representation of
+        an MD5 hash. You can use this function to make a RFC 4122 version 3
+        compliant Uuid. SHA-1 based (version 5) are preferred.
+        @see fromSHA1
+    */
+    static Uuid fromHexStringMD5 (const String& hash);
+
+    //==============================================================================
+
+    /** Returns a name space ID for when the 'name string is a fully-qualified
+        domain name' as defined in RFC 4122 Appendix C.
+        @see fromSHA1
+    */
+    static const Uuid namespaceDns;
+
+    /** Returns a name space ID for when the 'name string is a URL' as defined
+        in RFC 4122 Appendix C.
+        @see fromSHA1
+    */
+    static const Uuid namespaceUrl;
+
+    /** Returns a name space ID for when the 'name string is an ISO OID' as
+        defined in RFC 4122 Appendix C.
+        @see fromSHA1
+    */
+    static const Uuid namespaceIsoOid;
+
+    /** Returns a name space ID for when the 'name string is an X.500 DN
+        (in DER or a text output format)' as defined in RFC 4122 Appendix C.
+        @see fromSHA1
+    */
+    static const Uuid namespaceX500Dn;
 
 private:
     //==============================================================================

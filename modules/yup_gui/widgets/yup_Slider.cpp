@@ -32,11 +32,11 @@ Slider::Slider (StringRef componentID)
 
 //==============================================================================
 
-void Slider::setValue (float newValue)
+void Slider::setValue (float newValue, NotificationType notification)
 {
     value = jlimit (0.0f, 1.0f, newValue);
 
-    sendValueChanged();
+    sendValueChanged (notification);
 
     repaint();
 }
@@ -91,6 +91,14 @@ void Slider::mouseExit (const MouseEvent& event)
 
 void Slider::mouseDown (const MouseEvent& event)
 {
+    if (! isDragging)
+    {
+        isDragging = true;
+
+        if (onDragStart)
+            onDragStart (event);
+    }
+
     origin = event.getPosition();
 
     takeFocus();
@@ -100,12 +108,17 @@ void Slider::mouseDown (const MouseEvent& event)
 
 void Slider::mouseUp (const MouseEvent& event)
 {
+    if (isDragging && ! event.isAnyButtonDown())
+    {
+        if (onDragEnd)
+            onDragEnd (event);
+
+        isDragging = false;
+    }
 }
 
 void Slider::mouseDrag (const MouseEvent& event)
 {
-    //auto [x, y] = event.getPosition();
-
     const float multiplier =
         (event.getModifiers().isShiftDown() || event.isRightButtonDown()) ? 0.0001f : 0.0025f;
 
@@ -118,8 +131,6 @@ void Slider::mouseDrag (const MouseEvent& event)
 
 void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 {
-    //auto [x, y] = event.getPosition();
-
     const float multiplier = event.getModifiers().isShiftDown() ? 0.001f : 0.0025f;
     const float distance = (data.getDeltaX() + data.getDeltaY()) * multiplier;
 
@@ -137,12 +148,26 @@ void Slider::paint (Graphics& g)
 
 //==============================================================================
 
-void Slider::sendValueChanged()
+void Slider::sendValueChanged (NotificationType notification)
 {
-    valueChanged();
+    if (notification == dontSendNotification)
+        return;
 
-    if (onValueChanged)
-        onValueChanged (getValue());
+    auto notificationSender = [this, bailOutChecker = BailOutChecker (this)]
+    {
+        if (bailOutChecker.shouldBailOut())
+            return;
+
+        valueChanged();
+
+        if (onValueChanged)
+            onValueChanged (getValue());
+    };
+
+    if (notification == sendNotificationAsync || ! MessageManager::getInstance()->isThisTheMessageThread())
+        MessageManager::callAsync (std::move (notificationSender));
+    else
+        notificationSender();
 }
 
 } // namespace yup

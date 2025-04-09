@@ -33,6 +33,7 @@
 #include "yup_audio_processors.h"
 
 //==============================================================================
-#include "processors/yup_AudioProcessorParameter.cpp"
-#include "processors/yup_AudioProcessorEditor.cpp"
+#include "processors/yup_AudioParameter.cpp"
+#include "processors/yup_AudioParameterBuilder.cpp"
 #include "processors/yup_AudioProcessor.cpp"
+#include "processors/yup_AudioProcessorEditor.cpp"

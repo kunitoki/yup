@@ -35,8 +35,8 @@ YUP is an open-source library dedicated to empowering developers with advanced t
 YUP brings a suite of powerful features, including:
 - **High-Performance Rendering:** From intricate visualizations to high-speed gaming graphics, YUP handles it all with ease and efficiency, relying on the open source [Rive](https://rive.app/) Renderer, backed by Metal, Direct3D, OpenGL, Vulkan and WebGPU.
 - **Advanced Audio Processing:** Tailored for professionals, our audio toolkit delivers pristine sound quality with minimal latency, suitable for music production, live performance tools, and more. Based on the JUCE7 module for audio/midi input and output.
-- **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://cleveraudio.org/) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
-- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux, Wasm (iOS and Android are in the pipe).
+- **Open Source Audio Plugin Standards:** Facilitates the development of [CLAP](https://cleveraudio.org/) and [VST3](https://github.com/steinbergmedia/vst3sdk) plugin abstractions, providing a framework for creating versatile and compatible audio plugins.
+- **Cross-Platform Compatibility:** Consistent and reliable on Windows, macOS, Linux, Wasm, iOS and Android.
 - **Extensive Testing Infrastructure:** Massive set of unit and integration tests to validate functionality.
 - **Community-Driven Development:** As an open-source project, YUP thrives on contributions from developers around the globe.
 
@@ -44,7 +44,7 @@ YUP brings a suite of powerful features, including:
 ## Supported Platforms
 | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**        | **iOS**            |
 |--------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
-| :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :construction:     | :construction:     |
+| :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
 
 ## Supported Rendering Backends
@@ -67,10 +67,18 @@ YUP brings a suite of powerful features, including:
 | **DirectSound**          | :white_check_mark: |                    |                    |                    |                           |                       |
 | **WASAPI**               | :white_check_mark: |                    |                    |                    |                           |                       |
 | **ALSA**                 |                    |                    | :white_check_mark: |                    |                           |                       |
-| **JACK**                 |                    |                    | :white_check_mark: |                    |                           |                       |
+| **JACK**                 | :white_check_mark: | :white_check_mark: | :white_check_mark: |                    |                           |                       |
 | **Oboe**                 |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **OpenSL**               |                    |                    |                    |                    | :white_check_mark:        |                       |
 | **AudioWorklet**         |                    |                    |                    | :white_check_mark: |                           |                       |
+
+
+## Supported Plugin Formats
+|                          | **CLAP**           | **VST3**           | **VST2**           | **AUv3**           | **AUv2**                  | **AAX**               | **LV2**               |
+|--------------------------|:------------------:|:------------------:|:------------------:|:------------------:|:-------------------------:|:---------------------:|:---------------------:|
+| **Windows**              | :construction:     | :construction:     |                    |                    |                           |                       |                       |
+| **macOS**                | :white_check_mark: | :construction:     |                    |                    | :construction:            |                       |                       |
+| **Linux**                | :construction:     | :construction:     |                    |                    |                           |                       |                       |
 
 
 ## Prerequisites
@@ -248,7 +256,7 @@ struct MyApplication : yup::YUPApplication
         window = std::make_unique<MyWindow>();
         window->centreWithSize ({ 1080, 2400 });
         window->setVisible (true);
-        window->toFront();
+        window->toFront(true);
     }
 
     void shutdown() override

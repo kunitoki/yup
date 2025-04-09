@@ -121,7 +121,7 @@ struct Expression::Helpers
         EvaluationError (const String& desc)
             : description (desc)
         {
-            DBG ("Expression::EvaluationError: " + description);
+            JUCE_DBG ("Expression::EvaluationError: " + description);
         }
 
         String description;

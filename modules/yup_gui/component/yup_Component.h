@@ -24,87 +24,480 @@ namespace yup
 
 //==============================================================================
 
+/**
+    The Component class is the base class for all GUI components.
+
+    It provides a common interface for all components, and is used to create and manage GUI components.
+    It is a lightweight class that is used to create and manage GUI components.
+ */
 class JUCE_API Component
 {
 public:
     //==============================================================================
+    /**
+        Constructor for the Component class.
+
+        @param componentID The ID of the component.
+     */
     Component();
+
+    /**
+        Constructor for the Component class.
+
+        @param componentID The ID of the component.
+     */
     Component (StringRef componentID);
+
+    /** Destructor for the Component class. */
     virtual ~Component();
 
     //==============================================================================
+    /**
+        Get the ID of the component.
+
+        @return The ID of the component.
+     */
     String getComponentID() const;
 
     //==============================================================================
+    /**
+        Check if the component is enabled.
+
+        @return True if the component is enabled, false otherwise.
+     */
     bool isEnabled() const;
-    virtual void setEnabled (bool shouldBeEnabled);
+
+    /**
+        Set the enabled state of the component.
+
+        @param shouldBeEnabled True if the component should be enabled, false otherwise.
+     */
+    void setEnabled (bool shouldBeEnabled);
+
+    /**
+        Called when the enabled state of the component changes.
+     */
     virtual void enablementChanged();
 
     //==============================================================================
+    /**
+        Check if the component is visible.
+
+        @return True if the component is visible, false otherwise.
+     */
     bool isVisible() const;
-    virtual void setVisible (bool shouldBeVisible);
+
+    /**
+        Set the visible state of the component.
+
+        @param shouldBeVisible True if the component should be visible, false otherwise.
+     */
+    void setVisible (bool shouldBeVisible);
+
+    /**
+        Check if the component is showing.
+
+        A component is showing if it is visible and all of its parents are also visible.
+
+        @return True if the component is showing, false otherwise.
+     */
+    bool isShowing() const;
+
+    /**
+        Called when the visible state of the component changes.
+     */
     virtual void visibilityChanged();
 
     //==============================================================================
+    /**
+        Get the title of the component.
+
+        @return The title of the component.
+     */
     String getTitle() const;
-    virtual void setTitle (const String& title);
+
+    /**
+        Set the title of the component.
+
+        @param title The new title of the component.
+     */
+    void setTitle (const String& title);
 
     //==============================================================================
+    /**
+        Get the position of the component relative to its parent.
+
+        @return The position of the component relative to its parent.
+     */
     Point<float> getPosition() const;
+
+    /**
+        Set the position of the component relative to its parent.
+
+        @param newPosition The new position of the component relative to its parent.
+     */
+    void setPosition (const Point<float>& newPosition);
+
+    /**
+        Get the x position of the component relative to its parent.
+
+        @return The x position of the component relative to its parent.
+     */
     float getX() const;
+
+    /**
+        Get the y position of the component relative to its parent.
+
+        @return The y position of the component relative to its parent.
+     */
     float getY() const;
+
+    /**
+        Get the left position of the component relative to its parent.
+
+        @return The left position of the component relative to its parent.
+     */
+    float getLeft() const;
+
+    /**
+        Get the top position of the component relative to its parent.
+
+        @return The top position of the component relative to its parent.
+     */
+    float getTop() const;
+
+    /**
+        Get the right position of the component relative to its parent.
+
+        @return The right position of the component relative to its parent.
+     */
+    float getRight() const;
+
+    /**
+        Get the bottom position of the component relative to its parent.
+
+        @return The bottom position of the component relative to its parent.
+     */
+    float getBottom() const;
+
+    Point<float> getTopLeft() const;
+    void setTopLeft (const Point<float>& newTopLeft);
+
+    Point<float> getBottomLeft() const;
+    void setBottomLeft (const Point<float>& newBottomLeft);
+
+    Point<float> getTopRight() const;
+    void setTopRight (const Point<float>& newTopRight);
+
+    Point<float> getBottomRight() const;
+    void setBottomRight (const Point<float>& newBottomRight);
+
+    Point<float> getCenter() const;
+    void setCenter (const Point<float>& newCenter);
+
+    /**
+        Called when the position of the component changes.
+     */
     virtual void moved();
 
     //==============================================================================
-    virtual void setSize (const Size<float>& newSize);
+    /**
+        Get the size of the component.
+     */
     Size<float> getSize() const;
+
+    /**
+        Set the size of the component.
+
+        @param newSize The new size of the component.
+     */
+    void setSize (const Size<float>& newSize);
+
+    /**
+        Get the width of the component.
+
+        @return The width of the component.
+     */
     float getWidth() const;
+
+    /**
+        Get the height of the component.
+
+        @return The height of the component.
+     */
     float getHeight() const;
-    virtual void setBounds (const Rectangle<float>& newBounds);
-    Rectangle<float> getBounds() const;
-    Rectangle<float> getLocalBounds() const;
-    Rectangle<float> getBoundsRelativeToAncestor() const;
+
+    /**
+        Get the width of the component as a proportion of the parent's width.
+
+        @param proportion The proportion of the parent's width to get.
+
+        @return The width of the component as a proportion of the parent's width.
+     */
     float proportionOfWidth (float proportion) const;
+
+    /**
+        Get the height of the component as a proportion of the parent's height.
+
+        @param proportion The proportion of the parent's height to get.
+
+        @return The height of the component as a proportion of the parent's height.
+     */
     float proportionOfHeight (float proportion) const;
+
+    /**
+        Called when the size of the component changes.
+     */
     virtual void resized();
 
     //==============================================================================
-    virtual void setFullScreen (bool shouldBeFullScreen);
+    /**
+        Set the bounds of the component.
+
+        @param newBounds The new bounds of the component.
+     */
+    void setBounds (const Rectangle<float>& newBounds);
+
+    /**
+        Get the bounds of the component, relative to its parent.
+
+        @return The bounds of the component.
+     */
+    Rectangle<float> getBounds() const;
+
+    /**
+        Get the local bounds of the component, with zero position.
+
+        @return The local bounds of the component.
+     */
+    Rectangle<float> getLocalBounds() const;
+
+    /**
+        Get the bounds of the component relative to its top level component.
+
+        @return The bounds of the component relative to its top most component (on desktop).
+     */
+    Rectangle<float> getBoundsRelativeToTopLevelComponent() const;
+
+    //==============================================================================
+    /**
+        Set the full screen state of the component.
+
+        @param shouldBeFullScreen True if the component should be full screen, false otherwise.
+     */
+    void setFullScreen (bool shouldBeFullScreen);
+
+    /**
+        Check if the component is full screen.
+     */
     bool isFullScreen() const;
 
     //==============================================================================
+    /**
+        Called when the component changes display.
+     */
+    virtual void displayChanged();
+
+    //==============================================================================
+    /**
+        Get the scale factor of the component.
+
+        @return The scale factor of the component.
+     */
     float getScaleDpi() const;
+
+    /**
+        Called when the content scale of the component changes.
+
+        @param dpiScale The new scale factor of the component.
+     */
     virtual void contentScaleChanged (float dpiScale);
 
     //==============================================================================
+    /**
+        Get the opacity of the component.
+
+        @return The opacity of the component.
+     */
     float getOpacity() const;
-    virtual void setOpacity (float opacity);
+
+    /**
+        Set the opacity of the component.
+
+        @param opacity The new opacity of the component.
+     */
+    void setOpacity (float opacity);
 
     //==============================================================================
+    /**
+        Enable or disable unclipped rendering for the component.
+
+        @param shouldBeEnabled True if the component should be rendered unclipped, false otherwise.
+     */
     virtual void enableRenderingUnclipped (bool shouldBeEnabled);
+
+    /**
+        Check if the component is rendering unclipped.
+
+        @return True if the component is rendering unclipped, false otherwise.
+     */
     bool isRenderingUnclipped() const;
 
+    /**
+        Repaint the component.
+     */
     void repaint();
+
+    /**
+        Repaint the component.
+
+        @param rect The rectangle to repaint.
+     */
     void repaint (const Rectangle<float>& rect);
 
     //==============================================================================
+    /**
+        Get the native handle of the component.
+
+        @return The native handle of the component.
+     */
     void* getNativeHandle() const;
 
-    //==============================================================================
+    /**
+        Get the native component of the component.
+
+        @return The native component of the component.
+     */
     ComponentNative* getNativeComponent();
+
+    /**
+        Get the native component of the component.
+
+        @return The native component of the component.
+     */
     const ComponentNative* getNativeComponent() const;
 
+    /** */
+    virtual void attachedToNative();
+
+    /** */
+    virtual void detachedFromNative();
+
     //==============================================================================
+    /**
+        Check if the component is on the desktop.
+
+        @return True if the component is on the desktop, false otherwise.
+     */
     bool isOnDesktop() const;
-    void addToDesktop (const ComponentNative::Options& nativeOptions, void* parent);
+
+    /**
+        Add the component to the desktop.
+
+        @param nativeOptions The native options of the component.
+        @param parent The parent of the component.
+     */
+    void addToDesktop (const ComponentNative::Options& nativeOptions, void* parent = nullptr);
+
+    /**
+        Remove the component from the desktop.
+     */
     void removeFromDesktop();
 
+    /**
+        Called when the user tries to close the window.
+     */
     virtual void userTriedToCloseWindow();
 
     //==============================================================================
+    /**
+        Bring the component to the front.
+     */
+    void toFront (bool shouldGainKeyboardFocus);
+
+    /**
+        Bring the component to the back.
+     */
+    void toBack();
+
+    void raiseAbove (Component* component);
+
+    void lowerBelow (Component* component);
+
+    void raiseBy (int indexToRaise);
+
+    void lowerBy (int indexToLower);
+
+    //==============================================================================
+    /**
+        Set the mouse cursor of the component.
+
+        @param cursorType The new mouse cursor of the component.
+     */
+    void setMouseCursor (const MouseCursor& cursorType);
+
+    /**
+        Get the mouse cursor of the component.
+
+        @return The mouse cursor of the component.
+     */
+    virtual MouseCursor getMouseCursor() const;
+
+    //==============================================================================
+    /**
+        Set if the component wants keyboard focus.
+
+        @param wantsFocus True if the component wants keyboard focus, false otherwise.
+     */
+    void setWantsKeyboardFocus (bool wantsFocus);
+
+    /**
+        Take the focus.
+     */
+    void takeFocus();
+
+    /**
+        Leave the focus.
+     */
+    void leaveFocus();
+
+    /**
+        Check if the component has focus.
+
+        @return True if the component has focus, false otherwise.
+     */
+    bool hasFocus() const;
+
+    /**
+        Called when the component gains focus.
+     */
+    virtual void focusGained();
+
+    /**
+        Called when the component loses focus.
+     */
+    virtual void focusLost();
+
+    //==============================================================================
+    /**
+        Get the parent of the component.
+
+        @return The parent of the component.
+     */
     Component* getParentComponent();
+
+    /**
+        Get the parent of the component.
+
+        @return The parent of the component.
+     */
     const Component* getParentComponent() const;
 
+    /**
+        Get the parent of the component of a given type.
+
+        @return The parent of the component of the given type.
+     */
     template <class T>
     T* getParentComponentOfType()
     {
@@ -120,69 +513,314 @@ public:
         return nullptr;
     }
 
+    /**
+        Get the parent of the component of a given type.
+
+        @return The parent of the component of the given type.
+     */
+    template <class T>
+    const T* getParentComponentOfType() const
+    {
+        auto parent = parentComponent;
+        while (parent != nullptr)
+        {
+            if (auto foundParent = dynamic_cast<T*> (parent))
+                return foundParent;
+
+            parent = parent->getParentComponent();
+        }
+
+        return nullptr;
+    }
+
     //==============================================================================
-    void addChildComponent (Component& component);
-    void addChildComponent (Component* component);
+    /**
+        Add a child component to the component.
 
-    void addAndMakeVisible (Component& component);
-    void addAndMakeVisible (Component* component);
+        @param component The child component to add.
+     */
+    void addChildComponent (Component& component, int index = -1);
 
-    void insertChildComponent (Component& component, int index);
-    void insertChildComponent (Component* component, int index);
+    /**
+        Add a child component to the component.
 
+        @param component The child component to add.
+     */
+    void addChildComponent (Component* component, int index = -1);
+
+    /**
+        Add a child component to the component and make it visible.
+
+        @param component The child component to add.
+     */
+    void addAndMakeVisible (Component& component, int index = -1);
+
+    /**
+        Add a child component to the component and make it visible.
+
+        @param component The child component to add.
+     */
+    void addAndMakeVisible (Component* component, int index = -1);
+
+    /**
+        Remove a child component from the component.
+
+        @param component The child component to remove.
+     */
     void removeChildComponent (Component& component);
+
+    /**
+        Remove a child component from the component.
+
+        @param component The child component to remove.
+     */
     void removeChildComponent (Component* component);
 
+    /**
+        Remove a child component from the component at a specified index.
+
+        @param index The child component index to remove.
+     */
+    void removeChildComponent (int index);
+
+    /** */
+    void removeAllChildren();
+
+    /** */
+    virtual void parentHierarchyChanged();
+
+    /** */
+    virtual void childrenChanged();
+
     //==============================================================================
+    /**
+        Get the number of child components of the component.
+     */
     int getNumChildComponents() const;
+
+    /**
+        Get the child component at a given index.
+
+        @param index The index of the child component to get.
+     */
     Component* getComponentAt (int index) const;
+
+    /**
+        Returns the index of a child component, or -1 if not found.
+     */
+    int getIndexOfChildComponent (Component* component) const;
+
+    /**
+        Find the child component at a given point.
+
+        @param p The point to find the child component at.
+     */
     Component* findComponentAt (const Point<float>& p);
 
-    //==============================================================================
-    void toFront();
-    void toBack();
+    /**
+        Returns the top level component.
+    */
+    Component* getTopLevelComponent();
 
     //==============================================================================
-    void setWantsKeyboardFocus (bool wantsFocus);
+    /**
+        Set a color for the component.
 
-    void takeFocus();
-    void leaveFocus();
-    bool hasFocus() const;
-
-    //==============================================================================
+        @param colorId The identifier of the color to set.
+        @param color The color to set.
+     */
     void setColor (const Identifier& colorId, const std::optional<Color>& color);
+
+    /**
+        Get the color of the component.
+
+        @param colorId The identifier of the color to get.
+     */
     std::optional<Color> getColor (const Identifier& colorId) const;
+
+    /**
+        Find the color of the component.
+
+        @param colorId The identifier of the color to find.
+
+        @return The color of the component.
+     */
     std::optional<Color> findColor (const Identifier& colorId) const;
 
     //==============================================================================
+    /**
+        Get the properties of the component.
+
+        @return The properties of the component.
+     */
     NamedValueSet& getProperties();
+
+    /**
+        Get the properties of the component.
+
+        @return The properties of the component.
+     */
     const NamedValueSet& getProperties() const;
 
     //==============================================================================
+    /**
+        Paint the component.
+
+        @param g The graphics context to paint the component on.
+     */
     virtual void paint (Graphics& g);
+
+    /**
+        Paint the component over its children.
+
+        @param g The graphics context to paint the component on.
+     */
     virtual void paintOverChildren (Graphics& g);
 
     //==============================================================================
+    /**
+        Refresh the display of the component.
+
+        @param lastFrameTimeSeconds The time since the last frame.
+     */
     virtual void refreshDisplay (double lastFrameTimeSeconds);
 
     //==============================================================================
+    /**
+        Called when the mouse enters the component.
+
+        @param event The mouse event.
+     */
     virtual void mouseEnter (const MouseEvent& event);
+
+    /**
+        Called when the mouse exits the component.
+
+        @param event The mouse event.
+     */
     virtual void mouseExit (const MouseEvent& event);
+
+    /**
+        Called when the mouse button is pressed.
+
+        @param event The mouse event.
+     */
     virtual void mouseDown (const MouseEvent& event);
+
+    /**
+        Called when the mouse is moved.
+
+        @param event The mouse event.
+     */
     virtual void mouseMove (const MouseEvent& event);
+
+    /**
+        Called when the mouse is dragged.
+
+        @param event The mouse event.
+     */
     virtual void mouseDrag (const MouseEvent& event);
+
+    /**
+        Called when the mouse button is released.
+
+        @param event The mouse event.
+     */
     virtual void mouseUp (const MouseEvent& event);
+
+    /**
+        Called when the mouse button is double clicked.
+
+        @param event The mouse event.
+     */
     virtual void mouseDoubleClick (const MouseEvent& event);
+
+    /**
+        Called when the mouse wheel is scrolled.
+
+        @param event The mouse event.
+        @param wheelData The mouse wheel data.
+     */
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
 
     //==============================================================================
+    /**
+        Add a mouse listener to the component.
+
+        @param listener The mouse listener to add.
+     */
     void addMouseListener (MouseListener* listener);
+
+    /**
+        Remove a mouse listener from the component.
+
+        @param listener The mouse listener to remove.
+     */
     void removeMouseListener (MouseListener* listener);
 
     //==============================================================================
+    /**
+        Called when a key is pressed.
+
+        @param keys The key press.
+        @param position The position of the key press.
+     */
     virtual void keyDown (const KeyPress& keys, const Point<float>& position);
+
+    /**
+        Called when a key is released.
+
+        @param keys The key press.
+        @param position The position of the key press.
+     */
     virtual void keyUp (const KeyPress& keys, const Point<float>& position);
+
+    /**
+        Called when text is input.
+
+        @param text The text input.
+     */
     virtual void textInput (const String& text);
+
+    //==============================================================================
+    /**
+        A bail out checker for the component.
+     */
+    class BailOutChecker
+    {
+    public:
+        /**
+            Constructor for the BailOutChecker class.
+
+            @param component The component to check.
+         */
+        BailOutChecker (Component* component)
+            : componentWeak (component)
+        {
+        }
+
+        /** Copy constructor for the BailOutChecker class. */
+        BailOutChecker (const BailOutChecker& other) = default;
+        /** Move constructor for the BailOutChecker class. */
+        BailOutChecker (BailOutChecker&& other) = default;
+        /** Copy assignment operator for the BailOutChecker class. */
+        BailOutChecker& operator= (const BailOutChecker& other) = default;
+        /** Move assignment operator for the BailOutChecker class. */
+        BailOutChecker& operator= (BailOutChecker&& other) = default;
+
+        /**
+            Check if the component should bail out.
+
+            @return True if the component should bail out, false otherwise.
+         */
+        bool shouldBailOut() const
+        {
+            return componentWeak.get() == nullptr;
+        }
+
+    private:
+        WeakReference<Component> componentWeak;
+    };
 
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
@@ -200,8 +838,12 @@ private:
     void internalTextInput (const String& text);
     void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
+    void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
+    void internalHierarchyChanged();
+
+    void updateMouseCursor();
 
     friend class ComponentNative;
     friend class GLFWComponentNative;
@@ -218,6 +860,7 @@ private:
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
     NamedValueSet properties;
+    MouseCursor mouseCursor;
     uint8 opacity = 255;
 
     struct Options

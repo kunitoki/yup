@@ -297,7 +297,7 @@ bool JUCEApplicationBase::initialiseApp()
 #if JUCE_HANDLE_MULTIPLE_INSTANCES
     if ((! moreThanOneInstanceAllowed()) && sendCommandLineToPreexistingInstance())
     {
-        DBG ("Another instance is running - quitting...");
+        JUCE_DBG ("Another instance is running - quitting...");
         return false;
     }
 #endif
