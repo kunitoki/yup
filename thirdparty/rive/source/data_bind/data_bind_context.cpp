@@ -5,6 +5,7 @@
 #include "rive/data_bind/context/context_value_enum.hpp"
 #include "rive/data_bind/context/context_value_list.hpp"
 #include "rive/data_bind/context/context_value_color.hpp"
+#include "rive/data_bind/converters/data_converter_group.hpp"
 #include "rive/artboard.hpp"
 #include "rive/generated/core_registry.hpp"
 #include <iostream>
@@ -33,9 +34,16 @@ void DataBindContext::bindFromContext(DataContext* dataContext)
         auto value = dataContext->getViewModelProperty(m_SourcePathIdsBuffer);
         if (value != nullptr)
         {
-            value->addDependent(this);
+            if (!bindsOnce())
+            {
+                value->addDependent(this);
+            }
             m_Source = value;
             bind();
+        }
+        if (m_dataConverter != nullptr)
+        {
+            m_dataConverter->bindFromContext(dataContext, this);
         }
     }
 }

@@ -435,6 +435,12 @@ public:
         /** @see getHostTimeNs() */
         void setHostTimeNs (Optional<uint64_t> hostTimeNsIn) { setOptional (flagHostTimeNs, hostTimeNs, hostTimeNsIn); }
 
+        /** The current play position, in samples from the start of processing, without looping, if available. */
+        Optional<int64_t> getContinuousTimeInSamples() const { return getOptional (flagContinuousTime, continuousTimeInSamples); }
+
+        /** @see getContinuousTimeInSamples() */
+        void setContinuousTimeInSamples (Optional<int64_t> cont) { setOptional (flagContinuousTime, continuousTimeInSamples, cont); }
+
         /** True if the transport is currently playing. */
         bool getIsPlaying() const { return getFlag (flagIsPlaying); }
 
@@ -525,7 +531,8 @@ public:
             flagHostTimeNs = 1 << 10,
             flagIsPlaying = 1 << 11,
             flagIsRecording = 1 << 12,
-            flagIsLooping = 1 << 13
+            flagIsLooping = 1 << 13,
+            flagContinuousTime = 1 << 14
         };
 
         TimeSignature timeSignature;
@@ -536,6 +543,7 @@ public:
         double positionPpq = 0.0;
         double originTime = 0.0;
         double tempoBpm = 0.0;
+        int64_t continuousTimeInSamples = 0;
         int64_t timeInSamples = 0;
         int64_t barCount = 0;
         uint64_t hostTimeNs = 0;
@@ -543,67 +551,6 @@ public:
     };
 
     //==============================================================================
-    /** Deprecated, use getPosition() instead.
-
-        Fills-in the given structure with details about the transport's
-        position at the start of the current processing block. If this method returns
-        false then the current play head position is not available and the given
-        structure will be undefined.
-
-        You can ONLY call this from your processBlock() method! Calling it at other
-        times will produce undefined behaviour, as the host may not have any context
-        in which a time would make sense, and some hosts will almost certainly have
-        multithreading issues if it's not called on the audio thread.
-    */
-    [[deprecated ("Use getPosition instead. Not all hosts are able to provide all time position information; getPosition differentiates clearly between set and unset fields.")]] bool getCurrentPosition (CurrentPositionInfo& result)
-    {
-        if (const auto pos = getPosition())
-        {
-            result.resetToDefault();
-
-            if (const auto sig = pos->getTimeSignature())
-            {
-                result.timeSigNumerator = sig->numerator;
-                result.timeSigDenominator = sig->denominator;
-            }
-
-            if (const auto loop = pos->getLoopPoints())
-            {
-                result.ppqLoopStart = loop->ppqStart;
-                result.ppqLoopEnd = loop->ppqEnd;
-            }
-
-            if (const auto frame = pos->getFrameRate())
-                result.frameRate = *frame;
-
-            if (const auto timeInSeconds = pos->getTimeInSeconds())
-                result.timeInSeconds = *timeInSeconds;
-
-            if (const auto lastBarStartPpq = pos->getPpqPositionOfLastBarStart())
-                result.ppqPositionOfLastBarStart = *lastBarStartPpq;
-
-            if (const auto ppqPosition = pos->getPpqPosition())
-                result.ppqPosition = *ppqPosition;
-
-            if (const auto originTime = pos->getEditOriginTime())
-                result.editOriginTime = *originTime;
-
-            if (const auto bpm = pos->getBpm())
-                result.bpm = *bpm;
-
-            if (const auto timeInSamples = pos->getTimeInSamples())
-                result.timeInSamples = *timeInSamples;
-
-            result.isPlaying = pos->getIsPlaying();
-            result.isRecording = pos->getIsRecording();
-            result.isLooping = pos->getIsLooping();
-
-            return true;
-        }
-
-        return false;
-    }
-
     /** Fetches details about the transport's position at the start of the current
         processing block. If this method returns nullopt then the current play head
         position is not available.

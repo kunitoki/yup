@@ -229,8 +229,10 @@ public:
     std::vector<int> getRegisteredFds()
     {
         const ScopedLock sl (lock);
+
         std::vector<int> result;
         result.reserve (callbacks.size());
+
         std::transform (callbacks.begin(),
                         callbacks.end(),
                         std::back_inserter (result),
@@ -238,6 +240,7 @@ public:
                         {
                             return pair.first;
                         });
+
         return result;
     }
 
@@ -306,25 +309,49 @@ JUCE_IMPLEMENT_SINGLETON (InternalRunLoop)
 //==============================================================================
 namespace LinuxErrorHandling
 {
-    static bool keyboardBreakOccurred = false;
+static bool keyboardBreakOccurred = false;
 
-    static void keyboardBreakSignalHandler (int sig)
-    {
-        if (sig == SIGINT)
-            keyboardBreakOccurred = true;
-    }
+static void keyboardBreakSignalHandler (int sig)
+{
+    if (sig == SIGINT)
+        keyboardBreakOccurred = true;
+}
 
-    static void installKeyboardBreakHandler()
-    {
-        struct sigaction saction;
-        sigset_t maskSet;
-        sigemptyset (&maskSet);
-        saction.sa_handler = keyboardBreakSignalHandler;
-        saction.sa_mask = maskSet;
-        saction.sa_flags = 0;
-        sigaction (SIGINT, &saction, nullptr);
-    }
+static void installKeyboardBreakHandler()
+{
+    struct sigaction saction;
+    sigset_t maskSet;
+    sigemptyset (&maskSet);
+    saction.sa_handler = keyboardBreakSignalHandler;
+    saction.sa_mask = maskSet;
+    saction.sa_flags = 0;
+    sigaction (SIGINT, &saction, nullptr);
+}
 } // namespace LinuxErrorHandling
+
+//==============================================================================
+// this function expects that it will NEVER be called simultaneously for two concurrent threads
+bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+{
+    for (;;)
+    {
+        if (LinuxErrorHandling::keyboardBreakOccurred)
+            JUCEApplicationBase::quit();
+
+        if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
+        {
+            if (runLoop->dispatchPendingEvents())
+                break;
+
+            if (returnIfNoPendingMessages)
+                return false;
+
+            runLoop->sleepUntilNextEvent (2000);
+        }
+    }
+
+    return true;
+}
 
 //==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
@@ -357,32 +384,6 @@ void MessageManager::broadcastMessage (const String&)
 {
     // TODO
 }
-
-namespace detail
-{
-    // this function expects that it will NEVER be called simultaneously for two concurrent threads
-    bool dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
-    {
-        for (;;)
-        {
-            if (LinuxErrorHandling::keyboardBreakOccurred)
-                JUCEApplicationBase::quit();
-
-            if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
-            {
-                if (runLoop->dispatchPendingEvents())
-                    break;
-
-                if (returnIfNoPendingMessages)
-                    return false;
-
-                runLoop->sleepUntilNextEvent (2000);
-            }
-        }
-
-        return true;
-    }
-} // namespace detail
 
 //==============================================================================
 void LinuxEventLoop::registerFdCallback (int fd, std::function<void (int)> readCallback, short eventMask)

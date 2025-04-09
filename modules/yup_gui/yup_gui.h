@@ -36,6 +36,7 @@
     dependencies:       juce_events yup_graphics rive
     osxFrameworks:      Metal
     iosFrameworks:      Metal
+    iosSimFrameworks:   Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
@@ -51,6 +52,15 @@
 #include <yup_graphics/yup_graphics.h>
 
 //==============================================================================
+/** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+
+    Enable repaint debugging for components.
+*/
+#ifndef YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
+#define YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING 0
+#endif
+
+//==============================================================================
 
 #include <rive/artboard.hpp>
 #include <rive/file.hpp>
@@ -62,8 +72,10 @@
 #include "keyboard/yup_KeyModifiers.h"
 #include "keyboard/yup_KeyPress.h"
 #include "mouse/yup_MouseEvent.h"
+#include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
-#include "desktop/yup_Display.h"
+#include "mouse/yup_MouseListener.h"
+#include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
 #include "component/yup_Component.h"
@@ -72,3 +84,6 @@
 #include "widgets/yup_Slider.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
+
+//==============================================================================
+#include "native/yup_WindowingHelpers.h"

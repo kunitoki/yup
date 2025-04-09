@@ -62,6 +62,13 @@ MemoryInputStream::MemoryInputStream (const MemoryBlock& sourceData, bool keepCo
     }
 }
 
+MemoryInputStream::MemoryInputStream (StringRef stringToTake)
+    : internalCopy (stringToTake.text, stringToTake.length())
+{
+    data = internalCopy.getData();
+    dataSize = internalCopy.getSize();
+}
+
 MemoryInputStream::MemoryInputStream (MemoryBlock&& source)
     : internalCopy (std::move (source))
 {

@@ -4,6 +4,22 @@
 
 using namespace rive;
 
+bool TargetedConstraint::validate(CoreContext* context)
+{
+    if (!Super::validate(context))
+    {
+        return false;
+    }
+    auto coreObject = context->resolve(targetId());
+    // If core object is not null and is not a TransformComponent it should
+    // always be invalid
+    if (coreObject != nullptr && !coreObject->is<TransformComponent>())
+    {
+        return false;
+    }
+    return !requiresTarget() || coreObject != nullptr;
+}
+
 StatusCode TargetedConstraint::onAddedDirty(CoreContext* context)
 {
     StatusCode code = Super::onAddedDirty(context);
@@ -12,7 +28,7 @@ StatusCode TargetedConstraint::onAddedDirty(CoreContext* context)
         return code;
     }
     auto coreObject = context->resolve(targetId());
-    if (coreObject == nullptr || !coreObject->is<TransformComponent>())
+    if (requiresTarget() && coreObject == nullptr)
     {
         return StatusCode::MissingObject;
     }

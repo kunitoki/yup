@@ -21,6 +21,11 @@
 
 #include "sheenbidi.h"
 
+#if defined(__GNUC__) && !defined(__clang__)
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
+
 #include "source/SBBase.c"
 #include "source/RunQueue.c"
 #include "source/BidiTypeLookup.c"
@@ -41,3 +46,7 @@
 #include "source/SBParagraph.c"
 #include "source/IsolatingRun.c"
 #include "source/SBAlgorithm.c"
+
+#if defined(__GNUC__) && !defined(__clang__)
+ #pragma GCC diagnostic pop
+#endif

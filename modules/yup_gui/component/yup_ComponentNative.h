@@ -28,16 +28,20 @@ class Component;
 class JUCE_API ComponentNative
 {
     struct decoratedWindowTag;
+    struct resizableWindowTag;
     struct renderContinuousTag;
+    struct allowHighDensityDisplayTag;
 
 public:
     //==============================================================================
-    using Flags = FlagSet<uint32, decoratedWindowTag, renderContinuousTag>;
+    using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
 
     static inline constexpr Flags noFlags = Flags();
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
+    static inline constexpr Flags resizableWindow = Flags::declareValue<resizableWindowTag>();
     static inline constexpr Flags renderContinuous = Flags::declareValue<renderContinuousTag>();
-    static inline constexpr Flags defaultFlags = decoratedWindow;
+    static inline constexpr Flags allowHighDensityDisplay = Flags::declareValue<allowHighDensityDisplayTag>();
+    static inline constexpr Flags defaultFlags = decoratedWindow | resizableWindow | allowHighDensityDisplay;
 
     //==============================================================================
     /** Configuration options for creating a native component. */
@@ -46,27 +50,84 @@ public:
         /** Default constructor, initializes the options with default values. */
         constexpr Options() noexcept = default;
 
-        Options& withFlags(Flags newFlags) noexcept
+        Options& withFlags (Flags newFlags) noexcept
         {
             flags = newFlags;
             return *this;
         }
 
-        Options& withGraphicsApi(std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
+        Options& withDecoration (bool shouldHaveDecoration) noexcept
+        {
+            if (shouldHaveDecoration)
+                flags |= decoratedWindow;
+            else
+                flags &= ~decoratedWindow;
+            return *this;
+        }
+
+        Options& withResizableWindow (bool shouldAllowResizing) noexcept
+        {
+            if (shouldAllowResizing)
+                flags |= resizableWindow;
+            else
+                flags &= ~resizableWindow;
+            return *this;
+        }
+
+        Options& withRenderContinuous (bool shouldRenderContinuous) noexcept
+        {
+            if (shouldRenderContinuous)
+                flags |= renderContinuous;
+            else
+                flags &= ~renderContinuous;
+            return *this;
+        }
+
+        Options& withAllowedHighDensityDisplay (bool shouldAllowHighDensity) noexcept
+        {
+            if (shouldAllowHighDensity)
+                flags |= allowHighDensityDisplay;
+            else
+                flags &= ~allowHighDensityDisplay;
+            return *this;
+        }
+
+        Options& withGraphicsApi (std::optional<GraphicsContext::Api> newGraphicsApi) noexcept
         {
             graphicsApi = newGraphicsApi;
             return *this;
         }
 
-        Options& withFramerateRedraw(std::optional<float> newFramerateRedraw) noexcept
+        Options& withFramerateRedraw (std::optional<float> newFramerateRedraw) noexcept
         {
             framerateRedraw = newFramerateRedraw;
+            return *this;
+        }
+
+        Options& withClearColor (std::optional<Color> newClearColor) noexcept
+        {
+            clearColor = newClearColor;
+            return *this;
+        }
+
+        Options& withDoubleClickTime (std::optional<RelativeTime> newDoubleClickTime) noexcept
+        {
+            doubleClickTime = newDoubleClickTime;
+            return *this;
+        }
+
+        Options& withUpdateOnlyFocused (bool onlyWhenFocused) noexcept
+        {
+            updateOnlyWhenFocused = onlyWhenFocused;
             return *this;
         }
 
         Flags flags = defaultFlags;                      ///<
         std::optional<GraphicsContext::Api> graphicsApi; ///<
         std::optional<float> framerateRedraw;            ///<
+        std::optional<Color> clearColor;                 ///<
+        std::optional<RelativeTime> doubleClickTime;     ///<
+        bool updateOnlyWhenFocused = false;              ///<
     };
 
     //==============================================================================
@@ -116,8 +177,9 @@ public:
     virtual void enableWireframe (bool shouldBeEnabld) = 0;
 
     //==============================================================================
+    virtual void repaint() = 0;
     virtual void repaint (const Rectangle<float>& rect) = 0;
-    virtual Rectangle<float> getRepaintArea() const = 0;
+    virtual const RectangleList<float>& getRepaintAreas() const = 0;
 
     //==============================================================================
     virtual float getScaleDpi() const = 0;

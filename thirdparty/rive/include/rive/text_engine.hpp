@@ -111,7 +111,11 @@ struct GlyphLine
 struct Paragraph
 {
     SimpleArray<GlyphRun> runs;
-    TextDirection baseDirection;
+    uint8_t level;
+    TextDirection baseDirection() const
+    {
+        return level & 1 ? TextDirection::rtl : TextDirection::ltr;
+    }
 };
 
 // An abstraction for interfacing with an individual font.
@@ -153,6 +157,12 @@ public:
     // will be used. Otherwise the default value for the axis will be returned.
     virtual float getAxisValue(uint32_t axisTag) const = 0;
 
+    // Returns the current font value as a numeric value [1, 1000]
+    virtual uint16_t getWeight() const = 0;
+
+    // Whether this font is italic or not.
+    virtual bool isItalic() const = 0;
+
     // Font feature.
     struct Feature
     {
@@ -163,7 +173,7 @@ public:
     // Returns the features available for this font.
     virtual SimpleArray<uint32_t> features() const = 0;
 
-    virtual bool hasGlyph(rive::Span<const rive::Unichar>) const = 0;
+    virtual bool hasGlyph(const rive::Unichar) const = 0;
 
     // Value for the feature, if no value has been provided a (uint32_t)-1 is
     // returned to signal that the text engine will pick the best feature value
@@ -189,24 +199,27 @@ public:
     virtual RawPath getPath(GlyphID) const = 0;
 
     SimpleArray<Paragraph> shapeText(Span<const Unichar> text,
-                                     Span<const TextRun> runs) const;
+                                     Span<const TextRun> runs,
+                                     int textDirectionFlag = -1) const;
 
     // If the platform can supply fallback font(s), set this function pointer.
     // It will be called with a span of unichars, and the platform attempts to
     // return a font that can draw (at least some of) them. If no font is
     // available just return nullptr.
 
-    using FallbackProc =
-        rive::rcp<rive::Font> (*)(rive::Span<const rive::Unichar>);
+    using FallbackProc = rive::rcp<rive::Font> (*)(const rive::Unichar missing,
+                                                   const uint32_t fallbackIndex,
+                                                   const rive::Font*);
     static FallbackProc gFallbackProc;
     static bool gFallbackProcEnabled;
+    static constexpr unsigned kRegularWeight = 400;
 
 protected:
     Font(const LineMetrics& lm) : m_lineMetrics(lm) {}
 
-    virtual SimpleArray<Paragraph> onShapeText(
-        Span<const Unichar> text,
-        Span<const TextRun> runs) const = 0;
+    virtual SimpleArray<Paragraph> onShapeText(Span<const Unichar> text,
+                                               Span<const TextRun> runs,
+                                               int textDirectionFlag) const = 0;
 
 private:
     /// The font specified line metrics (automatic line metrics).
@@ -224,7 +237,7 @@ struct TextRun
     uint32_t unicharCount;
     uint32_t script;
     uint16_t styleId;
-    TextDirection dir;
+    uint8_t level;
 };
 
 // The corresponding system generated run for the user provided TextRuns.
@@ -289,8 +302,13 @@ struct GlyphRun
     // determined by the font or font size) applied to this run.
     uint16_t styleId;
 
-    // The text direction (LTR = 0/RTL = 1)
-    TextDirection dir;
+    // Bidi level (even is LTR, odd is RTL)
+    uint8_t level;
+
+    TextDirection dir() const
+    {
+        return level & 1 ? TextDirection::rtl : TextDirection::ltr;
+    }
 };
 
 } // namespace rive

@@ -77,11 +77,37 @@ void Profiler::startTracing (uint32 sizeInKilobytes)
 {
     perfetto::TraceConfig traceConfig;
     traceConfig.add_buffers()->set_size_kb (sizeInKilobytes);
+
     auto dataSourceConfig = traceConfig.add_data_sources()->mutable_config();
     dataSourceConfig->set_name ("track_event");
 
+    String fileName;
+    fileName
+        << JUCE_PROFILING_FILE_PREFIX
+#if JUCE_DEBUG
+        << "-DEBUG-"
+#else
+        << "-RELEASE-"
+#endif
+        << Time::getCurrentTime().formatted ("%Y%m%d%H%M%S")
+        << "-" << String::toHexString (static_cast<uint16> (Random::getSystemRandom().nextInt()))
+        << ".pftrace";
+
+    File destination;
+    if (outputFolder != File() && outputFolder.isDirectory())
+        destination = outputFolder;
+    else
+        destination = File::getSpecialLocation (File::userHomeDirectory);
+
+    destination = destination.getChildFile (fileName);
+
+    if (destination.existsAsFile())
+        destination.deleteFile();
+
+    fileDescriptor = open (destination.getFullPathName().toRawUTF8(), O_RDWR | O_CREAT | O_TRUNC, 0600);
+
     session = perfetto::Tracing::NewTrace();
-    session->Setup (traceConfig);
+    session->Setup (traceConfig, fileDescriptor);
     session->StartBlocking();
 }
 
@@ -95,44 +121,17 @@ void Profiler::stopTracing()
     perfetto::TrackEvent::Flush();
 
     session->StopBlocking();
-    std::vector<char> traceData (session->ReadTraceBlocking());
 
-    String fileName;
-    fileName
-        << "yup-profile"
-#if JUCE_DEBUG
-        << "-DEBUG-"
-#else
-        << "-RELEASE-"
-#endif
-        << Time::getCurrentTime().formatted ("%Y-%m-%d_%H%M%S")
-        << ".pftrace";
-
-    const auto destination = File::getSpecialLocation (File::userHomeDirectory) // TODO - make it configurable
-                                 .getChildFile (fileName);
-
-    if (destination.existsAsFile())
-        destination.deleteFile();
-
-    if (auto output = destination.createOutputStream(); output != nullptr && output->openedOk())
-    {
-        output->write (traceData.data(), traceData.size());
-
-        String message;
-        message
-            << "Trace written in " << destination.getFullPathName() << ". "
-            << "To read this trace in text form, `./tools/traceconv text " << destination.getFullPathName() << "`";
-
-        DBG (message);
-    }
-    else
-    {
-        DBG ("Failed to write trace file. Check for missing permissions.");
-
-        jassertfalse;
-    }
+    close (fileDescriptor);
 
     Profiler::deleteInstance();
+}
+
+//==============================================================================
+
+void Profiler::setOutputFolder (const File& newOutputFolder)
+{
+    outputFolder = newOutputFolder;
 }
 
 } // namespace juce

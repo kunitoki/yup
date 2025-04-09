@@ -769,9 +769,9 @@ Array<Win32MidiService::MidiInCollector*, CriticalSection> Win32MidiService::Mid
 #endif
 
 #if JUCE_WINRT_MIDI_LOGGING
-#define JUCE_WINRT_MIDI_LOG(x) DBG (x)
+#define JUCE_WINRT_MIDI_LOG(x) JUCE_DBG (x)
 #else
-#define JUCE_WINRT_MIDI_LOG(x)
+#define JUCE_WINRT_MIDI_LOG(x) {}
 #endif
 
 using namespace Microsoft::WRL;
@@ -876,7 +876,7 @@ private:
             auto requestedProperties = [wrtWrapper]
             {
                 auto devicePicker = wrtWrapper->activateInstance<IDevicePicker> (&RuntimeClass_Windows_Devices_Enumeration_DevicePicker[0],
-                                                                                 __uuidof(IDevicePicker));
+                                                                                 __uuidof (IDevicePicker));
                 jassert (devicePicker != nullptr);
 
                 IVector<HSTRING>* result;
@@ -906,7 +906,7 @@ private:
             }
 
             ComSmartPtr<IIterable<HSTRING>> iter;
-            auto hr = requestedProperties->QueryInterface (__uuidof(IIterable<HSTRING>), (void**) iter.resetAndGetPointerAddress());
+            auto hr = requestedProperties->QueryInterface (__uuidof (IIterable<HSTRING>), (void**) iter.resetAndGetPointerAddress());
 
             if (FAILED (hr))
             {
@@ -995,7 +995,7 @@ private:
         String getGUIDFromInspectable (IInspectable& inspectable)
         {
             ComSmartPtr<IReference<GUID>> guidRef;
-            auto hr = inspectable.QueryInterface (__uuidof(IReference<GUID>),
+            auto hr = inspectable.QueryInterface (__uuidof (IReference<GUID>),
                                                   (void**) guidRef.resetAndGetPointerAddress());
 
             if (FAILED (hr))
@@ -1022,7 +1022,7 @@ private:
         bool getBoolFromInspectable (IInspectable& inspectable)
         {
             ComSmartPtr<IReference<bool>> boolRef;
-            auto hr = inspectable.QueryInterface (__uuidof(IReference<bool>),
+            auto hr = inspectable.QueryInterface (__uuidof (IReference<bool>),
                                                   (void**) boolRef.resetAndGetPointerAddress());
 
             if (FAILED (hr))
@@ -1979,26 +1979,6 @@ std::unique_ptr<MidiInput> MidiInput::openDevice (const String& deviceIdentifier
     return in;
 }
 
-StringArray MidiInput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiInput::getDefaultDeviceIndex()
-{
-    return findDefaultDeviceIndex (getAvailableDevices(), getDefaultDevice());
-}
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* callback)
-{
-    return openDevice (getAvailableDevices()[index].identifier, callback);
-}
-
 MidiInput::MidiInput (const String& deviceName, const String& deviceIdentifier)
     : deviceInfo (deviceName, deviceIdentifier)
 {
@@ -2043,26 +2023,6 @@ std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String& deviceIdentifi
     out->internal = std::move (wrapper);
 
     return out;
-}
-
-StringArray MidiOutput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiOutput::getDefaultDeviceIndex()
-{
-    return findDefaultDeviceIndex (getAvailableDevices(), getDefaultDevice());
-}
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int index)
-{
-    return openDevice (getAvailableDevices()[index].identifier);
 }
 
 MidiOutput::~MidiOutput()

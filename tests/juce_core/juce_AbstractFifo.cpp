@@ -48,11 +48,10 @@ namespace
 
 struct WriteThread : public Thread
 {
-    WriteThread (AbstractFifo& fifo, int* buffer, Random rng)
+    WriteThread (AbstractFifo& fifo, int* buffer)
         : Thread ("fifo writer")
         , fifo (fifo)
         , buffer (buffer)
-        , random (rng)
     {
         startThread();
     }
@@ -65,6 +64,7 @@ struct WriteThread : public Thread
     void run() override
     {
         int n = 0;
+        auto& random = Random::getSystemRandom();
 
         while (! threadShouldExit())
         {
@@ -79,15 +79,14 @@ struct WriteThread : public Thread
                          || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
 
             writer.forEach ([this, &n] (int index)
-                            {
-                                this->buffer[index] = n++;
-                            });
+            {
+                this->buffer[index] = n++;
+            });
         }
     }
 
     AbstractFifo& fifo;
     int* buffer;
-    Random random;
 };
 
 } // namespace
@@ -97,7 +96,7 @@ TEST (AbstractFifoTests, BasicFunctionality)
     int buffer[5000];
     AbstractFifo fifo (numElementsInArray (buffer));
 
-    WriteThread writer (fifo, buffer, Random::getSystemRandom());
+    WriteThread writer (fifo, buffer);
 
     int n = 0;
     Random r;
@@ -118,9 +117,9 @@ TEST (AbstractFifoTests, BasicFunctionality)
         bool failed = false;
 
         reader.forEach ([&failed, &buffer, &n] (int index)
-                        {
-                            failed = (buffer[index] != n++) || failed;
-                        });
+        {
+            failed = (buffer[index] != n++) || failed;
+        });
 
         ASSERT_FALSE (failed) << "Read values were incorrect";
     }
@@ -341,9 +340,9 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
                              || (writer.startIndex2 >= 0 && writer.startIndex2 < fifo.getTotalSize()));
 
                 writer.forEach ([this, &n] (int index)
-                                {
-                                    this->buffer[index] = n++;
-                                });
+                {
+                    this->buffer[index] = n++;
+                });
             }
         }
 
@@ -380,9 +379,9 @@ TEST (AbstractFifoTests, AbstractFifoThreaded)
         bool failed = false;
 
         reader.forEach ([&failed, &buffer, &n] (int index)
-                        {
-                            failed = (buffer[index] != n++) || failed;
-                        });
+        {
+            failed = (buffer[index] != n++) || failed;
+        });
 
         if (failed)
         {

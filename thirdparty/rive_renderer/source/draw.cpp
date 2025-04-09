@@ -5,9 +5,9 @@
 #include "rive/renderer/draw.hpp"
 
 #include "gr_inner_fan_triangulator.hpp"
-#include "path_utils.hpp"
 #include "rive_render_path.hpp"
 #include "rive_render_paint.hpp"
+#include "rive/math/bezier_utils.hpp"
 #include "rive/math/wangs_formula.hpp"
 #include "rive/renderer/texture.hpp"
 #include "gradient.hpp"
@@ -17,7 +17,6 @@ namespace rive::gpu
 {
 namespace
 {
-
 // The final segment in an outerCurve patch is a bowtie join.
 constexpr static size_t kJoinSegmentCount = 1;
 constexpr static size_t kPatchSegmentCountExcludingJoin =
@@ -28,7 +27,7 @@ constexpr static size_t kMaxCurveSubdivisions =
     (kMaxParametricSegments + kPatchSegmentCountExcludingJoin - 1) /
     kPatchSegmentCountExcludingJoin;
 
-static uint32_t FindSubdivisionCount(
+static uint32_t find_outer_cubic_subdivision_count(
     const Vec2D pts[],
     const wangs_formula::VectorXform& vectorXform)
 {
@@ -39,15 +38,16 @@ static uint32_t FindSubdivisionCount(
         math::clamp(numSubdivisions, 1, kMaxCurveSubdivisions));
 }
 
-constexpr static int kNumSegmentsInMiterOrBevelJoin = 5;
-constexpr static int kStrokeStyleFlag = 8;
-constexpr static int kRoundJoinStyleFlag = kStrokeStyleFlag << 1;
-RIVE_ALWAYS_INLINE constexpr int style_flags(bool isStroked,
+constexpr static int NUM_SEGMENTS_IN_MITER_OR_BEVEL_JOIN = 5;
+constexpr static int STROKE_OR_FEATHER_STYLE_FLAG = 8;
+constexpr static int ROUND_JOIN_STYLE_FLAG = STROKE_OR_FEATHER_STYLE_FLAG << 1;
+RIVE_ALWAYS_INLINE constexpr int style_flags(bool isStrokeOrFeather,
                                              bool roundJoinStroked)
 {
-    int styleFlags = (isStroked << 3) | (roundJoinStroked << 4);
-    assert(bool(styleFlags & kStrokeStyleFlag) == isStroked);
-    assert(bool(styleFlags & kRoundJoinStyleFlag) == roundJoinStroked);
+    int styleFlags = (isStrokeOrFeather << 3) | (roundJoinStroked << 4);
+    assert(bool(styleFlags & STROKE_OR_FEATHER_STYLE_FLAG) ==
+           isStrokeOrFeather);
+    assert(bool(styleFlags & ROUND_JOIN_STYLE_FLAG) == roundJoinStroked);
     return styleFlags;
 }
 
@@ -56,28 +56,38 @@ RIVE_ALWAYS_INLINE constexpr int style_flags(bool isStroked,
 enum class StyledVerb
 {
     filledMove = static_cast<int>(PathVerb::move),
-    strokedMove = kStrokeStyleFlag | static_cast<int>(PathVerb::move),
-    roundJoinStrokedMove = kStrokeStyleFlag | kRoundJoinStyleFlag |
+    strokedMove =
+        STROKE_OR_FEATHER_STYLE_FLAG | static_cast<int>(PathVerb::move),
+    roundJoinStrokedMove = STROKE_OR_FEATHER_STYLE_FLAG |
+                           ROUND_JOIN_STYLE_FLAG |
                            static_cast<int>(PathVerb::move),
 
     filledLine = static_cast<int>(PathVerb::line),
-    strokedLine = kStrokeStyleFlag | static_cast<int>(PathVerb::line),
-    roundJoinStrokedLine = kStrokeStyleFlag | kRoundJoinStyleFlag |
+    strokedLine =
+        STROKE_OR_FEATHER_STYLE_FLAG | static_cast<int>(PathVerb::line),
+    roundJoinStrokedLine = STROKE_OR_FEATHER_STYLE_FLAG |
+                           ROUND_JOIN_STYLE_FLAG |
                            static_cast<int>(PathVerb::line),
 
     filledQuad = static_cast<int>(PathVerb::quad),
-    strokedQuad = kStrokeStyleFlag | static_cast<int>(PathVerb::quad),
-    roundJoinStrokedQuad = kStrokeStyleFlag | kRoundJoinStyleFlag |
+    strokedQuad =
+        STROKE_OR_FEATHER_STYLE_FLAG | static_cast<int>(PathVerb::quad),
+    roundJoinStrokedQuad = STROKE_OR_FEATHER_STYLE_FLAG |
+                           ROUND_JOIN_STYLE_FLAG |
                            static_cast<int>(PathVerb::quad),
 
     filledCubic = static_cast<int>(PathVerb::cubic),
-    strokedCubic = kStrokeStyleFlag | static_cast<int>(PathVerb::cubic),
-    roundJoinStrokedCubic = kStrokeStyleFlag | kRoundJoinStyleFlag |
+    strokedCubic =
+        STROKE_OR_FEATHER_STYLE_FLAG | static_cast<int>(PathVerb::cubic),
+    roundJoinStrokedCubic = STROKE_OR_FEATHER_STYLE_FLAG |
+                            ROUND_JOIN_STYLE_FLAG |
                             static_cast<int>(PathVerb::cubic),
 
     filledClose = static_cast<int>(PathVerb::close),
-    strokedClose = kStrokeStyleFlag | static_cast<int>(PathVerb::close),
-    roundJoinStrokedClose = kStrokeStyleFlag | kRoundJoinStyleFlag |
+    strokedClose =
+        STROKE_OR_FEATHER_STYLE_FLAG | static_cast<int>(PathVerb::close),
+    roundJoinStrokedClose = STROKE_OR_FEATHER_STYLE_FLAG |
+                            ROUND_JOIN_STYLE_FLAG |
                             static_cast<int>(PathVerb::close),
 };
 RIVE_ALWAYS_INLINE constexpr StyledVerb styled_verb(PathVerb verb,
@@ -121,23 +131,6 @@ RIVE_ALWAYS_INLINE std::array<Vec2D, 4> convert_line_to_cubic(Vec2D p0,
     return convert_line_to_cubic(line);
 }
 
-// Finds the tangents of the curve at T=0 and T=1 respectively.
-RIVE_ALWAYS_INLINE Vec2D find_cubic_tan0(const Vec2D p[4])
-{
-    Vec2D tan0 = (p[0] != p[1] ? p[1] : p[1] != p[2] ? p[2] : p[3]) - p[0];
-    return tan0;
-}
-RIVE_ALWAYS_INLINE Vec2D find_cubic_tan1(const Vec2D p[4])
-{
-    Vec2D tan1 = p[3] - (p[3] != p[2] ? p[2] : p[2] != p[1] ? p[1] : p[0]);
-    return tan1;
-}
-RIVE_ALWAYS_INLINE void find_cubic_tangents(const Vec2D p[4], Vec2D tangents[2])
-{
-    tangents[0] = find_cubic_tan0(p);
-    tangents[1] = find_cubic_tan1(p);
-}
-
 // Chops a cubic into 2 * n + 1 segments, surrounding each cusp. The resulting
 // cubics will be visually equivalent to the original when stroked, but the cusp
 // won't have artifacts when rendered using the parametric/polar sorting
@@ -163,13 +156,13 @@ static void chop_cubic_around_cusps(const Vec2D p[4],
         t[i * 2 + 0] = fmaxf(cuspT[i] - math::EPSILON, minT);
         t[i * 2 + 1] = fminf(cuspT[i] + math::EPSILON, maxT);
     }
-    pathutils::ChopCubicAt(p, dst, t, n * 2);
+    math::chop_cubic_at(p, dst, t, n * 2);
     for (int i = 0; i < n; ++i)
     {
         // Find the three chops at this cusp.
         Vec2D* chops = dst + i * 6;
         // Correct the chops to fall on the actual cusp point.
-        Vec2D cusp = pathutils::EvalCubicAt(p, cuspT[i]);
+        Vec2D cusp = math::eval_cubic_at(p, cuspT[i]);
         chops[3] = chops[6] = cusp;
         // The only purpose of the middle cubic is to capture the cusp's
         // 180-degree rotation. Implement it as a sub-pixel 180-degree pivot.
@@ -311,22 +304,38 @@ RIVE_ALWAYS_INLINE uint32_t join_type_flags(StrokeJoin join)
         case StrokeJoin::miter:
             return MITER_REVERT_JOIN_CONTOUR_FLAG;
         case StrokeJoin::round:
-            return 0;
+            return ROUND_JOIN_CONTOUR_FLAG;
         case StrokeJoin::bevel:
             return BEVEL_JOIN_CONTOUR_FLAG;
     }
     RIVE_UNREACHABLE();
 }
+
+inline float find_feather_radius(float paintFeather)
+{
+    // Blur magnitudes in design tools are customarily the width of two standard
+    // deviations, or, the length of the range -1stddev .. +1stddev.
+    return paintFeather * (FEATHER_TEXTURE_STDDEVS / 2);
+}
+
+inline float find_atlas_feather_scale_factor(float featherRadius,
+                                             float matrixMaxScale)
+{
+    // In practice, and with "gaussian -> linear -> gaussian" filtering, we
+    // never need to render a blur with a radius larger than 16 pixels. After
+    // this point, we can just scale it up to whatever resolution it needs to be
+    // displayed at.
+    return 16.f / fmaxf(featherRadius * matrixMaxScale, 16);
+}
 } // namespace
 
-Draw::Draw(AABB bounds,
+Draw::Draw(IAABB pixelBounds,
            const Mat2D& matrix,
            BlendMode blendMode,
            rcp<const Texture> imageTexture,
            Type type) :
     m_imageTextureRef(imageTexture.release()),
-    m_bounds(bounds),
-    m_pixelBounds(bounds.roundOut()),
+    m_pixelBounds(pixelBounds),
     m_matrix(matrix),
     m_blendMode(blendMode),
     m_type(type)
@@ -357,63 +366,99 @@ void Draw::setClipID(uint32_t clipID)
     }
 }
 
-bool Draw::allocateGradientIfNeeded(RenderContext::LogicalFlush* flush,
-                                    ResourceCounters* counters)
+void Draw::releaseRefs() { safe_unref(m_imageTextureRef); }
+
+PathDraw::CoverageType PathDraw::SelectCoverageType(
+    const RiveRenderPaint* paint,
+    float matrixMaxScale,
+    gpu::InterlockMode interlockMode)
 {
-    return m_gradientRef == nullptr ||
-           flush->allocateGradient(m_gradientRef,
-                                   counters,
-                                   &m_simplePaintValue.colorRampLocation);
+    if (interlockMode == gpu::InterlockMode::msaa)
+    {
+        return paint->getFeather() != 0 ? CoverageType::atlas
+                                        : CoverageType::msaa;
+    }
+    // Switch to the feather atlas once we can render quarter-resultion
+    // feathers.
+    if (paint->getFeather() != 0 &&
+        find_atlas_feather_scale_factor(
+            find_feather_radius(paint->getFeather()),
+            matrixMaxScale) <= .5f)
+    {
+        return CoverageType::atlas;
+    }
+    if (interlockMode == gpu::InterlockMode::clockwiseAtomic)
+    {
+        return CoverageType::clockwiseAtomic;
+    }
+    return CoverageType::pixelLocalStorage;
 }
 
-void Draw::releaseRefs()
-{
-    safe_unref(m_imageTextureRef);
-    safe_unref(m_gradientRef);
-}
-
-DrawUniquePtr RiveRenderPathDraw::Make(RenderContext* context,
-                                       const Mat2D& matrix,
-                                       rcp<const RiveRenderPath> path,
-                                       FillRule fillRule,
-                                       const RiveRenderPaint* paint,
-                                       RawPath* scratchPath)
+DrawUniquePtr PathDraw::Make(RenderContext* context,
+                             const Mat2D& matrix,
+                             rcp<const RiveRenderPath> path,
+                             FillRule fillRule,
+                             const RiveRenderPaint* paint,
+                             RawPath* scratchPath)
 {
     assert(path != nullptr);
     assert(paint != nullptr);
+
+    CoverageType coverageType =
+        SelectCoverageType(paint,
+                           matrix.findMaxScale(),
+                           context->frameInterlockMode());
+
+    // Compute the screen-space bounding box.
     AABB mappedBounds;
-    if (context->frameInterlockMode() == gpu::InterlockMode::atomics)
+    if (context->frameInterlockMode() == gpu::InterlockMode::rasterOrdering &&
+        coverageType != CoverageType::atlas)
     {
-        // In atomic mode, find a tighter bounding box in order to maximize
-        // reordering.
+        // In rasterOrdering mode we can use a looser bounding box since we
+        // don't do reordering.
+        mappedBounds = matrix.mapBoundingBox(path->getBounds());
+    }
+    else
+    {
+        // Otherwise find a tight bounding box in order to maximize reordering.
         mappedBounds =
             matrix.mapBoundingBox(path->getRawPath().points().data(),
                                   path->getRawPath().points().count());
     }
-    else
-    {
-        // Otherwise we can get away with just mapping the path's bounding box.
-        mappedBounds = matrix.mapBoundingBox(path->getBounds());
-    }
     assert(mappedBounds.width() >= 0);
     assert(mappedBounds.height() >= 0);
-    if (paint->getIsStroked())
+    if (paint->getIsStroked() || paint->getFeather() != 0)
     {
-        // Outset the path's bounding box to account for stroking.
-        float strokeOutset = paint->getThickness() * .5f;
-        if (paint->getJoin() == StrokeJoin::miter)
+        // Outset the path's bounding box to account for stroking & feathering.
+        float outset = 0;
+        if (paint->getIsStroked())
         {
-            strokeOutset *= 4;
+            outset = paint->getThickness() * .5f;
+            if (paint->getJoin() == StrokeJoin::miter)
+            {
+                // Miter joins may be longer than the stroke radius.
+                outset *= RIVE_MITER_LIMIT;
+            }
+            else if (paint->getCap() == StrokeCap::square)
+            {
+                // The diagonal of a square cap is longer than the stroke
+                // radius.
+                outset *= math::SQRT2;
+            }
         }
-        else if (paint->getCap() == StrokeCap::square)
+        if (paint->getFeather() != 0)
         {
-            strokeOutset *= math::SQRT2;
+            outset += find_feather_radius(paint->getFeather());
         }
-        AABB strokePixelOutset =
-            matrix.mapBoundingBox({0, 0, strokeOutset, strokeOutset});
-        mappedBounds = mappedBounds.inset(-strokePixelOutset.width(),
-                                          -strokePixelOutset.height());
+        AABB strokePixelOutset = matrix.mapBoundingBox({0, 0, outset, outset});
+        // Add an extra pixel to the stroke outset radius to account for:
+        //   * Butt caps and bevel joins bleed out 1/2 AA width.
+        //   * With Manhattan sytle AA, an AA width can be as large as sqrt(2).
+        //   * The diagonal of that sqrt(2)/2 bleed is 1px in length.
+        mappedBounds = mappedBounds.outset(strokePixelOutset.width() + 1,
+                                           strokePixelOutset.height() + 1);
     }
+
     IAABB pixelBounds = mappedBounds.roundOut();
     bool doTriangulation = false;
     const AABB& localBounds = path->getBounds();
@@ -421,37 +466,37 @@ DrawUniquePtr RiveRenderPathDraw::Make(RenderContext* context,
     {
         return DrawUniquePtr();
     }
-    if (!paint->getIsStroked())
+    if (!paint->getIsStroked() && paint->getFeather() == 0)
     {
         // Use interior triangulation to draw filled paths if they're large
         // enough to benefit from it.
+        //
+        // FIXME! Implement interior triangulation for feathers.
+        //
         // FIXME! Implement interior triangulation in msaa mode.
         if (context->frameInterlockMode() != gpu::InterlockMode::msaa &&
             path->getRawPath().verbs().count() < 1000 &&
-            gpu::FindTransformedArea(localBounds, matrix) > 512 * 512)
+            gpu::find_transformed_area(localBounds, matrix) > 512.f * 512.f)
         {
             doTriangulation = true;
         }
     }
 
-    auto draw = context->make<RiveRenderPathDraw>(
-        pixelBounds,
-        matrix,
-        std::move(path),
-        fillRule,
-        paint,
-        doTriangulation ? Type::interiorTriangulationPath
-                        : Type::midpointFanPath,
-        context->frameDescriptor(),
-        context->frameInterlockMode());
+    auto draw = context->make<PathDraw>(pixelBounds,
+                                        matrix,
+                                        std::move(path),
+                                        fillRule,
+                                        paint,
+                                        coverageType,
+                                        context->frameDescriptor());
     if (doTriangulation)
     {
         draw->initForInteriorTriangulation(
             context,
             scratchPath,
             localBounds.width() > localBounds.height()
-                ? RiveRenderPathDraw::TriangulatorAxis::horizontal
-                : RiveRenderPathDraw::TriangulatorAxis::vertical);
+                ? PathDraw::TriangulatorAxis::horizontal
+                : PathDraw::TriangulatorAxis::vertical);
     }
     else
     {
@@ -461,39 +506,44 @@ DrawUniquePtr RiveRenderPathDraw::Make(RenderContext* context,
     return DrawUniquePtr(draw);
 }
 
-RiveRenderPathDraw::RiveRenderPathDraw(
-    AABB bounds,
-    const Mat2D& matrix,
-    rcp<const RiveRenderPath> path,
-    FillRule fillRule,
-    const RiveRenderPaint* paint,
-    Type type,
-    const RenderContext::FrameDescriptor& frameDesc,
-    gpu::InterlockMode frameInterlockMode) :
-    Draw(bounds,
+PathDraw::PathDraw(IAABB pixelBounds,
+                   const Mat2D& matrix,
+                   rcp<const RiveRenderPath> path,
+                   FillRule initialFillRule,
+                   const RiveRenderPaint* paint,
+                   CoverageType coverageType,
+                   const RenderContext::FrameDescriptor& frameDesc) :
+    Draw(pixelBounds,
          matrix,
          paint->getBlendMode(),
          ref_rcp(paint->getImageTexture()),
-         type),
+         Type::path),
     m_pathRef(path.release()),
-    m_fillRule(paint->getIsStroked() || frameDesc.clockwiseFill
-                   // Fill rule is irrelevant for stroking and clockwiseFill,
-                   // but override it to nonZero so the triangulator doesn't do
-                   // evenOdd optimizations in "clockwiseFill" mode.
-                   ? FillRule::nonZero
-                   : fillRule),
-    m_paintType(paint->getType())
+    m_pathFillRule(frameDesc.clockwiseFillOverride ? FillRule::clockwise
+                                                   : initialFillRule),
+    m_gradientRef(safe_ref(paint->getGradient())),
+    m_paintType(paint->getType()),
+    m_coverageType(coverageType)
 {
     assert(m_pathRef != nullptr);
     assert(!m_pathRef->getRawPath().empty());
     assert(paint != nullptr);
-    if (m_blendMode == BlendMode::srcOver && paint->getIsOpaque())
+
+    if (paint->getIsOpaque())
     {
         m_drawContents |= gpu::DrawContents::opaquePaint;
     }
+
+    if (paint->getFeather() != 0)
+    {
+        m_featherRadius = find_feather_radius(paint->getFeather());
+        assert(!std::isnan(m_featherRadius)); // These should get culled in
+                                              // RiveRenderer::drawPath().
+        assert(m_featherRadius > 0);
+    }
+
     if (paint->getIsStroked())
     {
-        m_drawContents |= gpu::DrawContents::stroke;
         m_strokeRadius = paint->getThickness() * .5f;
         // Ensure stroke radius is nonzero. (In PLS, zero radius means the path
         // is filled.)
@@ -503,10 +553,37 @@ RiveRenderPathDraw::RiveRenderPathDraw(
                                              // RiveRenderer::drawPath().
         assert(m_strokeRadius > 0);
     }
-    else if (m_fillRule == FillRule::evenOdd)
+
+    // For atlased paths, m_drawContents refers to the rectangle being drawn
+    // into the main render target, not the step that generates the atlas mask.
+    if (m_coverageType != CoverageType::atlas)
     {
-        m_drawContents |= gpu::DrawContents::evenOddFill;
+        if (isStroke())
+        {
+            m_drawContents |= gpu::DrawContents::stroke;
+        }
+        else
+        {
+            if (m_featherRadius)
+            {
+                m_drawContents |= gpu::DrawContents::featheredFill;
+            }
+            if (initialFillRule == FillRule::clockwise ||
+                frameDesc.clockwiseFillOverride)
+            {
+                m_drawContents |= gpu::DrawContents::clockwiseFill;
+            }
+            else if (initialFillRule == FillRule::nonZero)
+            {
+                m_drawContents |= gpu::DrawContents::nonZeroFill;
+            }
+            else if (initialFillRule == FillRule::evenOdd)
+            {
+                m_drawContents |= gpu::DrawContents::evenOddFill;
+            }
+        }
     }
+
     if (paint->getType() == gpu::PaintType::clipUpdate)
     {
         m_drawContents |= gpu::DrawContents::clipUpdate;
@@ -516,15 +593,37 @@ RiveRenderPathDraw::RiveRenderPathDraw(
         }
     }
 
-    if (isStroked())
+    if (isStroke())
     {
         // Stroke triangles are always forward.
         m_contourDirections = gpu::ContourDirections::forward;
     }
-    else if (frameInterlockMode != gpu::InterlockMode::msaa)
+    else if (initialFillRule == FillRule::clockwise)
+    {
+        // Clockwise paths need to be reversed when the matrix is left-handed,
+        // so that the intended forward triangles remain clockwise.
+        float det = matrix.xx() * matrix.yy() - matrix.yx() * matrix.xy();
+        if (det < 0)
+        {
+            m_contourDirections =
+                m_coverageType == CoverageType::msaa
+                    ? gpu::ContourDirections::reverse
+                    : gpu::ContourDirections::forwardThenReverse;
+            m_contourFlags |= NEGATE_PATH_FILL_COVERAGE_FLAG; // ignored by msaa
+        }
+        else
+        {
+            m_contourDirections =
+                m_coverageType == CoverageType::msaa
+                    ? gpu::ContourDirections::forward
+                    : gpu::ContourDirections::reverseThenForward;
+        }
+    }
+    else if (m_coverageType != CoverageType::msaa)
     {
         // atomic and rasterOrdering fills need reverse AND forward triangles.
-        if (frameDesc.clockwiseFill && !m_pathRef->isClockwiseDominant(matrix))
+        if (frameDesc.clockwiseFillOverride &&
+            !m_pathRef->isClockwiseDominant(matrix))
         {
             // For clockwiseFill, this is also our opportunity to logically
             // reverse the winding of the path, if it is predominantly
@@ -537,94 +636,93 @@ RiveRenderPathDraw::RiveRenderPathDraw(
             m_contourDirections = gpu::ContourDirections::reverseThenForward;
         }
     }
-    else if (m_fillRule != FillRule::evenOdd)
-    {
-        // Emit "nonZero" msaa fills in a direction such that the dominant
-        // triangle winding area is always clockwise. This maximizes pixel
-        // throughput since we will draw counterclockwise triangles twice and
-        // clockwise only once.
-        m_contourDirections = m_pathRef->isClockwiseDominant(matrix)
-                                  ? gpu::ContourDirections::forward
-                                  : gpu::ContourDirections::reverse;
-    }
     else
     {
-        // "evenOdd" msaa fills just get drawn twice, so any direction is fine.
-        m_contourDirections = gpu::ContourDirections::forward;
+        if (initialFillRule == FillRule::nonZero ||
+            frameDesc.clockwiseFillOverride)
+        {
+            // Emit "nonZero" msaa fills in a direction such that the dominant
+            // triangle winding area is always clockwise. This maximizes pixel
+            // throughput since we will draw counterclockwise triangles twice
+            // and clockwise only once.
+            m_contourDirections = m_pathRef->isClockwiseDominant(matrix)
+                                      ? gpu::ContourDirections::forward
+                                      : gpu::ContourDirections::reverse;
+        }
+        else
+        {
+            // "evenOdd" msaa fills just get drawn twice, so any direction is
+            // fine.
+            m_contourDirections = gpu::ContourDirections::forward;
+        }
     }
 
     m_simplePaintValue = paint->getSimpleValue();
-    m_gradientRef = safe_ref(paint->getGradient());
+
+    if (m_coverageType == CoverageType::atlas)
+    {
+        // Reserve two triangles for our on-screen rectangle that reads coverage
+        // from the atlas.
+        m_resourceCounts.maxTriangleVertexCount = 6;
+    }
+
     RIVE_DEBUG_CODE(m_pathRef->lockRawPathMutations();)
     RIVE_DEBUG_CODE(m_rawPathMutationID = m_pathRef->getRawPathMutationID();)
-    assert(isStroked() == (strokeRadius() > 0));
+    assert(isStroke() == (strokeRadius() > 0));
+    assert(isFeatheredFill() == (!isStroke() && featherRadius() > 0));
+    assert(!isFeatheredFill() || featherRadius() > 0);
 }
 
-RiveRenderPathDraw::RiveRenderPathDraw(
-    const RiveRenderPathDraw& from,
-    float tx,
-    float ty,
-    rcp<const RiveRenderPath> path,
-    FillRule fillRule,
-    const RiveRenderPaint* paint,
-    const RenderContext::FrameDescriptor& frameDesc,
-    gpu::InterlockMode frameInterlockMode) :
-    RiveRenderPathDraw(
-        from.m_bounds.offset(tx - from.m_matrix.tx(), ty - from.m_matrix.ty()),
-        from.m_matrix.translate(
-            Vec2D(tx - from.m_matrix.tx(), ty - from.m_matrix.ty())),
-        path,
-        fillRule,
-        paint,
-        from.m_type,
-        frameDesc,
-        frameInterlockMode)
-
+void PathDraw::releaseRefs()
 {
-    m_resourceCounts = from.m_resourceCounts;
-    m_subpassCount = from.m_subpassCount;
-    m_strokeMatrixMaxScale = from.m_strokeMatrixMaxScale;
-
-    if (isStroked())
-    {
-        m_strokeMatrixMaxScale = from.m_strokeMatrixMaxScale;
-        m_strokeJoin = from.m_strokeJoin;
-        m_strokeCap = from.m_strokeCap;
-    }
-    m_contours = from.m_contours;
-    m_numChops = from.m_numChops;
-    m_chopVertices = from.m_chopVertices;
-    m_tangentPairs = from.m_tangentPairs;
-    m_polarSegmentCounts = from.m_polarSegmentCounts;
-    m_parametricSegmentCounts = from.m_parametricSegmentCounts;
-    m_triangulator = from.m_triangulator;
-
-    RIVE_DEBUG_CODE(m_pendingLineCount = from.m_pendingLineCount;)
-    RIVE_DEBUG_CODE(m_pendingCurveCount = from.m_pendingCurveCount;)
-    RIVE_DEBUG_CODE(m_pendingRotationCount = from.m_pendingRotationCount;)
-    RIVE_DEBUG_CODE(m_pendingStrokeJoinCount = from.m_pendingStrokeJoinCount;)
-    RIVE_DEBUG_CODE(m_pendingStrokeCapCount = from.m_pendingStrokeCapCount;)
-    RIVE_DEBUG_CODE(m_pendingEmptyStrokeCountForCaps =
-                        from.m_pendingEmptyStrokeCountForCaps;)
-}
-
-void RiveRenderPathDraw::releaseRefs()
-{
-    m_pathRef->invalidateDrawCache();
     Draw::releaseRefs();
     RIVE_DEBUG_CODE(m_pathRef->unlockRawPathMutations();)
     m_pathRef->unref();
+    safe_unref(m_gradientRef);
 }
 
-void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
-                                            const RiveRenderPaint* paint)
+void PathDraw::initForMidpointFan(RenderContext* context,
+                                  const RiveRenderPaint* paint)
 {
-    assert(type() == Type::midpointFanPath);
-    assert(simd::all(m_resourceCounts.toVec() == 0)); // Only call init() once.
+    // Only call init() once.
+    assert((m_resourceCounts.midpointFanTessVertexCount |
+            m_resourceCounts.outerCubicTessVertexCount) == 0);
 
-    if (isStroked())
+    if (isStrokeOrFeather())
     {
         m_strokeMatrixMaxScale = m_matrix.findMaxScale();
+
+        float r_ = 0;
+        if (m_featherRadius != 0)
+        {
+            r_ = m_featherRadius * m_strokeMatrixMaxScale;
+
+            // Inverse of 1/calc_polar_segments_per_radian at
+            // FEATHER_MIN_POLAR_SEGMENT_ANGLE.
+            //
+            // i.e., 1 / calc_polar_segments_per_radian<kPolarPrecision>(
+            //           FEATHER_MIN_POLAR_SEGMENT_ANGLE) ==
+            //       FEATHER_MAX_SCREEN_SPACE_RADIUS
+            //
+            constexpr static float FEATHER_MAX_SCREEN_SPACE_RADIUS =
+                1 / (kPolarPrecision *
+                     (1 - COS_FEATHER_POLAR_SEGMENT_MIN_ANGLE_OVER_2));
+            assert(math::nearly_equal(
+                1 / math::calc_polar_segments_per_radian<kPolarPrecision>(
+                        FEATHER_MAX_SCREEN_SPACE_RADIUS),
+                gpu::FEATHER_POLAR_SEGMENT_MIN_ANGLE));
+
+            // r_ is used to calculate how many polar segments are needed. Limit
+            // r_ for large feathers. (See FEATHER_POLAR_SEGMENT_MIN_ANGLE.)
+            r_ = std::min(r_, FEATHER_MAX_SCREEN_SPACE_RADIUS);
+        }
+        if (isStroke())
+        {
+            r_ += m_strokeRadius * m_strokeMatrixMaxScale;
+        }
+        m_polarSegmentsPerRadian =
+            math::calc_polar_segments_per_radian<kPolarPrecision>(r_);
+
         m_strokeJoin = paint->getJoin();
         m_strokeCap = paint->getCap();
     }
@@ -643,14 +741,14 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
     size_t maxRotations = 0;
     // Reserve enough space to record all the info we might need for this path.
     assert(rawPath.verbs()[0] == PathVerb::move);
-    // Every path has at least 1 (non-curve) move.
+    // Every path has at least 1 (non-cubic) move.
     size_t pathMaxLinesOrCurvesBeforeChops = rawPath.verbs().size() - 1;
     // Stroked cubics can be chopped into a maximum of 5 segments.
     size_t pathMaxLinesOrCurvesAfterChops =
-        isStroked() ? pathMaxLinesOrCurvesBeforeChops * 5
-                    : pathMaxLinesOrCurvesBeforeChops;
+        isStrokeOrFeather() ? pathMaxLinesOrCurvesBeforeChops * 5
+                            : pathMaxLinesOrCurvesBeforeChops;
     maxCurves += pathMaxLinesOrCurvesAfterChops;
-    if (isStroked())
+    if (isStrokeOrFeather())
     {
         maxStrokedCurvesBeforeChops += pathMaxLinesOrCurvesBeforeChops;
         maxRotations += pathMaxLinesOrCurvesAfterChops;
@@ -675,12 +773,12 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
     // +3 for each contour because we align each contour's curves and rotations
     // on multiples of 4.
     size_t maxPaddedRotations =
-        isStroked() ? maxRotations + contourCount * 3 : 0;
+        isStrokeOrFeather() ? maxRotations + contourCount * 3 : 0;
     size_t maxPaddedCurves = maxCurves + contourCount * 3;
 
     // Reserve intermediate space for the polar segment counts of each curve and
     // round join.
-    if (isStroked())
+    if (isStrokeOrFeather())
     {
         m_numChops.reset(context->numChopsAllocator(), maxChops);
         m_chopVertices.reset(context->chopVerticesAllocator(), maxChopVertices);
@@ -692,6 +790,19 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
     m_parametricSegmentCounts =
         context->parametricSegmentCountsAllocator().alloc(maxPaddedCurves);
 
+    float parametricPrecision = gpu::kParametricPrecision;
+    if (m_featherRadius > 1)
+    {
+        // Once the blur radius is above ~50 pixels, we don't have to tessellate
+        // within 1/4px of the edge anymore.
+        // At this point, tessellate within strokeRadius/200 pixels of the edge.
+        // (parametricPrecision == 1/tolerance.)
+        parametricPrecision =
+            std::min(parametricPrecision * 100.f /
+                         (m_featherRadius * m_strokeMatrixMaxScale),
+                     parametricPrecision);
+    }
+
     size_t lineCount = 0;
     size_t unpaddedCurveCount = 0;
     size_t unpaddedRotationCount = 0;
@@ -701,16 +812,16 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
     // every path in the batch, and begin counting tessellated vertices.
     size_t contourIdx = 0;
     size_t curveIdx = 0;
-    size_t rotationIdx =
-        0; // We measure rotations on both curves and round joins.
-    bool roundJoinStroked = isStroked() && m_strokeJoin == StrokeJoin::round;
+    // We measure rotations on both curves and round joins.
+    size_t rotationIdx = 0;
+    bool roundJoinStroked = isStroke() && m_strokeJoin == StrokeJoin::round;
     wangs_formula::VectorXform vectorXform(m_matrix);
     RawPath::Iter startOfContour = rawPath.begin();
     RawPath::Iter end = rawPath.end();
-    int preChopVerbCount =
-        0; // Original number of lines and curves, before chopping.
+    // Original number of lines and curves, before chopping.
+    int preChopVerbCount = 0;
     Vec2D endpointsSum{};
-    bool closed = !isStroked();
+    bool closed = !isStroke();
     Vec2D lastTangent = {0, 1};
     Vec2D firstTangent = {0, 1};
     size_t roundJoinCount = 0;
@@ -765,7 +876,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
             curveIdx,
             contourFirstRotationIdx,
             rotationIdx,
-            isStroked() ? Vec2D() : endpointsSum * (1.f / preChopVerbCount),
+            isStroke() ? Vec2D() : endpointsSum * (1.f / preChopVerbCount),
             closed,
             strokeJoinCount,
             0,                 // strokeCapSegmentCount
@@ -779,7 +890,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
         contourFirstRotationIdx = rotationIdx =
             math::round_up_to_multiple_of<4>(rotationIdx);
     };
-    const int styleFlags = style_flags(isStroked(), roundJoinStroked);
+    const int styleFlags = style_flags(isStrokeOrFeather(), roundJoinStroked);
     for (RawPath::Iter iter = startOfContour; iter != end; ++iter)
     {
         switch (styled_verb(iter.verb(), styleFlags))
@@ -794,7 +905,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 }
                 preChopVerbCount = 0;
                 endpointsSum = {0, 0};
-                closed = !isStroked();
+                closed = !isStroke();
                 lastTangent = {0, 1};
                 firstTangent = {0, 1};
                 roundJoinCount = 0;
@@ -840,7 +951,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
             {
                 const Vec2D* p = iter.cubicPts();
                 Vec2D unchoppedTangents[2];
-                find_cubic_tangents(p, unchoppedTangents);
+                math::find_cubic_tangents(p, unchoppedTangents);
                 if (preChopVerbCount == 0)
                 {
                     firstTangent = unchoppedTangents[0];
@@ -864,20 +975,21 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 // convex), and do not rotate more than 180 degrees. This is
                 // required by the GPU parametric/polar sorter.
                 float t[2];
-                bool areCusps;
+                bool areCusps = false;
                 uint8_t numChops =
-                    pathutils::FindCubicConvex180Chops(p, t, &areCusps);
+                    isStroke()
+                        ? math::find_cubic_convex_180_chops(p, t, &areCusps)
+                        : 0; // Feathers already got chopped.
                 uint8_t chopKey = chop_key(areCusps, numChops);
                 m_numChops.push_back(chopKey);
                 Vec2D localChopBuffer[16];
                 switch (chopKey)
                 {
                     case cusp_chop_key(2): // 2 cusps
-                    case cusp_chop_key(
-                        1): // 1 cusp
-                            // We have to chop carefully around stroked cusps in
-                            // order to avoid rendering artifacts. Luckily,
-                            // cusps are extremely rare in real-world content.
+                    case cusp_chop_key(1): // 1 cusp
+                        // We have to chop carefully around stroked cusps in
+                        // order to avoid rendering artifacts. Luckily, cusps
+                        // are extremely rare in real-world content.
                         m_chopVertices.push_back() = {t[0], t[1]};
                         chop_cubic_around_cusps(p,
                                                 localChopBuffer,
@@ -889,12 +1001,12 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                         break;
                     case simple_chop_key(2): // 2 non-cusp chops
                         m_chopVertices.push_back() = {t[0], t[1]};
-                        pathutils::ChopCubicAt(p, localChopBuffer, t[0], t[1]);
+                        math::chop_cubic_at(p, localChopBuffer, t[0], t[1]);
                         p = localChopBuffer;
                         break;
                     case simple_chop_key(1): // 1 non-cusp chop
                     {
-                        pathutils::ChopCubicAt(p, localChopBuffer, t[0]);
+                        math::chop_cubic_at(p, localChopBuffer, t[0]);
                         p = localChopBuffer;
                         memcpy(m_chopVertices.push_back_n(5),
                                p + 1,
@@ -908,7 +1020,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                      p += 3, ++curveIdx, ++rotationIdx)
                 {
                     float n4 = wangs_formula::cubic_pow4(p,
-                                                         kParametricPrecision,
+                                                         parametricPrecision,
                                                          vectorXform);
                     // Record n^4 for now. This will get resolved later.
                     assert(curveIdx < maxPaddedCurves);
@@ -916,7 +1028,22 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                                        &n4,
                                        sizeof(uint32_t));
                     assert(rotationIdx < maxPaddedRotations);
-                    find_cubic_tangents(p, m_tangentPairs[rotationIdx].data());
+                    if (isStroke())
+                    {
+                        math::find_cubic_tangents(
+                            p,
+                            m_tangentPairs[rotationIdx].data());
+                    }
+                    else
+                    {
+                        // FIXME: Feathered fills don't have polar segments for
+                        // now, but we're leaving space for them in
+                        // m_tangentPairs because we will convert them to use a
+                        // similar concept of "polar joins" once we move them
+                        // onto the GPU.
+                        m_tangentPairs[rotationIdx] = {Vec2D{0, 1},
+                                                       Vec2D{0, 1}};
+                    }
                 }
                 break;
             }
@@ -926,7 +1053,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 ++preChopVerbCount;
                 endpointsSum += p[3];
                 float n4 = wangs_formula::cubic_pow4(p,
-                                                     kParametricPrecision,
+                                                     parametricPrecision,
                                                      vectorXform);
                 // Record n^4 for now. This will get resolved later.
                 assert(curveIdx < maxPaddedCurves);
@@ -945,15 +1072,15 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
     assert(contourCount > 0);
     assert(curveIdx <= maxPaddedCurves);
     assert(rotationIdx <= maxPaddedRotations);
-    assert(curveIdx % 4 ==
-           0); // Because we write parametric segment counts in batches of 4.
-    assert(rotationIdx % 4 ==
-           0); // Because we write polar segment counts in batches of 4.
-    assert(isStroked() || maxPaddedRotations == 0);
-    assert(isStroked() || rotationIdx == 0);
+    // Because we write parametric segment counts in batches of 4.
+    assert(curveIdx % 4 == 0);
+    // Because we write polar segment counts in batches of 4.
+    assert(rotationIdx % 4 == 0);
+    assert(isStrokeOrFeather() || maxPaddedRotations == 0);
+    assert(isStrokeOrFeather() || rotationIdx == 0);
 
     // Return any data we conservatively allocated but did not use.
-    if (isStroked())
+    if (isStrokeOrFeather())
     {
         m_numChops.shrinkToFit(context->numChopsAllocator(), maxChops);
         m_chopVertices.shrinkToFit(context->chopVerticesAllocator(),
@@ -1000,13 +1127,10 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
             contourVertexCount -= m_parametricSegmentCounts[j];
         }
 
-        if (isStroked())
+        if (isStrokeOrFeather())
         {
             // Finish calculating and counting polar segments for each stroked
             // curve and round join.
-            const float r_ = m_strokeRadius * m_strokeMatrixMaxScale;
-            const float polarSegmentsPerRad =
-                pathutils::CalcPolarSegmentsPerRadian<kPolarPrecision>(r_);
             for (j = contour->firstRotationIdx; j < contour->endRotationIdx;
                  j += 4)
             {
@@ -1024,7 +1148,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 cosTheta = simd::clamp(cosTheta, float4(-1), float4(1));
                 float4 theta = simd::fast_acos(cosTheta);
                 // Find polar segment counts from the rotation angles.
-                float4 n = simd::ceil(theta * polarSegmentsPerRad);
+                float4 n = simd::ceil(theta * m_polarSegmentsPerRadian);
                 n = simd::clamp(n, float4(1), float4(kMaxPolarSegments));
                 uint4 n_ = simd::cast<uint32_t>(n);
                 assert(j + 4 <= rotationIdx);
@@ -1052,7 +1176,19 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
             }
 
             // Count joins.
-            if (m_strokeJoin == StrokeJoin::round)
+            if (!isStroke())
+            {
+                assert(isFeatheredFill());
+                uint32_t numSegmentsInFeatherJoin =
+                    static_cast<uint32_t>(std::clamp<float>(
+                        ceilf(m_polarSegmentsPerRadian * math::PI),
+                        2,
+                        kMaxPolarSegments - 2)) +
+                    5;
+                contourVertexCount +=
+                    contour->strokeJoinCount * (numSegmentsInFeatherJoin - 1);
+            }
+            else if (m_strokeJoin == StrokeJoin::round)
             {
                 // Round joins share their beginning and ending vertices with
                 // the curve on either side. Therefore, the number of vertices
@@ -1067,20 +1203,20 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 // their beginning and ending vertices with the curve on either
                 // side).
                 contourVertexCount += contour->strokeJoinCount *
-                                      (kNumSegmentsInMiterOrBevelJoin - 1);
+                                      (NUM_SEGMENTS_IN_MITER_OR_BEVEL_JOIN - 1);
             }
 
             // Count stroke caps, if any.
             bool empty = contour->endLineIdx == contourFirstLineIdx &&
                          contour->endCurveIdx == contour->firstCurveIdx;
             StrokeCap cap;
-            bool needsCaps;
+            bool needsCaps = false;
             if (!empty)
             {
                 cap = m_strokeCap;
                 needsCaps = !contour->closed;
             }
-            else
+            else if (isStroke())
             {
                 cap = empty_stroke_cap(contour->closed,
                                        m_strokeJoin,
@@ -1095,7 +1231,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 {
                     // Round caps rotate 180 degrees.
                     float strokeCapSegmentCount =
-                        ceilf(polarSegmentsPerRad * math::PI);
+                        ceilf(m_polarSegmentsPerRadian * math::PI);
                     // +2 because round caps emulated as joins need to emit
                     // vertices at T=0 and T=1, unlike normal round joins.
                     strokeCapSegmentCount += 2;
@@ -1108,7 +1244,7 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
                 else
                 {
                     contour->strokeCapSegmentCount =
-                        kNumSegmentsInMiterOrBevelJoin;
+                        NUM_SEGMENTS_IN_MITER_OR_BEVEL_JOIN;
                 }
                 // PLS expects all patches to have >0 tessellation vertices, so
                 // for the case of an empty patch with a stroke cap,
@@ -1173,74 +1309,416 @@ void RiveRenderPathDraw::initForMidpointFan(RenderContext* context,
     }
 }
 
-void RiveRenderPathDraw::initForInteriorTriangulation(
-    RenderContext* context,
-    RawPath* scratchPath,
-    TriangulatorAxis triangulatorAxis)
+void PathDraw::initForInteriorTriangulation(RenderContext* context,
+                                            RawPath* scratchPath,
+                                            TriangulatorAxis triangulatorAxis)
 {
-    assert(type() == Type::interiorTriangulationPath);
     assert(simd::all(m_resourceCounts.toVec() == 0)); // Only call init() once.
-    assert(!isStroked());
+    assert(!isStrokeOrFeather());
     assert(m_strokeRadius == 0);
+
+    // Every path has at least 1 (non-cubic) move.
+    size_t originalNumChopsSize = m_pathRef->getRawPath().verbs().size() - 1;
+    m_numChops.reset(context->numChopsAllocator(), originalNumChopsSize);
     iterateInteriorTriangulation(
         InteriorTriangulationOp::countDataAndTriangulate,
         &context->perFrameAllocator(),
         scratchPath,
         triangulatorAxis,
         nullptr);
-    m_subpassCount = 2;
+    m_numChops.shrinkToFit(context->numChopsAllocator(), originalNumChopsSize);
 }
 
-void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
-                                             uint32_t subpassIndex)
+bool PathDraw::allocateResourcesAndSubpasses(RenderContext::LogicalFlush* flush)
+{
+    // Allocate a gradient if needed. Do this first since it's more expensive to
+    // fail after setting up an atlas draw than a gradient draw.
+    if (m_gradientRef != nullptr &&
+        !flush->allocateGradient(m_gradientRef,
+                                 &m_simplePaintValue.colorRampLocation))
+    {
+        return false;
+    }
+
+    // Allocate a coverage buffer range or atlas region if needed.
+    if (m_coverageType == CoverageType::atlas ||
+        m_coverageType == CoverageType::clockwiseAtomic)
+    {
+        constexpr static int PADDING = 2;
+
+        // We don't need any coverage space for areas outside the viewport.
+        // TODO: Account for active clips as well once we have the info.
+        IAABB renderTargetBounds = {
+            0,
+            0,
+            static_cast<int32_t>(flush->frameDescriptor().renderTargetWidth),
+            static_cast<int32_t>(flush->frameDescriptor().renderTargetHeight),
+        };
+        IAABB visibleBounds = renderTargetBounds.intersect(m_pixelBounds);
+
+        if (m_coverageType == CoverageType::atlas)
+        {
+            const float scaleFactor =
+                find_atlas_feather_scale_factor(m_featherRadius,
+                                                m_strokeMatrixMaxScale);
+            auto w = static_cast<uint16_t>(
+                ceilf(visibleBounds.width() * scaleFactor));
+            auto h = static_cast<uint16_t>(
+                ceilf(visibleBounds.height() * scaleFactor));
+            uint16_t x, y;
+            if (!flush->allocateAtlasDraw(this,
+                                          w,
+                                          h,
+                                          PADDING,
+                                          &x,
+                                          &y,
+                                          &m_atlasScissor))
+            {
+                return false; // There wasn't room for our path in the atlas.
+            }
+            m_atlasTransform.scaleFactor = scaleFactor;
+            m_atlasTransform.translateX = x - visibleBounds.left * scaleFactor;
+            m_atlasTransform.translateY = y - visibleBounds.top * scaleFactor;
+            m_atlasScissorEnabled = visibleBounds != m_pixelBounds;
+        }
+        else
+        {
+            // Round up width and height to multiples of 32 for tiling.
+            uint32_t coverageWidth = math::round_up_to_multiple_of<32>(
+                visibleBounds.width() + PADDING * 2);
+            uint32_t coverageHeight = math::round_up_to_multiple_of<32>(
+                visibleBounds.height() + PADDING * 2);
+
+            // Get our coverage allocation.
+            size_t offset = flush->allocateCoverageBufferRange(coverageHeight *
+                                                               coverageWidth);
+            if (offset == -1)
+            {
+                return false; // There wasn't room for our coverage buffer.
+            }
+            m_coverageBufferRange.offset =
+                math::lossless_numeric_cast<uint32_t>(offset);
+            m_coverageBufferRange.pitch = coverageWidth;
+            m_coverageBufferRange.offsetX = -visibleBounds.left + PADDING;
+            m_coverageBufferRange.offsetY = -visibleBounds.top + PADDING;
+        }
+    }
+
+    // Interior triangulation has two subpasses: outer cubics and interior
+    // triangles.
+    m_subpassCount = m_triangulator != nullptr ? 2 : 1;
+    m_prepassCount = 0;
+
+    if (m_coverageType == CoverageType::clockwiseAtomic && !isStroke())
+    {
+        // clockwiseAtomic fills need a prepass to render their borrowed
+        // coverage.
+        m_prepassCount = m_subpassCount;
+    }
+    else if (m_coverageType == CoverageType::msaa && isOpaque())
+    {
+        // In msaa mode we can draw opaque paths front-to-back by converting
+        // them to a prepass. This takes advantage of early Z culling.
+        //
+        // FIXME: To keep things simple initially, we don't reverse-sort draws
+        // that use clipping.
+        bool usesClipping = drawContents() & (gpu::DrawContents::activeClip |
+                                              gpu::DrawContents::clipUpdate);
+        if (!usesClipping)
+        {
+            // Render this path front-to-back instead of back-to-front.
+            assert(m_prepassCount == 0);
+            std::swap(m_subpassCount, m_prepassCount);
+        }
+    }
+
+    return true;
+}
+
+void PathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
+                                   int subpassIndex)
 {
     // Make sure the rawPath in our path reference hasn't changed since we began
     // holding!
     assert(m_rawPathMutationID == m_pathRef->getRawPathMutationID());
     assert(!m_pathRef->getRawPath().empty());
 
-    size_t tessVertexCount = m_type == Type::midpointFanPath
-                                 ? m_resourceCounts.midpointFanTessVertexCount
-                                 : m_resourceCounts.outerCubicTessVertexCount;
-    if (tessVertexCount == 0)
+    if ((m_resourceCounts.outerCubicTessVertexCount |
+         m_resourceCounts.midpointFanTessVertexCount) == 0)
     {
         return;
     }
 
-    if (subpassIndex == 0)
+    if (m_pathID == 0)
     {
-        // Push a path record and update m_pathID.
-        m_pathID = flush->pushPath(
-            this,
-            m_type == Type::midpointFanPath ? PatchType::midpointFan
-                                            : PatchType::outerCurves,
-            math::lossless_numeric_cast<uint32_t>(tessVertexCount));
+        // Reserve our pathID and write out a path record.
+        m_pathID = flush->pushPath(this);
     }
-    assert(m_pathID != 0);
 
-    if (type() == Type::interiorTriangulationPath)
+    bool clockwiseAtomicFill =
+        !isStroke() && m_coverageType == CoverageType::clockwiseAtomic;
+
+    if (m_coverageType == CoverageType::atlas)
     {
-        if (subpassIndex == 0)
-        {
-            iterateInteriorTriangulation(
-                InteriorTriangulationOp::submitOuterCubics,
-                nullptr,
-                nullptr,
-                TriangulatorAxis::dontCare,
-                flush);
-        }
-        else
-        {
-            assert(subpassIndex == 1);
-            flush->pushInteriorTriangulation(this);
-        }
+        // Atlas draws only have one subpass -- the rectangular draw to the
+        // screen. The step that renders coverage to the offscreen atlas is
+        // handled separately, outside the subpass system.
+        assert(!clockwiseAtomicFill);
+        assert(subpassIndex == 0);
+        flush->pushAtlasCoverageDraw(this, m_pathID);
         return;
     }
 
-    assert(type() == Type::midpointFanPath);
-    assert(subpassIndex == 0);
+    if (m_coverageType == CoverageType::msaa)
+    {
+        // MSAA draws only have one subpass for now.
+        assert(!clockwiseAtomicFill);
+        assert(m_prepassCount + subpassIndex == 0);
+        assert(!m_triangulator);
+        uint32_t tessVertexCount, tessLocation;
+        pushTessellationData(flush, &tessVertexCount, &tessLocation);
+        assert(tessVertexCount == m_resourceCounts.midpointFanTessVertexCount);
+        flush->pushMidpointFanDraw(this, tessVertexCount, tessLocation);
+        return;
+    }
 
-    // Midpoint Fan Case
+    switch (subpassIndex)
+    {
+        case -2: // Borrowed coverage prepass for interior triangulation.
+        {
+            assert(clockwiseAtomicFill);
+            assert(m_triangulator != nullptr);
+            size_t actualCount RIVE_MAYBE_UNUSED =
+                flush->pushInteriorTriangulationDraw(
+                    this,
+                    m_pathID,
+                    gpu::WindingFaces::negative,
+                    gpu::ShaderMiscFlags::borrowedCoveragePrepass);
+            RIVE_DEBUG_CODE(m_numInteriorTriangleVerticesPushed += actualCount;)
+            assert(m_numInteriorTriangleVerticesPushed <=
+                   m_triangulator->maxVertexCount());
+            break;
+        }
+
+        case -1: // Borrowed coverage prepass for path tessellation.
+        {
+            assert(clockwiseAtomicFill);
+            // Allocate tessellation vertices and push a draw for the prepass.
+            // The tessellation vertices get filled in later by the main
+            // subpass.
+            if (m_triangulator != nullptr)
+            {
+                // Draw half the vertices now.
+                assert(m_resourceCounts.outerCubicTessVertexCount % 2 == 0);
+                auto prepassTessVertexCount =
+                    math::lossless_numeric_cast<uint32_t>(
+                        m_resourceCounts.outerCubicTessVertexCount / 2);
+                m_prepassTessLocation = flush->allocateOuterCubicTessVertices(
+                    prepassTessVertexCount);
+                flush->pushOuterCubicsDraw(
+                    this,
+                    prepassTessVertexCount,
+                    m_prepassTessLocation,
+                    gpu::ShaderMiscFlags::borrowedCoveragePrepass);
+            }
+            else
+            {
+                // Draw half the vertices now.
+                assert(m_resourceCounts.midpointFanTessVertexCount % 2 == 0);
+                auto prepassTessVertexCount =
+                    math::lossless_numeric_cast<uint32_t>(
+                        m_resourceCounts.midpointFanTessVertexCount / 2);
+                m_prepassTessLocation = flush->allocateMidpointFanTessVertices(
+                    prepassTessVertexCount);
+                flush->pushMidpointFanDraw(
+                    this,
+                    prepassTessVertexCount,
+                    m_prepassTessLocation,
+                    gpu::ShaderMiscFlags::borrowedCoveragePrepass);
+            }
+            break;
+        }
+
+        case 0: // Main subpass for path tessellation.
+        {
+            // Allocate tessellation vertices and push a path draw.
+            uint32_t tessVertexCount, tessLocation;
+            pushTessellationData(flush, &tessVertexCount, &tessLocation);
+            if (m_triangulator != nullptr)
+            {
+                flush->pushOuterCubicsDraw(this, tessVertexCount, tessLocation);
+            }
+            else
+            {
+                flush->pushMidpointFanDraw(this, tessVertexCount, tessLocation);
+            }
+            break;
+        }
+
+        case 1: // Main subpass for interior triangulation.
+        {
+            assert(m_triangulator != nullptr);
+            size_t actualCount RIVE_MAYBE_UNUSED =
+                flush->pushInteriorTriangulationDraw(
+                    this,
+                    m_pathID,
+                    // In clockwiseAtomic mode, the negative triangles get
+                    // written out in a separate prepass.
+                    clockwiseAtomicFill ? gpu::WindingFaces::positive
+                                        : gpu::WindingFaces::all);
+            RIVE_DEBUG_CODE(m_numInteriorTriangleVerticesPushed += actualCount;)
+            assert(m_numInteriorTriangleVerticesPushed <=
+                   m_triangulator->maxVertexCount());
+            break;
+        }
+
+        default:
+            RIVE_UNREACHABLE();
+    }
+}
+
+void PathDraw::pushAtlasTessellation(RenderContext::LogicalFlush* flush,
+                                     uint32_t* tessVertexCount,
+                                     uint32_t* tessBaseVertex)
+{
+    assert(m_coverageType == CoverageType::atlas);
+
+    if (m_pathID == 0)
+    {
+        assert(((m_resourceCounts.outerCubicTessVertexCount |
+                 m_resourceCounts.midpointFanTessVertexCount) == 0));
+        *tessVertexCount = 0;
+        return;
+    }
+
+    pushTessellationData(flush, tessVertexCount, tessBaseVertex);
+}
+
+void PathDraw::pushTessellationData(RenderContext::LogicalFlush* flush,
+                                    uint32_t* outTessVertexCount,
+                                    uint32_t* outTessLocation)
+{
+    uint32_t tessVertexCount = math::lossless_numeric_cast<uint32_t>(
+        m_triangulator != nullptr
+            ? m_resourceCounts.outerCubicTessVertexCount
+            : m_resourceCounts.midpointFanTessVertexCount);
+    assert(tessVertexCount > 0);
+
+    bool clockwiseAtomicFill =
+        !isStroke() && m_coverageType == CoverageType::clockwiseAtomic;
+
+    if (clockwiseAtomicFill)
+    {
+        // In clockwiseAtomic mode, we draw paths in two separate passes -- once
+        // backwards for borrowed coverage, and a separate forward pass.
+        assert(tessVertexCount % 2 == 0);
+        tessVertexCount /= 2;
+    }
+
+    // Allocate tessellation vertices and push a path draw.
+    uint32_t tessLocation;
+    if (m_triangulator != nullptr)
+    {
+        tessLocation = flush->allocateOuterCubicTessVertices(tessVertexCount);
+    }
+    else
+    {
+        tessLocation = flush->allocateMidpointFanTessVertices(tessVertexCount);
+    }
+
+    // Determine where to fill in forward and mirrored tessellations.
+    uint32_t forwardTessVertexCount, forwardTessLocation,
+        mirroredTessVertexCount, mirroredTessLocation;
+    switch (m_contourDirections)
+    {
+        case gpu::ContourDirections::forward:
+            forwardTessVertexCount = tessVertexCount;
+            forwardTessLocation = tessLocation;
+            mirroredTessLocation = mirroredTessVertexCount = 0;
+            break;
+        case gpu::ContourDirections::reverse:
+            forwardTessVertexCount = forwardTessLocation = 0;
+            mirroredTessVertexCount = tessVertexCount;
+            mirroredTessLocation = tessLocation + tessVertexCount;
+            break;
+        case gpu::ContourDirections::reverseThenForward:
+            if (clockwiseAtomicFill)
+            {
+                // The tessellation for borrowed coverage was allocated at a
+                // different location than the forward tessellation, both with
+                // "tessVertexCount" vertices.
+                forwardTessVertexCount = mirroredTessVertexCount =
+                    tessVertexCount;
+                forwardTessLocation = tessLocation;
+                mirroredTessLocation = m_prepassTessLocation + tessVertexCount;
+            }
+            else
+            {
+                // The reverse and forward tessellations are allocated
+                // contiguously, with a combined vertex count of
+                // "tessVertexCount". (tessVertexCount/2 vertices each.)
+                assert(tessVertexCount % 2 == 0);
+                forwardTessVertexCount = mirroredTessVertexCount =
+                    tessVertexCount / 2;
+                forwardTessLocation = mirroredTessLocation =
+                    tessLocation + tessVertexCount / 2;
+            }
+            break;
+        case gpu::ContourDirections::forwardThenReverse:
+            if (clockwiseAtomicFill)
+            {
+                // The tessellation for borrowed coverage was allocated at a
+                // different location than the forward tessellation, both with
+                // "tessVertexCount" vertices.
+                forwardTessVertexCount = mirroredTessVertexCount =
+                    tessVertexCount;
+                forwardTessLocation = m_prepassTessLocation;
+                mirroredTessLocation = tessLocation + tessVertexCount;
+            }
+            else
+            {
+                // The reverse and forward tessellations are allocated
+                // contiguously, with a combined vertex count of
+                // "tessVertexCount". (tessVertexCount/2 vertices each.)
+                assert(tessVertexCount % 2 == 0);
+                forwardTessVertexCount = mirroredTessVertexCount =
+                    tessVertexCount / 2;
+                forwardTessLocation = tessLocation;
+                mirroredTessLocation = tessLocation + tessVertexCount;
+            }
+            break;
+    }
+
+    // Write out the TessVertexSpans and path contours.
+    RenderContext::TessellationWriter tessWriter(flush,
+                                                 m_pathID,
+                                                 m_contourDirections,
+                                                 forwardTessVertexCount,
+                                                 forwardTessLocation,
+                                                 mirroredTessVertexCount,
+                                                 mirroredTessLocation);
+
+    if (m_triangulator != nullptr)
+    {
+        iterateInteriorTriangulation(
+            InteriorTriangulationOp::pushOuterCubicTessellationData,
+            nullptr,
+            nullptr,
+            TriangulatorAxis::dontCare,
+            &tessWriter);
+    }
+    else
+    {
+        pushMidpointFanTessellationData(&tessWriter);
+    }
+
+    *outTessVertexCount = tessVertexCount;
+    *outTessLocation = tessLocation;
+}
+
+void PathDraw::pushMidpointFanTessellationData(
+    RenderContext::TessellationWriter* tessWriter)
+{
     const RawPath& rawPath = m_pathRef->getRawPath();
     RawPath::Iter startOfContour = rawPath.begin();
     for (size_t i = 0; i < m_resourceCounts.contourCount; ++i)
@@ -1248,9 +1726,9 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
         // Push a contour and curve records.
         const ContourInfo& contour = m_contours[i];
         assert(startOfContour.verb() == PathVerb::move);
-        assert(isStroked() || contour.closed); // Fills are always closed.
+        assert(isStroke() || contour.closed); // Fills are always closed.
         RIVE_DEBUG_CODE(m_pendingStrokeJoinCount =
-                            isStroked() ? contour.strokeJoinCount : 0;)
+                            isStrokeOrFeather() ? contour.strokeJoinCount : 0;)
         RIVE_DEBUG_CODE(m_pendingStrokeCapCount =
                             contour.strokeCapSegmentCount != 0 ? 2 : 0;)
 
@@ -1260,41 +1738,66 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
         const RawPath::Iter end = contour.endOfContour;
         uint32_t joinTypeFlags = 0;
         bool roundJoinStroked = false;
-        bool needsFirstEmulatedCapAsJoin =
-            false; // Emit a starting cap before the next cubic?
+        // Emit a starting cap before the next cubic?
+        bool needsFirstEmulatedCapAsJoin = false;
         uint32_t emulatedCapAsJoinFlags = 0;
-        if (isStroked())
+        if (isStrokeOrFeather())
         {
-            joinTypeFlags = join_type_flags(m_strokeJoin);
-            roundJoinStroked = joinTypeFlags == 0;
+            joinTypeFlags = isStroke() ? join_type_flags(m_strokeJoin)
+                                       : FEATHER_JOIN_CONTOUR_FLAG;
+            roundJoinStroked = joinTypeFlags == ROUND_JOIN_CONTOUR_FLAG;
             if (contour.strokeCapSegmentCount != 0)
             {
                 StrokeCap cap =
                     !contour.closed
                         ? m_strokeCap
                         : empty_stroke_cap(true, m_strokeJoin, m_strokeCap);
-                emulatedCapAsJoinFlags = EMULATED_STROKE_CAP_CONTOUR_FLAG;
-                if (cap == StrokeCap::square)
+                switch (cap)
                 {
-                    emulatedCapAsJoinFlags |= MITER_CLIP_JOIN_CONTOUR_FLAG;
+                    case StrokeCap::butt:
+                        emulatedCapAsJoinFlags = BEVEL_JOIN_CONTOUR_FLAG;
+                        break;
+                    case StrokeCap::square:
+                        emulatedCapAsJoinFlags = MITER_CLIP_JOIN_CONTOUR_FLAG;
+                        break;
+                    case StrokeCap::round:
+                        emulatedCapAsJoinFlags = ROUND_JOIN_CONTOUR_FLAG;
+                        break;
                 }
-                else if (cap == StrokeCap::butt)
-                {
-                    emulatedCapAsJoinFlags |= BEVEL_JOIN_CONTOUR_FLAG;
-                }
+                emulatedCapAsJoinFlags |= EMULATED_STROKE_CAP_CONTOUR_FLAG;
                 needsFirstEmulatedCapAsJoin = true;
             }
         }
 
         // Make a data record for this current contour on the GPU.
         uint32_t contourIDWithFlags =
-            m_contourFlags | flush->pushContour(this,
-                                                contour.midpoint,
-                                                contour.closed,
-                                                contour.paddingVertexCount);
+            m_contourFlags |
+            tessWriter->pushContour(contour.midpoint,
+                                    isStroke(),
+                                    contour.closed,
+                                    contour.paddingVertexCount);
+
+        // When we don't have round joins, the number of segments per join is
+        // constant. (Round joins have a variable number of segments per join,
+        // depending on the angle.)
+        uint32_t numSegmentsInNotRoundJoin;
+        if (isFeatheredFill())
+        {
+            numSegmentsInNotRoundJoin =
+                static_cast<uint32_t>(std::clamp<float>(
+                    ceilf(m_polarSegmentsPerRadian * math::PI),
+                    2,
+                    kMaxPolarSegments - 2)) +
+                5;
+        }
+        else
+        {
+            numSegmentsInNotRoundJoin = NUM_SEGMENTS_IN_MITER_OR_BEVEL_JOIN;
+        }
 
         // Convert all curves in the contour to cubics and push them to the GPU.
-        const int styleFlags = style_flags(isStroked(), roundJoinStroked);
+        const int styleFlags =
+            style_flags(isStrokeOrFeather(), roundJoinStroked);
         Vec2D joinTangent = {0, 1};
         int joinSegmentCount = 1;
         Vec2D implicitClose[2]; // In case we need an implicit closing line.
@@ -1343,7 +1846,7 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                                                         end.rawPtsPtr(),
                                                         contour.closed,
                                                         pts);
-                        joinSegmentCount = kNumSegmentsInMiterOrBevelJoin;
+                        joinSegmentCount = numSegmentsInNotRoundJoin;
                         RIVE_DEBUG_CODE(--m_pendingStrokeJoinCount;)
                     }
                     else
@@ -1367,19 +1870,19 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                         // Emulate the start cap as a 180-degree join before the
                         // first stroke.
                         pushEmulatedStrokeCapAsJoinBeforeCubic(
-                            flush,
+                            tessWriter,
                             cubic.data(),
                             contour.strokeCapSegmentCount,
                             contourIDWithFlags | emulatedCapAsJoinFlags);
                         needsFirstEmulatedCapAsJoin = false;
                     }
-                    flush->pushCubic(cubic.data(),
-                                     m_contourDirections,
-                                     joinTangent,
-                                     1,
-                                     1,
-                                     joinSegmentCount,
-                                     contourIDWithFlags | joinTypeFlags);
+                    tessWriter->pushCubic(cubic.data(),
+                                          m_contourDirections,
+                                          joinTangent,
+                                          1,
+                                          1,
+                                          joinSegmentCount,
+                                          contourIDWithFlags | joinTypeFlags);
                     RIVE_DEBUG_CODE(--m_pendingLineCount;)
                     break;
                 }
@@ -1422,7 +1925,7 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                             // content. Just re-chop the curve this time around
                             // as well.
                             auto [t0, t1] = m_chopVertices.pop_front();
-                            pathutils::ChopCubicAt(p, localChopBuffer, t0, t1);
+                            math::chop_cubic_at(p, localChopBuffer, t0, t1);
                             p = localChopBuffer;
                             numChops = 2;
                             break;
@@ -1444,7 +1947,7 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                         // Emulate the start cap as a 180-degree join before the
                         // first stroke.
                         pushEmulatedStrokeCapAsJoinBeforeCubic(
-                            flush,
+                            tessWriter,
                             p,
                             contour.strokeCapSegmentCount,
                             contourIDWithFlags | emulatedCapAsJoinFlags);
@@ -1458,13 +1961,14 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                             m_parametricSegmentCounts[curveIdx];
                         uint32_t polarSegmentCount =
                             m_polarSegmentCounts[rotationIdx];
-                        flush->pushCubic(p,
-                                         m_contourDirections,
-                                         joinTangent,
-                                         parametricSegmentCount,
-                                         polarSegmentCount,
-                                         1,
-                                         contourIDWithFlags | joinTypeFlags);
+                        tessWriter->pushCubic(p,
+                                              m_contourDirections,
+                                              joinTangent,
+                                              parametricSegmentCount,
+                                              polarSegmentCount,
+                                              1,
+                                              contourIDWithFlags |
+                                                  joinTypeFlags);
                         RIVE_DEBUG_CODE(--m_pendingCurveCount;)
                         RIVE_DEBUG_CODE(--m_pendingRotationCount;)
                     }
@@ -1490,7 +1994,7 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                                                             end.rawPtsPtr(),
                                                             contour.closed,
                                                             pts);
-                            joinSegmentCount = kNumSegmentsInMiterOrBevelJoin;
+                            joinSegmentCount = numSegmentsInNotRoundJoin;
                         }
                         RIVE_DEBUG_CODE(--m_pendingStrokeJoinCount;)
                     }
@@ -1504,13 +2008,13 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                         joinSegmentCount = contour.strokeCapSegmentCount;
                         RIVE_DEBUG_CODE(--m_pendingStrokeCapCount;)
                     }
-                    flush->pushCubic(p,
-                                     m_contourDirections,
-                                     joinTangent,
-                                     parametricSegmentCount,
-                                     polarSegmentCount,
-                                     joinSegmentCount,
-                                     contourIDWithFlags | joinTypeFlags);
+                    tessWriter->pushCubic(p,
+                                          m_contourDirections,
+                                          joinTangent,
+                                          parametricSegmentCount,
+                                          polarSegmentCount,
+                                          joinSegmentCount,
+                                          contourIDWithFlags | joinTypeFlags);
                     RIVE_DEBUG_CODE(--m_pendingCurveCount;)
                     break;
                 }
@@ -1518,13 +2022,13 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                 {
                     uint32_t parametricSegmentCount =
                         m_parametricSegmentCounts[curveIdx++];
-                    flush->pushCubic(iter.cubicPts(),
-                                     m_contourDirections,
-                                     Vec2D{},
-                                     parametricSegmentCount,
-                                     1,
-                                     1,
-                                     contourIDWithFlags);
+                    tessWriter->pushCubic(iter.cubicPts(),
+                                          m_contourDirections,
+                                          Vec2D{},
+                                          parametricSegmentCount,
+                                          1,
+                                          1,
+                                          contourIDWithFlags);
                     RIVE_DEBUG_CODE(--m_pendingCurveCount;)
                     break;
                 }
@@ -1537,12 +2041,12 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
             Vec2D p0 = pts[0], left = {p0.x - 1, p0.y},
                   right = {p0.x + 1, p0.y};
             pushEmulatedStrokeCapAsJoinBeforeCubic(
-                flush,
+                tessWriter,
                 std::array{p0, right, right, right}.data(),
                 contour.strokeCapSegmentCount,
                 contourIDWithFlags | emulatedCapAsJoinFlags);
             pushEmulatedStrokeCapAsJoinBeforeCubic(
-                flush,
+                tessWriter,
                 std::array{p0, left, left, left}.data(),
                 contour.strokeCapSegmentCount,
                 contourIDWithFlags | emulatedCapAsJoinFlags);
@@ -1568,19 +2072,19 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
                     RIVE_DEBUG_CODE(--m_pendingRotationCount;)
                     RIVE_DEBUG_CODE(--m_pendingStrokeJoinCount;)
                 }
-                else if (isStroked())
+                else if (isStrokeOrFeather())
                 {
                     joinTangent = find_starting_tangent(pts, end.rawPtsPtr());
-                    joinSegmentCount = kNumSegmentsInMiterOrBevelJoin;
+                    joinSegmentCount = numSegmentsInNotRoundJoin;
                     RIVE_DEBUG_CODE(--m_pendingStrokeJoinCount;)
                 }
-                flush->pushCubic(cubic.data(),
-                                 m_contourDirections,
-                                 joinTangent,
-                                 1,
-                                 1,
-                                 joinSegmentCount,
-                                 contourIDWithFlags | joinTypeFlags);
+                tessWriter->pushCubic(cubic.data(),
+                                      m_contourDirections,
+                                      joinTangent,
+                                      1,
+                                      1,
+                                      joinSegmentCount,
+                                      contourIDWithFlags | joinTypeFlags);
                 RIVE_DEBUG_CODE(--m_pendingLineCount;)
             }
         }
@@ -1600,8 +2104,8 @@ void RiveRenderPathDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
     assert(m_pendingEmptyStrokeCountForCaps == 0);
 }
 
-void RiveRenderPathDraw::pushEmulatedStrokeCapAsJoinBeforeCubic(
-    RenderContext::LogicalFlush* flush,
+void PathDraw::pushEmulatedStrokeCapAsJoinBeforeCubic(
+    RenderContext::TessellationWriter* tessWriter,
     const Vec2D cubic[],
     uint32_t strokeCapSegmentCount,
     uint32_t contourIDWithFlags)
@@ -1611,26 +2115,25 @@ void RiveRenderPathDraw::pushEmulatedStrokeCapAsJoinBeforeCubic(
     // positioned immediately before the provided cubic, that looks like the
     // desired stroke cap.
     assert(strokeCapSegmentCount >= 2);
-    flush->pushCubic(std::array{cubic[3], cubic[2], cubic[1], cubic[0]}.data(),
-                     m_contourDirections,
-                     find_cubic_tan0(cubic),
-                     0,
-                     0,
-                     strokeCapSegmentCount,
-                     contourIDWithFlags);
+    tessWriter->pushCubic(
+        std::array{cubic[3], cubic[2], cubic[1], cubic[0]}.data(),
+        m_contourDirections,
+        math::find_cubic_tan0(cubic),
+        0,
+        0,
+        strokeCapSegmentCount,
+        contourIDWithFlags);
     RIVE_DEBUG_CODE(--m_pendingStrokeCapCount;)
     RIVE_DEBUG_CODE(--m_pendingEmptyStrokeCountForCaps;)
 }
 
-void RiveRenderPathDraw::iterateInteriorTriangulation(
+void PathDraw::iterateInteriorTriangulation(
     InteriorTriangulationOp op,
     TrivialBlockAllocator* allocator,
     RawPath* scratchPath,
     TriangulatorAxis triangulatorAxis,
-    RenderContext::LogicalFlush* flush)
+    RenderContext::TessellationWriter* tessWriter)
 {
-    assert(type() == Type::interiorTriangulationPath);
-
     Vec2D chops[kMaxCurveSubdivisions * 3 + 1];
     const RawPath& rawPath = m_pathRef->getRawPath();
     assert(!rawPath.empty());
@@ -1642,7 +2145,7 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
     {
         scratchPath->rewind();
     }
-    // Used with InteriorTriangulationOp::submitOuterCubics.
+    // Used with InteriorTriangulationOp::pushOuterCubicData.
     uint32_t contourIDWithFlags = 0;
     for (const auto [verb, pts] : rawPath)
     {
@@ -1651,9 +2154,10 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
             case PathVerb::move:
                 if (contourCount != 0 && pts[-1] != p0)
                 {
-                    if (op == InteriorTriangulationOp::submitOuterCubics)
+                    if (op ==
+                        InteriorTriangulationOp::pushOuterCubicTessellationData)
                     {
-                        flush->pushCubic(
+                        tessWriter->pushCubic(
                             convert_line_to_cubic(pts[-1], p0).data(),
                             m_contourDirections,
                             {0, 0},
@@ -1673,7 +2177,10 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                 {
                     contourIDWithFlags =
                         m_contourFlags |
-                        flush->pushContour(this, {0, 0}, true, 0);
+                        tessWriter->pushContour({0, 0},
+                                                isStroke(),
+                                                /*closed=*/true,
+                                                0);
                 }
                 p0 = pts[0];
                 ++contourCount;
@@ -1685,7 +2192,7 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                 }
                 else
                 {
-                    flush->pushCubic(
+                    tessWriter->pushCubic(
                         convert_line_to_cubic(pts).data(),
                         m_contourDirections,
                         {0, 0},
@@ -1701,8 +2208,17 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                 RIVE_UNREACHABLE();
             case PathVerb::cubic:
             {
-                uint32_t numSubdivisions =
-                    FindSubdivisionCount(pts, vectorXform);
+                uint32_t numSubdivisions;
+                if (op == InteriorTriangulationOp::countDataAndTriangulate)
+                {
+                    numSubdivisions =
+                        find_outer_cubic_subdivision_count(pts, vectorXform);
+                    m_numChops.push_back(numSubdivisions);
+                }
+                else
+                {
+                    numSubdivisions = m_numChops.pop_front();
+                }
                 if (numSubdivisions == 1)
                 {
                     if (op == InteriorTriangulationOp::countDataAndTriangulate)
@@ -1711,7 +2227,7 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                     }
                     else
                     {
-                        flush->pushCubic(
+                        tessWriter->pushCubic(
                             pts,
                             m_contourDirections,
                             {0, 0},
@@ -1726,10 +2242,10 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                 {
                     // Passing nullptr for the 'tValues' causes it to chop the
                     // cubic uniformly in T.
-                    pathutils::ChopCubicAt(pts,
-                                           chops,
-                                           nullptr,
-                                           numSubdivisions - 1);
+                    math::chop_cubic_at(pts,
+                                        chops,
+                                        nullptr,
+                                        numSubdivisions - 1);
                     const Vec2D* chop = chops;
                     for (size_t i = 0; i < numSubdivisions; ++i)
                     {
@@ -1740,7 +2256,7 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                         }
                         else
                         {
-                            flush->pushCubic(
+                            tessWriter->pushCubic(
                                 chop,
                                 m_contourDirections,
                                 {0, 0},
@@ -1763,9 +2279,9 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
     Vec2D lastPt = rawPath.points().back();
     if (contourCount != 0 && lastPt != p0)
     {
-        if (op == InteriorTriangulationOp::submitOuterCubics)
+        if (op == InteriorTriangulationOp::pushOuterCubicTessellationData)
         {
-            flush->pushCubic(
+            tessWriter->pushCubic(
                 convert_line_to_cubic(lastPt, p0).data(),
                 m_contourDirections,
                 {0, 0},
@@ -1788,9 +2304,16 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
             triangulatorAxis == TriangulatorAxis::horizontal
                 ? GrTriangulator::Comparator::Direction::kHorizontal
                 : GrTriangulator::Comparator::Direction::kVertical,
-            m_fillRule,
+            // clockwise and nonZero paths both get triangulated as nonZero,
+            // because clockwise fill still needs the backwards triangles for
+            // borrowed coverage.
+            m_pathFillRule == FillRule::evenOdd ? FillRule::evenOdd
+                                                : FillRule::nonZero,
             allocator);
-        if (m_contourFlags & NEGATE_PATH_FILL_COVERAGE_FLAG)
+        float matrixDeterminant =
+            m_matrix[0] * m_matrix[3] - m_matrix[2] * m_matrix[1];
+        if ((matrixDeterminant < 0) !=
+            static_cast<bool>(m_contourFlags & NEGATE_PATH_FILL_COVERAGE_FLAG))
         {
             m_triangulator->negateWinding();
         }
@@ -1811,7 +2334,7 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                 gpu::ContourDirectionsAreDoubleSided(m_contourDirections)
                     ? patchCount * kOuterCurvePatchSegmentSpan * 2
                     : patchCount * kOuterCurvePatchSegmentSpan;
-            m_resourceCounts.maxTriangleVertexCount =
+            m_resourceCounts.maxTriangleVertexCount +=
                 m_triangulator->maxVertexCount();
         }
     }
@@ -1826,14 +2349,14 @@ void RiveRenderPathDraw::iterateInteriorTriangulation(
                                         node->fPts[1],
                                         {0, 0},
                                         node->fPts[2]};
-            flush->pushCubic(triangleAsCubic,
-                             m_contourDirections,
-                             {0, 0},
-                             kPatchSegmentCountExcludingJoin,
-                             1,
-                             kJoinSegmentCount,
-                             contourIDWithFlags |
-                                 RETROFITTED_TRIANGLE_CONTOUR_FLAG);
+            tessWriter->pushCubic(triangleAsCubic,
+                                  m_contourDirections,
+                                  {0, 0},
+                                  kPatchSegmentCountExcludingJoin,
+                                  1,
+                                  kJoinSegmentCount,
+                                  contourIDWithFlags |
+                                      RETROFITTED_TRIANGLE_CONTOUR_FLAG);
             ++patchCount;
         }
         assert(contourCount == m_resourceCounts.contourCount);
@@ -1865,10 +2388,10 @@ ImageRectDraw::ImageRectDraw(RenderContext* context,
 }
 
 void ImageRectDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
-                                        uint32_t subpassIndex)
+                                        int subpassIndex)
 {
     assert(subpassIndex == 0);
-    flush->pushImageRect(this);
+    flush->pushImageRectDraw(this);
 }
 
 ImageMeshDraw::ImageMeshDraw(IAABB pixelBounds,
@@ -1898,10 +2421,10 @@ ImageMeshDraw::ImageMeshDraw(IAABB pixelBounds,
 }
 
 void ImageMeshDraw::pushToRenderContext(RenderContext::LogicalFlush* flush,
-                                        uint32_t subpassIndex)
+                                        int subpassIndex)
 {
     assert(subpassIndex == 0);
-    flush->pushImageMesh(this);
+    flush->pushImageMeshDraw(this);
 }
 
 void ImageMeshDraw::releaseRefs()
@@ -1914,6 +2437,7 @@ void ImageMeshDraw::releaseRefs()
 
 StencilClipReset::StencilClipReset(RenderContext* context,
                                    uint32_t previousClipID,
+                                   gpu::DrawContents previousClipDrawContents,
                                    ResetAction resetAction) :
     Draw(context->getClipContentBounds(previousClipID),
          Mat2D(),
@@ -1922,6 +2446,10 @@ StencilClipReset::StencilClipReset(RenderContext* context,
          Type::stencilClipReset),
     m_previousClipID(previousClipID)
 {
+    constexpr static gpu::DrawContents FILL_RULE_FLAGS =
+        gpu::DrawContents::nonZeroFill | gpu::DrawContents::evenOddFill |
+        gpu::DrawContents::clockwiseFill;
+    m_drawContents |= previousClipDrawContents & FILL_RULE_FLAGS;
     switch (resetAction)
     {
         case ResetAction::intersectPreviousClip:
@@ -1935,9 +2463,9 @@ StencilClipReset::StencilClipReset(RenderContext* context,
 }
 
 void StencilClipReset::pushToRenderContext(RenderContext::LogicalFlush* flush,
-                                           uint32_t subpassIndex)
+                                           int subpassIndex)
 {
     assert(subpassIndex == 0);
-    flush->pushStencilClipReset(this);
+    flush->pushStencilClipResetDraw(this);
 }
 } // namespace rive::gpu

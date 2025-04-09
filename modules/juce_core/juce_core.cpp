@@ -170,6 +170,7 @@ extern char** environ;
 #include "maths/juce_Random.cpp"
 #include "memory/juce_MemoryBlock.cpp"
 #include "memory/juce_AllocationHooks.cpp"
+#include "cryptography/juce_SHA1.cpp"
 #include "misc/juce_RuntimePermissions.cpp"
 #include "misc/juce_Result.cpp"
 #include "misc/juce_Uuid.cpp"
@@ -211,9 +212,6 @@ extern char** environ;
 #include "containers/juce_DynamicObject.cpp"
 #include "xml/juce_XmlDocument.cpp"
 #include "xml/juce_XmlElement.cpp"
-#include "zip/juce_GZIPDecompressorInputStream.cpp"
-#include "zip/juce_GZIPCompressorOutputStream.cpp"
-#include "zip/juce_ZipFile.cpp"
 #include "files/juce_FileFilter.cpp"
 #include "files/juce_WildcardFileFilter.cpp"
 #include "native/juce_ThreadPriorities_native.h"
@@ -230,14 +228,14 @@ extern char** environ;
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-#include "native/juce_Files_mac.mm"
-#include "native/juce_Network_mac.mm"
-#include "native/juce_Strings_mac.mm"
+#include "native/juce_Files_apple.mm"
+#include "native/juce_Network_apple.mm"
+#include "native/juce_Strings_apple.mm"
 #include "native/juce_SharedCode_intel.h"
-#include "native/juce_SystemStats_mac.mm"
-#include "native/juce_Threads_mac.mm"
+#include "native/juce_SystemStats_apple.mm"
+#include "native/juce_Threads_apple.mm"
 #include "native/juce_PlatformTimer_generic.cpp"
-#include "native/juce_Process_mac.mm"
+#include "native/juce_Process_apple.mm"
 
 //==============================================================================
 #elif JUCE_WINDOWS
@@ -312,6 +310,13 @@ extern char** environ;
 #if JUCE_UNIT_TESTS
 #include "maths/juce_MathsFunctions_test.cpp"
 #endif
+
+//==============================================================================
+#include <zlib/zlib.h>
+
+#include "zip/juce_GZIPDecompressorInputStream.cpp"
+#include "zip/juce_GZIPCompressorOutputStream.cpp"
+#include "zip/juce_ZipFile.cpp"
 
 //==============================================================================
 namespace juce

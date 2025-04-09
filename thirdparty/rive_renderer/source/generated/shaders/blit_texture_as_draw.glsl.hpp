@@ -6,10 +6,10 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char blit_texture_as_draw[] = R"===(#ifdef AB
-R1 S1 f2 g2 h1(QD,V,q,n,H){f r1;r1.x=(n&1)==0?-1.:1.;r1.y=(n&2)==0?-1.:1.;g T=g(r1,0,1);i1(T);}
+H2 I2 r3 v3 Z0(WD,e0,o,l,I){c j2;j2.x=(l&1)==0?-1.:1.;j2.y=(l&2)==0?-1.:1.;e Q=e(j2,0,1);U0(Q);}
 #endif
-#ifdef EB
-H2 v1(p2,0,DD);I2 q2(i,ED){i O9=N1(DD,e0(floor(h0.xy)));r2(O9);}
+#ifdef HB
+J2 o2(K2,0,ID);L2 T1(i,JD){i Ib=f1(ID,f0(floor(v0.xy)));U1(Ib);}
 #endif
 )===";
 } // namespace glsl

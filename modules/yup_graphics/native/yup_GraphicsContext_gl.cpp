@@ -27,8 +27,7 @@
 #include "rive/renderer/gl/render_target_gl.hpp"
 
 #if RIVE_DESKTOP_GL || JUCE_ANDROID
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
+#include <SDL2/SDL.h>
 #endif
 
 namespace yup
@@ -78,7 +77,7 @@ public:
     {
 #if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
-        if (! gladLoadCustomLoader ((GLADloadproc) glfwGetProcAddress))
+        if (! gladLoadCustomLoader ((GLADloadproc) SDL_GL_GetProcAddress))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
             exit (-1);
@@ -100,7 +99,7 @@ public:
         printf ("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n", GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 #endif
 
-#if DEBUG && !RIVE_ANDROID
+#if DEBUG && ! RIVE_ANDROID
         int n;
         glGetIntegerv (GL_NUM_EXTENSIONS, &n);
         for (size_t i = 0; i < n; ++i)
@@ -128,9 +127,9 @@ public:
 
     rive::Factory* factory() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderContext* plsContextOrNull() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* renderContext() override { return m_plsContext.get(); }
 
-    rive::gpu::RenderTarget* plsRenderTargetOrNull() override { return m_renderTarget.get(); }
+    rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {

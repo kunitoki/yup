@@ -22,6 +22,12 @@
 namespace yup
 {
 
+//==============================================================================
+
+JUCE_IMPLEMENT_SINGLETON (Desktop)
+
+//==============================================================================
+
 Desktop::Desktop()
 {
 }
@@ -31,24 +37,84 @@ Desktop::~Desktop()
     clearSingletonInstance();
 }
 
-int Desktop::getNumDisplays() const
+//==============================================================================
+
+int Desktop::getNumScreens() const
 {
-    return displays.size();
+    return screens.size();
 }
 
-Display* Desktop::getDisplay (int displayIndex) const
+//==============================================================================
+
+Screen::Ptr Desktop::getScreen (int screenIndex) const
 {
-    if (isPositiveAndBelow (displayIndex, displays.size()))
-        return displays.getUnchecked (displayIndex);
+    if (isPositiveAndBelow (screenIndex, screens.size()))
+        return screens.getUnchecked (screenIndex);
 
     return nullptr;
 }
 
-Display* Desktop::getPrimaryDisplay() const
+//==============================================================================
+
+Span<const Screen* const> Desktop::getScreens() const
 {
-    return ! displays.isEmpty() ? getDisplay (0) : nullptr;
+    return { screens.data(), static_cast<size_t> (screens.size()) };
 }
 
-JUCE_IMPLEMENT_SINGLETON (Desktop)
+//==============================================================================
+
+Screen::Ptr Desktop::getPrimaryScreen() const
+{
+    return ! screens.isEmpty() ? getScreen (0) : nullptr;
+}
+
+//==============================================================================
+
+Screen::Ptr Desktop::getScreenContainingMouseCursor() const
+{
+    return getScreenContaining (getCurrentMouseLocation());
+}
+
+//==============================================================================
+
+Screen::Ptr Desktop::getScreenContaining (const Point<float>& location) const
+{
+    for (auto& screen : screens)
+    {
+        if (screen->workArea.contains (location.to<int>()))
+            return screen;
+    }
+
+    return ! screens.isEmpty() ? getScreen (0) : nullptr;
+}
+
+//==============================================================================
+
+MouseCursor Desktop::getMouseCursor() const
+{
+    return currentMouseCursor.value_or (MouseCursor (MouseCursor::Default));
+}
+
+//==============================================================================
+
+void Desktop::handleScreenConnected (int screenIndex)
+{
+    updateScreens();
+}
+
+void Desktop::handleScreenDisconnected (int screenIndex)
+{
+    updateScreens();
+}
+
+void Desktop::handleScreenMoved (int screenIndex)
+{
+    updateScreens();
+}
+
+void Desktop::handleScreenOrientationChanged (int screenIndex)
+{
+    updateScreens();
+}
 
 } // namespace yup

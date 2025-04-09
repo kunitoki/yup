@@ -585,6 +585,21 @@ public:
         return ! (*this == other);
     }
 
+    //==============================================================================
+    /** @internal Conversion to Rive Mat2D class.  */
+    rive::Mat2D toMat2D() const
+    {
+        return
+        {
+            getScaleX(),     // xx
+            getShearX(),     // xy
+            getShearY(),     // yx
+            getScaleY(),     // yy
+            getTranslateX(), // tx
+            getTranslateY()  // ty
+        };
+    }
+
 private:
     union
     {

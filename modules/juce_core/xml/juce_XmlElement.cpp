@@ -453,44 +453,6 @@ bool XmlElement::writeTo (const File& destinationFile, const TextFormat& options
     return tempFile.overwriteTargetFileWithTemporary();
 }
 
-String XmlElement::createDocument (StringRef dtdToUse, bool allOnOneLine, bool includeXmlHeader, StringRef encodingType, int lineWrapLength) const
-{
-    TextFormat options;
-    options.dtd = dtdToUse;
-    options.customEncoding = encodingType;
-    options.addDefaultHeader = includeXmlHeader;
-    options.lineWrapLength = lineWrapLength;
-
-    if (allOnOneLine)
-        options.newLineChars = nullptr;
-
-    return toString (options);
-}
-
-void XmlElement::writeToStream (OutputStream& output, StringRef dtdToUse, bool allOnOneLine, bool includeXmlHeader, StringRef encodingType, int lineWrapLength) const
-{
-    TextFormat options;
-    options.dtd = dtdToUse;
-    options.customEncoding = encodingType;
-    options.addDefaultHeader = includeXmlHeader;
-    options.lineWrapLength = lineWrapLength;
-
-    if (allOnOneLine)
-        options.newLineChars = nullptr;
-
-    writeTo (output, options);
-}
-
-bool XmlElement::writeToFile (const File& file, StringRef dtdToUse, StringRef encodingType, int lineWrapLength) const
-{
-    TextFormat options;
-    options.dtd = dtdToUse;
-    options.customEncoding = encodingType;
-    options.lineWrapLength = lineWrapLength;
-
-    return writeTo (file, options);
-}
-
 //==============================================================================
 bool XmlElement::hasTagName (StringRef possibleTagName) const noexcept
 {

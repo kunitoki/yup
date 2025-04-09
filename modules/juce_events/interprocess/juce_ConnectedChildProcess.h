@@ -100,8 +100,6 @@ public:
     */
     virtual void handleMessageFromCoordinator (const MemoryBlock& mb);
 
-    [[deprecated ("Replaced by handleMessageFromCoordinator.")]] virtual void handleMessageFromMaster (const MemoryBlock&) {}
-
     /** This will be called when the coordinator process finishes connecting to this worker.
         The call will probably be made on a background thread, so be careful with your thread-safety!
     */
@@ -121,16 +119,12 @@ public:
     */
     bool sendMessageToCoordinator (const MemoryBlock&);
 
-    [[deprecated ("Replaced by sendMessageToCoordinator.")]] bool sendMessageToMaster (const MemoryBlock& mb) { return sendMessageToCoordinator (mb); }
-
 private:
     struct Connection;
     std::unique_ptr<Connection> connection;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessWorker)
 };
-
-using ChildProcessSlave [[deprecated ("Replaced by ChildProcessWorker.")]] = ChildProcessWorker;
 
 //==============================================================================
 /**
@@ -189,27 +183,15 @@ public:
                               int timeoutMs = 0,
                               int streamFlags = ChildProcess::wantStdOut | ChildProcess::wantStdErr);
 
-    [[deprecated ("Replaced by launchWorkerProcess.")]] bool launchSlaveProcess (const File& executableToLaunch,
-                                                                                 const String& commandLineUniqueID,
-                                                                                 int timeoutMs = 0,
-                                                                                 int streamFlags = ChildProcess::wantStdOut | ChildProcess::wantStdErr)
-    {
-        return launchWorkerProcess (executableToLaunch, commandLineUniqueID, timeoutMs, streamFlags);
-    }
-
     /** Sends a kill message to the worker, and disconnects from it.
         Note that this won't wait for it to terminate.
     */
     void killWorkerProcess();
 
-    [[deprecated ("Replaced by killWorkerProcess.")]] void killSlaveProcess() { killWorkerProcess(); }
-
     /** This will be called to deliver a message from the worker process.
         The call will probably be made on a background thread, so be careful with your thread-safety!
     */
     virtual void handleMessageFromWorker (const MemoryBlock&);
-
-    [[deprecated ("Replaced by handleMessageFromWorker")]] virtual void handleMessageFromSlave (const MemoryBlock&) {}
 
     /** This will be called when the worker process dies or is somehow disconnected.
         The call will probably be made on a background thread, so be careful with your thread-safety!
@@ -223,8 +205,6 @@ public:
     */
     bool sendMessageToWorker (const MemoryBlock&);
 
-    [[deprecated ("Replaced by sendMessageToWorker.")]] bool sendMessageToSlave (const MemoryBlock& mb) { return sendMessageToWorker (mb); }
-
 private:
     std::shared_ptr<ChildProcess> childProcess;
 
@@ -233,7 +213,5 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessCoordinator)
 };
-
-using ChildProcessMaster [[deprecated ("Replaced by ChildProcessCoordinator.")]] = ChildProcessCoordinator;
 
 } // namespace juce

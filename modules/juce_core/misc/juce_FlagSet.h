@@ -166,6 +166,20 @@ public:
         return FlagSet (flags | other.flags);
     }
 
+    /** Binary OR operator to combine this FlagSet with another.
+
+        Combines the flags of this FlagSet with another by performing a bitwise OR operation.
+
+        @param other Another FlagSet to combine with this one.
+
+        @return The current FlagSet.
+    */
+    constexpr FlagSet& operator|= (FlagSet other) noexcept
+    {
+        flags = (flags | other.flags);
+        return *this;
+    }
+
     /** Binary AND operator to intersect flags from two FlagSets.
 
         Produces a new FlagSet containing only the flags that are set in both this and another FlagSet by performing a
@@ -178,6 +192,20 @@ public:
     constexpr FlagSet operator& (FlagSet other) const noexcept
     {
         return FlagSet (flags & other.flags);
+    }
+
+    /** Binary AND operator to combine this FlagSet with another.
+
+        Combines the flags of this FlagSet with another by performing a bitwise AND operation.
+
+        @param other Another FlagSet to combine with this one.
+
+        @return The current FlagSet.
+    */
+    constexpr FlagSet& operator&= (FlagSet other) noexcept
+    {
+        flags = (flags & other.flags);
+        return *this;
     }
 
     /** Unary NOT operator to invert flags in the FlagSet.

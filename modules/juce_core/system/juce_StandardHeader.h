@@ -60,7 +60,7 @@
 
 #if ! DOXYGEN
 #define JUCE_VERSION_ID \
-[[maybe_unused]] volatile auto juceVersionId = "juce_version_" JUCE_STRINGIFY (JUCE_MAJOR_VERSION) "_" JUCE_STRINGIFY (JUCE_MINOR_VERSION) "_" JUCE_STRINGIFY (JUCE_BUILDNUMBER);
+    [[maybe_unused]] volatile auto juceVersionId = "juce_version_" JUCE_STRINGIFY (JUCE_MAJOR_VERSION) "_" JUCE_STRINGIFY (JUCE_MINOR_VERSION) "_" JUCE_STRINGIFY (JUCE_BUILDNUMBER);
 #endif
 
 //==============================================================================
@@ -86,6 +86,7 @@
 #include <sstream>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
@@ -154,10 +155,10 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 // DLL building settings on Windows
 #if JUCE_MSVC
 #ifdef JUCE_DLL_BUILD
-#define JUCE_API __declspec(dllexport)
+#define JUCE_API __declspec (dllexport)
 #pragma warning(disable : 4251)
 #elif defined(JUCE_DLL)
-#define JUCE_API __declspec(dllimport)
+#define JUCE_API __declspec (dllimport)
 #pragma warning(disable : 4251)
 #endif
 #ifdef __INTEL_COMPILER
@@ -175,7 +176,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #if JUCE_MSVC && JUCE_DLL_BUILD
 #define JUCE_PUBLIC_IN_DLL_BUILD(declaration) \
 public:                                       \
-declaration;                                  \
+    declaration;                              \
                                               \
 private:
 #else

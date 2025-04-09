@@ -43,6 +43,10 @@
 #define ushort3 mediump uvec3
 #define ushort4 mediump uvec4
 
+#define bool2 bvec2
+#define bool3 bvec3
+#define bool4 bvec4
+
 #define float2x2 mat2
 
 #define INLINE
@@ -57,14 +61,15 @@
 #extension GL_KHR_blend_equation_advanced : require
 #endif
 
-#if defined(@USING_DEPTH_STENCIL) && defined(@ENABLE_CLIP_RECT) &&             \
-    defined(GL_ES)
+// clang-format off
+#if defined(@RENDER_MODE_MSAA) && defined(@ENABLE_CLIP_RECT) && defined(GL_ES)
+// clang-format on
 #ifdef GL_EXT_clip_cull_distance
 #extension GL_EXT_clip_cull_distance : require
 #elif defined(GL_ANGLE_clip_cull_distance)
 #extension GL_ANGLE_clip_cull_distance : require
 #endif
-#endif // USING_DEPTH_STENCIL && ENABLE_CLIP_RECT
+#endif // RENDER_MODE_MSAA && ENABLE_CLIP_RECT
 
 #if @GLSL_VERSION >= 310
 #define UNIFORM_BLOCK_BEGIN(IDX, NAME)                                         \
@@ -135,6 +140,8 @@
     layout(set = SET, binding = IDX) uniform highp texture2D NAME
 #define TEXTURE_RGBA8(SET, IDX, NAME)                                          \
     layout(set = SET, binding = IDX) uniform mediump texture2D NAME
+#define TEXTURE_R16F(SET, IDX, NAME)                                           \
+    layout(binding = IDX) uniform mediump texture2D NAME
 #elif @GLSL_VERSION >= 310
 #define TEXTURE_RGBA32UI(SET, IDX, NAME)                                       \
     layout(binding = IDX) uniform highp usampler2D NAME
@@ -142,11 +149,15 @@
     layout(binding = IDX) uniform highp sampler2D NAME
 #define TEXTURE_RGBA8(SET, IDX, NAME)                                          \
     layout(binding = IDX) uniform mediump sampler2D NAME
+#define TEXTURE_R16F(SET, IDX, NAME)                                           \
+    layout(binding = IDX) uniform mediump sampler2D NAME
 #else
 #define TEXTURE_RGBA32UI(SET, IDX, NAME) uniform highp usampler2D NAME
 #define TEXTURE_RGBA32F(SET, IDX, NAME) uniform highp sampler2D NAME
 #define TEXTURE_RGBA8(SET, IDX, NAME) uniform mediump sampler2D NAME
+#define TEXTURE_R16F(SET, IDX, NAME) uniform mediump sampler2D NAME
 #endif
+
 #define TEXTURE_RG32UI(SET, IDX, NAME) TEXTURE_RGBA32UI(SET, IDX, NAME)
 
 #ifdef @TARGET_VULKAN
@@ -162,6 +173,7 @@
     textureLod(sampler2D(NAME, SAMPLER_NAME), COORD, LOD)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(sampler2D(NAME, SAMPLER_NAME), COORD, DDX, DDY)
+#define SAMPLED_R16F(NAME, SAMPLER_NAME) NAME, SAMPLER_NAME
 #else
 // SAMPLER_LINEAR and SAMPLER_MIPMAP are no-ops because in GL, sampling
 // parameters are API-level state tied to the texture.
@@ -172,9 +184,24 @@
     textureLod(NAME, COORD, LOD)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(NAME, COORD, DDX, DDY)
-#endif
+#define SAMPLED_R16F(NAME, SAMPLER_NAME) NAME
+#endif // !@TARGET_VULKAN
 
+#define TEXTURE_CONTEXT_DECL
+
+#define TEXTURE_CONTEXT_FORWARD
 #define TEXEL_FETCH(NAME, COORD) texelFetch(NAME, COORD, 0)
+
+#if @GLSL_VERSION >= 310
+#define TEXTURE_GATHER(NAME, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)        \
+    textureGather(NAME, (COORD) * (TEXTURE_INVERSE_SIZE))
+#else
+#define TEXTURE_GATHER(NAME, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)        \
+    make_half4(TEXEL_FETCH(NAME, int2(COORD) + int2(-1, 0)).r,                 \
+               TEXEL_FETCH(NAME, int2(COORD) + int2(0, 0)).r,                  \
+               TEXEL_FETCH(NAME, int2(COORD) + int2(0, -1)).r,                 \
+               TEXEL_FETCH(NAME, int2(COORD) + int2(-1, -1)).r)
+#endif
 
 #define VERTEX_STORAGE_BUFFER_BLOCK_BEGIN
 #define VERTEX_STORAGE_BUFFER_BLOCK_END
@@ -223,8 +250,14 @@
         float4 _values[];                                                      \
     }                                                                          \
     NAME
+#define STORAGE_BUFFER_U32_ATOMIC(IDX, GLSL_STRUCT_NAME, NAME)                 \
+    layout(std430, binding = IDX) buffer GLSL_STRUCT_NAME { uint _values[]; }  \
+    NAME
 #define STORAGE_BUFFER_LOAD4(NAME, I) NAME._values[I]
 #define STORAGE_BUFFER_LOAD2(NAME, I) NAME._values[I]
+#define STORAGE_BUFFER_LOAD(NAME, I) NAME._values[I]
+#define STORAGE_BUFFER_ATOMIC_MAX(NAME, I, X) atomicMax(NAME._values[I], X)
+#define STORAGE_BUFFER_ATOMIC_ADD(NAME, I, X) atomicAdd(NAME._values[I], X)
 
 #endif // DISABLE_SHADER_STORAGE_BUFFERS
 
@@ -258,11 +291,6 @@
 
 #extension GL_EXT_shader_pixel_local_storage : enable
 
-// We need one of the framebuffer fetch extensions for the shader that loads the
-// framebuffer.
-#extension GL_ARM_shader_framebuffer_fetch : enable
-#extension GL_EXT_shader_framebuffer_fetch : enable
-
 #define PLS_BLOCK_BEGIN                                                        \
     __pixel_localEXT PLS                                                       \
     {
@@ -277,8 +305,8 @@
 #define PLS_STORE4F(PLANE, VALUE) PLANE = (VALUE)
 #define PLS_STOREUI(PLANE, VALUE) PLANE = (VALUE)
 
-#define PLS_PRESERVE_4F(PLANE)
-#define PLS_PRESERVE_UI(PLANE)
+#define PLS_PRESERVE_4F(PLANE) PLANE = PLANE
+#define PLS_PRESERVE_UI(PLANE) PLANE = PLANE
 
 #define PLS_INTERLOCK_BEGIN
 #define PLS_INTERLOCK_END
@@ -423,7 +451,7 @@
 #    ifdef @ENABLE_SPIRV_CROSS_BASE_INSTANCE
        // This uniform is specifically named "SPIRV_Cross_BaseInstance" for compatibility with
        // SPIRV-Cross sytems that search for it by name.
-       uniform int $SPIRV_Cross_BaseInstance;
+       uniform highp int $SPIRV_Cross_BaseInstance;
 #      define INSTANCE_INDEX (gl_InstanceID + $SPIRV_Cross_BaseInstance)
 #    else
 #        define INSTANCE_INDEX (gl_InstanceID + gl_BaseInstance)
@@ -445,13 +473,10 @@
 
 #define IMAGE_RECT_VERTEX_MAIN VERTEX_MAIN
 
-#define IMAGE_MESH_VERTEX_MAIN(NAME,                                           \
-                               PositionAttr,                                   \
-                               position,                                       \
-                               UVAttr,                                         \
-                               uv,                                             \
-                               _vertexID)                                      \
+// clang-format off
+#define IMAGE_MESH_VERTEX_MAIN(NAME, PositionAttr, position, UVAttr, uv, _vertexID) \
     VERTEX_MAIN(NAME, PositionAttr, position, _vertexID, _instanceID)
+// clang-format on
 
 #define VARYING_INIT(NAME, TYPE)
 #define VARYING_PACK(NAME)
@@ -522,10 +547,6 @@
 
 #define MUL(A, B) ((A) * (B))
 
-#ifndef @TARGET_VULKAN
-#define FRAG_COORD_BOTTOM_UP
-#endif
-
 precision highp float;
 precision highp int;
 
@@ -537,3 +558,14 @@ INLINE half4 unpackUnorm4x8(uint u)
     return float4(vals) * (1. / 255.);
 }
 #endif
+
+// clang-format off
+#if @GLSL_VERSION >= 310 && defined(@VERTEX) && defined(@RENDER_MODE_MSAA) && defined(@ENABLE_CLIP_RECT)
+out gl_PerVertex
+{
+    // Redeclare gl_ClipDistance with exactly 4 clip planes.
+    float gl_ClipDistance[4];
+    float4 gl_Position;
+};
+#endif
+// clang-format on

@@ -55,17 +55,29 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
     AppDelegateClass()
         : ObjCClass("JUCEAppDelegate_")
     {
+        // clang-format off
         addMethod(@selector(applicationWillFinishLaunching:), [](id self, SEL, NSNotification*)
-                  {
+        {
             JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
             [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self
                                                                andSelector: @selector (getUrl:withReplyEvent:)
                                                              forEventClass: kInternetEventClass
                                                                 andEventID: kAEGetURL];
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE });
+            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        });
+
+        addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification*)
+        {
+            [[NSAppleEventManager sharedAppleEventManager] setEventHandler:self
+                                                               andSelector:@selector(handleQuitEvent:withReplyEvent:)
+                                                             forEventClass:kCoreEventClass
+                                                                andEventID:kAEQuitApplication];
+
+            [NSApp stop:nil];
+        });
 
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
             {
                 app->systemRequestedQuit();
@@ -74,23 +86,33 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                     return NSTerminateCancel;
             }
 
-            return NSTerminateNow; });
+            return NSTerminateNow;
+        });
 
         addMethod(@selector(applicationWillTerminate:), [](id /*self*/, SEL, NSNotification*)
-                  { JUCEApplicationBase::appWillTerminateByForce(); });
+        {
+            JUCEApplicationBase::appWillTerminateByForce();
+        });
+
+        addMethod(@selector(handleQuitEvent:withReplyEvent:), [](id self, SEL, NSAppleEventDescriptor*, NSAppleEventDescriptor*)
+        {
+            if (auto* app = JUCEApplicationBase::getInstance())
+                app->systemRequestedQuit();
+        });
 
         addMethod(@selector(application:openFile:), [](id /*self*/, SEL, NSApplication*, NSString* filename)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
             {
                 app->anotherInstanceStarted (quotedIfContainsSpaces (filename));
                 return YES;
             }
 
-            return NO; });
+            return NO;
+        });
 
         addMethod(@selector(application:openFiles:), [](id /*self*/, SEL, NSApplication*, NSArray* filenames)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
             {
                 StringArray files;
@@ -100,32 +122,47 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
                 if (files.size() > 0)
                     app->anotherInstanceStarted (files.joinIntoString (" "));
-            } });
+            }
+        });
 
         addMethod(@selector(applicationDidBecomeActive:), [](id /*self*/, SEL, NSNotification*)
-                  { focusChanged(); });
+        {
+            focusChanged();
+        });
+
         addMethod(@selector(applicationDidResignActive:), [](id /*self*/, SEL, NSNotification*)
-                  { focusChanged(); });
+        {
+            focusChanged();
+        });
+
         addMethod(@selector(applicationWillUnhide:), [](id /*self*/, SEL, NSNotification*)
-                  { focusChanged(); });
+        {
+            focusChanged();
+        });
 
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(getUrl:withReplyEvent:), [](id /*self*/, SEL, NSAppleEventDescriptor* event, NSAppleEventDescriptor*)
-                  {
+        {
             if (auto* app = JUCEApplicationBase::getInstance())
-                app->anotherInstanceStarted (quotedIfContainsSpaces ([[event paramDescriptorForKeyword: keyDirectObject] stringValue])); });
+                app->anotherInstanceStarted (quotedIfContainsSpaces ([[event paramDescriptorForKeyword: keyDirectObject] stringValue]));
+        });
 
         addMethod(@selector(broadcastMessageCallback:), [](id /*self*/, SEL, NSNotification* n)
-                  {
+        {
             NSDictionary* dict = (NSDictionary*) [n userInfo];
             auto messageString = nsStringToJuce ((NSString*) [dict valueForKey: nsStringLiteral ("message")]);
-            MessageManager::getInstance()->deliverBroadcastMessage (messageString); });
+            MessageManager::getInstance()->deliverBroadcastMessage (messageString);
+        });
 
         addMethod(@selector(mainMenuTrackingBegan:), [](id /*self*/, SEL, NSNotification*)
-                  { NullCheckedInvocation::invoke(menuTrackingChangedCallback, true); });
+        {
+            NullCheckedInvocation::invoke(menuTrackingChangedCallback, true);
+        });
 
         addMethod(@selector(mainMenuTrackingEnded:), [](id /*self*/, SEL, NSNotification*)
-                  { NullCheckedInvocation::invoke(menuTrackingChangedCallback, false); });
+        {
+            NullCheckedInvocation::invoke(menuTrackingChangedCallback, false);
+        });
 
         // (used as a way of running a dummy thread)
         addMethod(@selector(dummyMethod), [](id /*self*/, SEL) {});
@@ -136,28 +173,31 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         addIvar<NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>*>("pushNotificationsDelegate");
 
         addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification* notification)
-                  {
+        {
             if (notification.userInfo != nil)
             {
-                JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wdeprecated-declarations")
+                JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
                 // NSUserNotification is deprecated from macOS 11, but there doesn't seem to be a
                 // replacement for NSApplicationLaunchUserNotificationKey returning a non-deprecated type
                 NSUserNotification* userNotification = notification.userInfo[NSApplicationLaunchUserNotificationKey];
-                JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+                JUCE_END_IGNORE_DEPRECATION_WARNINGS
 
                 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnullable-to-nonnull-conversion")
                 if (userNotification != nil && userNotification.userInfo != nil)
                     [self application: [NSApplication sharedApplication] didReceiveRemoteNotification: userNotification.userInfo];
                 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
-            } });
+            }
+        });
 
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(setPushNotificationsDelegate:), [](id self, SEL, NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>* delegate)
-                  { object_setInstanceVariable(self, "pushNotificationsDelegate", delegate); });
+        {
+            object_setInstanceVariable(self, "pushNotificationsDelegate", delegate);
+        });
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
         addMethod(@selector(application:didRegisterForRemoteNotificationsWithDeviceToken:), [](id self, SEL, NSApplication* application, NSData* deviceToken)
-                  {
+        {
             auto* delegate = getPushNotificationsDelegate (self);
 
             SEL selector = @selector (application:didRegisterForRemoteNotificationsWithDeviceToken:);
@@ -171,10 +211,11 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 [invocation setArgument: &deviceToken atIndex:3];
 
                 [invocation invoke];
-            } });
+            }
+        });
 
         addMethod(@selector(application:didFailToRegisterForRemoteNotificationsWithError:), [](id self, SEL, NSApplication* application, NSError* error)
-                  {
+        {
             auto* delegate = getPushNotificationsDelegate (self);
 
             SEL selector =  @selector (application:didFailToRegisterForRemoteNotificationsWithError:);
@@ -188,10 +229,11 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 [invocation setArgument: &error       atIndex:3];
 
                 [invocation invoke];
-            } });
+            }
+        });
 
         addMethod(@selector(application:didReceiveRemoteNotification:), [](id self, SEL, NSApplication* application, NSDictionary* userInfo)
-                  {
+        {
             auto* delegate = getPushNotificationsDelegate (self);
 
             SEL selector =  @selector (application:didReceiveRemoteNotification:);
@@ -205,10 +247,12 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
                 [invocation setArgument: &userInfo    atIndex:3];
 
                 [invocation invoke];
-            } });
+            }
+        });
 #endif
-
         registerClass();
+
+        // clang-format on
     }
 
    private:
@@ -316,49 +360,112 @@ struct AppDelegate
         return juceStringToNS("juce_" + String::toHexString(File::getSpecialLocation(File::currentExecutableFile).hashCode64()));
     }
 
-    MessageQueue messageQueue;
+    InternalMessageQueue messageQueue;
     id delegate;
 };
 
 //==============================================================================
-void MessageManager::runDispatchLoop()
+void initialiseNSApplication();
+void initialiseNSApplication()
 {
-    if (quitMessagePosted.get() == 0) // check that the quit message wasn't already posted..
+    JUCE_AUTORELEASEPOOL
+    {
+        [NSApplication sharedApplication];
+    }
+}
+
+static void runNSApplication()
+{
+    JUCE_AUTORELEASEPOOL
+    {
+#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
+        @try
+        {
+            [NSApp run];
+        }
+        @catch (NSException* e)
+        {
+            // An AppKit exception will kill the app, but at least this provides a chance to log it.,
+            std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
+            JUCEApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
+        }
+        @finally
+        {
+        }
+#else
+        [NSApp run];
+#endif
+    }
+}
+
+static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMessagePosted)
+{
+    jassert(millisecondsToRunFor >= 0);
+
+    auto endTime = Time::currentTimeMillis() + millisecondsToRunFor;
+
+    while (quitMessagePosted.get() == 0)
     {
         JUCE_AUTORELEASEPOOL
         {
-            // must only be called by the message thread!
-            jassert(isThisTheMessageThread());
+            auto msRemaining = endTime - Time::currentTimeMillis();
+            if (msRemaining <= 0)
+                break;
 
-#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
-            @try
+            NSDate* untilDate = [NSDate dateWithTimeIntervalSinceNow:(msRemaining * 0.001)];
+
+            NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                                untilDate:untilDate
+                                                   inMode:NSDefaultRunLoopMode
+                                                  dequeue:YES];
+            if (event)
             {
-                [NSApp run];
+                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(event))
+                    [NSApp sendEvent:event];
             }
-            @catch (NSException* e)
+            else
             {
-                // An AppKit exception will kill the app, but at least this provides a chance to log it.,
-                std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
-                JUCEApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
+                // No event received within timeout, exit loop
+                break;
             }
-            @finally
-            {
-            }
-#else
-            [NSApp run];
-#endif
         }
     }
+
+    return quitMessagePosted.get() == 0;
 }
 
 static void shutdownNSApp()
 {
-    [NSApp stop:nil];
+    [NSApp terminate:nil];
+    [NSEvent stopPeriodicEvents];
     [NSEvent startPeriodicEventsAfterDelay:0 withPeriod:0.1];
+}
+
+//==============================================================================
+void MessageManager::runDispatchLoop()
+{
+    // must only be called by the message thread!
+    jassert(isThisTheMessageThread());
+
+    constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f);
+
+    runNSApplication();
+
+    while (quitMessagePosted.get() == 0)
+    {
+        if (runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted))
+        {
+            if (loopCallback)
+                loopCallback();
+        }
+    }
 }
 
 void MessageManager::stopDispatchLoop()
 {
+    if (quitMessagePosted.get())
+        return;
+
     if (isThisTheMessageThread())
     {
         quitMessagePosted = true;
@@ -382,42 +489,11 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
     jassert(millisecondsToRunFor >= 0);
     jassert(isThisTheMessageThread()); // must only be called by the message thread
 
-    auto endTime = Time::currentTimeMillis() + millisecondsToRunFor;
-
-    while (quitMessagePosted.get() == 0)
-    {
-        JUCE_AUTORELEASEPOOL
-        {
-            auto msRemaining = endTime - Time::currentTimeMillis();
-
-            if (msRemaining <= 0)
-                break;
-
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
-
-            if (NSEvent* e = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                                untilDate:[NSDate dateWithTimeIntervalSinceNow:0.001]
-                                                   inMode:NSDefaultRunLoopMode
-                                                  dequeue:YES])
-                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(e))
-                    [NSApp sendEvent:e];
-        }
-    }
-
-    return quitMessagePosted.get() == 0;
+    return runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted);
 }
 #endif
 
 //==============================================================================
-void initialiseNSApplication();
-void initialiseNSApplication()
-{
-    JUCE_AUTORELEASEPOOL
-    {
-        [NSApplication sharedApplication];
-    }
-}
-
 static std::unique_ptr<AppDelegate> appDelegate;
 
 void MessageManager::doPlatformSpecificInitialisation()

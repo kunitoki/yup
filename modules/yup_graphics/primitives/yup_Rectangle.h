@@ -316,6 +316,32 @@ public:
         return xy;
     }
 
+    /** Sets the position of the rectangle's top-left corner.
+
+        @param newPosition The new position for the top-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setTopLeft (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition;
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's top-left corner.
+
+        @param newPosition The new position for the top-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withTopLeft (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setTopLeft (newPosition);
+        return result;
+    }
+
     /** Returns the position of the top-right corner of the rectangle.
 
         @return The position of the top-right corner as a Point.
@@ -323,6 +349,32 @@ public:
     [[nodiscard]] constexpr Point<ValueType> getTopRight() const noexcept
     {
         return xy.translated (getWidth(), ValueType (0));
+    }
+
+    /** Sets the position of the rectangle's top-left corner.
+
+        @param newPosition The new position for the top-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setTopRight (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition.translated (-static_cast<ValueType> (getWidth()), ValueType (0));
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's top-right corner.
+
+        @param newPosition The new position for the top-right corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withTopRight (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setTopRight (newPosition);
+        return result;
     }
 
     /** Returns the position of the bottom-left corner of the rectangle.
@@ -334,6 +386,32 @@ public:
         return xy.translated (ValueType (0), getHeight());
     }
 
+    /** Sets the position of the rectangle's bottom-left corner.
+
+        @param newPosition The new position for the bottom-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setBottomLeft (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition.translated (ValueType (0), -static_cast<ValueType> (getHeight()));
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's bottom-left corner.
+
+        @param newPosition The new position for the bottom-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withBottomLeft (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setBottomLeft (newPosition);
+        return result;
+    }
+
     /** Returns the position of the bottom-right corner of the rectangle.
 
         @return The position of the bottom-right corner as a Point.
@@ -341,6 +419,32 @@ public:
     [[nodiscard]] constexpr Point<ValueType> getBottomRight() const noexcept
     {
         return xy.translated (getWidth(), getHeight());
+    }
+
+    /** Sets the position of the rectangle's bottom-right corner.
+
+        @param newPosition The new position for the bottom-right corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setBottomRight (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition.translated (-static_cast<ValueType> (getHeight()), -static_cast<ValueType> (getHeight()));
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's bottom-right corner.
+
+        @param newPosition The new position for the bottom-right corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withBottomRight (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setBottomRight (newPosition);
+        return result;
     }
 
     //==============================================================================
@@ -674,58 +778,59 @@ public:
     //==============================================================================
     /** Scales the size of the rectangle uniformly by a given factor.
 
-        This method multiplies both the width and height of the rectangle by the specified factor. The position
-        of the top-left corner remains unchanged.
+        This method multiplies both the x, y, width and height of the rectangle by the specified factor.
 
-        @param factor The scaling factor to apply to both the width and height of the rectangle.
+        @param factor The scaling factor to apply to both the x, y, width and height of the rectangle.
 
         @return A reference to this rectangle to allow method chaining.
     */
     constexpr Rectangle& scale (float factor) noexcept
     {
+        xy.scale (factor);
         size.scale (factor);
         return *this;
     }
 
     /** Scales the size of the rectangle by the specified x and y factors.
 
-        This method adjusts the size of the rectangle by multiplying its width and height by the given factors.
+        This method adjusts the size of the rectangle by multiplying its x, width and y, height by the given factors.
 
-        @param factorX The factor to multiply the width by.
-        @param factorY The factor to multiply the height by.
+        @param factorX The factor to multiply the x and width by.
+        @param factorY The factor to multiply the y and height by.
 
         @return A reference to this rectangle to allow method chaining.
     */
     constexpr Rectangle& scale (float factorX, float factorY) noexcept
     {
+        xy.scale (factorX, factorY);
         size.scale (factorX, factorY);
         return *this;
     }
 
     /** Returns a new rectangle with its size scaled uniformly by the specified factor.
 
-        This method creates a new rectangle with the same position but with both the width and height scaled by the given factor.
+        This method creates a new rectangle with the same position but with both the x, width and y, height scaled by the given factor.
 
-        @param factor The scaling factor to apply to both the width and height of the rectangle.
+        @param factor The scaling factor to apply to both the x, width and y, height of the rectangle.
 
         @return A new rectangle with the scaled size.
     */
     [[nodiscard]] constexpr Rectangle scaled (float factor) const noexcept
     {
-        return { xy, size.scaled (factor) };
+        return { xy.scaled (factor), size.scaled (factor) };
     }
 
     /** Returns a new rectangle with its size scaled by the specified x and y factors.
 
-        This method creates a new rectangle with the same position but its width and height adjusted by the given factors.
+        This method creates a new rectangle with the same position but its x, width and y, height adjusted by the given factors.
 
-        @param factorX The factor to multiply the width by.
-        @param factorY The factor to multiply the height by.
+        @param factorX The factor to multiply the x and width by.
+        @param factorY The factor to multiply the y and height by.
         @return A new rectangle with the scaled size.
     */
     [[nodiscard]] constexpr Rectangle scaled (float factorX, float factorY) const noexcept
     {
-        return { xy, size.scaled (factorX, factorY) };
+        return { xy.scaled (factorX, factorY), size.scaled (factorX, factorY) };
     }
 
     //==============================================================================
@@ -1145,6 +1250,21 @@ public:
     }
 
     //==============================================================================
+    /** Aligns a Size to this rectangle.
+
+        @return A Rectangle representing the center aligned rectangle with specificed size..
+    */
+    [[nodiscard]] constexpr Rectangle centeredRectangleWithSize (const Size<ValueType>& sizeOfRectangleToCenter) const noexcept
+    {
+        return {
+            getX() + jmax (ValueType (0), static_cast<ValueType> (getWidth() - sizeOfRectangleToCenter.getWidth()) / ValueType (2)),
+            getY() + jmax (ValueType (0), static_cast<ValueType> (getHeight() - sizeOfRectangleToCenter.getHeight()) / ValueType (2)),
+            sizeOfRectangleToCenter.getWidth(),
+            sizeOfRectangleToCenter.getHeight()
+        };
+    }
+
+    //==============================================================================
     // TODO - doxygen
     [[nodiscard]] Rectangle& transform (const AffineTransform& t) noexcept
     {
@@ -1192,6 +1312,13 @@ public:
     [[nodiscard]] constexpr Rectangle<T> to() const noexcept
     {
         return { xy.template to<T>(), size.template to<T>() };
+    }
+
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<int>>
+    {
+        return { xy.roundToInt(), size.roundToInt() };
     }
 
     //==============================================================================
@@ -1269,6 +1396,21 @@ public:
         xy = { static_cast<ValueType> (xy.getX() / scaleFactor), static_cast<ValueType> (xy.getY() / scaleFactor) };
         size = { static_cast<ValueType> (size.getWidth() / scaleFactor), static_cast<ValueType> (size.getHeight() / scaleFactor) };
         return *this;
+    }
+
+    //==============================================================================
+    /** Returns true if the two rectangles are approximately equal. */
+    constexpr bool approximatelyEqualTo (const Rectangle& other) const noexcept
+    {
+        if constexpr (std::is_floating_point_v<ValueType>)
+        {
+            return xy.approximatelyEqualTo (other.xy)
+                && size.approximatelyEqualTo (other.size);
+        }
+        else
+        {
+            return *this == other;
+        }
     }
 
     //==============================================================================

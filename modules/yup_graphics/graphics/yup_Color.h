@@ -113,6 +113,25 @@ public:
     }
 
     //==============================================================================
+    /** Returns of the color is fully transparent. */
+    constexpr bool isTransparent() const noexcept
+    {
+        return a == std::numeric_limits<uint8>::min();
+    }
+
+    /** Returns of the color is semi transparent. */
+    constexpr bool isSemiTransparent() const noexcept
+    {
+        return ! isOpaque();
+    }
+
+    /** Returns of the color is opaque. */
+    constexpr bool isOpaque() const noexcept
+    {
+        return a == std::numeric_limits<uint8>::max();
+    }
+
+    //==============================================================================
     /** Returns the alpha component of the color.
 
         @return The alpha component as an 8-bit integer.
@@ -542,7 +561,7 @@ public:
 
         @return A new Color object that is brighter than the original.
     */
-    constexpr Color brighter (float amount) noexcept
+    constexpr Color brighter (float amount) const noexcept
     {
         return {
             a,
@@ -561,7 +580,7 @@ public:
 
         @return A new Color object that is darker than the original.
     */
-    constexpr Color darker (float amount) noexcept
+    constexpr Color darker (float amount) const noexcept
     {
         return brighter (-amount);
     }

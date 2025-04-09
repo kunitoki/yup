@@ -40,20 +40,6 @@
 namespace juce
 {
 
-bool MidiRPNDetector::parseControllerMessage (int midiChannel,
-                                              int controllerNumber,
-                                              int controllerValue,
-                                              MidiRPNMessage& result) noexcept
-{
-    auto parsed = tryParse (midiChannel, controllerNumber, controllerValue);
-
-    if (! parsed.has_value())
-        return false;
-
-    result = *parsed;
-    return true;
-}
-
 std::optional<MidiRPNMessage> MidiRPNDetector::tryParse (int midiChannel,
                                                          int controllerNumber,
                                                          int controllerValue)

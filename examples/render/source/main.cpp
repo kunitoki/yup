@@ -38,21 +38,19 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        // Fluid and continuous animations needs continuous repainting
-        : yup::DocumentWindow (yup::ComponentNative::Options()
-            .withFlags(yup::ComponentNative::defaultFlags | yup::ComponentNative::renderContinuous), {})
+        : yup::DocumentWindow (yup::ComponentNative::Options{}.withRenderContinuous (true), {})
     {
         // Set title
         setTitle ("main");
 
 #if JUCE_WASM
         yup::File riveFilePath = yup::File ("/data")
-            .getChildFile ("artboard.riv");
+                                     .getChildFile ("artboard.riv");
 #else
         yup::File riveFilePath = yup::File (__FILE__)
-            .getParentDirectory()
-            .getSiblingFile ("data")
-            .getChildFile ("alien.riv");
+                                     .getParentDirectory()
+                                     .getSiblingFile ("data")
+                                     .getChildFile ("alien.riv");
 #endif
 
         // Setup artboards
@@ -62,11 +60,13 @@ public:
             addAndMakeVisible (art);
 
 #if JUCE_ANDROID
-            yup::MemoryInputStream is(yup::RiveFile_data, yup::RiveFile_size, false);
+            yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
             art->loadFromStream (is, 0, true);
 #else
             art->loadFromFile (riveFilePath, 0, true);
 #endif
+
+            art->advanceAndApply (i * art->durationSeconds());
         }
 
         // Grab focus
@@ -78,24 +78,25 @@ public:
 
     void resized() override
     {
-        for (int i = 0; i < totalRows * totalColumns; ++i)
-            artboards.getUnchecked (i)->setBounds (getLocalBounds());
+        //for (int i = 0; i < totalRows * totalColumns; ++i)
+        //    artboards.getUnchecked (i)->setBounds (getLocalBounds().reduced (100.0f));
 
-        /*
-        auto bounds = getLocalBounds().reduced (100);
+        if (artboards.size() != totalRows * totalColumns)
+            return;
+
+        auto bounds = getLocalBounds().reduced (50);
         auto width = bounds.getWidth() / totalColumns;
         auto height = bounds.getHeight() / totalRows;
 
-        for (int i = 0; i < totalRows && artboards.size(); ++i)
+        for (int i = 0; i < totalRows; ++i)
         {
             auto row = bounds.removeFromTop (height);
             for (int j = 0; j < totalColumns; ++j)
             {
                 auto col = row.removeFromLeft (width);
-                artboards.getUnchecked (i * totalRows + j)->setBounds (col.largestFittingSquare());
+                artboards.getUnchecked (j * totalRows + i)->setBounds (col.largestFittingSquare());
             }
         }
-        */
     }
 
     void keyDown (const yup::KeyPress& keys, const yup::Point<float>& position) override
@@ -117,40 +118,22 @@ public:
                 break;
 
             case yup::KeyPress::textPKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->setPaused (! artboards[i]->isPaused());
-                break;
-
-            case yup::KeyPress::textHKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->addHorizontalRepeats (shift ? -1 : 1);
-                break;
-
-            case yup::KeyPress::textJKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->addVerticalRepeats (shift ? -1 : 1);
+                for (auto& artboard : artboards)
+                    artboard->setPaused (! artboard->isPaused());
                 break;
 
             case yup::KeyPress::textZKey:
                 setFullScreen (! isFullScreen());
-                break;
-
-            case yup::KeyPress::upKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->multiplyScale (1.25);
-                break;
-
-            case yup::KeyPress::downKey:
-                for (int i = 0; i < totalRows * totalColumns; ++i)
-                    artboards[i]->multiplyScale (1.0 / 1.25);
                 break;
         }
     }
 
     void paint (yup::Graphics& g) override
     {
-        //g.setFillColor (0xffffffff);
-        //g.fillAll();
+        //g.setStrokeColor (0xffffffff);
+
+        //for (const auto& artboard : artboards)
+        //    g.strokeRect (artboard->getBounds());
     }
 
     void userTriedToCloseWindow() override
@@ -171,25 +154,40 @@ private:
         auto currentFps = getNativeComponent()->getCurrentFrameRate();
         title << "[" << yup::String (currentFps, 1) << " FPS]";
 
-        int instances = 0;
-        for (int i = 0; i < totalRows * totalColumns; ++i)
-            instances += artboards[i]->getNumInstances();
-        title << " (x" << instances << " instances)";
+        title << " (x" << (totalRows * totalColumns) << " instances)";
         title << " | "
               << "YUP Renderer";
 
         if (getNativeComponent()->isAtomicModeEnabled())
             title << " (atomic)";
 
-        auto [width, height] = getContentSize();
+        auto [width, height] = getNativeComponent()->getContentSize();
         title << " | " << width << " x " << height;
 
         setTitle (title);
     }
 
     yup::OwnedArray<yup::Artboard> artboards;
-    int totalRows = 1;
+    int totalRows = 2;
     int totalColumns = 1;
+};
+
+//==============================================================================
+
+class CustomWindow2
+    : public yup::DocumentWindow
+{
+public:
+    CustomWindow2()
+        : yup::DocumentWindow (yup::ComponentNative::Options{}.withRenderContinuous (true), {})
+    {
+        setTitle ("secondary");
+    }
+
+    void userTriedToCloseWindow() override
+    {
+        setVisible (false);
+    }
 };
 
 //==============================================================================
@@ -215,8 +213,18 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
+#if JUCE_IOS || JUCE_ANDROID
+        window->centreWithSize ({ 1080, 2400 });
+#else
         window->centreWithSize ({ 1280, 866 });
+#endif
         window->setVisible (true);
+        window->toFront(true);
+
+        //window2 = std::make_unique<CustomWindow2>();
+        //window2->centreWithSize ({ 300, 300 });
+        //window2->setVisible (true);
+        //window2->toFront(true);
     }
 
     void shutdown() override
@@ -225,11 +233,14 @@ struct Application : yup::YUPApplication
 
         window.reset();
 
+        //window2.reset();
+
         YUP_PROFILE_STOP();
     }
 
 private:
     std::unique_ptr<CustomWindow> window;
+    //std::unique_ptr<CustomWindow2> window2;
 };
 
 START_JUCE_APPLICATION (Application)

@@ -133,13 +133,6 @@ public:
     /** Returns a reference to the shared object. */
     SharedObjectType& operator*() const noexcept { return *sharedObject; }
 
-#ifndef DOXYGEN
-    [[deprecated ("If you are relying on this function please inform the JUCE team as we are planing on removing this in a subsequent release")]] int getReferenceCount() const noexcept
-    {
-        return (int) sharedObject.use_count();
-    }
-#endif
-
     /** Returns the SharedResourcePointer if one already exists, or a null optional otherwise. */
     static std::optional<SharedResourcePointer> getSharedObjectWithoutCreating()
     {

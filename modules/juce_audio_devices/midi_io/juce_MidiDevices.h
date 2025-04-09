@@ -54,7 +54,7 @@ class MidiDeviceListConnectionBroadcaster;
     auto connection = MidiDeviceListConnection::make ([]
     {
         // This will print a message when devices are connected/disconnected
-        DBG ("MIDI devices changed");
+        JUCE_DBG ("MIDI devices changed");
     });
 
     // Stop listening
@@ -264,12 +264,6 @@ public:
     void setName (const String& newName) noexcept { deviceInfo.name = newName; }
 
     //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("Use getAvailableDevices instead.")]] static StringArray getDevices();
-    [[deprecated ("Use getDefaultDevice instead.")]] static int getDefaultDeviceIndex();
-    [[deprecated ("Use openDevice that takes a device identifier instead.")]] static std::unique_ptr<MidiInput> openDevice (int, MidiInputCallback*);
-#endif
-
     /** @internal */
     class Pimpl;
 
@@ -450,12 +444,6 @@ public:
     bool isBackgroundThreadRunning() const noexcept { return isThreadRunning(); }
 
     //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("Use getAvailableDevices instead.")]] static StringArray getDevices();
-    [[deprecated ("Use getDefaultDevice instead.")]] static int getDefaultDeviceIndex();
-    [[deprecated ("Use openDevice that takes a device identifier instead.")]] static std::unique_ptr<MidiOutput> openDevice (int);
-#endif
-
     /** @internal */
     class Pimpl;
 

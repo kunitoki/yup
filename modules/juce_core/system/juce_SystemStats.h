@@ -110,6 +110,13 @@ public:
     */
     static String getOperatingSystemName();
 
+    /** Returns the version of the operating system we're running on.
+
+        @returns a string describing the OS version.
+        @see getOperatingSystemName
+    */
+    static String getOperatingSystemVersionString();
+
     /** Returns true if the OS is 64-bit, or false for a 32-bit OS. */
     static bool isOperatingSystem64Bit();
 
@@ -170,13 +177,6 @@ public:
         If no description is available, it'll just return an empty string.
     */
     static String getDeviceManufacturer();
-
-    /** This method calculates some IDs to uniquely identify the device.
-
-        The first choice for an ID is a filesystem ID for the user's home folder or
-        windows directory. If that fails then this function returns the MAC addresses.
-    */
-    [[deprecated ("The identifiers produced by this function are not reliable. Use getUniqueDeviceID() instead.")]] static StringArray getDeviceIdentifiers();
 
     /** This method returns a machine unique ID unaffected by storage or peripheral
         changes.
@@ -279,6 +279,12 @@ public:
     static int getPageSize();
 
     //==============================================================================
+    /** Returns a unique identifier for the current compile.
+        This should be used to identify a specific build of the application.
+    */
+    static uint64 getCompileUniqueId();
+
+    //==============================================================================
     /** Returns a backtrace of the current call-stack.
         The usefulness of the result will depend on the level of debug symbols
         that are available in the executable.
@@ -305,14 +311,6 @@ public:
 
 #if JUCE_MAC
     static bool isAppSandboxEnabled();
-#endif
-
-    //==============================================================================
-#ifndef DOXYGEN
-    [[deprecated ("This method was spelt wrong! Please change your code to use getCpuSpeedInMegahertz instead.")]] static int getCpuSpeedInMegaherz()
-    {
-        return getCpuSpeedInMegahertz();
-    }
 #endif
 
 private:

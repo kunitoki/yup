@@ -61,3 +61,86 @@ TEST (RandomTests, RandomNumbers)
         EXPECT_TRUE (r.nextInt (n) >= 0 && r.nextInt (n) < n);
     }
 }
+
+TEST (RandomTests, Concurrent)
+{
+    class FastWaitableEvent
+    {
+    public:
+        void notify() { notified = true; }
+
+        void wait() const
+        {
+            while (! notified)
+            {
+            }
+        }
+
+    private:
+        std::atomic<bool> notified = false;
+    };
+
+    class InvokerThread final : private Thread
+    {
+    public:
+        InvokerThread (std::function<void()> fn, FastWaitableEvent& notificationEvent, int numInvocationsToTrigger)
+            : Thread ("InvokerThread")
+            , invokable (fn)
+            , notified (&notificationEvent)
+            , numInvocations (numInvocationsToTrigger)
+        {
+            startThread();
+        }
+
+        ~InvokerThread()
+        {
+            stopThread (-1);
+        }
+
+        void waitUntilReady() const
+        {
+            ready.wait();
+        }
+
+    private:
+        void run() final
+        {
+            ready.notify();
+            notified->wait();
+
+            for (int i = numInvocations; --i >= 0;)
+                invokable();
+        }
+
+        std::function<void()> invokable;
+        FastWaitableEvent* notified;
+        FastWaitableEvent ready;
+        int numInvocations;
+    };
+
+    constexpr int numberOfInvocationsPerThread = 1000;
+    constexpr int numberOfThreads = 10;
+
+    FastWaitableEvent start;
+
+    std::vector<std::unique_ptr<InvokerThread>> threads;
+    threads.reserve ((size_t) numberOfThreads);
+
+    auto threadCallback = []
+    {
+        Random::getSystemRandom().nextInt();
+    };
+
+    for (int i = numberOfThreads; --i >= 0;)
+    {
+        threads.push_back (std::make_unique<InvokerThread> (threadCallback,
+                                                            start,
+                                                            numberOfInvocationsPerThread));
+    }
+
+    for (auto& thread : threads)
+        thread->waitUntilReady();
+
+    Thread::sleep (1);
+    start.notify();
+}

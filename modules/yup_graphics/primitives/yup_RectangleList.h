@@ -23,7 +23,22 @@ namespace yup
 {
 
 //==============================================================================
+/** A class that manages a list of rectangles.
 
+    This class provides a collection of rectangles and supports operations such as adding
+    rectangles (with optional merging), removing rectangles, checking for containment and
+    intersection, scaling, and offsetting. It also provides methods to get the bounding
+    box of all rectangles, the number of rectangles, and access to individual rectangles.
+
+    @code
+      RectangleList<int> list;
+
+      list.add ({ 0, 0, 10, 10 });
+      list.add ({ 5, 5, 15, 15 });
+
+      bool contains = list.contains (7, 7);
+    @endcode
+*/
 template <class ValueType>
 class JUCE_API RectangleList
 {
@@ -34,9 +49,18 @@ public:
     /** Default constructor, initializes an empty list of rectangles. */
     RectangleList() = default;
 
+    /** Construct from initializer list of rectangles. */
     RectangleList (std::initializer_list<RectangleType> rects)
         : rectangles (rects)
     {
+    }
+
+    /** Construct from initializer list of rectangles of different type. */
+    template <class OtherValueType, class = std::enable_if_t<! std::is_same_v<OtherValueType, ValueType>>>
+    RectangleList (std::initializer_list<Rectangle<OtherValueType>> rects)
+    {
+        for (const auto& otherRect : rects)
+            rectangles.add (otherRect.template to<ValueType>());
     }
 
     //==============================================================================
@@ -50,6 +74,8 @@ public:
     /** Adds a rectangle to the list.
 
         @param rect The rectangle to add.
+
+        @return A reference to the RectangleList object.
     */
     RectangleList& add (const RectangleType& newRect)
     {
@@ -77,6 +103,12 @@ public:
         return *this;
     }
 
+    /** Adds a rectangle to the list without merging it with any existing rectangles.
+
+        @param rect The rectangle to add.
+
+        @return A reference to the RectangleList object.
+    */
     RectangleList& addWithoutMerge (const RectangleType& newRect)
     {
         rectangles.addIfNotAlreadyThere (newRect);
@@ -87,6 +119,8 @@ public:
     /** Removes a rectangle from the list.
 
         @param rect The rectangle to remove.
+
+        @return A reference to the RectangleList object.
     */
     RectangleList& remove (const RectangleType& rect)
     {
@@ -112,6 +146,12 @@ public:
         rectangles.clear();
     }
 
+    /** Quickly clears all rectangles from the list. */
+    void clearQuick()
+    {
+        rectangles.clearQuick();
+    }
+
     //==============================================================================
     /** Checks if the list contains a specified rectangle.
 
@@ -129,6 +169,13 @@ public:
         return rectangles.contains (rect);
     }
 
+    /** Checks if the given point (x, y) is contained within any of the rectangles in the list.
+
+        @param x The x-coordinate of the point to check.
+        @param y The y-coordinate of the point to check.
+
+        @return true if the point is contained within any rectangle in the list, false otherwise.
+    */
     [[nodiscard]] bool contains (ValueType x, ValueType y) const
     {
         for (const auto& rect : rectangles)
@@ -187,6 +234,8 @@ public:
     */
     [[nodiscard]] RectangleType getRectangle (int index) const
     {
+        jassert (isPositiveAndBelow (index, rectangles.size()));
+
         return rectangles[index];
     }
 
@@ -241,6 +290,10 @@ public:
         return *this;
     }
 
+    /** Offset all rectangles in the list by the specified point.
+
+        @param delta The point containing the amounts to add to the x and y coordinates.
+    */
     RectangleList& offset (const Point<ValueType>& delta)
     {
         for (auto& rect : rectangles)
@@ -262,6 +315,10 @@ public:
         return *this;
     }
 
+    /** Scales all rectangles in the list by the specified factor.
+
+        @param factor The scaling factor.
+    */
     RectangleList& scale (float factorX, float factorY)
     {
         for (auto& rect : rectangles)
@@ -270,20 +327,44 @@ public:
         return *this;
     }
 
+    //==============================================================================
+    const Rectangle<ValueType>* begin() const
+    {
+        return rectangles.begin();
+    }
+
+    const Rectangle<ValueType>* end() const
+    {
+        return rectangles.end();
+    }
+
+    Rectangle<ValueType>* begin()
+    {
+        return rectangles.begin();
+    }
+
+    Rectangle<ValueType>* end()
+    {
+        return rectangles.end();
+    }
+
 private:
     void mergeRectangles()
     {
-        for (auto it = rectangles.begin(); it != rectangles.end();)
+        for (int rectangleIndex = 0; rectangleIndex < rectangles.size();)
         {
             bool furtherMerged = false;
+            auto& currentRect = rectangles.getReference (rectangleIndex);
 
             for (auto& existingRect : rectangles)
             {
-                if (it != rectangles.end() && it->intersects (existingRect) && std::addressof (existingRect) != std::addressof (*it))
+                if (rectangleIndex < rectangles.size()
+                    && currentRect.intersects (existingRect)
+                    && std::addressof (existingRect) != std::addressof (currentRect))
                 {
-                    existingRect = existingRect.smallestContainingRectangle (*it);
+                    existingRect = existingRect.smallestContainingRectangle (currentRect);
 
-                    it = rectangles.erase (it);
+                    rectangles.remove (rectangleIndex);
 
                     furtherMerged = true;
                     break;
@@ -291,7 +372,7 @@ private:
             }
 
             if (! furtherMerged)
-                ++it;
+                ++rectangleIndex;
         }
     }
 

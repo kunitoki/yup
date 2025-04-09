@@ -111,6 +111,9 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     int __stdcall WinMain(struct HINSTANCE__*, struct HINSTANCE__*, char*, int) \
         JUCE_END_IGNORE_WARNINGS_MSVC
 #define JUCE_MAIN_FUNCTION_ARGS
+#elif JUCE_ANDROID && JUCE_MODULE_AVAILABLE_yup_gui
+#define JUCE_MAIN_FUNCTION extern "C" int SDL_main(int argc, char* argv[])
+#define JUCE_MAIN_FUNCTION_ARGS argc, (const char**)argv
 #else
 #define JUCE_MAIN_FUNCTION int main(int argc, char* argv[])
 #define JUCE_MAIN_FUNCTION_ARGS argc, (const char**)argv
@@ -148,21 +151,6 @@ class JUCE_API ScopedJuceInitialiser_GUI final
         juce::JUCEApplicationBase::createInstance = &juce_CreateApplication;             \
         juce::JUCEApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
         return juce::JUCEApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);                 \
-    }
-
-#elif JUCE_ANDROID
-
-#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)                   \
-    extern "C" juce::JUCEApplicationBase* juce_CreateApplication() \
-    {                                                              \
-        return new AppClass();                                     \
-    }
-
-#define JUCE_MAIN_FUNCTION_DEFINITION                                        \
-    int main()                                                               \
-    {                                                                        \
-        juce::JUCEApplicationBase::createInstance = &juce_CreateApplication; \
-        return juce::JUCEApplicationBase::main(0, nullptr);                  \
     }
 
 #else

@@ -32,7 +32,6 @@
     website:          https://developer.android.com/games/sdk/oboe
     license:          Apache-2.0
 
-    dependencies:
     searchpaths:      upstream/include upstream/src
     androidLibs:      OpenSLES
 

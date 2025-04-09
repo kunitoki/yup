@@ -959,17 +959,17 @@ public:
 
         // BEST
         for (auto c : str)
-            DBG (c);
+            JUCE_DBG (c);
 
         // GOOD
         for (auto ptr = str.begin(), end = str.end(); ptr != end; ++ptr)
-            DBG (*ptr);
+            JUCE_DBG (*ptr);
 
-        std::for_each (str.begin(), str.end(), [] (juce_wchar c) { DBG (c); });
+        std::for_each (str.begin(), str.end(), [] (juce_wchar c) { JUCE_DBG (c); });
 
         // BAD
         for (auto ptr = str.begin(); ptr != str.end(); ++ptr)
-            DBG (*ptr);
+            JUCE_DBG (*ptr);
         @endcode
     */
     CharPointerType end() const { return begin().findTerminatingNull(); }
@@ -1353,14 +1353,6 @@ public:
         data as this one.
     */
     int getReferenceCount() const noexcept;
-
-    //==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES && ! defined(DOXYGEN)
-    [[deprecated ("This was a static empty string object, but is now deprecated as it's too easy to accidentally "
-                  "use it indirectly during a static constructor, leading to hard-to-find order-of-initialisation "
-                  "problems. If you need an empty String object, just use String() or {}. For returning an empty "
-                  "String from a function by reference, use a function-local static String object and return that.")]] static const String empty;
-#endif
 
 private:
     //==============================================================================

@@ -64,6 +64,7 @@ void StyledText::appendText (const Font& font,
 {
     textRuns.push_back (append (font, size, lineHeight, text));
 
+    jassert (font.getFont() != nullptr);
     paragraphs = font.getFont()->shapeText (unicodeChars, textRuns);
 }
 
@@ -151,7 +152,7 @@ float StyledText::layoutText (const rive::GlyphRun& run,
     jassert (startIndex >= 0 && endIndex <= run.glyphs.size());
 
     int i, end, inc;
-    if (run.dir == rive::TextDirection::rtl)
+    if (run.dir() == rive::TextDirection::rtl)
     {
         i = endIndex - 1;
         end = startIndex - 1;
@@ -189,7 +190,7 @@ float StyledText::layoutParagraph (const rive::Paragraph& paragraph,
         float x = line.startX + origin.x;
 
         int runIndex, endRun, runInc;
-        if (paragraph.baseDirection == rive::TextDirection::rtl)
+        if (paragraph.baseDirection() == rive::TextDirection::rtl)
         {
             runIndex = line.endRunIndex;
             endRun = line.startRunIndex - 1;

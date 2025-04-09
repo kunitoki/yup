@@ -1,9 +1,11 @@
+#include "rive/artboard.hpp"
 #include "rive/shapes/points_path.hpp"
 #include "rive/shapes/vertex.hpp"
 #include "rive/shapes/path_vertex.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/bones/skin.hpp"
 #include "rive/span.hpp"
+#include "rive/shapes/shape_path_flags.hpp"
 
 using namespace rive;
 
@@ -48,3 +50,8 @@ void PointsPath::markPathDirty(bool sendToLayout)
 }
 
 void PointsPath::markSkinDirty() { markPathDirty(); }
+
+bool PointsPath::isClockwise() const
+{
+    return (pathFlags() & (int)ShapePathFlags::isCounterClockwise) == 0;
+}

@@ -527,6 +527,13 @@ public:
         return { p1.template to<T>(), p2.template to<T>() };
     }
 
+    template <class T = ValueType>
+    constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Line<int>>
+    {
+        return { p1.roundToInt(), p2.roundToInt() };
+    }
+
     //==============================================================================
     /** Unary minus operator to negate both points of the line.
 

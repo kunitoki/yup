@@ -46,7 +46,7 @@ namespace juce
 */
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-FIELD (activityInfo, "activityInfo", "Landroid/content/pm/ActivityInfo;")
+    FIELD (activityInfo, "activityInfo", "Landroid/content/pm/ActivityInfo;")
 
 DECLARE_JNI_CLASS (AndroidResolveInfo, "android/content/pm/ResolveInfo")
 #undef JNI_CLASS_MEMBERS
@@ -79,7 +79,7 @@ static void JNICALL juce_JavainitialiseJUCE (JNIEnv* env, jobject /*jclass*/, jo
     Thread::initialiseJUCE (env, context);
 }
 
-extern "C" jint JNIEXPORT JNI_OnLoad (JavaVM* vm, void*)
+extern "C" jint JNIEXPORT juce_JNI_OnLoad (JavaVM* vm, void*)
 {
     // Huh? JNI_OnLoad was called two times!
     jassert (androidJNIJavaVM == nullptr);

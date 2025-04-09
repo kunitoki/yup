@@ -173,7 +173,6 @@ private:
     IMPLEMENT_PLS_STRUCTURED_BUFFER(PaintBuffer, m_paintBufferRing)
     IMPLEMENT_PLS_STRUCTURED_BUFFER(PaintAuxBuffer, m_paintAuxBufferRing)
     IMPLEMENT_PLS_STRUCTURED_BUFFER(ContourBuffer, m_contourBufferRing)
-    IMPLEMENT_PLS_BUFFER(SimpleColorRampsBuffer, m_simpleColorRampsBufferRing)
     IMPLEMENT_PLS_BUFFER(GradSpanBuffer, m_gradSpanBufferRing)
     IMPLEMENT_PLS_BUFFER(TessVertexSpanBuffer, m_tessSpanBufferRing)
     IMPLEMENT_PLS_BUFFER(TriangleVertexBuffer, m_triangleBufferRing)
@@ -183,6 +182,8 @@ private:
 
     void resizeGradientTexture(uint32_t width, uint32_t height) override;
     void resizeTessellationTexture(uint32_t width, uint32_t height) override;
+    void resizeAtlasTexture(uint32_t width, uint32_t height) override {}
+    void resizeCoverageBuffer(size_t sizeInBytes) override;
 
     // Wraps a VkDescriptorPool created specifically for a PLS flush, and tracks
     // its allocated descriptor sets.
@@ -229,7 +230,6 @@ private:
     vkutil::BufferRing m_paintBufferRing;
     vkutil::BufferRing m_paintAuxBufferRing;
     vkutil::BufferRing m_contourBufferRing;
-    vkutil::BufferRing m_simpleColorRampsBufferRing;
     vkutil::BufferRing m_gradSpanBufferRing;
     vkutil::BufferRing m_tessSpanBufferRing;
     vkutil::BufferRing m_triangleBufferRing;
@@ -243,6 +243,9 @@ private:
     rcp<vkutil::TextureView> m_gradTextureView;
     rcp<vkutil::Framebuffer> m_gradTextureFramebuffer;
 
+    // Gaussian integral table for feathering.
+    rcp<TextureVulkanImpl> m_featherTexture;
+
     // Renders tessellated vertices to the tessellation texture.
     class TessellatePipeline;
     std::unique_ptr<TessellatePipeline> m_tessellatePipeline;
@@ -251,12 +254,15 @@ private:
     rcp<vkutil::TextureView> m_tessVertexTextureView;
     rcp<vkutil::Framebuffer> m_tessTextureFramebuffer;
 
+    // Coverage buffer used by shaders in clockwiseAtomic mode.
+    rcp<vkutil::Buffer> m_coverageBuffer;
+
     // A pipeline for each
     // [rasterOrdering, atomics] x [all DrawPipelineLayoutOptions permutations].
     class DrawPipelineLayout;
     constexpr static int kDrawPipelineLayoutOptionCount = 1;
     std::array<std::unique_ptr<DrawPipelineLayout>,
-               2 * (1 << kDrawPipelineLayoutOptionCount)>
+               gpu::kInterlockModeCount * (1 << kDrawPipelineLayoutOptionCount)>
         m_drawPipelineLayouts;
 
     class DrawShader;
@@ -265,8 +271,8 @@ private:
     class DrawPipeline;
     std::map<uint32_t, DrawPipeline> m_drawPipelines;
 
-    rcp<TextureVulkanImpl>
-        m_nullImageTexture; // Bound when there is not an image paint.
+    // Bound when there is not an image paint.
+    rcp<TextureVulkanImpl> m_nullImageTexture;
     VkSampler m_linearSampler;
     VkSampler m_mipmapSampler;
     rcp<vkutil::Buffer> m_pathPatchVertexBuffer;

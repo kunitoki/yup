@@ -147,7 +147,7 @@ const LinearAnimation* StateTransition::exitTimeAnimation(
 AllowTransition StateTransition::allowed(
     StateInstance* stateFrom,
     StateMachineInstance* stateMachineInstance,
-    bool ignoreTriggers) const
+    StateMachineLayerInstance* layerInstance) const
 {
     if (isDisabled())
     {
@@ -156,8 +156,7 @@ AllowTransition StateTransition::allowed(
 
     for (auto condition : m_Conditions)
     {
-        if ((ignoreTriggers && condition->is<TransitionTriggerCondition>()) ||
-            !condition->evaluate(stateMachineInstance))
+        if (!condition->evaluate(stateMachineInstance, layerInstance))
         {
             return AllowTransition::no;
         }
@@ -219,4 +218,14 @@ bool StateTransition::applyExitCondition(StateInstance* from) const
         return true;
     }
     return useExitTime;
+}
+
+void StateTransition::useLayerInConditions(
+    StateMachineInstance* stateMachineInstance,
+    StateMachineLayerInstance* layerInstance) const
+{
+    for (auto condition : m_Conditions)
+    {
+        condition->useInLayer(stateMachineInstance, layerInstance);
+    }
 }

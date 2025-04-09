@@ -70,54 +70,52 @@ function (_yup_module_collect_sources folder output_variable)
     foreach (extension ${source_extensions})
         file (GLOB found_source_files "${base_path}*${extension}")
 
-        if (NOT "${yup_platform}" MATCHES "^(win32|uwp)$")
+        if (NOT YUP_PLATFORM_MSFT)
+            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_microsoft${extension}")
+        endif()
+
+        if (NOT YUP_PLATFORM_WINDOWS)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_windows${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(win32)$")
-            list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_win32${extension}")
-        endif()
-
-        if (NOT "${yup_platform}" MATCHES "^(uwp)$")
+        if (NOT YUP_PLATFORM_UWP)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_uwp${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|osx)$")
+        if (NOT YUP_PLATFORM_APPLE)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_apple${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios)$")
+        if (NOT YUP_PLATFORM_IOS)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_ios${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(osx)$")
+        if (NOT YUP_PLATFORM_OSX)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_osx${extension}")
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mac${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(linux)$")
+        if (NOT YUP_PLATFORM_LINUX)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_linux${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|android)$")
+        if (NOT YUP_PLATFORM_MOBILE)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_mobile${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(android)$")
+        if (NOT YUP_PLATFORM_ANDROID)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_android${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(emscripten)$")
+        if (NOT YUP_PLATFORM_EMSCRIPTEN)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_emscripten${extension}")
         endif()
 
-        if (NOT "${yup_platform}" MATCHES "^(ios|osx|android|linux|emscripten)$")
+        if (NOT YUP_PLATFORM_POSIX)
             list (FILTER found_source_files EXCLUDE REGEX "${base_path}*_posix${extension}")
         endif()
 
-        foreach (source ${found_source_files})
-            list (APPEND all_module_sources ${source})
-        endforeach()
+        list (APPEND all_module_sources ${found_source_files})
     endforeach()
 
     set (module_sources "")
@@ -173,15 +171,8 @@ function (_yup_module_setup_target module_name
                                    module_frameworks
                                    module_dependencies
                                    module_arc_enabled)
-    if ("${yup_platform}" MATCHES "^(win32|uwp)$")
+    if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
-    endif()
-
-    if ("${yup_platform}" MATCHES "^(android)$")
-        list (APPEND module_include_paths
-            "${ANDROID_NDK}/sources/android/cpufeatures")
-        list (APPEND module_sources
-            "${ANDROID_NDK}/sources/android/cpufeatures/cpu-features.c")
     endif()
 
     target_sources (${module_name} INTERFACE ${module_sources})
@@ -193,13 +184,14 @@ function (_yup_module_setup_target module_name
     endif()
 
     set_target_properties (${module_name} PROPERTIES
-        CXX_EXTENSIONS              OFF
-        CXX_VISIBILITY_PRESET       "hidden"
-        VISIBILITY_INLINES_HIDDEN   ON)
+        CXX_EXTENSIONS OFF
+        CXX_VISIBILITY_PRESET hidden
+        VISIBILITY_INLINES_HIDDEN ON)
 
-    if ("${yup_platform}" MATCHES "^(osx|ios)$")
+    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
         set_target_properties (${module_name} PROPERTIES
-            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled})
+            XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC ${module_arc_enabled}
+            XCODE_GENERATE_SCHEME OFF)
     endif()
 
     target_compile_options (${module_name} INTERFACE
@@ -227,18 +219,29 @@ endfunction()
 
 #==============================================================================
 
-function (_yup_module_setup_plugin_client_clap target_name plugin_client_target folder_name)
-    if (NOT "${yup_platform}" MATCHES "^(osx|linux|win32)$")
+function (_yup_module_setup_plugin_client target_name plugin_client_target folder_name plugin_type)
+    if (NOT YUP_PLATFORM_DESKTOP)
         return()
     endif()
 
     set (options "")
-    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGING_IS_SYNTH PLUGIN_IS_MONO)
+    set (one_value_args PLUGIN_ID PLUGIN_NAME PLUGIN_VENDOR PLUGIN_VERSION PLUGIN_DESCRIPTION PLUGIN_URL PLUGIN_EMAIL PLUGIN_IS_SYNTH PLUGIN_IS_MONO)
     set (multi_value_args "")
 
     cmake_parse_arguments (YUP_ARG "${options}" "${one_value_args}" "${multi_value_args}" ${ARGN})
 
-    set (custom_target_name "${target_name}_clap")
+    if (plugin_type STREQUAL "vst3")
+        set (custom_target_name "${target_name}_vst3")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_VST3=1")
+    elseif (plugin_type STREQUAL "clap")
+        set (custom_target_name "${target_name}_clap")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_CLAP=1")
+    elseif (plugin_type STREQUAL "standalone")
+        set (custom_target_name "${target_name}_standalone")
+        set (plugin_define "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE=1")
+    else()
+        _yup_message (FATAL_ERROR "Invalid plugin type: ${plugin_type}. Must be either 'vst3', 'clap' or 'standalone'")
+    endif()
 
     add_library (${custom_target_name} INTERFACE)
     set_target_properties (${custom_target_name} PROPERTIES FOLDER "${folder_name}")
@@ -253,31 +256,34 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
     get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
 
-    list (APPEND module_defines YUP_AUDIO_PLUGIN_ENABLE_CLAP=1)
+    list (APPEND module_defines ${plugin_define})
     list (APPEND module_defines YupPlugin_Id="${YUP_ARG_PLUGIN_ID}")
     list (APPEND module_defines YupPlugin_Name="${YUP_ARG_PLUGIN_NAME}")
     list (APPEND module_defines YupPlugin_Version="${YUP_ARG_PLUGIN_VERSION}")
     list (APPEND module_defines YupPlugin_Vendor="${YUP_ARG_PLUGIN_VENDOR}")
     list (APPEND module_defines YupPlugin_Description="${YUP_ARG_PLUGIN_DESCRIPTION}")
     list (APPEND module_defines YupPlugin_URL="${YUP_ARG_PLUGIN_URL}")
+    list (APPEND module_defines YupPlugin_Email="${YUP_ARG_PLUGIN_EMAIL}")
+
     if (YUP_ARG_PLUGIN_IS_SYNTH)
         list (APPEND module_defines YupPlugin_IsSynth=1)
     else()
         list (APPEND module_defines YupPlugin_IsSynth=0)
     endif()
+
     if (YUP_ARG_PLUGIN_IS_MONO)
         list (APPEND module_defines YupPlugin_IsMono=1)
     else()
         list (APPEND module_defines YupPlugin_IsMono=0)
     endif()
 
-    if ("${yup_platform}" MATCHES "^(ios|osx)$")
-        _yup_glob_recurse ("${module_path}/clap/*.mm" module_sources)
+    if (YUP_PLATFORM_APPLE)
+        _yup_glob_recurse ("${module_path}/${plugin_type}/*.mm" module_sources)
     else()
-        _yup_glob_recurse ("${module_path}/clap/*.cpp" module_sources)
+        _yup_glob_recurse ("${module_path}/${plugin_type}/*.cpp" module_sources)
     endif()
 
-    _yup_module_setup_target (${custom_target_name}
+    _yup_module_setup_target ("${custom_target_name}"
                               "${module_cpp_standard}"
                               "${module_include_paths}"
                               "${module_options}"
@@ -288,13 +294,11 @@ function (_yup_module_setup_plugin_client_clap target_name plugin_client_target 
                               "${module_dependencies}"
                               "${module_arc_enabled}")
 
-
-    _yup_glob_recurse ("${module_path}/clap/*" all_module_files_clap)
-    target_sources (${custom_target_name} PRIVATE ${all_module_files_clap})
-    source_group (TREE ${module_path}/clap/ FILES ${all_module_files_clap})
-    list (REMOVE_ITEM all_module_files_clap ${module_sources})
-    set_source_files_properties (${all_module_files_clap} PROPERTIES HEADER_FILE_ONLY TRUE)
-
+    _yup_glob_recurse ("${module_path}/${plugin_type}/*" all_module_files)
+    target_sources (${custom_target_name} PRIVATE ${all_module_files})
+    source_group (TREE ${module_path}/${plugin_type}/ FILES ${all_module_files})
+    list (REMOVE_ITEM all_module_files ${module_sources})
+    set_source_files_properties (${all_module_files} PROPERTIES HEADER_FILE_ONLY TRUE)
 endfunction()
 
 #==============================================================================
@@ -307,12 +311,12 @@ function (yup_add_module module_path)
     set (${module_name}_Found OFF PARENT_SCOPE)
 
     if (NOT EXISTS ${module_path})
-        _yup_message (FATAL_ERROR "Module location not found")
+        _yup_message (FATAL_ERROR "Module location ${module_path} not found")
     endif()
 
     set (module_header "${module_path}/${module_name}.h")
     if (NOT EXISTS ${module_header})
-        _yup_message (FATAL_ERROR "Module header ${module_header} not found")
+        _yup_message (FATAL_ERROR "Module header ${module_header} in module ${module_path} not found")
     endif()
 
     # ==== Add module as library
@@ -324,7 +328,7 @@ function (yup_add_module module_path)
 
     # ==== Assign Configurations Dynamically
     set (global_properties "dependencies|defines|options|searchpaths")
-    set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)Packages$")
+    set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)Packages$|^(.*)Searchpaths$")
 
     set (parsed_config "")
     foreach (module_config ${module_configs})
@@ -348,49 +352,71 @@ function (yup_add_module module_path)
 
     _yup_set_default (module_cpp_standard "17")
     _yup_set_default (module_arc_enabled OFF)
+    _yup_resolve_variable_paths ("${module_searchpaths}" module_searchpaths)
 
     # ==== Setup Platform-Specific Configurations
-    if ("${yup_platform}" MATCHES "^(ios)$")
-        list (APPEND module_dependencies ${module_iosDeps})
-        list (APPEND module_defines ${module_iosDefines})
-        list (APPEND module_options ${module_iosOptions})
-        list (APPEND module_libs ${module_iosLibs})
-        _yup_module_prepare_frameworks ("${module_iosFrameworks}" "${module_iosWeakFrameworks}" module_frameworks)
+    if (YUP_PLATFORM_IOS)
+        if (PLATFORM MATCHES "^(SIMULATOR.*)$")
+            list (APPEND module_dependencies ${module_iosSimDeps})
+            list (APPEND module_defines ${module_iosSimDefines})
+            list (APPEND module_options ${module_iosSimOptions})
+            list (APPEND module_libs ${module_iosSimLibs})
+            _yup_resolve_variable_paths ("${module_iosSimSearchpaths}" module_iosSimSearchpaths)
+            list (APPEND module_searchpaths ${module_iosSimSearchpaths})
+            _yup_module_prepare_frameworks ("${module_iosSimFrameworks}" "${module_iosSimWeakFrameworks}" module_frameworks)
+        else()
+            list (APPEND module_dependencies ${module_iosDeps})
+            list (APPEND module_defines ${module_iosDefines})
+            list (APPEND module_options ${module_iosOptions})
+            list (APPEND module_libs ${module_iosLibs})
+            _yup_resolve_variable_paths ("${module_iosSearchpaths}" module_iosSearchpaths)
+            list (APPEND module_searchpaths ${module_iosSearchpaths})
+            _yup_module_prepare_frameworks ("${module_iosFrameworks}" "${module_iosWeakFrameworks}" module_frameworks)
+        endif()
 
-    elseif ("${yup_platform}" MATCHES "^(osx)$")
+    elseif (YUP_PLATFORM_OSX)
         list (APPEND module_dependencies ${module_osxDeps})
         list (APPEND module_defines ${module_osxDefines})
         list (APPEND module_options ${module_osxOptions})
         list (APPEND module_libs ${module_osxLibs})
+        _yup_resolve_variable_paths ("${module_osxSearchpaths}" module_osxSearchpaths)
+        list (APPEND module_searchpaths ${module_osxSearchpaths})
         _yup_module_prepare_frameworks ("${module_osxFrameworks}" "${module_osxWeakFrameworks}" module_frameworks)
 
-    elseif ("${yup_platform}" MATCHES "^(linux)$")
+    elseif (YUP_PLATFORM_LINUX)
         list (APPEND module_dependencies ${module_linuxDeps})
         list (APPEND module_defines ${module_linuxDefines})
         list (APPEND module_options ${module_linuxOptions})
         list (APPEND module_libs ${module_linuxLibs})
+        _yup_resolve_variable_paths ("${module_linuxSearchpaths}" module_linuxSearchpaths)
+        list (APPEND module_searchpaths ${module_linuxSearchpaths})
         foreach (package ${module_linuxPackages})
             _yup_get_package_config_libs ("${package}" package_libs)
             list (APPEND module_libs ${package_libs})
         endforeach()
 
-    elseif ("${yup_platform}" MATCHES "^(emscripten)$")
+    elseif (YUP_PLATFORM_EMSCRIPTEN)
         list (APPEND module_dependencies ${module_wasmDeps})
         list (APPEND module_defines ${module_wasmDefines})
         list (APPEND module_options ${module_wasmOptions})
         list (APPEND module_libs ${module_wasmLibs})
+        _yup_resolve_variable_paths ("${module_wasmSearchpaths}" module_wasmSearchpaths)
+        list (APPEND module_searchpaths ${module_wasmSearchpaths})
 
-    elseif ("${yup_platform}" MATCHES "^(android)$")
+    elseif (YUP_PLATFORM_ANDROID)
         list (APPEND module_dependencies ${module_androidDeps})
         list (APPEND module_defines ${module_androidDefines})
         list (APPEND module_options ${module_androidOptions})
         list (APPEND module_libs ${module_androidLibs})
-        list (APPEND module_include_paths "${ANDROID_NDK}/sources/android/native_app_glue")
+        _yup_resolve_variable_paths ("${module_androidSearchpaths}" module_androidSearchpaths)
+        list (APPEND module_searchpaths ${module_androidSearchpaths})
 
-    elseif ("${yup_platform}" MATCHES "^(win32|uwp)$")
+    elseif (YUP_PLATFORM_MSFT)
         list (APPEND module_dependencies ${module_windowsDeps})
         list (APPEND module_defines ${module_windowsDefines})
         list (APPEND module_options ${module_windowsOptions})
+        _yup_resolve_variable_paths ("${module_windowsSearchpaths}" module_windowsSearchpaths)
+        list (APPEND module_searchpaths ${module_windowsSearchpaths})
         if (MINGW)
             list (APPEND module_libs ${module_mingwLibs})
         else()
@@ -403,7 +429,9 @@ function (yup_add_module module_path)
     list (APPEND module_include_paths "${module_include_path}")
 
     foreach (searchpath ${module_searchpaths})
-        if (EXISTS "${module_path}/${searchpath}")
+        if (EXISTS "${searchpath}")
+            list (APPEND module_include_paths "${searchpath}")
+        elseif (EXISTS "${module_path}/${searchpath}")
             list (APPEND module_include_paths "${module_path}/${searchpath}")
         endif()
     endforeach()
@@ -458,16 +486,19 @@ endfunction()
 
 function (_yup_add_default_modules modules_path)
     # Setup vulkan
-    if (YUP_ENABLE_VULKAN AND NOT "${yup_platform}" MATCHES "^(emscripten)$")
+    if (YUP_ENABLE_VULKAN AND NOT YUP_PLATFORM_EMSCRIPTEN)
         find_package (Vulkan REQUIRED)
     endif()
 
     yup_add_module (${modules_path}/thirdparty/zlib)
     yup_add_module (${modules_path}/thirdparty/glad)
     yup_add_module (${modules_path}/thirdparty/harfbuzz)
+    yup_add_module (${modules_path}/thirdparty/libpng)
+    yup_add_module (${modules_path}/thirdparty/libwebp)
     yup_add_module (${modules_path}/thirdparty/sheenbidi)
     yup_add_module (${modules_path}/thirdparty/yoga_library)
     yup_add_module (${modules_path}/thirdparty/rive)
+    yup_add_module (${modules_path}/thirdparty/rive_decoders)
     yup_add_module (${modules_path}/thirdparty/rive_renderer)
     yup_add_module (${modules_path}/thirdparty/oboe_library)
     yup_add_module (${modules_path}/thirdparty/vk_bootstrap)

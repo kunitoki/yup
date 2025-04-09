@@ -585,12 +585,6 @@ public:
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DownloadTask)
     };
 
-    /** This function is replaced by a new overload accepting a DownloadTaskOptions argument. */
-    [[deprecated ("Use the overload with a DownloadTaskOptions argument instead")]] std::unique_ptr<DownloadTask> downloadToFile (const File& targetLocation,
-                                                                                                                                  String extraHeaders = String(),
-                                                                                                                                  DownloadTaskListener* listener = nullptr,
-                                                                                                                                  bool usePostCommand = false);
-
     /** Download the URL to a file.
 
         This method attempts to download the URL to a given file location.
@@ -693,25 +687,6 @@ public:
         parameters and parameters which are embedded in the URL address itself.
     */
     static URL createWithoutParsing (const String& url);
-
-    //==============================================================================
-#ifndef DOXYGEN
-    using OpenStreamProgressCallback = bool (void* context, int bytesSent, int totalBytes);
-
-    /** This method has been deprecated.
-
-        @see InputStreamOptions
-    */
-    [[deprecated ("New code should use the method which takes an InputStreamOptions argument instead.")]] std::unique_ptr<InputStream> createInputStream (bool doPostLikeRequest,
-                                                                                                                                                          OpenStreamProgressCallback* progressCallback = nullptr,
-                                                                                                                                                          void* progressCallbackContext = nullptr,
-                                                                                                                                                          String extraHeaders = {},
-                                                                                                                                                          int connectionTimeOutMs = 0,
-                                                                                                                                                          StringPairArray* responseHeaders = nullptr,
-                                                                                                                                                          int* statusCode = nullptr,
-                                                                                                                                                          int numRedirectsToFollow = 5,
-                                                                                                                                                          String httpRequestCmd = {}) const;
-#endif
 
 private:
     //==============================================================================

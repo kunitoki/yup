@@ -621,26 +621,6 @@ std::unique_ptr<MidiInput> MidiInput::createNewDevice (const String&, MidiInputC
     return {};
 }
 
-StringArray MidiInput::getDevices()
-{
-    StringArray deviceNames;
-
-    for (auto& d : getAvailableDevices())
-        deviceNames.add (d.name);
-
-    return deviceNames;
-}
-
-int MidiInput::getDefaultDeviceIndex()
-{
-    return 0;
-}
-
-std::unique_ptr<MidiInput> MidiInput::openDevice (int index, MidiInputCallback* callback)
-{
-    return openDevice (getAvailableDevices()[index].identifier, callback);
-}
-
 //==============================================================================
 // TODO: Add Bela MidiOutput support
 class MidiOutput::Pimpl
@@ -658,11 +638,5 @@ MidiDeviceInfo MidiOutput::getDefaultDevice() { return {}; }
 std::unique_ptr<MidiOutput> MidiOutput::openDevice (const String&) { return {}; }
 
 std::unique_ptr<MidiOutput> MidiOutput::createNewDevice (const String&) { return {}; }
-
-StringArray MidiOutput::getDevices() { return {}; }
-
-int MidiOutput::getDefaultDeviceIndex() { return 0; }
-
-std::unique_ptr<MidiOutput> MidiOutput::openDevice (int) { return {}; }
 
 } // namespace juce

@@ -38,11 +38,11 @@
 */
 
 #ifdef JUCE_AUDIO_DEVICES_H_INCLUDED
-    /* When you add this cpp file to your project, you mustn't include it in a file where you've
-    already included any other headers - just put it inside a file on its own, possibly with your config
-    flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
-    header files that the compiler may be using.
- */
+/* When you add this cpp file to your project, you mustn't include it in a file where you've
+   already included any other headers - just put it inside a file on its own, possibly with your config
+   flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
+   header files that the compiler may be using.
+*/
 #error "Incorrect use of JUCE cpp file"
 #endif
 
@@ -67,8 +67,8 @@
 
 //==============================================================================
 #if JUCE_MAC || JUCE_IOS
-#include <juce_audio_basics/native/juce_CoreAudioTimeConversions_mac.h>
-#include <juce_audio_basics/native/juce_AudioWorkgroup_mac.h>
+#include <juce_audio_basics/native/juce_CoreAudioTimeConversions_apple.h>
+#include <juce_audio_basics/native/juce_AudioWorkgroup_apple.h>
 #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
 #include <juce_audio_basics/midi/ump/juce_UMP.h>
 #include "midi_io/ump/juce_UMPBytestreamInputHandler.h"
@@ -85,7 +85,7 @@
 #undef Component
 
 #include "native/juce_CoreAudio_mac.cpp"
-#include "native/juce_CoreMidi_mac.mm"
+#include "native/juce_CoreMidi_apple.mm"
 
 #elif JUCE_IOS
 #import <AudioToolbox/AudioToolbox.h>
@@ -101,7 +101,7 @@
 #endif
 
 #include "native/juce_Audio_ios.cpp"
-#include "native/juce_CoreMidi_mac.mm"
+#include "native/juce_CoreMidi_apple.mm"
 
 //==============================================================================
 #elif JUCE_WINDOWS
@@ -115,7 +115,7 @@
 #endif
 
 #if JUCE_USE_WINRT_MIDI && (JUCE_MSVC || JUCE_CLANG)
-        /* If you cannot find any of the header files below then you are probably
+/* If you cannot find any of the header files below then you are probably
    attempting to use the Windows 10 Bluetooth Low Energy API. For this to work you
    need to install version 10.0.14393.0 of the Windows Standalone SDK and you may
    need to add the path to the WinRT headers to your build system. This path should
@@ -141,7 +141,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "native/juce_Midi_windows.cpp"
 
 #if JUCE_ASIO
-        /* This is very frustrating - we only need to use a handful of definitions from
+/* This is very frustrating - we only need to use a handful of definitions from
    a couple of the header files in Steinberg's ASIO SDK, and it'd be easy to copy
    about 30 lines of code into this cpp file to create a fully stand-alone ASIO
    implementation...
@@ -181,24 +181,11 @@ JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 #include "native/juce_ALSA_linux.cpp"
 #endif
 
-#if JUCE_JACK
-        /* Got an include error here? If so, you've either not got jack-audio-connection-kit
-   installed, or you've not got your paths set up correctly to find its header files.
-
-   The package you need to install to get JACK support is "libjack-dev".
-
-   If you don't have the jack-audio-connection-kit library and don't want to build
-   JUCE with low latency audio support, just set the JUCE_JACK flag to 0.
-*/
-#include <jack/jack.h>
-#include "native/juce_JackAudio_linux.cpp"
-#endif
-
 #if (JUCE_LINUX && JUCE_BELA)
-    /* Got an include error here? If so, you've either not got the bela headers
-     installed, or you've not got your paths set up correctly to find its header
-     files.
-  */
+/* Got an include error here? If so, you've either not got the bela headers
+   installed, or you've not got your paths set up correctly to find its header
+   files.
+*/
 #include <Bela.h>
 #include <Midi.h>
 #include <juce_audio_basics/midi/juce_MidiDataConcatenator.h>
@@ -273,9 +260,26 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
 
 #endif
 
+#if (JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_WINDOWS) && JUCE_JACK
+/* Got an include error here? If so, you've either not got jack-audio-connection-kit
+   installed, or you've not got your paths set up correctly to find its header files.
+   Linux: The package you need to install to get JACK support is libjack-dev.
+   macOS: The package you need to install to get JACK support is jack, which you can
+   install using Homebrew.
+   Windows: The package you need to install to get JACK support is available from the
+   JACK Audio website. Download and run the installer for Windows.
+   If you don't have the jack-audio-connection-kit library and don't want to build
+   JUCE with low latency audio support, just set the JUCE_JACK flag to 0.
+*/
+#include <jack/jack.h>
+
+#include "native/juce_JackAudio.cpp"
+#endif
+
 #if ! JUCE_SYSTEMAUDIOVOL_IMPLEMENTED
 namespace juce
 {
+
 // None of these methods are available. (On Windows you might need to enable WASAPI for this)
 float JUCE_CALLTYPE SystemAudioVolume::getGain()
 {
@@ -300,6 +304,7 @@ bool JUCE_CALLTYPE SystemAudioVolume::setMuted (bool)
     jassertfalse;
     return false;
 }
+
 } // namespace juce
 #endif
 

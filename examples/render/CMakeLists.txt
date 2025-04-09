@@ -25,7 +25,7 @@ set (target_version "1.0.0")
 
 project (${target_name} VERSION ${target_version})
 
-set (rive_file "data/seasynth.riv")
+set (rive_file "data/alien.riv")
 
 # ==== Prepare Android build
 set (link_libraries "")
@@ -42,8 +42,8 @@ if (ANDROID)
         RESOURCE_NAMES
             RiveFile
         RESOURCES
-            ${CMAKE_CURRENT_LIST_DIR}/${rive_file}
-    )
+            "${CMAKE_CURRENT_LIST_DIR}/${rive_file}")
+
     set (link_libraries "${target_name}_binary_data")
 endif()
 
@@ -53,8 +53,7 @@ yup_standalone_app (
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Examples"
     TARGET_APP_ID "org.yup.${target_name}"
-    TARGET_APP_NAMESPACE "org.yup.${target_name}"
-    LINK_OPTIONS ${link_options}
+    TARGET_APP_NAMESPACE "org.yup"
     INITIAL_MEMORY 268435456
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"
@@ -68,10 +67,11 @@ yup_standalone_app (
         yup_audio_processors
         harfbuzz
         sheenbidi
+        libpng
+        libwebp
         rive
         rive_renderer
-        ${link_libraries}
-)
+        ${link_libraries})
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)

@@ -211,7 +211,7 @@ static TextRun copyRun(const TextRun& source, uint32_t unicharCount)
         unicharCount,
         source.script,
         source.styleId,
-        source.dir,
+        source.level,
     };
 }
 
@@ -250,7 +250,7 @@ TextRun TextModifierGroup::modifyShape(const Text& text,
             run.unicharCount,
             run.script,
             run.styleId,
-            run.dir,
+            run.level,
         };
     }
     else
@@ -280,7 +280,8 @@ void TextModifierGroup::applyShapeModifiers(const Text& text,
         // values.
         uint32_t end = index + run.unicharCount;
 
-        while (index < end)
+        auto coverageSize = m_coverage.size();
+        while (index < end && index < coverageSize)
         {
             float coverage = m_coverage[index];
             if (coverage != lastCoverage)
