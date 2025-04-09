@@ -771,7 +771,9 @@ Array<Win32MidiService::MidiInCollector*, CriticalSection> Win32MidiService::Mid
 #if JUCE_WINRT_MIDI_LOGGING
 #define JUCE_WINRT_MIDI_LOG(x) JUCE_DBG (x)
 #else
-#define JUCE_WINRT_MIDI_LOG(x) {}
+#define JUCE_WINRT_MIDI_LOG(x) \
+    {                          \
+    }
 #endif
 
 using namespace Microsoft::WRL;
@@ -1068,27 +1070,27 @@ private:
                 watcher->add_Added (
                     Callback<ITypedEventHandler<DeviceWatcher*, DeviceInformation*>> (
                         [handlerPtr] (IDeviceWatcher*, IDeviceInformation* info)
-                        {
-                            return handlerPtr->addDevice (info);
-                        })
+                {
+                    return handlerPtr->addDevice (info);
+                })
                         .Get(),
                     &deviceAddedToken);
 
                 watcher->add_Removed (
                     Callback<ITypedEventHandler<DeviceWatcher*, DeviceInformationUpdate*>> (
                         [handlerPtr] (IDeviceWatcher*, IDeviceInformationUpdate* infoUpdate)
-                        {
-                            return handlerPtr->removeDevice (infoUpdate);
-                        })
+                {
+                    return handlerPtr->removeDevice (infoUpdate);
+                })
                         .Get(),
                     &deviceRemovedToken);
 
                 watcher->add_Updated (
                     Callback<ITypedEventHandler<DeviceWatcher*, DeviceInformationUpdate*>> (
                         [handlerPtr] (IDeviceWatcher*, IDeviceInformationUpdate* infoUpdate)
-                        {
-                            return handlerPtr->updateDevice (infoUpdate);
-                        })
+                {
+                    return handlerPtr->updateDevice (infoUpdate);
+                })
                         .Get(),
                     &deviceUpdatedToken);
 
@@ -1202,9 +1204,9 @@ private:
                 {
                     auto& info = devices.getReference (removedDeviceId);
                     listeners.call ([&info] (Listener& l)
-                                    {
-                                        l.bleDeviceDisconnected (info.containerID);
-                                    });
+                    {
+                        l.bleDeviceDisconnected (info.containerID);
+                    });
                     devices.remove (removedDeviceId);
                     JUCE_WINRT_MIDI_LOG ("Removed BLE device: " << removedDeviceId);
                 }
@@ -1252,9 +1254,9 @@ private:
                     {
                         JUCE_WINRT_MIDI_LOG ("BLE device connection status change: " << updatedDeviceId << " " << info.containerID << " " << (isConnected ? "connected" : "disconnected"));
                         listeners.call ([&info] (Listener& l)
-                                        {
-                                            l.bleDeviceDisconnected (info.containerID);
-                                        });
+                        {
+                            l.bleDeviceDisconnected (info.containerID);
+                        });
                     }
 
                     info.isConnected = isConnected;
@@ -1511,48 +1513,48 @@ private:
                                     ComSmartPtr<COMInterfaceType>& comPort)
     {
         std::thread { [&]
-                      {
-                          Thread::setCurrentThreadName (threadName);
+        {
+            Thread::setCurrentThreadName (threadName);
 
-                          const WinRTWrapper::ScopedHString hDeviceId { midiDeviceID };
-                          ComSmartPtr<IAsyncOperation<COMType*>> asyncOp;
-                          const auto hr = comFactory->FromIdAsync (hDeviceId.get(), asyncOp.resetAndGetPointerAddress());
+            const WinRTWrapper::ScopedHString hDeviceId { midiDeviceID };
+            ComSmartPtr<IAsyncOperation<COMType*>> asyncOp;
+            const auto hr = comFactory->FromIdAsync (hDeviceId.get(), asyncOp.resetAndGetPointerAddress());
 
-                          if (FAILED (hr))
-                              return;
+            if (FAILED (hr))
+                return;
 
-                          std::promise<ComSmartPtr<COMInterfaceType>> promise;
-                          auto future = promise.get_future();
+            std::promise<ComSmartPtr<COMInterfaceType>> promise;
+            auto future = promise.get_future();
 
-                          auto callback = [p = std::move (promise)] (IAsyncOperation<COMType*>* asyncOpPtr, AsyncStatus) mutable
-                          {
-                              if (asyncOpPtr == nullptr)
-                              {
-                                  p.set_value (nullptr);
-                                  return E_ABORT;
-                              }
+            auto callback = [p = std::move (promise)] (IAsyncOperation<COMType*>* asyncOpPtr, AsyncStatus) mutable
+            {
+                if (asyncOpPtr == nullptr)
+                {
+                    p.set_value (nullptr);
+                    return E_ABORT;
+                }
 
-                              ComSmartPtr<COMInterfaceType> result;
-                              const auto hr = asyncOpPtr->GetResults (result.resetAndGetPointerAddress());
+                ComSmartPtr<COMInterfaceType> result;
+                const auto hr = asyncOpPtr->GetResults (result.resetAndGetPointerAddress());
 
-                              if (FAILED (hr))
-                              {
-                                  p.set_value (nullptr);
-                                  return hr;
-                              }
+                if (FAILED (hr))
+                {
+                    p.set_value (nullptr);
+                    return hr;
+                }
 
-                              p.set_value (std::move (result));
-                              return S_OK;
-                          };
+                p.set_value (std::move (result));
+                return S_OK;
+            };
 
-                          const auto ir = asyncOp->put_Completed (Callback<IAsyncOperationCompletedHandler<COMType*>> (std::move (callback)).Get());
+            const auto ir = asyncOp->put_Completed (Callback<IAsyncOperationCompletedHandler<COMType*>> (std::move (callback)).Get());
 
-                          if (FAILED (ir))
-                              return;
+            if (FAILED (ir))
+                return;
 
-                          if (future.wait_for (std::chrono::milliseconds (2000)) == std::future_status::ready)
-                              comPort = future.get();
-                      } }
+            if (future.wait_for (std::chrono::milliseconds (2000)) == std::future_status::ready)
+                comPort = future.get();
+        } }
             .join();
     }
 
@@ -1663,17 +1665,17 @@ private:
             auto hr = midiPort->add_MessageReceived (
                 Callback<ITypedEventHandler<MidiInPort*, MidiMessageReceivedEventArgs*>> (
                     [self = checkedReference] (IMidiInPort*, IMidiMessageReceivedEventArgs* args)
-                    {
-                        HRESULT hr = S_OK;
+            {
+                HRESULT hr = S_OK;
 
-                        self->access ([&hr, args] (auto* ptr)
-                                      {
-                                          if (ptr != nullptr)
-                                              hr = ptr->midiInMessageReceived (args);
-                                      });
+                self->access ([&hr, args] (auto* ptr)
+                {
+                    if (ptr != nullptr)
+                        hr = ptr->midiInMessageReceived (args);
+                });
 
-                        return hr;
-                    })
+                return hr;
+            })
                     .Get(),
                 &midiInMessageToken);
 
@@ -1929,9 +1931,9 @@ struct MidiService final : public DeletedAtShutdown
 private:
     std::unique_ptr<MidiServiceType> internal;
     DeviceChangeDetector detector { L"JuceMidiDeviceDetector_", []
-                                    {
-                                        MidiDeviceListConnectionBroadcaster::get().notify();
-                                    } };
+    {
+        MidiDeviceListConnectionBroadcaster::get().notify();
+    } };
 };
 
 JUCE_IMPLEMENT_SINGLETON (MidiService)

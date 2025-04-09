@@ -38,7 +38,7 @@ class CustomWindow
 {
 public:
     CustomWindow()
-        : yup::DocumentWindow (yup::ComponentNative::Options{}.withRenderContinuous (true), {})
+        : yup::DocumentWindow (yup::ComponentNative::Options {}.withRenderContinuous (true), {})
     {
         // Set title
         setTitle ("main");
@@ -202,7 +202,7 @@ class CustomWindow2
 {
 public:
     CustomWindow2()
-        : yup::DocumentWindow (yup::ComponentNative::Options{}.withRenderContinuous (true), {})
+        : yup::DocumentWindow (yup::ComponentNative::Options {}.withRenderContinuous (true), {})
     {
         setTitle ("secondary");
     }
@@ -242,7 +242,7 @@ struct Application : yup::YUPApplication
         window->centreWithSize ({ 1280, 866 });
 #endif
         window->setVisible (true);
-        window->toFront(true);
+        window->toFront (true);
 
         //window2 = std::make_unique<CustomWindow2>();
         //window2->centreWithSize ({ 300, 300 });

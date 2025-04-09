@@ -35,7 +35,7 @@ YUPApplication::YUPApplication()
 
     NSMenu* appMenu = [[NSMenu alloc] init];
     NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:@"Quit"
-                                                          action:@selector(terminate:)
+                                                          action:@selector (terminate:)
                                                    keyEquivalent:@"q"];
     [appMenu addItem:quitMenuItem];
     [menuBarItem setSubmenu:appMenu];
