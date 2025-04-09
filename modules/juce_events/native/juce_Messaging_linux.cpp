@@ -51,16 +51,16 @@ public:
 
         LinuxEventLoop::registerFdCallback (getReadHandle(),
                                             [this] (int fd)
-                                            {
-                                                while (auto msg = popNextMessage (fd))
-                                                {
-                                                    JUCE_TRY
-                                                    {
-                                                        msg->messageCallback();
-                                                    }
-                                                    JUCE_CATCH_EXCEPTION
-                                                }
-                                            });
+        {
+            while (auto msg = popNextMessage (fd))
+            {
+                JUCE_TRY
+                {
+                    msg->messageCallback();
+                }
+                JUCE_CATCH_EXCEPTION
+            }
+        });
     }
 
     ~InternalMessageQueue()
@@ -166,9 +166,9 @@ public:
         }
 
         listeners.call ([] (auto& l)
-                        {
-                            l.fdCallbacksChanged();
-                        });
+        {
+            l.fdCallbacksChanged();
+        });
     }
 
     void unregisterFdCallback (int fd)
@@ -189,9 +189,9 @@ public:
         }
 
         listeners.call ([] (auto& l)
-                        {
-                            l.fdCallbacksChanged();
-                        });
+        {
+            l.fdCallbacksChanged();
+        });
     }
 
     bool dispatchPendingEvents()
@@ -237,9 +237,9 @@ public:
                         callbacks.end(),
                         std::back_inserter (result),
                         [] (const auto& pair)
-                        {
-                            return pair.first;
-                        });
+        {
+            return pair.first;
+        });
 
         return result;
     }
@@ -282,17 +282,17 @@ private:
     std::vector<pollfd>::iterator getPollfd (int fd)
     {
         return std::lower_bound (pfds.begin(), pfds.end(), fd, [] (auto descriptor, auto toFind)
-                                 {
-                                     return descriptor.fd < toFind;
-                                 });
+        {
+            return descriptor.fd < toFind;
+        });
     }
 
     bool pfdsAreSorted() const
     {
         return std::is_sorted (pfds.begin(), pfds.end(), [] (auto a, auto b)
-                               {
-                                   return a.fd < b.fd;
-                               });
+        {
+            return a.fd < b.fd;
+        });
     }
 
     CriticalSection lock;
@@ -391,9 +391,9 @@ void LinuxEventLoop::registerFdCallback (int fd, std::function<void (int)> readC
     if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
         runLoop->registerFdCallback (
             fd, [cb = std::move (readCallback), fd]
-            {
-                cb (fd);
-            },
+        {
+            cb (fd);
+        },
             eventMask);
 }
 

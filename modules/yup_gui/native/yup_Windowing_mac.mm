@@ -24,9 +24,9 @@ namespace yup
 
 //==============================================================================
 
-Rectangle<int> getNativeWindowPosition (void* nativeWindow)
+Rectangle<int> getNativeWindowPosition(void* nativeWindow)
 {
-    NSView* view = reinterpret_cast<NSView*> (nativeWindow);
+    NSView* view = reinterpret_cast<NSView*>(nativeWindow);
     NSWindow* window = [view window];
 
     // Convert view bounds to window coordinates
@@ -40,17 +40,16 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow)
     NSScreen* screen = [window screen] ?: mainScreen;
 
     // Calculate vertical offset between current screen and main screen
-    CGFloat adjustedY = NSMaxY ([screen frame]) - NSMaxY ([mainScreen frame]);
+    CGFloat adjustedY = NSMaxY([screen frame]) - NSMaxY([mainScreen frame]);
 
     // Correctly flip Y coordinate relative to main screen's top-left origin
-    windowRect.origin.y = NSMaxY ([screen frame]) - NSMaxY (windowRect) - adjustedY;
+    windowRect.origin.y = NSMaxY([screen frame]) - NSMaxY(windowRect) - adjustedY;
 
     return {
-        static_cast<int> (windowRect.origin.x),
-        static_cast<int> (windowRect.origin.y),
-        static_cast<int> (NSWidth (windowRect)),
-        static_cast<int> (NSHeight (windowRect))
-    };
+        static_cast<int>(windowRect.origin.x),
+        static_cast<int>(windowRect.origin.y),
+        static_cast<int>(NSWidth(windowRect)),
+        static_cast<int>(NSHeight(windowRect))};
 }
 
 } // namespace yup

@@ -215,9 +215,9 @@ void Thread::signalThreadShouldExit()
 {
     shouldExit = true;
     listeners.call ([] (Listener& l)
-                    {
-                        l.exitSignalSent();
-                    });
+    {
+        l.exitSignalSent();
+    });
 }
 
 bool Thread::threadShouldExit() const

@@ -100,8 +100,8 @@
 #define JUCE_EACH_49_(FN, X, ...) FN (X) JUCE_EACH_48_ (FN, __VA_ARGS__)
 
 /** Apply the macro FN to each of the other arguments. */
-#define JUCE_EACH(FN, ...)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      \
-    JUCE_NTH_ARG_ (, __VA_ARGS__, JUCE_EACH_49_, JUCE_EACH_48_, JUCE_EACH_47_, JUCE_EACH_46_, JUCE_EACH_45_, JUCE_EACH_44_, JUCE_EACH_43_, JUCE_EACH_42_, JUCE_EACH_41_, JUCE_EACH_40_, JUCE_EACH_39_, JUCE_EACH_38_, JUCE_EACH_37_, JUCE_EACH_36_, JUCE_EACH_35_, JUCE_EACH_34_, JUCE_EACH_33_, JUCE_EACH_32_, JUCE_EACH_31_, JUCE_EACH_30_, JUCE_EACH_29_, JUCE_EACH_28_, JUCE_EACH_27_, JUCE_EACH_26_, JUCE_EACH_25_, JUCE_EACH_24_, JUCE_EACH_23_, JUCE_EACH_22_, JUCE_EACH_21_, JUCE_EACH_20_, JUCE_EACH_19_, JUCE_EACH_18_, JUCE_EACH_17_, JUCE_EACH_16_, JUCE_EACH_15_, JUCE_EACH_14_, JUCE_EACH_13_, JUCE_EACH_12_, JUCE_EACH_11_, JUCE_EACH_10_, JUCE_EACH_09_, JUCE_EACH_08_, JUCE_EACH_07_, JUCE_EACH_06_, JUCE_EACH_05_, JUCE_EACH_04_, JUCE_EACH_03_, JUCE_EACH_02_, JUCE_EACH_01_, JUCE_EACH_00_) \
+#define JUCE_EACH(FN, ...) \
+    JUCE_NTH_ARG_ (, __VA_ARGS__, JUCE_EACH_49_, JUCE_EACH_48_, JUCE_EACH_47_, JUCE_EACH_46_, JUCE_EACH_45_, JUCE_EACH_44_, JUCE_EACH_43_, JUCE_EACH_42_, JUCE_EACH_41_, JUCE_EACH_40_, JUCE_EACH_39_, JUCE_EACH_38_, JUCE_EACH_37_, JUCE_EACH_36_, JUCE_EACH_35_, JUCE_EACH_34_, JUCE_EACH_33_, JUCE_EACH_32_, JUCE_EACH_31_, JUCE_EACH_30_, JUCE_EACH_29_, JUCE_EACH_28_, JUCE_EACH_27_, JUCE_EACH_26_, JUCE_EACH_25_, JUCE_EACH_24_, JUCE_EACH_23_, JUCE_EACH_22_, JUCE_EACH_21_, JUCE_EACH_20_, JUCE_EACH_19_, JUCE_EACH_18_, JUCE_EACH_17_, JUCE_EACH_16_, JUCE_EACH_15_, JUCE_EACH_14_, JUCE_EACH_13_, JUCE_EACH_12_, JUCE_EACH_11_, JUCE_EACH_10_, JUCE_EACH_09_, JUCE_EACH_08_, JUCE_EACH_07_, JUCE_EACH_06_, JUCE_EACH_05_, JUCE_EACH_04_, JUCE_EACH_03_, JUCE_EACH_02_, JUCE_EACH_01_, JUCE_EACH_00_)          \
     (FN, __VA_ARGS__)
 
 /** Concatenate two tokens to form a new token. */
@@ -171,8 +171,7 @@
     compilers (like clang and gcc).
 */
 #if JUCE_MSVC
-#define JUCE_IGNORE_MSVC(warnings) __pragma (warning (disable \
-                                                      : warnings))
+#define JUCE_IGNORE_MSVC(warnings) __pragma (warning (disable : warnings))
 #define JUCE_BEGIN_IGNORE_WARNINGS_LEVEL_MSVC(level, warnings) \
     __pragma (warning (push, level)) JUCE_IGNORE_MSVC (warnings)
 #define JUCE_BEGIN_IGNORE_WARNINGS_MSVC(warnings) \

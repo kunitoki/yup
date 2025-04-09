@@ -502,9 +502,9 @@ private:
     mutable bool listNeedsScanning = true;
     AudioBuffer<float> tempBuffer;
     MidiDeviceListConnection midiDeviceListConnection = MidiDeviceListConnection::make ([this]
-                                                                                        {
-                                                                                            midiDeviceListChanged();
-                                                                                        });
+    {
+        midiDeviceListChanged();
+    });
 
     struct MidiCallbackInfo
     {

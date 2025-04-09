@@ -269,9 +269,7 @@ int SystemStats::getCpuSpeedInMegahertz()
     size_t optSize = sizeof(hz);
     sysctlbyname("hw.tbfrequency", &hz, &optSize, nullptr, 0);
 
-    struct clockinfo ci
-    {
-    };
+    struct clockinfo ci{};
     optSize = sizeof(ci);
     int mib[] = {CTL_KERN, KERN_CLOCKRATE};
     sysctl(mib, 2, &ci, &optSize, nullptr, 0);

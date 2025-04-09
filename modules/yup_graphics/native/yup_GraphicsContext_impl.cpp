@@ -42,8 +42,8 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
 #endif
 
 #if YUP_RIVE_USE_VULKAN
-    case Api::Vulkan:
-        return juce_constructVulkanGraphicsContext (options);
+        case Api::Vulkan:
+            return juce_constructVulkanGraphicsContext (options);
 #endif
 
 #if YUP_RIVE_USE_DAWN

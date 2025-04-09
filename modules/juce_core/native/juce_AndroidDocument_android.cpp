@@ -316,7 +316,7 @@ public:
 
 private:
     template <typename Value>
-    Args with (Value Args::*member, Value v) const
+    Args with (Value Args::* member, Value v) const
     {
         auto copy = *this;
         copy.*member = std::move (v);
@@ -497,9 +497,9 @@ struct AndroidDocument::Utils
                     const auto indices = { flagsColumnIndex, nameColumnIndex, mimeColumnIndex, idColumnIndex, modColumnIndex, sizeColumnIndex };
 
                     if (std::any_of (indices.begin(), indices.end(), [] (auto index)
-                                     {
-                                         return index < 0;
-                                     }))
+                    {
+                        return index < 0;
+                    }))
                         return AndroidDocumentInfo::Args {};
 
                     const LocalRef<jstring> nameString { (jstring) env->CallObjectMethod (cursor, AndroidCursor.getString, nameColumnIndex) };

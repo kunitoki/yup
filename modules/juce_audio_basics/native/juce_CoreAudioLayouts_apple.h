@@ -250,7 +250,7 @@ public:
                 for (UInt32 i = 0; i < layout.mNumberChannelDescriptions; ++i)
                     channels.addIfNotAlreadyThere (getChannelTypeFromAudioChannelLabel (layout.mChannelDescriptions[i].mChannelLabel));
 
-                    // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
+                // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
 #ifndef __clang_analyzer__
                 // different speaker mappings may point to the same JUCE speaker so fill up
                 // this array with discrete channels
