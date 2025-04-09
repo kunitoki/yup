@@ -151,10 +151,10 @@ private:
 
       @see HeavyweightLeakedObjectDetector, JUCE_LEAK_DETECTOR, LeakedObjectDetector
   */
-#define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                             \
-friend class juce::HeavyweightLeakedObjectDetector<OwnerClass>;                \
-static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
-juce::HeavyweightLeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
+#define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                                 \
+    friend class juce::HeavyweightLeakedObjectDetector<OwnerClass>;                \
+    static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
+    juce::HeavyweightLeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
 #else
 #define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)
 #endif

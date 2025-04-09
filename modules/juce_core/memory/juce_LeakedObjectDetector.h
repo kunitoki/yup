@@ -148,10 +148,10 @@ private:
 
       @see JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR, LeakedObjectDetector
   */
-#define JUCE_LEAK_DETECTOR(OwnerClass)                                         \
-friend class juce::LeakedObjectDetector<OwnerClass>;                           \
-static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
-juce::LeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
+#define JUCE_LEAK_DETECTOR(OwnerClass)                                             \
+    friend class juce::LeakedObjectDetector<OwnerClass>;                           \
+    static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
+    juce::LeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
 #else
 #define JUCE_LEAK_DETECTOR(OwnerClass)
 #endif

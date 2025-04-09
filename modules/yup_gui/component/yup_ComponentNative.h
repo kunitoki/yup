@@ -36,11 +36,11 @@ class JUCE_API ComponentNative
 public:
     //==============================================================================
     using Flags = FlagSet<uint32,
-        decoratedWindowTag,
-        resizableWindowTag,
-        skipTaskbarTag,
-        renderContinuousTag,
-        allowHighDensityDisplayTag>;
+                          decoratedWindowTag,
+                          resizableWindowTag,
+                          skipTaskbarTag,
+                          renderContinuousTag,
+                          allowHighDensityDisplayTag>;
 
     static inline constexpr Flags noFlags = Flags();
     static inline constexpr Flags decoratedWindow = Flags::declareValue<decoratedWindowTag>();
