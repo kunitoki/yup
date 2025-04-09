@@ -62,20 +62,22 @@ String Component::getComponentID() const
 
 bool Component::isEnabled() const
 {
-    return ! options.isDisabled;
+    return ! options.isDisabled && (parentComponent == nullptr || parentComponent->isEnabled());
 }
 
 void Component::setEnabled (bool shouldBeEnabled)
 {
-    if (options.isDisabled != ! shouldBeEnabled)
-    {
-        options.isDisabled = ! shouldBeEnabled;
+    if (options.isDisabled == ! shouldBeEnabled)
+        return;
 
-        //if (options.onDesktop && native != nullptr)
-        //    native->setEnabled (shouldBeEnabled);
+    options.isDisabled = ! shouldBeEnabled;
 
-        enablementChanged();
-    }
+    //if (options.onDesktop && native != nullptr)
+    //    native->setEnabled (shouldBeEnabled);
+
+    if (options.isDisabled && hasKeyboardFocus())
+
+    enablementChanged();
 }
 
 void Component::enablementChanged()
@@ -91,17 +93,17 @@ bool Component::isVisible() const
 
 void Component::setVisible (bool shouldBeVisible)
 {
-    if (options.isVisible != shouldBeVisible)
-    {
-        options.isVisible = shouldBeVisible;
+    if (options.isVisible == shouldBeVisible)
+        return;
 
-        if (options.onDesktop && native != nullptr)
-            native->setVisible (shouldBeVisible);
+    options.isVisible = shouldBeVisible;
 
-        visibilityChanged();
+    if (options.onDesktop && native != nullptr)
+        native->setVisible (shouldBeVisible);
 
-        repaint();
-    }
+    visibilityChanged();
+
+    repaint();
 }
 
 void Component::visibilityChanged()
@@ -353,13 +355,13 @@ bool Component::isFullScreen() const
 
 void Component::setFullScreen (bool shouldBeFullScreen)
 {
-    if (options.isFullScreen != shouldBeFullScreen)
-    {
-        options.isFullScreen = shouldBeFullScreen;
+    if (options.isFullScreen == shouldBeFullScreen)
+        return;
 
-        if (options.onDesktop && native != nullptr)
-            native->setFullScreen (shouldBeFullScreen);
-    }
+    options.isFullScreen = shouldBeFullScreen;
+
+    if (options.onDesktop && native != nullptr)
+        native->setFullScreen (shouldBeFullScreen);
 }
 
 //==============================================================================
@@ -523,7 +525,7 @@ void Component::toFront (bool shouldGainKeyboardFocus)
     parentComponent->addChildComponent (this, parentComponent->getNumChildComponents());
 
     if (shouldGainKeyboardFocus && options.wantsKeyboardFocus)
-        takeFocus();
+        takeKeyboardFocus();
 }
 
 void Component::toBack()
@@ -774,7 +776,7 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
     options.wantsKeyboardFocus = wantsFocus;
 }
 
-void Component::takeFocus()
+void Component::takeKeyboardFocus()
 {
     if (options.wantsKeyboardFocus)
     {
@@ -783,7 +785,7 @@ void Component::takeFocus()
     }
 }
 
-void Component::leaveFocus()
+void Component::leaveKeyboardFocus()
 {
     if (auto nativeComponent = getNativeComponent())
     {
@@ -792,7 +794,7 @@ void Component::leaveFocus()
     }
 }
 
-bool Component::hasFocus() const
+bool Component::hasKeyboardFocus() const
 {
     if (! options.wantsKeyboardFocus)
         return false;
@@ -1087,7 +1089,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! isVisible() || ! options.wantsTextInput)
+    if (! options.wantsTextInput || ! isVisible())
         return;
 
     textInput (text);

@@ -285,6 +285,16 @@ float Graphics::getStrokeWidth() const
     return currentRenderOptions().strokeWidth;
 }
 
+void Graphics::setFeather (float feather)
+{
+    currentRenderOptions().feather = jmax (0.0f, feather);
+}
+
+float Graphics::getFeather() const
+{
+    return currentRenderOptions().feather;
+}
+
 void Graphics::setOpacity (float opacity)
 {
     currentRenderOptions().opacity = jlimit (0.0f, 1.0f, opacity);
@@ -563,6 +573,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
     paint->thickness (options.getStrokeWidth());
     paint->join (toStrokeJoin (options.join));
     paint->cap (toStrokeCap (options.cap));
+    paint->feather (options.feather);
 
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());
@@ -578,6 +589,7 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
 {
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::fill);
+    paint->feather (options.feather);
 
     if (options.isFillColor())
         paint->color (options.getFillColor());
@@ -617,7 +629,9 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     rive::RiveRenderPaint paint;
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
-    renderer.drawPath (unitRectPath.get(), &paint);
+    paint.feather (options.feather);
+
+    renderer.drawPath (unitRectPath.get(), std::addressof (paint));
 
     renderer.restore();
 }
@@ -629,6 +643,7 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
 
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::fill);
+    paint->feather (options.feather);
 
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());

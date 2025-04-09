@@ -162,6 +162,13 @@ public:
     float getStrokeWidth() const;
 
     //==============================================================================
+    // TODO - doxygen
+    void setFeather (float feather);
+
+    // TODO - doxygen
+    float getFeather() const;
+
+    //==============================================================================
     /** Sets the opacity for subsequent drawing operations.
 
         @param opacity The new opacity level (0.0-1.0).
@@ -481,6 +488,11 @@ private:
             return strokeWidth * scale;
         }
 
+        float getFeather() const noexcept
+        {
+            return feather * scale;
+        }
+
         const Rectangle<float>& getDrawingArea() const noexcept
         {
             return drawingArea;
@@ -507,6 +519,7 @@ private:
         ColorGradient fillGradient;
         ColorGradient strokeGradient;
         float strokeWidth = 1.0f;
+        float feather = 0.0f;
         Rectangle<float> drawingArea;
         AffineTransform transform;
         Path clipPath;

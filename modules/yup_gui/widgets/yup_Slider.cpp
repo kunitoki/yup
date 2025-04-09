@@ -28,6 +28,8 @@ Slider::Slider (StringRef componentID, const Font& font)
     : Component (componentID)
     , font (font)
 {
+    setMouseCursor (MouseCursor::Type::Hand);
+
     setValue (0.0f);
 }
 
@@ -86,7 +88,7 @@ void Slider::mouseDown (const MouseEvent& event)
 
     origin = event.getPosition();
 
-    takeFocus();
+    takeKeyboardFocus();
 
     repaint();
 }

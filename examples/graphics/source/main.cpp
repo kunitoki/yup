@@ -285,7 +285,7 @@ public:
 
     void mouseDown (const yup::MouseEvent& event) override
     {
-        takeFocus();
+        takeKeyboardFocus();
     }
 
     void mouseDoubleClick (const yup::MouseEvent& event) override

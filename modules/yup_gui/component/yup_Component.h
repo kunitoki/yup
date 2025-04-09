@@ -454,19 +454,19 @@ public:
     /**
         Take the focus.
      */
-    void takeFocus();
+    void takeKeyboardFocus();
 
     /**
         Leave the focus.
      */
-    void leaveFocus();
+    void leaveKeyboardFocus();
 
     /**
         Check if the component has focus.
 
         @return True if the component has focus, false otherwise.
      */
-    bool hasFocus() const;
+    bool hasKeyboardFocus() const;
 
     /**
         Called when the component gains focus.
@@ -499,7 +499,7 @@ public:
         @return The parent of the component of the given type.
      */
     template <class T>
-    T* getParentComponentOfType()
+    T* getParentComponentWithType()
     {
         auto parent = parentComponent;
         while (parent != nullptr)
@@ -519,7 +519,7 @@ public:
         @return The parent of the component of the given type.
      */
     template <class T>
-    const T* getParentComponentOfType() const
+    const T* getParentComponentWithType() const
     {
         auto parent = parentComponent;
         while (parent != nullptr)
