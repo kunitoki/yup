@@ -62,7 +62,7 @@ String Component::getComponentID() const
 
 bool Component::isEnabled() const
 {
-    return ! options.isDisabled && (parentComponent == nullptr || parentComponent->isEnabled());
+    return ! options.isDisabled && (parentComponent == nullptr || parentComponent->isEnabled());
 }
 
 void Component::setEnabled (bool shouldBeEnabled)
