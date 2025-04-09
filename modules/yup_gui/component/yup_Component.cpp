@@ -77,7 +77,7 @@ void Component::setEnabled (bool shouldBeEnabled)
 
     if (options.isDisabled && hasKeyboardFocus())
 
-    enablementChanged();
+        enablementChanged();
 }
 
 void Component::enablementChanged()
