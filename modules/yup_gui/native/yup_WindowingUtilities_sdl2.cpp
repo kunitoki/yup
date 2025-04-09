@@ -210,7 +210,7 @@ bool isMouseOutsideWindow (SDL_Window* window)
     SDL_GetWindowPosition (window, &windowX, &windowY);
     SDL_GetWindowSize (window, &windowW, &windowH);
 
-    int mouseX, mouseY;
+    float mouseX, mouseY;
     Uint32 mouseState = SDL_GetGlobalMouseState (&mouseX, &mouseY);
 
     return (mouseX < windowX || mouseX > windowX + windowW || mouseY < windowY || mouseY > windowY + windowH);

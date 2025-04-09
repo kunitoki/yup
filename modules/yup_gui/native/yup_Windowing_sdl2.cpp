@@ -1057,7 +1057,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_EVENT_RENDER_TARGETS_RESET:
         {
-            YUP_DBG_WINDOWING ("SDL_EVENT_RENDER_TARGETS_RESET");
+            YUP_WINDOWING_LOG ("SDL_EVENT_RENDER_TARGETS_RESET");
             break;
         }
 
@@ -1139,30 +1139,30 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
         }
 
         case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_CLOSE_REQUESTED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_CLOSE_REQUESTED");
             component.internalUserTriedToCloseWindow();
             break;
 
         case SDL_EVENT_WINDOW_RESIZED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_RESIZED " << event->window.data1 << " " << event->window.data2);
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_RESIZED " << event->window.data1 << " " << event->window.data2);
             handleResized (event->window.data1, event->window.data2);
             break;
 
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << event->window.data1 << " " << event->window.data2);
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED " << event->window.data1 << " " << event->window.data2);
             handleContentScaleChanged();
             break;
 
         case SDL_EVENT_WINDOW_MOVED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MOVED " << event->window.data1 << " " << event->window.data2);
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_MOVED " << event->window.data1 << " " << event->window.data2);
             handleMoved (event->window.data1, event->window.data2);
             break;
 
         case SDL_EVENT_WINDOW_MOUSE_ENTER:
         {
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MOUSE_ENTER");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_MOUSE_ENTER");
             //handleWindowMouseEnter();
-            int x = 0, y = 0;
+            float x = 0.0f, y = 0.0f;
             SDL_GetMouseState (&x, &y);
             handleMouseEnter ({ x, y });
             break;
@@ -1172,63 +1172,63 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
         {
             YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_MOUSE_LEAVE");
             //handleWindowMouseLeave();
-            int x = 0, y = 0;
+            float x = 0.0f, y = 0.0f;
             SDL_GetMouseState (&x, &y);
             handleMouseLeave ({ x, y });
             break;
         }
 
         case SDL_EVENT_WINDOW_SHOWN:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_SHOWN");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_SHOWN");
             // handleVisibilityChanged (true);
             break;
 
         case SDL_EVENT_WINDOW_HIDDEN:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_HIDDEN");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_HIDDEN");
             // handleVisibilityChanged (false);
             break;
 
         case SDL_EVENT_WINDOW_MINIMIZED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MINIMIZED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_MINIMIZED");
             handleMinimized();
             break;
 
         case SDL_EVENT_WINDOW_MAXIMIZED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_MAXIMIZED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_MAXIMIZED");
             handleMaximized();
             break;
 
         case SDL_EVENT_WINDOW_RESTORED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_RESTORED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_RESTORED");
             handleRestored();
             break;
 
         case SDL_EVENT_WINDOW_EXPOSED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_EXPOSED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_EXPOSED");
             repaint();
             break;
 
         case SDL_EVENT_WINDOW_FOCUS_GAINED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_FOCUS_GAINED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_FOCUS_GAINED");
             handleFocusChanged (true);
             break;
 
         case SDL_EVENT_WINDOW_FOCUS_LOST:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_FOCUS_LOST");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_FOCUS_LOST");
             handleFocusChanged (false);
             break;
 
         case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
+            YUP_WINDOWING_LOG ("SDL_WINDOWEVENT_DISPLAY_CHANGED");
             handleContentScaleChanged();
             break;
 
         case SDL_EVENT_WINDOW_ENTER_FULLSCREEN:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_ENTER_FULLSCREEN");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_ENTER_FULLSCREEN");
             break;
 
         case SDL_EVENT_WINDOW_LEAVE_FULLSCREEN:
-            YUP_DBG_WINDOWING ("SDL_EVENT_WINDOW_LEAVE_FULLSCREEN");
+            YUP_WINDOWING_LOG ("SDL_EVENT_WINDOW_LEAVE_FULLSCREEN");
             break;
 
         default:
@@ -1259,36 +1259,36 @@ bool displayEventDispatcher (void* userdata, SDL_Event* event)
     switch (event->type)
     {
         case SDL_EVENT_DISPLAY_ADDED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_ADDED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_ADDED");
             desktop->handleScreenConnected (event->display.displayID);
             break;
 
         case SDL_EVENT_DISPLAY_REMOVED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_REMOVED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_REMOVED");
             desktop->handleScreenDisconnected (event->display.displayID);
             break;
 
         case SDL_EVENT_DISPLAY_ORIENTATION:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_ORIENTATION");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_ORIENTATION");
             desktop->handleScreenOrientationChanged (event->display.displayID);
             break;
 
 #if ! JUCE_EMSCRIPTEN
         case SDL_EVENT_DISPLAY_MOVED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_MOVED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_MOVED");
             desktop->handleScreenMoved (event->display.displayID);
             break;
 #endif
         case SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_DESKTOP_MODE_CHANGED");
             break;
 
         case SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED");
             break;
 
         case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
-            YUP_DBG_WINDOWING ("SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED");
+            YUP_WINDOWING_LOG ("SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED");
             break;
 
         default:
@@ -1343,42 +1343,42 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
     static const auto cursors = []
     {
         return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
-            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
-            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_DEFAULT) },
+            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_TEXT) },
             { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
-            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
-            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
+            { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_PROGRESS) },
+            { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_POINTER) },
             { MouseCursor::Crosshair, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_CROSSHAIR) },
-            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NO) },
-            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZEWE) },
-            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENS) },
-            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENWSE) },
-            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_SIZENESW) },
-            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) }
+            { MouseCursor::Crossbones, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NOT_ALLOWED) },
+            { MouseCursor::ResizeLeftRight, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_EW_RESIZE) },
+            { MouseCursor::ResizeUpDown, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NS_RESIZE) },
+            { MouseCursor::ResizeTopLeftRightBottom, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NWSE_RESIZE) },
+            { MouseCursor::ResizeBottomLeftRightTop, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_NESW_RESIZE) },
+            { MouseCursor::ResizeAll, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_MOVE) }
         };
     }();
 
-    if (mouseCursor.getType() == MouseCursor::None)
+    if (cursorToSet.getType() == MouseCursor::None)
     {
-        SDL_ShowCursor (SDL_DISABLE);
+        SDL_HideCursor();
     }
     else
     {
-        auto it = cursors.find (mouseCursor.getType());
+        auto it = cursors.find (cursorToSet.getType());
         if (it != cursors.end())
             SDL_SetCursor (it->second);
 
-        SDL_ShowCursor (SDL_ENABLE);
+        SDL_ShowCursor();
     }
 }
 
 Point<float> Desktop::getCurrentMouseLocation() const
 {
-    int x = 0, y = 0;
+    float x = 0, y = 0;
 
     SDL_GetGlobalMouseState (&x, &y);
 
-    return { static_cast<float> (x), static_cast<float> (y) };
+    return { x, y };
 }
 
 void Desktop::setCurrentMouseLocation (const Point<float>& location)
