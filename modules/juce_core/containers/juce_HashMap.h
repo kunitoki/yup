@@ -106,12 +106,12 @@ struct DefaultHashFunctions
     hash.set (1, "item1");
     hash.set (2, "item2");
 
-    DBG (hash [1]); // prints "item1"
-    DBG (hash [2]); // prints "item2"
+    JUCE_DBG (hash [1]); // prints "item1"
+    JUCE_DBG (hash [2]); // prints "item2"
 
     // This iterates the map, printing all of its key -> value pairs..
     for (HashMap<int, String>::Iterator i (hash); i.next();)
-        DBG (i.getKey() << " -> " << i.getValue());
+        JUCE_DBG (i.getKey() << " -> " << i.getValue());
     @endcode
 
     @tparam HashFunctionType The class of hash function, which must be copy-constructible.
@@ -464,7 +464,7 @@ public:
 
         while (i.next())
         {
-            DBG (i.getKey() << " -> " << i.getValue());
+            JUCE_DBG (i.getKey() << " -> " << i.getValue());
         }
         @endcode
 

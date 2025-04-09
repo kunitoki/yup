@@ -23,18 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-#define YUP_VERBOSE_WINDOWING_DBG 1
-
-#if YUP_VERBOSE_WINDOWING_DBG
-#define YUP_DBG_WINDOWING(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON ( \
-    juce::String tempDbgBuf;                                              \
-    tempDbgBuf << textToWrite;                                            \
-    juce::Logger::outputDebugString (tempDbgBuf);)
-#else
-#define YUP_DBG_WINDOWING(textToWrite)
-#endif
-
-//==============================================================================
 class SDL2ComponentNative final
     : public ComponentNative
     , public Timer
@@ -92,7 +80,7 @@ public:
     //==============================================================================
     void repaint() override;
     void repaint (const Rectangle<float>& rect) override;
-    Rectangle<float> getRepaintArea() const override;
+    const RectangleList<float>& getRepaintAreas() const override;
 
     //==============================================================================
     float getScaleDpi() const override;
@@ -122,10 +110,12 @@ public:
     Point<float> getCursorPosition() const;
 
     //==============================================================================
-    void handleMouseMoveOrDrag (const Point<float>& localPosition);
-    void handleMouseDown (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseUp (const Point<float>& localPosition, MouseEvent::Buttons button, KeyModifiers modifiers);
-    void handleMouseWheel (const Point<float>& localPosition, const MouseWheelData& wheelData);
+    void handleMouseMoveOrDrag (const Point<float>& position);
+    void handleMouseDown (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseUp (const Point<float>& position, MouseEvent::Buttons button, KeyModifiers modifiers);
+    void handleMouseWheel (const Point<float>& position, const MouseWheelData& wheelData);
+    void handleMouseEnter (const Point<float>& position);
+    void handleMouseLeave (const Point<float>& position);
     void handleKeyDown (const KeyPress& keys, const Point<float>& position);
     void handleKeyUp (const KeyPress& keys, const Point<float>& position);
     void handleTextInput (const String& textInput);
@@ -137,6 +127,7 @@ public:
     void handleRestored();
     void handleExposed();
     void handleContentScaleChanged();
+    void handleDisplayChanged();
     void handleUserTriedToCloseWindow();
 
     //==============================================================================
@@ -183,6 +174,8 @@ private:
 
     RelativeTime doubleClickTime;
 
+    RectangleList<float> currentRepaintAreas;
+
     float desiredFrameRate = 60.0f;
     std::atomic<float> currentFrameRate = 0.0f;
     double frameRateStartTimeSeconds = 0.0;
@@ -190,6 +183,7 @@ private:
 
     int currentContentWidth = 0;
     int currentContentHeight = 0;
+    bool internalBoundsChange = false;
 
     WaitableEvent renderEvent { true };
     std::atomic<bool> shouldRenderContinuous = false;
@@ -197,8 +191,6 @@ private:
     bool renderAtomicMode = false;
     bool renderWireframe = false;
     bool updateOnlyWhenFocused = false;
-
-    Rectangle<float> currentRepaintArea;
 };
 
 } // namespace yup

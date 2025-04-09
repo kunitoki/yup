@@ -30,7 +30,7 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     x = std::make_unique<yup::Slider> ("Slider", yup::Font());
     x->setMouseCursor (yup::MouseCursor::Hand);
     x->setValue (gainParameter->getValue());
-    x->onDragStart = [this]
+    x->onDragStart = [this] (const yup::MouseEvent&)
     {
         gainParameter->beginChangeGesture();
     };
@@ -38,7 +38,7 @@ ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     {
         gainParameter->setValueNotifyingHost (value);
     };
-    x->onDragEnd = [this]
+    x->onDragEnd = [this] (const yup::MouseEvent&)
     {
         gainParameter->endChangeGesture();
     };

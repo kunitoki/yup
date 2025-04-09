@@ -146,6 +146,12 @@ public:
         rectangles.clear();
     }
 
+    /** Quickly clears all rectangles from the list. */
+    void clearQuick()
+    {
+        rectangles.clearQuick();
+    }
+
     //==============================================================================
     /** Checks if the list contains a specified rectangle.
 
@@ -345,17 +351,20 @@ public:
 private:
     void mergeRectangles()
     {
-        for (auto it = rectangles.begin(); it != rectangles.end();)
+        for (int rectangleIndex = 0; rectangleIndex < rectangles.size();)
         {
             bool furtherMerged = false;
+            auto& currentRect = rectangles.getReference (rectangleIndex);
 
             for (auto& existingRect : rectangles)
             {
-                if (it != rectangles.end() && it->intersects (existingRect) && std::addressof (existingRect) != std::addressof (*it))
+                if (rectangleIndex < rectangles.size()
+                    && currentRect.intersects (existingRect)
+                    && std::addressof (existingRect) != std::addressof (currentRect))
                 {
-                    existingRect = existingRect.smallestContainingRectangle (*it);
+                    existingRect = existingRect.smallestContainingRectangle (currentRect);
 
-                    it = rectangles.erase (it);
+                    rectangles.remove (rectangleIndex);
 
                     furtherMerged = true;
                     break;
@@ -363,7 +372,7 @@ private:
             }
 
             if (! furtherMerged)
-                ++it;
+                ++rectangleIndex;
         }
     }
 

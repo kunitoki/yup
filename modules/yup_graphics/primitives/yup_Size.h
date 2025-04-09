@@ -446,6 +446,13 @@ public:
         return { static_cast<T> (width), static_cast<T> (height) };
     }
 
+    template <class T = ValueType>
+    constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    {
+        return { yup::roundToInt (width), yup::roundToInt (height) };
+    }
+
     //==============================================================================
     /** Multiplication operator
 

@@ -57,7 +57,7 @@ public:
 
     //==============================================================================
     /** Constructs an empty path. */
-    Path() noexcept = default;
+    Path();
 
     /** Initializes a path and moves to the specified coordinates.
 
@@ -67,7 +67,7 @@ public:
         @param x The x-coordinate to move to.
         @param y The y-coordinate to move to.
     */
-    Path (float x, float y) noexcept;
+    Path (float x, float y);
 
     /** Initializes a path and moves to the specified point.
 
@@ -76,7 +76,7 @@ public:
 
         @param p The point to move to.
     */
-    Path (const Point<float>& p) noexcept;
+    Path (const Point<float>& p);
 
     //==============================================================================
     /** Copy and move constructors and assignment operators. */
@@ -439,7 +439,7 @@ public:
     */
     auto begin()
     {
-        return data.begin();
+        return path->getRawPath().begin();
     }
 
     /** Provides a constant iterator to the beginning of the path data.
@@ -451,7 +451,7 @@ public:
     */
     auto begin() const
     {
-        return data.begin();
+        return path->getRawPath().begin();
     }
 
     /** Provides an iterator to the end of the path data.
@@ -463,7 +463,7 @@ public:
     */
     auto end()
     {
-        return data.end();
+        return path->getRawPath().end();
     }
 
     /** Provides a constant iterator to the end of the path data.
@@ -475,62 +475,20 @@ public:
     */
     auto end() const
     {
-        return data.end();
+        return path->getRawPath().end();
     }
 
     //==============================================================================
-    struct Segment
+    /** @internal Returns the raw render path to use in the renderer. */
+    rive::RiveRenderPath* getRenderPath() const
     {
-        constexpr Segment() noexcept = default;
-
-        constexpr Segment (SegmentType type) noexcept
-            : type (type)
-        {
-        }
-
-        constexpr Segment (SegmentType type, float x, float y) noexcept
-            : type (type)
-            , x (x)
-            , y (y)
-        {
-        }
-
-        constexpr Segment (SegmentType type, float x, float y, float x1, float y1) noexcept
-            : type (type)
-            , x (x)
-            , y (y)
-            , x1 (x1)
-            , y1 (y1)
-        {
-        }
-
-        constexpr Segment (SegmentType type, float x, float y, float x1, float y1, float x2, float y2) noexcept
-            : type (type)
-            , x (x)
-            , y (y)
-            , x1 (x1)
-            , y1 (y1)
-            , x2 (x2)
-            , y2 (y2)
-        {
-        }
-
-        SegmentType type = SegmentType::MoveTo;
-        float x = 0.0f, y = 0.0f;
-        float x1 = 0.0f, y1 = 0.0f;
-        float x2 = 0.0f, y2 = 0.0f;
-    };
+        return path.get();
+    }
 
 private:
-    void updateBoundingBox (float x, float y);
-    void resetBoundingBox();
+    explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
 
-    std::vector<Segment> data;
-    int lastSubpathIndex = -1;
-    float minX = std::numeric_limits<float>::max();
-    float maxX = std::numeric_limits<float>::min();
-    float minY = std::numeric_limits<float>::max();
-    float maxY = std::numeric_limits<float>::min();
+    rive::rcp<rive::RiveRenderPath> path;
 };
 
 } // namespace yup

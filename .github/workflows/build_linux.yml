@@ -148,3 +148,5 @@ jobs:
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_clap_plugin
     #- run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
     #- run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
+    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_standalone_plugin

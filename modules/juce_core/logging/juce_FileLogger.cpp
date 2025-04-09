@@ -66,7 +66,7 @@ FileLogger::~FileLogger() {}
 void FileLogger::logMessage (const String& message)
 {
     const ScopedLock sl (logLock);
-    DBG (message);
+    JUCE_DBG (message);
     FileOutputStream out (logFile, 256);
     out << message << newLine;
 }

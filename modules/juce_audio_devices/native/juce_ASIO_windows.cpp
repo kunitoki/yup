@@ -59,7 +59,7 @@ namespace ASIODebugging
 static void logMessage (String message)
 {
     message = "ASIO: " + message;
-    DBG (message);
+    JUCE_DBG (message);
 
     if (Logger::getCurrentLogger() != nullptr)
         Logger::writeToLog (message);

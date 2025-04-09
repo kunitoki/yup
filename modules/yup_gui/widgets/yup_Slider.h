@@ -36,8 +36,8 @@ public:
     virtual void valueChanged();
 
     std::function<void (float)> onValueChanged;
-    std::function<void()> onDragStart;
-    std::function<void()> onDragEnd;
+    std::function<void (const MouseEvent&)> onDragStart;
+    std::function<void (const MouseEvent&)> onDragEnd;
 
     //==============================================================================
     void resized() override;
@@ -62,8 +62,8 @@ private:
     Point<float> origin;
     const Font& font;
     float value = 0.0f;
-    int index = 0;
     bool isInside = false;
+    bool isDragging = false;
 };
 
 } // namespace yup

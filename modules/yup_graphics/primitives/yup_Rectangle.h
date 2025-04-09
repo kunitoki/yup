@@ -316,6 +316,32 @@ public:
         return xy;
     }
 
+    /** Sets the position of the rectangle's top-left corner.
+
+        @param newPosition The new position for the top-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setTopLeft (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition;
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's top-left corner.
+
+        @param newPosition The new position for the top-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withTopLeft (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setTopLeft (newPosition);
+        return result;
+    }
+
     /** Returns the position of the top-right corner of the rectangle.
 
         @return The position of the top-right corner as a Point.
@@ -323,6 +349,32 @@ public:
     [[nodiscard]] constexpr Point<ValueType> getTopRight() const noexcept
     {
         return xy.translated (getWidth(), ValueType (0));
+    }
+
+    /** Sets the position of the rectangle's top-left corner.
+
+        @param newPosition The new position for the top-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setTopRight (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition.translated (-static_cast<ValueType> (getWidth()), ValueType (0));
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's top-right corner.
+
+        @param newPosition The new position for the top-right corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withTopRight (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setTopRight (newPosition);
+        return result;
     }
 
     /** Returns the position of the bottom-left corner of the rectangle.
@@ -334,6 +386,32 @@ public:
         return xy.translated (ValueType (0), getHeight());
     }
 
+    /** Sets the position of the rectangle's bottom-left corner.
+
+        @param newPosition The new position for the bottom-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setBottomLeft (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition.translated (ValueType (0), -static_cast<ValueType> (getHeight()));
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's bottom-left corner.
+
+        @param newPosition The new position for the bottom-left corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withBottomLeft (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setBottomLeft (newPosition);
+        return result;
+    }
+
     /** Returns the position of the bottom-right corner of the rectangle.
 
         @return The position of the bottom-right corner as a Point.
@@ -341,6 +419,32 @@ public:
     [[nodiscard]] constexpr Point<ValueType> getBottomRight() const noexcept
     {
         return xy.translated (getWidth(), getHeight());
+    }
+
+    /** Sets the position of the rectangle's bottom-right corner.
+
+        @param newPosition The new position for the bottom-right corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setBottomRight (const Point<ValueType>& newPosition) noexcept
+    {
+        xy = newPosition.translated (-static_cast<ValueType> (getHeight()), -static_cast<ValueType> (getHeight()));
+
+        return *this;
+    }
+
+    /** Sets the position of the rectangle's bottom-right corner.
+
+        @param newPosition The new position for the bottom-right corner as a Point.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle withBottomRight (const Point<ValueType>& newPosition) const noexcept
+    {
+        Rectangle result = *this;
+        result.setBottomRight (newPosition);
+        return result;
     }
 
     //==============================================================================
@@ -1146,6 +1250,21 @@ public:
     }
 
     //==============================================================================
+    /** Aligns a Size to this rectangle.
+
+        @return A Rectangle representing the center aligned rectangle with specificed size..
+    */
+    [[nodiscard]] constexpr Rectangle centeredRectangleWithSize (const Size<ValueType>& sizeOfRectangleToCenter) const noexcept
+    {
+        return {
+            getX() + jmax (ValueType (0), static_cast<ValueType> (getWidth() - sizeOfRectangleToCenter.getWidth()) / ValueType (2)),
+            getY() + jmax (ValueType (0), static_cast<ValueType> (getHeight() - sizeOfRectangleToCenter.getHeight()) / ValueType (2)),
+            sizeOfRectangleToCenter.getWidth(),
+            sizeOfRectangleToCenter.getHeight()
+        };
+    }
+
+    //==============================================================================
     // TODO - doxygen
     [[nodiscard]] Rectangle& transform (const AffineTransform& t) noexcept
     {
@@ -1193,6 +1312,13 @@ public:
     [[nodiscard]] constexpr Rectangle<T> to() const noexcept
     {
         return { xy.template to<T>(), size.template to<T>() };
+    }
+
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto roundToInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<int>>
+    {
+        return { xy.roundToInt(), size.roundToInt() };
     }
 
     //==============================================================================

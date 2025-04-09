@@ -959,17 +959,17 @@ public:
 
         // BEST
         for (auto c : str)
-            DBG (c);
+            JUCE_DBG (c);
 
         // GOOD
         for (auto ptr = str.begin(), end = str.end(); ptr != end; ++ptr)
-            DBG (*ptr);
+            JUCE_DBG (*ptr);
 
-        std::for_each (str.begin(), str.end(), [] (juce_wchar c) { DBG (c); });
+        std::for_each (str.begin(), str.end(), [] (juce_wchar c) { JUCE_DBG (c); });
 
         // BAD
         for (auto ptr = str.begin(); ptr != str.end(); ++ptr)
-            DBG (*ptr);
+            JUCE_DBG (*ptr);
         @endcode
     */
     CharPointerType end() const { return begin().findTerminatingNull(); }

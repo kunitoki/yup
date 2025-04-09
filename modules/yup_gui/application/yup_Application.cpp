@@ -27,6 +27,21 @@ namespace yup
 YUPApplication::YUPApplication()
 {
     initialiseYup_Windowing();
+
+#if JUCE_MAC
+    NSMenu* menuBar = [[NSMenu alloc] init];
+    NSMenuItem* menuBarItem = [[NSMenuItem alloc] init];
+    [menuBar addItem:menuBarItem];
+
+    NSMenu* appMenu = [[NSMenu alloc] init];
+    NSMenuItem* quitMenuItem = [[NSMenuItem alloc] initWithTitle:@"Quit"
+                                                          action:@selector(terminate:)
+                                                   keyEquivalent:@"q"];
+    [appMenu addItem:quitMenuItem];
+    [menuBarItem setSubmenu:appMenu];
+
+    [NSApp setMainMenu:menuBar];
+#endif
 }
 
 YUPApplication::~YUPApplication()

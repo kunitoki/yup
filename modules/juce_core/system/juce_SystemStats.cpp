@@ -66,7 +66,7 @@ struct JuceVersionPrinter
 {
     JuceVersionPrinter()
     {
-        DBG (SystemStats::getJUCEVersion());
+        JUCE_DBG (SystemStats::getJUCEVersion());
     }
 };
 

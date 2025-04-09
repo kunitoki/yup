@@ -22,19 +22,44 @@
 namespace yup
 {
 
-class JUCE_API Display : public ReferenceCountedObject
+//==============================================================================
+/** Represents a screen device.
+
+    This class encapsulates information about a screen, including its physical size,
+    content scale, virtual position, work area, name, and whether it is the primary screen.
+
+    @see Desktop
+*/
+class JUCE_API Screen : public ReferenceCountedObject
 {
 public:
-    using Ptr = ReferenceCountedObjectPtr<Display>;
+    //==============================================================================
+    /** A pointer to a Display object. */
+    using Ptr = ReferenceCountedObjectPtr<const Screen>;
+    using Array = ReferenceCountedArray<Screen>;
 
-    Display() {}
+    //==============================================================================
+    /** Default constructor. */
+    Screen() = default;
 
+    //==============================================================================
+    /** The physical size of the screen in millimeters. */
     Size<int> physicalSizeMillimeters;
+
+    /** The content scale of the screen. */
     float contentScaleX = 1.0f;
     float contentScaleY = 1.0f;
+
+    /** The virtual position of the screen. */
     Point<int> virtualPosition;
+
+    /** The work area of the screen. */
     Rectangle<int> workArea;
+
+    /** The name of the screen. */
     String name;
+
+    /** Whether the screen is the primary screen. */
     bool isPrimary = false;
 };
 
