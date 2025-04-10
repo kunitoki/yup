@@ -267,7 +267,7 @@ void* getNativeDisplayHandle (SDL_Window* window)
 
 //==============================================================================
 
-#if !JUCE_WINDOWS && !JUCE_MAC && !JUCE_LINUX
+#if ! JUCE_WINDOWS && ! JUCE_MAC && ! JUCE_LINUX
 Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 {
     return {};

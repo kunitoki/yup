@@ -261,8 +261,8 @@ public:
                                    .reduced (proportionOfWidth (0.2f), 0.0f));
 
         auto bottomBounds = getLocalBounds()
-                                    .removeFromBottom (proportionOfHeight (0.2f))
-                                    .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f));
+                                .removeFromBottom (proportionOfHeight (0.2f))
+                                .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f));
 
         oscilloscope.setBounds (bottomBounds);
     }

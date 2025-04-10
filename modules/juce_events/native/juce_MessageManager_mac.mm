@@ -409,7 +409,7 @@ static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMes
             if (msRemaining <= 0)
                 break;
 
-            CFRunLoopRunInMode (kCFRunLoopDefaultMode, jmin (1.0, msRemaining * 0.001), true);
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, jmin(1.0, msRemaining * 0.001), true);
         }
     }
 
@@ -427,15 +427,15 @@ static void shutdownNSApp()
 void MessageManager::runDispatchLoop()
 {
     // must only be called by the message thread!
-    jassert (isThisTheMessageThread());
+    jassert(isThisTheMessageThread());
 
-    constexpr int millisecondsToRunFor = static_cast<int> (1000.0f / 60.0f); // TODO
+    constexpr int millisecondsToRunFor = static_cast<int>(1000.0f / 60.0f); // TODO
 
     runNSApplication();
 
     while (quitMessagePosted.get() == 0)
     {
-        if (runNSApplicationSlice (millisecondsToRunFor, quitMessagePosted))
+        if (runNSApplicationSlice(millisecondsToRunFor, quitMessagePosted))
         {
             if (loopCallback)
                 loopCallback();

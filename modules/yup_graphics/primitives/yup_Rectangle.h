@@ -1480,16 +1480,15 @@ public:
     //==============================================================================
     /** @internal Converts from Rive AABB. */
     Rectangle (const rive::AABB& aabb) noexcept
-        : xy{ static_cast<ValueType> (aabb.left()), static_cast<ValueType> (aabb.top()) }
-        , size{ static_cast<ValueType> (aabb.width()), static_cast<ValueType> (aabb.height()) }
+        : xy { static_cast<ValueType> (aabb.left()), static_cast<ValueType> (aabb.top()) }
+        , size { static_cast<ValueType> (aabb.width()), static_cast<ValueType> (aabb.height()) }
     {
     }
 
     /** @internal Converts to Rive AABB. */
     rive::AABB toAABB() const
     {
-        return
-        {
+        return {
             static_cast<float> (getLeft()),
             static_cast<float> (getTop()),
             static_cast<float> (getRight()),

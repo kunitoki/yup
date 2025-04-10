@@ -329,9 +329,9 @@ struct MountedVolumeListChangeDetector::Pimpl
     }
 
     DeviceChangeDetector detector { L"MountedVolumeList", [this]
-                                    {
-                                        systemDeviceChanged();
-                                    } };
+    {
+        systemDeviceChanged();
+    } };
     MountedVolumeListChangeDetector& owner;
     Array<File> lastVolumeList;
 };
