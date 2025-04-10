@@ -260,9 +260,11 @@ public:
                                    .removeFromTop (proportionOfHeight (0.2f))
                                    .reduced (proportionOfWidth (0.2f), 0.0f));
 
-        oscilloscope.setBounds (getLocalBounds()
+        auto bottomBounds = getLocalBounds()
                                     .removeFromBottom (proportionOfHeight (0.2f))
-                                    .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f)));
+                                    .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f));
+
+        oscilloscope.setBounds (bottomBounds);
     }
 
     /*

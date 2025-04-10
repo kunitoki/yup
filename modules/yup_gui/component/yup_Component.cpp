@@ -485,6 +485,8 @@ bool Component::isOnDesktop() const
 
 void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
+    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
     if (options.onDesktop)
         removeFromDesktop();
 
@@ -505,6 +507,8 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
 void Component::removeFromDesktop()
 {
+    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
     if (! options.onDesktop)
         return;
 
@@ -922,7 +926,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto opacity = g.getOpacity() * getOpacity();
+    const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
     if (opacity <= 0.0f)
         return;
 
@@ -1089,7 +1093,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! options.wantsTextInput || ! isVisible())
+    if (! options.wantsKeyboardFocus || ! isVisible())
         return;
 
     textInput (text);

@@ -46,7 +46,7 @@ MouseEvent::Buttons toMouseButton (Uint8 sdlButton) noexcept
 
 KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept
 {
-    int modifiers;
+    int32_t modifiers = 0;
 
     if (sdlMod & KMOD_CTRL)
         modifiers |= KeyModifiers::controlMask;

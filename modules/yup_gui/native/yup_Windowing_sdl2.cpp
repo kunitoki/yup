@@ -942,11 +942,15 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
     if (gotFocus)
     {
+        SDL_StartTextInput();
+
         if (! isRendering())
             startRendering();
     }
     else
     {
+        SDL_StopTextInput();
+
         if (updateOnlyWhenFocused)
         {
             if (isRendering())
@@ -1224,11 +1228,26 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_TEXTINPUT:
         {
+            YUP_WINDOWING_LOG ("SDL_TEXTINPUT");
+
             // auto cursorPosition = getCursorPosition();
             // auto modifiers = toKeyModifiers (getKeyModifiers());
 
             if (event->text.windowID == SDL_GetWindowID (window))
                 handleTextInput (String::fromUTF8 (event->text.text));
+
+            break;
+        }
+
+        case SDL_TEXTEDITING:
+        {
+            YUP_WINDOWING_LOG ("SDL_TEXTEDITING");
+
+            // auto cursorPosition = getCursorPosition();
+            // auto modifiers = toKeyModifiers (getKeyModifiers());
+
+            //if (event->text.windowID == SDL_GetWindowID (window))
+            //    handleTextInput (String::fromUTF8 (event->text.text));
 
             break;
         }
@@ -1320,7 +1339,7 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
     {
         return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
             { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
-            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Text, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
             { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
             { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
             { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },

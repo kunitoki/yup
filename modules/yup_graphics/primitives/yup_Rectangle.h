@@ -174,6 +174,43 @@ public:
     }
 
     //==============================================================================
+    /** Returns the left-coordinate of the rectangle's top-left corner.
+
+        @return The left-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getLeft() const noexcept
+    {
+        return xy.getX();
+    }
+
+    /** Returns the top-coordinate of the rectangle's top-left corner.
+
+        @return The top-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getTop() const noexcept
+    {
+        return xy.getY();
+    }
+
+    /** Returns the right-coordinate of the rectangle's bottom-right corner.
+
+        @return The right-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getRight() const noexcept
+    {
+        return xy.getX() + size.getWidth();
+    }
+
+    /** Returns the bottom-coordinate of the rectangle's bottom-right corner.
+
+        @return The bottom-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getBottom() const noexcept
+    {
+        return xy.getY() + size.getHeight();
+    }
+
+    //==============================================================================
     /** Returns the width of the rectangle.
 
         @return The width value.
@@ -1266,7 +1303,7 @@ public:
 
     //==============================================================================
     // TODO - doxygen
-    [[nodiscard]] Rectangle& transform (const AffineTransform& t) noexcept
+    Rectangle& transform (const AffineTransform& t) noexcept
     {
         auto x1 = static_cast<float> (getX());
         auto y1 = static_cast<float> (getY());
@@ -1438,6 +1475,26 @@ public:
     constexpr bool operator!= (const Rectangle& other) const noexcept
     {
         return ! (*this == other);
+    }
+
+    //==============================================================================
+    /** @internal Converts from Rive AABB. */
+    Rectangle (const rive::AABB& aabb) noexcept
+        : xy{ static_cast<ValueType> (aabb.left()), static_cast<ValueType> (aabb.top()) }
+        , size{ static_cast<ValueType> (aabb.width()), static_cast<ValueType> (aabb.height()) }
+    {
+    }
+
+    /** @internal Converts to Rive AABB. */
+    rive::AABB toAABB() const
+    {
+        return
+        {
+            static_cast<float> (getLeft()),
+            static_cast<float> (getTop()),
+            static_cast<float> (getRight()),
+            static_cast<float> (getBottom())
+        };
     }
 
 private:
