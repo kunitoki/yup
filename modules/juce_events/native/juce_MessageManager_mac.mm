@@ -43,9 +43,6 @@ namespace juce
 using AppFocusChangeCallback = void (*)();
 AppFocusChangeCallback appFocusChangeCallback = nullptr;
 
-using CheckEventBlockedByModalComps = bool (*)(NSEvent*);
-CheckEventBlockedByModalComps isEventBlockedByModalComps = nullptr;
-
 using MenuTrackingChangedCallback = void (*)(bool);
 MenuTrackingChangedCallback menuTrackingChangedCallback = nullptr;
 
@@ -413,25 +410,6 @@ static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMes
                 break;
 
             CFRunLoopRunInMode (kCFRunLoopDefaultMode, jmin (1.0, msRemaining * 0.001), true);
-
-            /*
-            NSDate* untilDate = [NSDate dateWithTimeIntervalSinceNow:(msRemaining * 0.001)];
-
-            NSEvent* event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                                untilDate:untilDate
-                                                   inMode:NSDefaultRunLoopMode
-                                                  dequeue:YES];
-            if (event)
-            {
-                if (isEventBlockedByModalComps == nullptr || !(*isEventBlockedByModalComps)(event))
-                    [NSApp sendEvent:event];
-            }
-            else
-            {
-                // No event received within timeout, exit loop
-                break;
-            }
-            */
         }
     }
 
