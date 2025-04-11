@@ -31,10 +31,6 @@ public:
     Font() = default;
 
     //==============================================================================
-    Font (const MemoryBlock& fontBytes);
-    Font (const File& fontFile);
-
-    //==============================================================================
     /** Copy and move constructors and assignment operators. */
     Font (const Font& other) noexcept = default;
     Font (Font&& other) noexcept = default;
@@ -49,8 +45,9 @@ public:
 
     //==============================================================================
     float getAscent() const;
-
     float getDescent() const;
+    int getWeight() const;
+    bool isItalic() const;
 
     //==============================================================================
     struct Axis
@@ -63,6 +60,16 @@ public:
         float defaultValue = 0.0f;
     };
 
+    int getNumAxis() const;
+    std::optional<Font::Axis> getAxisDescription (int index) const;
+    std::optional<Font::Axis> getAxisDescription (StringRef tagName) const;
+
+    float getAxisValue (int index) const;
+    float getAxisValue (StringRef tagName) const;
+
+    void setAxisValue (int index, float value);
+    void setAxisValue (StringRef tagName, float value);
+
     struct AxisOption
     {
         AxisOption (StringRef tagName, float value)
@@ -74,16 +81,6 @@ public:
         String tagName;
         float value;
     };
-
-    int getNumAxis() const;
-    std::optional<Font::Axis> getAxisDescription (int index) const;
-    std::optional<Font::Axis> getAxisDescription (StringRef tagName) const;
-
-    float getAxisValue (int index) const;
-    float getAxisValue (StringRef tagName) const;
-
-    void setAxisValue (int index, float value);
-    void setAxisValue (StringRef tagName, float value);
 
     void setAxisValues (std::initializer_list<AxisOption> axisOptions);
 

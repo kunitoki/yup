@@ -50,16 +50,6 @@ String axisTagToString (uint32_t tag)
 
 //==============================================================================
 
-Font::Font (const MemoryBlock& fontBytes)
-{
-    loadFromData (fontBytes);
-}
-
-Font::Font (const File& fontFile)
-{
-    loadFromFile (fontFile);
-}
-
 Font::Font (rive::rcp<rive::Font> font)
     : font (std::move (font))
 {
@@ -69,7 +59,7 @@ Font::Font (rive::rcp<rive::Font> font)
 
 Result Font::loadFromData (const MemoryBlock& fontBytes)
 {
-    font = HBFont::Decode (rive::Span<const uint8_t> { static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize() });
+    font = HBFont::Decode (rive::make_span (static_cast<const uint8_t*> (fontBytes.getData()), fontBytes.getSize()));
     return font ? Result::ok() : Result::fail ("Unable to load font");
 }
 
@@ -82,10 +72,7 @@ Result Font::loadFromFile (const File& fontFile)
     {
         yup::MemoryBlock mb;
         is->readIntoMemoryBlock (mb);
-
-        font = HBFont::Decode (rive::Span<const uint8_t> { static_cast<const uint8_t*> (mb.getData()), mb.getSize() });
-        if (! font)
-            return Result::fail ("Unable to load font");
+        return loadFromData (mb);
     }
 
     return Result::ok();
@@ -107,6 +94,22 @@ float Font::getDescent() const
         return font->lineMetrics().descent;
 
     return 0.0f;
+}
+
+int Font::getWeight() const
+{
+    if (font != nullptr)
+        return font->getWeight();
+
+    return 0;
+}
+
+bool Font::isItalic() const
+{
+    if (font != nullptr)
+        return font->isItalic();
+
+    return 0;
 }
 
 //==============================================================================
