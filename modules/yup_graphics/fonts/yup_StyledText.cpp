@@ -97,6 +97,8 @@ void StyledText::layout (const Rectangle<float>& rect, Alignment align)
     float y = rect.getY();
     float paragraphWidth = rect.getWidth();
 
+    float initialY = y;
+
     rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> linesArray (paragraphs.size());
 
     std::size_t paragraphIndex = 0;
