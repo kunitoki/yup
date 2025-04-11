@@ -184,10 +184,8 @@ void Font::setAxisValue (int index, float value)
 
     const auto axis = font->getAxis (static_cast<int16_t> (index));
 
-    auto newFont = font->makeAtCoord ({
-        axis.tag,
-        jlimit (axis.min, axis.max, value)
-    });
+    auto newFont = font->makeAtCoord ({ axis.tag,
+                                        jlimit (axis.min, axis.max, value) });
 
     if (newFont != nullptr)
         std::swap (newFont, font);
@@ -204,10 +202,8 @@ void Font::setAxisValue (StringRef tagName, float value)
     if (! axis.has_value())
         return;
 
-    auto newFont = font->makeAtCoord ({
-        axisTagFromString (tagName),
-        jlimit (axis->minimumValue, axis->maximumValue, value)
-    });
+    auto newFont = font->makeAtCoord ({ axisTagFromString (tagName),
+                                        jlimit (axis->minimumValue, axis->maximumValue, value) });
 
     if (newFont != nullptr)
         std::swap (newFont, font);
@@ -229,10 +225,8 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
         if (! axis.has_value())
             continue;
 
-        coords.push_back ({
-            axisTagFromString (option.tagName),
-            jlimit (axis->minimumValue, axis->maximumValue, option.value)
-        });
+        coords.push_back ({ axisTagFromString (option.tagName),
+                            jlimit (axis->minimumValue, axis->maximumValue, option.value) });
     }
 
     if (! coords.empty())
@@ -289,7 +283,7 @@ void Font::resetAllAxisValues()
 
     auto newFont = font->makeAtCoords (coords);
     if (newFont != nullptr)
-       std::swap (newFont, font);
+        std::swap (newFont, font);
 }
 
 //==============================================================================
