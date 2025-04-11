@@ -43,21 +43,26 @@ public:
 
     //==============================================================================
     void appendText (const Font& font,
-                     float size,
+                     float fontSize,
                      float lineHeight,
-                     const char text[]);
+                     StringRef text);
 
     //==============================================================================
     void layout (const Rectangle<float>& rect, Alignment align);
 
     //==============================================================================
+    /** @internal */
     const std::vector<rive::RawPath>& getGlyphs() const;
+    /** @internal */
+    int getNumParagraphs() const;
+    /** @internal */
+    const rive::Paragraph& getParagraph (int index) const;
 
 private:
     rive::TextRun append (const Font& font,
-                          float size,
+                          float fontSize,
                           float lineHeight,
-                          const char text[]);
+                          StringRef text);
 
     float layoutText (const rive::GlyphRun& run,
                       unsigned startIndex,

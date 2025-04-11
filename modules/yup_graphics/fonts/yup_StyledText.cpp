@@ -58,11 +58,11 @@ void StyledText::clear()
 //==============================================================================
 
 void StyledText::appendText (const Font& font,
-                             float size,
+                             float fontSize,
                              float lineHeight,
-                             const char text[])
+                             StringRef text)
 {
-    textRuns.push_back (append (font, size, lineHeight, text));
+    textRuns.push_back (append (font, fontSize, lineHeight, text));
 
     jassert (font.getFont() != nullptr);
     paragraphs = font.getFont()->shapeText (unicodeChars, textRuns);
@@ -71,20 +71,20 @@ void StyledText::appendText (const Font& font,
 //==============================================================================
 
 rive::TextRun StyledText::append (const Font& font,
-                                  float size,
+                                  float fontSize,
                                   float lineHeight,
-                                  const char text[])
+                                  StringRef text)
 {
-    const uint8_t* ptr = (const uint8_t*) text;
-    uint32_t n = 0;
+    const uint8_t* ptr = (const uint8_t*) (const char*) text;
+    uint32_t codepointsCount = 0;
 
     while (*ptr != '\0')
     {
         unicodeChars.push_back (rive::UTF::NextUTF8 (&ptr));
-        n += 1;
+        codepointsCount += 1;
     }
 
-    return { font.getFont(), size, lineHeight, 0.0f, n };
+    return { font.getFont(), fontSize, lineHeight, 0.0f, codepointsCount };
 }
 
 //==============================================================================
@@ -96,9 +96,6 @@ void StyledText::layout (const Rectangle<float>& rect, Alignment align)
     float x = rect.getX();
     float y = rect.getY();
     float paragraphWidth = rect.getWidth();
-    float lineHeight = 11.0f;
-
-    float totalTextHeight = paragraphs.size() * lineHeight;
 
     rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> linesArray (paragraphs.size());
 
@@ -125,8 +122,6 @@ void StyledText::layout (const Rectangle<float>& rect, Alignment align)
                              lines,
                              { x, y });
 
-        y += lineHeight;
-
         ++paragraphIndex;
     }
 }
@@ -136,6 +131,22 @@ void StyledText::layout (const Rectangle<float>& rect, Alignment align)
 const std::vector<rive::RawPath>& StyledText::getGlyphs() const
 {
     return glyphPaths;
+}
+
+//==============================================================================
+
+int StyledText::getNumParagraphs() const
+{
+    return static_cast<int> (paragraphs.size());
+}
+
+const rive::Paragraph& StyledText::getParagraph (int index) const
+{
+    if (isPositiveAndBelow (index, getNumParagraphs()))
+        return paragraphs[index];
+
+    static rive::Paragraph empty;
+    return empty;
 }
 
 //==============================================================================
