@@ -291,6 +291,18 @@ void Font::resetAllAxisValues()
 
 //==============================================================================
 
+bool Font::operator==(const Font& other) const
+{
+    return font == other.font;
+}
+
+bool Font::operator!=(const Font& other) const
+{
+    return font != other.font;
+}
+
+//==============================================================================
+
 rive::rcp<rive::Font> Font::getFont() const
 {
     return font;

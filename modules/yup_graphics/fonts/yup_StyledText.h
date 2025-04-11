@@ -50,6 +50,8 @@ public:
     //==============================================================================
     void layout (const Rectangle<float>& rect, Alignment align);
 
+    Path getGlyphsPath (const AffineTransform& transform) const;
+
     //==============================================================================
     /** @internal */
     const std::vector<rive::RawPath>& getGlyphs() const;

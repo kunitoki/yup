@@ -637,7 +637,7 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
 }
 
 //==============================================================================
-void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
 {
     const auto& options = currentRenderOptions();
 
@@ -645,21 +645,48 @@ void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>&
     paint->style (rive::RenderPaintStyle::fill);
     paint->feather (options.feather);
 
+    if (options.isFillColor())
+        paint->color (options.getFillColor());
+    else
+        paint->shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
+
+    auto glyphsPath = text.getGlyphsPath (options.getTransform());
+
+    auto height = glyphsPath.getBoundingBox().getHeight();
+    auto yOffset = (rect.getHeight() - height) / 2.0f;
+
+    renderer.save();
+    renderer.translate (0, yOffset);
+
+    renderer.drawPath (glyphsPath.getRenderPath(), paint.get());
+
+    renderer.restore();
+}
+
+void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+{
+    const auto& options = currentRenderOptions();
+
+    auto paint = factory.makeRenderPaint();
+    paint->style (rive::RenderPaintStyle::stroke);
+    paint->feather (options.feather);
+
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());
     else
         paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
-    auto path = factory.makeEmptyRenderPath();
+    auto glyphsPath = text.getGlyphsPath (options.getTransform());
 
-    std::size_t totalPathSize = 0;
-    for (const auto& rawPath : text.getGlyphs())
-        totalPathSize += rawPath.verbs().size();
+    auto height = glyphsPath.getBoundingBox().getHeight();
+    auto yOffset = (rect.getHeight() - height) / 2.0f;
 
-    for (const auto& rawPath : text.getGlyphs())
-        convertRawPathToRenderPath (rawPath, path.get(), options.getTransform());
+    renderer.save();
+    renderer.translate (0, yOffset);
 
-    renderer.drawPath (path.get(), paint.get());
+    renderer.drawPath (glyphsPath.getRenderPath(), paint.get());
+
+    renderer.restore();
 }
 
 } // namespace yup

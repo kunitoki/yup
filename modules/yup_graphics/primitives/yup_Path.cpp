@@ -42,10 +42,9 @@ Path::Path (const Point<float>& p)
 }
 
 Path::Path (rive::rcp<rive::RiveRenderPath> newPath)
-    : path (newPath)
+    : path (std::move (newPath))
 {
-    auto points = path->getRawPath().points();
-
+    jassert (path != nullptr);
 }
 
 //==============================================================================
@@ -338,6 +337,16 @@ void Path::appendPath (const Path& other, const AffineTransform& transform)
     path->addRenderPath (other.getRenderPath(), transform.toMat2D());
 }
 
+void Path::appendPath (rive::rcp<rive::RiveRenderPath> other)
+{
+    path->addRenderPath (other.get(), rive::Mat2D());
+}
+
+void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransform& transform)
+{
+    path->addRenderPath (other.get(), transform.toMat2D());
+}
+
 //==============================================================================
 Path& Path::transform (const AffineTransform& t)
 {
@@ -359,6 +368,11 @@ Rectangle<float> Path::getBoundingBox() const
 {
     const auto& aabb = path->getBounds();
     return { aabb.left(), aabb.top(), aabb.width(), aabb.height() };
+}
+
+rive::RiveRenderPath* Path::getRenderPath() const
+{
+    return path.get();
 }
 
 //==============================================================================

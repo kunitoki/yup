@@ -158,8 +158,8 @@ void Slider::paint (Graphics& g)
     g.setStrokeWidth (proportionOfWidth (0.03f));
     g.strokePath (foregroundLine);
 
-    g.setStrokeColor (Color (0xffffffff));
-    g.strokeFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
+    //g.setFillColor (Color (0xffffffff));
+    //g.fillFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
 
     //if (hasFocus())
     //{

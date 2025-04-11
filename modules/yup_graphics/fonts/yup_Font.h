@@ -90,6 +90,10 @@ public:
     void resetAllAxisValues();
 
     //==============================================================================
+    bool operator==(const Font& other) const;
+    bool operator!=(const Font& other) const;
+
+    //==============================================================================
     /** @internal */
     Font (rive::rcp<rive::Font> font);
     /** @internal */

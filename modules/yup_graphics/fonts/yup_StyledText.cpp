@@ -124,6 +124,20 @@ void StyledText::layout (const Rectangle<float>& rect, Alignment align)
 
         ++paragraphIndex;
     }
+
+    JUCE_DBG (initialY << " > " << y);
+}
+
+//==============================================================================
+
+Path StyledText::getGlyphsPath (const AffineTransform& transform) const
+{
+    Path path;
+
+    for (auto rawPath : glyphPaths)
+        path.appendPath (rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::nonZero, rawPath), transform);
+
+    return path;
 }
 
 //==============================================================================

@@ -39,23 +39,6 @@ class JUCE_API Path
 {
 public:
     //==============================================================================
-    /** Defines the types of segments that can compose a path.
-
-        Each segment in a path can be one of these types:
-        - MoveTo: Move the starting point.
-        - LineTo: Draw a straight line from the current point.
-        - QuadTo: Draw a quadratic Bezier curve.
-        - CubicTo: Draw a cubic Bezier curve.
-    */
-    enum SegmentType
-    {
-        MoveTo,
-        LineTo,
-        QuadTo,
-        CubicTo
-    };
-
-    //==============================================================================
     /** Constructs an empty path. */
     Path();
 
@@ -479,15 +462,16 @@ public:
     }
 
     //==============================================================================
+    /** @internal Constructs a path from a raw render path. */
+    explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
     /** @internal Returns the raw render path to use in the renderer. */
-    rive::RiveRenderPath* getRenderPath() const
-    {
-        return path.get();
-    }
+    rive::RiveRenderPath* getRenderPath() const;
+    /** @internal */
+    void appendPath (rive::rcp<rive::RiveRenderPath> other);
+    /** @internal */
+    void appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransform& transform);
 
 private:
-    explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
-
     rive::rcp<rive::RiveRenderPath> path;
 };
 
