@@ -89,26 +89,24 @@ rive::TextRun StyledText::append (const Font& font,
 
 //==============================================================================
 
-void StyledText::layout (const Rectangle<float>& rect, Alignment align)
+void StyledText::layout (const Rectangle<float>& rect, Alignment hAlign, VerticalAlignment vAlign)
 {
     glyphPaths.clear();
 
-    float x = rect.getX();
-    float y = rect.getY();
-    float paragraphWidth = rect.getWidth();
-
-    float initialY = y;
-
+    // We'll measure line breaks into linesArray for each paragraph, 
+    // then compute total height to allow vertical alignment.
     rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> linesArray (paragraphs.size());
 
+    // 1) Break lines using the given width
+    float paragraphWidth = rect.getWidth();
     std::size_t paragraphIndex = 0;
     for (const auto& paragraph : paragraphs)
     {
         linesArray[paragraphIndex] = rive::GlyphLine::BreakLines (paragraph.runs, paragraphWidth);
-
-        ++paragraphIndex;
+        paragraphIndex++;
     }
 
+    // 2) Compute line spacing (this sets baseline, top, bottom for each line)
     paragraphIndex = 0;
     for (const auto& paragraph : paragraphs)
     {
@@ -118,16 +116,51 @@ void StyledText::layout (const Rectangle<float>& rect, Alignment align)
                                              lines,
                                              paragraph.runs,
                                              paragraphWidth,
-                                             toTextAlign (align));
-
-        y = layoutParagraph (paragraph,
-                             lines,
-                             { x, y });
-
-        ++paragraphIndex;
+                                             toTextAlign (hAlign));
+        paragraphIndex++;
     }
 
-    JUCE_DBG (initialY << " > " << y);
+    // 3) Measure total text height for vertical alignment
+    float totalHeight = 0.0f;
+    for (size_t i = 0; i < paragraphs.size(); ++i)
+    {
+        const auto& lines = linesArray[i];
+        if (! lines.empty())
+        {
+            // The 'bottom' of the last line in each paragraph
+            // extends from the paragraph baseline down to the last line's bottom.
+            totalHeight += lines.back().bottom;
+        }
+    }
+
+    // If you have extra spacing between paragraphs, you can add it to totalHeight here.
+
+    // 4) Compute vertical offset based on alignment
+    // By default we start layout at rect.getY().
+    float yOffset = 0.0f;
+    const float boxHeight = rect.getHeight();
+
+    switch (vAlign)
+    {
+        case top:    /* no offset */ break;
+        case middle: yOffset = (boxHeight - totalHeight) * 0.5f; break;
+        case bottom: yOffset =  (boxHeight - totalHeight);       break;
+    }
+
+    // 5) Now do the actual layout, offset by yOffset. (Horizontally, we rely on Rive's line alignment.)
+    float x = rect.getX();
+    float y = rect.getY() + yOffset;
+
+    paragraphIndex = 0;
+    for (const auto& paragraph : paragraphs)
+    {
+        const auto& lines = linesArray[paragraphIndex];
+
+        // Layout each line in the paragraph
+        y = layoutParagraph(paragraph, lines, { x, y });
+
+        paragraphIndex++;
+    }
 }
 
 //==============================================================================
@@ -212,6 +245,8 @@ float StyledText::layoutParagraph (const rive::Paragraph& paragraph,
                                    const rive::SimpleArray<rive::GlyphLine>& lines,
                                    rive::Vec2D origin)
 {
+    float y = origin.y;
+
     for (const auto& line : lines)
     {
         float x = line.startX + origin.x;
@@ -235,18 +270,22 @@ float StyledText::layoutParagraph (const rive::Paragraph& paragraph,
             const auto& run = paragraph.runs[runIndex];
 
             int startGIndex = runIndex == line.startRunIndex ? line.startGlyphIndex : 0;
-            int endGIndex = runIndex == line.endRunIndex ? line.endGlyphIndex : static_cast<int> (run.glyphs.size());
+            int endGIndex   = runIndex == line.endRunIndex   ? line.endGlyphIndex   : (int) run.glyphs.size();
 
-            x = layoutText (run,
-                            startGIndex,
-                            endGIndex,
-                            { x, origin.y + line.baseline });
+            float nextX = layoutText (run,
+                                      startGIndex,
+                                      endGIndex,
+                                      { x, y + line.baseline });
 
+            x = nextX;
             runIndex += runInc;
         }
+
+        // Move down for next line in the same paragraph
+        y += (line.bottom - line.top); // line height
     }
 
-    return origin.y + lines.back().bottom;
+    return y;
 }
 
 } // namespace yup

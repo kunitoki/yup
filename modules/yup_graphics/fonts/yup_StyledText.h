@@ -35,6 +35,13 @@ public:
         right
     };
 
+    enum VerticalAlignment
+    {
+        top,
+        middle,
+        bottom
+    };
+
     //==============================================================================
     StyledText();
 
@@ -48,7 +55,7 @@ public:
                      StringRef text);
 
     //==============================================================================
-    void layout (const Rectangle<float>& rect, Alignment align);
+    void layout (const Rectangle<float>& rect, Alignment hAlign = center, VerticalAlignment vAlign = top);
 
     Path getGlyphsPath (const AffineTransform& transform) const;
 
