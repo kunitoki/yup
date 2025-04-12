@@ -212,6 +212,23 @@ void Font::setAxisValue (StringRef tagName, float value)
         std::swap (newFont, font);
 }
 
+Font Font::withAxisValue (StringRef tagName, float value) const
+{
+    jassert (tagName.length() == 4);
+
+    if (font == nullptr)
+        return {};
+
+    auto axis = getAxisDescription (tagName);
+    if (! axis.has_value())
+        return {};
+
+    return Font (font->makeAtCoord ({
+        axisTagFromString (tagName),
+        jlimit (axis->minimumValue, axis->maximumValue, value)
+    }));
+}
+
 void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
 {
     jassert (axisOptions.size() > 0);
@@ -232,12 +249,38 @@ void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
                             jlimit (axis->minimumValue, axis->maximumValue, option.value) });
     }
 
-    if (! coords.empty())
+    if (coords.empty())
+        return;
+
+    auto newFont = font->makeAtCoords (coords);
+    if (newFont != nullptr)
+        std::swap (newFont, font);
+}
+
+Font Font::withAxisValues (std::initializer_list<AxisOption> axisOptions) const
+{
+    jassert (axisOptions.size() > 0);
+
+    if (font == nullptr)
+        return {};
+
+    std::vector<rive::Font::Coord> coords;
+    coords.reserve (axisOptions.size());
+
+    for (const auto& option : axisOptions)
     {
-        auto newFont = font->makeAtCoords (coords);
-        if (newFont != nullptr)
-            std::swap (newFont, font);
+        auto axis = getAxisDescription (StringRef (option.tagName));
+        if (! axis.has_value())
+            continue;
+
+        coords.push_back ({ axisTagFromString (option.tagName),
+                            jlimit (axis->minimumValue, axis->maximumValue, option.value) });
     }
+
+    if (coords.empty())
+        return {};
+
+    return Font (font->makeAtCoords (coords));
 }
 
 void Font::resetAxisValue (int index)

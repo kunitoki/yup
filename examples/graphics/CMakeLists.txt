@@ -63,7 +63,9 @@ yup_standalone_app (
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)
-    file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
+    file (GLOB_RECURSE sources
+        "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
     source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
     target_sources (${target_name} PRIVATE ${sources})
 endif()

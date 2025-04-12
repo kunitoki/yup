@@ -553,7 +553,21 @@ void SDL2ComponentNative::renderContext()
 
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
     auto currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-    const auto dpiScale = getScaleDpi();
+
+    const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
+    {
+        ++frameRateCounter;
+
+        const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
+        if (timeSinceFpsMeasure >= 1.0)
+        {
+            const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
+            currentFrameRate.store (currentFps, std::memory_order_relaxed);
+
+            frameRateStartTimeSeconds = currentTimeSeconds;
+            frameRateCounter = 0;
+        }
+    });
 
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
@@ -597,6 +611,8 @@ void SDL2ComponentNative::renderContext()
         // Repaint components hierarchy
         if (renderer != nullptr)
         {
+            const auto dpiScale = getScaleDpi();
+
             for (auto& repaintArea : currentRepaintAreas)
             {
                 YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
@@ -616,26 +632,12 @@ void SDL2ComponentNative::renderContext()
     };
 
     renderFrame();
-    if (! renderContinuous && currentGraphicsApi != GraphicsContext::Metal)
-        renderFrame(); // This is needed on double buffered platforms until we render on a single texture!
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
         SDL_GL_SwapWindow (window);
 
-    // Compute framerate
-    ++frameRateCounter;
-
-    const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
-    if (timeSinceFpsMeasure >= 1.0)
-    {
-        const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
-        currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-        frameRateStartTimeSeconds = currentTimeSeconds;
-        frameRateCounter = 0;
-    }
-
+    // Clear repainted areas
     currentRepaintAreas.clearQuick();
 }
 

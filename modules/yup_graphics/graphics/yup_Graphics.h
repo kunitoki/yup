@@ -427,6 +427,10 @@ public:
     void clipPath (const Path& path);
 
     //==============================================================================
+    /** Retrieves the global context scale, the one used to construct the graphics instance. */
+    float getContextScale() const;
+
+    //==============================================================================
     /** Retrieves the factory used for creating graphical objects.
 
         @return Pointer to a rive::Factory object.
@@ -543,6 +547,7 @@ private:
 
     rive::Factory& factory;
     rive::Renderer& renderer;
+    float contextScale = 1.0f;
 
     std::vector<RenderOptions> renderOptions;
 };

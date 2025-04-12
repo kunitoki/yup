@@ -69,6 +69,7 @@ public:
 
     void setAxisValue (int index, float value);
     void setAxisValue (StringRef tagName, float value);
+    Font withAxisValue (StringRef tagName, float value) const;
 
     struct AxisOption
     {
@@ -83,6 +84,7 @@ public:
     };
 
     void setAxisValues (std::initializer_list<AxisOption> axisOptions);
+    Font withAxisValues (std::initializer_list<AxisOption> axisOptions) const;
 
     void resetAxisValue (int index);
     void resetAxisValue (StringRef tagName);

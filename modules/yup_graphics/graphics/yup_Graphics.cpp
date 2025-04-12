@@ -179,10 +179,18 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
     : context (context)
     , factory (*context.factory())
     , renderer (renderer)
+    , contextScale (scale)
 {
     renderOptions.emplace_back();
 
     currentRenderOptions().scale = scale;
+}
+
+//==============================================================================
+
+float Graphics::getContextScale() const
+{
+    return contextScale;
 }
 
 //==============================================================================
