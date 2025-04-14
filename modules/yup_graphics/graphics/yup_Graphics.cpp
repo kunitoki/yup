@@ -649,30 +649,19 @@ void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect,
 
     const auto& options = currentRenderOptions();
 
-    float offsetX = 0.0f;
-    float offsetY = 0.0f;
-
-    if (text.getMaxSize().getWidth() < 0.0f) // Non negative max size in text layout will adjust X axis alignment
-    {
-        if (text.getHorizontalAlign() == StyledText::center)
-            offsetX = (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
-        else if (text.getHorizontalAlign() == StyledText::right)
-            offsetX = (rect.getWidth() - text.getBounds().getWidth());
-    }
-
-    if (text.getVerticalAlign() == StyledText::middle)
-        offsetY = (rect.getHeight() - text.getBounds().getHeight()) * 0.5f;
-    else if (text.getVerticalAlign() == StyledText::bottom)
-        offsetY = (rect.getHeight() - text.getBounds().getHeight());
+    auto offset = text.getOffset (rect);
+    if (text.getMaxSize().getWidth() > 0.0f) // Non negative max size in text layout will adjust X axis alignment
+        offset = offset.withX (0.0f);
 
     renderer.save();
 
-    Path p;
-    p.addRectangle (rect);
-    p.transform (options.getTransform());
-    renderer.clipPath (p.getRenderPath());
+    rive::RawPath path;
+    path.addRect ({ rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom() });
+    path.transformInPlace (options.getTransform().toMat2D());
+    rive::RiveRenderPath renderPath (rive::FillRule::clockwise, path);
+    renderer.clipPath (std::addressof (renderPath));
 
-    auto transform = options.getTranslatedTransform (rect.getX() + offsetX, rect.getY() + offsetY);
+    auto transform = options.getTranslatedTransform (rect.getX() + offset.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 
     for (auto style : text.getRenderStyles())

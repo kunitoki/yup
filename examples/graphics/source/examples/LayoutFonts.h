@@ -40,7 +40,7 @@ public:
         for (int i = 0; i < numTexts; ++i)
         {
             const auto labelBounds = bounds.removeFromTop (getHeight() / (float) (numTexts + 1)).reduced (10.0f, 5.0f);
-            const float fontSize = labelBounds.getHeight() * 0.2f;
+            const float fontSize = labelBounds.getHeight() * 0.4f;
 
             text[i].prepare (font, fontSize, labelBounds);
 
@@ -62,6 +62,7 @@ public:
             g.setFeather (0.0f);
             g.fillFittedText (text[i].styledText, labelBounds);
 
+            /*
             g.setStrokeColor (yup::Colors::green);
             g.strokeLine (labelBounds.getX(), labelBounds.getTop(), labelBounds.getRight(), labelBounds.getTop());
 
@@ -70,28 +71,28 @@ public:
 
             g.setStrokeColor (yup::Colors::blue);
             g.strokeLine (labelBounds.getX(), labelBounds.getBottom(), labelBounds.getRight(), labelBounds.getBottom());
+            */
 
-            /*
+            auto offset = text[i].styledText.getOffset (labelBounds);
+
             g.setStrokeColor (yup::Colors::magenta);
             const auto& lines = text[i].styledText.getOrderedLines();
             for (const auto& line : lines)
             {
-                float accum = 0.0f;
                 for (auto [glyph, _] : line)
                 {
-                    for (auto advances : glyph->advances)
+                    for (auto xPos : glyph->xpos)
                     {
                         g.strokeLine (
-                            labelBounds.getX() + accum,
-                            labelBounds.getTop(),
-                            labelBounds.getX() + accum,
-                            labelBounds.getBottom());
+                            labelBounds.getX() + offset.getX() + xPos,
+                            labelBounds.getTop() + offset.getY(),
+                            labelBounds.getX() + offset.getX() + xPos,
+                            labelBounds.getTop() + offset.getY() + text[i].styledText.getComputedTextBounds().getHeight());
 
-                        accum += advances / g.getContextScale();
+                        //accum += advances; // / g.getContextScale();
                     }
                 }
             }
-            */
         }
     }
 

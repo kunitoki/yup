@@ -116,7 +116,9 @@ public:
 
     //==============================================================================
 
-    Rectangle<float> getBounds();
+    Rectangle<float> getComputedTextBounds();
+
+    Point<float> getOffset (const Rectangle<float>& area);
 
     //==============================================================================
 
@@ -142,6 +144,10 @@ public:
     };
 
     const std::vector<RenderStyle*>& getRenderStyles();
+
+    //==============================================================================
+
+    Rectangle<float> getGlyphPosition (int index) const;
 
 private:
     rive::SimpleArray<rive::Paragraph> shape;

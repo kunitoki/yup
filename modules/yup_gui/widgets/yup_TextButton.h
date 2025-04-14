@@ -32,8 +32,11 @@ public:
     //==============================================================================
     void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) override;
 
+    void resized() override;
+
 private:
     const Font& font;
+    StyledText styledText;
 };
 
 } // namespace yup

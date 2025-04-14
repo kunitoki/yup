@@ -370,10 +370,36 @@ void StyledText::update()
 
 //==============================================================================
 
-Rectangle<float> StyledText::getBounds()
+Rectangle<float> StyledText::getGlyphPosition (int index) const
+{
+    return {}; // TODO
+}
+
+//==============================================================================
+
+Rectangle<float> StyledText::getComputedTextBounds()
 {
     update();
     return bounds;
+}
+
+Point<float> StyledText::getOffset (const Rectangle<float>& area)
+{
+    update();
+
+    Point<float> result{ 0.0f, 0.0f };
+
+    if (getHorizontalAlign() == StyledText::center)
+        result.setX ((area.getWidth() - bounds.getWidth()) * 0.5f);
+    else if (getHorizontalAlign() == StyledText::right)
+        result.setX (area.getWidth() - bounds.getWidth());
+
+    if (getVerticalAlign() == StyledText::middle)
+        result.setY ((area.getHeight() - bounds.getHeight()) * 0.5f);
+    else if (getVerticalAlign() == StyledText::bottom)
+        result.setY (area.getHeight() - bounds.getHeight());
+
+    return result;
 }
 
 //==============================================================================

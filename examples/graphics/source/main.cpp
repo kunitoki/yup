@@ -87,7 +87,7 @@ public:
         */
 
         // Add the demos
-        int demo = 2;
+        int demo = 1;
 
         if (demo == 0)
         {

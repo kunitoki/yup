@@ -30,6 +30,8 @@ TextButton::TextButton (StringRef componentID, const Font& font)
 {
 }
 
+//==============================================================================
+
 void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 {
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
@@ -38,28 +40,30 @@ void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
     auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
 
     Path backgroundPath;
-    //backgroundPath.clear();
     backgroundPath.addRoundedRectangle (rectBounds, 10.0f, 10.0f, 10.0f, 10.0f);
     g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
     g.fillPath (backgroundPath);
 
-    /*
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
-    const float fontSize = labelBounds.getHeight() * 0.1f;
-
-    StyledText text;
-    text.appendText (font, fontSize, fontSize, getComponentID().toRawUTF8());
-    text.layout (labelBounds, yup::StyledText::center, yup::StyledText::top);
-
-    g.setStrokeColor (0xff0000ff);
-    g.strokeRect (rectBounds);
-
-    g.setStrokeColor (0xffff0000);
-    g.strokeRect (labelBounds);
-
     g.setFillColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
-    g.fillFittedText (text, labelBounds);
-    */
+    g.fillFittedText (styledText, labelBounds);
+}
+
+//==============================================================================
+
+void TextButton::resized()
+{
+    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
+    auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
+    auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+
+    styledText.setMaxSize (labelBounds.getSize());
+    styledText.setHorizontalAlign (StyledText::center);
+    styledText.setVerticalAlign (StyledText::middle);
+
+    styledText.clear();
+    styledText.appendText (getComponentID(), nullptr, font, 32.0f);
+    styledText.update();
 }
 
 } // namespace yup
