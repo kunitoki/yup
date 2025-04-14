@@ -46,7 +46,7 @@ public:
             label->setFont (font);
             addAndMakeVisible (label);
 
-            auto slider = sliders.add (std::make_unique<yup::Slider>("FontSize", font));
+            auto slider = sliders.add (std::make_unique<yup::Slider> ("FontSize", font));
             slider->setDefaultValue (16.0f);
             slider->setRange ({ 4.0f, 32.0f });
             slider->setValue (16.0f);
@@ -72,7 +72,7 @@ public:
             label->setFont (font);
             addAndMakeVisible (label);
 
-            auto slider = sliders.add (std::make_unique<yup::Slider>(axisInfo->tagName, font));
+            auto slider = sliders.add (std::make_unique<yup::Slider> (axisInfo->tagName, font));
             slider->setDefaultValue (axisInfo->defaultValue);
             slider->setRange ({ axisInfo->minimumValue, axisInfo->maximumValue });
             slider->setValue (axisInfo->defaultValue);

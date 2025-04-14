@@ -205,7 +205,10 @@ void StyledText::update()
     if (! isDirty)
         return;
 
-    auto clearDirtyFlag = ErasedScopeGuard ([this] { isDirty = false; });
+    auto clearDirtyFlag = ErasedScopeGuard ([this]
+    {
+        isDirty = false;
+    });
 
     for (RenderStyle& style : styles)
     {
@@ -239,7 +242,7 @@ void StyledText::update()
     float y = 0.0f;
     float minY = 0.0f;
     float measuredWidth = 0.0f;
-    if (origin == TextOrigin::baseline && !lines.empty() && !lines[0].empty())
+    if (origin == TextOrigin::baseline && ! lines.empty() && ! lines[0].empty())
     {
         y -= lines[0][0].baseline;
         minY = y;
@@ -283,7 +286,7 @@ void StyledText::update()
     bounds = { 0.0f, minY, measuredWidth, jmax (minY, y - paragraphSpacing) - minY };
 
     y = 0;
-    if (origin == TextOrigin::baseline && !lines.empty() && !lines[0].empty())
+    if (origin == TextOrigin::baseline && ! lines.empty() && ! lines[0].empty())
         y -= lines[0][0].baseline;
 
     paragraphIndex = 0;

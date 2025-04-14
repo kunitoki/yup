@@ -109,7 +109,7 @@ public:
 
         if (demo == 3)
         {
-            components.add (std::make_unique<PathsExample> ());
+            components.add (std::make_unique<PathsExample>());
             addAndMakeVisible (components.getLast());
         }
 

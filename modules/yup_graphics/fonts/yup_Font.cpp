@@ -221,10 +221,8 @@ Font Font::withAxisValue (int index, float value) const
     if (! axis.has_value())
         return {};
 
-    return Font (font->makeAtCoord ({
-        axisTagFromString (axis->tagName),
-        jlimit (axis->minimumValue, axis->maximumValue, value)
-    }));
+    return Font (font->makeAtCoord ({ axisTagFromString (axis->tagName),
+                                      jlimit (axis->minimumValue, axis->maximumValue, value) }));
 }
 
 Font Font::withAxisValue (StringRef tagName, float value) const
@@ -238,10 +236,8 @@ Font Font::withAxisValue (StringRef tagName, float value) const
     if (! axis.has_value())
         return {};
 
-    return Font (font->makeAtCoord ({
-        axisTagFromString (tagName),
-        jlimit (axis->minimumValue, axis->maximumValue, value)
-    }));
+    return Font (font->makeAtCoord ({ axisTagFromString (tagName),
+                                      jlimit (axis->minimumValue, axis->maximumValue, value) }));
 }
 
 void Font::setAxisValues (std::initializer_list<AxisOption> axisOptions)
@@ -349,12 +345,12 @@ void Font::resetAllAxisValues()
 
 //==============================================================================
 
-bool Font::operator==(const Font& other) const
+bool Font::operator== (const Font& other) const
 {
     return font == other.font;
 }
 
-bool Font::operator!=(const Font& other) const
+bool Font::operator!= (const Font& other) const
 {
     return font != other.font;
 }

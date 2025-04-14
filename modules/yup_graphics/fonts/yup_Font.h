@@ -94,8 +94,8 @@ public:
     void resetAllAxisValues();
 
     //==============================================================================
-    bool operator==(const Font& other) const;
-    bool operator!=(const Font& other) const;
+    bool operator== (const Font& other) const;
+    bool operator!= (const Font& other) const;
 
     //==============================================================================
     /** @internal */

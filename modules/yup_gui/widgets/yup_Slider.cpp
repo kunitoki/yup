@@ -211,8 +211,8 @@ void Slider::paint (Graphics& g)
 void Slider::updateRenderItems (bool forceAll)
 {
     auto bounds = getLocalBounds()
-        .reduced (proportionOfWidth (0.075f))
-        .translated (0.0f, proportionOfWidth (0.05f));
+                      .reduced (proportionOfWidth (0.075f))
+                      .translated (0.0f, proportionOfWidth (0.05f));
 
     const auto center = bounds.getCenter();
     const auto realValue = getValueNormalised();
