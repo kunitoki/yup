@@ -101,23 +101,18 @@ private:
     struct TextBox
     {
         yup::String text;
-
         yup::StyledText::HorizontalAlign hAlign;
         yup::StyledText::VerticalAlign vAlign;
         yup::StyledText::TextOverflow overflow;
-        //yup::StyledText::TextOrigin origin;
         yup::StyledText::TextWrap wrap;
-
         yup::StyledText styledText;
-
         yup::Rectangle<float> bounds;
 
         void prepare (const yup::Font& font, float fontSize, const yup::Rectangle<float>& newBounds)
         {
             bounds = newBounds;
 
-            styledText.setMaxWidth (newBounds.getWidth());
-            styledText.setMaxHeight (newBounds.getHeight());
+            styledText.setMaxSize (newBounds.getSize());
             styledText.setHorizontalAlign (hAlign);
             styledText.setVerticalAlign (vAlign);
             styledText.setParagraphSpacing (0.0f);

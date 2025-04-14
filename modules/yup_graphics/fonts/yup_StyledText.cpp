@@ -122,30 +122,16 @@ void StyledText::setVerticalAlign (VerticalAlign value)
 
 //==============================================================================
 
-float StyledText::getMaxWidth() const
+Size<float> StyledText::getMaxSize() const
 {
-    return maxWidth;
+    return maxSize;
 }
 
-void StyledText::setMaxWidth (float value)
+void StyledText::setMaxSize (const Size<float>& value)
 {
-    if (maxWidth != value)
+    if (maxSize != value)
     {
-        maxWidth = value;
-        isDirty = true;
-    }
-}
-
-float StyledText::getMaxHeight() const
-{
-    return maxHeight;
-}
-
-void StyledText::setMaxHeight (float value)
-{
-    if (maxHeight != value)
-    {
-        maxHeight = value;
+        maxSize = value;
         isDirty = true;
     }
 }
@@ -234,7 +220,7 @@ void StyledText::update()
     auto runs = styledTexts.runs();
     shape = runs[0].font->shapeText (styledTexts.unichars(), runs);
     lines = rive::Text::BreakLines (shape,
-                                    maxWidth, // -1.0f
+                                    maxSize.getWidth(), // -1.0f
                                     toTextAlign (horizontalAlign),
                                     toTextWrap (textWrap));
 
@@ -277,7 +263,7 @@ void StyledText::update()
                 measuredWidth = width;
 
             lastLineIndex++;
-            if (wantEllipsis && y + line.bottom <= maxHeight)
+            if (wantEllipsis && y + line.bottom <= maxSize.getHeight())
                 ellipsisLine++;
         }
 
@@ -310,7 +296,7 @@ void StyledText::update()
             switch (overflow)
             {
                 case TextOverflow::hidden:
-                    if (y + line.bottom > maxHeight)
+                    if (y + line.bottom > maxSize.getHeight())
                         return;
 
                     break;
@@ -324,7 +310,7 @@ void StyledText::update()
                 orderedLines.emplace_back (
                     rive::OrderedLine (paragraph,
                                        line,
-                                       maxWidth,
+                                       maxSize.getWidth(),
                                        ellipsisLine == lineIndex,
                                        isEllipsisLineLast,
                                        &ellipsisRun));

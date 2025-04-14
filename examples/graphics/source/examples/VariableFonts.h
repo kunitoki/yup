@@ -97,9 +97,8 @@ public:
 
         textBounds = bounds.removeFromBottom (proportionOfHeight (0.5f)).reduced (10);
 
-        styledText.setMaxWidth (textBounds.getWidth());
-        styledText.setMaxHeight (textBounds.getHeight());
-        styledText.setHorizontalAlign (yup::StyledText::left);
+        styledText.setMaxSize (textBounds.getSize());
+        styledText.setHorizontalAlign (yup::StyledText::right);
         styledText.setVerticalAlign (yup::StyledText::middle);
         styledText.setWrap (yup::StyledText::wrap);
         styledText.clear();

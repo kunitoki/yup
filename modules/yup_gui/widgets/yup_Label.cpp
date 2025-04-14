@@ -93,8 +93,7 @@ void Label::prepareText()
 {
     auto fontSize = getHeight() * 0.8f;
 
-    styledText.setMaxWidth (getWidth());
-    styledText.setMaxHeight (getHeight());
+    styledText.setMaxSize (getSize());
     styledText.setHorizontalAlign (StyledText::left);
     styledText.setVerticalAlign (StyledText::middle);
     styledText.setOverflow (StyledText::ellipsis);

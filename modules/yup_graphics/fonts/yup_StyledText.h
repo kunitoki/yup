@@ -24,10 +24,6 @@ namespace yup
 
 //==============================================================================
 
-class Graphics;
-
-//==============================================================================
-
 class JUCE_API StyledText
 {
 public:
@@ -100,10 +96,6 @@ public:
 
     //==============================================================================
 
-    void draw (Graphics& g, const Rectangle<float>& bounds, rive::rcp<rive::RenderPaint> paint = nullptr);
-
-    //==============================================================================
-
     TextOverflow getOverflow() const;
     void setOverflow (TextOverflow value);
 
@@ -113,11 +105,8 @@ public:
     VerticalAlign getVerticalAlign() const;
     void setVerticalAlign (VerticalAlign value);
 
-    float getMaxWidth() const;
-    void setMaxWidth (float value);
-
-    float getMaxHeight() const;
-    void setMaxHeight (float value);
+    Size<float> getMaxSize() const;
+    void setMaxSize (const Size<float>& value);
 
     float getParagraphSpacing() const;
     void setParagraphSpacing (float value);
@@ -168,8 +157,7 @@ private:
     HorizontalAlign horizontalAlign = HorizontalAlign::left;
     VerticalAlign verticalAlign = VerticalAlign::middle;
     TextWrap textWrap = TextWrap::wrap;
-    float maxWidth = -1.0f;
-    float maxHeight = -1.0f;
+    Size<float> maxSize = { -1.0f, -1.0f };
     float paragraphSpacing = 0.0f;
     Rectangle<float> bounds;
     bool isDirty = false;

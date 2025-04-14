@@ -543,6 +543,8 @@ private:
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
 
+    void renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
+
     GraphicsContext& context;
 
     rive::Factory& factory;

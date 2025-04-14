@@ -426,12 +426,7 @@ void Graphics::fillAll()
     const auto& area = options.getDrawingArea();
 
     Path path;
-    path.reserveSpace (5);
-    path.moveTo (area.getX(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY());
+    path.addRectangle (area);
 
     renderFillPath (path, options, options.getUntranslatedTransform());
 }
@@ -442,12 +437,7 @@ void Graphics::fillRect (float x, float y, float width, float height)
     const auto& options = currentRenderOptions();
 
     Path path;
-    path.reserveSpace (5);
-    path.moveTo (x, y);
-    path.lineTo (x + width, y);
-    path.lineTo (x + width, y + height);
-    path.lineTo (x, y + height);
-    path.lineTo (x, y);
+    path.addRectangle (x, y, width, height);
 
     renderFillPath (path, options, options.getTransform());
 }
@@ -463,12 +453,7 @@ void Graphics::strokeRect (float x, float y, float width, float height)
     const auto& options = currentRenderOptions();
 
     Path path;
-    path.reserveSpace (5);
-    path.moveTo (x, y);
-    path.lineTo (x + width, y);
-    path.lineTo (x + width, y + height);
-    path.lineTo (x, y + height);
-    path.lineTo (x, y);
+    path.addRectangle (x, y, width, height);
 
     renderStrokePath (path, options, options.getTransform());
 }
@@ -627,46 +612,16 @@ void Graphics::fillFittedText (StyledText& text, const Rectangle<float>& rect)
 
     const auto& options = currentRenderOptions();
 
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::fill);
-    paint->feather (options.feather);
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::fill);
+    paint.feather (options.feather);
 
     if (options.isFillColor())
-        paint->color (options.getFillColor());
+        paint.color (options.getFillColor());
     else
-        paint->shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
+        paint.shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
 
-    float offsetX = rect.getX();
-    float offsetY = rect.getY();
-
-    if (text.getHorizontalAlign() == StyledText::center)
-        offsetX += (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
-    else if (text.getHorizontalAlign() == StyledText::right)
-        offsetX += (rect.getWidth() - text.getBounds().getWidth());
-
-    if (text.getVerticalAlign() == StyledText::middle)
-        offsetY += (rect.getHeight() - text.getBounds().getHeight()) * 0.5f;
-    else if (text.getVerticalAlign() == StyledText::bottom)
-        offsetY += (rect.getHeight() - text.getBounds().getHeight());
-
-    auto transform = options.transform
-        .translated (options.drawingArea.getX(), options.drawingArea.getY())
-        .translated (offsetX, offsetY)
-        .scaled (options.scale);
-
-    renderer.save();
-
-    Path p;
-    p.addRectangle (rect);
-    p.transform (options.getTransform());
-    renderer.clipPath (p.getRenderPath());
-
-    renderer.transform (transform.toMat2D());
-
-    for (auto style : text.getRenderStyles())
-        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint.get() : style->paint.get());
-
-    renderer.restore();
+    renderFittedText (text, rect, std::addressof (paint));
 }
 
 void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
@@ -677,30 +632,42 @@ void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
 
     const auto& options = currentRenderOptions();
 
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::stroke);
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::stroke);
 
     if (options.isStrokeColor())
-        paint->color (options.getStrokeColor());
+        paint.color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
+        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
-    float offsetX = rect.getX();
-    float offsetY = rect.getY();
+    renderFittedText (text, rect, std::addressof (paint));
+}
 
-    if (text.getHorizontalAlign() == StyledText::center)
-        offsetX += (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
-    else if (text.getHorizontalAlign() == StyledText::right)
-        offsetX += (rect.getWidth() - text.getBounds().getWidth());
+void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint)
+{
+    jassert (! text.isEmpty());
+
+    const auto& options = currentRenderOptions();
+
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
+
+    if (text.getMaxSize().getWidth() < 0.0f)
+    {
+        if (text.getHorizontalAlign() == StyledText::center)
+            offsetX = (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
+        else if (text.getHorizontalAlign() == StyledText::right)
+            offsetX = (rect.getWidth() - text.getBounds().getWidth());
+    }
 
     if (text.getVerticalAlign() == StyledText::middle)
-        offsetY += (rect.getHeight() - text.getBounds().getHeight()) * 0.5f;
+        offsetY = (rect.getHeight() - text.getBounds().getHeight()) * 0.5f;
     else if (text.getVerticalAlign() == StyledText::bottom)
-        offsetY += (rect.getHeight() - text.getBounds().getHeight());
+        offsetY = (rect.getHeight() - text.getBounds().getHeight());
 
     auto transform = options.transform
         .translated (options.drawingArea.getX(), options.drawingArea.getY())
-        .translated (offsetX, offsetY)
+        .translated (rect.getX() + offsetX, rect.getY() + offsetY)
         .scaled (options.scale);
 
     renderer.save();
@@ -713,7 +680,7 @@ void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
     renderer.transform (transform.toMat2D());
 
     for (auto style : text.getRenderStyles())
-        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint.get() : style->paint.get());
+        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint : style->paint.get());
 
     renderer.restore();
 }
