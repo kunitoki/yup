@@ -652,7 +652,7 @@ void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect,
     float offsetX = 0.0f;
     float offsetY = 0.0f;
 
-    if (text.getMaxSize().getWidth() < 0.0f)
+    if (text.getMaxSize().getWidth() < 0.0f) // Non negative max size in text layout will adjust X axis alignment
     {
         if (text.getHorizontalAlign() == StyledText::center)
             offsetX = (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
@@ -665,11 +665,6 @@ void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect,
     else if (text.getVerticalAlign() == StyledText::bottom)
         offsetY = (rect.getHeight() - text.getBounds().getHeight());
 
-    auto transform = options.transform
-        .translated (options.drawingArea.getX(), options.drawingArea.getY())
-        .translated (rect.getX() + offsetX, rect.getY() + offsetY)
-        .scaled (options.scale);
-
     renderer.save();
 
     Path p;
@@ -677,6 +672,7 @@ void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect,
     p.transform (options.getTransform());
     renderer.clipPath (p.getRenderPath());
 
+    auto transform = options.getTranslatedTransform (rect.getX() + offsetX, rect.getY() + offsetY);
     renderer.transform (transform.toMat2D());
 
     for (auto style : text.getRenderStyles())

@@ -516,6 +516,14 @@ private:
                 .scaled (scale);
         }
 
+        AffineTransform getTranslatedTransform (float offsetX, float offsetY) const noexcept
+        {
+            return transform
+                .translated (drawingArea.getX(), drawingArea.getY())
+                .translated (offsetX, offsetY)
+                .scaled (scale);
+        }
+
         float scale = 1.0f;
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
@@ -536,6 +544,7 @@ private:
 
     RenderOptions& currentRenderOptions();
     const RenderOptions& currentRenderOptions() const;
+
     void restoreState();
 
     void clipPath (rive::RawPath& path);
