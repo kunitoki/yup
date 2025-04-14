@@ -250,6 +250,7 @@ Color Graphics::getFillColor() const
     return currentRenderOptions().fillColor;
 }
 
+//==============================================================================
 void Graphics::setStrokeColor (Color color)
 {
     currentRenderOptions().strokeColor = color;
@@ -261,6 +262,7 @@ Color Graphics::getStrokeColor() const
     return currentRenderOptions().strokeColor;
 }
 
+//==============================================================================
 void Graphics::setFillColorGradient (ColorGradient gradient)
 {
     currentRenderOptions().fillGradient = std::move (gradient);
@@ -272,6 +274,7 @@ ColorGradient Graphics::getFillColorGradient() const
     return currentRenderOptions().fillGradient;
 }
 
+//==============================================================================
 void Graphics::setStrokeColorGradient (ColorGradient gradient)
 {
     currentRenderOptions().strokeGradient = std::move (gradient);
@@ -283,6 +286,7 @@ ColorGradient Graphics::getStrokeColorGradient() const
     return currentRenderOptions().strokeGradient;
 }
 
+//==============================================================================
 void Graphics::setStrokeWidth (float strokeWidth)
 {
     currentRenderOptions().strokeWidth = jmax (0.0f, strokeWidth);
@@ -293,6 +297,7 @@ float Graphics::getStrokeWidth() const
     return currentRenderOptions().strokeWidth;
 }
 
+//==============================================================================
 void Graphics::setFeather (float feather)
 {
     currentRenderOptions().feather = jmax (0.0f, feather);
@@ -303,6 +308,7 @@ float Graphics::getFeather() const
     return currentRenderOptions().feather;
 }
 
+//==============================================================================
 void Graphics::setOpacity (float opacity)
 {
     currentRenderOptions().opacity = jlimit (0.0f, 1.0f, opacity);
@@ -313,6 +319,7 @@ float Graphics::getOpacity() const
     return currentRenderOptions().opacity;
 }
 
+//==============================================================================
 void Graphics::setStrokeJoin (StrokeJoin join)
 {
     currentRenderOptions().join = join;
@@ -323,6 +330,7 @@ StrokeJoin Graphics::getStrokeJoin() const
     return currentRenderOptions().join;
 }
 
+//==============================================================================
 void Graphics::setStrokeCap (StrokeCap cap)
 {
     currentRenderOptions().cap = cap;
@@ -333,6 +341,7 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+//==============================================================================
 void Graphics::setBlendMode (BlendMode blendMode)
 {
     currentRenderOptions().blendMode = blendMode;
@@ -343,6 +352,7 @@ BlendMode Graphics::getBlendMode() const
     return currentRenderOptions().blendMode;
 }
 
+//==============================================================================
 void Graphics::setDrawingArea (const Rectangle<float>& drawingArea)
 {
     currentRenderOptions().drawingArea = drawingArea;
@@ -353,6 +363,7 @@ Rectangle<float> Graphics::getDrawingArea() const
     return currentRenderOptions().drawingArea;
 }
 
+//==============================================================================
 void Graphics::setTransform (const AffineTransform& transform)
 {
     currentRenderOptions().transform = transform;
@@ -363,6 +374,7 @@ AffineTransform Graphics::getTransform() const
     return currentRenderOptions().transform;
 }
 
+//==============================================================================
 void Graphics::setClipPath (const Rectangle<float>& clipRect)
 {
     Path path;
@@ -537,76 +549,38 @@ void Graphics::fillPath (const Path& path)
 }
 
 //==============================================================================
-void Graphics::clipPath (const Rectangle<float>& area)
-{
-    const auto& options = currentRenderOptions();
-
-    rive::RawPath path;
-    path.reserve (5, 5);
-    path.moveTo (area.getX(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY());
-
-    clipPath (path);
-}
-
-void Graphics::clipPath (const Path& path)
-{
-    const auto& options = currentRenderOptions();
-
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::nonZero);
-    renderPath->addRenderPath (path.getRenderPath(), options.getTransform().toMat2D());
-
-    renderer.clipPath (renderPath.get());
-}
-
-void Graphics::clipPath (rive::RawPath& path)
-{
-    const auto& options = currentRenderOptions();
-
-    path.transformInPlace (options.getTransform().toMat2D());
-
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::nonZero, path);
-    renderer.clipPath (renderPath.get());
-}
-
-//==============================================================================
 void Graphics::renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::stroke);
-    paint->thickness (options.getStrokeWidth());
-    paint->join (toStrokeJoin (options.join));
-    paint->cap (toStrokeCap (options.cap));
-    paint->feather (options.feather);
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::stroke);
+    paint.thickness (options.getStrokeWidth());
+    paint.join (toStrokeJoin (options.join));
+    paint.cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
-        paint->color (options.getStrokeColor());
+        paint.color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
+        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
 
     auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
     renderPath->addRenderPath (path.getRenderPath(), transform.toMat2D());
-    renderer.drawPath (renderPath.get(), paint.get());
+    renderer.drawPath (renderPath.get(), std::addressof (paint));
 }
 
 void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::fill);
-    paint->feather (options.feather);
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::fill);
+    paint.feather (options.feather);
 
     if (options.isFillColor())
-        paint->color (options.getFillColor());
+        paint.color (options.getFillColor());
     else
-        paint->shader (toColorGradient (factory, options.getFillColorGradient(), transform));
+        paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
     auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
     renderPath->addRenderPath (path.getRenderPath(), transform.toMat2D());
-    renderer.drawPath (renderPath.get(), paint.get());
+    renderer.drawPath (renderPath.get(), std::addressof (paint));
 }
 
 //==============================================================================
@@ -637,7 +611,7 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     rive::RiveRenderPaint paint;
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
-    paint.feather (options.feather);
+    //paint.feather (options.feather);
 
     renderer.drawPath (unitRectPath.get(), std::addressof (paint));
 
@@ -645,8 +619,12 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
 }
 
 //==============================================================================
-void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+void Graphics::fillFittedText (StyledText& text, const Rectangle<float>& rect)
 {
+    text.update();
+    if (text.isEmpty())
+        return;
+
     const auto& options = currentRenderOptions();
 
     auto paint = factory.makeRenderPaint();
@@ -658,41 +636,84 @@ void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& r
     else
         paint->shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
 
-    auto glyphsPath = text.getGlyphsPath (options.getTransform());
+    float offsetX = rect.getX();
+    float offsetY = rect.getY();
 
-    auto height = glyphsPath.getBoundingBox().getHeight();
-    auto yOffset = (rect.getHeight() - height) / 2.0f;
+    if (text.getHorizontalAlign() == StyledText::center)
+        offsetX += (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
+    else if (text.getHorizontalAlign() == StyledText::right)
+        offsetX += (rect.getWidth() - text.getBounds().getWidth());
+
+    if (text.getVerticalAlign() == StyledText::middle)
+        offsetY += (rect.getHeight() - text.getBounds().getHeight()) * 0.5f;
+    else if (text.getVerticalAlign() == StyledText::bottom)
+        offsetY += (rect.getHeight() - text.getBounds().getHeight());
+
+    auto transform = options.transform
+        .translated (options.drawingArea.getX(), options.drawingArea.getY())
+        .translated (offsetX, offsetY)
+        .scaled (options.scale);
 
     renderer.save();
-    renderer.translate (0, yOffset);
 
-    renderer.drawPath (glyphsPath.getRenderPath(), paint.get());
+    Path p;
+    p.addRectangle (rect);
+    p.transform (options.getTransform());
+    renderer.clipPath (p.getRenderPath());
+
+    renderer.transform (transform.toMat2D());
+
+    for (auto style : text.getRenderStyles())
+        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint.get() : style->paint.get());
 
     renderer.restore();
 }
 
-void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
 {
+    text.update();
+    if (text.isEmpty())
+        return;
+
     const auto& options = currentRenderOptions();
 
     auto paint = factory.makeRenderPaint();
     paint->style (rive::RenderPaintStyle::stroke);
-    paint->feather (options.feather);
 
     if (options.isStrokeColor())
         paint->color (options.getStrokeColor());
     else
         paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
-    auto glyphsPath = text.getGlyphsPath (options.getTransform());
+    float offsetX = rect.getX();
+    float offsetY = rect.getY();
 
-    auto height = glyphsPath.getBoundingBox().getHeight();
-    auto yOffset = (rect.getHeight() - height) / 2.0f;
+    if (text.getHorizontalAlign() == StyledText::center)
+        offsetX += (rect.getWidth() - text.getBounds().getWidth()) * 0.5f;
+    else if (text.getHorizontalAlign() == StyledText::right)
+        offsetX += (rect.getWidth() - text.getBounds().getWidth());
+
+    if (text.getVerticalAlign() == StyledText::middle)
+        offsetY += (rect.getHeight() - text.getBounds().getHeight()) * 0.5f;
+    else if (text.getVerticalAlign() == StyledText::bottom)
+        offsetY += (rect.getHeight() - text.getBounds().getHeight());
+
+    auto transform = options.transform
+        .translated (options.drawingArea.getX(), options.drawingArea.getY())
+        .translated (offsetX, offsetY)
+        .scaled (options.scale);
 
     renderer.save();
-    renderer.translate (0, yOffset);
 
-    renderer.drawPath (glyphsPath.getRenderPath(), paint.get());
+    Path p;
+    p.addRectangle (rect);
+    p.transform (options.getTransform());
+    renderer.clipPath (p.getRenderPath());
+
+    renderer.transform (transform.toMat2D());
+
+    for (auto style : text.getRenderStyles())
+        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint.get() : style->paint.get());
 
     renderer.restore();
 }

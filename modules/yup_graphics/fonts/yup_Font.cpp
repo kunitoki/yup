@@ -212,6 +212,21 @@ void Font::setAxisValue (StringRef tagName, float value)
         std::swap (newFont, font);
 }
 
+Font Font::withAxisValue (int index, float value) const
+{
+    if (font == nullptr || ! isPositiveAndBelow (index, getNumAxis()))
+        return {};
+
+    auto axis = getAxisDescription (index);
+    if (! axis.has_value())
+        return {};
+
+    return Font (font->makeAtCoord ({
+        axisTagFromString (axis->tagName),
+        jlimit (axis->minimumValue, axis->maximumValue, value)
+    }));
+}
+
 Font Font::withAxisValue (StringRef tagName, float value) const
 {
     jassert (tagName.length() == 4);

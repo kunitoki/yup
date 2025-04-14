@@ -24,68 +24,155 @@ namespace yup
 
 //==============================================================================
 
+class Graphics;
+
+//==============================================================================
+
 class JUCE_API StyledText
 {
 public:
     //==============================================================================
-    enum Alignment
+
+    enum HorizontalAlign : uint8_t
     {
         left,
         center,
         right
     };
 
-    enum VerticalAlignment
+    enum VerticalAlign : uint8_t
     {
         top,
         middle,
         bottom
     };
 
+    enum TextDirection : uint8_t
+    {
+        ltr = 0,
+        rtl = 1
+    };
+
+    enum TextOverflow : uint8_t
+    {
+        visible,
+        hidden,
+        ellipsis,
+        fit
+    };
+
+    enum TextOrigin : uint8_t
+    {
+        topOrigin,
+        baseline
+    };
+
+    enum TextWrap : uint8_t
+    {
+        wrap = 0,
+        noWrap = 1
+    };
+
     //==============================================================================
+
     StyledText();
 
     //==============================================================================
+
+    bool isEmpty() const;
+
+    //==============================================================================
+
     void clear();
 
     //==============================================================================
-    void appendText (const Font& font,
-                     float fontSize,
-                     float lineHeight,
-                     StringRef text);
+
+    void appendText (StringRef text,
+                     rive::rcp<rive::RenderPaint> paint,
+                     const Font& font,
+                     float fontSize = 16.0f,
+                     float lineHeight = -1.0f,
+                     float letterSpacing = 0.0f);
 
     //==============================================================================
-    void layout (const Rectangle<float>& rect, Alignment hAlign = center, VerticalAlignment vAlign = top);
 
-    Path getGlyphsPath (const AffineTransform& transform) const;
+    void update();
 
     //==============================================================================
-    /** @internal */
-    const std::vector<rive::RawPath>& getGlyphs() const;
-    /** @internal */
-    int getNumParagraphs() const;
-    /** @internal */
-    const rive::Paragraph& getParagraph (int index) const;
+
+    void draw (Graphics& g, const Rectangle<float>& bounds, rive::rcp<rive::RenderPaint> paint = nullptr);
+
+    //==============================================================================
+
+    TextOverflow getOverflow() const;
+    void setOverflow (TextOverflow value);
+
+    HorizontalAlign getHorizontalAlign() const;
+    void setHorizontalAlign (HorizontalAlign value);
+
+    VerticalAlign getVerticalAlign() const;
+    void setVerticalAlign (VerticalAlign value);
+
+    float getMaxWidth() const;
+    void setMaxWidth (float value);
+
+    float getMaxHeight() const;
+    void setMaxHeight (float value);
+
+    float getParagraphSpacing() const;
+    void setParagraphSpacing (float value);
+
+    TextWrap getWrap() const;
+    void setWrap (TextWrap value);
+
+    //==============================================================================
+
+    Rectangle<float> getBounds();
+
+    //==============================================================================
+
+    const std::vector<rive::OrderedLine>& getOrderedLines();
+
+    //==============================================================================
+
+    struct RenderStyle
+    {
+        RenderStyle (
+            rive::rcp<rive::RenderPaint> paint,
+            rive::rcp<rive::RenderPath> path,
+            bool isEmpty)
+            : paint (std::move (paint))
+            , path (std::move (path))
+            , isEmpty (isEmpty)
+        {
+        }
+
+        rive::rcp<rive::RenderPaint> paint;
+        rive::rcp<rive::RenderPath> path;
+        bool isEmpty;
+    };
+
+    const std::vector<RenderStyle*>& getRenderStyles();
 
 private:
-    rive::TextRun append (const Font& font,
-                          float fontSize,
-                          float lineHeight,
-                          StringRef text);
+    rive::SimpleArray<rive::Paragraph> shape;
+    rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> lines;
+    std::vector<rive::OrderedLine> orderedLines;
+    rive::GlyphRun ellipsisRun;
+    rive::StyledText styledTexts;
+    std::vector<RenderStyle> styles;
+    std::vector<RenderStyle*> renderStyles;
 
-    float layoutText (const rive::GlyphRun& run,
-                      unsigned startIndex,
-                      unsigned endIndex,
-                      rive::Vec2D origin);
-
-    float layoutParagraph (const rive::Paragraph& paragraph,
-                           const rive::SimpleArray<rive::GlyphLine>& lines,
-                           rive::Vec2D origin);
-
-    std::vector<rive::Unichar> unicodeChars;
-    rive::SimpleArray<rive::Paragraph> paragraphs;
-    std::vector<rive::TextRun> textRuns;
-    std::vector<rive::RawPath> glyphPaths;
+    TextOrigin origin = TextOrigin::topOrigin;
+    TextOverflow overflow = TextOverflow::visible;
+    HorizontalAlign horizontalAlign = HorizontalAlign::left;
+    VerticalAlign verticalAlign = VerticalAlign::middle;
+    TextWrap textWrap = TextWrap::wrap;
+    float maxWidth = -1.0f;
+    float maxHeight = -1.0f;
+    float paragraphSpacing = 0.0f;
+    Rectangle<float> bounds;
+    bool isDirty = false;
 };
 
 } // namespace yup

@@ -35,19 +35,31 @@ void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
     const auto center = bounds.getCenter();
 
+    auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
+
     Path backgroundPath;
     //backgroundPath.clear();
-    backgroundPath.addRoundedRectangle (bounds.reduced (proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
+    backgroundPath.addRoundedRectangle (rectBounds, 10.0f, 10.0f, 10.0f, 10.0f);
     g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
     g.fillPath (backgroundPath);
 
-    StyledText text;
-    //text.clear();
-    text.appendText (font, bounds.getHeight() * 0.25f, bounds.getHeight(), getComponentID().toRawUTF8());
-    text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
+    /*
+    auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+    const float fontSize = labelBounds.getHeight() * 0.1f;
 
-    g.setStrokeColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
-    g.strokeFittedText (text, {});
+    StyledText text;
+    text.appendText (font, fontSize, fontSize, getComponentID().toRawUTF8());
+    text.layout (labelBounds, yup::StyledText::center, yup::StyledText::top);
+
+    g.setStrokeColor (0xff0000ff);
+    g.strokeRect (rectBounds);
+
+    g.setStrokeColor (0xffff0000);
+    g.strokeRect (labelBounds);
+
+    g.setFillColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
+    g.fillFittedText (text, labelBounds);
+    */
 }
 
 } // namespace yup

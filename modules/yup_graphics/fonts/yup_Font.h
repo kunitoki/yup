@@ -69,6 +69,8 @@ public:
 
     void setAxisValue (int index, float value);
     void setAxisValue (StringRef tagName, float value);
+
+    Font withAxisValue (int index, float value) const;
     Font withAxisValue (StringRef tagName, float value) const;
 
     struct AxisOption

@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-rive::TextAlign toTextAlign (StyledText::Alignment align) noexcept
+rive::TextAlign toTextAlign (StyledText::HorizontalAlign align) noexcept
 {
     if (align == StyledText::left)
         return rive::TextAlign::left;
@@ -38,6 +38,17 @@ rive::TextAlign toTextAlign (StyledText::Alignment align) noexcept
     return rive::TextAlign::left;
 }
 
+rive::TextWrap toTextWrap (StyledText::TextWrap wrap) noexcept
+{
+    if (wrap == StyledText::wrap)
+        return rive::TextWrap::wrap;
+
+    if (wrap == StyledText::noWrap)
+        return rive::TextWrap::noWrap;
+
+    return rive::TextWrap::noWrap;
+}
+
 //==============================================================================
 
 StyledText::StyledText()
@@ -46,246 +57,348 @@ StyledText::StyledText()
 
 //==============================================================================
 
+bool StyledText::isEmpty() const
+{
+    return styledTexts.empty();
+}
+
+//==============================================================================
+
 void StyledText::clear()
 {
-    unicodeChars.clear();
-    textRuns.clear();
-    glyphPaths.clear();
+    styledTexts.clear();
+    styles.clear();
 
-    paragraphs = rive::SimpleArray<rive::Paragraph> {};
+    isDirty = true;
 }
 
 //==============================================================================
 
-void StyledText::appendText (const Font& font,
+StyledText::TextOverflow StyledText::getOverflow() const
+{
+    return overflow;
+}
+
+void StyledText::setOverflow (TextOverflow value)
+{
+    if (overflow != value)
+    {
+        overflow = value;
+        isDirty = true;
+    }
+}
+
+//==============================================================================
+
+StyledText::HorizontalAlign StyledText::getHorizontalAlign() const
+{
+    return horizontalAlign;
+}
+
+void StyledText::setHorizontalAlign (HorizontalAlign value)
+{
+    if (horizontalAlign != value)
+    {
+        horizontalAlign = value;
+        isDirty = true;
+    }
+}
+
+//==============================================================================
+
+StyledText::VerticalAlign StyledText::getVerticalAlign() const
+{
+    return verticalAlign;
+}
+
+void StyledText::setVerticalAlign (VerticalAlign value)
+{
+    if (verticalAlign != value)
+    {
+        verticalAlign = value;
+        isDirty = true;
+    }
+}
+
+//==============================================================================
+
+float StyledText::getMaxWidth() const
+{
+    return maxWidth;
+}
+
+void StyledText::setMaxWidth (float value)
+{
+    if (maxWidth != value)
+    {
+        maxWidth = value;
+        isDirty = true;
+    }
+}
+
+float StyledText::getMaxHeight() const
+{
+    return maxHeight;
+}
+
+void StyledText::setMaxHeight (float value)
+{
+    if (maxHeight != value)
+    {
+        maxHeight = value;
+        isDirty = true;
+    }
+}
+
+//==============================================================================
+
+float StyledText::getParagraphSpacing() const
+{
+    return paragraphSpacing;
+}
+
+void StyledText::setParagraphSpacing (float value)
+{
+    if (paragraphSpacing != value)
+    {
+        paragraphSpacing = value;
+        isDirty = true;
+    }
+}
+
+//==============================================================================
+
+StyledText::TextWrap StyledText::getWrap() const
+{
+    return textWrap;
+}
+
+void StyledText::setWrap (TextWrap value)
+{
+    if (textWrap != value)
+    {
+        textWrap = value;
+        isDirty = true;
+    }
+}
+
+//==============================================================================
+
+void StyledText::appendText (StringRef text,
+                             rive::rcp<rive::RenderPaint> paint,
+                             const Font& font,
                              float fontSize,
                              float lineHeight,
-                             StringRef text)
+                             float letterSpacing)
 {
-    textRuns.push_back (append (font, fontSize, lineHeight, text));
+    int styleIndex = 0;
 
-    jassert (font.getFont() != nullptr);
-    paragraphs = font.getFont()->shapeText (unicodeChars, textRuns);
+    for (RenderStyle& style : styles)
+    {
+        if (style.paint == paint)
+            break;
+
+        styleIndex++;
+    }
+
+    if (styleIndex == styles.size())
+    {
+        auto path = rive::make_rcp<rive::RiveRenderPath>();
+        styles.emplace_back (paint, std::move (path), true);
+    }
+
+    styledTexts.append (font.getFont(), fontSize, lineHeight, letterSpacing, (const char*) text, styleIndex);
+
+    isDirty = true;
 }
 
 //==============================================================================
 
-rive::TextRun StyledText::append (const Font& font,
-                                  float fontSize,
-                                  float lineHeight,
-                                  StringRef text)
+void StyledText::update()
 {
-    const uint8_t* ptr = (const uint8_t*) (const char*) text;
-    uint32_t codepointsCount = 0;
+    if (! isDirty)
+        return;
 
-    while (*ptr != '\0')
+    auto clearDirtyFlag = ErasedScopeGuard ([this] { isDirty = false; });
+
+    for (RenderStyle& style : styles)
     {
-        unicodeChars.push_back (rive::UTF::NextUTF8 (&ptr));
-        codepointsCount += 1;
+        style.path->rewind();
+        style.isEmpty = true;
     }
 
-    return { font.getFont(), fontSize, lineHeight, 0.0f, codepointsCount };
-}
+    renderStyles.clear();
+    if (styledTexts.empty())
+        return;
 
-//==============================================================================
+    auto runs = styledTexts.runs();
+    shape = runs[0].font->shapeText (styledTexts.unichars(), runs);
+    lines = rive::Text::BreakLines (shape,
+                                    maxWidth, // -1.0f
+                                    toTextAlign (horizontalAlign),
+                                    toTextWrap (textWrap));
 
-void StyledText::layout (const Rectangle<float>& rect, Alignment hAlign, VerticalAlignment vAlign)
-{
-    glyphPaths.clear();
+    orderedLines.clear();
+    ellipsisRun = {};
 
-    // We'll measure line breaks into linesArray for each paragraph, 
-    // then compute total height to allow vertical alignment.
-    rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> linesArray (paragraphs.size());
-
-    // 1) Break lines using the given width
-    float paragraphWidth = rect.getWidth();
-    std::size_t paragraphIndex = 0;
-    for (const auto& paragraph : paragraphs)
+    // build render styles.
+    if (shape.empty())
     {
-        linesArray[paragraphIndex] = rive::GlyphLine::BreakLines (paragraph.runs, paragraphWidth);
-        paragraphIndex++;
+        bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
+        return;
     }
 
-    // 2) Compute line spacing (this sets baseline, top, bottom for each line)
+    // Build up ordered runs as we go.
+    int paragraphIndex = 0;
+    float y = 0.0f;
+    float minY = 0.0f;
+    float measuredWidth = 0.0f;
+    if (origin == TextOrigin::baseline && !lines.empty() && !lines[0].empty())
+    {
+        y -= lines[0][0].baseline;
+        minY = y;
+    }
+
+    int ellipsisLine = -1;
+    bool isEllipsisLineLast = false;
+    bool wantEllipsis = (overflow == TextOverflow::ellipsis);
+
+    int lastLineIndex = -1;
+    for (const rive::SimpleArray<rive::GlyphLine>& paragraphLines : lines)
+    {
+        const rive::Paragraph& paragraph = shape[paragraphIndex++];
+        for (const rive::GlyphLine& line : paragraphLines)
+        {
+            const rive::GlyphRun& endRun = paragraph.runs[line.endRunIndex];
+            const rive::GlyphRun& startRun = paragraph.runs[line.startRunIndex];
+
+            float width = endRun.xpos[line.endGlyphIndex] - startRun.xpos[line.startGlyphIndex];
+            if (width > measuredWidth)
+                measuredWidth = width;
+
+            lastLineIndex++;
+            if (wantEllipsis && y + line.bottom <= maxHeight)
+                ellipsisLine++;
+        }
+
+        if (! paragraphLines.empty())
+            y += paragraphLines.back().bottom;
+
+        y += paragraphSpacing;
+    }
+
+    if (wantEllipsis && ellipsisLine == -1)
+        ellipsisLine = 0;
+
+    isEllipsisLineLast = lastLineIndex == ellipsisLine;
+
+    int lineIndex = 0;
     paragraphIndex = 0;
-    for (const auto& paragraph : paragraphs)
-    {
-        rive::SimpleArray<rive::GlyphLine>& lines = linesArray[paragraphIndex];
+    bounds = { 0.0f, minY, measuredWidth, jmax (minY, y - paragraphSpacing) - minY };
 
-        rive::GlyphLine::ComputeLineSpacing (paragraphIndex == 0,
-                                             lines,
-                                             paragraph.runs,
-                                             paragraphWidth,
-                                             toTextAlign (hAlign));
-        paragraphIndex++;
-    }
-
-    // 3) Measure total text height for vertical alignment
-    float totalHeight = 0.0f;
-    for (size_t i = 0; i < paragraphs.size(); ++i)
-    {
-        const auto& lines = linesArray[i];
-        if (! lines.empty())
-        {
-            // The 'bottom' of the last line in each paragraph
-            // extends from the paragraph baseline down to the last line's bottom.
-            totalHeight += lines.back().bottom;
-        }
-    }
-
-    // If you have extra spacing between paragraphs, you can add it to totalHeight here.
-
-    // 4) Compute vertical offset based on alignment
-    // By default we start layout at rect.getY().
-    float yOffset = 0.0f;
-    const float boxHeight = rect.getHeight();
-
-    switch (vAlign)
-    {
-        case top:    /* no offset */ break;
-        case middle: yOffset = (boxHeight - totalHeight) * 0.5f; break;
-        case bottom: yOffset =  (boxHeight - totalHeight);       break;
-    }
-
-    // 5) Now do the actual layout, offset by yOffset. (Horizontally, we rely on Rive's line alignment.)
-    float x = rect.getX();
-    float y = rect.getY() + yOffset;
+    y = 0;
+    if (origin == TextOrigin::baseline && !lines.empty() && !lines[0].empty())
+        y -= lines[0][0].baseline;
 
     paragraphIndex = 0;
-    for (const auto& paragraph : paragraphs)
+
+    for (const rive::SimpleArray<rive::GlyphLine>& paragraphLines : lines)
     {
-        const auto& lines = linesArray[paragraphIndex];
-
-        // Layout each line in the paragraph
-        y = layoutParagraph(paragraph, lines, { x, y });
-
-        paragraphIndex++;
-    }
-}
-
-//==============================================================================
-
-Path StyledText::getGlyphsPath (const AffineTransform& transform) const
-{
-    Path path;
-
-    for (auto rawPath : glyphPaths)
-        path.appendPath (rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::nonZero, rawPath), transform);
-
-    return path;
-}
-
-//==============================================================================
-
-const std::vector<rive::RawPath>& StyledText::getGlyphs() const
-{
-    return glyphPaths;
-}
-
-//==============================================================================
-
-int StyledText::getNumParagraphs() const
-{
-    return static_cast<int> (paragraphs.size());
-}
-
-const rive::Paragraph& StyledText::getParagraph (int index) const
-{
-    if (isPositiveAndBelow (index, getNumParagraphs()))
-        return paragraphs[index];
-
-    static rive::Paragraph empty;
-    return empty;
-}
-
-//==============================================================================
-
-float StyledText::layoutText (const rive::GlyphRun& run,
-                              unsigned startIndex,
-                              unsigned endIndex,
-                              rive::Vec2D origin)
-{
-    auto font = run.font.get();
-    const auto scale = rive::Mat2D::fromScale (run.size, run.size);
-
-    float x = origin.x;
-    jassert (startIndex >= 0 && endIndex <= run.glyphs.size());
-
-    int i, end, inc;
-    if (run.dir() == rive::TextDirection::rtl)
-    {
-        i = endIndex - 1;
-        end = startIndex - 1;
-        inc = -1;
-    }
-    else
-    {
-        i = startIndex;
-        end = endIndex;
-        inc = 1;
-    }
-
-    while (i != end)
-    {
-        auto trans = rive::Mat2D::fromTranslate (x, origin.y);
-        x += run.advances[i];
-
-        auto rawpath = font->getPath (run.glyphs[i]);
-        rawpath.transformInPlace (trans * scale);
-
-        glyphPaths.push_back (std::move (rawpath));
-
-        i += inc;
-    }
-
-    return x;
-}
-
-float StyledText::layoutParagraph (const rive::Paragraph& paragraph,
-                                   const rive::SimpleArray<rive::GlyphLine>& lines,
-                                   rive::Vec2D origin)
-{
-    float y = origin.y;
-
-    for (const auto& line : lines)
-    {
-        float x = line.startX + origin.x;
-
-        int runIndex, endRun, runInc;
-        if (paragraph.baseDirection() == rive::TextDirection::rtl)
+        const rive::Paragraph& paragraph = shape[paragraphIndex++];
+        for (const rive::GlyphLine& line : paragraphLines)
         {
-            runIndex = line.endRunIndex;
-            endRun = line.startRunIndex - 1;
-            runInc = -1;
-        }
-        else
-        {
-            runIndex = line.startRunIndex;
-            endRun = line.endRunIndex + 1;
-            runInc = 1;
+            switch (overflow)
+            {
+                case TextOverflow::hidden:
+                    if (y + line.bottom > maxHeight)
+                        return;
+
+                    break;
+
+                default:
+                    break;
+            }
+
+            if (lineIndex >= orderedLines.size())
+            {
+                orderedLines.emplace_back (
+                    rive::OrderedLine (paragraph,
+                                       line,
+                                       maxWidth,
+                                       ellipsisLine == lineIndex,
+                                       isEllipsisLineLast,
+                                       &ellipsisRun));
+            }
+
+            float x = line.startX;
+            float renderY = y + line.baseline;
+
+            for (auto [run, glyphIndex] : orderedLines[lineIndex])
+            {
+                const rive::Font* font = run->font.get();
+                const rive::Vec2D& offset = run->offsets[glyphIndex];
+
+                rive::GlyphID glyphId = run->glyphs[glyphIndex];
+                float advance = run->advances[glyphIndex];
+
+                rive::RawPath path = font->getPath (glyphId);
+
+                path.transformInPlace (rive::Mat2D (run->size,
+                                                    0.0f,
+                                                    0.0f,
+                                                    run->size,
+                                                    x + offset.x,
+                                                    renderY + offset.y));
+                x += advance;
+
+                jassert (run->styleId < styles.size());
+                RenderStyle* style = &styles[run->styleId];
+                jassert (style != nullptr);
+                path.addTo (style->path.get());
+
+                if (style->isEmpty)
+                {
+                    // This was the first path added to the style, so let's mark it in our draw list.
+                    style->isEmpty = false;
+
+                    renderStyles.push_back (style);
+                }
+            }
+
+            // Early return if we're done after ellipsis line
+            if (lineIndex == ellipsisLine)
+                return;
+
+            lineIndex++;
         }
 
-        while (runIndex != endRun)
-        {
-            const auto& run = paragraph.runs[runIndex];
+        if (! paragraphLines.empty())
+            y += paragraphLines.back().bottom;
 
-            int startGIndex = runIndex == line.startRunIndex ? line.startGlyphIndex : 0;
-            int endGIndex   = runIndex == line.endRunIndex   ? line.endGlyphIndex   : (int) run.glyphs.size();
-
-            float nextX = layoutText (run,
-                                      startGIndex,
-                                      endGIndex,
-                                      { x, y + line.baseline });
-
-            x = nextX;
-            runIndex += runInc;
-        }
-
-        // Move down for next line in the same paragraph
-        y += (line.bottom - line.top); // line height
+        y += paragraphSpacing;
     }
+}
 
-    return y;
+//==============================================================================
+
+Rectangle<float> StyledText::getBounds()
+{
+    update();
+    return bounds;
+}
+
+//==============================================================================
+
+const std::vector<rive::OrderedLine>& StyledText::getOrderedLines()
+{
+    update();
+    return orderedLines;
+}
+
+const std::vector<StyledText::RenderStyle*>& StyledText::getRenderStyles()
+{
+    update();
+    return renderStyles;
 }
 
 } // namespace yup

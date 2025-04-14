@@ -599,7 +599,7 @@ void SDL2ComponentNative::renderContext()
         frameDescriptor.wireframe = renderWireframe;
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
-        frameDescriptor.clockwiseFillOverride = false;
+        frameDescriptor.clockwiseFillOverride = true;
 
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);

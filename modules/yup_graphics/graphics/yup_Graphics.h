@@ -410,8 +410,8 @@ public:
     //==============================================================================
     /** Draws an attributed text.
     */
-    void fillFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
-    void strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
+    void fillFittedText (StyledText& text, const Rectangle<float>& rect);
+    void strokeFittedText (StyledText& text, const Rectangle<float>& rect);
 
     //==============================================================================
     /** Clips the drawing area to the specified rectangle.

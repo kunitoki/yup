@@ -241,6 +241,11 @@ public:
         return { xy, size.withWidth (newWidth) };
     }
 
+    [[nodiscard]] constexpr ValueType proportionOfWidth (float proportion) const noexcept
+    {
+        return static_cast<ValueType> (size.getWidth() * proportion);
+    }
+
     //==============================================================================
     /** Returns the height of the rectangle.
 
@@ -270,6 +275,11 @@ public:
     [[nodiscard]] constexpr Rectangle withHeight (ValueType newHeight) const noexcept
     {
         return { xy, size.withHeight (newHeight) };
+    }
+
+    [[nodiscard]] constexpr ValueType proportionOfHeight (float proportion) const noexcept
+    {
+        return static_cast<ValueType> (size.getHeight() * proportion);
     }
 
     //==============================================================================
