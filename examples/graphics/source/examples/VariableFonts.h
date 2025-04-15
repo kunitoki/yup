@@ -42,48 +42,9 @@ public:
             "tincidunt. Maecenas facilisis libero sed vehicula accumsan. Quisque sed justo nisl.";
 
         {
-            auto label = labels.add (std::make_unique<yup::Label>());
-            label->setFont (font);
-            addAndMakeVisible (label);
-
-            auto slider = sliders.add (std::make_unique<yup::Slider> ("FontSize", font));
-            slider->setDefaultValue (16.0f);
-            slider->setRange ({ 4.0f, 32.0f });
-            slider->setValue (16.0f);
-            slider->onValueChanged = [this] (float value)
-            {
-                updateLabel (0);
-
-                fontSize = value;
-
-                resized();
-                repaint (textBounds);
-            };
-            addAndMakeVisible (slider);
-
-            updateLabel (0);
-        }
-
-        {
-            auto label = labels.add (std::make_unique<yup::Label>());
-            label->setFont (font);
-            addAndMakeVisible (label);
-
-            auto slider = sliders.add (std::make_unique<yup::Slider> ("StrokeWidth", font));
-            slider->setDefaultValue (0.0f);
-            slider->setRange ({ 0.0f, 32.0f });
-            slider->setValue (0.0f);
-            slider->onValueChanged = [this] (float value)
-            {
-                updateLabel (1);
-
-                strokeWidth = value;
-
-                repaint (textBounds);
-            };
-            addAndMakeVisible (slider);
-
-            updateLabel (1);
+            addControl ("FontSize", 0, 16.0f, 4.0f, 32.0f, fontSize);
+            addControl ("Stroke", 1, 0.0f, 0.0f, 8.0f, strokeWidth);
+            addControl ("Feather", 2, 0.0f, 0.0f, 10.0f, feather);
         }
 
         const int offsetIndex = sliders.size();
@@ -161,14 +122,24 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        if (feather > 0.0f)
+        {
+            g.setFillColor (0xffffffff);
+            g.setFeather (feather);
+            g.fillFittedText (styledText, textBounds);
+        }
+
         if (strokeWidth > 0.0f)
         {
             g.setStrokeColor (0xff000000);
             g.setStrokeWidth (strokeWidth);
+            g.setStrokeCap (yup::StrokeCap::Round);
+            g.setStrokeJoin (yup::StrokeJoin::Round);
             g.strokeFittedText (styledText, textBounds);
         }
 
         g.setFillColor (0xffffffff);
+        g.setFeather (0.0f);
         g.fillFittedText (styledText, textBounds);
     }
 
@@ -178,6 +149,30 @@ private:
         labels[index]->setText (sliders[index]->getComponentID() + ": " + yup::String (sliders[index]->getValue(), 2));
     }
 
+    void addControl (yup::StringRef name, int index, float defaultValue, float minValue, float maxValue, float& valueToSet)
+    {
+        auto label = labels.add (std::make_unique<yup::Label>());
+        label->setFont (font);
+        addAndMakeVisible (label);
+
+        auto slider = sliders.add (std::make_unique<yup::Slider> (name, font));
+        slider->setDefaultValue (defaultValue);
+        slider->setRange ({ minValue, maxValue });
+        slider->setValue (defaultValue);
+        slider->onValueChanged = [this, index, &valueToSet] (float value)
+        {
+            updateLabel (index);
+
+            valueToSet = value;
+
+            resized();
+            repaint (textBounds);
+        };
+        addAndMakeVisible (slider);
+
+        updateLabel (index);
+    }
+
     yup::Font font;
 
     yup::String text;
@@ -185,6 +180,7 @@ private:
     yup::Rectangle<float> textBounds;
     float fontSize = 16.0f;
     float strokeWidth = 0.0f;
+    float feather = 0.0f;
 
     yup::OwnedArray<yup::TextButton> buttons;
     yup::OwnedArray<yup::Slider> sliders;
