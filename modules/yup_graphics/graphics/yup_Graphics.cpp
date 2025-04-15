@@ -389,11 +389,11 @@ void Graphics::setClipPath (const Path& clipPath)
 
     options.clipPath = clipPath;
 
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::nonZero);
-    renderPath->addRenderPath (clipPath.getRenderPath(), options.getUntranslatedTransform().toMat2D());
+    rive::RiveRenderPath renderPath;
+    renderPath.fillRule (rive::FillRule::nonZero);
+    renderPath.addRenderPath (clipPath.getRenderPath(), options.getUntranslatedTransform().toMat2D());
 
-    renderer.clipPath (renderPath.get());
+    renderer.clipPath (std::addressof (renderPath));
 }
 
 Path Graphics::getClipPath() const
@@ -596,7 +596,6 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     rive::RiveRenderPaint paint;
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
-    //paint.feather (options.feather);
 
     renderer.drawPath (unitRectPath.get(), std::addressof (paint));
 
@@ -634,6 +633,9 @@ void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
 
     rive::RiveRenderPaint paint;
     paint.style (rive::RenderPaintStyle::stroke);
+    paint.thickness (options.getStrokeWidth());
+    paint.join (toStrokeJoin (options.join));
+    paint.cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
         paint.color (options.getStrokeColor());

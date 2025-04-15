@@ -220,17 +220,16 @@ void StyledText::update()
     if (styledTexts.empty())
         return;
 
-    auto runs = styledTexts.runs();
+    orderedLines.clear();
+    ellipsisRun = {};
+
+    const auto& runs = styledTexts.runs();
     shape = runs[0].font->shapeText (styledTexts.unichars(), runs);
     lines = rive::Text::BreakLines (shape,
                                     maxSize.getWidth(), // -1.0f
                                     toTextAlign (horizontalAlign),
                                     toTextWrap (textWrap));
 
-    orderedLines.clear();
-    ellipsisRun = {};
-
-    // build render styles.
     if (shape.empty())
     {
         bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
@@ -320,7 +319,21 @@ void StyledText::update()
             }
 
             float x = line.startX;
+            float renderX = x;
             float renderY = y + line.baseline;
+
+            int numGlyphs = 0;
+            for (auto [run, glyphIndex] : orderedLines[lineIndex])
+            {
+                const rive::Vec2D& offset = run->offsets[glyphIndex];
+                renderX += run->advances[glyphIndex] + offset.x;
+
+                ++numGlyphs;
+            }
+
+            float adjustX = 0.0f;
+            if (overflow == TextOverflow::fit && renderX < measuredWidth && lineIndex != lastLineIndex)
+                adjustX = (measuredWidth - renderX) / numGlyphs;
 
             for (auto [run, glyphIndex] : orderedLines[lineIndex])
             {
@@ -338,7 +351,7 @@ void StyledText::update()
                                                     run->size,
                                                     x + offset.x,
                                                     renderY + offset.y));
-                x += advance;
+                x += advance + adjustX;
 
                 jassert (run->styleId < styles.size());
                 RenderStyle* style = &styles[run->styleId];

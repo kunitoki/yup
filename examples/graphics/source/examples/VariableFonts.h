@@ -60,8 +60,33 @@ public:
                 repaint (textBounds);
             };
             addAndMakeVisible (slider);
+
+            updateLabel (0);
         }
 
+        {
+            auto label = labels.add (std::make_unique<yup::Label>());
+            label->setFont (font);
+            addAndMakeVisible (label);
+
+            auto slider = sliders.add (std::make_unique<yup::Slider> ("StrokeWidth", font));
+            slider->setDefaultValue (0.0f);
+            slider->setRange ({ 0.0f, 32.0f });
+            slider->setValue (0.0f);
+            slider->onValueChanged = [this] (float value)
+            {
+                updateLabel (1);
+
+                strokeWidth = value;
+
+                repaint (textBounds);
+            };
+            addAndMakeVisible (slider);
+
+            updateLabel (1);
+        }
+
+        const int offsetIndex = sliders.size();
         for (int index = 0; index < font.getNumAxis(); ++index)
         {
             auto axisInfo = font.getAxisDescription (index);
@@ -76,9 +101,9 @@ public:
             slider->setDefaultValue (axisInfo->defaultValue);
             slider->setRange ({ axisInfo->minimumValue, axisInfo->maximumValue });
             slider->setValue (axisInfo->defaultValue);
-            slider->onValueChanged = [this, index] (float value)
+            slider->onValueChanged = [this, index, offsetIndex] (float value)
             {
-                updateLabel (index + 1);
+                updateLabel (index + offsetIndex);
 
                 this->font = this->font.withAxisValue (index, value);
 
@@ -87,7 +112,7 @@ public:
             };
             addAndMakeVisible (slider);
 
-            updateLabel (index);
+            updateLabel (index + offsetIndex);
         }
     }
 
@@ -98,8 +123,9 @@ public:
         textBounds = bounds.removeFromBottom (proportionOfHeight (0.5f)).reduced (10);
 
         styledText.setMaxSize (textBounds.getSize());
-        styledText.setHorizontalAlign (yup::StyledText::right);
+        styledText.setHorizontalAlign (yup::StyledText::left);
         styledText.setVerticalAlign (yup::StyledText::middle);
+        styledText.setOverflow (yup::StyledText::fit);
         styledText.setWrap (yup::StyledText::wrap);
         styledText.clear();
         styledText.appendText (text, nullptr, font.getFont(), fontSize);
@@ -107,7 +133,7 @@ public:
 
         bounds = bounds.reduced (10);
 
-        int slidersPerRow = 5;
+        int slidersPerRow = 6;
         int sliderWidth = bounds.getWidth() / slidersPerRow;
         int labelHeight = 16;
         int sliderIndex = 0;
@@ -135,8 +161,12 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        g.setStrokeColor (0xffff0000);
-        g.strokeFittedText (styledText, textBounds);
+        if (strokeWidth > 0.0f)
+        {
+            g.setStrokeColor (0xff000000);
+            g.setStrokeWidth (strokeWidth);
+            g.strokeFittedText (styledText, textBounds);
+        }
 
         g.setFillColor (0xffffffff);
         g.fillFittedText (styledText, textBounds);
@@ -154,7 +184,9 @@ private:
     yup::StyledText styledText;
     yup::Rectangle<float> textBounds;
     float fontSize = 16.0f;
+    float strokeWidth = 0.0f;
 
+    yup::OwnedArray<yup::TextButton> buttons;
     yup::OwnedArray<yup::Slider> sliders;
     yup::OwnedArray<yup::Label> labels;
 };
