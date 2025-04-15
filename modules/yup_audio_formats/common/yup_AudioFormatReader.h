@@ -19,7 +19,8 @@
   ==============================================================================
 */
 
-namespace yup {
+namespace yup
+{
 
 class JUCE_API AudioFormatReader
 {

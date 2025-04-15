@@ -19,7 +19,8 @@
   ==============================================================================
 */
 
-namespace yup {
+namespace yup
+{
 
 AudioFormatManager::AudioFormatManager() = default;
 

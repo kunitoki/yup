@@ -19,7 +19,8 @@
   ==============================================================================
 */
 
-namespace yup {
+namespace yup
+{
 
 //==============================================================================
 
@@ -33,8 +34,8 @@ struct WAVHeader
     uint16 audioFormat;   // 1 for PCM
     uint16 numChannels;
     uint32 sampleRate;
-    uint32 byteRate;      // sampleRate * numChannels * bitsPerSample/8
-    uint16 blockAlign;    // numChannels * bitsPerSample/8
+    uint32 byteRate;   // sampleRate * numChannels * bitsPerSample/8
+    uint16 blockAlign; // numChannels * bitsPerSample/8
     uint16 bitsPerSample;
     char subchunk2ID[4];  // "data"
     uint32 subchunk2Size; // Number of data bytes
@@ -49,7 +50,7 @@ public:
         : stream (filePath, std::ios::binary)
         , dataOffset (0)
     {
-        if (!stream)
+        if (! stream)
             throw std::runtime_error ("Could not open WAV file for reading.");
 
         readHeader();
@@ -79,7 +80,7 @@ public:
         int numCh = header.numChannels;
         std::vector<int16_t> tempBuffer (numSamples * numCh);
 
-        if (!readSamples (tempBuffer.data(), startSample, numSamples))
+        if (! readSamples (tempBuffer.data(), startSample, numSamples))
             return false;
 
         // Deinterleave and convert to float (in range [-1, 1]).
@@ -103,11 +104,11 @@ private:
 
         stream.clear();
         stream.seekg (byteOffset, std::ios::beg);
-        if (!stream)
+        if (! stream)
             return false;
 
         size_t bytesToRead = numSamples * blockAlign;
-        stream.read(reinterpret_cast<char*> (buffer), bytesToRead);
+        stream.read (reinterpret_cast<char*> (buffer), bytesToRead);
 
         return stream.gcount() == static_cast<std::streamsize> (bytesToRead);
     }
@@ -121,10 +122,7 @@ private:
             throw std::runtime_error ("Failed to read complete WAV header.");
 
         // Validate header values.
-        if (std::strncmp (header.chunkID, "RIFF", 4) != 0 ||
-            std::strncmp (header.format, "WAVE", 4) != 0 ||
-            std::strncmp (header.subchunk1ID, "fmt ", 4) != 0 ||
-            std::strncmp (header.subchunk2ID, "data", 4) != 0)
+        if (std::strncmp (header.chunkID, "RIFF", 4) != 0 || std::strncmp (header.format, "WAVE", 4) != 0 || std::strncmp (header.subchunk1ID, "fmt ", 4) != 0 || std::strncmp (header.subchunk2ID, "data", 4) != 0)
         {
             throw std::runtime_error ("Invalid or unsupported WAV file.");
         }
@@ -143,16 +141,16 @@ private:
 class JUCE_API WAVAudioFormatWriter : public AudioFormatWriter
 {
 public:
-    WAVAudioFormatWriter(const std::string& filePath, int sampleRate, int numChannels, int bitsPerSample)
-        : stream(filePath, std::ios::binary)
-        , sampleRate(sampleRate)
-        , numChannels(numChannels)
-        , bitsPerSample(bitsPerSample)
-        , dataBytesWritten(0)
-        , finalized(false)
+    WAVAudioFormatWriter (const std::string& filePath, int sampleRate, int numChannels, int bitsPerSample)
+        : stream (filePath, std::ios::binary)
+        , sampleRate (sampleRate)
+        , numChannels (numChannels)
+        , bitsPerSample (bitsPerSample)
+        , dataBytesWritten (0)
+        , finalized (false)
     {
-        if (!stream)
-            throw std::runtime_error("Could not open WAV file for writing.");
+        if (! stream)
+            throw std::runtime_error ("Could not open WAV file for writing.");
 
         writeHeaderPlaceholder();
     }
@@ -195,35 +193,35 @@ public:
         stream.flush();
         std::streampos fileSize = stream.tellp();
 
-        uint32_t subchunk2Size = static_cast<uint32_t>(dataBytesWritten);
-        uint32_t chunkSize = static_cast<uint32_t>(fileSize) - 8;
+        uint32_t subchunk2Size = static_cast<uint32_t> (dataBytesWritten);
+        uint32_t chunkSize = static_cast<uint32_t> (fileSize) - 8;
 
         WAVHeader header;
-        std::memcpy(header.chunkID, "RIFF", 4);
+        std::memcpy (header.chunkID, "RIFF", 4);
         header.chunkSize = chunkSize;
-        std::memcpy(header.format, "WAVE", 4);
+        std::memcpy (header.format, "WAVE", 4);
 
-        std::memcpy(header.subchunk1ID, "fmt ", 4);
+        std::memcpy (header.subchunk1ID, "fmt ", 4);
         header.subchunk1Size = 16;
         header.audioFormat = 1;
-        header.numChannels = static_cast<uint16_t>(numChannels);
-        header.sampleRate = static_cast<uint32_t>(sampleRate);
-        header.bitsPerSample = static_cast<uint16_t>(bitsPerSample);
+        header.numChannels = static_cast<uint16_t> (numChannels);
+        header.sampleRate = static_cast<uint32_t> (sampleRate);
+        header.bitsPerSample = static_cast<uint16_t> (bitsPerSample);
         header.byteRate = header.sampleRate * header.numChannels * header.bitsPerSample / 8;
-        header.blockAlign = static_cast<uint16_t>(header.numChannels * header.bitsPerSample / 8);
+        header.blockAlign = static_cast<uint16_t> (header.numChannels * header.bitsPerSample / 8);
 
-        std::memcpy(header.subchunk2ID, "data", 4);
+        std::memcpy (header.subchunk2ID, "data", 4);
         header.subchunk2Size = subchunk2Size;
 
-        stream.seekp(0, std::ios::beg);
-        stream.write(reinterpret_cast<const char*>(&header), sizeof(WAVHeader));
+        stream.seekp (0, std::ios::beg);
+        stream.write (reinterpret_cast<const char*> (&header), sizeof (WAVHeader));
         stream.flush();
         return stream.good();
     }
 
     ~WAVAudioFormatWriter()
     {
-        if (!finalized)
+        if (! finalized)
             finalize();
     }
 
@@ -231,18 +229,18 @@ private:
     void writeHeaderPlaceholder()
     {
         WAVHeader header;
-        std::memset(&header, 0, sizeof(WAVHeader));
-        stream.write(reinterpret_cast<const char*>(&header), sizeof(WAVHeader));
+        std::memset (&header, 0, sizeof (WAVHeader));
+        stream.write (reinterpret_cast<const char*> (&header), sizeof (WAVHeader));
     }
 
-    bool writeSamples(const void* samples, size_t numSamples) override
+    bool writeSamples (const void* samples, size_t numSamples) override
     {
         size_t bytesPerSample = (bitsPerSample / 8) * numChannels;
         size_t bytesToWrite = numSamples * bytesPerSample;
 
         stream.write (reinterpret_cast<const char*> (samples), bytesToWrite);
 
-        if (!stream)
+        if (! stream)
             return false;
 
         dataBytesWritten += bytesToWrite;

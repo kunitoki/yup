@@ -19,7 +19,8 @@
   ==============================================================================
 */
 
-namespace yup {
+namespace yup
+{
 
 class JUCE_API AudioFormat
 {
@@ -30,7 +31,7 @@ public:
 
     virtual StringArray getSupportedFileExtensions() const = 0;
 
-    virtual bool canHandleFile(const File& filePath) const = 0;
+    virtual bool canHandleFile (const File& filePath) const = 0;
 
     virtual std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* stream) = 0;
 
