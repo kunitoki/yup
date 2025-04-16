@@ -249,7 +249,7 @@ public:
     */
     [[nodiscard]] static constexpr AffineTransform translation (float tx, float ty) noexcept
     {
-        return AffineTransform (1.0f, 0.0f, tx, 0.0f, 1.0f, ty);
+        return { 1.0f, 0.0f, tx, 0.0f, 1.0f, ty };
     }
 
     //==============================================================================
@@ -264,7 +264,7 @@ public:
     [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians) const noexcept
     {
         if (angleInRadians == 0.0f)
-            return identity();
+            return *this;
 
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
@@ -310,7 +310,7 @@ public:
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
 
-        return AffineTransform (cosTheta, -sinTheta, 0.0f, sinTheta, cosTheta, 0.0f);
+        return { cosTheta, -sinTheta, 0.0f, sinTheta, cosTheta, 0.0f };
     }
 
     /** Create a rotation transformation around a point
@@ -331,13 +331,14 @@ public:
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
 
-        return AffineTransform (
+        return {
             cosTheta,
             -sinTheta,
-            -cosTheta * centerX + sinTheta * centerY + centerY,
+            -cosTheta * centerX + sinTheta * centerY + centerX,
             sinTheta,
             cosTheta,
-            -sinTheta * centerX + -cosTheta * centerY + centerY);
+            -sinTheta * centerX + -cosTheta * centerY + centerY
+        };
     }
 
     //==============================================================================

@@ -66,15 +66,15 @@ void Label::setFont (Font newFont)
 
 void Label::paint (Graphics& g)
 {
-    g.setFillColor (fillColor);
-    g.fillFittedText (styledText, getLocalBounds());
-
-    if (! strokeColor.isTransparent())
+    if (! strokeColor.isTransparent() && strokeWidth > 0.0f)
     {
         g.setStrokeColor (strokeColor);
         g.setStrokeWidth (strokeWidth);
         g.strokeFittedText (styledText, getLocalBounds());
     }
+
+    g.setFillColor (fillColor);
+    g.fillFittedText (styledText, getLocalBounds());
 
     //g.setStrokeColor (0xffff0000);
     //g.strokeRect (getLocalBounds());
@@ -104,7 +104,6 @@ void Label::prepareText()
     if (text.isNotEmpty())
     {
         styledText.appendText (text, nullptr, font.getFont(), fontSize);
-
         styledText.update();
     }
 

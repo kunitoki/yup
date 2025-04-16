@@ -538,6 +538,7 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
 {
     rive::RiveRenderPaint paint;
     paint.style (rive::RenderPaintStyle::stroke);
+    paint.blendMode (toBlendMode (options.blendMode));
     paint.thickness (options.getStrokeWidth());
     paint.join (toStrokeJoin (options.join));
     paint.cap (toStrokeCap (options.cap));
@@ -556,6 +557,7 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
 {
     rive::RiveRenderPaint paint;
     paint.style (rive::RenderPaintStyle::fill);
+    paint.blendMode (toBlendMode (options.blendMode));
     paint.feather (options.feather);
 
     if (options.isFillColor())
@@ -613,6 +615,7 @@ void Graphics::fillFittedText (StyledText& text, const Rectangle<float>& rect)
 
     rive::RiveRenderPaint paint;
     paint.style (rive::RenderPaintStyle::fill);
+    paint.blendMode (toBlendMode (options.blendMode));
     paint.feather (options.feather);
 
     if (options.isFillColor())
@@ -633,6 +636,7 @@ void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
 
     rive::RiveRenderPaint paint;
     paint.style (rive::RenderPaintStyle::stroke);
+    paint.blendMode (toBlendMode (options.blendMode));
     paint.thickness (options.getStrokeWidth());
     paint.join (toStrokeJoin (options.join));
     paint.cap (toStrokeCap (options.cap));
@@ -660,8 +664,8 @@ void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect,
     rive::RawPath path;
     path.addRect ({ rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom() });
     path.transformInPlace (options.getTransform().toMat2D());
-    rive::RiveRenderPath renderPath (rive::FillRule::clockwise, path);
-    renderer.clipPath (std::addressof (renderPath));
+    auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
+    renderer.clipPath (renderPath.get());
 
     auto transform = options.getTranslatedTransform (rect.getX() + offset.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());

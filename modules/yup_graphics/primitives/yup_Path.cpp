@@ -352,7 +352,7 @@ Path& Path::transform (const AffineTransform& t)
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
     newPath->addRenderPath (path.get(), t.toMat2D());
-    path = newPath;
+    path = std::move (newPath);
     return *this;
 }
 
