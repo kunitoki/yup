@@ -26,9 +26,9 @@
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 
-#if RIVE_DESKTOP_GL || JUCE_ANDROID
-#include <SDL2/SDL.h>
-#endif
+//#if RIVE_DESKTOP_GL || JUCE_ANDROID
+//#include <SDL2/SDL.h>
+//#endif
 
 namespace yup
 {
