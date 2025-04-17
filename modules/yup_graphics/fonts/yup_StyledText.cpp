@@ -26,7 +26,7 @@ namespace yup
 
 rive::TextAlign toTextAlign (StyledText::HorizontalAlign align) noexcept
 {
-    if (align == StyledText::left)
+    if (align == StyledText::left || align == StyledText::justified)
         return rive::TextAlign::left;
 
     if (align == StyledText::center)
@@ -295,18 +295,6 @@ void StyledText::update()
         const rive::Paragraph& paragraph = shape[paragraphIndex++];
         for (const rive::GlyphLine& line : paragraphLines)
         {
-            switch (overflow)
-            {
-                case TextOverflow::hidden:
-                    if (y + line.bottom > maxSize.getHeight())
-                        return;
-
-                    break;
-
-                default:
-                    break;
-            }
-
             if (lineIndex >= orderedLines.size())
             {
                 orderedLines.emplace_back (
@@ -319,21 +307,25 @@ void StyledText::update()
             }
 
             float x = line.startX;
-            float renderX = x;
             float renderY = y + line.baseline;
-
-            int numGlyphs = 0;
-            for (auto [run, glyphIndex] : orderedLines[lineIndex])
-            {
-                const rive::Vec2D& offset = run->offsets[glyphIndex];
-                renderX += run->advances[glyphIndex] + offset.x;
-
-                ++numGlyphs;
-            }
-
             float adjustX = 0.0f;
-            if (overflow == TextOverflow::fit && renderX < measuredWidth && lineIndex != lastLineIndex)
-                adjustX = (measuredWidth - renderX) / numGlyphs;
+
+            if (horizontalAlign == HorizontalAlign::justified && lineIndex != lastLineIndex)
+            {
+                float renderX = x;
+                int numGlyphs = 0;
+
+                for (auto [run, glyphIndex] : orderedLines[lineIndex])
+                {
+                    const rive::Vec2D& offset = run->offsets[glyphIndex];
+                    renderX += run->advances[glyphIndex] + offset.x;
+
+                    ++numGlyphs;
+                }
+
+                if (renderX < measuredWidth)
+                    adjustX = (measuredWidth - renderX) / numGlyphs;
+            }
 
             for (auto [run, glyphIndex] : orderedLines[lineIndex])
             {
@@ -344,7 +336,6 @@ void StyledText::update()
                 float advance = run->advances[glyphIndex];
 
                 rive::RawPath path = font->getPath (glyphId);
-
                 path.transformInPlace (rive::Mat2D (run->size,
                                                     0.0f,
                                                     0.0f,

@@ -172,8 +172,6 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
 void Slider::paint (Graphics& g)
 {
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
-
     g.setFillColor (Color (0xff3d3d3d));
     g.fillPath (backgroundPath);
 

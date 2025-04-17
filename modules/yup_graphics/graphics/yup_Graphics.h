@@ -490,12 +490,12 @@ private:
 
         float getStrokeWidth() const noexcept
         {
-            return strokeWidth * scale;
+            return strokeWidth;
         }
 
         float getFeather() const noexcept
         {
-            return feather * scale;
+            return feather;
         }
 
         const Rectangle<float>& getDrawingArea() const noexcept
@@ -503,25 +503,35 @@ private:
             return drawingArea;
         }
 
-        AffineTransform getUntranslatedTransform() const noexcept
+        AffineTransform getLocalTransform() const noexcept
         {
             return transform
-                .scaled (scale);
+                .scaled (scale)
+            ;
         }
 
         AffineTransform getTransform() const noexcept
         {
             return transform
                 .translated (drawingArea.getX(), drawingArea.getY())
-                .scaled (scale);
+                .scaled (scale)
+            ;
         }
 
-        AffineTransform getTranslatedTransform (float offsetX, float offsetY) const noexcept
+        AffineTransform getFixedTransform() const noexcept
+        {
+            return AffineTransform()
+                .translated (drawingArea.getX(), drawingArea.getY())
+                .scaled (scale)
+            ;
+        }
+
+        AffineTransform getTransform (float offsetX, float offsetY) const noexcept
         {
             return transform
-                .translated (drawingArea.getX(), drawingArea.getY())
-                .translated (offsetX, offsetY)
-                .scaled (scale);
+                .translated (drawingArea.getX() + offsetX, drawingArea.getY() + offsetY)
+                .scaled (scale)
+            ;
         }
 
         float scale = 1.0f;

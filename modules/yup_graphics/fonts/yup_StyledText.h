@@ -33,7 +33,8 @@ public:
     {
         left,
         center,
-        right
+        right,
+        justified
     };
 
     enum VerticalAlign : uint8_t
@@ -43,18 +44,10 @@ public:
         bottom
     };
 
-    enum TextDirection : uint8_t
-    {
-        ltr = 0,
-        rtl = 1
-    };
-
     enum TextOverflow : uint8_t
     {
         visible,
-        hidden,
-        ellipsis,
-        fit
+        ellipsis
     };
 
     enum TextOrigin : uint8_t
@@ -161,7 +154,7 @@ private:
     TextOrigin origin = TextOrigin::topOrigin;
     TextOverflow overflow = TextOverflow::visible;
     HorizontalAlign horizontalAlign = HorizontalAlign::left;
-    VerticalAlign verticalAlign = VerticalAlign::middle;
+    VerticalAlign verticalAlign = VerticalAlign::top;
     TextWrap textWrap = TextWrap::wrap;
     Size<float> maxSize = { -1.0f, -1.0f };
     float paragraphSpacing = 0.0f;

@@ -366,7 +366,7 @@ Rectangle<float> Graphics::getDrawingArea() const
 //==============================================================================
 void Graphics::setTransform (const AffineTransform& transform)
 {
-    currentRenderOptions().transform = transform;
+    currentRenderOptions().transform = currentRenderOptions().transform.followedBy (transform);
 }
 
 AffineTransform Graphics::getTransform() const
@@ -391,7 +391,7 @@ void Graphics::setClipPath (const Path& clipPath)
 
     rive::RiveRenderPath renderPath;
     renderPath.fillRule (rive::FillRule::nonZero);
-    renderPath.addRenderPath (clipPath.getRenderPath(), options.getUntranslatedTransform().toMat2D());
+    renderPath.addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
 
     renderer.clipPath (std::addressof (renderPath));
 }
@@ -423,12 +423,11 @@ void Graphics::strokeLine (const Point<float>& p1, const Point<float>& p2)
 void Graphics::fillAll()
 {
     const auto& options = currentRenderOptions();
-    const auto& area = options.getDrawingArea();
 
     Path path;
-    path.addRectangle (area);
+    path.addRectangle (options.getDrawingArea().withZeroPosition());
 
-    renderFillPath (path, options, options.getUntranslatedTransform());
+    renderFillPath (path, options, options.getTransform());
 }
 
 //==============================================================================
@@ -548,9 +547,10 @@ void Graphics::renderStrokePath (const Path& path, const RenderOptions& options,
     else
         paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
 
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->addRenderPath (path.getRenderPath(), transform.toMat2D());
-    renderer.drawPath (renderPath.get(), std::addressof (paint));
+    renderer.save();
+    renderer.transform (transform.toMat2D());
+    renderer.drawPath (path.getRenderPath(), std::addressof (paint));
+    renderer.restore();
 }
 
 void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
@@ -565,9 +565,10 @@ void Graphics::renderFillPath (const Path& path, const RenderOptions& options, c
     else
         paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->addRenderPath (path.getRenderPath(), transform.toMat2D());
-    renderer.drawPath (renderPath.get(), std::addressof (paint));
+    renderer.save();
+    renderer.transform (transform.toMat2D());
+    renderer.drawPath (path.getRenderPath(), std::addressof (paint));
+    renderer.restore();
 }
 
 //==============================================================================
@@ -577,14 +578,10 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     if (renderContext == nullptr)
         return;
 
-    const auto& options = currentRenderOptions();
-
-    renderer.save();
-    renderer.scale (image.getWidth(), image.getHeight());
-    renderer.transform (options.getTransform().toMat2D());
-
     if (! image.createTextureIfNotPresent (context))
         return;
+
+    const auto& options = currentRenderOptions();
 
     static const auto unitRectPath = []
     {
@@ -599,8 +596,10 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
 
+    renderer.save();
+    renderer.scale (image.getWidth(), image.getHeight());
+    renderer.transform (options.getTransform().toMat2D());
     renderer.drawPath (unitRectPath.get(), std::addressof (paint));
-
     renderer.restore();
 }
 
@@ -663,11 +662,11 @@ void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect,
 
     rive::RawPath path;
     path.addRect ({ rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom() });
-    path.transformInPlace (options.getTransform().toMat2D());
+    path.transformInPlace (options.getFixedTransform().toMat2D());
     auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
     renderer.clipPath (renderPath.get());
 
-    auto transform = options.getTranslatedTransform (rect.getX() + offset.getX(), rect.getY() + offset.getY());
+    auto transform = options.getTransform (rect.getX() + offset.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 
     for (auto style : text.getRenderStyles())

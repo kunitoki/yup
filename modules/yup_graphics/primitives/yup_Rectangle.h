@@ -601,13 +601,31 @@ public:
     }
 
     //==============================================================================
+    /** Returns the center X of the rectangle.
+
+        @return The center X of the rectangle.
+    */
+    [[nodiscard]] constexpr ValueType getCenterX() const noexcept
+    {
+        return xy.getX() + size.getWidth() / static_cast<ValueType> (2);
+    }
+
+    /** Returns the center Y of the rectangle.
+
+        @return The center Y of the rectangle.
+    */
+    [[nodiscard]] constexpr ValueType getCenterY() const noexcept
+    {
+        return xy.getY() + size.getHeight() / static_cast<ValueType> (2);
+    }
+
     /** Returns the center point of the rectangle.
 
         @return The center of the rectangle as a Point, calculated as the midpoint between the top-left and bottom-right corners.
     */
     [[nodiscard]] constexpr Point<ValueType> getCenter() const noexcept
     {
-        return { xy.getX() + size.getWidth() / 2.0f, xy.getY() + size.getHeight() / 2.0f };
+        return { xy.getX() + size.getWidth() / static_cast<ValueType> (2), xy.getY() + size.getHeight() / static_cast<ValueType> (2) };
     }
 
     /** Sets the center of the rectangle to the specified coordinates.

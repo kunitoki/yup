@@ -74,31 +74,35 @@ void Path::clear()
 
 //==============================================================================
 
-void Path::moveTo (float x, float y)
+Path& Path::moveTo (float x, float y)
 {
     path->moveTo (x, y);
+
+    return *this;
 }
 
-void Path::moveTo (const Point<float>& p)
+Path& Path::moveTo (const Point<float>& p)
 {
-    moveTo (p.getX(), p.getY());
+    return moveTo (p.getX(), p.getY());
 }
 
 //==============================================================================
 
-void Path::lineTo (float x, float y)
+Path& Path::lineTo (float x, float y)
 {
     path->lineTo (x, y);
+
+    return *this;
 }
 
-void Path::lineTo (const Point<float>& p)
+Path& Path::lineTo (const Point<float>& p)
 {
-    lineTo (p.getX(), p.getY());
+    return lineTo (p.getX(), p.getY());
 }
 
 //==============================================================================
 
-void Path::quadTo (float x, float y, float x1, float y1)
+Path& Path::quadTo (float x, float y, float x1, float y1)
 {
     const auto& rawPath = path->getRawPath();
     if (rawPath.points().empty())
@@ -109,49 +113,59 @@ void Path::quadTo (float x, float y, float x1, float y1)
     path->cubic (rive::Vec2D::lerp (last, rive::Vec2D (x1, y1), 2 / 3.f),
                  rive::Vec2D::lerp (rive::Vec2D (x, y), rive::Vec2D (x1, y1), 2 / 3.f),
                  rive::Vec2D (x, y));
+
+    return *this;
 }
 
-void Path::quadTo (const Point<float>& p, float x1, float y1)
+Path& Path::quadTo (const Point<float>& p, float x1, float y1)
 {
-    quadTo (p.getX(), p.getY(), x1, y1);
+    return quadTo (p.getX(), p.getY(), x1, y1);
 }
 
 //==============================================================================
 
-void Path::cubicTo (float x, float y, float x1, float y1, float x2, float y2)
+Path& Path::cubicTo (float x, float y, float x1, float y1, float x2, float y2)
 {
     path->cubicTo (x, y, x1, y1, x2, y2);
+
+    return *this;
 }
 
-void Path::cubicTo (const Point<float>& p, float x1, float y1, float x2, float y2)
+Path& Path::cubicTo (const Point<float>& p, float x1, float y1, float x2, float y2)
 {
-    cubicTo (p.getX(), p.getY(), x1, y1, x2, y2);
+    return cubicTo (p.getX(), p.getY(), x1, y1, x2, y2);
 }
 
 //==============================================================================
 
-void Path::close()
+Path& Path::close()
 {
     path->close();
+
+    return *this;
 }
 
 //==============================================================================
 
-void Path::addLine (const Point<float>& p1, const Point<float>& p2)
+Path& Path::addLine (const Point<float>& p1, const Point<float>& p2)
 {
     moveTo (p1);
     lineTo (p2);
+
+    return *this;
 }
 
-void Path::addLine (const Line<float>& line)
+Path& Path::addLine (const Line<float>& line)
 {
     moveTo (line.getStart());
     lineTo (line.getEnd());
+
+    return *this;
 }
 
 //==============================================================================
 
-void Path::addRectangle (float x, float y, float width, float height)
+Path& Path::addRectangle (float x, float y, float width, float height)
 {
     reserveSpace (size() + 5);
 
@@ -160,16 +174,18 @@ void Path::addRectangle (float x, float y, float width, float height)
     lineTo (x + width, y + height);
     lineTo (x, y + height);
     lineTo (x, y);
+
+    return *this;
 }
 
-void Path::addRectangle (const Rectangle<float>& rect)
+Path& Path::addRectangle (const Rectangle<float>& rect)
 {
-    addRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
+    return addRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight());
 }
 
 //==============================================================================
 
-void Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
+Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
     reserveSpace (size() + 10);
 
@@ -188,26 +204,28 @@ void Path::addRoundedRectangle (float x, float y, float width, float height, flo
     lineTo (x, y + radiusTopLeft);
     cubicTo (x, y + radiusTopLeft * 0.55f, x + radiusTopLeft * 0.55f, y, x + radiusTopLeft, y);
     lineTo (x + radiusTopLeft, y);
+
+    return *this;
 }
 
-void Path::addRoundedRectangle (float x, float y, float width, float height, float radius)
+Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radius)
 {
-    addRoundedRectangle (x, y, width, height, radius, radius, radius, radius);
+    return addRoundedRectangle (x, y, width, height, radius, radius, radius, radius);
 }
 
-void Path::addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
+Path& Path::addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
+    return addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radiusTopLeft, radiusTopRight, radiusBottomLeft, radiusBottomRight);
 }
 
-void Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
+Path& Path::addRoundedRectangle (const Rectangle<float>& rect, float radius)
 {
-    addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radius, radius, radius, radius);
+    return addRoundedRectangle (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), radius, radius, radius, radius);
 }
 
 //==============================================================================
 
-void Path::addEllipse (float x, float y, float width, float height)
+Path& Path::addEllipse (float x, float y, float width, float height)
 {
     reserveSpace (size() + 6);
 
@@ -224,16 +242,18 @@ void Path::addEllipse (float x, float y, float width, float height)
     cubicTo (cx - rx, cy + dy, cx - dx, cy + ry, cx, cy + ry);
     cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
     close();
+
+    return *this;
 }
 
-void Path::addEllipse (const Rectangle<float>& r)
+Path& Path::addEllipse (const Rectangle<float>& r)
 {
-    addEllipse (r.getX(), r.getY(), r.getWidth(), r.getHeight());
+    return addEllipse (r.getX(), r.getY(), r.getWidth(), r.getHeight());
 }
 
 //==============================================================================
 
-void Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
+Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
 {
     reserveSpace (size() + 6);
 
@@ -250,37 +270,41 @@ void Path::addCenteredEllipse (float centerX, float centerY, float radiusX, floa
     cubicTo (cx - rx, cy + dy, cx - dx, cy + ry, cx, cy + ry);
     cubicTo (cx + dx, cy + ry, cx + rx, cy + dy, cx + rx, cy);
     close();
+
+    return *this;
 }
 
-void Path::addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY)
+Path& Path::addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY)
 {
-    addCenteredEllipse (center.getX(), center.getY(), radiusX, radiusY);
+    return addCenteredEllipse (center.getX(), center.getY(), radiusX, radiusY);
 }
 
-void Path::addCenteredEllipse (const Point<float>& center, const Size<float>& diameter)
+Path& Path::addCenteredEllipse (const Point<float>& center, const Size<float>& diameter)
 {
-    addCenteredEllipse (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f);
+    return addCenteredEllipse (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f);
 }
 
 //==============================================================================
 
-void Path::addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath)
+Path& Path::addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const float radiusX = width * 0.5f;
     const float radiusY = height * 0.5f;
 
     addCenteredArc (x + radiusX, y + radiusY, radiusX, radiusY, 0.0f, fromRadians, toRadians, startAsNewSubPath);
+
+    return *this;
 }
 
-void Path::addArc (const Rectangle<float>& rect,
-                   float fromRadians,
-                   float toRadians,
-                   bool startAsNewSubPath)
+Path& Path::addArc (const Rectangle<float>& rect,
+                    float fromRadians,
+                    float toRadians,
+                    bool startAsNewSubPath)
 {
-    addArc (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), fromRadians, toRadians, startAsNewSubPath);
+    return addArc (rect.getX(), rect.getY(), rect.getWidth(), rect.getHeight(), fromRadians, toRadians, startAsNewSubPath);
 }
 
-void Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
+Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
     const int segments = jlimit (2, 54, static_cast<int> ((toRadians - fromRadians) / 0.1f));
 
@@ -314,27 +338,33 @@ void Path::addCenteredArc (float centerX, float centerY, float radiusX, float ra
         // Line to the next point on the arc
         lineTo (rotatedX, rotatedY);
     }
+
+    return *this;
 }
 
-void Path::addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
+Path& Path::addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
-    addCenteredArc (center.getX(), center.getY(), radiusX, radiusY, rotationOfEllipse, fromRadians, toRadians, startAsNewSubPath);
+    return addCenteredArc (center.getX(), center.getY(), radiusX, radiusY, rotationOfEllipse, fromRadians, toRadians, startAsNewSubPath);
 }
 
-void Path::addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
+Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
-    addCenteredArc (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f, rotationOfEllipse, fromRadians, toRadians, startAsNewSubPath);
+    return addCenteredArc (center.getX(), center.getY(), diameter.getWidth() / 2.0f, diameter.getHeight() / 2.0f, rotationOfEllipse, fromRadians, toRadians, startAsNewSubPath);
 }
 
 //==============================================================================
-void Path::appendPath (const Path& other)
+Path& Path::appendPath (const Path& other)
 {
     path->addRenderPath (other.getRenderPath(), rive::Mat2D());
+
+    return *this;
 }
 
-void Path::appendPath (const Path& other, const AffineTransform& transform)
+Path& Path::appendPath (const Path& other, const AffineTransform& transform)
 {
     path->addRenderPath (other.getRenderPath(), transform.toMat2D());
+
+    return *this;
 }
 
 void Path::appendPath (rive::rcp<rive::RiveRenderPath> other)

@@ -45,6 +45,7 @@ public:
             addControl ("FontSize", 0, 16.0f, 4.0f, 32.0f, fontSize);
             addControl ("Stroke", 1, 0.0f, 0.0f, 8.0f, strokeWidth);
             addControl ("Feather", 2, 0.0f, 0.0f, 10.0f, feather);
+            addControl ("Rotation", 3, 0.0f, 0.0f, 360.0f, rotation);
         }
 
         const int offsetIndex = sliders.size();
@@ -84,9 +85,9 @@ public:
         textBounds = bounds.removeFromBottom (proportionOfHeight (0.5f)).reduced (10);
 
         styledText.setMaxSize (textBounds.getSize());
-        styledText.setHorizontalAlign (yup::StyledText::left);
+        styledText.setHorizontalAlign (yup::StyledText::justified);
         styledText.setVerticalAlign (yup::StyledText::middle);
-        styledText.setOverflow (yup::StyledText::fit);
+        styledText.setOverflow (yup::StyledText::visible);
         styledText.setWrap (yup::StyledText::wrap);
         styledText.clear();
         styledText.appendText (text, nullptr, font.getFont(), fontSize);
@@ -122,16 +123,19 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        g.setTransform (yup::AffineTransform::rotation (
+            yup::degreesToRadians (-rotation), getLocalBounds().getCenterX(), 100.0f));
+
         if (feather > 0.0f)
         {
-            g.setFillColor (0xffffffff);
+            g.setFillColor (yup::Colors::black);
             g.setFeather (feather);
-            g.fillFittedText (styledText, textBounds);
+            g.fillFittedText (styledText, textBounds.translated (0, 2));
         }
 
         if (strokeWidth > 0.0f)
         {
-            g.setStrokeColor (0xff000000);
+            g.setStrokeColor (yup::Colors::green);
             g.setStrokeWidth (strokeWidth);
             g.setStrokeCap (yup::StrokeCap::Round);
             g.setStrokeJoin (yup::StrokeJoin::Round);
@@ -181,6 +185,7 @@ private:
     float fontSize = 16.0f;
     float strokeWidth = 0.0f;
     float feather = 0.0f;
+    float rotation = 0.0f;
 
     yup::OwnedArray<yup::TextButton> buttons;
     yup::OwnedArray<yup::Slider> sliders;
