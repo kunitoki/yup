@@ -506,32 +506,28 @@ private:
         AffineTransform getLocalTransform() const noexcept
         {
             return transform
-                .scaled (scale)
-            ;
+                .scaled (scale);
         }
 
         AffineTransform getTransform() const noexcept
         {
             return transform
                 .translated (drawingArea.getX(), drawingArea.getY())
-                .scaled (scale)
-            ;
+                .scaled (scale);
         }
 
         AffineTransform getFixedTransform() const noexcept
         {
             return AffineTransform()
                 .translated (drawingArea.getX(), drawingArea.getY())
-                .scaled (scale)
-            ;
+                .scaled (scale);
         }
 
         AffineTransform getTransform (float offsetX, float offsetY) const noexcept
         {
             return transform
                 .translated (drawingArea.getX() + offsetX, drawingArea.getY() + offsetY)
-                .scaled (scale)
-            ;
+                .scaled (scale);
         }
 
         float scale = 1.0f;

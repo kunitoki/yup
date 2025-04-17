@@ -46,7 +46,8 @@ class CustomWindow
 public:
     CustomWindow()
         : yup::DocumentWindow (yup::ComponentNative::Options()
-                               .withAllowedHighDensityDisplay (true), yup::Color (0xff404040))
+                                   .withAllowedHighDensityDisplay (true),
+                               yup::Color (0xff404040))
     {
         setTitle ("main");
 
