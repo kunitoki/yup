@@ -50,8 +50,11 @@ public:
     //==============================================================================
     void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) override;
 
+    void resized() override;
+
 private:
     Style::Ptr style;
+    StyledText styledText;
 };
 
 } // namespace yup

@@ -84,9 +84,6 @@
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 
-//==============================================================================
-#else
-
 #endif
 
 //==============================================================================
@@ -98,6 +95,7 @@
 #include "component/yup_Component.cpp"
 #include "widgets/yup_Button.cpp"
 #include "widgets/yup_TextButton.cpp"
+#include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"

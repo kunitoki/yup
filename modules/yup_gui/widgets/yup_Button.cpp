@@ -59,7 +59,7 @@ void Button::mouseDown (const MouseEvent& event)
     if (onClick)
         onClick();
 
-    takeFocus();
+    takeKeyboardFocus();
 
     repaint();
 }

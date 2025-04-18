@@ -28,6 +28,9 @@
 #elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wattributes"
+#elif _MSC_VER
+ __pragma (warning (push))
+ __pragma (warning (disable: 4244))
 #endif
 
 #include "source/rive_renderer.cpp"
@@ -48,4 +51,6 @@
  #pragma clang diagnostic pop
 #elif __GNUC__
  #pragma GCC diagnostic pop
+#elif _MSC_VER
+ __pragma (warning (pop))
 #endif

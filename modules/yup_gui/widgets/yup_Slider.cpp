@@ -27,14 +27,16 @@ namespace yup
 Slider::Slider (StringRef componentID)
     : Component (componentID)
 {
-    setValue (0.0f);
+    setMouseCursor (MouseCursor::Hand);
+
+    setValue (defaultValue, dontSendNotification);
 }
 
 //==============================================================================
 
 void Slider::setValue (float newValue, NotificationType notification)
 {
-    value = jlimit (0.0f, 1.0f, newValue);
+    value = range.getRange().clipValue (newValue);
 
     sendValueChanged (notification);
 
@@ -46,7 +48,45 @@ float Slider::getValue() const
     return value;
 }
 
+void Slider::setValueNormalised (float newValue, NotificationType notification)
+{
+    setValue (range.convertFrom0to1 (jlimit (0.0f, 1.0f, newValue)), notification);
+}
+
+float Slider::getValueNormalised() const
+{
+    return range.convertTo0to1 (value);
+}
+
 void Slider::valueChanged() {}
+
+//==============================================================================
+
+void Slider::setDefaultValue (float newDefaultValue)
+{
+    defaultValue = newDefaultValue;
+}
+
+float Slider::getDefaultValue() const
+{
+    return defaultValue;
+}
+
+//==============================================================================
+
+void Slider::setRange (const Range<float>& newRange)
+{
+    range = newRange;
+
+    setDefaultValue (range.getRange().clipValue (defaultValue));
+
+    setValue (range.getRange().clipValue (value), dontSendNotification);
+}
+
+Range<float> Slider::getRange() const
+{
+    return range.getRange();
+}
 
 //==============================================================================
 
@@ -101,7 +141,7 @@ void Slider::mouseDown (const MouseEvent& event)
 
     origin = event.getPosition();
 
-    takeFocus();
+    takeKeyboardFocus();
 
     repaint();
 }
@@ -126,7 +166,7 @@ void Slider::mouseDrag (const MouseEvent& event)
 
     origin = event.getPosition();
 
-    setValue (value + distance);
+    setValueNormalised (getValueNormalised() + distance);
 }
 
 void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
@@ -136,7 +176,7 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
     origin = event.getPosition();
 
-    setValue (value + distance);
+    setValueNormalised (getValueNormalised() + distance);
 }
 
 //==============================================================================

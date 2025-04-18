@@ -249,7 +249,21 @@ public:
     */
     [[nodiscard]] static constexpr AffineTransform translation (float tx, float ty) noexcept
     {
-        return AffineTransform (1.0f, 0.0f, tx, 0.0f, 1.0f, ty);
+        return { 1.0f, 0.0f, tx, 0.0f, 1.0f, ty };
+    }
+
+    /** Create a translated transformation
+
+        Creates a new AffineTransform object that represents this transformation translated absolutely in the x and y directions.
+
+        @param tx The absolute amount to translate in the x-direction.
+        @param ty The absolute amount to translate in the y-direction.
+
+        @return A new AffineTransform object representing the translated transformation.
+    */
+    [[nodiscard]] constexpr AffineTransform withAbsoluteTranslation (float tx, float ty) const noexcept
+    {
+        return { scaleX, shearX, tx, shearY, scaleY, ty };
     }
 
     //==============================================================================
@@ -264,7 +278,7 @@ public:
     [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians) const noexcept
     {
         if (angleInRadians == 0.0f)
-            return identity();
+            return *this;
 
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
@@ -310,7 +324,7 @@ public:
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
 
-        return AffineTransform (cosTheta, -sinTheta, 0.0f, sinTheta, cosTheta, 0.0f);
+        return { cosTheta, -sinTheta, 0.0f, sinTheta, cosTheta, 0.0f };
     }
 
     /** Create a rotation transformation around a point
@@ -331,13 +345,14 @@ public:
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
 
-        return AffineTransform (
+        return {
             cosTheta,
             -sinTheta,
-            -cosTheta * centerX + sinTheta * centerY + centerY,
+            -cosTheta * centerX + sinTheta * centerY + centerX,
             sinTheta,
             cosTheta,
-            -sinTheta * centerX + -cosTheta * centerY + centerY);
+            -sinTheta * centerX + -cosTheta * centerY + centerY
+        };
     }
 
     //==============================================================================
@@ -485,7 +500,7 @@ public:
     }
 
     //==============================================================================
-    /** Create a transformation that follows another
+    /** Create a transformation that follows another.
 
         Creates a new AffineTransform object that represents this transformation followed by another specified AffineTransform.
 
@@ -496,12 +511,25 @@ public:
     [[nodiscard]] constexpr AffineTransform followedBy (const AffineTransform& other) const noexcept
     {
         return {
-            scaleX * other.scaleX + shearY * other.shearX,
-            shearX * other.scaleX + scaleY * other.shearX,
-            translateX * other.scaleX + translateY * other.shearX + other.translateX,
-            scaleX * other.shearY + shearY * other.scaleY,
-            shearX * other.shearY + scaleY * other.scaleY,
-            translateX * other.shearY + translateY * other.scaleY + other.translateY
+            other.scaleX * scaleX + other.shearX * shearY,
+            other.scaleX * shearX + other.shearX * scaleY,
+            other.scaleX * translateX + other.shearX * translateY + other.translateX,
+            other.shearY * scaleX + other.scaleY * shearY,
+            other.shearY * shearX + other.scaleY * scaleY,
+            other.shearY * translateX + other.scaleY * translateY + other.translateY
+        };
+    }
+
+    // TODO - doxygen
+    [[nodiscard]] constexpr AffineTransform prependedBy (const AffineTransform& other) const noexcept
+    {
+        return {
+            scaleX * other.scaleX + shearX * other.shearY,
+            shearX * other.scaleX + scaleY * other.shearY,
+            translateX * other.scaleX + translateY * other.shearY + other.translateX,
+            scaleX * other.shearX + shearY * other.scaleY,
+            shearX * other.shearX + scaleY * other.scaleY,
+            translateX * other.shearX + translateY * other.scaleY + other.translateY
         };
     }
 
@@ -591,8 +619,8 @@ public:
     {
         return {
             getScaleX(),     // xx
-            getShearX(),     // xy
-            getShearY(),     // yx
+            -getShearX(),    // xy
+            -getShearY(),    // yx
             getScaleY(),     // yy
             getTranslateX(), // tx
             getTranslateY()  // ty

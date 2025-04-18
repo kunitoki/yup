@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -19,24 +19,21 @@
   ==============================================================================
 */
 
-namespace yup
-{
+#include <yup_gui/yup_gui.h>
 
 //==============================================================================
-class JUCE_API AudioProcessorEditor : public Component
+
+class PathsExample : public yup::Component
 {
 public:
-    AudioProcessorEditor();
-    virtual ~AudioProcessorEditor();
+    PathsExample()
+        : Component ("PathsExample")
+    {
+    }
 
-    virtual bool isResizable() const = 0;
-    virtual Size<int> getPreferredSize() const = 0;
+    void paint (yup::Graphics& g) override
+    {
+    }
 
-    virtual bool shouldPreserveAspectRatio() const { return false; }
-
-    virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
-
-    virtual bool shouldRenderContinuous() const { return false; }
+private:
 };
-
-} // namespace yup

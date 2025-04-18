@@ -46,6 +46,31 @@ TextButton::Style::Ptr TextButton::getStyle() const
 void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 {
     ApplicationTheme::findComponentStyle (style.get()).onPaint (g, *this, isButtonOver, isButtonDown);
+
+	/*
+    auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+    g.setFillColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
+    g.fillFittedText (styledText, labelBounds);
+	*/
+}
+
+//==============================================================================
+
+void TextButton::resized()
+{
+	/*
+    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
+    auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
+    auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+
+    styledText.setMaxSize (labelBounds.getSize());
+    styledText.setHorizontalAlign (StyledText::center);
+    styledText.setVerticalAlign (StyledText::middle);
+
+    styledText.clear();
+    styledText.appendText (getComponentID(), nullptr, font, 32.0f);
+    styledText.update();
+	*/
 }
 
 } // namespace yup

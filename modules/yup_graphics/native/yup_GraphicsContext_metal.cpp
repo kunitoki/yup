@@ -173,7 +173,6 @@ public:
         m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
-        m_swapchain.maximumDrawableCount = 2;
 #if JUCE_MAC
         m_swapchain.displaySyncEnabled = NO;
 #endif
@@ -188,6 +187,13 @@ public:
 
         auto plsContextImpl = m_plsContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
         m_renderTarget = plsContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
+
+        if (m_currentTexture != nil)
+        {
+            [m_currentTexture setPurgeableState:MTLPurgeableStateEmpty];
+            [m_currentTexture release];
+            m_currentTexture = nil;
+        }
 
         MTLTextureDescriptor* descriptor = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(MTLPixelFormatBGRA8Unorm)
                                                                                               width:width

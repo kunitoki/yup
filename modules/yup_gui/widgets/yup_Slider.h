@@ -23,15 +23,21 @@ namespace yup
 {
 
 //==============================================================================
+
 class JUCE_API Slider : public Component
 {
 public:
     //==============================================================================
+
     Slider (StringRef componentID);
 
     //==============================================================================
+
     void setValue (float newValue, NotificationType notification = sendNotification);
     float getValue() const;
+
+    void setValueNormalised (float newValue, NotificationType notification = sendNotification);
+    float getValueNormalised() const;
 
     virtual void valueChanged();
 
@@ -63,6 +69,17 @@ public:
     Style::Ptr getStyle() const;
 
     //==============================================================================
+
+    void setDefaultValue (float newDefaultValue);
+    float getDefaultValue() const;
+
+    //==============================================================================
+
+    void setRange (const Range<float>& newRange);
+    Range<float> getRange() const;
+
+    //==============================================================================
+
     void resized() override;
     void paint (Graphics& g) override;
     void mouseEnter (const MouseEvent& event) override;
@@ -79,6 +96,8 @@ private:
 
     Point<float> origin;
     float value = 0.0f;
+    float defaultValue = 0.0f;
+    NormalisableRange<float> range = { 0.0f, 1.0f };
     bool isMouseOverSlider = false;
     bool isDragging = false;
 };
