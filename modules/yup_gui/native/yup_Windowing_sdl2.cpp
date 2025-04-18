@@ -106,7 +106,7 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     // Create the rendering context
     GraphicsContext::Options graphicsOptions;
     graphicsOptions.retinaDisplay = options.flags.test (allowHighDensityDisplay);
-
+    graphicsOptions.loaderFunction = SDL_GL_GetProcAddress;
     context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
         return; // TODO - raise something ?

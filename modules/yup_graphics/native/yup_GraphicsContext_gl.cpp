@@ -26,10 +26,6 @@
 #include "rive/renderer/gl/render_context_gl_impl.hpp"
 #include "rive/renderer/gl/render_target_gl.hpp"
 
-//#if RIVE_DESKTOP_GL || JUCE_ANDROID
-//#include <SDL2/SDL.h>
-//#endif
-
 namespace yup
 {
 
@@ -73,11 +69,11 @@ static void GLAPIENTRY err_msg_callback (GLenum source,
 class LowLevelRenderContextGL : public GraphicsContext
 {
 public:
-    LowLevelRenderContextGL()
+    LowLevelRenderContextGL (Options options)
     {
 #if RIVE_DESKTOP_GL
         // Load the OpenGL API using glad.
-        if (! gladLoadCustomLoader ((GLADloadproc) SDL_GL_GetProcAddress))
+        if (! gladLoadCustomLoader ((GLADloadproc) options.loaderFunction))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
             exit (-1);
@@ -159,9 +155,9 @@ private:
     rive::rcp<rive::gpu::RenderTargetGL> m_renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsContext::Options)
+std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsContext::Options options)
 {
-    return std::make_unique<LowLevelRenderContextGL>();
+    return std::make_unique<LowLevelRenderContextGL> (options);
 }
 
 } // namespace yup
