@@ -36,7 +36,7 @@ class JUCE_API GraphicsContext
 public:
     //==============================================================================
     /** Procedure load function used by GL and Vulkan to locate methods at runtime. */
-    using LoaderFunction = void* (*)(const char*);
+    using LoaderFunction = void* (*) (const char*);
 
     //==============================================================================
     /** Enumerates supported graphics APIs. */
