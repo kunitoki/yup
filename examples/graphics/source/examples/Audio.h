@@ -161,7 +161,7 @@ public:
         // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
-            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i), font));
+            auto slider = sliders.add (std::make_unique<yup::Slider> (yup::String (i)));
 
             slider->onValueChanged = [this, i, sampleRate] (float value)
             {
@@ -173,7 +173,7 @@ public:
         }
 
         // Add buttons
-        button = std::make_unique<yup::TextButton> ("Randomize", font);
+        button = std::make_unique<yup::TextButton> ("Randomize");
         button->onClick = [this]
         {
             for (int i = 0; i < sliders.size(); ++i)

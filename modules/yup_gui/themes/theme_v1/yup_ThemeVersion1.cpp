@@ -92,14 +92,16 @@ void paintSlider (Graphics& g, const Slider& s)
     g.setStrokeWidth (s.proportionOfWidth (0.03f));
     g.strokePath (foregroundLine);
 
+    /*
     StyledText text;
     text.appendText (font, s.proportionOfHeight (0.1f), s.proportionOfHeight (0.1f), String (s.getValue(), 3).toRawUTF8());
     text.layout (s.getLocalBounds().reduced (5).removeFromBottom (s.proportionOfWidth (0.1f)), StyledText::center);
 
     g.setStrokeColor (Color (0xffffffff));
     g.strokeFittedText (text, s.getLocalBounds().reduced (5).removeFromBottom (s.proportionOfWidth (0.1f)));
+    */
 
-    if (s.hasFocus())
+    if (s.hasKeyboardFocus())
     {
         g.setStrokeColor (Color (0xffff5f2b));
         g.setStrokeWidth (s.proportionOfWidth (0.0175f));
@@ -120,12 +122,14 @@ void paintTextButton (Graphics& g, const TextButton& b, bool isButtonOver, bool 
     g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
     g.fillPath (backgroundPath);
 
+    /*
     StyledText text;
     text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, b.getComponentID().toRawUTF8());
     text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
 
     g.setStrokeColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
     g.strokeFittedText (text, {});
+    */
 }
 
 //==============================================================================
