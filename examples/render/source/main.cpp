@@ -78,7 +78,7 @@ public:
         }
 
         // Grab focus
-        takeFocus();
+        takeKeyboardFocus();
 
         // Update titlebar
         startTimerHz (1);

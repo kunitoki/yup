@@ -46,7 +46,7 @@ public:
 
         addAndMakeVisible (*editor);
 
-        takeFocus();
+        takeKeyboardFocus();
     }
 
     void resized() override

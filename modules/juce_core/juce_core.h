@@ -37,36 +37,33 @@
   ==============================================================================
 */
 
-/*******************************************************************************
- The block below describes the properties of this module, and is read by
- the Projucer to automatically generate project code that uses it.
- For details about the syntax and how to create or use a module, see the
- JUCE Module Format.md file.
+/*
+  ==============================================================================
 
+  BEGIN_JUCE_MODULE_DECLARATION
 
- BEGIN_JUCE_MODULE_DECLARATION
+    ID:                 juce_core
+    vendor:             juce
+    version:            7.0.12
+    name:               JUCE core classes
+    description:        The essential set of basic JUCE classes, as required by all the other JUCE modules.
+    website:            http://www.juce.com/juce
+    license:            ISC
+    minimumCppStandard: 17
 
-  ID:                 juce_core
-  vendor:             juce
-  version:            7.0.12
-  name:               JUCE core classes
-  description:        The essential set of basic JUCE classes, as required by all the other JUCE modules. Includes text, container, memory, threading and i/o functionality.
-  website:            http://www.juce.com/juce
-  license:            ISC
-  minimumCppStandard: 17
+    dependencies:       zlib
+    osxFrameworks:      Cocoa Foundation IOKit Security
+    iosFrameworks:      Foundation UIKit
+    iosSimFrameworks:   Foundation UIKit
+    linuxLibs:          rt dl pthread
+    androidLibs:        log android
+    androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures
+    mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm
 
-  dependencies:       zlib
-  osxFrameworks:      Cocoa Foundation IOKit Security
-  iosFrameworks:      Foundation UIKit
-  iosSimFrameworks:   Foundation UIKit
-  linuxLibs:          rt dl pthread
-  androidLibs:        log android
-  androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures
-  mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm
+  END_JUCE_MODULE_DECLARATION
 
- END_JUCE_MODULE_DECLARATION
-
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 #define JUCE_CORE_H_INCLUDED

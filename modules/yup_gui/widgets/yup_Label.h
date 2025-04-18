@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -23,20 +23,35 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API AudioProcessorEditor : public Component
+
+class JUCE_API Label : public Component
 {
 public:
-    AudioProcessorEditor();
-    virtual ~AudioProcessorEditor();
+    //==============================================================================
+    Label();
 
-    virtual bool isResizable() const = 0;
-    virtual Size<int> getPreferredSize() const = 0;
+    //==============================================================================
+    String getText() const;
+    void setText (String newText, NotificationType notification = sendNotification);
 
-    virtual bool shouldPreserveAspectRatio() const { return false; }
+    //==============================================================================
+    const Font& getFont() const;
+    void setFont (Font newFont);
 
-    virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
+    //==============================================================================
+    void paint (Graphics& g) override;
 
-    virtual bool shouldRenderContinuous() const { return false; }
+    void resized() override;
+
+private:
+    void prepareText();
+
+    String text;
+    StyledText styledText;
+    Color fillColor = Colors::white;
+    Color strokeColor = Colors::transparentBlack;
+    float strokeWidth = 0.0f;
+    Font font;
 };
 
 } // namespace yup

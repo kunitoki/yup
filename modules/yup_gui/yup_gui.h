@@ -34,9 +34,7 @@
     minimumCppStandard: 17
 
     dependencies:       juce_events yup_graphics rive
-    osxFrameworks:      Metal
-    iosFrameworks:      Metal
-    iosSimFrameworks:   Metal
+    appleFrameworks:    Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
@@ -81,6 +79,7 @@
 #include "component/yup_Component.h"
 #include "widgets/yup_Button.h"
 #include "widgets/yup_TextButton.h"
+#include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
 #include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"

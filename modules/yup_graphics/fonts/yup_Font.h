@@ -31,10 +31,6 @@ public:
     Font() = default;
 
     //==============================================================================
-    Font (const MemoryBlock& fontBytes);
-    Font (const File& fontFile);
-
-    //==============================================================================
     /** Copy and move constructors and assignment operators. */
     Font (const Font& other) noexcept = default;
     Font (Font&& other) noexcept = default;
@@ -48,6 +44,63 @@ public:
     Result loadFromFile (const File& fontFile);
 
     //==============================================================================
+    float getAscent() const;
+    float getDescent() const;
+    int getWeight() const;
+    bool isItalic() const;
+
+    //==============================================================================
+    struct Axis
+    {
+        Axis() = default;
+
+        String tagName;
+        float minimumValue = 0.0f;
+        float maximumValue = 0.0f;
+        float defaultValue = 0.0f;
+    };
+
+    int getNumAxis() const;
+    std::optional<Font::Axis> getAxisDescription (int index) const;
+    std::optional<Font::Axis> getAxisDescription (StringRef tagName) const;
+
+    float getAxisValue (int index) const;
+    float getAxisValue (StringRef tagName) const;
+
+    void setAxisValue (int index, float value);
+    void setAxisValue (StringRef tagName, float value);
+
+    Font withAxisValue (int index, float value) const;
+    Font withAxisValue (StringRef tagName, float value) const;
+
+    struct AxisOption
+    {
+        AxisOption (StringRef tagName, float value)
+            : tagName (tagName)
+            , value (value)
+        {
+        }
+
+        String tagName;
+        float value;
+    };
+
+    void setAxisValues (std::initializer_list<AxisOption> axisOptions);
+    Font withAxisValues (std::initializer_list<AxisOption> axisOptions) const;
+
+    void resetAxisValue (int index);
+    void resetAxisValue (StringRef tagName);
+
+    void resetAllAxisValues();
+
+    //==============================================================================
+    bool operator== (const Font& other) const;
+    bool operator!= (const Font& other) const;
+
+    //==============================================================================
+    /** @internal */
+    Font (rive::rcp<rive::Font> font);
+    /** @internal */
     rive::rcp<rive::Font> getFont() const;
 
 private:
