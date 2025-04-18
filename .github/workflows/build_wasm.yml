@@ -63,15 +63,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - uses: actions/cache/restore@v4
-      with:
-        path: ${{runner.workspace}}/build
-        key: wasm-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{runner.workspace}}/build/tests/Debug
       run: node yup_tests.js
@@ -86,15 +86,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - uses: actions/cache/restore@v4
-      with:
-        path: ${{runner.workspace}}/build
-        key: wasm-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
@@ -105,15 +105,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - uses: actions/cache/restore@v4
-      with:
-        path: ${{runner.workspace}}/build
-        key: wasm-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
 
@@ -124,15 +124,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - uses: actions/cache/restore@v4
-      with:
-        path: ${{runner.workspace}}/build
-        key: wasm-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
 
@@ -143,14 +143,14 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+    - uses: actions/cache/restore@v4
+      with:
+        path: ${{runner.workspace}}/build
+        key: wasm-build-${{ github.sha }}
     - name: Setup emsdk
       uses: mymindstorm/setup-emsdk@v14
       with:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
-    - uses: actions/cache/restore@v4
-      with:
-        path: ${{runner.workspace}}/build
-        key: wasm-build-${{ github.sha }}
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
