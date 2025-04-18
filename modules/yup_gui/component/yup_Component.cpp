@@ -209,7 +209,7 @@ void Component::setBottomLeft (const Point<float>& newBottomLeft)
     boundsInParent.setBottomLeft (newBottomLeft);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newBottomLeft.to<int>().translated (0, -getHeight()));
+        native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 
     moved();
 }
@@ -224,7 +224,7 @@ void Component::setTopRight (const Point<float>& newTopRight)
     boundsInParent.setTopRight (newTopRight);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newTopRight.to<int>().translated (-getWidth(), 0));
+        native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
 
     moved();
 }
@@ -239,7 +239,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
     boundsInParent.setBottomRight (newBottomRight);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newBottomRight.to<int>().translated (-getWidth(), -getHeight()));
+        native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 
     moved();
 }
@@ -254,7 +254,7 @@ void Component::setCenter (const Point<float>& newCenter)
     boundsInParent.setCenter (newCenter);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newCenter.to<int>().translated (-getWidth() / 2, -getHeight() / 2));
+        native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 
     moved();
 }
@@ -1103,7 +1103,7 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<float> (width, height));
+    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
     resized();
 }
@@ -1112,7 +1112,7 @@ void Component::internalResized (int width, int height)
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos));
+    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
     moved();
 }
