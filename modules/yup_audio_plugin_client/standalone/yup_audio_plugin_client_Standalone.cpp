@@ -46,7 +46,7 @@ public:
 
         addAndMakeVisible (*editor);
 
-        takeFocus();
+        takeKeyboardFocus();
     }
 
     void resized() override
@@ -98,7 +98,7 @@ public:
         window = std::make_unique<AudioProcessorEditorWindow> (getApplicationName(), editor);
         window->centreWithSize (editor->getPreferredSize());
         window->setVisible (true);
-        window->toFront(true);
+        window->toFront (true);
     }
 
     void shutdown() override

@@ -28,14 +28,16 @@ Slider::Slider (StringRef componentID, const Font& font)
     : Component (componentID)
     , font (font)
 {
-    setValue (0.0f);
+    setMouseCursor (MouseCursor::Hand);
+
+    setValue (defaultValue, dontSendNotification);
 }
 
 //==============================================================================
 
 void Slider::setValue (float newValue, NotificationType notification)
 {
-    value = jlimit (0.0f, 1.0f, newValue);
+    value = range.getRange().clipValue (newValue);
 
     sendValueChanged (notification);
 
@@ -49,7 +51,45 @@ float Slider::getValue() const
     return value;
 }
 
+void Slider::setValueNormalised (float newValue, NotificationType notification)
+{
+    setValue (range.convertFrom0to1 (jlimit (0.0f, 1.0f, newValue)), notification);
+}
+
+float Slider::getValueNormalised() const
+{
+    return range.convertTo0to1 (value);
+}
+
 void Slider::valueChanged() {}
+
+//==============================================================================
+
+void Slider::setDefaultValue (float newDefaultValue)
+{
+    defaultValue = newDefaultValue;
+}
+
+float Slider::getDefaultValue() const
+{
+    return defaultValue;
+}
+
+//==============================================================================
+
+void Slider::setRange (const Range<float>& newRange)
+{
+    range = newRange;
+
+    setDefaultValue (range.getRange().clipValue (defaultValue));
+
+    setValue (range.getRange().clipValue (value), dontSendNotification);
+}
+
+Range<float> Slider::getRange() const
+{
+    return range.getRange();
+}
 
 //==============================================================================
 
@@ -86,7 +126,7 @@ void Slider::mouseDown (const MouseEvent& event)
 
     origin = event.getPosition();
 
-    takeFocus();
+    takeKeyboardFocus();
 
     repaint();
 }
@@ -111,7 +151,7 @@ void Slider::mouseDrag (const MouseEvent& event)
 
     origin = event.getPosition();
 
-    setValue (value + distance);
+    setValueNormalised (getValueNormalised() + distance);
 
     repaint();
 }
@@ -123,7 +163,7 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
     origin = event.getPosition();
 
-    setValue (value + distance);
+    setValueNormalised (getValueNormalised() + distance);
 
     repaint();
 }
@@ -132,8 +172,6 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
 void Slider::paint (Graphics& g)
 {
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
-
     g.setFillColor (Color (0xff3d3d3d));
     g.fillPath (backgroundPath);
 
@@ -156,8 +194,8 @@ void Slider::paint (Graphics& g)
     g.setStrokeWidth (proportionOfWidth (0.03f));
     g.strokePath (foregroundLine);
 
-    g.setStrokeColor (Color (0xffffffff));
-    g.strokeFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
+    //g.setFillColor (Color (0xffffffff));
+    //g.fillFittedText (text, getLocalBounds().reduced (5).removeFromBottom (proportionOfWidth (0.1f)));
 
     //if (hasFocus())
     //{
@@ -170,8 +208,12 @@ void Slider::paint (Graphics& g)
 
 void Slider::updateRenderItems (bool forceAll)
 {
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.1f));
+    auto bounds = getLocalBounds()
+                      .reduced (proportionOfWidth (0.075f))
+                      .translated (0.0f, proportionOfWidth (0.05f));
+
     const auto center = bounds.getCenter();
+    const auto realValue = getValueNormalised();
 
     constexpr auto fromRadians = degreesToRadians (135.0f);
     constexpr auto toRadians = fromRadians + degreesToRadians (270.0f);
@@ -191,7 +233,7 @@ void Slider::updateRenderItems (bool forceAll)
                                       true);
     }
 
-    const auto toCurrentRadians = fromRadians + degreesToRadians (270.0f) * value;
+    const auto toCurrentRadians = fromRadians + degreesToRadians (270.0f) * realValue;
 
     foregroundArc.clear();
     foregroundArc.addCenteredArc (center,

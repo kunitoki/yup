@@ -162,6 +162,13 @@ public:
     float getStrokeWidth() const;
 
     //==============================================================================
+    // TODO - doxygen
+    void setFeather (float feather);
+
+    // TODO - doxygen
+    float getFeather() const;
+
+    //==============================================================================
     /** Sets the opacity for subsequent drawing operations.
 
         @param opacity The new opacity level (0.0-1.0).
@@ -403,7 +410,8 @@ public:
     //==============================================================================
     /** Draws an attributed text.
     */
-    void strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align = rive::TextAlign::center);
+    void fillFittedText (StyledText& text, const Rectangle<float>& rect);
+    void strokeFittedText (StyledText& text, const Rectangle<float>& rect);
 
     //==============================================================================
     /** Clips the drawing area to the specified rectangle.
@@ -417,6 +425,10 @@ public:
         @param path The path to clip to.
     */
     void clipPath (const Path& path);
+
+    //==============================================================================
+    /** Retrieves the global context scale, the one used to construct the graphics instance. */
+    float getContextScale() const;
 
     //==============================================================================
     /** Retrieves the factory used for creating graphical objects.
@@ -478,7 +490,12 @@ private:
 
         float getStrokeWidth() const noexcept
         {
-            return strokeWidth * scale;
+            return strokeWidth;
+        }
+
+        float getFeather() const noexcept
+        {
+            return feather;
         }
 
         const Rectangle<float>& getDrawingArea() const noexcept
@@ -486,7 +503,7 @@ private:
             return drawingArea;
         }
 
-        AffineTransform getUntranslatedTransform() const noexcept
+        AffineTransform getLocalTransform() const noexcept
         {
             return transform
                 .scaled (scale);
@@ -499,6 +516,20 @@ private:
                 .scaled (scale);
         }
 
+        AffineTransform getFixedTransform() const noexcept
+        {
+            return AffineTransform()
+                .translated (drawingArea.getX(), drawingArea.getY())
+                .scaled (scale);
+        }
+
+        AffineTransform getTransform (float offsetX, float offsetY) const noexcept
+        {
+            return transform
+                .translated (drawingArea.getX() + offsetX, drawingArea.getY() + offsetY)
+                .scaled (scale);
+        }
+
         float scale = 1.0f;
         StrokeJoin join = StrokeJoin::Miter;
         StrokeCap cap = StrokeCap::Square;
@@ -507,6 +538,7 @@ private:
         ColorGradient fillGradient;
         ColorGradient strokeGradient;
         float strokeWidth = 1.0f;
+        float feather = 0.0f;
         Rectangle<float> drawingArea;
         AffineTransform transform;
         Path clipPath;
@@ -518,6 +550,7 @@ private:
 
     RenderOptions& currentRenderOptions();
     const RenderOptions& currentRenderOptions() const;
+
     void restoreState();
 
     void clipPath (rive::RawPath& path);
@@ -525,10 +558,13 @@ private:
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
 
+    void renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
+
     GraphicsContext& context;
 
     rive::Factory& factory;
     rive::Renderer& renderer;
+    float contextScale = 1.0f;
 
     std::vector<RenderOptions> renderOptions;
 };

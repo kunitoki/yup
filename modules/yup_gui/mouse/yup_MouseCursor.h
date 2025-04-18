@@ -31,7 +31,7 @@ public:
         None = 0,
         Default,
         Arrow = Default,
-        IBeam,
+        Text,
         Wait,
         WaitArrow,
         Hand,

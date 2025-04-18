@@ -46,9 +46,6 @@ extern HWND juce_messageWindowHandle;
 LRESULT juce_offerEventToActiveXControl (::MSG&);
 #endif
 
-using CheckEventBlockedByModalComps = bool (*) (const MSG&);
-CheckEventBlockedByModalComps isEventBlockedByModalComps = nullptr;
-
 using SettingChangeCallbackFunc = void (*) (void);
 SettingChangeCallbackFunc settingChangeCallback = nullptr;
 
@@ -136,7 +133,7 @@ public:
                 if (auto* app = JUCEApplicationBase::getInstance())
                     app->systemRequestedQuit();
             }
-            else if (isEventBlockedByModalComps == nullptr || ! isEventBlockedByModalComps (m))
+            else
             {
                 if ((m.message == WM_LBUTTONDOWN || m.message == WM_RBUTTONDOWN)
                     && ! JuceWindowIdentifier::isJUCEWindow (m.hwnd))
@@ -332,9 +329,9 @@ struct MountedVolumeListChangeDetector::Pimpl
     }
 
     DeviceChangeDetector detector { L"MountedVolumeList", [this]
-                                    {
-                                        systemDeviceChanged();
-                                    } };
+    {
+        systemDeviceChanged();
+    } };
     MountedVolumeListChangeDetector& owner;
     Array<File> lastVolumeList;
 };

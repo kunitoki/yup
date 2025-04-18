@@ -174,6 +174,43 @@ public:
     }
 
     //==============================================================================
+    /** Returns the left-coordinate of the rectangle's top-left corner.
+
+        @return The left-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getLeft() const noexcept
+    {
+        return xy.getX();
+    }
+
+    /** Returns the top-coordinate of the rectangle's top-left corner.
+
+        @return The top-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getTop() const noexcept
+    {
+        return xy.getY();
+    }
+
+    /** Returns the right-coordinate of the rectangle's bottom-right corner.
+
+        @return The right-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getRight() const noexcept
+    {
+        return xy.getX() + size.getWidth();
+    }
+
+    /** Returns the bottom-coordinate of the rectangle's bottom-right corner.
+
+        @return The bottom-coordinate value.
+    */
+    [[nodiscard]] constexpr ValueType getBottom() const noexcept
+    {
+        return xy.getY() + size.getHeight();
+    }
+
+    //==============================================================================
     /** Returns the width of the rectangle.
 
         @return The width value.
@@ -202,6 +239,11 @@ public:
     [[nodiscard]] constexpr Rectangle withWidth (ValueType newWidth) const noexcept
     {
         return { xy, size.withWidth (newWidth) };
+    }
+
+    [[nodiscard]] constexpr ValueType proportionOfWidth (float proportion) const noexcept
+    {
+        return static_cast<ValueType> (size.getWidth() * proportion);
     }
 
     //==============================================================================
@@ -233,6 +275,11 @@ public:
     [[nodiscard]] constexpr Rectangle withHeight (ValueType newHeight) const noexcept
     {
         return { xy, size.withHeight (newHeight) };
+    }
+
+    [[nodiscard]] constexpr ValueType proportionOfHeight (float proportion) const noexcept
+    {
+        return static_cast<ValueType> (size.getHeight() * proportion);
     }
 
     //==============================================================================
@@ -554,13 +601,31 @@ public:
     }
 
     //==============================================================================
+    /** Returns the center X of the rectangle.
+
+        @return The center X of the rectangle.
+    */
+    [[nodiscard]] constexpr ValueType getCenterX() const noexcept
+    {
+        return xy.getX() + size.getWidth() / static_cast<ValueType> (2);
+    }
+
+    /** Returns the center Y of the rectangle.
+
+        @return The center Y of the rectangle.
+    */
+    [[nodiscard]] constexpr ValueType getCenterY() const noexcept
+    {
+        return xy.getY() + size.getHeight() / static_cast<ValueType> (2);
+    }
+
     /** Returns the center point of the rectangle.
 
         @return The center of the rectangle as a Point, calculated as the midpoint between the top-left and bottom-right corners.
     */
     [[nodiscard]] constexpr Point<ValueType> getCenter() const noexcept
     {
-        return { xy.getX() + size.getWidth() / 2.0f, xy.getY() + size.getHeight() / 2.0f };
+        return { xy.getX() + size.getWidth() / static_cast<ValueType> (2), xy.getY() + size.getHeight() / static_cast<ValueType> (2) };
     }
 
     /** Sets the center of the rectangle to the specified coordinates.
@@ -1266,7 +1331,7 @@ public:
 
     //==============================================================================
     // TODO - doxygen
-    [[nodiscard]] Rectangle& transform (const AffineTransform& t) noexcept
+    Rectangle& transform (const AffineTransform& t) noexcept
     {
         auto x1 = static_cast<float> (getX());
         auto y1 = static_cast<float> (getY());
@@ -1438,6 +1503,25 @@ public:
     constexpr bool operator!= (const Rectangle& other) const noexcept
     {
         return ! (*this == other);
+    }
+
+    //==============================================================================
+    /** @internal Converts from Rive AABB. */
+    Rectangle (const rive::AABB& aabb) noexcept
+        : xy { static_cast<ValueType> (aabb.left()), static_cast<ValueType> (aabb.top()) }
+        , size { static_cast<ValueType> (aabb.width()), static_cast<ValueType> (aabb.height()) }
+    {
+    }
+
+    /** @internal Converts to Rive AABB. */
+    rive::AABB toAABB() const
+    {
+        return {
+            static_cast<float> (getLeft()),
+            static_cast<float> (getTop()),
+            static_cast<float> (getRight()),
+            static_cast<float> (getBottom())
+        };
     }
 
 private:

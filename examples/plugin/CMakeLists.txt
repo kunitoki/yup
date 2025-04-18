@@ -31,9 +31,9 @@ yup_add_embedded_binary_resources (
     HEADER BinaryData.h
     NAMESPACE yup
     RESOURCE_NAMES
-        RobotoRegularFont
+        RobotoFont
     RESOURCES
-        ${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf
+        ${CMAKE_CURRENT_LIST_DIR}/data/RobotoFlex-VariableFont.ttf
 )
 
 yup_audio_plugin (
