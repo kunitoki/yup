@@ -34,9 +34,7 @@
     minimumCppStandard: 17
 
     dependencies:       juce_events yup_graphics rive
-    osxFrameworks:      Metal
-    iosFrameworks:      Metal
-    iosSimFrameworks:   Metal
+    appleFrameworks:    Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
