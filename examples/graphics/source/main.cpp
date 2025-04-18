@@ -53,7 +53,7 @@ public:
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
 
-		auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         /*
         // Load an image

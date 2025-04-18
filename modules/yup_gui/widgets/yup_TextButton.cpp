@@ -47,7 +47,7 @@ void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 {
     ApplicationTheme::findComponentStyle (style.get()).onPaint (g, *this, isButtonOver, isButtonDown);
 
-	/*
+    /*
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
     g.setFillColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
     g.fillFittedText (styledText, labelBounds);
@@ -58,7 +58,7 @@ void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
 
 void TextButton::resized()
 {
-	/*
+    /*
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
     auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
