@@ -144,8 +144,8 @@ ApplicationTheme::Ptr createThemeVersion1()
 
     theme->setDefaultFont (std::move (font));
 
-    theme->setComponentStyle<Slider> (new ComponentCachedStyle<Slider>{ paintSlider });
-    theme->setComponentStyle<TextButton> (new ComponentCachedStyle<TextButton>{ paintTextButton });
+    theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
+    theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
 
     return theme;
 }
