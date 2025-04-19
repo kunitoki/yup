@@ -32,34 +32,70 @@ class JUCE_API ComponentStyle : public ReferenceCountedObject
 {
 public:
     //==============================================================================
-
+    /** A pointer to a ComponentStyle object. */
     using Ptr = ReferenceCountedObjectPtr<ComponentStyle>;
+
+    /** A pointer to a const ComponentStyle object. */
     using ConstPtr = ReferenceCountedObjectPtr<const ComponentStyle>;
 
     //==============================================================================
-
+    /** Destructor. */
     virtual ~ComponentStyle() = default;
 
     //==============================================================================
+    /** Paints the component with the specified style.
 
+        This is the main method that derived classes must implement to define
+        how a component should be painted with this style.
+
+        @param g The graphics context to use for drawing
+        @param component The component to be painted
+    */
     virtual void paint (Graphics& g, const Component& component) = 0;
 
     //==============================================================================
+    /** Creates a style for a specific component type with a custom paint callback.
 
+        This factory method creates a ComponentStyle that will call the provided
+        paint callback when the component needs to be painted. The callback will
+        receive a reference to the component cast to the specified ComponentType.
+
+        @param paintCallback A function or lambda that will be called to paint the component
+
+        @return A new ComponentStyle object that uses the provided paint callback
+
+        @code
+        // Example usage:
+        auto buttonStyle = ComponentStyle::createStyle<Button>(
+            [](Graphics& g, const Button& button) {
+                // Custom painting code for buttons
+            });
+        @endcode
+    */
     template <class ComponentType, class F>
     static ComponentStyle::Ptr createStyle (F&& paintCallback)
     {
-        class ComponentCachedStyle : public ComponentStyle
+        class ComponentCachedStyle final : public ComponentStyle
         {
         public:
+            /** The type of the paint callback function. */
             using PaintCallback = std::function<void (Graphics&, const ComponentType&)>;
 
+            /** Constructor that takes a paint callback function.
+
+                @param paintCallback The function to call when painting
+            */
             ComponentCachedStyle (PaintCallback paintCallback)
                 : paintCallback (std::move (paintCallback))
             {
             }
 
-            void paint (Graphics& g, const Component& component) override final
+            /** Implements the paint method by calling the stored callback.
+
+                @param g The graphics context
+                @param component The component to paint
+            */
+            void paint (Graphics& g, const Component& component) override
             {
                 paintCallback (g, static_cast<const ComponentType&> (component));
             }
@@ -68,8 +104,7 @@ public:
             PaintCallback paintCallback;
         };
 
-        ComponentStyle::Ptr result (new ComponentCachedStyle (std::move (paintCallback)));
-        return result;
+        return ComponentStyle::Ptr{ new ComponentCachedStyle (std::move (paintCallback)) };
     }
 
 protected:
