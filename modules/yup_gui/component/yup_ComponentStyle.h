@@ -104,7 +104,7 @@ public:
             PaintCallback paintCallback;
         };
 
-        return ComponentStyle::Ptr{ new ComponentCachedStyle (std::move (paintCallback)) };
+        return ComponentStyle::Ptr { new ComponentCachedStyle (std::move (paintCallback)) };
     }
 
 protected:

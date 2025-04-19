@@ -47,12 +47,12 @@ public:
     */
     enum Buttons
     {
-        noButtons = 0x0000,      /**< No buttons pressed. */
-        leftButton = 0x0001,     /**< The left mouse button. */
-        middleButton = 0x0002,   /**< The middle mouse button. */
-        rightButton = 0x0004,    /**< The right mouse button. */
+        noButtons = 0x0000,    /**< No buttons pressed. */
+        leftButton = 0x0001,   /**< The left mouse button. */
+        middleButton = 0x0002, /**< The middle mouse button. */
+        rightButton = 0x0004,  /**< The right mouse button. */
 
-        allButtons = leftButton | middleButton | rightButton  /**< Bitmask of all buttons. */
+        allButtons = leftButton | middleButton | rightButton /**< Bitmask of all buttons. */
     };
 
     //==============================================================================
