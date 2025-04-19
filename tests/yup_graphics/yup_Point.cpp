@@ -430,7 +430,7 @@ TEST (PointTests, EllipticalCircumference)
     EXPECT_NEAR (p.getX(), 3.0f, tol);
     EXPECT_NEAR (p.getY(), 1.0f, tol);
 
-    angle = static_cast<float> (M_PI / 2.0); // 90 degrees
+    angle = MathConstants<float>::halfPi; // 90 degrees
     p = center.getPointOnCircumference (radiusX, radiusY, angle);
     EXPECT_NEAR (p.getX(), 1.0f, tol);
     EXPECT_NEAR (p.getY(), 4.0f, tol);
@@ -571,7 +571,7 @@ TEST (PointTests, Transform_DifferentTypes)
     EXPECT_FLOAT_EQ (p.getY(), 6.0f);
 
     // Test with rotation
-    AffineTransform t2 = AffineTransform::rotation (static_cast<float> (M_PI / 2.0));
+    AffineTransform t2 = AffineTransform::rotation (MathConstants<float>::halfPi);
     p.transform (t2);
     EXPECT_NEAR (p.getX(), -6.0f, tol);
     EXPECT_NEAR (p.getY(), 4.0f, tol);
@@ -594,7 +594,7 @@ TEST (PointTests, Circumference_NegativeRadii)
 
     float radiusX = -2.0f;
     float radiusY = -3.0f;
-    p = center.getPointOnCircumference (radiusX, radiusY, static_cast<float> (M_PI / 2.0));
+    p = center.getPointOnCircumference (radiusX, radiusY, MathConstants<float>::halfPi);
     EXPECT_NEAR (p.getX(), 1.0f, tol);
     EXPECT_NEAR (p.getY(), -2.0f, tol);
 }
