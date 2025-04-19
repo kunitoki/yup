@@ -31,13 +31,14 @@ public:
 
     //==============================================================================
     bool isButtonDown() const { return isButtonCurrentlyDown; }
+
     bool isButtonOver() const { return isButtonCurrentlyDown; }
 
     //==============================================================================
     virtual void paintButton (Graphics& g) = 0;
 
     //==============================================================================
-    std::function<void ()> onClick;
+    std::function<void()> onClick;
 
     //==============================================================================
     void paint (Graphics& g) override;

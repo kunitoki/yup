@@ -462,6 +462,7 @@ const ComponentNative* Component::getNativeComponent() const
 }
 
 void Component::attachedToNative() {}
+
 void Component::detachedFromNative() {}
 
 //==============================================================================
@@ -688,6 +689,7 @@ void Component::internalHierarchyChanged()
 }
 
 void Component::parentHierarchyChanged() {}
+
 void Component::childrenChanged() {}
 
 //==============================================================================
@@ -797,6 +799,7 @@ bool Component::hasKeyboardFocus() const
 }
 
 void Component::focusGained() {}
+
 void Component::focusLost() {}
 
 //==============================================================================
