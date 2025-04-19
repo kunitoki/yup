@@ -33,7 +33,7 @@ Button::Button (StringRef componentID)
 
 void Button::paint (Graphics& g)
 {
-    paintButton (g, isButtonCurrentlyOver, isButtonCurrentlyDown);
+    paintButton (g);
 }
 
 //==============================================================================

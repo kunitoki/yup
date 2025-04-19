@@ -783,6 +783,16 @@ public:
     virtual void textInput (const String& text);
 
     //==============================================================================
+
+    /** TODO */
+    void setStyle (ComponentStyle::Ptr newStyle);
+
+    /** TODO */
+    ComponentStyle::Ptr getStyle() const;
+
+    virtual void styleChanged();
+
+    //==============================================================================
     /**
         A bail out checker for the component.
      */
@@ -859,6 +869,7 @@ private:
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     uint8 opacity = 255;

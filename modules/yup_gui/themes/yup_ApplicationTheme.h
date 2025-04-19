@@ -76,12 +76,44 @@ public:
 
         @returns The resolved style for the component type.
     */
-    template <class T>
-    static const T& findComponentStyle (const T* instanceStyle = nullptr)
+    template <class ComponentType>
+    static auto findComponentStyle (ComponentType& component)
+        -> std::enable_if_t<std::is_base_of_v<Component, ComponentType>, ComponentStyle::Ptr>
     {
-        return instanceStyle != nullptr
-                 ? *instanceStyle
-                 : std::get<T> (getGlobalThemeInstance()->componentStyles);
+        auto& componentStyles = getGlobalThemeInstance()->componentStyles;
+
+        if (auto style = component.getStyle())
+            return style;
+
+        {
+            auto it = componentStyles.find (std::type_index (typeid (component)));
+            if (it != componentStyles.end())
+                return it->second;
+        }
+
+        {
+            auto it = componentStyles.find (std::type_index (typeid (ComponentType)));
+            if (it != componentStyles.end())
+                return it->second;
+        }
+
+        jassertfalse;
+        return nullptr;
+    }
+
+    //==============================================================================
+    /**
+        Sets the style for a specific component type.
+
+        This template method allows setting the style for a specific type of component. The component type must be
+        part of the `componentStyles` tuple.
+
+        @param instanceStyle  The style to set for the component type.
+    */
+    template <class ComponentType>
+    void setComponentStyle (ComponentStyle::Ptr style)
+    {
+        componentStyles.try_emplace (std::type_index (typeid (ComponentType)), std::move (style));
     }
 
     //==============================================================================
@@ -106,32 +138,13 @@ public:
     */
     const Font& getDefaultFont() const;
 
-    //==============================================================================
-    /**
-        Sets the style for a specific component type.
-
-        This template method allows setting the style for a specific type of component. The component type must be
-        part of the `componentStyles` tuple.
-
-        @param instanceStyle  The style to set for the component type.
-    */
-    template <class T>
-    void setComponentStyle (T&& instanceStyle)
-    {
-        std::get<T> (componentStyles) = std::forward<T> (instanceStyle);
-    }
-
 private:
     static ApplicationTheme::Ptr& getGlobalThemeInstance();
 
     //==============================================================================
-    std::tuple<
-        Slider::Style,
-        TextButton::Style>
-        componentStyles;
-
-    Font defaultFont;
+    std::unordered_map<std::type_index, ComponentStyle::Ptr> componentStyles;
     std::unordered_map<Identifier, Color> defaultColors;
+    Font defaultFont;
 
     JUCE_LEAK_DETECTOR (ApplicationTheme)
 };

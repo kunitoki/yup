@@ -78,6 +78,7 @@
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
+#include "component/yup_ComponentStyle.h"
 #include "component/yup_Component.h"
 #include "widgets/yup_Button.h"
 #include "widgets/yup_TextButton.h"

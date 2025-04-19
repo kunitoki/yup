@@ -30,7 +30,11 @@ public:
     Button (StringRef componentID);
 
     //==============================================================================
-    virtual void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) = 0;
+    bool isButtonDown() const { return isButtonCurrentlyDown; }
+    bool isButtonOver() const { return isButtonCurrentlyDown; }
+
+    //==============================================================================
+    virtual void paintButton (Graphics& g) = 0;
 
     //==============================================================================
     std::function<void ()> onClick;

@@ -111,7 +111,7 @@ void paintSlider (Graphics& g, const Slider& s)
 
 //==============================================================================
 
-void paintTextButton (Graphics& g, const TextButton& b, bool isButtonOver, bool isButtonDown)
+void paintTextButton (Graphics& g, const TextButton& b)
 {
     const auto& font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
     auto bounds = b.getLocalBounds().reduced (b.proportionOfWidth (0.01f));
@@ -119,7 +119,7 @@ void paintTextButton (Graphics& g, const TextButton& b, bool isButtonOver, bool 
 
     Path backgroundPath;
     backgroundPath.addRoundedRectangle (bounds.reduced (b.proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
-    g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
+    g.setFillColor (b.isButtonDown() ? Color (0xff000000) : Color (0xffffffff));
     g.fillPath (backgroundPath);
 
     /*
@@ -144,8 +144,8 @@ ApplicationTheme::Ptr createThemeVersion1()
 
     theme->setDefaultFont (std::move (font));
 
-    theme->setComponentStyle<Slider::Style> ({ paintSlider });
-    theme->setComponentStyle<TextButton::Style> ({ paintTextButton });
+    theme->setComponentStyle<Slider> (new ComponentCachedStyle<Slider>{ paintSlider });
+    theme->setComponentStyle<TextButton> (new ComponentCachedStyle<TextButton>{ paintTextButton });
 
     return theme;
 }

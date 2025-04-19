@@ -51,25 +51,6 @@ public:
 
     //==============================================================================
 
-    struct Style : ReferenceCountedObject
-    {
-        using Ptr = ReferenceCountedObjectPtr<const Style>;
-
-        Style() = default;
-
-        Style (std::function<void (Graphics&, const Slider&)> p)
-            : onPaint (std::move (p))
-        {
-        }
-
-        std::function<void (Graphics&, const Slider&)> onPaint;
-    };
-
-    void setStyle (Style::Ptr newStyle);
-    Style::Ptr getStyle() const;
-
-    //==============================================================================
-
     void setDefaultValue (float newDefaultValue);
     float getDefaultValue() const;
 
@@ -91,8 +72,6 @@ public:
 
 private:
     void sendValueChanged (NotificationType notification);
-
-    Style::Ptr style;
 
     Point<float> origin;
     float value = 0.0f;

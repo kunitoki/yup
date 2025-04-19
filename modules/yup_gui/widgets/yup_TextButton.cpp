@@ -31,21 +31,9 @@ TextButton::TextButton (StringRef componentID)
 
 //==============================================================================
 
-void TextButton::setStyle (Style::Ptr newStyle)
+void TextButton::paintButton (Graphics& g)
 {
-    style = newStyle;
-}
-
-TextButton::Style::Ptr TextButton::getStyle() const
-{
-    return style;
-}
-
-//==============================================================================
-
-void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
-{
-    ApplicationTheme::findComponentStyle (style.get()).onPaint (g, *this, isButtonOver, isButtonDown);
+    ApplicationTheme::findComponentStyle (*this)->paint (g, *this);
 
     /*
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
