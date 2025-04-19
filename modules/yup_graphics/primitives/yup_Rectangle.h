@@ -965,8 +965,7 @@ public:
     {
         delta = jlimit (ValueType (0), size.getHeight(), delta);
 
-        Rectangle result
-        {
+        Rectangle result {
             xy.withY (xy.getY() + size.getHeight() - delta),
             size.withHeight (delta)
         };
@@ -988,8 +987,7 @@ public:
     {
         delta = jlimit (ValueType (0), size.getWidth(), delta);
 
-        Rectangle result
-        {
+        Rectangle result {
             xy.withX (xy.getX() + size.getWidth() - delta),
             size.withWidth (delta)
         };
