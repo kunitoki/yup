@@ -24,8 +24,8 @@ namespace yup
 
 //==============================================================================
 
-extern const uint8_t RobotoRegularFont_data[];
-extern const std::size_t RobotoRegularFont_size;
+extern const uint8_t RobotoFlexFont_data[];
+extern const std::size_t RobotoFlexFont_size;
 
 //==============================================================================
 
@@ -136,13 +136,15 @@ void paintTextButton (Graphics& g, const TextButton& b)
 
 ApplicationTheme::Ptr createThemeVersion1()
 {
-    auto theme = new ApplicationTheme;
+    ApplicationTheme::Ptr theme (new ApplicationTheme);
 
-    Font font;
-    if (auto result = font.loadFromData (MemoryBlock (&RobotoRegularFont_data[0], RobotoRegularFont_size)); result.failed())
-        yup::Logger::outputDebugString (result.getErrorMessage());
+    {
+        Font font;
+        if (auto result = font.loadFromData (MemoryBlock (&RobotoFlexFont_data[0], RobotoFlexFont_size)); result.failed())
+            yup::Logger::outputDebugString (result.getErrorMessage());
 
-    theme->setDefaultFont (std::move (font));
+        theme->setDefaultFont (std::move (font));
+    }
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
