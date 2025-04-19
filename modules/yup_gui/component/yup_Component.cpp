@@ -378,7 +378,7 @@ float Component::getScaleDpi() const
     return parentComponent->getScaleDpi();
 }
 
-void Component::contentScaleChanged ([[maybe_unused]] float dpiScale) {}
+void Component::contentScaleChanged ([[maybe_unused]] float dpiScale) {}
 
 //==============================================================================
 
