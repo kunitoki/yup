@@ -106,6 +106,20 @@ public:
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
     }
 
+    /** Constructs a rectangle by converting from another type position and size.
+
+        @tparam T The type of the value from the source rectangle.
+
+        @param other The source rectangle from which to convert.
+    */
+    template <class T, class = std::enable_if_t<! std::is_same_v<T, ValueType>>>
+    constexpr Rectangle (const Point<T>& xy, const Size<T>& size) noexcept
+        : xy (xy.template to<ValueType>())
+        , size (size.template to<ValueType>())
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+    }
+
     //==============================================================================
     /** Copy and move constructors and assignment operators. */
     constexpr Rectangle (const Rectangle& other) noexcept = default;
@@ -909,10 +923,12 @@ public:
     */
     constexpr Rectangle removeFromTop (ValueType delta) noexcept
     {
-        const Rectangle result { xy, size.withHeight (jmax (ValueType (0), delta)) };
+        delta = jlimit (ValueType (0), size.getHeight(), delta);
+
+        Rectangle result { xy, size.withHeight (delta) };
 
         xy = xy.withY (xy.getY() + delta);
-        size = size.withHeight (jmax (ValueType (0), size.getHeight() - delta));
+        size = size.withHeight (size.getHeight() - delta);
 
         return result;
     }
@@ -927,10 +943,12 @@ public:
     */
     constexpr Rectangle removeFromLeft (ValueType delta) noexcept
     {
-        const Rectangle result { xy, size.withWidth (jmax (ValueType (0), delta)) };
+        delta = jlimit (ValueType (0), size.getWidth(), delta);
+
+        Rectangle result { xy, size.withWidth (delta) };
 
         xy = xy.withX (xy.getX() + delta);
-        size = size.withWidth (jmax (ValueType (0), size.getWidth() - delta));
+        size = size.withWidth (size.getWidth() - delta);
 
         return result;
     }
@@ -945,9 +963,15 @@ public:
     */
     constexpr Rectangle removeFromBottom (ValueType delta) noexcept
     {
-        const Rectangle result { xy.withY (jmax (ValueType (0), xy.getY() + size.getHeight() - delta)), size.withHeight (jmax (ValueType (0), delta)) };
+        delta = jlimit (ValueType (0), size.getHeight(), delta);
 
-        size = size.withHeight (jmax (ValueType (0), size.getHeight() - delta));
+        Rectangle result
+        {
+            xy.withY (xy.getY() + size.getHeight() - delta),
+            size.withHeight (delta)
+        };
+
+        size = size.withHeight (size.getHeight() - delta);
 
         return result;
     }
@@ -962,10 +986,15 @@ public:
     */
     constexpr Rectangle removeFromRight (ValueType delta) noexcept
     {
-        const Rectangle result { xy.withX (jmax (ValueType (0), xy.getX() + size.getWidth() - delta)),
-                                 size.withWidth (jmax (ValueType (0), delta)) };
+        delta = jlimit (ValueType (0), size.getWidth(), delta);
 
-        size = size.withWidth (jmax (ValueType (0), size.getWidth() - delta));
+        Rectangle result
+        {
+            xy.withX (xy.getX() + size.getWidth() - delta),
+            size.withWidth (delta)
+        };
+
+        size = size.withWidth (size.getWidth() - delta);
 
         return result;
     }
@@ -1322,8 +1351,8 @@ public:
     [[nodiscard]] constexpr Rectangle centeredRectangleWithSize (const Size<ValueType>& sizeOfRectangleToCenter) const noexcept
     {
         return {
-            getX() + jmax (ValueType (0), static_cast<ValueType> (getWidth() - sizeOfRectangleToCenter.getWidth()) / ValueType (2)),
-            getY() + jmax (ValueType (0), static_cast<ValueType> (getHeight() - sizeOfRectangleToCenter.getHeight()) / ValueType (2)),
+            getX() + static_cast<ValueType> (getWidth() - sizeOfRectangleToCenter.getWidth()) / ValueType (2),
+            getY() + static_cast<ValueType> (getHeight() - sizeOfRectangleToCenter.getHeight()) / ValueType (2),
             sizeOfRectangleToCenter.getWidth(),
             sizeOfRectangleToCenter.getHeight()
         };
@@ -1345,13 +1374,8 @@ public:
         auto ry1 = jmin (y1, y2);
         auto ry2 = jmax (y1, y2);
 
-        xy = xy
-                 .withX (static_cast<ValueType> (rx1))
-                 .withY (static_cast<ValueType> (ry1));
-
-        size = size
-                   .withWidth (static_cast<ValueType> (rx2 - rx1))
-                   .withHeight (static_cast<ValueType> (ry2 - ry1));
+        xy = { static_cast<ValueType> (rx1), static_cast<ValueType> (ry1) };
+        size = { static_cast<ValueType> (rx2 - rx1), static_cast<ValueType> (ry2 - ry1) };
 
         return *this;
     }
@@ -1458,8 +1482,12 @@ public:
     constexpr auto operator/= (T scaleFactor) noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle&>
     {
-        xy = { static_cast<ValueType> (xy.getX() / scaleFactor), static_cast<ValueType> (xy.getY() / scaleFactor) };
-        size = { static_cast<ValueType> (size.getWidth() / scaleFactor), static_cast<ValueType> (size.getHeight() / scaleFactor) };
+        if (scaleFactor != 0.0f)
+        {
+            xy = { static_cast<ValueType> (xy.getX() / scaleFactor), static_cast<ValueType> (xy.getY() / scaleFactor) };
+            size = { static_cast<ValueType> (size.getWidth() / scaleFactor), static_cast<ValueType> (size.getHeight() / scaleFactor) };
+        }
+
         return *this;
     }
 
