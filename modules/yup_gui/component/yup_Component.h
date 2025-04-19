@@ -624,31 +624,6 @@ public:
 
     //==============================================================================
     /**
-        Set a color for the component.
-
-        @param colorId The identifier of the color to set.
-        @param color The color to set.
-     */
-    void setColor (const Identifier& colorId, const std::optional<Color>& color);
-
-    /**
-        Get the color of the component.
-
-        @param colorId The identifier of the color to get.
-     */
-    std::optional<Color> getColor (const Identifier& colorId) const;
-
-    /**
-        Find the color of the component.
-
-        @param colorId The identifier of the color to find.
-
-        @return The color of the component.
-     */
-    std::optional<Color> findColor (const Identifier& colorId) const;
-
-    //==============================================================================
-    /**
         Get the properties of the component.
 
         @return The properties of the component.
@@ -791,6 +766,31 @@ public:
     ComponentStyle::Ptr getStyle() const;
 
     virtual void styleChanged();
+
+    //==============================================================================
+    /**
+        Set a color for the component.
+
+        @param colorId The identifier of the color to set.
+        @param color The color to set.
+     */
+    void setColor (const Identifier& colorId, const std::optional<Color>& color);
+
+    /**
+        Get the color of the component.
+
+        @param colorId The identifier of the color to get.
+     */
+    std::optional<Color> getColor (const Identifier& colorId) const;
+
+    /**
+        Find the color of the component.
+
+        @param colorId The identifier of the color to find.
+
+        @return The color of the component.
+     */
+    std::optional<Color> findColor (const Identifier& colorId) const;
 
     //==============================================================================
     /**
