@@ -23,11 +23,19 @@
 
 //==============================================================================
 
+class ExampleSlider : public yup::Slider
+{
+public:
+    using yup::Slider::Slider;
+};
+
+//==============================================================================
+
 ExampleEditor::ExampleEditor (ExamplePlugin& processor)
     : audioProcessor (processor)
     , gainParameter (audioProcessor.getParameters()[0])
 {
-    x = std::make_unique<yup::Slider> ("Slider", yup::Font());
+    x = std::make_unique<ExampleSlider> ("Slider");
     x->setMouseCursor (yup::MouseCursor::Hand);
     x->setValue (gainParameter->getValue());
     x->onDragStart = [this] (const yup::MouseEvent&)

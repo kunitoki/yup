@@ -161,9 +161,9 @@ public:
     {
         add (&listenerToAdd);
         return ErasedScopeGuard { [this, &listenerToAdd]
-                                  {
-                                      remove (&listenerToAdd);
-                                  } };
+        {
+            remove (&listenerToAdd);
+        } };
     }
 
     /** Returns the number of registered listeners. */
@@ -271,9 +271,9 @@ public:
         iterators->push_back (&it);
 
         const ScopeGuard scope { [i = iterators, &it]
-                                 {
-                                     i->erase (std::remove (i->begin(), i->end(), &it), i->end());
-                                 } };
+        {
+            i->erase (std::remove (i->begin(), i->end(), &it), i->end());
+        } };
 
         for (; it.index < it.end; ++it.index)
         {
@@ -344,9 +344,9 @@ public:
                                Args&&... args)
     {
         callCheckedExcluding (listenerToExclude, bailOutChecker, [&] (ListenerClass& l)
-                              {
-                                  (l.*callbackFunction) (args...);
-                              });
+        {
+            (l.*callbackFunction) (args...);
+        });
     }
 
     //==============================================================================

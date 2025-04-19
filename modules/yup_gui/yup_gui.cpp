@@ -19,14 +19,16 @@
   ==============================================================================
 */
 
+// clang-format off
 #ifdef YUP_GUI_H_INCLUDED
 /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
     header files that the compiler may be using.
- */
+*/
 #error "Incorrect use of YUP cpp file"
 #endif
+// clang-format on
 
 #include "yup_gui.h"
 
@@ -97,6 +99,9 @@
 #include "widgets/yup_Slider.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
+#include "themes/yup_ApplicationTheme.cpp"
+#include "themes/theme_v1/yup_ThemeVersion1.cpp"
+#include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"
 
 //==============================================================================
 #include "native/yup_WindowingUtilities_sdl2.cpp"

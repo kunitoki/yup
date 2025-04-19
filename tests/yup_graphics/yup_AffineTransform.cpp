@@ -27,7 +27,10 @@
 
 using namespace yup;
 
+namespace
+{
 static constexpr float tol = 1e-5f;
+} // namespace
 
 TEST (AffineTransformTests, Default_IsIdentity)
 {

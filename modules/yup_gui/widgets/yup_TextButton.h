@@ -27,15 +27,14 @@ class JUCE_API TextButton : public Button
 {
 public:
     //==============================================================================
-    TextButton (StringRef componentID, const Font& font);
+    TextButton (StringRef componentID);
 
     //==============================================================================
-    void paintButton (Graphics& g, bool isButtonOver, bool isButtonDown) override;
+    void paintButton (Graphics& g) override;
 
     void resized() override;
 
 private:
-    const Font& font;
     StyledText styledText;
 };
 

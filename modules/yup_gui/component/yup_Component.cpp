@@ -80,9 +80,7 @@ void Component::setEnabled (bool shouldBeEnabled)
         enablementChanged();
 }
 
-void Component::enablementChanged()
-{
-}
+void Component::enablementChanged() {}
 
 //==============================================================================
 
@@ -106,10 +104,6 @@ void Component::setVisible (bool shouldBeVisible)
     repaint();
 }
 
-void Component::visibilityChanged()
-{
-}
-
 bool Component::isShowing() const
 {
     if (! isVisible())
@@ -126,6 +120,8 @@ bool Component::isShowing() const
 
     return true;
 }
+
+void Component::visibilityChanged() {}
 
 //==============================================================================
 
@@ -152,6 +148,11 @@ Point<float> Component::getPosition() const
 void Component::setPosition (const Point<float>& newPosition)
 {
     boundsInParent.setTopLeft (newPosition);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newPosition.to<int>());
+
+    moved();
 }
 
 float Component::getX() const
@@ -259,9 +260,7 @@ void Component::setCenter (const Point<float>& newCenter)
     moved();
 }
 
-void Component::moved()
-{
-}
+void Component::moved() {}
 
 //==============================================================================
 
@@ -342,9 +341,7 @@ float Component::proportionOfHeight (float proportion) const
     return getHeight() * proportion;
 }
 
-void Component::resized()
-{
-}
+void Component::resized() {}
 
 //==============================================================================
 
@@ -366,9 +363,7 @@ void Component::setFullScreen (bool shouldBeFullScreen)
 
 //==============================================================================
 
-void Component::displayChanged()
-{
-}
+void Component::displayChanged() {}
 
 //==============================================================================
 
@@ -383,9 +378,7 @@ float Component::getScaleDpi() const
     return parentComponent->getScaleDpi();
 }
 
-void Component::contentScaleChanged (float dpiScale)
-{
-}
+void Component::contentScaleChanged ([[maybe_unused]] float dpiScale) {}
 
 //==============================================================================
 
@@ -468,13 +461,9 @@ const ComponentNative* Component::getNativeComponent() const
     return parentComponent->getNativeComponent();
 }
 
-void Component::attachedToNative()
-{
-}
+void Component::attachedToNative() {}
 
-void Component::detachedFromNative()
-{
-}
+void Component::detachedFromNative() {}
 
 //==============================================================================
 
@@ -815,35 +804,6 @@ void Component::focusLost() {}
 
 //==============================================================================
 
-void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
-{
-    if (color)
-        properties.set (colorId, static_cast<int64> (color->getARGB()));
-    else
-        properties.remove (colorId);
-}
-
-std::optional<Color> Component::getColor (const Identifier& colorId) const
-{
-    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
-        return Color (static_cast<uint32> (static_cast<int64> (*color)));
-
-    return std::nullopt;
-}
-
-std::optional<Color> Component::findColor (const Identifier& colorId) const
-{
-    if (auto color = getColor (colorId))
-        return color;
-
-    if (parentComponent != nullptr)
-        return parentComponent->findColor (colorId);
-
-    return std::nullopt;
-}
-
-//==============================================================================
-
 NamedValueSet& Component::getProperties()
 {
     return properties;
@@ -899,6 +859,54 @@ void Component::removeMouseListener (MouseListener* listener)
 }
 
 //==============================================================================
+
+void Component::setStyle (ComponentStyle::Ptr newStyle)
+{
+    if (style != newStyle)
+    {
+        style = std::move (newStyle);
+
+        styleChanged();
+
+        repaint();
+    }
+}
+
+ComponentStyle::Ptr Component::getStyle() const
+{
+    return style;
+}
+
+void Component::styleChanged() {}
+
+//==============================================================================
+
+void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
+{
+    if (color)
+        properties.set (colorId, static_cast<int64> (color->getARGB()));
+    else
+        properties.remove (colorId);
+}
+
+std::optional<Color> Component::getColor (const Identifier& colorId) const
+{
+    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
+        return Color (static_cast<uint32> (static_cast<int64> (*color)));
+
+    return std::nullopt;
+}
+
+std::optional<Color> Component::findColor (const Identifier& colorId) const
+{
+    if (auto color = getColor (colorId))
+        return color;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findColor (colorId);
+
+    return std::nullopt;
+}
 
 void Component::userTriedToCloseWindow() {}
 
@@ -1119,9 +1127,7 @@ void Component::internalMoved (int xpos, int ypos)
 
 //==============================================================================
 
-void Component::internalDisplayChanged()
-{
-}
+void Component::internalDisplayChanged() {}
 
 //==============================================================================
 

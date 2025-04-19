@@ -28,7 +28,7 @@ class LayoutFontsExample : public yup::Component
 public:
     LayoutFontsExample (const yup::Font& font)
         : Component ("LayoutFontsExample")
-        , font (font.withAxisValues ({ { "wght", 10.0f }, { "slnt", -10.0f } }))
+        , font (font)
     {
     }
 

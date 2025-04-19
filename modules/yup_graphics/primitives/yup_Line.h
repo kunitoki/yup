@@ -130,6 +130,25 @@ public:
     }
 
     //==============================================================================
+    /** Retrieves the start point value X of the line.
+
+        @return The start point value X of the line.
+    */
+    constexpr ValueType getStartX() const noexcept
+    {
+        return p1.getX();
+    }
+
+    /** Retrieves the start point value Y of the line.
+
+        @return The start point value Y of the line.
+    */
+    constexpr ValueType getStartY() const noexcept
+    {
+        return p1.getY();
+    }
+
+    //==============================================================================
     /** Retrieves the end point of the line.
 
         @return The end point of the line as a `Point<ValueType>`.
@@ -160,6 +179,25 @@ public:
     constexpr Line withEnd (const Point<ValueType>& newEnd) const noexcept
     {
         return { p1, newEnd };
+    }
+
+    //==============================================================================
+    /** Retrieves the end point value X of the line.
+
+        @return The end point value X of the line.
+    */
+    constexpr ValueType getEndX() const noexcept
+    {
+        return p2.getX();
+    }
+
+    /** Retrieves the end point value Y of the line.
+
+        @return The end point value Y of the line.
+    */
+    constexpr ValueType getEndY() const noexcept
+    {
+        return p2.getY();
     }
 
     //==============================================================================

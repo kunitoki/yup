@@ -295,15 +295,15 @@ static void logError (HRESULT hr, int lineNum)
 //==============================================================================
 namespace
 {
-#define DSOUND_FUNCTION(functionName, params)        \
-typedef HRESULT (WINAPI* type##functionName) params; \
-static type##functionName ds##functionName = nullptr;
+#define DSOUND_FUNCTION(functionName, params)            \
+    typedef HRESULT (WINAPI* type##functionName) params; \
+    static type##functionName ds##functionName = nullptr;
 
-#define DSOUND_FUNCTION_LOAD(functionName)                                 \
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-function-type")               \
-ds##functionName = (type##functionName) GetProcAddress (h, #functionName); \
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE                                          \
-jassert (ds##functionName != nullptr);
+#define DSOUND_FUNCTION_LOAD(functionName)                                     \
+    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-function-type")               \
+    ds##functionName = (type##functionName) GetProcAddress (h, #functionName); \
+    JUCE_END_IGNORE_WARNINGS_GCC_LIKE                                          \
+    jassert (ds##functionName != nullptr);
 
 typedef BOOL (CALLBACK* LPDSENUMCALLBACKW) (LPGUID, LPCWSTR, LPCWSTR, LPVOID);
 typedef BOOL (CALLBACK* LPDSENUMCALLBACKA) (LPGUID, LPCSTR, LPCSTR, LPVOID);
@@ -1433,9 +1433,9 @@ public:
 
 private:
     DeviceChangeDetector detector { L"DirectSound", [this]
-                                    {
-                                        systemDeviceChanged();
-                                    } };
+    {
+        systemDeviceChanged();
+    } };
     DSoundDeviceList deviceList;
     bool hasScanned = false;
 

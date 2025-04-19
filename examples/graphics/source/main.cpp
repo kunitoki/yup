@@ -28,10 +28,6 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
-#if JUCE_ANDROID
-#include <BinaryData.h>
-#endif
-
 #include "examples/Audio.h"
 #include "examples/LayoutFonts.h"
 #include "examples/VariableFonts.h"
@@ -57,18 +53,7 @@ public:
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
 #endif
 
-        // Load the font
-        {
-#if JUCE_ANDROID
-            yup::MemoryBlock mb (yup::RobotoFont_data, yup::RobotoFont_size);
-            if (auto result = font.loadFromData (mb); result.failed())
-                yup::Logger::outputDebugString (result.getErrorMessage());
-#else
-            auto fontFilePath = baseFilePath.getChildFile ("RobotoFlex-VariableFont.ttf");
-            if (auto result = font.loadFromFile (fontFilePath); result.failed())
-                yup::Logger::outputDebugString (result.getErrorMessage());
-#endif
-        }
+        auto font = yup::ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
         /*
         // Load an image
