@@ -34,9 +34,7 @@
     minimumCppStandard: 17
 
     dependencies:       juce_events yup_data_model yup_graphics rive
-    osxFrameworks:      Metal
-    iosFrameworks:      Metal
-    iosSimFrameworks:   Metal
+    appleFrameworks:    Metal
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
@@ -65,6 +63,8 @@
 
 #include <rive/rive.h>
 
+#include <tuple>
+
 //==============================================================================
 
 #include "application/yup_Application.h"
@@ -77,12 +77,19 @@
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
+#include "component/yup_ComponentStyle.h"
 #include "component/yup_Component.h"
 #include "widgets/yup_Button.h"
 #include "widgets/yup_TextButton.h"
+#include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 
 //==============================================================================
 #include "native/yup_WindowingHelpers.h"
+
+//==============================================================================
+
+#include "themes/yup_ApplicationTheme.h"
+#include "themes/theme_v1/yup_ThemeVersion1.h"

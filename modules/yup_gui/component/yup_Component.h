@@ -377,10 +377,16 @@ public:
      */
     const ComponentNative* getNativeComponent() const;
 
-    /** */
+    /** Called when this component is attached to a native window.
+
+        Override this to perform any setup required when the component gets a native window.
+    */
     virtual void attachedToNative();
 
-    /** */
+    /** Called when this component is detached from its native window.
+
+        Override this to perform any cleanup when the component loses its native window.
+    */
     virtual void detachedFromNative();
 
     //==============================================================================
@@ -420,12 +426,28 @@ public:
      */
     void toBack();
 
+    /** Raises this component above the specified component in the z-order.
+
+        @param component The component to raise above.
+    */
     void raiseAbove (Component* component);
 
+    /** Lowers this component below the specified component in the z-order.
+
+        @param component The component to lower below.
+    */
     void lowerBelow (Component* component);
 
+    /** Raises this component by a number of positions in the z-order.
+
+        @param indexToRaise The number of positions to raise by.
+    */
     void raiseBy (int indexToRaise);
 
+    /** Lowers this component by a number of positions in the z-order.
+
+        @param indexToLower The number of positions to lower by.
+    */
     void lowerBy (int indexToLower);
 
     //==============================================================================
@@ -454,19 +476,19 @@ public:
     /**
         Take the focus.
      */
-    void takeFocus();
+    void takeKeyboardFocus();
 
     /**
         Leave the focus.
      */
-    void leaveFocus();
+    void leaveKeyboardFocus();
 
     /**
         Check if the component has focus.
 
         @return True if the component has focus, false otherwise.
      */
-    bool hasFocus() const;
+    bool hasKeyboardFocus() const;
 
     /**
         Called when the component gains focus.
@@ -499,7 +521,7 @@ public:
         @return The parent of the component of the given type.
      */
     template <class T>
-    T* getParentComponentOfType()
+    T* getParentComponentWithType()
     {
         auto parent = parentComponent;
         while (parent != nullptr)
@@ -519,7 +541,7 @@ public:
         @return The parent of the component of the given type.
      */
     template <class T>
-    const T* getParentComponentOfType() const
+    const T* getParentComponentWithType() const
     {
         auto parent = parentComponent;
         while (parent != nullptr)
@@ -534,43 +556,37 @@ public:
     }
 
     //==============================================================================
-    /**
-        Add a child component to the component.
+    /** Add a child component to the component.
 
         @param component The child component to add.
      */
     void addChildComponent (Component& component, int index = -1);
 
-    /**
-        Add a child component to the component.
+    /** Add a child component to the component.
 
         @param component The child component to add.
      */
     void addChildComponent (Component* component, int index = -1);
 
-    /**
-        Add a child component to the component and make it visible.
+    /** Add a child component to the component and make it visible.
 
         @param component The child component to add.
      */
     void addAndMakeVisible (Component& component, int index = -1);
 
-    /**
-        Add a child component to the component and make it visible.
+    /** Add a child component to the component and make it visible.
 
         @param component The child component to add.
      */
     void addAndMakeVisible (Component* component, int index = -1);
 
-    /**
-        Remove a child component from the component.
+    /** Remove a child component from the component.
 
         @param component The child component to remove.
      */
     void removeChildComponent (Component& component);
 
-    /**
-        Remove a child component from the component.
+    /** Remove a child component from the component.
 
         @param component The child component to remove.
      */
@@ -583,13 +599,22 @@ public:
      */
     void removeChildComponent (int index);
 
-    /** */
+    /** Removes all child components from this component.
+
+        The removed components will be deleted if not referenced elsewhere.
+    */
     void removeAllChildren();
 
-    /** */
+    /** Called when the parent hierarchy of this component changes.
+
+        This happens when the component is added to or removed from a parent component.
+    */
     virtual void parentHierarchyChanged();
 
-    /** */
+    /** Called when the child components of this component change.
+
+        This happens when child components are added or removed.
+    */
     virtual void childrenChanged();
 
     //==============================================================================
@@ -621,31 +646,6 @@ public:
         Returns the top level component.
     */
     Component* getTopLevelComponent();
-
-    //==============================================================================
-    /**
-        Set a color for the component.
-
-        @param colorId The identifier of the color to set.
-        @param color The color to set.
-     */
-    void setColor (const Identifier& colorId, const std::optional<Color>& color);
-
-    /**
-        Get the color of the component.
-
-        @param colorId The identifier of the color to get.
-     */
-    std::optional<Color> getColor (const Identifier& colorId) const;
-
-    /**
-        Find the color of the component.
-
-        @param colorId The identifier of the color to find.
-
-        @return The color of the component.
-     */
-    std::optional<Color> findColor (const Identifier& colorId) const;
 
     //==============================================================================
     /**
@@ -783,33 +783,68 @@ public:
     virtual void textInput (const String& text);
 
     //==============================================================================
-    /**
-        A bail out checker for the component.
+
+    /** Sets the style for this component.
+
+        @param newStyle The new style to apply to the component.
+    */
+    void setStyle (ComponentStyle::Ptr newStyle);
+
+    /** Returns the current style of this component.
+
+        @return The component's current style.
+    */
+    ComponentStyle::Ptr getStyle() const;
+
+    /** Called when the component's style changes.
+
+        Override this to perform custom actions when the style is modified.
+    */
+    virtual void styleChanged();
+
+    //==============================================================================
+    /** Set a color for the component.
+
+        @param colorId The identifier of the color to set.
+        @param color The color to set.
      */
+    void setColor (const Identifier& colorId, const std::optional<Color>& color);
+
+    /** Get the color of the component.
+
+        @param colorId The identifier of the color to get.
+     */
+    std::optional<Color> getColor (const Identifier& colorId) const;
+
+    /** Find the color of the component.
+
+        @param colorId The identifier of the color to find.
+
+        @return The color of the component.
+     */
+    std::optional<Color> findColor (const Identifier& colorId) const;
+
+    //==============================================================================
+    /** A bail out checker for the component. */
     class BailOutChecker
     {
     public:
-        /**
-            Constructor for the BailOutChecker class.
+        /** Constructor for the BailOutChecker class.
 
             @param component The component to check.
          */
-        BailOutChecker (Component* component)
+        explicit BailOutChecker (Component* component)
             : componentWeak (component)
         {
         }
 
-        /** Copy constructor for the BailOutChecker class. */
+        /** Copy and move constructors and assignment operators for the BailOutChecker class. */
         BailOutChecker (const BailOutChecker& other) = default;
-        /** Move constructor for the BailOutChecker class. */
         BailOutChecker (BailOutChecker&& other) = default;
-        /** Copy assignment operator for the BailOutChecker class. */
         BailOutChecker& operator= (const BailOutChecker& other) = default;
-        /** Move assignment operator for the BailOutChecker class. */
         BailOutChecker& operator= (BailOutChecker&& other) = default;
 
-        /**
-            Check if the component should bail out.
+        /** Check if the component should bail out.
 
             @return True if the component should bail out, false otherwise.
          */
@@ -846,7 +881,6 @@ private:
     void updateMouseCursor();
 
     friend class ComponentNative;
-    friend class GLFWComponentNative;
     friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
 
@@ -859,6 +893,7 @@ private:
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
+    ComponentStyle::Ptr style;
     NamedValueSet properties;
     MouseCursor mouseCursor;
     uint8 opacity = 255;
@@ -872,7 +907,6 @@ private:
         bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
-        bool wantsTextInput : 1;
     };
 
     union

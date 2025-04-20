@@ -34,9 +34,7 @@
     minimumCppStandard: 17
 
     dependencies:       juce_core rive rive_renderer
-    osxFrameworks:      Metal
-    iosFrameworks:      Metal
-    iosSimFrameworks:   Metal
+    appleFrameworks:    Metal
     searchpaths:        native
     enableARC:          1
 
@@ -57,6 +55,7 @@
 
 JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
 #include <rive/rive.h>
+#include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
 JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 

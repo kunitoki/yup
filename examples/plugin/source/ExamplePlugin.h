@@ -23,8 +23,6 @@
 
 #include <yup_audio_processors/yup_audio_processors.h>
 
-#include <BinaryData.h>
-
 //==============================================================================
 
 template <class T>

@@ -62,25 +62,25 @@ String Component::getComponentID() const
 
 bool Component::isEnabled() const
 {
-    return ! options.isDisabled;
+    return ! options.isDisabled && (parentComponent == nullptr || parentComponent->isEnabled());
 }
 
 void Component::setEnabled (bool shouldBeEnabled)
 {
-    if (options.isDisabled != ! shouldBeEnabled)
-    {
-        options.isDisabled = ! shouldBeEnabled;
+    if (options.isDisabled == ! shouldBeEnabled)
+        return;
 
-        //if (options.onDesktop && native != nullptr)
-        //    native->setEnabled (shouldBeEnabled);
+    options.isDisabled = ! shouldBeEnabled;
+
+    //if (options.onDesktop && native != nullptr)
+    //    native->setEnabled (shouldBeEnabled);
+
+    if (options.isDisabled && hasKeyboardFocus())
 
         enablementChanged();
-    }
 }
 
-void Component::enablementChanged()
-{
-}
+void Component::enablementChanged() {}
 
 //==============================================================================
 
@@ -91,21 +91,17 @@ bool Component::isVisible() const
 
 void Component::setVisible (bool shouldBeVisible)
 {
-    if (options.isVisible != shouldBeVisible)
-    {
-        options.isVisible = shouldBeVisible;
+    if (options.isVisible == shouldBeVisible)
+        return;
 
-        if (options.onDesktop && native != nullptr)
-            native->setVisible (shouldBeVisible);
+    options.isVisible = shouldBeVisible;
 
-        visibilityChanged();
+    if (options.onDesktop && native != nullptr)
+        native->setVisible (shouldBeVisible);
 
-        repaint();
-    }
-}
+    visibilityChanged();
 
-void Component::visibilityChanged()
-{
+    repaint();
 }
 
 bool Component::isShowing() const
@@ -124,6 +120,8 @@ bool Component::isShowing() const
 
     return true;
 }
+
+void Component::visibilityChanged() {}
 
 //==============================================================================
 
@@ -150,6 +148,11 @@ Point<float> Component::getPosition() const
 void Component::setPosition (const Point<float>& newPosition)
 {
     boundsInParent.setTopLeft (newPosition);
+
+    if (options.onDesktop && native != nullptr)
+        native->setPosition (newPosition.to<int>());
+
+    moved();
 }
 
 float Component::getX() const
@@ -207,7 +210,7 @@ void Component::setBottomLeft (const Point<float>& newBottomLeft)
     boundsInParent.setBottomLeft (newBottomLeft);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newBottomLeft.to<int>().translated (0, -getHeight()));
+        native->setPosition (newBottomLeft.translated (0.0f, -getHeight()).to<int>());
 
     moved();
 }
@@ -222,7 +225,7 @@ void Component::setTopRight (const Point<float>& newTopRight)
     boundsInParent.setTopRight (newTopRight);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newTopRight.to<int>().translated (-getWidth(), 0));
+        native->setPosition (newTopRight.translated (-getWidth(), 0.0f).to<int>());
 
     moved();
 }
@@ -237,7 +240,7 @@ void Component::setBottomRight (const Point<float>& newBottomRight)
     boundsInParent.setBottomRight (newBottomRight);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newBottomRight.to<int>().translated (-getWidth(), -getHeight()));
+        native->setPosition (newBottomRight.translated (-getWidth(), -getHeight()).to<int>());
 
     moved();
 }
@@ -252,14 +255,12 @@ void Component::setCenter (const Point<float>& newCenter)
     boundsInParent.setCenter (newCenter);
 
     if (options.onDesktop && native != nullptr)
-        native->setPosition (newCenter.to<int>().translated (-getWidth() / 2, -getHeight() / 2));
+        native->setPosition (newCenter.translated (-getWidth() / 2.0f, -getHeight() / 2.0f).to<int>());
 
     moved();
 }
 
-void Component::moved()
-{
-}
+void Component::moved() {}
 
 //==============================================================================
 
@@ -340,9 +341,7 @@ float Component::proportionOfHeight (float proportion) const
     return getHeight() * proportion;
 }
 
-void Component::resized()
-{
-}
+void Component::resized() {}
 
 //==============================================================================
 
@@ -353,20 +352,18 @@ bool Component::isFullScreen() const
 
 void Component::setFullScreen (bool shouldBeFullScreen)
 {
-    if (options.isFullScreen != shouldBeFullScreen)
-    {
-        options.isFullScreen = shouldBeFullScreen;
+    if (options.isFullScreen == shouldBeFullScreen)
+        return;
 
-        if (options.onDesktop && native != nullptr)
-            native->setFullScreen (shouldBeFullScreen);
-    }
+    options.isFullScreen = shouldBeFullScreen;
+
+    if (options.onDesktop && native != nullptr)
+        native->setFullScreen (shouldBeFullScreen);
 }
 
 //==============================================================================
 
-void Component::displayChanged()
-{
-}
+void Component::displayChanged() {}
 
 //==============================================================================
 
@@ -381,9 +378,7 @@ float Component::getScaleDpi() const
     return parentComponent->getScaleDpi();
 }
 
-void Component::contentScaleChanged (float dpiScale)
-{
-}
+void Component::contentScaleChanged ([[maybe_unused]] float dpiScale) {}
 
 //==============================================================================
 
@@ -466,13 +461,9 @@ const ComponentNative* Component::getNativeComponent() const
     return parentComponent->getNativeComponent();
 }
 
-void Component::attachedToNative()
-{
-}
+void Component::attachedToNative() {}
 
-void Component::detachedFromNative()
-{
-}
+void Component::detachedFromNative() {}
 
 //==============================================================================
 
@@ -483,6 +474,8 @@ bool Component::isOnDesktop() const
 
 void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
+    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
     if (options.onDesktop)
         removeFromDesktop();
 
@@ -503,6 +496,8 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
 void Component::removeFromDesktop()
 {
+    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
     if (! options.onDesktop)
         return;
 
@@ -523,7 +518,7 @@ void Component::toFront (bool shouldGainKeyboardFocus)
     parentComponent->addChildComponent (this, parentComponent->getNumChildComponents());
 
     if (shouldGainKeyboardFocus && options.wantsKeyboardFocus)
-        takeFocus();
+        takeKeyboardFocus();
 }
 
 void Component::toBack()
@@ -774,7 +769,7 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
     options.wantsKeyboardFocus = wantsFocus;
 }
 
-void Component::takeFocus()
+void Component::takeKeyboardFocus()
 {
     if (options.wantsKeyboardFocus)
     {
@@ -783,7 +778,7 @@ void Component::takeFocus()
     }
 }
 
-void Component::leaveFocus()
+void Component::leaveKeyboardFocus()
 {
     if (auto nativeComponent = getNativeComponent())
     {
@@ -792,7 +787,7 @@ void Component::leaveFocus()
     }
 }
 
-bool Component::hasFocus() const
+bool Component::hasKeyboardFocus() const
 {
     if (! options.wantsKeyboardFocus)
         return false;
@@ -806,35 +801,6 @@ bool Component::hasFocus() const
 void Component::focusGained() {}
 
 void Component::focusLost() {}
-
-//==============================================================================
-
-void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
-{
-    if (color)
-        properties.set (colorId, static_cast<int64> (color->getARGB()));
-    else
-        properties.remove (colorId);
-}
-
-std::optional<Color> Component::getColor (const Identifier& colorId) const
-{
-    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
-        return Color (static_cast<uint32> (static_cast<int64> (*color)));
-
-    return std::nullopt;
-}
-
-std::optional<Color> Component::findColor (const Identifier& colorId) const
-{
-    if (auto color = getColor (colorId))
-        return color;
-
-    if (parentComponent != nullptr)
-        return parentComponent->findColor (colorId);
-
-    return std::nullopt;
-}
 
 //==============================================================================
 
@@ -894,6 +860,54 @@ void Component::removeMouseListener (MouseListener* listener)
 
 //==============================================================================
 
+void Component::setStyle (ComponentStyle::Ptr newStyle)
+{
+    if (style != newStyle)
+    {
+        style = std::move (newStyle);
+
+        styleChanged();
+
+        repaint();
+    }
+}
+
+ComponentStyle::Ptr Component::getStyle() const
+{
+    return style;
+}
+
+void Component::styleChanged() {}
+
+//==============================================================================
+
+void Component::setColor (const Identifier& colorId, const std::optional<Color>& color)
+{
+    if (color)
+        properties.set (colorId, static_cast<int64> (color->getARGB()));
+    else
+        properties.remove (colorId);
+}
+
+std::optional<Color> Component::getColor (const Identifier& colorId) const
+{
+    if (auto color = properties.getVarPointer (colorId); color != nullptr && color->isInt64())
+        return Color (static_cast<uint32> (static_cast<int64> (*color)));
+
+    return std::nullopt;
+}
+
+std::optional<Color> Component::findColor (const Identifier& colorId) const
+{
+    if (auto color = getColor (colorId))
+        return color;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findColor (colorId);
+
+    return std::nullopt;
+}
+
 void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
@@ -920,7 +934,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto opacity = g.getOpacity() * getOpacity();
+    const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
     if (opacity <= 0.0f)
         return;
 
@@ -1087,7 +1101,7 @@ void Component::internalKeyUp (const KeyPress& keys, const Point<float>& positio
 
 void Component::internalTextInput (const String& text)
 {
-    if (! isVisible() || ! options.wantsTextInput)
+    if (! options.wantsKeyboardFocus || ! isVisible())
         return;
 
     textInput (text);
@@ -1097,7 +1111,7 @@ void Component::internalTextInput (const String& text)
 
 void Component::internalResized (int width, int height)
 {
-    boundsInParent = boundsInParent.withSize (Size<float> (width, height));
+    boundsInParent = boundsInParent.withSize (Size<int> (width, height).to<float>());
 
     resized();
 }
@@ -1106,16 +1120,14 @@ void Component::internalResized (int width, int height)
 
 void Component::internalMoved (int xpos, int ypos)
 {
-    boundsInParent = boundsInParent.withPosition (Point<float> (xpos, ypos));
+    boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
     moved();
 }
 
 //==============================================================================
 
-void Component::internalDisplayChanged()
-{
-}
+void Component::internalDisplayChanged() {}
 
 //==============================================================================
 

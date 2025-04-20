@@ -37,35 +37,32 @@
   ==============================================================================
 */
 
-/*******************************************************************************
- The block below describes the properties of this module, and is read by
- the Projucer to automatically generate project code that uses it.
- For details about the syntax and how to create or use a module, see the
- JUCE Module Format.md file.
+/*
+  ==============================================================================
 
+  BEGIN_JUCE_MODULE_DECLARATION
 
- BEGIN_JUCE_MODULE_DECLARATION
+    ID:                 juce_audio_devices
+    vendor:             juce
+    version:            7.0.12
+    name:               JUCE audio and MIDI I/O device classes
+    description:        Classes to play and record from audio and MIDI I/O devices
+    website:            http://www.juce.com/juce
+    license:            ISC
+    minimumCppStandard: 17
 
-  ID:                 juce_audio_devices
-  vendor:             juce
-  version:            7.0.12
-  name:               JUCE audio and MIDI I/O device classes
-  description:        Classes to play and record from audio and MIDI I/O devices
-  website:            http://www.juce.com/juce
-  license:            ISC
-  minimumCppStandard: 17
+    dependencies:       juce_audio_basics juce_events
+    appleFrameworks:    CoreAudio CoreMIDI AudioToolbox
+    iosFrameworks:      AVFoundation
+    iosSimFrameworks:   AVFoundation
+    linuxPackages:      alsa
+    androidDeps:        oboe_library
+    mingwLibs:          winmm
 
-  dependencies:       juce_audio_basics juce_events
-  osxFrameworks:      CoreAudio CoreMIDI AudioToolbox
-  iosFrameworks:      CoreAudio CoreMIDI AudioToolbox AVFoundation
-  iosSimFrameworks:   CoreAudio CoreMIDI AudioToolbox AVFoundation
-  linuxPackages:      alsa
-  androidDeps:        oboe_library
-  mingwLibs:          winmm
+  END_JUCE_MODULE_DECLARATION
 
- END_JUCE_MODULE_DECLARATION
-
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 #define JUCE_AUDIO_DEVICES_H_INCLUDED

@@ -25,17 +25,6 @@ set (target_version "1.0.0")
 
 project (${target_name} VERSION ${target_version})
 
-yup_add_embedded_binary_resources (
-    "${target_name}_binary_data"
-    OUT_DIR BinaryData
-    HEADER BinaryData.h
-    NAMESPACE yup
-    RESOURCE_NAMES
-        RobotoRegularFont
-    RESOURCES
-        ${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf
-)
-
 yup_audio_plugin (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
@@ -57,8 +46,7 @@ yup_audio_plugin (
     PLUGIN_CREATE_STANDALONE ON
     MODULES
         yup_gui
-        yup_audio_processors
-        "${target_name}_binary_data")
+        yup_audio_processors)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
@@ -66,3 +54,4 @@ file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name}_shared PUBLIC ${sources})
+

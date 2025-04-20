@@ -179,10 +179,18 @@ Graphics::Graphics (GraphicsContext& context, rive::Renderer& renderer, float sc
     : context (context)
     , factory (*context.factory())
     , renderer (renderer)
+    , contextScale (scale)
 {
     renderOptions.emplace_back();
 
     currentRenderOptions().scale = scale;
+}
+
+//==============================================================================
+
+float Graphics::getContextScale() const
+{
+    return contextScale;
 }
 
 //==============================================================================
@@ -242,6 +250,7 @@ Color Graphics::getFillColor() const
     return currentRenderOptions().fillColor;
 }
 
+//==============================================================================
 void Graphics::setStrokeColor (Color color)
 {
     currentRenderOptions().strokeColor = color;
@@ -253,6 +262,7 @@ Color Graphics::getStrokeColor() const
     return currentRenderOptions().strokeColor;
 }
 
+//==============================================================================
 void Graphics::setFillColorGradient (ColorGradient gradient)
 {
     currentRenderOptions().fillGradient = std::move (gradient);
@@ -264,6 +274,7 @@ ColorGradient Graphics::getFillColorGradient() const
     return currentRenderOptions().fillGradient;
 }
 
+//==============================================================================
 void Graphics::setStrokeColorGradient (ColorGradient gradient)
 {
     currentRenderOptions().strokeGradient = std::move (gradient);
@@ -275,6 +286,7 @@ ColorGradient Graphics::getStrokeColorGradient() const
     return currentRenderOptions().strokeGradient;
 }
 
+//==============================================================================
 void Graphics::setStrokeWidth (float strokeWidth)
 {
     currentRenderOptions().strokeWidth = jmax (0.0f, strokeWidth);
@@ -285,6 +297,18 @@ float Graphics::getStrokeWidth() const
     return currentRenderOptions().strokeWidth;
 }
 
+//==============================================================================
+void Graphics::setFeather (float feather)
+{
+    currentRenderOptions().feather = jmax (0.0f, feather);
+}
+
+float Graphics::getFeather() const
+{
+    return currentRenderOptions().feather;
+}
+
+//==============================================================================
 void Graphics::setOpacity (float opacity)
 {
     currentRenderOptions().opacity = jlimit (0.0f, 1.0f, opacity);
@@ -295,6 +319,7 @@ float Graphics::getOpacity() const
     return currentRenderOptions().opacity;
 }
 
+//==============================================================================
 void Graphics::setStrokeJoin (StrokeJoin join)
 {
     currentRenderOptions().join = join;
@@ -305,6 +330,7 @@ StrokeJoin Graphics::getStrokeJoin() const
     return currentRenderOptions().join;
 }
 
+//==============================================================================
 void Graphics::setStrokeCap (StrokeCap cap)
 {
     currentRenderOptions().cap = cap;
@@ -315,6 +341,7 @@ StrokeCap Graphics::getStrokeCap() const
     return currentRenderOptions().cap;
 }
 
+//==============================================================================
 void Graphics::setBlendMode (BlendMode blendMode)
 {
     currentRenderOptions().blendMode = blendMode;
@@ -325,6 +352,7 @@ BlendMode Graphics::getBlendMode() const
     return currentRenderOptions().blendMode;
 }
 
+//==============================================================================
 void Graphics::setDrawingArea (const Rectangle<float>& drawingArea)
 {
     currentRenderOptions().drawingArea = drawingArea;
@@ -335,9 +363,10 @@ Rectangle<float> Graphics::getDrawingArea() const
     return currentRenderOptions().drawingArea;
 }
 
+//==============================================================================
 void Graphics::setTransform (const AffineTransform& transform)
 {
-    currentRenderOptions().transform = transform;
+    currentRenderOptions().transform = currentRenderOptions().transform.followedBy (transform);
 }
 
 AffineTransform Graphics::getTransform() const
@@ -345,6 +374,7 @@ AffineTransform Graphics::getTransform() const
     return currentRenderOptions().transform;
 }
 
+//==============================================================================
 void Graphics::setClipPath (const Rectangle<float>& clipRect)
 {
     Path path;
@@ -359,11 +389,11 @@ void Graphics::setClipPath (const Path& clipPath)
 
     options.clipPath = clipPath;
 
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::nonZero);
-    renderPath->addRenderPath (clipPath.getRenderPath(), options.getUntranslatedTransform().toMat2D());
+    rive::RiveRenderPath renderPath;
+    renderPath.fillRule (rive::FillRule::nonZero);
+    renderPath.addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
 
-    renderer.clipPath (renderPath.get());
+    renderer.clipPath (std::addressof (renderPath));
 }
 
 Path Graphics::getClipPath() const
@@ -393,17 +423,11 @@ void Graphics::strokeLine (const Point<float>& p1, const Point<float>& p2)
 void Graphics::fillAll()
 {
     const auto& options = currentRenderOptions();
-    const auto& area = options.getDrawingArea();
 
     Path path;
-    path.reserveSpace (5);
-    path.moveTo (area.getX(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY());
+    path.addRectangle (options.getDrawingArea().withZeroPosition());
 
-    renderFillPath (path, options, options.getUntranslatedTransform());
+    renderFillPath (path, options, options.getTransform());
 }
 
 //==============================================================================
@@ -412,12 +436,7 @@ void Graphics::fillRect (float x, float y, float width, float height)
     const auto& options = currentRenderOptions();
 
     Path path;
-    path.reserveSpace (5);
-    path.moveTo (x, y);
-    path.lineTo (x + width, y);
-    path.lineTo (x + width, y + height);
-    path.lineTo (x, y + height);
-    path.lineTo (x, y);
+    path.addRectangle (x, y, width, height);
 
     renderFillPath (path, options, options.getTransform());
 }
@@ -433,12 +452,7 @@ void Graphics::strokeRect (float x, float y, float width, float height)
     const auto& options = currentRenderOptions();
 
     Path path;
-    path.reserveSpace (5);
-    path.moveTo (x, y);
-    path.lineTo (x + width, y);
-    path.lineTo (x + width, y + height);
-    path.lineTo (x, y + height);
-    path.lineTo (x, y);
+    path.addRectangle (x, y, width, height);
 
     renderStrokePath (path, options, options.getTransform());
 }
@@ -519,74 +533,42 @@ void Graphics::fillPath (const Path& path)
 }
 
 //==============================================================================
-void Graphics::clipPath (const Rectangle<float>& area)
-{
-    const auto& options = currentRenderOptions();
-
-    rive::RawPath path;
-    path.reserve (5, 5);
-    path.moveTo (area.getX(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY());
-    path.lineTo (area.getX() + area.getWidth(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY() + area.getHeight());
-    path.lineTo (area.getX(), area.getY());
-
-    clipPath (path);
-}
-
-void Graphics::clipPath (const Path& path)
-{
-    const auto& options = currentRenderOptions();
-
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->fillRule (rive::FillRule::nonZero);
-    renderPath->addRenderPath (path.getRenderPath(), options.getTransform().toMat2D());
-
-    renderer.clipPath (renderPath.get());
-}
-
-void Graphics::clipPath (rive::RawPath& path)
-{
-    const auto& options = currentRenderOptions();
-
-    path.transformInPlace (options.getTransform().toMat2D());
-
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::nonZero, path);
-    renderer.clipPath (renderPath.get());
-}
-
-//==============================================================================
 void Graphics::renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::stroke);
-    paint->thickness (options.getStrokeWidth());
-    paint->join (toStrokeJoin (options.join));
-    paint->cap (toStrokeCap (options.cap));
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::stroke);
+    paint.blendMode (toBlendMode (options.blendMode));
+    paint.thickness (options.getStrokeWidth());
+    paint.join (toStrokeJoin (options.join));
+    paint.cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
-        paint->color (options.getStrokeColor());
+        paint.color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
+        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), transform));
 
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->addRenderPath (path.getRenderPath(), transform.toMat2D());
-    renderer.drawPath (renderPath.get(), paint.get());
+    renderer.save();
+    renderer.transform (transform.toMat2D());
+    renderer.drawPath (path.getRenderPath(), std::addressof (paint));
+    renderer.restore();
 }
 
 void Graphics::renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform)
 {
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::fill);
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::fill);
+    paint.blendMode (toBlendMode (options.blendMode));
+    paint.feather (options.feather);
 
     if (options.isFillColor())
-        paint->color (options.getFillColor());
+        paint.color (options.getFillColor());
     else
-        paint->shader (toColorGradient (factory, options.getFillColorGradient(), transform));
+        paint.shader (toColorGradient (factory, options.getFillColorGradient(), transform));
 
-    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
-    renderPath->addRenderPath (path.getRenderPath(), transform.toMat2D());
-    renderer.drawPath (renderPath.get(), paint.get());
+    renderer.save();
+    renderer.transform (transform.toMat2D());
+    renderer.drawPath (path.getRenderPath(), std::addressof (paint));
+    renderer.restore();
 }
 
 //==============================================================================
@@ -596,14 +578,10 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     if (renderContext == nullptr)
         return;
 
-    const auto& options = currentRenderOptions();
-
-    renderer.save();
-    renderer.scale (image.getWidth(), image.getHeight());
-    renderer.transform (options.getTransform().toMat2D());
-
     if (! image.createTextureIfNotPresent (context))
         return;
+
+    const auto& options = currentRenderOptions();
 
     static const auto unitRectPath = []
     {
@@ -617,34 +595,84 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
     rive::RiveRenderPaint paint;
     paint.image (image.getTexture(), jlimit (0.0f, 1.0f, options.opacity));
     paint.blendMode (toBlendMode (options.blendMode));
-    renderer.drawPath (unitRectPath.get(), &paint);
 
+    renderer.save();
+    renderer.scale (image.getWidth(), image.getHeight());
+    renderer.transform (options.getTransform().toMat2D());
+    renderer.drawPath (unitRectPath.get(), std::addressof (paint));
     renderer.restore();
 }
 
 //==============================================================================
-void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect, rive::TextAlign align)
+void Graphics::fillFittedText (StyledText& text, const Rectangle<float>& rect)
 {
+    text.update();
+    if (text.isEmpty())
+        return;
+
     const auto& options = currentRenderOptions();
 
-    auto paint = factory.makeRenderPaint();
-    paint->style (rive::RenderPaintStyle::fill);
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::fill);
+    paint.blendMode (toBlendMode (options.blendMode));
+    paint.feather (options.feather);
+
+    if (options.isFillColor())
+        paint.color (options.getFillColor());
+    else
+        paint.shader (toColorGradient (factory, options.getFillColorGradient(), options.getTransform()));
+
+    renderFittedText (text, rect, std::addressof (paint));
+}
+
+void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
+{
+    text.update();
+    if (text.isEmpty())
+        return;
+
+    const auto& options = currentRenderOptions();
+
+    rive::RiveRenderPaint paint;
+    paint.style (rive::RenderPaintStyle::stroke);
+    paint.blendMode (toBlendMode (options.blendMode));
+    paint.thickness (options.getStrokeWidth());
+    paint.join (toStrokeJoin (options.join));
+    paint.cap (toStrokeCap (options.cap));
 
     if (options.isStrokeColor())
-        paint->color (options.getStrokeColor());
+        paint.color (options.getStrokeColor());
     else
-        paint->shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
+        paint.shader (toColorGradient (factory, options.getStrokeColorGradient(), options.getTransform()));
 
-    auto path = factory.makeEmptyRenderPath();
+    renderFittedText (text, rect, std::addressof (paint));
+}
 
-    std::size_t totalPathSize = 0;
-    for (const auto& rawPath : text.getGlyphs())
-        totalPathSize += rawPath.verbs().size();
+void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint)
+{
+    jassert (! text.isEmpty());
 
-    for (const auto& rawPath : text.getGlyphs())
-        convertRawPathToRenderPath (rawPath, path.get(), options.getTransform());
+    const auto& options = currentRenderOptions();
 
-    renderer.drawPath (path.get(), paint.get());
+    auto offset = text.getOffset (rect);
+    if (text.getMaxSize().getWidth() > 0.0f) // Non negative max size in text layout will adjust X axis alignment
+        offset = offset.withX (0.0f);
+
+    renderer.save();
+
+    rive::RawPath path;
+    path.addRect ({ rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom() });
+    path.transformInPlace (options.getFixedTransform().toMat2D());
+    auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
+    renderer.clipPath (renderPath.get());
+
+    auto transform = options.getTransform (rect.getX() + offset.getX(), rect.getY() + offset.getY());
+    renderer.transform (transform.toMat2D());
+
+    for (auto style : text.getRenderStyles())
+        renderer.drawPath (style->path.get(), (paint != nullptr) ? paint : style->paint.get());
+
+    renderer.restore();
 }
 
 } // namespace yup

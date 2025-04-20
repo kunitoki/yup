@@ -128,6 +128,9 @@
 #elif __clang__
  #pragma clang diagnostic push
  #pragma clang diagnostic ignored "-Wattributes"
+#elif _MSC_VER
+ __pragma (warning (push))
+ __pragma (warning (disable: 4244))
 #endif
 
 // Public API
@@ -144,4 +147,6 @@
  #pragma GCC diagnostic pop
 #elif __clang__
  #pragma clang diagnostic pop
+#elif _MSC_VER
+ __pragma (warning (pop))
 #endif

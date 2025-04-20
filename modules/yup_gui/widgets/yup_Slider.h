@@ -23,15 +23,21 @@ namespace yup
 {
 
 //==============================================================================
+
 class JUCE_API Slider : public Component
 {
 public:
     //==============================================================================
-    Slider (StringRef componentID, const Font& font);
+
+    Slider (StringRef componentID);
 
     //==============================================================================
+
     void setValue (float newValue, NotificationType notification = sendNotification);
     float getValue() const;
+
+    void setValueNormalised (float newValue, NotificationType notification = sendNotification);
+    float getValueNormalised() const;
 
     virtual void valueChanged();
 
@@ -40,6 +46,21 @@ public:
     std::function<void (const MouseEvent&)> onDragEnd;
 
     //==============================================================================
+
+    bool isMouseOver() const;
+
+    //==============================================================================
+
+    void setDefaultValue (float newDefaultValue);
+    float getDefaultValue() const;
+
+    //==============================================================================
+
+    void setRange (const Range<float>& newRange);
+    Range<float> getRange() const;
+
+    //==============================================================================
+
     void resized() override;
     void paint (Graphics& g) override;
     void mouseEnter (const MouseEvent& event) override;
@@ -50,19 +71,13 @@ public:
     void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
 
 private:
-    void updateRenderItems (bool forceAll);
     void sendValueChanged (NotificationType notification);
 
-    Path backgroundPath;
-    Path backgroundArc;
-    Path foregroundArc;
-    Path foregroundLine;
-    StyledText text;
-
     Point<float> origin;
-    const Font& font;
     float value = 0.0f;
-    bool isInside = false;
+    float defaultValue = 0.0f;
+    NormalisableRange<float> range = { 0.0f, 1.0f };
+    bool isMouseOverSlider = false;
     bool isDragging = false;
 };
 
