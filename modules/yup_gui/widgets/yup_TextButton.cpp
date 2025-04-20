@@ -24,35 +24,29 @@ namespace yup
 
 //==============================================================================
 
-TextButton::TextButton (StringRef componentID, const Font& font)
+TextButton::TextButton (StringRef componentID)
     : Button (componentID)
-    , font (font)
 {
 }
 
 //==============================================================================
 
-void TextButton::paintButton (Graphics& g, bool isButtonOver, bool isButtonDown)
+void TextButton::paintButton (Graphics& g)
 {
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
-    const auto center = bounds.getCenter();
+    ApplicationTheme::findComponentStyle (*this)->paint (g, *this);
 
-    auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
-
-    Path backgroundPath;
-    backgroundPath.addRoundedRectangle (rectBounds, 10.0f, 10.0f, 10.0f, 10.0f);
-    g.setFillColor (isButtonDown ? Color (0xff000000) : Color (0xffffffff));
-    g.fillPath (backgroundPath);
-
+    /*
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
     g.setFillColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
     g.fillFittedText (styledText, labelBounds);
+	*/
 }
 
 //==============================================================================
 
 void TextButton::resized()
 {
+    /*
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
     auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
@@ -64,6 +58,7 @@ void TextButton::resized()
     styledText.clear();
     styledText.appendText (getComponentID(), nullptr, font, 32.0f);
     styledText.update();
+	*/
 }
 
 } // namespace yup

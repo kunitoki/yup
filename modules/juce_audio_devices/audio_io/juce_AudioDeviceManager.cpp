@@ -482,9 +482,9 @@ void AudioDeviceManager::openLastRequestedMidiDevices (const Array<MidiDeviceInf
                                             auto&& doOpen)
     {
         const auto iterWithMatchingIdentifier = std::find_if (devices.begin(), devices.end(), [&] (const auto& x)
-                                                              {
-                                                                  return x.identifier == deviceToOpen.identifier;
-                                                              });
+        {
+            return x.identifier == deviceToOpen.identifier;
+        });
 
         if (iterWithMatchingIdentifier != devices.end())
         {
@@ -493,9 +493,9 @@ void AudioDeviceManager::openLastRequestedMidiDevices (const Array<MidiDeviceInf
         }
 
         const auto iterWithMatchingName = std::find_if (devices.begin(), devices.end(), [&] (const auto& x)
-                                                        {
-                                                            return x.name == deviceToOpen.name;
-                                                        });
+        {
+            return x.name == deviceToOpen.name;
+        });
 
         if (iterWithMatchingName != devices.end())
             doOpen (iterWithMatchingName->identifier);
@@ -507,16 +507,16 @@ void AudioDeviceManager::openLastRequestedMidiDevices (const Array<MidiDeviceInf
 
     for (const auto& info : midiDeviceInfosFromXml)
         openDeviceIfAvailable (inputs, info, [&] (const auto identifier)
-                               {
-                                   setMidiInputDeviceEnabled (identifier, true);
-                               });
+        {
+            setMidiInputDeviceEnabled (identifier, true);
+        });
 
     const auto outputs = MidiOutput::getAvailableDevices();
 
     openDeviceIfAvailable (outputs, defaultOutput, [&] (const auto identifier)
-                           {
-                               setDefaultMidiOutputDevice (identifier);
-                           });
+    {
+        setDefaultMidiOutputDevice (identifier);
+    });
 }
 
 String AudioDeviceManager::initialiseWithDefaultDevices (int numInputChannelsNeeded,
@@ -590,9 +590,9 @@ void AudioDeviceManager::insertDefaultDeviceNames (AudioDeviceSetup& setup) cons
             return std::any_of (inputSampleRates.begin(),
                                 inputSampleRates.end(),
                                 [&] (auto inputSampleRate)
-                                {
-                                    return outputSampleRates.contains (inputSampleRate);
-                                });
+            {
+                return outputSampleRates.contains (inputSampleRate);
+            });
         };
 
         auto outputsToTest = getDevicesToTestForMatchingSampleRate (Direction::out);

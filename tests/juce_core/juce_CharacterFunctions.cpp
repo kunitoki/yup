@@ -357,11 +357,11 @@ protected:
             auto nans = asciiToMemoryBlocks (nanCharPtrs, true);
 
             withAllPrefixesAndSuffixes (prefixes, separators.terminals, nans, [this] (const MemoryBlock& data, const MemoryBlock& suffix)
-                                        {
-                                            CharPointerType charPtr { (CharType*) data.getData() };
-                                            EXPECT_TRUE (std::isnan (CharacterFunctions::readDoubleValue (charPtr)));
-                                            EXPECT_TRUE (*charPtr == *(CharPointerType ((CharType*) suffix.getData())));
-                                        });
+            {
+                CharPointerType charPtr { (CharType*) data.getData() };
+                EXPECT_TRUE (std::isnan (CharacterFunctions::readDoubleValue (charPtr)));
+                EXPECT_TRUE (*charPtr == *(CharPointerType ((CharType*) suffix.getData())));
+            });
         }
 
         {
@@ -369,13 +369,13 @@ protected:
             auto infs = asciiToMemoryBlocks (infCharPtrs, true);
 
             withAllPrefixesAndSuffixes (prefixes, separators.terminals, infs, [this] (const MemoryBlock& data, const MemoryBlock& suffix)
-                                        {
-                                            CharPointerType charPtr { (CharType*) data.getData() };
-                                            auto expected = charPtr[0] == '-' ? -std::numeric_limits<double>::infinity()
-                                                                              : std::numeric_limits<double>::infinity();
-                                            EXPECT_EQ (CharacterFunctions::readDoubleValue (charPtr), expected);
-                                            EXPECT_TRUE (*charPtr == *(CharPointerType ((CharType*) suffix.getData())));
-                                        });
+            {
+                CharPointerType charPtr { (CharType*) data.getData() };
+                auto expected = charPtr[0] == '-' ? -std::numeric_limits<double>::infinity()
+                                                  : std::numeric_limits<double>::infinity();
+                EXPECT_EQ (CharacterFunctions::readDoubleValue (charPtr), expected);
+                EXPECT_TRUE (*charPtr == *(CharPointerType ((CharType*) suffix.getData())));
+            });
         }
 
         {
@@ -383,12 +383,12 @@ protected:
             auto zeros = asciiToMemoryBlocks (zeroCharPtrs, true);
 
             withAllPrefixesAndSuffixes (prefixes, separators.terminals, zeros, [this] (const MemoryBlock& data, const MemoryBlock& suffix)
-                                        {
-                                            CharPointerType charPtr { (CharType*) data.getData() };
-                                            auto expected = charPtr[0] == '-' ? -0.0 : 0.0;
-                                            EXPECT_EQ (CharacterFunctions::readDoubleValue (charPtr), expected);
-                                            EXPECT_TRUE (*charPtr == *(CharPointerType ((CharType*) suffix.getData())));
-                                        });
+            {
+                CharPointerType charPtr { (CharType*) data.getData() };
+                auto expected = charPtr[0] == '-' ? -0.0 : 0.0;
+                EXPECT_EQ (CharacterFunctions::readDoubleValue (charPtr), expected);
+                EXPECT_TRUE (*charPtr == *(CharPointerType ((CharType*) suffix.getData())));
+            });
         }
 
         {

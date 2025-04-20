@@ -380,9 +380,9 @@ struct CoreAudioClasses
 
             auto streams = getStreams();
             const auto total = std::accumulate (streams.begin(), streams.end(), 0, [] (int n, const auto& s)
-                                                {
-                                                    return n + (s != nullptr ? s->channels : 0);
-                                                });
+            {
+                return n + (s != nullptr ? s->channels : 0);
+            });
             audioBuffer.calloc (total * tempBufSize);
 
             auto channels = 0;
@@ -505,9 +505,9 @@ struct CoreAudioClasses
                 if (auto* workgroup = audioObjectGetProperty<os_workgroup_t> (deviceID, pa).value_or (nullptr))
                 {
                     ScopeGuard scope { [&]
-                                       {
-                                           os_release (workgroup);
-                                       } };
+                    {
+                        os_release (workgroup);
+                    } };
                     return makeRealAudioWorkgroup (workgroup);
                 }
 
@@ -651,9 +651,9 @@ struct CoreAudioClasses
         {
             callbacksAllowed = false;
             const ScopeGuard scope { [&]
-                                     {
-                                         callbacksAllowed = true;
-                                     } };
+            {
+                callbacksAllowed = true;
+            } };
 
             stopTimer();
 
@@ -871,11 +871,11 @@ struct CoreAudioClasses
                 , bitDepth (getBitDepthFromDevice (isInput, parent))
                 , chanNames (getChannelNames (isInput, parent))
                 , activeChans ([&activeRequested, clearFrom = chanNames.size()]
-                               {
-                                   auto result = activeRequested;
-                                   result.setRange (clearFrom, result.getHighestBit() + 1 - clearFrom, false);
-                                   return result;
-                               }())
+            {
+                auto result = activeRequested;
+                result.setRange (clearFrom, result.getHighestBit() + 1 - clearFrom, false);
+                return result;
+            }())
                 , channelInfo (getChannelInfos (isInput, parent, activeChans))
                 , channels (static_cast<int> (channelInfo.size()))
             {
@@ -926,32 +926,32 @@ struct CoreAudioClasses
             static Array<CallbackDetailsForChannel> getChannelInfos (bool isInput, CoreAudioInternal& parent, const BigInteger& active)
             {
                 return visitChannels (isInput, parent, [&] (const auto& args) -> std::optional<CallbackDetailsForChannel>
-                                      {
-                                          if (! active[args.chanNum])
-                                              return {};
+                {
+                    if (! active[args.chanNum])
+                        return {};
 
-                                          return CallbackDetailsForChannel { args.stream, args.channelIdx, args.streamChannels };
-                                      });
+                    return CallbackDetailsForChannel { args.stream, args.channelIdx, args.streamChannels };
+                });
             }
 
             static StringArray getChannelNames (bool isInput, CoreAudioInternal& parent)
             {
                 auto names = visitChannels (isInput, parent, [&] (const auto& args) -> std::optional<String>
-                                            {
-                                                String name;
-                                                const auto element = static_cast<AudioObjectPropertyElement> (args.chanNum + 1);
+                {
+                    String name;
+                    const auto element = static_cast<AudioObjectPropertyElement> (args.chanNum + 1);
 
-                                                if (auto nameNSString = audioObjectGetProperty<NSString*> (parent.deviceID, { kAudioObjectPropertyElementName, getScope (isInput), element }).value_or (nullptr))
-                                                {
-                                                    name = nsStringToJuce (nameNSString);
-                                                    [nameNSString release];
-                                                }
+                    if (auto nameNSString = audioObjectGetProperty<NSString*> (parent.deviceID, { kAudioObjectPropertyElementName, getScope (isInput), element }).value_or (nullptr))
+                    {
+                        name = nsStringToJuce (nameNSString);
+                        [nameNSString release];
+                    }
 
-                                                if (name.isEmpty())
-                                                    name << (isInput ? "Input " : "Output ") << (args.chanNum + 1);
+                    if (name.isEmpty())
+                        name << (isInput ? "Input " : "Output ") << (args.chanNum + 1);
 
-                                                return name;
-                                            });
+                    return name;
+                });
 
                 return { names };
             }
@@ -1025,9 +1025,9 @@ struct CoreAudioClasses
         static auto getWithDefault (const std::unique_ptr<Stream>& ptr, Value (Stream::*member))
         {
             return getWithDefault (ptr, [&] (Stream& s)
-                                   {
-                                       return s.*member;
-                                   });
+            {
+                return s.*member;
+            });
         }
 
         static int getLatency (const std::unique_ptr<Stream>& ptr) { return getWithDefault (ptr, &Stream::latency); }
@@ -1045,9 +1045,9 @@ struct CoreAudioClasses
         static float** getTempBuffers (const std::unique_ptr<Stream>& ptr)
         {
             return getWithDefault (ptr, [] (auto& s)
-                                   {
-                                       return s.tempBuffers.get();
-                                   });
+            {
+                return s.tempBuffers.get();
+            });
         }
 
         //==============================================================================
@@ -1159,35 +1159,35 @@ struct CoreAudioClasses
             auto& intern = *static_cast<CoreAudioInternal*> (inClientData);
 
             const auto xruns = std::count_if (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
-                                              {
-                                                  return x.mSelector == kAudioDeviceProcessorOverload;
-                                              });
+            {
+                return x.mSelector == kAudioDeviceProcessorOverload;
+            });
 
             intern.xruns += xruns;
 
             const auto detailsChanged = std::any_of (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
-                                                     {
-                                                         constexpr UInt32 selectors[] {
-                                                             kAudioDevicePropertyBufferSize,
-                                                             kAudioDevicePropertyBufferFrameSize,
-                                                             kAudioDevicePropertyNominalSampleRate,
-                                                             kAudioDevicePropertyStreamFormat,
-                                                             kAudioDevicePropertyDeviceIsAlive,
-                                                             kAudioStreamPropertyPhysicalFormat,
-                                                         };
+            {
+                constexpr UInt32 selectors[] {
+                    kAudioDevicePropertyBufferSize,
+                    kAudioDevicePropertyBufferFrameSize,
+                    kAudioDevicePropertyNominalSampleRate,
+                    kAudioDevicePropertyStreamFormat,
+                    kAudioDevicePropertyDeviceIsAlive,
+                    kAudioStreamPropertyPhysicalFormat,
+                };
 
-                                                         return std::find (std::begin (selectors), std::end (selectors), x.mSelector) != std::end (selectors);
-                                                     });
+                return std::find (std::begin (selectors), std::end (selectors), x.mSelector) != std::end (selectors);
+            });
 
             const auto requestedRestart = std::any_of (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
-                                                       {
-                                                           constexpr UInt32 selectors[] {
-                                                               kAudioDevicePropertyDeviceHasChanged,
-                                                               kAudioObjectPropertyOwnedObjects,
-                                                           };
+            {
+                constexpr UInt32 selectors[] {
+                    kAudioDevicePropertyDeviceHasChanged,
+                    kAudioObjectPropertyOwnedObjects,
+                };
 
-                                                           return std::find (std::begin (selectors), std::end (selectors), x.mSelector) != std::end (selectors);
-                                                       });
+                return std::find (std::begin (selectors), std::end (selectors), x.mSelector) != std::end (selectors);
+            });
 
             if (detailsChanged)
                 intern.deviceDetailsChanged();
@@ -1483,9 +1483,9 @@ struct CoreAudioClasses
                                               void* inClientData)
         {
             const auto detailsChanged = std::any_of (pa, pa + numAddresses, [] (const AudioObjectPropertyAddress& x)
-                                                     {
-                                                         return x.mSelector == kAudioHardwarePropertyDevices;
-                                                     });
+            {
+                return x.mSelector == kAudioHardwarePropertyDevices;
+            });
 
             if (detailsChanged)
                 static_cast<CoreAudioInternal*> (inClientData)->deviceDetailsChanged();
@@ -1903,11 +1903,11 @@ struct CoreAudioClasses
             }
 
             accessFifo (currentWritePos, scratchBuffer.getNumChannels(), n, [&] (const auto& args)
-                        {
-                            FloatVectorOperations::copy (fifo.getWritePointer (args.channel, args.fifoPos),
-                                                         scratchBuffer.getReadPointer (args.channel, args.inputPos),
-                                                         args.nItems);
-                        });
+            {
+                FloatVectorOperations::copy (fifo.getWritePointer (args.channel, args.fifoPos),
+                                             scratchBuffer.getReadPointer (args.channel, args.inputPos),
+                                             args.nItems);
+            });
 
             {
                 auto invalid = invalidSampleTime;
@@ -1949,11 +1949,11 @@ struct CoreAudioClasses
                 std::fill (channels[i], channels[i] + numZerosToWrite, 0.0f);
 
             accessFifo (currentReadPos + numZerosToWrite, numChannels, static_cast<int> (longN - numZerosToWrite), [&] (const auto& args)
-                        {
-                            FloatVectorOperations::copy (channels[args.channel] + args.inputPos + numZerosToWrite,
-                                                         fifo.getReadPointer (args.channel, args.fifoPos),
-                                                         args.nItems);
-                        });
+            {
+                FloatVectorOperations::copy (channels[args.channel] + args.inputPos + numZerosToWrite,
+                                             fifo.getReadPointer (args.channel, args.fifoPos),
+                                             args.nItems);
+            });
 
             // use compare exchange here as we need to avoid the case
             // where we overwrite readPos being equal to invalidSampleTime

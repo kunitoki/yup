@@ -371,82 +371,82 @@ private:
         std::atomic<bool> shouldStop { false };
         UpdateNotifier notifier;
         std::thread thread { [this]
-                             {
-                                 Thread::setCurrentThreadName ("JUCE MIDI Input");
+        {
+            Thread::setCurrentThreadName ("JUCE MIDI Input");
 
-                                 auto seqHandle = client.get();
+            auto seqHandle = client.get();
 
-                                 const int maxEventSize = 16 * 1024;
-                                 snd_midi_event_t* midiParser;
+            const int maxEventSize = 16 * 1024;
+            snd_midi_event_t* midiParser;
 
-                                 if (snd_midi_event_new (maxEventSize, &midiParser) >= 0)
-                                 {
-                                     const ScopeGuard freeMidiEvent { [&]
-                                                                      {
-                                                                          snd_midi_event_free (midiParser);
-                                                                      } };
+            if (snd_midi_event_new (maxEventSize, &midiParser) >= 0)
+            {
+                const ScopeGuard freeMidiEvent { [&]
+                {
+                    snd_midi_event_free (midiParser);
+                } };
 
-                                     const auto numPfds = snd_seq_poll_descriptors_count (seqHandle, POLLIN);
-                                     std::vector<pollfd> pfd (static_cast<size_t> (numPfds));
-                                     snd_seq_poll_descriptors (seqHandle, pfd.data(), (unsigned int) numPfds, POLLIN);
+                const auto numPfds = snd_seq_poll_descriptors_count (seqHandle, POLLIN);
+                std::vector<pollfd> pfd (static_cast<size_t> (numPfds));
+                snd_seq_poll_descriptors (seqHandle, pfd.data(), (unsigned int) numPfds, POLLIN);
 
-                                     std::vector<uint8> buffer (maxEventSize);
+                std::vector<uint8> buffer (maxEventSize);
 
-                                     while (! shouldStop)
-                                     {
-                                         // This timeout shouldn't be too long, so that the program can exit in a timely manner
-                                         if (poll (pfd.data(), (nfds_t) numPfds, 100) > 0)
-                                         {
-                                             if (shouldStop)
-                                                 break;
+                while (! shouldStop)
+                {
+                    // This timeout shouldn't be too long, so that the program can exit in a timely manner
+                    if (poll (pfd.data(), (nfds_t) numPfds, 100) > 0)
+                    {
+                        if (shouldStop)
+                            break;
 
-                                             do
-                                             {
-                                                 snd_seq_event_t* inputEvent = nullptr;
+                        do
+                        {
+                            snd_seq_event_t* inputEvent = nullptr;
 
-                                                 if (snd_seq_event_input (seqHandle, &inputEvent) >= 0)
-                                                 {
-                                                     const ScopeGuard freeInputEvent { [&]
-                                                                                       {
-                                                                                           snd_seq_free_event (inputEvent);
-                                                                                       } };
+                            if (snd_seq_event_input (seqHandle, &inputEvent) >= 0)
+                            {
+                                const ScopeGuard freeInputEvent { [&]
+                                {
+                                    snd_seq_free_event (inputEvent);
+                                } };
 
-                                                     constexpr int systemEvents[] {
-                                                         SND_SEQ_EVENT_CLIENT_CHANGE,
-                                                         SND_SEQ_EVENT_CLIENT_START,
-                                                         SND_SEQ_EVENT_CLIENT_EXIT,
-                                                         SND_SEQ_EVENT_PORT_CHANGE,
-                                                         SND_SEQ_EVENT_PORT_START,
-                                                         SND_SEQ_EVENT_PORT_EXIT,
-                                                         SND_SEQ_EVENT_PORT_SUBSCRIBED,
-                                                         SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
-                                                     };
+                                constexpr int systemEvents[] {
+                                    SND_SEQ_EVENT_CLIENT_CHANGE,
+                                    SND_SEQ_EVENT_CLIENT_START,
+                                    SND_SEQ_EVENT_CLIENT_EXIT,
+                                    SND_SEQ_EVENT_PORT_CHANGE,
+                                    SND_SEQ_EVENT_PORT_START,
+                                    SND_SEQ_EVENT_PORT_EXIT,
+                                    SND_SEQ_EVENT_PORT_SUBSCRIBED,
+                                    SND_SEQ_EVENT_PORT_UNSUBSCRIBED,
+                                };
 
-                                                     const auto foundEvent = std::find (std::begin (systemEvents),
-                                                                                        std::end (systemEvents),
-                                                                                        inputEvent->type);
+                                const auto foundEvent = std::find (std::begin (systemEvents),
+                                                                   std::end (systemEvents),
+                                                                   inputEvent->type);
 
-                                                     if (foundEvent != std::end (systemEvents))
-                                                     {
-                                                         notifier.triggerAsyncUpdate();
-                                                         continue;
-                                                     }
+                                if (foundEvent != std::end (systemEvents))
+                                {
+                                    notifier.triggerAsyncUpdate();
+                                    continue;
+                                }
 
-                                                     // xxx what about SYSEXes that are too big for the buffer?
-                                                     const auto numBytes = snd_midi_event_decode (midiParser,
-                                                                                                  buffer.data(),
-                                                                                                  maxEventSize,
-                                                                                                  inputEvent);
+                                // xxx what about SYSEXes that are too big for the buffer?
+                                const auto numBytes = snd_midi_event_decode (midiParser,
+                                                                             buffer.data(),
+                                                                             maxEventSize,
+                                                                             inputEvent);
 
-                                                     snd_midi_event_reset_decode (midiParser);
+                                snd_midi_event_reset_decode (midiParser);
 
-                                                     concatenator.pushMidiData (buffer.data(), (int) numBytes, Time::getMillisecondCounter() * 0.001, inputEvent, client);
-                                                 }
-                                             } while (snd_seq_event_input_pending (seqHandle, 0) > 0);
-                                         }
-                                     }
-                                 }
-                             } };
+                                concatenator.pushMidiData (buffer.data(), (int) numBytes, Time::getMillisecondCounter() * 0.001, inputEvent, client);
+                            }
+                        } while (snd_seq_event_input_pending (seqHandle, 0) > 0);
+                    }
+                }
+            }
+        } };
     };
 
     std::optional<SequencerThread> inputThread;
@@ -709,9 +709,9 @@ MidiDeviceListConnection MidiDeviceListConnection::make (std::function<void()> c
     // as the MidiDeviceListConnection. This is necessary because system change messages will only
     // be processed when the AlsaClient's SequencerThread is running.
     return { &broadcaster, broadcaster.add ([fn = std::move (cb), client = AlsaClient::getInstance()]
-                                            {
-                                                NullCheckedInvocation::invoke (fn);
-                                            }) };
+    {
+        NullCheckedInvocation::invoke (fn);
+    }) };
 }
 
 //==============================================================================

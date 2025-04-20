@@ -29,7 +29,7 @@ class JUCE_API Slider : public Component
 public:
     //==============================================================================
 
-    Slider (StringRef componentID, const Font& font);
+    Slider (StringRef componentID);
 
     //==============================================================================
 
@@ -44,6 +44,10 @@ public:
     std::function<void (float)> onValueChanged;
     std::function<void (const MouseEvent&)> onDragStart;
     std::function<void (const MouseEvent&)> onDragEnd;
+
+    //==============================================================================
+
+    bool isMouseOver() const;
 
     //==============================================================================
 
@@ -67,21 +71,13 @@ public:
     void mouseWheel (const MouseEvent& event, const MouseWheelData& data) override;
 
 private:
-    void updateRenderItems (bool forceAll);
     void sendValueChanged (NotificationType notification);
 
-    Path backgroundPath;
-    Path backgroundArc;
-    Path foregroundArc;
-    Path foregroundLine;
-    StyledText text;
-
     Point<float> origin;
-    const Font& font;
     float value = 0.0f;
     float defaultValue = 0.0f;
     NormalisableRange<float> range = { 0.0f, 1.0f };
-    bool isInside = false;
+    bool isMouseOverSlider = false;
     bool isDragging = false;
 };
 
