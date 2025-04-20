@@ -316,7 +316,7 @@ public:
 
 private:
     template <typename Value>
-    Args with (Value Args::*member, Value v) const
+    Args with (Value Args::* member, Value v) const
     {
         auto copy = *this;
         copy.*member = std::move (v);

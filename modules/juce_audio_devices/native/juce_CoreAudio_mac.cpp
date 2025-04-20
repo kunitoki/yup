@@ -1022,7 +1022,7 @@ struct CoreAudioClasses
         }
 
         template <typename Value>
-        static auto getWithDefault (const std::unique_ptr<Stream>& ptr, Value (Stream::*member))
+        static auto getWithDefault (const std::unique_ptr<Stream>& ptr, Value (Stream::* member))
         {
             return getWithDefault (ptr, [&] (Stream& s)
             {
