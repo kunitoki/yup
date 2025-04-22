@@ -1447,6 +1447,9 @@ void shutdownYup_Windowing()
     SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
     Desktop::getInstance()->deleteInstance();
 
+    // Unregister theme
+    ApplicationTheme::setGlobalTheme (nullptr);
+
     // Unregister event loop
     MessageManager::getInstance()->registerEventLoopCallback (nullptr);
 

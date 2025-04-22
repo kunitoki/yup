@@ -23,35 +23,100 @@ namespace yup
 {
 
 //==============================================================================
+/** A component that displays text.
 
+    The Label component can display text with optional styling including font,
+    colors, and stroke effects. It efficiently caches the styled text layout
+    for better performance.
+
+    @see Component, StyledText
+*/
 class JUCE_API Label : public Component
 {
 public:
     //==============================================================================
-    Label();
+    /** Creates an empty label. */
+    Label (StringRef componentID);
 
     //==============================================================================
+    /** Returns the label's current text.
+
+        @returns The text displayed in the label
+    */
     String getText() const;
+
+    /** Changes the label's text.
+
+        @param newText          The new text to display
+        @param notification     Whether to trigger a change notification
+    */
     void setText (String newText, NotificationType notification = sendNotification);
 
     //==============================================================================
-    const Font& getFont() const;
+
+    /** Returns the current font.
+
+        @returns The font used to display the text
+    */
+    std::optional<Font> getFont() const;
+
+    /** Sets the font to use.
+
+        @param newFont    The new font to use
+    */
     void setFont (Font newFont);
 
-    //==============================================================================
-    void paint (Graphics& g) override;
+    /** Reset the font to the theme one. */
+    void resetFont();
 
+    //==============================================================================
+
+    /** Returns the stroke width used for the text outline.
+
+        @returns The width of the text outline
+    */
+    float getStrokeWidth() const noexcept { return strokeWidth; }
+
+    /** Sets the stroke width for the text outline.
+
+        @param newWidth    The new width to use for the text outline
+    */
+    void setStrokeWidth (float newWidth) noexcept;
+
+    //==============================================================================
+
+    /** Returns the cached styled text.
+
+        @returns The cached StyledText object used for rendering
+    */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
+
+    //==============================================================================
+
+    struct Colors
+    {
+      static const Identifier fillColorId;
+      static const Identifier strokeColorId;
+    };
+
+    //==============================================================================
+
+    /** @internal */
+    void paint (Graphics& g) override;
+    /** @internal */
     void resized() override;
 
 private:
     void prepareText();
+    void invalidateCache();
 
     String text;
     StyledText styledText;
-    Color fillColor = Colors::white;
-    Color strokeColor = Colors::transparentBlack;
     float strokeWidth = 0.0f;
-    Font font;
+    std::optional<Font> font;
+    bool needsUpdate = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
 };
 
 } // namespace yup

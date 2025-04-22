@@ -33,7 +33,8 @@ TextButton::TextButton (StringRef componentID)
 
 void TextButton::paintButton (Graphics& g)
 {
-    ApplicationTheme::findComponentStyle (*this)->paint (g, *this);
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 
     /*
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);

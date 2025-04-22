@@ -55,7 +55,7 @@ public:
             if (! axisInfo)
                 continue;
 
-            auto label = labels.add (std::make_unique<yup::Label>());
+            auto label = labels.add (std::make_unique<yup::Label> (axisInfo->tagName + "Label"));
             label->setFont (font);
             addAndMakeVisible (label);
 
@@ -155,7 +155,7 @@ private:
 
     void addControl (yup::StringRef name, int index, float defaultValue, float minValue, float maxValue, float& valueToSet)
     {
-        auto label = labels.add (std::make_unique<yup::Label>());
+        auto label = labels.add (std::make_unique<yup::Label> (name + "Label"));
         label->setFont (font);
         addAndMakeVisible (label);
 

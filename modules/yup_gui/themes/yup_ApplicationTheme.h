@@ -45,6 +45,8 @@ public:
     /** Constructs an ApplicationTheme object. */
     ApplicationTheme();
 
+    ~ApplicationTheme();
+
     //==============================================================================
     /**
         Sets the global application theme.
@@ -122,6 +124,9 @@ public:
 
     /** */
     void setColor (const Identifier& colorId, const Color& color);
+
+    /** */
+    void setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors);
 
     //==============================================================================
     /**
