@@ -578,12 +578,12 @@ TEST (RectangleTests, Largest_Fitting_Square)
     EXPECT_FLOAT_EQ (square3.getY(), 2.5f);
 }
 
-TEST (RectangleTests, Smallest_Containing_Rectangle)
+TEST (RectangleTests, Union_With)
 {
     Rectangle<float> r1 (1.0f, 2.0f, 3.0f, 4.0f);
     Rectangle<float> r2 (2.0f, 3.0f, 3.0f, 4.0f);
 
-    Rectangle<float> containing = r1.smallestContainingRectangle (r2);
+    Rectangle<float> containing = r1.unionWith (r2);
     EXPECT_FLOAT_EQ (containing.getX(), 1.0f);
     EXPECT_FLOAT_EQ (containing.getY(), 2.0f);
     EXPECT_FLOAT_EQ (containing.getWidth(), 4.0f);

@@ -85,7 +85,7 @@ public:
         {
             if (existingRect.intersects (newRect))
             {
-                existingRect = existingRect.smallestContainingRectangle (newRect);
+                existingRect = existingRect.unionWith (newRect);
                 merged = true;
                 break;
             }
@@ -362,7 +362,7 @@ private:
                     && currentRect.intersects (existingRect)
                     && std::addressof (existingRect) != std::addressof (currentRect))
                 {
-                    existingRect = existingRect.smallestContainingRectangle (currentRect);
+                    existingRect = existingRect.unionWith (currentRect);
 
                     rectangles.remove (rectangleIndex);
 

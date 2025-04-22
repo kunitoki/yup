@@ -146,7 +146,7 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
         g.strokeFittedText (styledText, bounds);
     }
 
-    const auto fillColor = l.findColor (Label::Colors::strokeColorId).value_or (Colors::black);
+    const auto fillColor = l.findColor (Label::Colors::fillColorId).value_or (Colors::white);
     g.setFillColor (fillColor);
     g.fillFittedText (styledText, bounds);
 }
