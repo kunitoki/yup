@@ -236,7 +236,7 @@ private:
     std::thread thread;
     std::atomic_bool threadShouldExit = false;
 
-    std::unordered_map<std::string, int> watchDescriptors;
+    std::unordered_map<String, int> watchDescriptors;
     int fd = -1;
 };
 
