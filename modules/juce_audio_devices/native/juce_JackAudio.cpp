@@ -331,43 +331,43 @@ public:
         if (! inputChannels.isZero())
         {
             forEachClientChannel (inputName, false, [&] (const char* portName, int index)
-                                  {
-                                      if (! inputChannels[index])
-                                          return;
+            {
+                if (! inputChannels[index])
+                    return;
 
-                                      jassert (index < inputPorts.size());
+                jassert (index < inputPorts.size());
 
-                                      const auto* source = portName;
-                                      const auto* inputPort = inputPorts[index];
+                const auto* source = portName;
+                const auto* inputPort = inputPorts[index];
 
-                                      jassert (juce::jack_port_flags (juce::jack_port_by_name (client, source)) & JackPortIsOutput);
-                                      jassert (juce::jack_port_flags (inputPort) & JackPortIsInput);
+                jassert (juce::jack_port_flags (juce::jack_port_by_name (client, source)) & JackPortIsOutput);
+                jassert (juce::jack_port_flags (inputPort) & JackPortIsInput);
 
-                                      auto error = juce::jack_connect (client, source, juce::jack_port_name (inputPort));
-                                      if (error != 0)
-                                          JUCE_JACK_LOG ("Cannot connect input port " + String (index) + " (" + portName + "), error " + String (error));
-                                  });
+                auto error = juce::jack_connect (client, source, juce::jack_port_name (inputPort));
+                if (error != 0)
+                    JUCE_JACK_LOG ("Cannot connect input port " + String (index) + " (" + portName + "), error " + String (error));
+            });
         }
 
         if (! outputChannels.isZero())
         {
             forEachClientChannel (outputName, true, [&] (const char* portName, int index)
-                                  {
-                                      if (! outputChannels[index])
-                                          return;
+            {
+                if (! outputChannels[index])
+                    return;
 
-                                      jassert (index < outputPorts.size());
+                jassert (index < outputPorts.size());
 
-                                      const auto* outputPort = outputPorts[index];
-                                      const auto* destination = portName;
+                const auto* outputPort = outputPorts[index];
+                const auto* destination = portName;
 
-                                      jassert (juce::jack_port_flags (outputPort) & JackPortIsOutput);
-                                      jassert (juce::jack_port_flags (juce::jack_port_by_name (client, destination)) & JackPortIsInput);
+                jassert (juce::jack_port_flags (outputPort) & JackPortIsOutput);
+                jassert (juce::jack_port_flags (juce::jack_port_by_name (client, destination)) & JackPortIsInput);
 
-                                      auto error = juce::jack_connect (client, juce::jack_port_name (outputPort), destination);
-                                      if (error != 0)
-                                          JUCE_JACK_LOG ("Cannot connect output port " + String (index) + " (" + portName + "), error " + String (error));
-                                  });
+                auto error = juce::jack_connect (client, juce::jack_port_name (outputPort), destination);
+                if (error != 0)
+                    JUCE_JACK_LOG ("Cannot connect output port " + String (index) + " (" + portName + "), error " + String (error));
+            });
         }
 
         updateActivePorts();
@@ -716,9 +716,9 @@ public:
 
         if (inputIndex >= 0 || outputIndex >= 0)
             return new JackAudioIODevice (inputDeviceName, outputDeviceName, [this]
-                                          {
-                                              callDeviceChangeListeners();
-                                          });
+            {
+                callDeviceChangeListeners();
+            });
 
         return nullptr;
     }

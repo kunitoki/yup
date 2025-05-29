@@ -233,9 +233,9 @@ TEST_F (VariantTests, IsTypeMethods)
     var vBinaryData { MemoryBlock() };
     var vObject { new DynamicObject() };
     var vMethod { createNativeFunction ([] (const var::NativeFunctionArgs&) -> var
-                                        {
-                                            return var();
-                                        }) };
+    {
+        return var();
+    }) };
 
     EXPECT_TRUE (vVoid.isVoid());
     EXPECT_FALSE (vVoid.isUndefined());
@@ -448,10 +448,10 @@ TEST_F (VariantTests, MethodOperations)
 
     double counter = 0.0;
     var::NativeFunction incrementFunc = createNativeFunction ([&counter] (const var::NativeFunctionArgs& args) -> var
-                                                              {
-                                                                  counter += 1.0;
-                                                                  return var (counter);
-                                                              });
+    {
+        counter += 1.0;
+        return var (counter);
+    });
 
     obj->setMethod (methodName, incrementFunc);
 
@@ -570,15 +570,15 @@ TEST_F (VariantTests, InvokeMethodWithArguments)
     Identifier methodName ("add");
 
     var::NativeFunction addFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                        {
-                                                            if (args.numArguments >= 2 && args.arguments[0].isDouble() && args.arguments[1].isDouble())
-                                                            {
-                                                                double a = args.arguments[0];
-                                                                double b = args.arguments[1];
-                                                                return var (a + b);
-                                                            }
-                                                            return var();
-                                                        });
+    {
+        if (args.numArguments >= 2 && args.arguments[0].isDouble() && args.arguments[1].isDouble())
+        {
+            double a = args.arguments[0];
+            double b = args.arguments[1];
+            return var (a + b);
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, addFunc);
 
@@ -625,9 +625,9 @@ TEST_F (VariantTests, InvokeMethodReturnsString)
     Identifier methodName ("greet");
 
     var::NativeFunction greetFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                          {
-                                                              return var ("Hello, JUCE!");
-                                                          });
+    {
+        return var ("Hello, JUCE!");
+    });
 
     obj->setMethod (methodName, greetFunc);
 
@@ -739,10 +739,10 @@ TEST_F (VariantTests, InvokeMethodModifiesExternalState)
 
     int counter = 0;
     var::NativeFunction increaseFunc = createNativeFunction ([&counter] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 counter += 5;
-                                                                 return var (counter);
-                                                             });
+    {
+        counter += 5;
+        return var (counter);
+    });
 
     obj->setMethod (methodName, increaseFunc);
 
@@ -867,15 +867,15 @@ TEST_F (VariantTests, MethodWithMultipleArguments)
     Identifier methodName ("multiply");
 
     var::NativeFunction multiplyFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 if (args.numArguments >= 2 && args.arguments[0].isDouble() && args.arguments[1].isDouble())
-                                                                 {
-                                                                     double a = args.arguments[0];
-                                                                     double b = args.arguments[1];
-                                                                     return var (a * b);
-                                                                 }
-                                                                 return var();
-                                                             });
+    {
+        if (args.numArguments >= 2 && args.arguments[0].isDouble() && args.arguments[1].isDouble())
+        {
+            double a = args.arguments[0];
+            double b = args.arguments[1];
+            return var (a * b);
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, multiplyFunc);
 
@@ -916,9 +916,9 @@ TEST_F (VariantTests, MethodReturnsObject)
     Identifier methodName ("getChild");
 
     var::NativeFunction getChildFunc = createNativeFunction ([childObj] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 return var (childObj);
-                                                             });
+    {
+        return var (childObj);
+    });
 
     parentObj->setMethod (methodName, getChildFunc);
 
@@ -942,16 +942,16 @@ TEST_F (VariantTests, MethodReturnsMethod)
     Identifier innerMethod ("inner");
 
     var::NativeFunction innerFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                          {
-                                                              return var ("Inner Method Called");
-                                                          });
+    {
+        return var ("Inner Method Called");
+    });
 
     var::NativeFunction outerFunc = createNativeFunction ([innerFunc, &innerMethod] (const var::NativeFunctionArgs& args) -> var
-                                                          {
-                                                              DynamicObject::Ptr innerObj = new DynamicObject();
-                                                              innerObj->setMethod (innerMethod, innerFunc);
-                                                              return var (innerObj);
-                                                          });
+    {
+        DynamicObject::Ptr innerObj = new DynamicObject();
+        innerObj->setMethod (innerMethod, innerFunc);
+        return var (innerObj);
+    });
 
     obj->setMethod (outerMethod, outerFunc);
 
@@ -1024,10 +1024,10 @@ TEST_F (VariantTests, MethodReturnsVoid)
     Identifier methodName ("doNothing");
 
     var::NativeFunction doNothingFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                              {
-                                                                  // Does nothing, returns void
-                                                                  return var();
-                                                              });
+    {
+        // Does nothing, returns void
+        return var();
+    });
 
     obj->setMethod (methodName, doNothingFunc);
 
@@ -1069,13 +1069,13 @@ TEST_F (VariantTests, InvokeMethodWithIncorrectArguments)
     Identifier methodName ("concat");
 
     var::NativeFunction concatFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                           {
-                                                               if (args.numArguments >= 2 && args.arguments[0].isString() && args.arguments[1].isString())
-                                                               {
-                                                                   return var (args.arguments[0].toString() + args.arguments[1].toString());
-                                                               }
-                                                               return var();
-                                                           });
+    {
+        if (args.numArguments >= 2 && args.arguments[0].isString() && args.arguments[1].isString())
+        {
+            return var (args.arguments[0].toString() + args.arguments[1].toString());
+        }
+        return var();
+    });
 
     obj->setMethod (methodName, concatFunc);
 
@@ -1131,13 +1131,13 @@ TEST_F (VariantTests, MethodReturnsArray)
     Identifier methodName ("createArray");
 
     var::NativeFunction createArrayFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                                {
-                                                                    Array<var> array;
-                                                                    array.add (1);
-                                                                    array.add (2);
-                                                                    array.add (3);
-                                                                    return var (array);
-                                                                });
+    {
+        Array<var> array;
+        array.add (1);
+        array.add (2);
+        array.add (3);
+        return var (array);
+    });
 
     obj->setMethod (methodName, createArrayFunc);
 
@@ -1159,15 +1159,15 @@ TEST_F (VariantTests, InvokeMethodWithExtraArguments)
     Identifier methodName ("sum");
 
     var::NativeFunction sumFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                        {
-                                                            double total = 0.0;
-                                                            for (int i = 0; i < args.numArguments; ++i)
-                                                            {
-                                                                if (args.arguments[i].isDouble())
-                                                                    total += static_cast<double> (args.arguments[i]);
-                                                            }
-                                                            return var (total);
-                                                        });
+    {
+        double total = 0.0;
+        for (int i = 0; i < args.numArguments; ++i)
+        {
+            if (args.arguments[i].isDouble())
+                total += static_cast<double> (args.arguments[i]);
+        }
+        return var (total);
+    });
 
     obj->setMethod (methodName, sumFunc);
 
@@ -1324,9 +1324,9 @@ TEST_F (VariantTests, InvokeMethodWithNullArguments)
     Identifier methodName ("sayHello");
 
     var::NativeFunction sayHelloFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 return var ("Hello!");
-                                                             });
+    {
+        return var ("Hello!");
+    });
 
     obj->setMethod (methodName, sayHelloFunc);
 
@@ -1422,22 +1422,22 @@ TEST_F (VariantTests, MethodReturnsAnotherMethod)
     Identifier innerMethod ("multiply");
 
     var::NativeFunction multiplyFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 if (args.numArguments >= 2 && args.arguments[0].isDouble() && args.arguments[1].isDouble())
-                                                                 {
-                                                                     double a = args.arguments[0];
-                                                                     double b = args.arguments[1];
-                                                                     return var (a * b);
-                                                                 }
-                                                                 return var();
-                                                             });
+    {
+        if (args.numArguments >= 2 && args.arguments[0].isDouble() && args.arguments[1].isDouble())
+        {
+            double a = args.arguments[0];
+            double b = args.arguments[1];
+            return var (a * b);
+        }
+        return var();
+    });
 
     var::NativeFunction getMultiplierFunc = createNativeFunction ([multiplyFunc] (const var::NativeFunctionArgs& args) -> var
-                                                                  {
-                                                                      DynamicObject::Ptr multiplierObj = new DynamicObject();
-                                                                      multiplierObj->setMethod ("multiply", multiplyFunc);
-                                                                      return var (multiplierObj);
-                                                                  });
+    {
+        DynamicObject::Ptr multiplierObj = new DynamicObject();
+        multiplierObj->setMethod ("multiply", multiplyFunc);
+        return var (multiplierObj);
+    });
 
     obj->setMethod (outerMethod, getMultiplierFunc);
 
@@ -1460,9 +1460,9 @@ TEST_F (VariantTests, CloneMethodVar)
     Identifier methodName ("getValue");
 
     var::NativeFunction getValueFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                             {
-                                                                 return var (999);
-                                                             });
+    {
+        return var (999);
+    });
 
     obj->setMethod (methodName, getValueFunc);
 
@@ -1533,15 +1533,15 @@ TEST_F (VariantTests, CallMethodsWithVaryingArguments)
     Identifier methodName ("concatenate");
 
     var::NativeFunction concatenateFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                                {
-                                                                    std::string result;
-                                                                    for (int i = 0; i < args.numArguments; ++i)
-                                                                    {
-                                                                        if (args.arguments[i].isString())
-                                                                            result += args.arguments[i].toString().toStdString();
-                                                                    }
-                                                                    return var (result);
-                                                                });
+    {
+        std::string result;
+        for (int i = 0; i < args.numArguments; ++i)
+        {
+            if (args.arguments[i].isString())
+                result += args.arguments[i].toString().toStdString();
+        }
+        return var (result);
+    });
 
     obj->setMethod (methodName, concatenateFunc);
 
@@ -1565,15 +1565,15 @@ TEST_F (VariantTests, InvokeMethodVariousSignatures)
     Identifier methodName ("compute");
 
     var::NativeFunction computeFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                            {
-                                                                if (args.numArguments == 0)
-                                                                    return var (0);
-                                                                if (args.numArguments == 1 && args.arguments[0].isInt())
-                                                                    return var (static_cast<int> (args.arguments[0]) * 2);
-                                                                if (args.numArguments == 2 && args.arguments[0].isInt() && args.arguments[1].isInt())
-                                                                    return var (static_cast<int> (args.arguments[0]) + static_cast<int> (args.arguments[1]));
-                                                                return var();
-                                                            });
+    {
+        if (args.numArguments == 0)
+            return var (0);
+        if (args.numArguments == 1 && args.arguments[0].isInt())
+            return var (static_cast<int> (args.arguments[0]) * 2);
+        if (args.numArguments == 2 && args.arguments[0].isInt() && args.arguments[1].isInt())
+            return var (static_cast<int> (args.arguments[0]) + static_cast<int> (args.arguments[1]));
+        return var();
+    });
 
     obj->setMethod (methodName, computeFunc);
 
@@ -1636,15 +1636,15 @@ TEST_F (VariantTests, MethodReturnsFunction)
     Identifier methodName ("getAdder");
 
     var::NativeFunction adderFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                          {
-                                                              return var::NativeFunction ([] (const var::NativeFunctionArgs& innerArgs) -> var
-                                                                                          {
-                                                                                              if (innerArgs.numArguments >= 1 && innerArgs.arguments[0].isInt())
-                                                                                                  return var (static_cast<int> (innerArgs.arguments[0]) + 10);
+    {
+        return var::NativeFunction ([] (const var::NativeFunctionArgs& innerArgs) -> var
+        {
+            if (innerArgs.numArguments >= 1 && innerArgs.arguments[0].isInt())
+                return var (static_cast<int> (innerArgs.arguments[0]) + 10);
 
-                                                                                              return var();
-                                                                                          });
-                                                          });
+            return var();
+        });
+    });
 
     obj->setMethod (methodName, adderFunc);
 
@@ -1666,9 +1666,9 @@ TEST_F (VariantTests, MethodReturnsUndefined)
     Identifier methodName ("returnUndefined");
 
     var::NativeFunction undefinedFunc = createNativeFunction ([] (const var::NativeFunctionArgs& args) -> var
-                                                              {
-                                                                  return var::undefined();
-                                                              });
+    {
+        return var::undefined();
+    });
 
     obj->setMethod (methodName, undefinedFunc);
 

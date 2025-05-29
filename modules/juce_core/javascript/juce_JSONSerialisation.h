@@ -140,14 +140,14 @@ private:
         Visitor (const std::optional<int>& explicitVersion, bool includeVersion)
             : version (explicitVersion)
             , value ([&]() -> var
-                     {
-                         if (! (version.has_value() && includeVersion))
-                             return var();
+        {
+            if (! (version.has_value() && includeVersion))
+                return var();
 
-                         auto obj = std::make_unique<DynamicObject>();
-                         obj->setProperty ("__version__", *version);
-                         return obj.release();
-                     }())
+            auto obj = std::make_unique<DynamicObject>();
+            obj->setProperty ("__version__", *version);
+            return obj.release();
+        }())
             , versionIncluded (includeVersion)
         {
         }

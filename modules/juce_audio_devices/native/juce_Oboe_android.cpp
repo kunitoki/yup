@@ -44,7 +44,9 @@
 #if JUCE_OBOE_LOG_ENABLED
 #define JUCE_OBOE_LOG(x) JUCE_DBG (x)
 #else
-#define JUCE_OBOE_LOG(x) {}
+#define JUCE_OBOE_LOG(x) \
+    {                    \
+    }
 #endif
 
 namespace juce
@@ -510,7 +512,7 @@ private:
                 startResult = stream->waitForStateChange (expectedState, &nextState, timeoutNanos);
 
                 JUCE_OBOE_LOG ("Starting Oboe stream with result: " + getOboeString (startResult);
-                               + "\nUses AAudio = " + String ((int) stream->usesAAudio())
+                               +"\nUses AAudio = " + String ((int) stream->usesAAudio())
                                + "\nDirection = " + getOboeString (stream->getDirection())
                                + "\nSharingMode = " + getOboeString (stream->getSharingMode())
                                + "\nChannelCount = " + String (stream->getChannelCount())
@@ -1434,9 +1436,9 @@ public:
             threadEntryProc = nullptr;
 
             MessageManager::callAsync ([this]()
-                                       {
-                                           delete this;
-                                       });
+            {
+                delete this;
+            });
 
             return oboe::DataCallbackResult::Stop;
         }

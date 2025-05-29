@@ -316,9 +316,9 @@ public:
             return kInternalError;
 
         if (state)
-            editor->takeFocus();
+            editor->takeKeyboardFocus();
         else
-            editor->leaveFocus();
+            editor->leaveKeyboardFocus();
 
         return kResultTrue;
     }

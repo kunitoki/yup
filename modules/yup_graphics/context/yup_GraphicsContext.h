@@ -35,6 +35,10 @@ class JUCE_API GraphicsContext
 {
 public:
     //==============================================================================
+    /** Procedure load function used by GL and Vulkan to locate methods at runtime. */
+    using LoaderFunction = void* (*) (const char*);
+
+    //==============================================================================
     /** Enumerates supported graphics APIs. */
     enum Api
     {
@@ -55,6 +59,7 @@ public:
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
+        LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
     };
 
     //==============================================================================

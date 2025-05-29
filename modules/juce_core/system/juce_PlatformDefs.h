@@ -202,6 +202,7 @@ constexpr bool isConstantEvaluated() noexcept
 #define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
     __pragma (warning (push))               \
     __pragma (warning (disable : 4127))     \
+    __pragma (warning (disable : 4390))     \
     do { x } while (false)                  \
     __pragma (warning (pop))
 #else

@@ -165,6 +165,9 @@ public:
     /** Creates a string from a UTF-8 encoded std::string. */
     explicit String (const std::string& text);
 
+    /** Creates a string from a wide char std::wstring. */
+    explicit String (const std::wstring& text);
+
     /** Creates a string from a UTF-8 encoded std::string_view. */
     explicit String (std::string_view start);
 

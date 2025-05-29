@@ -37,8 +37,6 @@ public:
     virtual Size<int> getPreferredAspectRatioSize() const { return getPreferredSize(); }
 
     virtual bool shouldRenderContinuous() const { return false; }
-
-    virtual void attachedToNative() {}
 };
 
 } // namespace yup

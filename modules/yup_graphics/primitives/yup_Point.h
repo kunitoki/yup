@@ -42,6 +42,10 @@ class JUCE_API Point
 {
 public:
     //==============================================================================
+    /** Value type of the point. */
+    using Type = ValueType;
+
+    //==============================================================================
     /** Constructs a default point at the origin (0, 0).
     */
     constexpr Point() noexcept = default;
@@ -71,6 +75,19 @@ public:
     constexpr Point (T newX, T newY) noexcept
         : x (static_cast<ValueType> (newX))
         , y (static_cast<ValueType> (newY))
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+    }
+
+    /** Constructs a point from another Point type, converting the coordinates to the ValueType.
+
+        @tparam T The type of the original coordinates (must be different from ValueType).
+        @param newPoint The original point to convert.
+    */
+    template <class T, std::enable_if_t<! std::is_same_v<T, ValueType>, int> = 0>
+    constexpr Point (const Point<T> newPoint) noexcept
+        : x (static_cast<ValueType> (newPoint.getX()))
+        , y (static_cast<ValueType> (newPoint.getY()))
     {
         static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
     }
@@ -469,8 +486,10 @@ public:
         const float cosTheta = std::cos (angleInRadians);
         const float sinTheta = std::sin (angleInRadians);
 
-        x = static_cast<ValueType> (x * cosTheta - y * sinTheta);
-        y = static_cast<ValueType> (x * sinTheta + y * cosTheta);
+        const auto originalX = x;
+        x = static_cast<ValueType> (originalX * cosTheta + y * sinTheta);
+        y = static_cast<ValueType> (-originalX * sinTheta + y * cosTheta);
+
         return *this;
     }
 
@@ -485,10 +504,9 @@ public:
     */
     [[nodiscard]] constexpr Point rotatedClockwise (float angleInRadians) const noexcept
     {
-        const float cosTheta = std::cos (angleInRadians);
-        const float sinTheta = std::sin (angleInRadians);
-
-        return { static_cast<ValueType> (x * cosTheta - y * sinTheta), static_cast<ValueType> (x * sinTheta + y * cosTheta) };
+        auto result = *this;
+        result.rotateClockwise (angleInRadians);
+        return result;
     }
 
     /** Rotates this point counterclockwise around the origin by a specified angle.
@@ -503,7 +521,13 @@ public:
     */
     constexpr Point& rotateCounterClockwise (float angleInRadians) noexcept
     {
-        *this = rotatedCounterClockwise (angleInRadians);
+        const float cosTheta = std::cos (angleInRadians);
+        const float sinTheta = std::sin (angleInRadians);
+
+        const auto originalX = x;
+        x = static_cast<ValueType> (originalX * cosTheta - y * sinTheta);
+        y = static_cast<ValueType> (originalX * sinTheta + y * cosTheta);
+
         return *this;
     }
 
@@ -518,10 +542,9 @@ public:
     */
     [[nodiscard]] constexpr Point rotatedCounterClockwise (float angleInRadians) const noexcept
     {
-        const float cosTheta = std::cos (angleInRadians);
-        const float sinTheta = std::sin (angleInRadians);
-
-        return { static_cast<ValueType> (x * cosTheta + y * sinTheta), static_cast<ValueType> (-x * sinTheta + y * cosTheta) };
+        auto result = *this;
+        result.rotateCounterClockwise (angleInRadians);
+        return result;
     }
 
     //==============================================================================
@@ -664,7 +687,7 @@ public:
     */
     [[nodiscard]] constexpr bool isCollinear (const Point& other) const noexcept
     {
-        return crossProduct (other) == ValueType (0);
+        return juce_abs (crossProduct (other)) == ValueType (0);
     }
 
     //==============================================================================
@@ -695,7 +718,7 @@ public:
     */
     [[nodiscard]] constexpr bool isWithinRectangle (const Point& topLeft, const Point& bottomRight) const noexcept
     {
-        return x >= topLeft.x && x <= bottomRight.x_ && y >= topLeft.y && y <= bottomRight.y;
+        return x >= topLeft.x && x <= bottomRight.x && y >= topLeft.y && y <= bottomRight.y;
     }
 
     //==============================================================================

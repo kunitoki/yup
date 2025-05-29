@@ -104,7 +104,10 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     }
 
     // Create the rendering context
-    context = GraphicsContext::createContext (currentGraphicsApi, GraphicsContext::Options {});
+    GraphicsContext::Options graphicsOptions;
+    graphicsOptions.retinaDisplay = options.flags.test (allowHighDensityDisplay);
+    graphicsOptions.loaderFunction = SDL_GL_GetProcAddress;
+    context = GraphicsContext::createContext (currentGraphicsApi, graphicsOptions);
     if (context == nullptr)
         return; // TODO - raise something ?
 
@@ -553,7 +556,21 @@ void SDL2ComponentNative::renderContext()
 
     auto renderContinuous = shouldRenderContinuous.load (std::memory_order_relaxed);
     auto currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
-    const auto dpiScale = getScaleDpi();
+
+    const auto measureFramesPerSeconds = ErasedScopeGuard ([&]
+    {
+        ++frameRateCounter;
+
+        const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
+        if (timeSinceFpsMeasure >= 1.0)
+        {
+            const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
+            currentFrameRate.store (currentFps, std::memory_order_relaxed);
+
+            frameRateStartTimeSeconds = currentTimeSeconds;
+            frameRateCounter = 0;
+        }
+    });
 
     {
         YUP_PROFILE_NAMED_INTERNAL_TRACE (RefreshDisplay);
@@ -585,7 +602,7 @@ void SDL2ComponentNative::renderContext()
         frameDescriptor.wireframe = renderWireframe;
         frameDescriptor.fillsDisabled = false;
         frameDescriptor.strokesDisabled = false;
-        frameDescriptor.clockwiseFillOverride = false;
+        frameDescriptor.clockwiseFillOverride = true;
 
         {
             YUP_PROFILE_NAMED_INTERNAL_TRACE (ContextBegin);
@@ -597,6 +614,8 @@ void SDL2ComponentNative::renderContext()
         // Repaint components hierarchy
         if (renderer != nullptr)
         {
+            const auto dpiScale = getScaleDpi();
+
             for (auto& repaintArea : currentRepaintAreas)
             {
                 YUP_PROFILE_NAMED_INTERNAL_TRACE (InternalPaint);
@@ -616,26 +635,12 @@ void SDL2ComponentNative::renderContext()
     };
 
     renderFrame();
-    if (! renderContinuous && currentGraphicsApi != GraphicsContext::Metal)
-        renderFrame(); // This is needed on double buffered platforms until we render on a single texture!
 
     // Swap buffers
     if (window != nullptr && currentGraphicsApi == GraphicsContext::OpenGL)
         SDL_GL_SwapWindow (window);
 
-    // Compute framerate
-    ++frameRateCounter;
-
-    const double timeSinceFpsMeasure = currentTimeSeconds - frameRateStartTimeSeconds;
-    if (timeSinceFpsMeasure >= 1.0)
-    {
-        const double currentFps = static_cast<double> (frameRateCounter) / timeSinceFpsMeasure;
-        currentFrameRate.store (currentFps, std::memory_order_relaxed);
-
-        frameRateStartTimeSeconds = currentTimeSeconds;
-        frameRateCounter = 0;
-    }
-
+    // Clear repainted areas
     currentRepaintAreas.clearQuick();
 }
 
@@ -942,11 +947,15 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
     if (gotFocus)
     {
+        SDL_StartTextInput();
+
         if (! isRendering())
             startRendering();
     }
     else
     {
+        SDL_StopTextInput();
+
         if (updateOnlyWhenFocused)
         {
             if (isRendering())
@@ -1224,11 +1233,26 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_TEXTINPUT:
         {
+            YUP_WINDOWING_LOG ("SDL_TEXTINPUT");
+
             // auto cursorPosition = getCursorPosition();
             // auto modifiers = toKeyModifiers (getKeyModifiers());
 
             if (event->text.windowID == SDL_GetWindowID (window))
                 handleTextInput (String::fromUTF8 (event->text.text));
+
+            break;
+        }
+
+        case SDL_TEXTEDITING:
+        {
+            YUP_WINDOWING_LOG ("SDL_TEXTEDITING");
+
+            // auto cursorPosition = getCursorPosition();
+            // auto modifiers = toKeyModifiers (getKeyModifiers());
+
+            //if (event->text.windowID == SDL_GetWindowID (window))
+            //    handleTextInput (String::fromUTF8 (event->text.text));
 
             break;
         }
@@ -1320,7 +1344,7 @@ void Desktop::setMouseCursor (const MouseCursor& cursorToSet)
     {
         return std::unordered_map<MouseCursor::Type, SDL_Cursor*> {
             { MouseCursor::Default, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_ARROW) },
-            { MouseCursor::IBeam, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
+            { MouseCursor::Text, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_IBEAM) },
             { MouseCursor::Wait, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAIT) },
             { MouseCursor::WaitArrow, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_WAITARROW) },
             { MouseCursor::Hand, SDL_CreateSystemCursor (SDL_SYSTEM_CURSOR_HAND) },
@@ -1387,6 +1411,9 @@ void initialiseYup_Windowing()
     Desktop::getInstance()->updateScreens();
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
+    // Set the default theme
+    ApplicationTheme::setGlobalTheme (createThemeVersion1());
+
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
     {
@@ -1419,6 +1446,9 @@ void shutdownYup_Windowing()
     // Shutdown desktop
     SDL_DelEventWatch (displayEventDispatcher, Desktop::getInstance());
     Desktop::getInstance()->deleteInstance();
+
+    // Unregister theme
+    ApplicationTheme::setGlobalTheme (nullptr);
 
     // Unregister event loop
     MessageManager::getInstance()->registerEventLoopCallback (nullptr);

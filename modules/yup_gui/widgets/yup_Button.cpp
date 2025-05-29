@@ -29,17 +29,11 @@ Button::Button (StringRef componentID)
 {
 }
 
-Button::Button (StringRef componentID, const Font& font)
-    : Component (componentID)
-    , font (font)
-{
-}
-
 //==============================================================================
 
 void Button::paint (Graphics& g)
 {
-    paintButton (g, isButtonCurrentlyOver, isButtonCurrentlyDown);
+    paintButton (g);
 }
 
 //==============================================================================
@@ -65,7 +59,7 @@ void Button::mouseDown (const MouseEvent& event)
     if (onClick)
         onClick();
 
-    takeFocus();
+    takeKeyboardFocus();
 
     repaint();
 }

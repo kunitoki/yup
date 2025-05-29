@@ -41,7 +41,7 @@ namespace juce
 {
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-DECLARE_JNI_CLASS (AndroidAudioManager, "android/media/AudioManager")
+    DECLARE_JNI_CLASS (AndroidAudioManager, "android/media/AudioManager")
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -1386,9 +1386,9 @@ public:
 
             (*player)->SetPlayState (player, SL_PLAYSTATE_STOPPED);
             MessageManager::callAsync ([this]()
-                                       {
-                                           delete this;
-                                       });
+            {
+                delete this;
+            });
         }
     }
 

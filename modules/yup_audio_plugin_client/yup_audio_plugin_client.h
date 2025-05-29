@@ -19,7 +19,8 @@
   ==============================================================================
 */
 
-/*******************************************************************************
+/*
+  ==============================================================================
 
   BEGIN_JUCE_MODULE_DECLARATION
 
@@ -30,14 +31,15 @@
     description:        The essential set of basic YUP audio plugin clients.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 20
+    minimumCppStandard: 17
 
     dependencies:       yup_audio_processors yup_gui
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
 
-*******************************************************************************/
+  ==============================================================================
+*/
 
 #pragma once
 #define YUP_AUDIO_PPLUGIN_CLIENT_H_INCLUDED

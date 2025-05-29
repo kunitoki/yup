@@ -45,7 +45,12 @@ endif()
 # ==== Create executable
 set (target_name yup_tests)
 set (target_version "1.0.0")
-set (target_modules juce_core juce_events juce_audio_basics juce_audio_devices)
+set (target_modules
+    juce_core
+    juce_events
+    juce_audio_basics
+    juce_audio_devices
+    yup_graphics)
 
 enable_testing()
 

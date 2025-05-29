@@ -162,26 +162,26 @@ public:
         return width == ValueType (0) || height == ValueType (0);
     }
 
-    /** Checks if the width is zero but not the height.
-
-        Determines if the width is zero while the height is not, indicating an empty horizontal dimension.
-
-        @return True if width is zero and height is not, false otherwise.
-    */
-    constexpr bool isVerticallyEmpty() const noexcept
-    {
-        return width == ValueType (0) && height != ValueType (0);
-    }
-
     /** Checks if the height is zero but not the width.
 
         Determines if the height is zero while the width is not, indicating an empty vertical dimension.
 
         @return True if height is zero and width is not, false otherwise.
     */
-    constexpr bool isHorizontallyEmpty() const noexcept
+    constexpr bool isVerticallyEmpty() const noexcept
     {
         return width != ValueType (0) && height == ValueType (0);
+    }
+
+    /** Checks if the width is zero but not the height.
+
+        Determines if the width is zero while the height is not, indicating an empty horizontal dimension.
+
+        @return True if width is zero and height is not, false otherwise.
+    */
+    constexpr bool isHorizontallyEmpty() const noexcept
+    {
+        return width == ValueType (0) && height != ValueType (0);
     }
 
     //==============================================================================
@@ -448,7 +448,7 @@ public:
 
     template <class T = ValueType>
     constexpr auto roundToInt() const noexcept
-        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size<int>>
     {
         return { yup::roundToInt (width), yup::roundToInt (height) };
     }

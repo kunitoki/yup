@@ -107,7 +107,7 @@ endfunction()
 #==============================================================================
 
 function (_yup_version_string_to_version_code version_string output_variable)
-    string (REPLACE "." ";" version_parts ${version_string})
+    string (REPLACE "." ";" version_parts "${version_string}")
     list (LENGTH version_parts num_parts)
     set (major_version 0)
     set (minor_version 0)
@@ -134,7 +134,7 @@ endfunction()
 #==============================================================================
 
 function (_yup_file_to_byte_array file_path output_variable)
-    file (READ ${file_path} hex_contents HEX)
+    file (READ "${file_path}" hex_contents HEX)
     string (REGEX MATCHALL "([A-Fa-f0-9][A-Fa-f0-9])" separated_hex ${hex_contents})
 
     list (JOIN separated_hex ", 0x" formatted_hex)

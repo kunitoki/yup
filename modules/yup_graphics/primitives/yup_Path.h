@@ -39,23 +39,6 @@ class JUCE_API Path
 {
 public:
     //==============================================================================
-    /** Defines the types of segments that can compose a path.
-
-        Each segment in a path can be one of these types:
-        - MoveTo: Move the starting point.
-        - LineTo: Draw a straight line from the current point.
-        - QuadTo: Draw a quadratic Bezier curve.
-        - CubicTo: Draw a cubic Bezier curve.
-    */
-    enum SegmentType
-    {
-        MoveTo,
-        LineTo,
-        QuadTo,
-        CubicTo
-    };
-
-    //==============================================================================
     /** Constructs an empty path. */
     Path();
 
@@ -121,7 +104,7 @@ public:
         @param x The x-coordinate to move to.
         @param y The y-coordinate to move to.
     */
-    void moveTo (float x, float y);
+    Path& moveTo (float x, float y);
 
     /** Moves the current point to a specified point, starting a new sub-path.
 
@@ -131,7 +114,7 @@ public:
 
         @param p The point to move to.
     */
-    void moveTo (const Point<float>& p);
+    Path& moveTo (const Point<float>& p);
 
     //==============================================================================
     /** Draws a line from the current point to specified coordinates.
@@ -142,7 +125,7 @@ public:
         @param x The x-coordinate of the endpoint.
         @param y The y-coordinate of the endpoint.
     */
-    void lineTo (float x, float y);
+    Path& lineTo (float x, float y);
 
     /** Draws a line from the current point to a specified point.
 
@@ -151,7 +134,7 @@ public:
 
         @param p The point to draw the line to.
     */
-    void lineTo (const Point<float>& p);
+    Path& lineTo (const Point<float>& p);
 
     //==============================================================================
     /** Draws a quadratic Bezier curve to specified coordinates with one control point.
@@ -164,7 +147,7 @@ public:
         @param x1 The x-coordinate of the control point.
         @param y1 The y-coordinate of the control point.
     */
-    void quadTo (float x, float y, float x1, float y1);
+    Path& quadTo (float x, float y, float x1, float y1);
 
     /** Draws a quadratic Bezier curve to specified coordinates with one control point.
 
@@ -175,7 +158,7 @@ public:
         @param x1 The x-coordinate of the endpoint.
         @param y1 The y-coordinate of the endpoint.
     */
-    void quadTo (const Point<float>& p, float x1, float y1);
+    Path& quadTo (const Point<float>& p, float x1, float y1);
 
     //==============================================================================
     /** Draws a cubic Bezier curve to specified coordinates with two control points.
@@ -190,7 +173,7 @@ public:
         @param x2 The x-coordinate of the second control point.
         @param y2 The y-coordinate of the second control point.
     */
-    void cubicTo (float x, float y, float x1, float y1, float x2, float y2);
+    Path& cubicTo (float x, float y, float x1, float y1, float x2, float y2);
 
     /** Draws a cubic Bezier curve to specified coordinates with two control points.
 
@@ -204,7 +187,7 @@ public:
         @param x2 The x-coordinate of the endpoint.
         @param y2 The y-coordinate of the endpoint.
     */
-    void cubicTo (const Point<float>& p, float x1, float y1, float x2, float y2);
+    Path& cubicTo (const Point<float>& p, float x1, float y1, float x2, float y2);
 
     //==============================================================================
     /** Closes the current sub-path by drawing a line to the start point of the sub-path.
@@ -213,7 +196,7 @@ public:
         of the sub-path, effectively closing any open figures and making them ready for fill
         operations. This does not affect the current point.
     */
-    void close();
+    Path& close();
 
     //==============================================================================
     /** Adds a straight line segment to the path between two points.
@@ -224,7 +207,7 @@ public:
         @param p1 The starting point of the line.
         @param p2 The ending point of the line.
     */
-    void addLine (const Point<float>& p1, const Point<float>& p2);
+    Path& addLine (const Point<float>& p1, const Point<float>& p2);
 
     /** Adds a line segment described by a Line object to the path.
 
@@ -233,7 +216,7 @@ public:
 
         @param line The line to add to the path.
     */
-    void addLine (const Line<float>& line);
+    Path& addLine (const Line<float>& line);
 
     //==============================================================================
     /** Adds a rectangle to the path.
@@ -246,7 +229,7 @@ public:
         @param width The width of the rectangle.
         @param height The height of the rectangle.
     */
-    void addRectangle (float x, float y, float width, float height);
+    Path& addRectangle (float x, float y, float width, float height);
 
     /** Adds a rectangle described by a Rectangle object to the path.
 
@@ -255,7 +238,7 @@ public:
 
         @param rect The rectangle to add to the path.
     */
-    void addRectangle (const Rectangle<float>& rect);
+    Path& addRectangle (const Rectangle<float>& rect);
 
     //==============================================================================
     /** Adds a rounded rectangle to the path.
@@ -273,10 +256,10 @@ public:
         @param radiusBottomLeft The radius of the bottom-left corner.
         @param radiusBottomRight The radius of the bottom-right corner.
     */
-    void addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    Path& addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     // TODO - doxygen
-    void addRoundedRectangle (float x, float y, float width, float height, float radius);
+    Path& addRoundedRectangle (float x, float y, float width, float height, float radius);
 
     /** Adds a rounded rectangle described by a Rectangle object with specific corner radii to the path.
 
@@ -290,10 +273,10 @@ public:
         @param radiusBottomLeft The radius of the bottom-left corner.
         @param radiusBottomRight The radius of the bottom-right corner.
     */
-    void addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
+    Path& addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
     // TODO - doxygen
-    void addRoundedRectangle (const Rectangle<float>& rect, float radius);
+    Path& addRoundedRectangle (const Rectangle<float>& rect, float radius);
 
     //==============================================================================
     /** Adds an ellipse to the path.
@@ -307,7 +290,7 @@ public:
         @param width The width of the bounding rectangle.
         @param height The height of the bounding rectangle.
     */
-    void addEllipse (float x, float y, float width, float height);
+    Path& addEllipse (float x, float y, float width, float height);
 
     /** Adds an ellipse described by a Rectangle object to the path.
 
@@ -317,17 +300,17 @@ public:
 
         @param rect The rectangle that bounds the ellipse.
     */
-    void addEllipse (const Rectangle<float>& rect);
+    Path& addEllipse (const Rectangle<float>& rect);
 
     //==============================================================================
     // TODO - doxygen
-    void addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY);
+    Path& addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY);
 
     // TODO - doxygen
-    void addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY);
+    Path& addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY);
 
     // TODO - doxygen
-    void addCenteredEllipse (const Point<float>& center, const Size<float>& diameter);
+    Path& addCenteredEllipse (const Point<float>& center, const Size<float>& diameter);
 
     //==============================================================================
     /** Adds an arc to the path.
@@ -343,7 +326,7 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath);
+    Path& addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     /** Adds an arc described by a Rectangle object to the path.
 
@@ -356,10 +339,10 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addArc (const Rectangle<float>& rect,
-                 float fromRadians,
-                 float toRadians,
-                 bool startAsNewSubPath);
+    Path& addArc (const Rectangle<float>& rect,
+                  float fromRadians,
+                  float toRadians,
+                  bool startAsNewSubPath);
 
     /** Adds a centered arc to the path.
 
@@ -375,7 +358,7 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
+    Path& addCenteredArc (float centerX, float centerY, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     /** Adds a centered arc described by a Point object to the path.
 
@@ -391,9 +374,9 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    void addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
+    Path& addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
-    void addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
+    Path& addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
     //==============================================================================
     /** Appends another path to this one.
@@ -403,7 +386,7 @@ public:
 
         @param other The path to append to this path.
     */
-    void appendPath (const Path& other);
+    Path& appendPath (const Path& other);
 
     /** Appends another path to this one applying a transformation.
 
@@ -412,7 +395,7 @@ public:
 
         @param other The path with transformation to append to this path.
     */
-    void appendPath (const Path& other, const AffineTransform& transform);
+    Path& appendPath (const Path& other, const AffineTransform& transform);
 
     //==============================================================================
     // TODO - doxygen
@@ -479,15 +462,16 @@ public:
     }
 
     //==============================================================================
+    /** @internal Constructs a path from a raw render path. */
+    explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
     /** @internal Returns the raw render path to use in the renderer. */
-    rive::RiveRenderPath* getRenderPath() const
-    {
-        return path.get();
-    }
+    rive::RiveRenderPath* getRenderPath() const;
+    /** @internal */
+    void appendPath (rive::rcp<rive::RiveRenderPath> other);
+    /** @internal */
+    void appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransform& transform);
 
 private:
-    explicit Path (rive::rcp<rive::RiveRenderPath> newPath);
-
     rive::rcp<rive::RiveRenderPath> path;
 };
 

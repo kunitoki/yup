@@ -122,6 +122,9 @@
 #if __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif _MSC_VER
+ __pragma (warning (push))
+ __pragma (warning (disable: 4244))
 #endif
 
 //==============================================================================
@@ -138,4 +141,6 @@
 
 #if __GNUC__
  #pragma GCC diagnostic pop
+#elif _MSC_VER
+ __pragma (warning (pop))
 #endif

@@ -32,17 +32,16 @@ if (ANDROID)
     _yup_setup_platform()
     _yup_add_default_modules ("${CMAKE_CURRENT_LIST_DIR}/../..")
 
-    yup_add_embedded_binary_resources (
-        "${target_name}_binary_data"
-        OUT_DIR BinaryData
-        HEADER BinaryData.h
-        NAMESPACE yup
-        RESOURCE_NAMES
-            RobotoRegularFont
-        RESOURCES
-            "${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf")
-
-    set (link_libraries "${target_name}_binary_data")
+    #yup_add_embedded_binary_resources (
+    #    "${target_name}_binary_data"
+    #    OUT_DIR BinaryData
+    #    HEADER BinaryData.h
+    #    NAMESPACE yup
+    #    RESOURCE_NAMES
+    #        RobotoFont
+    #    RESOURCES
+    #        "${CMAKE_CURRENT_LIST_DIR}/data/RobotoFlex-VariableFont.ttf")
+    #set (link_libraries "${target_name}_binary_data")
 endif()
 
 # ==== Prepare target
@@ -53,24 +52,19 @@ yup_standalone_app (
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
     PRELOAD_FILES
-        "${CMAKE_CURRENT_LIST_DIR}/data/Roboto-Regular.ttf@data/Roboto-Regular.ttf"
+        "${CMAKE_CURRENT_LIST_DIR}/data/RobotoFlex-VariableFont.ttf@data/RobotoFlex-VariableFont.ttf"
     MODULES
-        juce_core
-        juce_events
-        juce_audio_basics
         juce_audio_devices
-        yup_graphics
         yup_gui
         yup_audio_processors
-        harfbuzz
-        sheenbidi
-        rive
-        rive_renderer
+        libpng
         ${link_libraries})
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)
-    file (GLOB_RECURSE sources "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
+    file (GLOB_RECURSE sources
+        "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp"
+        "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
     source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
     target_sources (${target_name} PRIVATE ${sources})
 endif()
