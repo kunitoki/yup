@@ -219,7 +219,7 @@ class Watchdog::Impl final
         {
             if (auto lockedOwner = implementation->owner.lock())
             {
-                lockedOwner->enqueueEvents (std::move (implementation->events));
+                lockedOwner->enqueueEvents(std::move(implementation->events));
                 implementation->events.clear();
             }
         }
