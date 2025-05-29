@@ -85,7 +85,7 @@ private:
             if (threadShouldExit)
                 break;
 
-            if (! success or bytesOut <= 0)
+            if (! success || bytesOut <= 0)
                 continue;
 
             uint8_t* rawData = buffer;
@@ -119,7 +119,7 @@ private:
                         {
                             event = Watchdog::EventType::file_renamed;
 
-                            if (fni->Action == FILE_ACTION_RENAMED_OLD_NAME and not path.exists())
+                            if (fni->Action == FILE_ACTION_RENAMED_OLD_NAME && ! path.exists())
                                 lastRenamedPath = std::exchange (path, *lastRenamedPath);
                         }
                         else
