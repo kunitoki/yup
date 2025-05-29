@@ -55,6 +55,8 @@
 
 #include "juce_core.h"
 
+#include <atomic>
+#include <ctime>
 #include <cctype>
 #include <cstdarg>
 #include <locale>
@@ -66,8 +68,6 @@
 #endif
 
 #if JUCE_WINDOWS
-#include <ctime>
-
 #if JUCE_MINGW
 #include <ws2spi.h>
 #include <cstdio>
@@ -109,9 +109,15 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 
 #if JUCE_LINUX || JUCE_BSD
 #include <stdio.h>
+#include <limits.h>
 #include <langinfo.h>
 #include <ifaddrs.h>
+#include <semaphore.h>
+#include <sys/inotify.h>
+#include <sys/mman.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
+#include <sys/time.h>
 
 #if JUCE_USE_CURL
 #include <curl/curl.h>
@@ -136,6 +142,12 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #endif
 
 extern char** environ;
+#endif
+
+#if JUCE_MAC
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <semaphore.h>
 #endif
 
 #if JUCE_MAC || JUCE_IOS
@@ -229,6 +241,11 @@ extern char** environ;
 #endif
 
 //==============================================================================
+#if JUCE_MAC
+#include "native/juce_Watchdog_mac.h"
+#endif
+
+//==============================================================================
 #if JUCE_MAC || JUCE_IOS
 #include "native/juce_Files_apple.mm"
 #include "native/juce_Network_apple.mm"
@@ -247,6 +264,7 @@ extern char** environ;
 #include "native/juce_SystemStats_windows.cpp"
 #include "native/juce_Threads_windows.cpp"
 #include "native/juce_PlatformTimer_windows.cpp"
+#include "native/juce_Watchdog_windows.h"
 
 //==============================================================================
 #elif JUCE_LINUX
@@ -259,6 +277,7 @@ extern char** environ;
 #include "native/juce_SystemStats_linux.cpp"
 #include "native/juce_Threads_linux.cpp"
 #include "native/juce_PlatformTimer_generic.cpp"
+#include "native/juce_Watchdog_linux.h"
 
 //==============================================================================
 #elif JUCE_BSD
@@ -319,6 +338,9 @@ extern char** environ;
 #include "zip/juce_GZIPDecompressorInputStream.cpp"
 #include "zip/juce_GZIPCompressorOutputStream.cpp"
 #include "zip/juce_ZipFile.cpp"
+
+//==============================================================================
+#include "files/juce_Watchdog.cpp"
 
 //==============================================================================
 namespace juce

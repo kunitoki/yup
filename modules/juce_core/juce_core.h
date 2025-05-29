@@ -379,6 +379,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include "memory/juce_AllocationHooks.h"
 #include "memory/juce_Reservoir.h"
 #include "files/juce_AndroidDocument.h"
+#include "files/juce_Watchdog.h"
 #include "streams/juce_AndroidDocumentInputSource.h"
 
 #include "detail/juce_CallbackListenerList.h"
