@@ -36,12 +36,24 @@ void AudioFormatManager::registerFormat (std::unique_ptr<AudioFormat> format)
 
 std::unique_ptr<AudioFormatReader> AudioFormatManager::createReaderFor (const std::string& filePath)
 {
+    File file {String (filePath)};
+    if (!file.existsAsFile())
+        return {};
+
     for (auto& format : formats)
     {
-        if (format->canHandleFile (filePath))
+        if (format->canHandleFile (file))
         {
-            if (auto reader = format->createReaderFor (filePath))
-                return reader;
+            auto stream = std::make_unique<FileInputStream> (file);
+            if (stream->openedOk())
+            {
+                if (auto reader = format->createReaderFor (stream.get()))
+                {
+                    // Reader takes ownership of the stream, so release it
+                    stream.release();
+                    return reader;
+                }
+            }
         }
     }
 
@@ -53,12 +65,22 @@ std::unique_ptr<AudioFormatWriter> AudioFormatManager::createWriterFor (const st
                                                                         int numChannels,
                                                                         int bitsPerSample)
 {
+    File file {String (filePath)};
+
     for (auto& format : formats)
     {
-        if (format->canHandleFile (filePath))
+        if (format->canHandleFile (file))
         {
-            if (auto writer = format->createWriterFor (filePath, sampleRate, numChannels, bitsPerSample))
-                return writer;
+            auto stream = std::make_unique<FileOutputStream> (file);
+            if (stream->openedOk())
+            {
+                if (auto writer = format->createWriterFor (stream.get(), sampleRate, numChannels, bitsPerSample))
+                {
+                    // Writer takes ownership of the stream, so release it
+                    stream.release();
+                    return writer;
+                }
+            }
         }
     }
 

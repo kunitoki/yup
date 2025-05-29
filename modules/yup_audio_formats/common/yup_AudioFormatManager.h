@@ -27,6 +27,8 @@ class JUCE_API AudioFormatManager
 public:
     AudioFormatManager();
 
+    void registerDefaultFormats();
+
     void registerFormat (std::unique_ptr<AudioFormat> format);
 
     std::unique_ptr<AudioFormatReader> createReaderFor (const std::string& filePath);

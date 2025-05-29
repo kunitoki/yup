@@ -32,3 +32,4 @@
 
 //==============================================================================
 #include "common/yup_AudioFormatManager.cpp"
+#include "formats/yup_WavAudioFormat.cpp"

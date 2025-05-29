@@ -25,11 +25,15 @@ namespace yup
 class JUCE_API WAVAudioFormat : public AudioFormat
 {
 public:
+    WAVAudioFormat();
+
+    String getFormatName() const override;
+    StringArray getSupportedFileExtensions() const override;
     bool canHandleFile (const File& filePath) const override;
 
-    std::unique_ptr<AudioFormatReader> createReaderFor (inputStream& stream) override;
+    std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* stream) override;
 
-    std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream& stream,
+    std::unique_ptr<AudioFormatWriter> createWriterFor (OutputStream* stream,
                                                         int sampleRate,
                                                         int numChannels,
                                                         int bitsPerSample) override;

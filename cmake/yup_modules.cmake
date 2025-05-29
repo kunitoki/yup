@@ -519,6 +519,7 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/modules/juce_audio_devices)
 
     # New yup modules
+    yup_add_module (${modules_path}/modules/yup_audio_formats)
     yup_add_module (${modules_path}/modules/yup_audio_processors)
     yup_add_module (${modules_path}/modules/yup_audio_plugin_client)
     yup_add_module (${modules_path}/modules/yup_graphics)
