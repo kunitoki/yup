@@ -45,8 +45,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 //==============================================================================
-#include "common/yup_AudioFormat.h"
 #include "common/yup_AudioFormatReader.h"
 #include "common/yup_AudioFormatWriter.h"
+#include "common/yup_AudioFormat.h"
 #include "common/yup_AudioFormatManager.h"
 #include "formats/yup_WavAudioFormat.h"
