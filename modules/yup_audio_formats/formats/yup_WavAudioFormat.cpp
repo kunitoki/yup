@@ -200,6 +200,9 @@ public:
 
     bool writeSamples (const AudioSampleBuffer& buffer, int numSamples) override
     {
+        if (numSamples == 0)
+            return true;
+
         if (stream == nullptr || buffer.getNumChannels() != numChannels)
             return false;
 

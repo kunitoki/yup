@@ -24,13 +24,13 @@ TEST_F (AudioFormatManagerTest, RegisterFormat)
 TEST_F (AudioFormatManagerTest, CreateReaderForNonExistentFile)
 {
     // Test with a non-existent file
-    auto reader = manager.createReaderFor ("nonexistent.wav");
+    auto reader = manager.createReaderFor (File::getCurrentWorkingDirectory().getChildFile ("nonexistent.wav"));
     EXPECT_EQ (reader, nullptr);
 }
 
 TEST_F (AudioFormatManagerTest, CreateWriterForInvalidPath)
 {
     // Test with invalid parameters
-    auto writer = manager.createWriterFor ("", 44100, 2, 16);
+    auto writer = manager.createWriterFor (File::getCurrentWorkingDirectory(), 44100, 2, 16);
     EXPECT_EQ (writer, nullptr);
 }

@@ -34,10 +34,9 @@ void AudioFormatManager::registerFormat (std::unique_ptr<AudioFormat> format)
     formats.push_back (std::move (format));
 }
 
-std::unique_ptr<AudioFormatReader> AudioFormatManager::createReaderFor (const std::string& filePath)
+std::unique_ptr<AudioFormatReader> AudioFormatManager::createReaderFor (const File& file)
 {
-    File file {String (filePath)};
-    if (!file.existsAsFile())
+    if (! file.existsAsFile())
         return {};
 
     for (auto& format : formats)
@@ -60,13 +59,11 @@ std::unique_ptr<AudioFormatReader> AudioFormatManager::createReaderFor (const st
     return {};
 }
 
-std::unique_ptr<AudioFormatWriter> AudioFormatManager::createWriterFor (const std::string& filePath,
+std::unique_ptr<AudioFormatWriter> AudioFormatManager::createWriterFor (const File& file,
                                                                         int sampleRate,
                                                                         int numChannels,
                                                                         int bitsPerSample)
 {
-    File file {String (filePath)};
-
     for (auto& format : formats)
     {
         if (format->canHandleFile (file))

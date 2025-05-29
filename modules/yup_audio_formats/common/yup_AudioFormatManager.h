@@ -31,8 +31,8 @@ public:
 
     void registerFormat (std::unique_ptr<AudioFormat> format);
 
-    std::unique_ptr<AudioFormatReader> createReaderFor (const std::string& filePath);
-    std::unique_ptr<AudioFormatWriter> createWriterFor (const std::string& filePath,
+    std::unique_ptr<AudioFormatReader> createReaderFor (const File& file);
+    std::unique_ptr<AudioFormatWriter> createWriterFor (const File& file,
                                                         int sampleRate,
                                                         int numChannels,
                                                         int bitsPerSample);
