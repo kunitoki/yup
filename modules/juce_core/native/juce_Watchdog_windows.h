@@ -41,10 +41,12 @@ public:
                                     nullptr);
 
         if (folderHandle != INVALID_HANDLE_VALUE)
+        {
             thread = std::thread ([this]
             {
                 threadCallback();
             });
+        }
     }
 
     ~Impl()
@@ -93,8 +95,8 @@ private:
             {
                 const FILE_NOTIFY_INFORMATION* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*> (rawData);
 
-                auto path = folder.getChildFile (std::wstring (fni->FileName, fni->FileNameLength / sizeof (wchar_t)));
-                if (isPathHidden (path))
+                auto path = folder.getChildFile (String (fni->FileName, fni->FileNameLength / sizeof (wchar_t));
+                if (path.isHidden())
                     continue;
 
                 auto event = Watchdog::EventType::undefined;
@@ -153,7 +155,7 @@ private:
             if (lastRenamedPath)
             {
                 auto newEventType = Watchdog::EventType::file_created;
-                if (not lastRenamedPath->exists())
+                if (! lastRenamedPath->exists())
                     newEventType = Watchdog::EventType::file_deleted;
 
                 events.emplace_back (newEventType, *lastRenamedPath);
