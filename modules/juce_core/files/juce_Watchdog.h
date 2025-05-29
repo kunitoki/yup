@@ -72,7 +72,7 @@ public:
 
         @param timeout The timeout for the watchdog.
      */
-    Watchdog (std::chrono::milliseconds timeout);
+    static std::shared_ptr<Watchdog> createInstance (std::chrono::milliseconds timeout);
 
     /**
         Destroys the watchdog object.
@@ -108,6 +108,10 @@ public:
 private:
     class Impl;
     friend class Impl;
+
+    friend std::shared_ptr<Watchdog> createInstance (std::chrono::milliseconds);
+
+    Watchdog (std::chrono::milliseconds timeout);
 
     void enqueueEvents (std::vector<Event> newEvents);
 

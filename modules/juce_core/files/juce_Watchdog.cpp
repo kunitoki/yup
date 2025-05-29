@@ -23,6 +23,10 @@ namespace juce
 {
 
 #if JUCE_LINUX || JUCE_WINDOWS || JUCE_MAC
+std::shared_ptr<Watchdog> Watchdog::createInstance (std::chrono::milliseconds timeout)
+{
+    return std::shared_ptr<Watchdog> (new Watchdog (timeout));
+}
 
 Watchdog::Watchdog (std::chrono::milliseconds timeout)
     : timeout (timeout)
