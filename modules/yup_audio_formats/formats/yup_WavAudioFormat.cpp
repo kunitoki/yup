@@ -48,7 +48,9 @@ public:
     }
 
     double getSampleRate() const override { return sampleRate; }
+
     int getNumChannels() const override { return numChannels; }
+
     int64 getTotalSamples() const override { return totalSamples; }
 
     bool readSamples (AudioSampleBuffer& buffer, int64 startSampleInFile, int64 numSamples) override
@@ -60,7 +62,7 @@ public:
         const int frameSize = numChannels * (bitsPerSample / 8);
         const int64 byteOffset = dataOffset + startSampleInFile * frameSize;
 
-        if (!stream->setPosition (byteOffset))
+        if (! stream->setPosition (byteOffset))
             return false;
 
         const int bufferSize = samplesToRead * frameSize;
@@ -144,7 +146,7 @@ private:
         bool foundFmt = false;
         bool foundData = false;
 
-        while (!stream->isExhausted() && (!foundFmt || !foundData))
+        while (! stream->isExhausted() && (! foundFmt || ! foundData))
         {
             char chunkHeader[8];
             if (stream->read (chunkHeader, 8) != 8)
@@ -166,8 +168,7 @@ private:
                         bitsPerSample = ByteOrder::littleEndianShort (fmtData + 14);
 
                         // Support PCM format with 8, 16, 24, or 32 bits
-                        if (audioFormat == 1 && numChannels > 0 && sampleRate > 0 &&
-                            (bitsPerSample == 8 || bitsPerSample == 16 || bitsPerSample == 24 || bitsPerSample == 32))
+                        if (audioFormat == 1 && numChannels > 0 && sampleRate > 0 && (bitsPerSample == 8 || bitsPerSample == 16 || bitsPerSample == 24 || bitsPerSample == 32))
                             foundFmt = true;
                     }
 
@@ -218,7 +219,7 @@ public:
 
     ~WAVAudioFormatWriter() override
     {
-        if (!finalized)
+        if (! finalized)
             finalize();
     }
 
@@ -316,11 +317,11 @@ private:
 
         // Write fmt chunk
         stream->write ("fmt ", 4);
-        stream->writeInt (16); // Format chunk size
+        stream->writeInt (16);  // Format chunk size
         stream->writeShort (1); // PCM format
         stream->writeShort (static_cast<short> (numChannels));
         stream->writeInt (sampleRate);
-        stream->writeInt (sampleRate * numChannels * (bitsPerSample / 8)); // Byte rate
+        stream->writeInt (sampleRate * numChannels * (bitsPerSample / 8));           // Byte rate
         stream->writeShort (static_cast<short> (numChannels * (bitsPerSample / 8))); // Block align
         stream->writeShort (static_cast<short> (bitsPerSample));
 
@@ -352,8 +353,7 @@ StringArray WAVAudioFormat::getSupportedFileExtensions() const
 
 bool WAVAudioFormat::canHandleFile (const File& filePath) const
 {
-    return filePath.existsAsFile() &&
-           (filePath.hasFileExtension (".wav") || filePath.hasFileExtension (".rf64"));
+    return filePath.existsAsFile() && (filePath.hasFileExtension (".wav") || filePath.hasFileExtension (".rf64"));
 }
 
 Array<int> WAVAudioFormat::getSupportedBitsPerSample() const
@@ -401,7 +401,7 @@ std::unique_ptr<AudioFormatWriter> WAVAudioFormat::createWriterFor (OutputStream
 
     // Check if the bit depth is supported
     Array<int> supportedBits = getSupportedBitsPerSample();
-    if (!supportedBits.contains (bitsPerSample))
+    if (! supportedBits.contains (bitsPerSample))
         return nullptr;
 
     return std::make_unique<WAVAudioFormatWriter> (stream, sampleRate, numChannels, bitsPerSample);
