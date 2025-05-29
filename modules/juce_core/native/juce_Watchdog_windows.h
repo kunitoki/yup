@@ -41,7 +41,10 @@ public:
                                     nullptr);
 
         if (folderHandle != INVALID_HANDLE_VALUE)
-            thread = std::thread ([this] { threadCallback(); });
+            thread = std::thread ([this]
+            {
+                threadCallback();
+            });
     }
 
     ~Impl()
@@ -66,7 +69,7 @@ private:
         constexpr int heapSize = 16 * 1024;
 
         DWORD bytesOut = 0;
-        auto lastRenamedPath = std::optional<File>{};
+        auto lastRenamedPath = std::optional<File> {};
 
         while (! threadShouldExit)
         {
@@ -133,10 +136,10 @@ private:
 
                 if (event != Watchdog::EventType::undefined)
                 {
-                    auto otherPath = std::optional<File>{};
+                    auto otherPath = std::optional<File> {};
 
                     if (event == Watchdog::EventType::file_renamed)
-                        otherPath = std::exchange (lastRenamedPath, std::optional<File>{});
+                        otherPath = std::exchange (lastRenamedPath, std::optional<File> {});
 
                     events.emplace_back (event, path, otherPath);
                 }

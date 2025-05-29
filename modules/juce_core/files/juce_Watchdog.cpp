@@ -24,7 +24,7 @@ namespace juce
 
 #if JUCE_LINUX || JUCE_WINDOWS || JUCE_MAC
 
-Watchdog::Watchdog(std::chrono::milliseconds timeout)
+Watchdog::Watchdog (std::chrono::milliseconds timeout)
     : timeout (timeout)
 {
 }

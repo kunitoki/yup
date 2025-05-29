@@ -24,20 +24,23 @@ namespace juce
 
 class Watchdog::Impl final
 {
-    inline static constexpr std::size_t bufferSize = (10 * (sizeof(struct inotify_event) + NAME_MAX + 1));
+    inline static constexpr std::size_t bufferSize = (10 * (sizeof (struct inotify_event) + NAME_MAX + 1));
 
 public:
     Impl (std::weak_ptr<Watchdog> owner, const File& folder)
-        : owner (std::move(owner))
+        : owner (std::move (owner))
         , folder (folder)
     {
         fd = inotify_init();
         if (fd < 0)
             return;
 
-        add_paths(folder);
+        add_paths (folder);
 
-        thread = std::thread ([this] { threadCallback(); });
+        thread = std::thread ([this]
+        {
+            threadCallback();
+        });
     }
 
     ~Impl()
@@ -67,8 +70,7 @@ private:
 
         const auto wd = inotify_add_watch (fd,
                                            pathString.c_str(),
-                                           IN_ATTRIB | IN_CREATE | IN_DELETE | IN_DELETE_SELF |
-                                           IN_MODIFY | IN_MOVE_SELF | IN_MOVED_TO | IN_MOVED_FROM);
+                                           IN_ATTRIB | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MODIFY | IN_MOVE_SELF | IN_MOVED_TO | IN_MOVED_FROM);
         if (wd < 0)
             return;
 
@@ -112,7 +114,7 @@ private:
     {
         if (path.isDirectory())
         {
-            addPath(path);
+            addPath (path);
 
             for (const auto& entry : path.findChildFiles (File::findDirectories, true))
             {
@@ -155,7 +157,7 @@ private:
     void threadCallback()
     {
         const inotify_event* notifyEvent = nullptr;
-        auto lastRenamedPath = std::optional<File>{};
+        auto lastRenamedPath = std::optional<File> {};
 
         while (! threadShouldExit)
         {
@@ -165,7 +167,7 @@ private:
             if (numRead <= 0 || threadShouldExit)
                 break;
 
-            for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof(struct inotify_event) + notifyEvent->len)
+            for (const char* ptr = buffer; ptr < buffer + numRead; ptr += sizeof (struct inotify_event) + notifyEvent->len)
             {
                 const inotify_event* notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
 
@@ -199,10 +201,10 @@ private:
 
                 if (event != Watchdog::EventType::undefined)
                 {
-                    auto otherPath = std::optional<File>{};
+                    auto otherPath = std::optional<File> {};
 
                     if (event == Watchdog::EventType::file_renamed)
-                        otherPath = std::exchange (lastRenamedPath, std::optional<File>{});
+                        otherPath = std::exchange (lastRenamedPath, std::optional<File> {});
 
                     events.emplace_back (event, path, otherPath);
                 }
@@ -220,7 +222,7 @@ private:
             if (! events.empty())
             {
                 if (auto owner = owner.lock())
-                    owner->enqueueEvents(events);
+                    owner->enqueueEvents (events);
 
                 for (const auto& event : events)
                     updatePathFromEvent (event);

@@ -24,7 +24,7 @@
 namespace juce
 {
 
-static void printEventFlags (FSEventStreamEventFlags flags)
+static void printEventFlags(FSEventStreamEventFlags flags)
 {
     std::vector<String> descriptions;
 
@@ -72,9 +72,9 @@ static void printEventFlags (FSEventStreamEventFlags flags)
 
     // Print all decoded flags
     String output;
-    output << "0x" << String::toHexString (flags) << " (";
+    output << "0x" << String::toHexString(flags) << " (";
 
-    if (! descriptions.empty())
+    if (!descriptions.empty())
     {
         for (std::size_t i = 0; i < descriptions.size(); ++i)
         {
@@ -90,15 +90,14 @@ static void printEventFlags (FSEventStreamEventFlags flags)
 
     output << ")";
 
-    juce::Logger::getCurrentLogger()->writeToLog (output);
+    juce::Logger::getCurrentLogger()->writeToLog(output);
 }
 
 class Watchdog::Impl final
 {
-public:
-    Impl (std::weak_ptr<Watchdog> owner, const File& folder)
-        : owner (std::move (owner))
-        , folder (folder)
+   public:
+    Impl(std::weak_ptr<Watchdog> owner, const File& folder)
+        : owner(std::move(owner)), folder(folder)
     {
         NSString* newPath = [NSString stringWithUTF8String:folder.getFullPathName().toRawUTF8()];
 
@@ -110,17 +109,17 @@ public:
         context.release = nil;
         context.copyDescription = nil;
 
-        dispatch_queue_t queue = dispatch_queue_create ("com.yup.watchdog", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_t queue = dispatch_queue_create("com.yup.watchdog", DISPATCH_QUEUE_SERIAL);
 
         stream = FSEventStreamCreate(
-            kCFAllocatorDefault, callback, &context, reinterpret_cast<CFArrayRef> (paths),
+            kCFAllocatorDefault, callback, &context, reinterpret_cast<CFArrayRef>(paths),
             kFSEventStreamEventIdSinceNow, 0.1,
             kFSEventStreamCreateFlagNoDefer | kFSEventStreamCreateFlagFileEvents);
 
         if (stream != nullptr)
         {
-            FSEventStreamSetDispatchQueue (stream, queue);
-            FSEventStreamStart (stream);
+            FSEventStreamSetDispatchQueue(stream, queue);
+            FSEventStreamStart(stream);
         }
     }
 
@@ -128,11 +127,11 @@ public:
     {
         if (stream != nullptr)
         {
-            FSEventStreamFlushSync (stream);
-            FSEventStreamStop (stream);
-            FSEventStreamSetDispatchQueue (stream, nullptr);
-            FSEventStreamInvalidate (stream);
-            FSEventStreamRelease (stream);
+            FSEventStreamFlushSync(stream);
+            FSEventStreamStop(stream);
+            FSEventStreamSetDispatchQueue(stream, nullptr);
+            FSEventStreamInvalidate(stream);
+            FSEventStreamRelease(stream);
         }
     }
 
@@ -144,30 +143,30 @@ public:
         const FSEventStreamEventFlags* eventFlags,
         const FSEventStreamEventId* eventIds)
     {
-        ignoreUnused (streamRef, numEvents, eventPaths, eventFlags, eventIds);
+        ignoreUnused(streamRef, numEvents, eventPaths, eventFlags, eventIds);
 
-        auto* implementation = reinterpret_cast<Impl*> (clientCallbackInfo);
+        auto* implementation = reinterpret_cast<Impl*>(clientCallbackInfo);
         if (implementation == nullptr)
             return;
 
         implementation->events.clear();
-        implementation->events.reserve (numEvents);
+        implementation->events.reserve(numEvents);
 
-        char** files = reinterpret_cast<char**> (eventPaths);
+        char** files = reinterpret_cast<char**>(eventPaths);
         auto lastRenamedPath = std::optional<File>{};
 
-        for (int i = 0; i < static_cast<int> (numEvents); ++i)
+        for (int i = 0; i < static_cast<int>(numEvents); ++i)
         {
             auto event = Watchdog::EventType::undefined;
-            auto path = File (files[i]);
+            auto path = File(files[i]);
 
             if (path.isHidden())
                 continue;
 
             FSEventStreamEventFlags evt = eventFlags[i];
 
-            //DBG (path.getFullPathName());
-            //printEventFlags (evt);
+            // DBG (path.getFullPathName());
+            // printEventFlags (evt);
 
             if (evt & kFSEventStreamEventFlagItemModified)
             {
@@ -187,8 +186,8 @@ public:
                 {
                     event = Watchdog::EventType::file_renamed;
 
-                    if (! path.exists())
-                        lastRenamedPath = std::exchange (path, *lastRenamedPath);
+                    if (!path.exists())
+                        lastRenamedPath = std::exchange(path, *lastRenamedPath);
                 }
                 else
                 {
@@ -201,9 +200,9 @@ public:
                 auto otherPath = std::optional<File>{};
 
                 if (event == Watchdog::EventType::file_renamed)
-                    otherPath = std::exchange (lastRenamedPath, std::optional<File>{});
+                    otherPath = std::exchange(lastRenamedPath, std::optional<File>{});
 
-                implementation->events.emplace_back (event, path, otherPath);
+                implementation->events.emplace_back(event, path, otherPath);
             }
         }
 
@@ -213,13 +212,13 @@ public:
             if (lastRenamedPath->exists())
                 newEventType = Watchdog::EventType::file_deleted;
 
-            implementation->events.emplace_back (newEventType, *lastRenamedPath);
+            implementation->events.emplace_back(newEventType, *lastRenamedPath);
         }
 
-        if (! implementation->events.empty())
+        if (!implementation->events.empty())
         {
             if (auto lockedOwner = implementation->owner.lock())
-                lockedOwner->enqueueEvents (implementation->events);
+                lockedOwner->enqueueEvents(implementation->events);
         }
     }
 
