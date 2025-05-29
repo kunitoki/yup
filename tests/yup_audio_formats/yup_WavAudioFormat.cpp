@@ -53,15 +53,18 @@ protected:
     }
 
     // Helper to create a minimal valid WAV file header
-    void createMinimalWavFile (const File& file, int sampleRate = 44100, int numChannels = 2, int numSamples = 1000)
+    void createMinimalWavFile (const File& file, int sampleRate = 44100, int numChannels = 2, int numSamples = 1000, int bitsPerSample = 16)
     {
         FileOutputStream stream (file);
         if (! stream.openedOk())
             return;
 
+        const int bytesPerSample = bitsPerSample / 8;
+        const int frameSize = numChannels * bytesPerSample;
+
         // RIFF header
         stream.write ("RIFF", 4);
-        uint32 fileSize = 36 + (numSamples * numChannels * 2); // Header + data
+        uint32 fileSize = 36 + (numSamples * frameSize); // Header + data
         stream.writeInt (fileSize - 8);
         stream.write ("WAVE", 4);
 
@@ -71,18 +74,46 @@ protected:
         stream.writeShort (1); // PCM format
         stream.writeShort (static_cast<short> (numChannels));
         stream.writeInt (sampleRate);
-        stream.writeInt (sampleRate * numChannels * 2);           // Byte rate
-        stream.writeShort (static_cast<short> (numChannels * 2)); // Block align
-        stream.writeShort (16);                                   // Bits per sample
+        stream.writeInt (sampleRate * frameSize);           // Byte rate
+        stream.writeShort (static_cast<short> (frameSize)); // Block align
+        stream.writeShort (static_cast<short> (bitsPerSample));
 
         // data chunk
         stream.write ("data", 4);
-        stream.writeInt (numSamples * numChannels * 2);
+        stream.writeInt (numSamples * frameSize);
 
-        // Write some test audio data
+        // Write some test audio data based on bit depth
         for (int i = 0; i < numSamples * numChannels; ++i)
         {
-            stream.writeShort (static_cast<short> (i % 32767)); // Simple test pattern
+            switch (bitsPerSample)
+            {
+                case 8:
+                {
+                    uint8 value = static_cast<uint8> (128 + (i % 127)); // 8-bit unsigned
+                    stream.writeByte (value);
+                    break;
+                }
+                case 16:
+                {
+                    int16 value = static_cast<int16> (i % 32767); // 16-bit signed
+                    stream.writeShort (value);
+                    break;
+                }
+                case 24:
+                {
+                    int32 value = (i % 8388607) << 8; // 24-bit signed (stored as 32-bit)
+                    stream.writeByte (static_cast<char> (value & 0xFF));
+                    stream.writeByte (static_cast<char> ((value >> 8) & 0xFF));
+                    stream.writeByte (static_cast<char> ((value >> 16) & 0xFF));
+                    break;
+                }
+                case 32:
+                {
+                    float value = 1.0f;
+                    stream.writeFloat (value);
+                    break;
+                }
+            }
         }
 
         stream.flush();
@@ -149,6 +180,34 @@ TEST_F (WAVAudioFormatTest, GetSupportedFileExtensions)
     EXPECT_EQ (extensions.size(), 2);
     EXPECT_TRUE (extensions.contains (".wav"));
     EXPECT_TRUE (extensions.contains (".rf64"));
+}
+
+TEST_F (WAVAudioFormatTest, GetSupportedBitsPerSample)
+{
+    Array<int> bitsPerSample = format->getSupportedBitsPerSample();
+    EXPECT_EQ (bitsPerSample.size(), 4);
+    EXPECT_TRUE (bitsPerSample.contains (8));
+    EXPECT_TRUE (bitsPerSample.contains (16));
+    EXPECT_TRUE (bitsPerSample.contains (24));
+    EXPECT_TRUE (bitsPerSample.contains (32));
+}
+
+TEST_F (WAVAudioFormatTest, GetSupportedSampleRates)
+{
+    Array<int> sampleRates = format->getSupportedSampleRates();
+    EXPECT_GT (sampleRates.size(), 0);
+
+    // Check for common sample rates
+    EXPECT_TRUE (sampleRates.contains (8000));
+    EXPECT_TRUE (sampleRates.contains (11025));
+    EXPECT_TRUE (sampleRates.contains (16000));
+    EXPECT_TRUE (sampleRates.contains (22050));
+    EXPECT_TRUE (sampleRates.contains (44100));
+    EXPECT_TRUE (sampleRates.contains (48000));
+    EXPECT_TRUE (sampleRates.contains (88200));
+    EXPECT_TRUE (sampleRates.contains (96000));
+    EXPECT_TRUE (sampleRates.contains (176400));
+    EXPECT_TRUE (sampleRates.contains (192000));
 }
 
 TEST_F (WAVAudioFormatTest, CanHandleFile_ValidExtensions)
@@ -446,14 +505,14 @@ TEST_F (WAVAudioFormatTest, CreateWriterFor_InvalidParameters)
     auto writer2b = format->createWriterFor (&stream, 44100, -2, 16);
     EXPECT_EQ (writer2b, nullptr);
 
-    // Test invalid bit depth (only 16-bit supported)
-    auto writer3 = format->createWriterFor (&stream, 44100, 2, 24);
+    // Test unsupported bit depths (not 8, 16, 24, or 32)
+    auto writer3 = format->createWriterFor (&stream, 44100, 2, 12);
     EXPECT_EQ (writer3, nullptr);
 
-    auto writer4 = format->createWriterFor (&stream, 44100, 2, 8);
+    auto writer4 = format->createWriterFor (&stream, 44100, 2, 20);
     EXPECT_EQ (writer4, nullptr);
 
-    auto writer5 = format->createWriterFor (&stream, 44100, 2, 32);
+    auto writer5 = format->createWriterFor (&stream, 44100, 2, 64);
     EXPECT_EQ (writer5, nullptr);
 }
 
@@ -492,6 +551,40 @@ TEST_F (WAVAudioFormatTest, CreateWriterFor_DifferentValidParameters)
 
         auto writer = format->createWriterFor (&stream, testCase.sampleRate, testCase.numChannels, 16);
         EXPECT_NE (writer, nullptr) << "Failed for " << testCase.sampleRate << "Hz, " << testCase.numChannels << " channels";
+
+        testFile.deleteFile();
+    }
+}
+
+TEST_F (WAVAudioFormatTest, CreateWriterFor_AllSupportedBitDepths)
+{
+    Array<int> supportedBits = format->getSupportedBitsPerSample();
+
+    for (int bits : supportedBits)
+    {
+        File testFile = getTestWavFile();
+        FileOutputStream stream (testFile);
+        ASSERT_TRUE (stream.openedOk());
+
+        auto writer = format->createWriterFor (&stream, 44100, 2, bits);
+        EXPECT_NE (writer, nullptr) << "Failed to create writer for " << bits << "-bit";
+
+        testFile.deleteFile();
+    }
+}
+
+TEST_F (WAVAudioFormatTest, CreateWriterFor_UnsupportedBitDepths)
+{
+    Array<int> unsupportedBits = { 12, 20, 48, 64 };
+
+    for (int bits : unsupportedBits)
+    {
+        File testFile = getTestWavFile();
+        FileOutputStream stream (testFile);
+        ASSERT_TRUE (stream.openedOk());
+
+        auto writer = format->createWriterFor (&stream, 44100, 2, bits);
+        EXPECT_EQ (writer, nullptr) << "Should not create writer for unsupported " << bits << "-bit";
 
         testFile.deleteFile();
     }
@@ -725,6 +818,97 @@ TEST_F (WAVAudioFormatTest, WriteAndReadRoundTrip_DifferentConfigurations)
     }
 }
 
+TEST_F (WAVAudioFormatTest, WriteAndReadRoundTrip_AllBitDepths)
+{
+    Array<int> supportedBits = format->getSupportedBitsPerSample();
+    const int sampleRate = 44100;
+    const int numChannels = 2;
+    const int numSamples = 1000;
+
+    for (int bits : supportedBits)
+    {
+        File testFile = getTestWavFile();
+
+        // Create test data with different frequencies per channel
+        AudioSampleBuffer originalBuffer (numChannels, numSamples);
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            for (int sample = 0; sample < numSamples; ++sample)
+            {
+                float value = std::sin (2.0f * M_PI * (440.0f + channel * 100.0f) * sample / sampleRate);
+                originalBuffer.setSample (channel, sample, value * 0.5f);
+            }
+        }
+
+        // Write the file
+        {
+            FileOutputStream stream (testFile);
+            ASSERT_TRUE (stream.openedOk());
+
+            auto writer = format->createWriterFor (&stream, sampleRate, numChannels, bits);
+            ASSERT_NE (writer, nullptr) << "Failed to create writer for " << bits << "-bit";
+
+            bool success = writer->writeSamples (originalBuffer, numSamples);
+            ASSERT_TRUE (success) << "Failed to write samples for " << bits << "-bit";
+
+            success = writer->finalize();
+            ASSERT_TRUE (success) << "Failed to finalize writer for " << bits << "-bit";
+        }
+
+        // Read the file back
+        {
+            FileInputStream stream (testFile);
+            ASSERT_TRUE (stream.openedOk());
+
+            auto reader = format->createReaderFor (&stream);
+            ASSERT_NE (reader, nullptr) << "Failed to create reader for " << bits << "-bit";
+
+            EXPECT_EQ (reader->getSampleRate(), sampleRate);
+            EXPECT_EQ (reader->getNumChannels(), numChannels);
+            EXPECT_EQ (reader->getTotalSamples(), numSamples);
+
+            AudioSampleBuffer readBuffer (numChannels, numSamples);
+            bool success = reader->readSamples (readBuffer, 0, numSamples);
+            ASSERT_TRUE (success) << "Failed to read samples for " << bits << "-bit";
+
+            // Compare data with appropriate tolerance for bit depth
+            float tolerance;
+            switch (bits)
+            {
+                case 8:
+                    tolerance = 1.0f / 128.0f;
+                    break; // 8-bit has lower precision
+                case 16:
+                    tolerance = 1.0f / 32768.0f * 2.0f;
+                    break;
+                case 24:
+                    tolerance = 1.0f / 8388608.0f * 2.0f;
+                    break;
+                case 32:
+                    tolerance = 1.0f / 2147483648.0f * 2.0f;
+                    break;
+                default:
+                    tolerance = 0.01f;
+                    break;
+            }
+
+            for (int channel = 0; channel < numChannels; ++channel)
+            {
+                for (int sample = 0; sample < numSamples; ++sample)
+                {
+                    float original = originalBuffer.getSample (channel, sample);
+                    float read = readBuffer.getSample (channel, sample);
+
+                    EXPECT_NEAR (original, read, tolerance)
+                        << "Mismatch at " << bits << "-bit, channel " << channel << ", sample " << sample;
+                }
+            }
+        }
+
+        testFile.deleteFile();
+    }
+}
+
 // === Edge Cases and Error Handling ===
 
 TEST_F (WAVAudioFormatTest, ReaderReadSamples_BeyondEndOfFile)
@@ -904,4 +1088,49 @@ TEST_F (WAVAudioFormatTest, WriterWriteAfterFinalize)
     // (though the data may not be properly formatted in the file)
     success = writer->writeSamples (buffer, 100);
     EXPECT_TRUE (success); // Current implementation allows this
+}
+
+TEST_F (WAVAudioFormatTest, CreateReaderFor_DifferentBitDepths)
+{
+    Array<int> supportedBits = format->getSupportedBitsPerSample();
+
+    for (int bits : supportedBits)
+    {
+        File testFile = getTestWavFile();
+        createMinimalWavFile (testFile, 44100, 2, 1000, bits);
+
+        FileInputStream stream (testFile);
+        ASSERT_TRUE (stream.openedOk());
+
+        auto reader = format->createReaderFor (&stream);
+        ASSERT_NE (reader, nullptr) << "Failed to create reader for " << bits << "-bit";
+
+        EXPECT_EQ (reader->getSampleRate(), 44100);
+        EXPECT_EQ (reader->getNumChannels(), 2);
+        EXPECT_EQ (reader->getTotalSamples(), 1000);
+
+        // Try reading some samples
+        AudioSampleBuffer buffer (2, 100);
+        bool success = reader->readSamples (buffer, 0, 100);
+        EXPECT_TRUE (success) << "Failed to read samples for " << bits << "-bit";
+
+        // Verify that data was actually read (should not be all zeros for most cases)
+        bool hasNonZeroData = false;
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        {
+            for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            {
+                if (std::abs (buffer.getSample (channel, sample)) > 0.001f)
+                {
+                    hasNonZeroData = true;
+                    break;
+                }
+            }
+            if (hasNonZeroData)
+                break;
+        }
+        EXPECT_TRUE (hasNonZeroData) << "No non-zero data found for " << bits << "-bit";
+
+        testFile.deleteFile();
+    }
 }

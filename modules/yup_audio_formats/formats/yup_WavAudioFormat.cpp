@@ -63,31 +63,37 @@ public:
         if (!stream->setPosition (byteOffset))
             return false;
 
-        // Simple 16-bit implementation for now
-        if (bitsPerSample == 16)
+        const int bufferSize = samplesToRead * frameSize;
+        MemoryBlock tempBuffer (bufferSize);
+        const int bytesRead = stream->read (tempBuffer.getData(), bufferSize);
+
+        if (bytesRead != bufferSize)
+            return false;
+
+        // Use AudioData for proper conversion based on bit depth
+        switch (bitsPerSample)
         {
-            const int bufferSize = samplesToRead * frameSize;
-            MemoryBlock tempBuffer (bufferSize);
-            const int bytesRead = stream->read (tempBuffer.getData(), bufferSize);
+            case 8:
+                convertFromInterleavedSource<AudioData::UInt8> (tempBuffer.getData(), buffer, samplesToRead);
+                break;
 
-            if (bytesRead == bufferSize)
-            {
-                auto* sourceData = static_cast<const int16*> (tempBuffer.getData());
+            case 16:
+                convertFromInterleavedSource<AudioData::Int16> (tempBuffer.getData(), buffer, samplesToRead);
+                break;
 
-                for (int sample = 0; sample < samplesToRead; ++sample)
-                {
-                    for (int channel = 0; channel < numChannels; ++channel)
-                    {
-                        int16 intValue = ByteOrder::littleEndianShort (sourceData + sample * numChannels + channel);
-                        float floatValue = static_cast<float> (intValue) / 32768.0f;
-                        buffer.getWritePointer (channel)[sample] = floatValue;
-                    }
-                }
-                return true;
-            }
+            case 24:
+                convertFromInterleavedSource<AudioData::Int24> (tempBuffer.getData(), buffer, samplesToRead);
+                break;
+
+            case 32:
+                convertFromInterleavedSource<AudioData::Float32> (tempBuffer.getData(), buffer, samplesToRead);
+                break;
+
+            default:
+                return false;
         }
 
-        return false;
+        return true;
     }
 
     bool isValidFile() const { return stream != nullptr; }
@@ -100,6 +106,22 @@ private:
     int64 totalSamples;
     int64 dataOffset;
     bool isRF64;
+
+    template <typename SourceFormat>
+    void convertFromInterleavedSource (void* sourceData, AudioSampleBuffer& buffer, int samplesToRead)
+    {
+        using SourceType = AudioData::Pointer<SourceFormat, AudioData::LittleEndian, AudioData::Interleaved, AudioData::Const>;
+        using DestType = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::NonConst>;
+
+        SourceType source (sourceData, numChannels);
+
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            DestType dest (buffer.getWritePointer (channel));
+            SourceType channelSource (static_cast<const char*> (sourceData) + channel * SourceFormat::bytesPerSample, numChannels);
+            dest.convertSamples (channelSource, samplesToRead);
+        }
+    }
 
     bool parseHeader()
     {
@@ -143,7 +165,9 @@ private:
                         sampleRate = ByteOrder::littleEndianInt (fmtData + 4);
                         bitsPerSample = ByteOrder::littleEndianShort (fmtData + 14);
 
-                        if (audioFormat == 1 && numChannels > 0 && sampleRate > 0 && bitsPerSample == 16)
+                        // Support PCM format with 8, 16, 24, or 32 bits
+                        if (audioFormat == 1 && numChannels > 0 && sampleRate > 0 &&
+                            (bitsPerSample == 8 || bitsPerSample == 16 || bitsPerSample == 24 || bitsPerSample == 32))
                             foundFmt = true;
                     }
 
@@ -206,33 +230,24 @@ public:
         if (stream == nullptr || buffer.getNumChannels() != numChannels)
             return false;
 
-        // Simple 16-bit implementation
-        if (bitsPerSample == 16)
+        // Use AudioData for proper conversion based on bit depth
+        switch (bitsPerSample)
         {
-            const int frameSize = numChannels * 2;
-            const int bufferSize = numSamples * frameSize;
-            MemoryBlock tempBuffer (bufferSize);
-            auto* destData = static_cast<int16*> (tempBuffer.getData());
+            case 8:
+                return convertToInterleavedDest<AudioData::UInt8> (buffer, numSamples);
 
-            for (int sample = 0; sample < numSamples; ++sample)
-            {
-                for (int channel = 0; channel < numChannels; ++channel)
-                {
-                    float floatValue = buffer.getReadPointer (channel)[sample];
-                    floatValue = jlimit (-1.0f, 1.0f, floatValue);
-                    int16 intValue = static_cast<int16> (floatValue * 32767.0f);
-                    destData[sample * numChannels + channel] = intValue;
-                }
-            }
+            case 16:
+                return convertToInterleavedDest<AudioData::Int16> (buffer, numSamples);
 
-            bool success = stream->write (tempBuffer.getData(), bufferSize);
-            if (success)
-                samplesWritten += numSamples;
+            case 24:
+                return convertToInterleavedDest<AudioData::Int24> (buffer, numSamples);
 
-            return success;
+            case 32:
+                return convertToInterleavedDest<AudioData::Float32> (buffer, numSamples);
+
+            default:
+                return false;
         }
-
-        return false;
     }
 
     bool finalize() override
@@ -265,6 +280,32 @@ private:
     int bitsPerSample;
     int64 samplesWritten;
     bool finalized;
+
+    template <typename DestFormat>
+    bool convertToInterleavedDest (const AudioSampleBuffer& buffer, int numSamples)
+    {
+        using SourceType = AudioData::Pointer<AudioData::Float32, AudioData::NativeEndian, AudioData::NonInterleaved, AudioData::Const>;
+        using DestType = AudioData::Pointer<DestFormat, AudioData::LittleEndian, AudioData::Interleaved, AudioData::NonConst>;
+
+        const int frameSize = numChannels * DestFormat::bytesPerSample;
+        const int bufferSize = numSamples * frameSize;
+        MemoryBlock tempBuffer (bufferSize);
+
+        DestType dest (tempBuffer.getData(), numChannels);
+
+        for (int channel = 0; channel < numChannels; ++channel)
+        {
+            SourceType source (buffer.getReadPointer (channel));
+            DestType channelDest (static_cast<char*> (tempBuffer.getData()) + channel * DestFormat::bytesPerSample, numChannels);
+            channelDest.convertSamples (source, numSamples);
+        }
+
+        bool success = stream->write (tempBuffer.getData(), bufferSize);
+        if (success)
+            samplesWritten += numSamples;
+
+        return success;
+    }
 
     void writeHeader()
     {
@@ -315,6 +356,32 @@ bool WAVAudioFormat::canHandleFile (const File& filePath) const
            (filePath.hasFileExtension (".wav") || filePath.hasFileExtension (".rf64"));
 }
 
+Array<int> WAVAudioFormat::getSupportedBitsPerSample() const
+{
+    Array<int> bitsPerSample;
+    bitsPerSample.add (8);  // 8-bit unsigned PCM
+    bitsPerSample.add (16); // 16-bit signed PCM
+    bitsPerSample.add (24); // 24-bit signed PCM
+    bitsPerSample.add (32); // 32-bit signed PCM
+    return bitsPerSample;
+}
+
+Array<int> WAVAudioFormat::getSupportedSampleRates() const
+{
+    Array<int> sampleRates;
+    sampleRates.add (8000);
+    sampleRates.add (11025);
+    sampleRates.add (16000);
+    sampleRates.add (22050);
+    sampleRates.add (44100);
+    sampleRates.add (48000);
+    sampleRates.add (88200);
+    sampleRates.add (96000);
+    sampleRates.add (176400);
+    sampleRates.add (192000);
+    return sampleRates;
+}
+
 std::unique_ptr<AudioFormatReader> WAVAudioFormat::createReaderFor (InputStream* stream)
 {
     if (stream == nullptr)
@@ -329,7 +396,12 @@ std::unique_ptr<AudioFormatWriter> WAVAudioFormat::createWriterFor (OutputStream
                                                                     int numChannels,
                                                                     int bitsPerSample)
 {
-    if (stream == nullptr || sampleRate <= 0 || numChannels <= 0 || bitsPerSample != 16)
+    if (stream == nullptr || sampleRate <= 0 || numChannels <= 0)
+        return nullptr;
+
+    // Check if the bit depth is supported
+    Array<int> supportedBits = getSupportedBitsPerSample();
+    if (!supportedBits.contains (bitsPerSample))
         return nullptr;
 
     return std::make_unique<WAVAudioFormatWriter> (stream, sampleRate, numChannels, bitsPerSample);

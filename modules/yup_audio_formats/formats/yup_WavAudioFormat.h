@@ -28,8 +28,11 @@ public:
     WAVAudioFormat();
 
     String getFormatName() const override;
-    StringArray getSupportedFileExtensions() const override;
     bool canHandleFile (const File& filePath) const override;
+
+    StringArray getSupportedFileExtensions() const override;
+    Array<int> getSupportedBitsPerSample() const override;
+    Array<int> getSupportedSampleRates() const override;
 
     std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* stream) override;
 

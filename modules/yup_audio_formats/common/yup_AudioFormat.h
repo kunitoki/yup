@@ -29,9 +29,13 @@ public:
 
     virtual String getFormatName() const = 0;
 
+    virtual bool canHandleFile (const File& filePath) const = 0;
+
     virtual StringArray getSupportedFileExtensions() const = 0;
 
-    virtual bool canHandleFile (const File& filePath) const = 0;
+    virtual Array<int> getSupportedBitsPerSample() const = 0;
+
+    virtual Array<int> getSupportedSampleRates() const = 0;
 
     virtual std::unique_ptr<AudioFormatReader> createReaderFor (InputStream* stream) = 0;
 
