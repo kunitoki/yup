@@ -109,7 +109,7 @@ private:
     class Impl;
     friend class Impl;
 
-    void enqueueEvents (Span<Event> newEvents);
+    void enqueueEvents (std::vector<Event> newEvents);
 
     std::unordered_map<String, std::shared_ptr<Impl>> watched;
     std::chrono::milliseconds timeout;

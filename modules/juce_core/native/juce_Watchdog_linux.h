@@ -35,7 +35,7 @@ public:
         if (fd < 0)
             return;
 
-        add_paths (folder);
+        addPaths (folder);
 
         thread = std::thread ([this]
         {
@@ -94,7 +94,7 @@ private:
         }
 
         if (! removedPath.endsWith ("/"))
-            removedPath.append ("/");
+            removedPath << "/";
 
         for (auto it = watchDescriptors.begin(); it != watchDescriptors.end();)
         {
@@ -171,7 +171,7 @@ private:
             {
                 const inotify_event* notifyEvent = reinterpret_cast<const inotify_event*> (ptr);
 
-                auto path = folder / notifyEvent->name;
+                auto path = folder.getChildFile (String::fromUTF8 (notifyEvent->name));
                 if (path.isHidden())
                     continue;
 
@@ -221,11 +221,13 @@ private:
 
             if (! events.empty())
             {
-                if (auto owner = owner.lock())
-                    owner->enqueueEvents (events);
-
                 for (const auto& event : events)
                     updatePathFromEvent (event);
+
+                if (auto lockedOwner = owner.lock())
+                    lockedOwner->enqueueEvents (std::move (events));
+
+                events.clear();
             }
         }
     }
@@ -241,5 +243,3 @@ private:
 };
 
 } // namespace juce
-
-#endif

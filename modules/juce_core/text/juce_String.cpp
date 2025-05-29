@@ -426,13 +426,18 @@ String::String (const std::string& s)
 {
 }
 
+String::String (const std::wstring& s)
+    : text (StringHolderUtils::createFromCharPointer (castToCharPointer_wchar_t (s.data()), s.size()))
+{
+}
+
 String::String (std::string_view s)
     : text (StringHolderUtils::createFromFixedLength (s.data(), s.size()))
 {
 }
 
 String::String (StringRef s)
-    : text (StringHolderUtils::createFromCharPointer (s.text))
+    : text (StringHolderUtils::createFromCharPointer (s.text, s.length()))
 {
 }
 

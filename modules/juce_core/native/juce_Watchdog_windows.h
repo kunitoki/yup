@@ -93,7 +93,7 @@ private:
             {
                 const FILE_NOTIFY_INFORMATION* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*> (rawData);
 
-                auto path = folder / std::wstring (fni->FileName, fni->FileNameLength / sizeof (wchar_t));
+                auto path = folder.getChildFile (std::wstring (fni->FileName, fni->FileNameLength / sizeof (wchar_t)));
                 if (isPathHidden (path))
                     continue;
 
@@ -161,9 +161,9 @@ private:
 
             if (! events.empty())
             {
-                if (auto owner = owner.lock())
+                if (auto lockedOwner = owner.lock())
                 {
-                    owner->enqueueEvents (events);
+                    lockedOwner->enqueueEvents (std::move (events));
                     events.clear();
                 }
                 else

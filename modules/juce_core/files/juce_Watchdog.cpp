@@ -84,7 +84,7 @@ std::size_t Watchdog::dispatchEvents (const EventsCallback& callback)
     return currentEventsCount;
 }
 
-void Watchdog::enqueueEvents (Span<Event> newEvents)
+void Watchdog::enqueueEvents (std::vector<Event> newEvents)
 {
     auto lg = std::lock_guard (eventsMutex);
 
