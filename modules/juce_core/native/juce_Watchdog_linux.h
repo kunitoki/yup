@@ -69,7 +69,7 @@ private:
             return;
 
         const auto wd = inotify_add_watch (fd,
-                                           pathString.getFullPathName().toRawUTF8(),
+                                           pathString.toRawUTF8(),
                                            IN_ATTRIB | IN_CREATE | IN_DELETE | IN_DELETE_SELF | IN_MODIFY | IN_MOVE_SELF | IN_MOVED_TO | IN_MOVED_FROM);
         if (wd < 0)
             return;
@@ -116,11 +116,8 @@ private:
         {
             addPath (path);
 
-            for (const auto& entry : path.findChildFiles (File::findDirectories, true))
-            {
-                if (entry.isDirectory())
-                    addPaths (entry);
-            }
+            for (const auto& entry : path.findChildFiles (File::findDirectories, false))
+                addPaths (entry);
         }
     }
 
