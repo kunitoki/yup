@@ -95,7 +95,7 @@ private:
             {
                 const FILE_NOTIFY_INFORMATION* fni = reinterpret_cast<FILE_NOTIFY_INFORMATION*> (rawData);
 
-                auto path = folder.getChildFile (String (fni->FileName, fni->FileNameLength / sizeof (wchar_t));
+                auto path = folder.getChildFile (String (fni->FileName, fni->FileNameLength / sizeof (wchar_t)));
                 if (path.isHidden())
                     continue;
 
