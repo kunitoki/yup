@@ -19,17 +19,30 @@
 
 #==============================================================================
 
+macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_tag)
+    if (NOT DEFINED FETCHCONTENT_BASE_DIR)
+        set (FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/externals")
+    endif()
+
+    FetchContent_Declare(
+		"${name}"
+		DOWNLOAD_COMMAND
+			cd "${FETCHCONTENT_BASE_DIR}/${name}-src" &&
+			git init &&
+			git fetch --depth=1 --progress "${git_repository}" "${git_tag}" &&
+			git reset --hard FETCH_HEAD)
+endmacro()
+
+#==============================================================================
+
 function (_yup_fetch_sdl2)
     if (TARGET sdl2::sdl2)
         return()
     endif()
 
-    FetchContent_Declare (SDL2
+    _yup_fetchcontent_declare (SDL2
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-2.30.10
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/SDL2
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE)
+        GIT_TAG release-2.30.10)
 
     set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set (SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -63,12 +76,9 @@ function (_yup_fetch_perfetto)
         return()
     endif()
 
-    FetchContent_Declare (Perfetto
+    _yup_fetchcontent_declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
-        GIT_TAG v42.0
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/Perfetto
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE)
+        GIT_TAG v42.0)
 
     FetchContent_MakeAvailable (Perfetto)
 
@@ -94,4 +104,28 @@ function (_yup_fetch_perfetto)
     endif()
 
     add_library (perfetto::perfetto ALIAS perfetto)
+endfunction()
+
+#==============================================================================
+
+function (_yup_fetch_googletest)
+    if (TARGET GTest::gtest_main)
+        return()
+    endif()
+
+    if (YUP_PLATFORM_EMSCRIPTEN)
+        set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+    endif()
+
+    _yup_fetchcontent_declare (googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.17.0)
+
+    set (gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable (googletest)
+
+    set_target_properties (gtest PROPERTIES FOLDER "Tests")
+    set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
+    set_target_properties (gmock PROPERTIES FOLDER "Tests")
+    set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 endfunction()

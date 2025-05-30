@@ -303,7 +303,7 @@ endfunction()
 
 #==============================================================================
 
-function (yup_add_module module_path)
+function (yup_add_module module_path module_group)
     get_filename_component (module_path ${module_path} ABSOLUTE)
     get_filename_component (module_name ${module_path} NAME)
 
@@ -321,7 +321,7 @@ function (yup_add_module module_path)
 
     # ==== Add module as library
     add_library (${module_name} INTERFACE)
-    set_target_properties (${module_name} PROPERTIES FOLDER "Modules")
+    set_target_properties (${module_name} PROPERTIES FOLDER "${module_group}")
 
     # ==== Parse module declaration string
     _yup_module_parse_config ("${module_header}" module_configs module_user_configs)
@@ -500,27 +500,30 @@ endfunction()
 #==============================================================================
 
 function (_yup_add_default_modules modules_path)
-    yup_add_module (${modules_path}/thirdparty/zlib)
-    yup_add_module (${modules_path}/thirdparty/glad)
-    yup_add_module (${modules_path}/thirdparty/harfbuzz)
-    yup_add_module (${modules_path}/thirdparty/libpng)
-    yup_add_module (${modules_path}/thirdparty/libwebp)
-    yup_add_module (${modules_path}/thirdparty/sheenbidi)
-    yup_add_module (${modules_path}/thirdparty/yoga_library)
-    yup_add_module (${modules_path}/thirdparty/rive)
-    yup_add_module (${modules_path}/thirdparty/rive_decoders)
-    yup_add_module (${modules_path}/thirdparty/rive_renderer)
-    yup_add_module (${modules_path}/thirdparty/oboe_library)
+    set (thirdparty_group "Thirdparty")
+    set (modules_group "Modules")
+
+    yup_add_module (${modules_path}/thirdparty/zlib ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/glad ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/harfbuzz ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/libpng ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/libwebp ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/sheenbidi ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/yoga_library ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive_decoders ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/rive_renderer ${thirdparty_group})
+    yup_add_module (${modules_path}/thirdparty/oboe_library ${thirdparty_group})
 
     # Original juce modules
-    yup_add_module (${modules_path}/modules/juce_core)
-    yup_add_module (${modules_path}/modules/juce_events)
-    yup_add_module (${modules_path}/modules/juce_audio_basics)
-    yup_add_module (${modules_path}/modules/juce_audio_devices)
+    yup_add_module (${modules_path}/modules/juce_core ${modules_group})
+    yup_add_module (${modules_path}/modules/juce_events ${modules_group})
+    yup_add_module (${modules_path}/modules/juce_audio_basics ${modules_group})
+    yup_add_module (${modules_path}/modules/juce_audio_devices ${modules_group})
 
     # New yup modules
-    yup_add_module (${modules_path}/modules/yup_audio_processors)
-    yup_add_module (${modules_path}/modules/yup_audio_plugin_client)
-    yup_add_module (${modules_path}/modules/yup_graphics)
-    yup_add_module (${modules_path}/modules/yup_gui)
+    yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
 endfunction()
