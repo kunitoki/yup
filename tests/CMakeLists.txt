@@ -38,8 +38,8 @@ _yup_fetchcontent_declare (googletest
 FetchContent_MakeAvailable (googletest)
 
 if (YUP_PLATFORM_EMSCRIPTEN)
-    target_compile_options(gmock PRIVATE -pthread)
-    target_compile_options(gtest PRIVATE -pthread)
+    target_compile_options (gmock PRIVATE -pthread)
+    target_compile_options (gtest PRIVATE -pthread)
 endif()
 
 set_target_properties (gtest PROPERTIES FOLDER "Tests")
