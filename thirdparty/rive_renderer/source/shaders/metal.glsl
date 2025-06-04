@@ -46,6 +46,7 @@
 #define OUT(ARG_TYPE) $thread ARG_TYPE&
 #define INOUT(ARG_TYPE) $thread ARG_TYPE&
 
+#define equal(A, B) ((A) == (B))
 #define notEqual(A, B) ((A) != (B))
 #define lessThanEqual(A, B) ((A) <= (B))
 #define lessThan(A, B) ((A) < (B))
@@ -108,11 +109,11 @@
     ;
 
 #define STORAGE_BUFFER_U32x2(IDX, GLSL_STRUCT_NAME, NAME)                      \
-    $constant uint2* NAME [[$buffer(IDX)]]
+    $constant uint2* NAME [[$buffer(METAL_BUFFER_IDX(IDX))]]
 #define STORAGE_BUFFER_U32x4(IDX, GLSL_STRUCT_NAME, NAME)                      \
-    $constant uint4* NAME [[$buffer(IDX)]]
+    $constant uint4* NAME [[$buffer(METAL_BUFFER_IDX(IDX))]]
 #define STORAGE_BUFFER_F32x4(IDX, GLSL_STRUCT_NAME, NAME)                      \
-    $constant float4* NAME [[$buffer(IDX)]]
+    $constant float4* NAME [[$buffer(METAL_BUFFER_IDX(IDX))]]
 #define STORAGE_BUFFER_LOAD4(NAME, I) _buffers.NAME[I]
 #define STORAGE_BUFFER_LOAD2(NAME, I) _buffers.NAME[I]
 
@@ -130,30 +131,46 @@
     }                                                                          \
     ;
 
+#define DYNAMIC_SAMPLER_BLOCK_BEGIN                                            \
+    struct DynamicSamplers                                                     \
+    {
+#define DYNAMIC_SAMPLER_BLOCK_END                                              \
+    }                                                                          \
+    ;
+
 #define TEXTURE_RGBA32UI(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<uint> NAME
 #define TEXTURE_RGBA32F(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<float> NAME
 #define TEXTURE_RGBA8(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<half> NAME
 #define TEXTURE_R16F(SET, IDX, NAME) [[$texture(IDX)]] $texture2d<half> NAME
-#define SAMPLED_R16F_REF(NAME, SAMPLER_NAME)                                   \
-    $thread $const $texture2d<half>&NAME, $const $thread $sampler &SAMPLER_NAME
-#define SAMPLED_R16F(NAME, SAMPLER_NAME) _textures.NAME, SAMPLER_NAME
+#define TEXTURE_R16F_1D_ARRAY(SET, IDX, NAME)                                  \
+    [[$texture(IDX)]] $texture1d_array<half> NAME
 
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
     $constexpr $sampler NAME($filter::$linear, $mip_filter::$none);
 #define SAMPLER_MIPMAP(TEXTURE_IDX, NAME)                                      \
     $constexpr $sampler NAME($filter::$linear, $mip_filter::$linear);
-
+#define SAMPLER_DYNAMIC(SAMPLER_IDX, NAME)                                     \
+    [[$sampler(SAMPLER_IDX)]] $sampler NAME;
 #define TEXEL_FETCH(TEXTURE, COORD) _textures.TEXTURE.$read(uint2(COORD))
 #define TEXTURE_SAMPLE(TEXTURE, SAMPLER_NAME, COORD)                           \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD)
-#define TEXTURE_REF_SAMPLE_LOD(TEXTURE_REF, SAMPLER_NAME, COORD, LOD)          \
-    TEXTURE_REF.$sample(SAMPLER_NAME, COORD, $level(LOD))
 #define TEXTURE_SAMPLE_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)                  \
-    TEXTURE_REF_SAMPLE_LOD(_textures.TEXTURE, SAMPLER_NAME, COORD, LOD)
+    _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $level(LOD))
 #define TEXTURE_SAMPLE_GRAD(TEXTURE, SAMPLER_NAME, COORD, DDX, DDY)            \
     _textures.TEXTURE.$sample(SAMPLER_NAME, COORD, $gradient2d(DDX, DDY))
 #define TEXTURE_GATHER(TEXTURE, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)     \
     _textures.TEXTURE.$gather(SAMPLER_NAME, (COORD) * (TEXTURE_INVERSE_SIZE))
+#define TEXTURE_SAMPLE_DYNAMIC(TEXTURE, SAMPLER_NAME, COORD)                   \
+    _textures.TEXTURE.$sample(_dynamicSampler.SAMPLER_NAME, COORD)
+#define TEXTURE_SAMPLE_DYNAMIC_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)          \
+    _textures.TEXTURE.$sample(_dynamicSampler.SAMPLER_NAME, COORD, $level(LOD))
+#define TEXTURE_SAMPLE_LOD_1D_ARRAY(TEXTURE,                                   \
+                                    SAMPLER_NAME,                              \
+                                    X,                                         \
+                                    ARRAY_INDEX,                               \
+                                    ARRAY_INDEX_NORMALIZED,                    \
+                                    LOD)                                       \
+    _textures.TEXTURE.$sample(SAMPLER_NAME, X, ARRAY_INDEX)
 
 #define VERTEX_CONTEXT_DECL                                                    \
     , $constant @FlushUniforms &uniforms, VertexTextures _textures,            \
@@ -166,9 +183,9 @@
         uint _vertexID [[$vertex_id]],                                         \
         uint _instanceID [[$instance_id]],                                     \
         $constant uint& _baseInstance                                          \
-        [[$buffer(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)]],                    \
+        [[$buffer(METAL_BUFFER_IDX(PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX))]],  \
         $constant @FlushUniforms& uniforms                                     \
-        [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant Attrs* attrs [[$buffer(0)]],                                 \
         VertexTextures _textures,                                              \
         VertexStorageBuffers _buffers)                                         \
@@ -181,7 +198,7 @@
         uint _vertexID [[$vertex_id]],                                         \
         uint _instanceID [[$instance_id]],                                     \
         $constant @FlushUniforms& uniforms                                     \
-        [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant Attrs* attrs [[$buffer(0)]],                                 \
         VertexTextures _textures,                                              \
         VertexStorageBuffers _buffers)                                         \
@@ -193,9 +210,9 @@
     $__attribute__(($visibility("default"))) Varyings $vertex NAME(            \
         uint _vertexID [[$vertex_id]],                                         \
         $constant @FlushUniforms& uniforms                                     \
-        [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant @ImageDrawUniforms& imageDrawUniforms                        \
-        [[$buffer(IMAGE_DRAW_UNIFORM_BUFFER_IDX)]],                            \
+        [[$buffer(METAL_BUFFER_IDX(IMAGE_DRAW_UNIFORM_BUFFER_IDX))]],          \
         $constant Attrs* attrs [[$buffer(0)]],                                 \
         VertexTextures _textures,                                              \
         VertexStorageBuffers _buffers)                                         \
@@ -211,9 +228,9 @@
     $__attribute__(($visibility("default"))) Varyings $vertex NAME(            \
         uint _vertexID [[$vertex_id]],                                         \
         $constant @FlushUniforms& uniforms                                     \
-        [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant @ImageDrawUniforms& imageDrawUniforms                        \
-        [[$buffer(IMAGE_DRAW_UNIFORM_BUFFER_IDX)]],                            \
+        [[$buffer(METAL_BUFFER_IDX(IMAGE_DRAW_UNIFORM_BUFFER_IDX))]],          \
         $constant PositionAttr* position [[$buffer(0)]],                       \
         $constant UVAttr* uv [[$buffer(1)]])                                   \
     {                                                                          \
@@ -236,8 +253,9 @@
 
 #define FRAGMENT_CONTEXT_DECL                                                  \
     , float2 _fragCoord, FragmentTextures _textures,                           \
-        FragmentStorageBuffers _buffers
-#define FRAGMENT_CONTEXT_UNPACK , _fragCoord, _textures, _buffers
+        FragmentStorageBuffers _buffers, DynamicSamplers _dynamicSampler
+#define FRAGMENT_CONTEXT_UNPACK                                                \
+    , _fragCoord, _textures, _buffers, _dynamicSampler
 
 #define TEXTURE_CONTEXT_DECL , FragmentTextures _textures
 #define TEXTURE_CONTEXT_FORWARD , _textures
@@ -254,22 +272,28 @@
 // buffers by DEFAULT_BINDINGS_SET_SIZE.
 #define PLS_DECL4F(IDX, NAME)                                                  \
     $device uint* NAME                                                         \
-        [[$buffer(IDX + DEFAULT_BINDINGS_SET_SIZE), $raster_order_group(0)]]
+        [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE)),          \
+          $raster_order_group(0)]]
 #define PLS_DECLUI(IDX, NAME)                                                  \
     $device uint* NAME                                                         \
-        [[$buffer(IDX + DEFAULT_BINDINGS_SET_SIZE), $raster_order_group(0)]]
+        [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE)),          \
+          $raster_order_group(0)]]
 #define PLS_DECLUI_ATOMIC(IDX, NAME)                                           \
     $device $atomic_uint* NAME                                                 \
-        [[$buffer(IDX + DEFAULT_BINDINGS_SET_SIZE), $raster_order_group(0)]]
+        [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE)),          \
+          $raster_order_group(0)]]
 #else
 // Since the PLS plane indices collide with other buffer bindings, offset the
 // binding indices of these buffers by DEFAULT_BINDINGS_SET_SIZE.
 #define PLS_DECL4F(IDX, NAME)                                                  \
-    $device uint* NAME [[$buffer(IDX + DEFAULT_BINDINGS_SET_SIZE)]]
+    $device uint* NAME                                                         \
+        [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE))]]
 #define PLS_DECLUI(IDX, NAME)                                                  \
-    $device uint* NAME [[$buffer(IDX + DEFAULT_BINDINGS_SET_SIZE)]]
+    $device uint* NAME                                                         \
+        [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE))]]
 #define PLS_DECLUI_ATOMIC(IDX, NAME)                                           \
-    $device $atomic_uint* NAME [[$buffer(IDX + DEFAULT_BINDINGS_SET_SIZE)]]
+    $device $atomic_uint* NAME                                                 \
+        [[$buffer(METAL_BUFFER_IDX(IDX + DEFAULT_BINDINGS_SET_SIZE))]]
 #endif // @PLS_IMPL_DEVICE_BUFFER_RASTER_ORDERED
 #define PLS_BLOCK_END                                                          \
     }                                                                          \
@@ -308,9 +332,10 @@
     $__attribute__(($visibility("default"))) $fragment NAME(                   \
         PLS _pls,                                                              \
         $constant @FlushUniforms& uniforms                                     \
-        [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         Varyings _varyings [[$stage_in]],                                      \
         FragmentTextures _textures,                                            \
+        DynamicSamplers _dynamicSampler,                                       \
         FragmentStorageBuffers _buffers)                                       \
     {                                                                          \
         float2 _fragCoord = _varyings._pos.xy;                                 \
@@ -321,10 +346,11 @@
     $__attribute__(($visibility("default"))) $fragment NAME(                   \
         PLS _pls,                                                              \
         $constant @FlushUniforms& uniforms                                     \
-        [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                                 \
+        [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],               \
         $constant @ImageDrawUniforms& imageDrawUniforms                        \
-        [[$buffer(IMAGE_DRAW_UNIFORM_BUFFER_IDX)]],                            \
+        [[$buffer(METAL_BUFFER_IDX(IMAGE_DRAW_UNIFORM_BUFFER_IDX))]],          \
         Varyings _varyings [[$stage_in]],                                      \
+        DynamicSamplers _dynamicSampler,                                       \
         FragmentTextures _textures,                                            \
         FragmentStorageBuffers _buffers)                                       \
     {                                                                          \
@@ -406,19 +432,22 @@ INLINE uint pls_atomic_add($thread uint& dst, uint x)
     PLS_METAL_MAIN(NAME,                                                       \
                    PLS _inpls,                                                 \
                    $constant @FlushUniforms& uniforms                          \
-                   [[$buffer(FLUSH_UNIFORM_BUFFER_IDX)]],                      \
+                   [[$buffer(METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX))]],    \
                    Varyings _varyings [[$stage_in]],                           \
+                   DynamicSamplers _dynamicSampler,                            \
                    FragmentTextures _textures,                                 \
                    FragmentStorageBuffers _buffers)
 
 #define PLS_MAIN_WITH_IMAGE_UNIFORMS(NAME)                                     \
-    PLS_METAL_MAIN(NAME,                                                       \
-                   PLS _inpls,                                                 \
-                   Varyings _varyings [[$stage_in]],                           \
-                   FragmentTextures _textures,                                 \
-                   FragmentStorageBuffers _buffers,                            \
-                   $constant @ImageDrawUniforms& imageDrawUniforms             \
-                   [[$buffer(IMAGE_DRAW_UNIFORM_BUFFER_IDX)]])
+    PLS_METAL_MAIN(                                                            \
+        NAME,                                                                  \
+        PLS _inpls,                                                            \
+        Varyings _varyings [[$stage_in]],                                      \
+        FragmentTextures _textures,                                            \
+        FragmentStorageBuffers _buffers,                                       \
+        DynamicSamplers _dynamicSampler,                                       \
+        $constant @ImageDrawUniforms& imageDrawUniforms                        \
+        [[$buffer(METAL_BUFFER_IDX(IMAGE_DRAW_UNIFORM_BUFFER_IDX))]])
 
 #define EMIT_PLS                                                               \
     }                                                                          \
@@ -445,20 +474,22 @@ INLINE uint pls_atomic_add($thread uint& dst, uint x)
                               FragmentStorageBuffers _buffers)
 
 #define PLS_FRAG_COLOR_MAIN_WITH_IMAGE_UNIFORMS(NAME)                          \
-    PLS_FRAG_COLOR_METAL_MAIN(NAME,                                            \
-                              PLS _inpls,                                      \
-                              Varyings _varyings [[$stage_in]],                \
-                              FragmentTextures _textures,                      \
-                              FragmentStorageBuffers _buffers,                 \
-                              $__VA_ARGS__ $constant                           \
-                              @ImageDrawUniforms& imageDrawUniforms            \
-                              [[$buffer(IMAGE_DRAW_UNIFORM_BUFFER_IDX)]])
+    PLS_FRAG_COLOR_METAL_MAIN(                                                 \
+        NAME,                                                                  \
+        PLS _inpls,                                                            \
+        Varyings _varyings [[$stage_in]],                                      \
+        FragmentTextures _textures,                                            \
+        FragmentStorageBuffers _buffers,                                       \
+        $__VA_ARGS__ $constant @ImageDrawUniforms& imageDrawUniforms           \
+        [[$buffer(METAL_BUFFER_IDX(IMAGE_DRAW_UNIFORM_BUFFER_IDX))]])
 
 #define EMIT_PLS_AND_FRAG_COLOR                                                \
     }                                                                          \
     return {._color = _fragColor, ._pls = _pls};
 
 #endif // PLS_IMPL_DEVICE_BUFFER
+
+#define PLS_DECL4F_READONLY PLS_DECL4F
 
 #define discard $discard_fragment()
 
@@ -511,5 +542,7 @@ INLINE float2 mix(float2 a, float2 b, bool2 c)
         result[i] = c[i] ? b[i] : a[i];
     return result;
 }
+
+INLINE float2 mix(float2 a, float2 b, float t) { return mix(a, b, float2(t)); }
 
 INLINE float mod(float x, float y) { return $fmod(x, y); }

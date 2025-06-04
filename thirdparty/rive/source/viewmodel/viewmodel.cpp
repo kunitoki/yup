@@ -9,6 +9,14 @@
 
 using namespace rive;
 
+ViewModel::~ViewModel()
+{
+    for (auto& property : m_Properties)
+    {
+        delete property;
+    }
+}
+
 void ViewModel::addProperty(ViewModelProperty* property)
 {
     m_Properties.push_back(property);
@@ -71,3 +79,5 @@ ViewModelInstance* ViewModel::instance(const std::string& name)
     }
     return nullptr;
 }
+
+size_t ViewModel::instanceCount() const { return m_Instances.size(); }

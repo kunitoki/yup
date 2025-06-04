@@ -4,8 +4,6 @@
 
 #include "rive/renderer/gl/gles3.hpp"
 
-#ifdef RIVE_ANDROID
-
 #include <EGL/egl.h>
 
 PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEEXTPROC
@@ -57,5 +55,3 @@ void LoadGLESExtensions(const GLCapabilities& extensions)
         loadedExtensions.EXT_multisampled_render_to_texture = true;
     }
 }
-
-#endif

@@ -303,7 +303,8 @@ void StyledText::update()
                                        maxSize.getWidth(),
                                        ellipsisLine == lineIndex,
                                        isEllipsisLineLast,
-                                       &ellipsisRun));
+                                       &ellipsisRun,
+                                       y));
             }
 
             float x = line.startX;

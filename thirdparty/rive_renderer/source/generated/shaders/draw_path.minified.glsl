@@ -1,271 +1,283 @@
-#ifdef VERTEX
-L0(e0)
-#ifdef DRAW_INTERIOR_TRIANGLES
-h0(0,R3,IB);
+#ifdef ENABLE_ADVANCED_BLEND
+#define o6 !ENABLE_ADVANCED_BLEND
 #else
-h0(0,e,LB);h0(1,e,MB);
+#define o6 true
 #endif
-M0
+#ifdef VERTEX
+U0(f0)
+#ifdef DRAW_INTERIOR_TRIANGLES
+i0(0,a4,IB);
+#else
+i0(0,f,LB);i0(1,f,MB);
 #endif
-o1 o0 H(0,e,X0);
-#ifdef ATLAS_COVERAGE
-o0 H(1,c,N1);
+V0
+#endif
+o1 n0 H(0,f,H1);
+#ifdef ATLAS_BLIT
+n0 H(1,c,Q0);
 #elif!defined(RENDER_MODE_MSAA)
 #ifdef DRAW_INTERIOR_TRIANGLES
-OPTIONALLY_FLAT H(1,h,a1);
+OPTIONALLY_FLAT H(1,g,i1);
 #elif defined(ENABLE_FEATHER)
-o0 H(2,e,q);
+n0 H(2,f,D);
 #else
-o0 H(2,C,q);
+n0 H(2,G,D);
 #endif
-OPTIONALLY_FLAT H(3,h,i0);
+OPTIONALLY_FLAT H(3,g,j0);
 #endif
 #ifdef ENABLE_CLIPPING
-OPTIONALLY_FLAT H(4,h,h1);
+OPTIONALLY_FLAT H(4,G,i3);
 #endif
 #ifdef ENABLE_CLIP_RECT
-o0 H(5,e,F0);
+n0 H(5,f,R0);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-OPTIONALLY_FLAT H(6,h,E3);
+OPTIONALLY_FLAT H(6,g,U3);
 #endif
 p1
 #ifdef VERTEX
-Z0(PB,e0,o,l,I){
+q1(PB,f0,B,n,K){
 #ifdef DRAW_INTERIOR_TRIANGLES
-k0(l,o,IB,a0);
+l0(n,B,IB,Z);
 #else
-k0(l,o,LB,e);k0(l,o,MB,e);
+l0(n,B,LB,f);l0(n,B,MB,f);
 #endif
-P(X0,e);
-#ifdef ATLAS_COVERAGE
-P(N1,c);
+L(H1,f);
+#ifdef ATLAS_BLIT
+L(Q0,c);
 #elif!defined(RENDER_MODE_MSAA)
 #ifdef DRAW_INTERIOR_TRIANGLES
-P(a1,h);
+L(i1,g);
 #elif defined(ENABLE_FEATHER)
-P(q,e);
+L(D,f);
 #else
-P(q,C);
+L(D,G);
 #endif
-P(i0,h);
+L(j0,g);
 #endif
 #ifdef ENABLE_CLIPPING
-P(h1,h);
+L(i3,G);
 #endif
 #ifdef ENABLE_CLIP_RECT
-P(F0,e);
+L(R0,f);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-P(E3,h);
+L(U3,g);
 #endif
-bool fa=false;uint d0;c K;
+bool Eb=false;uint R;c J;
 #ifdef RENDER_MODE_MSAA
-O z6;
+a0 z7;
 #endif
-#ifdef ATLAS_COVERAGE
-K=Y8(IB,d0,
+#ifdef ATLAS_BLIT
+J=a8(IB,R,
 #ifdef RENDER_MODE_MSAA
-z6,
+z7,
 #endif
-N1 g2);
+Q0 Y1);
 #elif defined(DRAW_INTERIOR_TRIANGLES)
-K=g7(IB,d0
+J=c8(IB,R
 #ifdef RENDER_MODE_MSAA
-,z6
+,z7
 #else
-,a1
+,i1
 #endif
-g2);
+Y1);
 #else
-e M;fa=!S5(LB,MB,I,d0,K
+f O;Eb=!E6(LB,MB,K,R,J
 #ifndef RENDER_MODE_MSAA
-,M
+,O
 #else
-,z6
+,z7
 #endif
-g2);
+Y1);
 #ifndef RENDER_MODE_MSAA
 #ifdef ENABLE_FEATHER
-q=M;
+D=O;
 #else
-q.xy=T5(M.xy);
+D.xy=F6(O.xy);
 #endif
 #endif
 #endif
-E0 z0=a4(CC,d0);
-#if!defined(ATLAS_COVERAGE)&&!defined(RENDER_MODE_MSAA)
-i0=o6(d0,m.F4);if((z0.x&v7)!=0u)i0=-i0;
+N0 F0=k4(DC,R);
+#if!defined(ATLAS_BLIT)&&!defined(RENDER_MODE_MSAA)
+j0=g7(R,q.d5);if((F0.x&p8)!=0u)j0=-j0;
 #endif
-uint y1=z0.x&0xfu;
+uint J1=F0.x&0xfu;
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){uint zc=(y1==c6?z0.y:z0.x)>>16;h1=o6(zc,m.F4);if(y1==c6)h1=-h1;}
+if(ENABLE_CLIPPING){uint te=(J1==N6?F0.y:F0.x)>>16;g Z0=g7(te,q.d5);if(J1==N6)Z0=-Z0;i3.x=Z0;}
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND){E3=float((z0.x>>4)&0xfu);}
+if(ENABLE_ADVANCED_BLEND){U3=float((F0.x>>4)&0xfu);}
 #endif
-c r5=K;
+c p6=J;
 #ifdef FRAMEBUFFER_BOTTOM_UP
-r5.y=float(m.Tb)-r5.y;
+p6.y=float(q.id)-p6.y;
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){Y F1=r1(r0(JB,d0*4u+2u));e O1=r0(JB,d0*4u+3u);
+if(ENABLE_CLIP_RECT){S R1=D1(w0(KB,R*4u+2u));f Z1=w0(KB,R*4u+3u);
 #ifndef RENDER_MODE_MSAA
-F0=W5(F1,O1.xy,r5);
+R0=I6(R1,Z1.xy,p6);
 #else
-G9(F1,O1.xy,r5);
+Ka(R1,Z1.xy,p6);
 #endif
 }
 #endif
-if(y1==w7){i j=unpackUnorm4x8(z0.y);X0=e(j);}
+if(J1==q8){i j=unpackUnorm4x8(F0.y);if(o6)j.xyz*=j.w;H1=f(j);}
 #ifdef ENABLE_CLIPPING
-else if(ENABLE_CLIPPING&&y1==c6){h A6=o6(z0.x>>16,m.F4);X0=e(A6,0,0,0);}
+else if(ENABLE_CLIPPING&&J1==N6){g A7=g7(F0.x>>16,q.d5);i3.y=A7;}
 #endif
-else{Y Ac=r1(r0(JB,d0*4u));e B6=r0(JB,d0*4u+1u);c w2=q0(Ac,r5)+B6.xy;if(y1==d6||y1==cc){X0.w=-uintBitsToFloat(z0.y);float Bc=B6.z;if(Bc>.9){X0.z=2.;}else{X0.z=B6.w;}if(y1==d6){X0.y=.0;X0.x=w2.x;}else{X0.z=-X0.z;X0.xy=w2.xy;}}else{float G2=uintBitsToFloat(z0.y);float q5=B6.z;X0=e(w2.x,w2.y,G2,-2.-q5);}}e Q;if(!fa){Q=v2(K);
+else{S ue=D1(w0(KB,R*4u));f B7=w0(KB,R*4u+1u);c G2=C0(ue,p6)+B7.xy;if(J1==O6||J1==td){H1.w=-uintBitsToFloat(F0.y);float ve=B7.z;if(ve>.9){H1.z=2.;}else{H1.z=B7.w;}if(J1==O6){H1.y=.0;H1.x=G2.x;}else{H1.z=-H1.z;H1.xy=G2.xy;}}else{float H2=uintBitsToFloat(F0.y);float d6=B7.z;H1=f(G2.x,G2.y,H2,-2.-d6);}}f Q;if(!Eb){Q=F2(J);
 #ifdef POST_INVERT_Y
 Q.y=-Q.y;
 #endif
 #ifdef RENDER_MODE_MSAA
-Q.z=N7(z6);
+Q.z=S8(z7);
 #endif
-}else{Q=e(m.q1,m.q1,m.q1,m.q1);}X(X0);
-#ifdef ATLAS_COVERAGE
-X(N1);
+}else{Q=f(q.C1,q.C1,q.C1,q.C1);}P(H1);
+#ifdef ATLAS_BLIT
+P(Q0);
 #elif!defined(RENDER_MODE_MSAA)
 #ifdef DRAW_INTERIOR_TRIANGLES
-X(a1);
+P(i1);
 #elif defined(ENABLE_FEATHER)
-X(q);
+P(D);
 #else
-X(q);
+P(D);
 #endif
-X(i0);
+P(j0);
 #endif
 #ifdef ENABLE_CLIPPING
-X(h1);
+P(i3);
 #endif
 #ifdef ENABLE_CLIP_RECT
-X(F0);
+P(R0);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-X(E3);
+P(U3);
 #endif
-U0(Q);}
+h1(Q);}
 #endif
 #ifdef FRAGMENT
-j3 k3 d i ga(e x2 Z4){if(x2.w>=.0){return g5(x2);}else if(x2.w>-1.){float t=x2.z>.0?x2.x:length(x2.xy);t=clamp(t,.0,1.);float ha=abs(x2.z);float x=ha>1.?(1.-1./O7)*t+(.5/O7):(1./O7)*t+ha;float Cc=-x2.w;return S1(KC,x7,c(x,Cc),.0);}else{h q5=-x2.w-2.;i j=S1(UB,q3,x2.xy,q5);h G2=x2.z;j.w*=G2;return j;}}
+w3 x3 d i Fb(f J2,float E C5){i j;if(J2.w>=.0){j=I5(J2);if(o6)j*=E;else j.w*=E;}else if(J2.w>-1.){float t=J2.z>.0?J2.x:length(J2.xy);t=clamp(t,.0,1.);float Gb=abs(J2.z);float x=Gb>1.?(1.-1./T8)*t+(.5/T8):(1./T8)*t+Gb;float we=-J2.w;j=T1(MC,r8,c(x,we),.0);j.w*=E;if(o6)j.xyz*=j.w;}else{g d6=-J2.w-2.;j=C7(UB,B3,J2.xy,d6);g H2=J2.z*E;if(o6)j*=H2;else j=E1(Y3(j),j.w*H2);}return j;}
 #ifndef RENDER_MODE_MSAA
-k2 N0(l7,B0);P0(Y4,c1);N0(X9,D3);P0(n7,i4);l2 n2(NB){Z(X0,e);
-#ifdef ATLAS_COVERAGE
-Z(N1,c);
+x2 M0(i8,H0);Y0(B5,r1);M0(bb,N3);Y0(k8,x4);y2 z2(NB){N(H1,f);
+#ifdef ATLAS_BLIT
+N(Q0,c);
 #elif!defined(RENDER_MODE_MSAA)
 #ifdef DRAW_INTERIOR_TRIANGLES
-Z(a1,h);
+N(i1,g);
 #elif defined(ENABLE_FEATHER)
-Z(q,e);
+N(D,f);
 #else
-Z(q,C);
+N(D,G);
 #endif
-Z(i0,h);
+N(j0,g);
 #endif
 #ifdef ENABLE_CLIPPING
-Z(h1,h);
+N(i3,G);
 #endif
 #ifdef ENABLE_CLIP_RECT
-Z(F0,e);
+N(R0,f);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-Z(E3,h);
+N(U3,g);
 #endif
-#if!defined(DRAW_INTERIOR_TRIANGLES)||defined(ATLAS_COVERAGE)
-W1;
+#if!defined(DRAW_INTERIOR_TRIANGLES)||defined(ATLAS_BLIT)
+h2;
 #endif
-h J;
-#ifdef ATLAS_COVERAGE
-J=C7(N1,m.f5 z1);
+g E;
+#ifdef ATLAS_BLIT
+E=W6(Q0,q.U4 x1);
 #else
-C A3=unpackHalf2x16(V0(i4));h ia=A3.y;h R1=ia==i0?A3.x:d1(.0);
+G L3=unpackHalf2x16(j1(x4));g Hb=L3.y;g F1=Hb==j0?L3.x:v1(.0);
 #ifdef DRAW_INTERIOR_TRIANGLES
-R1+=a1;X1(i4);
+F1+=i1;i2(x4);
 #else
-if(j6(q)){h m0;
+if(U6(D)){g r0;
 #ifdef ENABLE_FEATHER
-if(ENABLE_FEATHER&&z7(q)){m0=g6(q z1);}else
+if(ENABLE_FEATHER&&w8(D)){r0=R6(D x1);}else
 #endif
-{m0=min(q.x,q.y);}R1=max(m0,R1);}else{h m0;
+{r0=min(D.x,D.y);}F1=max(r0,F1);}else{g r0;
 #if defined(ENABLE_FEATHER)
-if(ENABLE_FEATHER&&h6(q)){m0=A4(q z1);}else
+if(ENABLE_FEATHER&&S6(D)){r0=S4(D x1);}else
 #endif
-{m0=q.x;}R1+=m0;}W0(i4,packHalf2x16(Q3(R1,i0)));
+{r0=D.x;}F1+=r0;}l1(x4,packHalf2x16(Z3(F1,j0)));
 #endif
 #ifdef CLOCKWISE_FILL
-if(CLOCKWISE_FILL){J=clamp(R1,d1(.0),d1(1.));}else
+if(CLOCKWISE_FILL){
+#ifdef VULKAN_VENDOR_ID
+if(VULKAN_VENDOR_ID==yd){if(F1<.0)E=.0;else if(F1<=1.)E=F1;else E=1.;}else
 #endif
-{J=abs(R1);
+{E=clamp(F1,v1(.0),v1(1.));}}else
+#endif
+{E=abs(F1);
 #ifdef ENABLE_EVEN_ODD
-if(ENABLE_EVEN_ODD&&i0<.0){J=1.-d1(abs(fract(J*.5)*2.+-1.));}
+if(ENABLE_EVEN_ODD&&j0<.0){E=1.-v1(abs(fract(E*.5)*2.+-1.));}
 #endif
-J=min(J,d1(1.));}
+E=min(E,v1(1.));}
 #endif
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&h1<.0){h m2=-h1;
+if(ENABLE_CLIPPING&&i3.x<.0){g Z0=-i3.x;
 #ifdef ENABLE_NESTED_CLIPPING
-if(ENABLE_NESTED_CLIPPING){h A6=X0.x;if(A6!=.0){C x1=unpackHalf2x16(V0(c1));h M4=x1.y;h C6;if(M4!=m2){C6=M4==A6?x1.x:.0;
+if(ENABLE_NESTED_CLIPPING){g A7=i3.y;if(A7!=.0){G I1=unpackHalf2x16(j1(r1));g k5=I1.y;g D7;if(k5!=Z0){D7=k5==A7?I1.x:.0;
 #ifndef DRAW_INTERIOR_TRIANGLES
-H0(D3,f2(C6,.0,.0,.0));
+T0(N3,E1(D7,.0,.0,.0));
 #endif
-}else{C6=C0(D3).x;
+}else{D7=I0(N3).x;
 #ifndef DRAW_INTERIOR_TRIANGLES
-p2(D3);
+E2(N3);
 #endif
-}J=min(J,C6);}}
+}E=min(E,D7);}}
 #endif
-W0(c1,packHalf2x16(Q3(J,m2)));p2(B0);}else
+l1(r1,packHalf2x16(Z3(E,Z0)));E2(H0);}else
 #endif
 {
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){if(h1!=.0){C x1=unpackHalf2x16(V0(c1));h M4=x1.y;J=(M4==h1)?min(x1.x,J):d1(.0);}}
+if(ENABLE_CLIPPING){g Z0=i3.x;if(Z0!=.0){G I1=unpackHalf2x16(j1(r1));g k5=I1.y;E=(k5==Z0)?min(I1.x,E):v1(.0);}}
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){h c4=E7(g5(F0));J=clamp(c4,d1(.0),J);}
+if(ENABLE_CLIP_RECT){g l4=A8(I5(R0));E=clamp(l4,v1(.0),E);}
 #endif
-i j=ga(X0 o3);j.w*=J;i e1;
-#ifdef ATLAS_COVERAGE
-e1=C0(B0);
+i j=Fb(H1,E Y2);i w1;
+#ifdef ATLAS_BLIT
+w1=I0(H0);
 #else
-if(ia!=i0){e1=C0(B0);
+if(Hb!=j0){w1=I0(H0);
 #ifndef DRAW_INTERIOR_TRIANGLES
-H0(D3,e1);
+T0(N3,w1);
 #endif
-}else{e1=C0(D3);
+}else{w1=I0(N3);
 #ifndef DRAW_INTERIOR_TRIANGLES
-p2(D3);
+E2(N3);
 #endif
 }
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND&&E3!=n6(F7)){j=R5(j,w4(e1),K7(E3));}else
+if(ENABLE_ADVANCED_BLEND){if(U3!=f7(B8)){j.xyz=M4(j.xyz,w1,O8(U3));}j.xyz*=j.w;}
 #endif
-{j.xyz*=j.w;j=j+e1*(1.-j.w);}H0(B0,j);X1(c1);}
-#if!defined(DRAW_INTERIOR_TRIANGLES)||defined(ATLAS_COVERAGE)
-Y1;
+j+=w1*(1.-j.w);T0(H0,j);i2(r1);}
+#if!defined(DRAW_INTERIOR_TRIANGLES)||defined(ATLAS_BLIT)
+j2;
 #endif
-E2;}
+M2;}
 #else
-T1(i,NB){Z(X0,e);
-#ifdef ATLAS_COVERAGE
-Z(N1,c);
+e2(i,NB){N(H1,f);
+#ifdef ATLAS_BLIT
+N(Q0,c);
 #endif
 #ifdef ENABLE_ADVANCED_BLEND
-Z(E3,h);
+N(U3,g);
 #endif
-i j=ga(X0);
-#ifdef ATLAS_COVERAGE
-j.w*=C7(N1,m.f5 z1);
+g E=
+#ifdef ATLAS_BLIT
+W6(Q0,q.U4 x1);
+#else
+1.;
 #endif
+i j=Fb(H1,E Y2);
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND){i e1=f1(MC,f0(floor(v0.xy)));j=R5(j,w4(e1),K7(E3));}else
+if(ENABLE_ADVANCED_BLEND){i w1=d1(PC,c0(floor(y0.xy)));j.xyz=M4(j.xyz,w1,O8(U3));j.xyz*=j.w;}
 #endif
-{j=y9(j);}U1(j);}
+f2(j);}
 #endif
 #endif

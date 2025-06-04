@@ -237,11 +237,27 @@ void LayoutComponentStyle::displayChanged()
     }
 }
 
+void LayoutComponentStyle::positionTypeValueChanged()
+{
+    if (parent()->is<LayoutComponent>())
+    {
+        parent()->as<LayoutComponent>()->positionTypeChanged();
+    }
+}
+
 void LayoutComponentStyle::flexDirectionValueChanged()
 {
     if (parent()->is<LayoutComponent>())
     {
         parent()->as<LayoutComponent>()->flexDirectionChanged();
+    }
+}
+
+void LayoutComponentStyle::directionValueChanged()
+{
+    if (parent()->is<LayoutComponent>())
+    {
+        parent()->as<LayoutComponent>()->directionChanged();
     }
 }
 
@@ -265,10 +281,15 @@ void LayoutComponentStyle::markLayoutNodeDirty() {}
 void LayoutComponentStyle::markLayoutStyleDirty() {}
 void LayoutComponentStyle::scaleTypeChanged() {}
 void LayoutComponentStyle::displayChanged() {}
+void LayoutComponentStyle::positionTypeValueChanged() {}
 void LayoutComponentStyle::flexDirectionValueChanged() {}
+void LayoutComponentStyle::directionValueChanged() {}
 #endif
 
-void LayoutComponentStyle::interpolationTimeChanged() { markLayoutNodeDirty(); }
+void LayoutComponentStyle::interpolationTimeChanged()
+{
+    markLayoutStyleDirty();
+}
 void LayoutComponentStyle::layoutAlignmentTypeChanged()
 {
     markLayoutNodeDirty();
@@ -279,13 +300,11 @@ void LayoutComponentStyle::layoutHeightScaleTypeChanged()
     scaleTypeChanged();
 }
 void LayoutComponentStyle::displayValueChanged() { displayChanged(); }
-void LayoutComponentStyle::positionTypeValueChanged() { markLayoutNodeDirty(); }
 void LayoutComponentStyle::overflowValueChanged() { markLayoutNodeDirty(); }
 void LayoutComponentStyle::intrinsicallySizedValueChanged()
 {
     markLayoutNodeDirty();
 }
-void LayoutComponentStyle::directionValueChanged() { markLayoutNodeDirty(); }
 void LayoutComponentStyle::alignContentValueChanged() { markLayoutNodeDirty(); }
 void LayoutComponentStyle::alignItemsValueChanged() { markLayoutNodeDirty(); }
 void LayoutComponentStyle::alignSelfValueChanged() { markLayoutNodeDirty(); }
@@ -413,7 +432,7 @@ void LayoutComponentStyle::positionBottomUnitsValueChanged()
 {
     markLayoutNodeDirty();
 }
-void LayoutComponentStyle::cornerRadiusTLChanged() { markLayoutNodeDirty(); }
-void LayoutComponentStyle::cornerRadiusTRChanged() { markLayoutNodeDirty(); }
-void LayoutComponentStyle::cornerRadiusBLChanged() { markLayoutNodeDirty(); }
-void LayoutComponentStyle::cornerRadiusBRChanged() { markLayoutNodeDirty(); }
+void LayoutComponentStyle::cornerRadiusTLChanged() { markLayoutStyleDirty(); }
+void LayoutComponentStyle::cornerRadiusTRChanged() { markLayoutStyleDirty(); }
+void LayoutComponentStyle::cornerRadiusBLChanged() { markLayoutStyleDirty(); }
+void LayoutComponentStyle::cornerRadiusBRChanged() { markLayoutStyleDirty(); }

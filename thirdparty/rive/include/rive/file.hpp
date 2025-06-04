@@ -11,8 +11,10 @@
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
 #include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_instance_list_item.hpp"
+#include "rive/animation/keyframe_interpolator.hpp"
 #include <vector>
 #include <set>
+#include <unordered_map>
 
 ///
 /// Default namespace for Rive Cpp runtime code.
@@ -22,6 +24,8 @@ namespace rive
 class BinaryReader;
 class RuntimeHeader;
 class Factory;
+class ScrollPhysics;
+class ViewModelRuntime;
 
 ///
 /// Tracks the success/failure result when importing a Rive file.
@@ -47,7 +51,7 @@ public:
     /// Minor version number supported by the runtime.
     static const int minorVersion = 0;
 
-    File(Factory*, FileAssetLoader*);
+    File(Factory*, rcp<FileAssetLoader>);
 
 public:
     ~File();
@@ -60,9 +64,17 @@ public:
     /// cannot be found in-band.
     /// @returns a pointer to the file, or null on failure.
     static std::unique_ptr<File> import(Span<const uint8_t> data,
-                                        Factory*,
+                                        Factory* factory,
                                         ImportResult* result = nullptr,
-                                        FileAssetLoader* assetLoader = nullptr);
+                                        FileAssetLoader* assetLoader = nullptr)
+    {
+        return import(data, factory, result, ref_rcp(assetLoader));
+    }
+
+    static std::unique_ptr<File> import(Span<const uint8_t> data,
+                                        Factory*,
+                                        ImportResult* result,
+                                        rcp<FileAssetLoader> assetLoader);
 
     /// @returns the file's backboard. All files have exactly one backboard.
     Backboard* backboard() const { return m_backboard; }
@@ -90,29 +102,55 @@ public:
 
     /// @returns a view model instance of the view model with the specified
     /// name.
-    ViewModelInstance* createViewModelInstance(std::string name);
+    rcp<ViewModelInstance> createViewModelInstance(std::string name) const;
 
     /// @returns a view model instance attached to the artboard if it exists.
-    ViewModelInstance* createViewModelInstance(Artboard* artboard);
+    rcp<ViewModelInstance> createViewModelInstance(Artboard* artboard) const;
 
     /// @returns a view model instance of the viewModel.
-    ViewModelInstance* createViewModelInstance(ViewModel* viewModel);
+    rcp<ViewModelInstance> createViewModelInstance(ViewModel* viewModel) const;
+
+    /// @returns the default view model instance of the viewModel, or returns an
+    /// empty one if there is no default.
+    rcp<ViewModelInstance> createDefaultViewModelInstance(
+        ViewModel* viewModel) const;
+
+    /// @returns the default view model instance of the viewModel, or returns an
+    /// empty one if there is no default.
+    rcp<ViewModelInstance> createDefaultViewModelInstance(
+        Artboard* artboard) const;
 
     /// @returns a view model instance of the viewModel by name and instance
     /// name.
-    ViewModelInstance* createViewModelInstance(std::string name,
-                                               std::string instanceName);
+    rcp<ViewModelInstance> createViewModelInstance(
+        std::string name,
+        std::string instanceName) const;
 
     /// @returns a view model instance of the viewModel by their indexes.
-    ViewModelInstance* createViewModelInstance(size_t index,
-                                               size_t instanceIndex);
+    rcp<ViewModelInstance> createViewModelInstance(size_t index,
+                                                   size_t instanceIndex) const;
 
+    size_t viewModelCount() const { return m_ViewModels.size(); }
     ViewModel* viewModel(std::string name);
+    ViewModel* viewModel(size_t index);
+    ViewModelRuntime* defaultArtboardViewModel(Artboard* artboard) const;
+    ViewModelRuntime* viewModelByIndex(size_t index) const;
+    ViewModelRuntime* viewModelByName(std::string name) const;
     ViewModelInstanceListItem* viewModelInstanceListItem(
-        ViewModelInstance* viewModelInstance);
+        rcp<ViewModelInstance> viewModelInstance);
     ViewModelInstanceListItem* viewModelInstanceListItem(
-        ViewModelInstance* viewModelInstance,
+        rcp<ViewModelInstance> viewModelInstance,
         Artboard* artboard);
+    void completeViewModelInstance(
+        rcp<ViewModelInstance> viewModelInstance,
+        std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>>
+            instancesMap) const;
+    void completeViewModelInstance(
+        rcp<ViewModelInstance> viewModelInstance) const;
+    const std::vector<DataEnum*>& enums() const;
+    FileAsset* asset(size_t index);
+
+    std::vector<Artboard*> artboards() { return m_artboards; };
 
 #ifdef WITH_RIVE_TOOLS
     /// Strips FileAssetContents for FileAssets of given typeKeys.
@@ -126,6 +164,13 @@ public:
         ImportResult* result = nullptr);
 #endif
 
+#ifdef TESTING
+    FileAssetLoader* testing_getAssetLoader() const
+    {
+        return m_assetLoader.get();
+    }
+#endif
+
 private:
     ImportResult read(BinaryReader&, const RuntimeHeader&);
 
@@ -136,22 +181,41 @@ private:
     /// We just keep these alive for the life of this File
     std::vector<FileAsset*> m_fileAssets;
 
+    std::vector<DataConverter*> m_DataConverters;
+
+    std::vector<KeyFrameInterpolator*> m_keyframeInterpolators;
+    std::vector<ScrollPhysics*> m_scrollPhysics;
+
     /// List of artboards in the file. Each artboard encapsulates a set of
     /// Rive components and animations.
     std::vector<Artboard*> m_artboards;
 
+    /// List of view models in the file. They may outlive the file if viewmodel
+    /// instances are still needed after the file is destroyed
     std::vector<ViewModel*> m_ViewModels;
+
+    /// List of view models instances in the file. We keep this list to keep
+    /// them alive during the lifetime of this file. This list does not hold a
+    /// reference to instances created by users.
+    std::vector<ViewModelInstance*> m_ViewModelInstances;
+
+    mutable std::vector<ViewModelRuntime*> m_viewModelRuntimes;
     std::vector<DataEnum*> m_Enums;
 
     Factory* m_factory;
 
     /// The helper used to load assets when they're not provided in-band
     /// with the file.
-    FileAssetLoader* m_assetLoader;
+    rcp<FileAssetLoader> m_assetLoader;
 
-    void completeViewModelInstance(ViewModelInstance* viewModelInstance);
-    ViewModelInstance* copyViewModelInstance(
-        ViewModelInstance* viewModelInstance);
+    rcp<ViewModelInstance> copyViewModelInstance(
+        ViewModelInstance* viewModelInstance,
+        std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>>
+            instancesMap) const;
+
+    ViewModelRuntime* createViewModelRuntime(ViewModel* viewModel) const;
+
+    uint32_t findViewModelId(ViewModel* search) const;
 };
 } // namespace rive
 #endif

@@ -54,9 +54,10 @@ private:
 protected:
 public:
     SliceMesh(NSlicer* nslicer);
-    MeshType type = MeshType::nslice;
+    MeshType type() override { return MeshType::nslice; }
     void draw(Renderer* renderer,
               const RenderImage* image,
+              ImageSampler,
               BlendMode blendMode,
               float opacity) override;
     void onAssetLoaded(RenderImage* renderImage) override;

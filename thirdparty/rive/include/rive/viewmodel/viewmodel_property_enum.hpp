@@ -2,6 +2,7 @@
 #define _RIVE_VIEW_MODEL_PROPERTY_ENUM_HPP_
 #include "rive/generated/viewmodel/viewmodel_property_enum_base.hpp"
 #include "rive/viewmodel/data_enum.hpp"
+#include "rive/refcnt.hpp"
 #include <stdio.h>
 namespace rive
 {
@@ -16,10 +17,10 @@ public:
     int valueIndex(std::string name);
     int valueIndex(uint32_t index);
     void dataEnum(DataEnum* value);
-    DataEnum* dataEnum();
+    virtual DataEnum* dataEnum();
 
 private:
-    DataEnum* m_DataEnum;
+    rcp<DataEnum> m_DataEnum;
 };
 
 } // namespace rive

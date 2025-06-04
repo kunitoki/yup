@@ -97,7 +97,9 @@ TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, DST_COLOR_TEXTURE_IDX, @dstColorTexture);
 #endif
 FRAG_TEXTURE_BLOCK_END
 
-SAMPLER_MIPMAP(IMAGE_TEXTURE_IDX, imageSampler)
+DYNAMIC_SAMPLER_BLOCK_BEGIN
+SAMPLER_DYNAMIC(IMAGE_SAMPLER_IDX, imageSampler)
+DYNAMIC_SAMPLER_BLOCK_END
 
 FRAG_STORAGE_BUFFER_BLOCK_BEGIN
 FRAG_STORAGE_BUFFER_BLOCK_END
@@ -121,7 +123,8 @@ PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
     VARYING_UNPACK(v_clipRect, float4);
 #endif
 
-    half4 color = TEXTURE_SAMPLE(@imageTexture, imageSampler, v_texCoord);
+    half4 color =
+        TEXTURE_SAMPLE_DYNAMIC(@imageTexture, imageSampler, v_texCoord);
     half coverage = 1.;
 
 #ifdef @ENABLE_CLIP_RECT
@@ -146,22 +149,19 @@ PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
 #endif
 
     // Blend with the framebuffer color.
-    color.a *= imageDrawUniforms.opacity * coverage;
-    half4 dstColor = PLS_LOAD4F(colorBuffer);
+    half4 dstColorPremul = PLS_LOAD4F(colorBuffer);
 #ifdef @ENABLE_ADVANCED_BLEND
     if (@ENABLE_ADVANCED_BLEND && imageDrawUniforms.blendMode != BLEND_SRC_OVER)
     {
-        color =
-            advanced_blend(color,
-                           unmultiply(dstColor),
-                           cast_uint_to_ushort(imageDrawUniforms.blendMode));
+        color.rgb = advanced_color_blend(
+                        unmultiply_rgb(color),
+                        dstColorPremul,
+                        cast_uint_to_ushort(imageDrawUniforms.blendMode)) *
+                    color.a;
     }
-    else
 #endif
-    {
-        color.rgb *= color.a;
-        color = color + dstColor * (1. - color.a);
-    }
+    color *= imageDrawUniforms.opacity * coverage;
+    color += dstColorPremul * (1. - color.a);
 
     PLS_STORE4F(colorBuffer, color);
     PLS_PRESERVE_UI(clipBuffer);
@@ -178,23 +178,24 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 {
     VARYING_UNPACK(v_texCoord, float2);
 
-    half4 color = TEXTURE_SAMPLE(@imageTexture, imageSampler, v_texCoord);
-    color.a *= imageDrawUniforms.opacity;
+    half4 color =
+        TEXTURE_SAMPLE_DYNAMIC(@imageTexture, imageSampler, v_texCoord) *
+        imageDrawUniforms.opacity;
 
 #ifdef @ENABLE_ADVANCED_BLEND
     if (@ENABLE_ADVANCED_BLEND)
     {
-        half4 dstColor =
+        // Do the color portion of the blend mode in the shader.
+        half4 dstColorPremul =
             TEXEL_FETCH(@dstColorTexture, int2(floor(_fragCoord.xy)));
-        color = advanced_blend(color,
-                               unmultiply(dstColor),
-                               imageDrawUniforms.blendMode);
+        color.rgb = advanced_color_blend(unmultiply_rgb(color),
+                                         dstColorPremul,
+                                         imageDrawUniforms.blendMode);
+        // Src-over blending is enabled, so just premultiply and let the HW
+        // finish the the the alpha portion of the blend mode.
+        color.rgb *= color.a;
     }
-    else
 #endif // !ENABLE_ADVANCED_BLEND
-    {
-        color = premultiply(color);
-    }
 
     EMIT_FRAG_DATA(color);
 }

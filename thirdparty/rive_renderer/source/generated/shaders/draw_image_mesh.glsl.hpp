@@ -6,85 +6,85 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char draw_image_mesh[] = R"===(#ifdef AB
-L0(P1)h0(0,c,SB);M0 L0(h2)h0(1,c,TB);M0
+U0(a2)i0(0,c,SB);V0 U0(v2)i0(1,c,TB);V0
 #endif
-o1 o0 H(0,c,A0);
-#ifdef R
-OB H(1,h,h1);
+o1 n0 H(0,c,q0);
+#ifdef T
+OB H(1,g,j5);
 #endif
 #ifdef BB
-o0 H(2,e,F0);
+n0 H(2,f,R0);
 #endif
 p1
 #ifdef AB
-H2 I2 v4(PB,P1,Q1,h2,i2,l){k0(l,Q1,SB,c);k0(l,i2,TB,c);P(A0,c);
-#ifdef R
-P(h1,h);
+P2 Q2 N4(PB,a2,c2,v2,w2,n){l0(n,c2,SB,c);l0(n,w2,TB,c);L(q0,c);
+#ifdef T
+L(j5,g);
 #endif
 #ifdef BB
-P(F0,e);
+L(R0,f);
 #endif
-c K=q0(r1(l0.V5),SB)+l0.G0;A0=TB;
-#ifdef R
-if(R){h1=o6(l0.m2,m.F4);}
+c J=C0(D1(m0.H6),SB)+m0.S0;q0=TB;
+#ifdef T
+if(T){j5=g7(m0.Z0,q.d5);}
 #endif
 #ifdef BB
 if(BB){
-#ifndef CB
-F0=W5(r1(l0.F1),l0.O1,K);
+#ifndef DB
+R0=I6(D1(m0.R1),m0.Z1,J);
 #else
-G9(r1(l0.F1),l0.O1,K);
+Ka(D1(m0.R1),m0.Z1,J);
 #endif
 }
 #endif
-e Q=v2(K);
-#ifdef CB
-Q.z=N7(l0.m5);
+f Q=F2(J);
+#ifdef DB
+Q.z=S8(m0.X5);
 #endif
-X(A0);
-#ifdef R
-X(h1);
+P(q0);
+#ifdef T
+P(j5);
 #endif
 #ifdef BB
-X(F0);
+P(R0);
 #endif
-U0(Q);}
+h1(Q);}
 #endif
 #ifdef HB
-J2 o2(w6,I4,UB);
-#ifdef CB
+R2 C2(Y5,W8,UB);
+#ifdef DB
 #ifdef FB
-o2(K2,V9,MC);
+C2(U2,Za,PC);
 #endif
 #endif
-L2 h4(I4,q3)j3 k3
-#ifndef CB
-k2 N0(l7,B0);P0(Y4,c1);N0(X9,D3);P0(n7,i4);l2 z4(NB){Z(A0,c);
-#ifdef R
-Z(h1,h);
+S2 p4 G3(X8,B3)q4 w3 x3
+#ifndef DB
+x2 M0(i8,H0);Y0(B5,r1);M0(bb,N3);Y0(k8,x4);y2 R4(NB){N(q0,c);
+#ifdef T
+N(j5,g);
 #endif
 #ifdef BB
-Z(F0,e);
+N(R0,f);
 #endif
-i j=p3(UB,q3,A0);h J=1.;
+i j=o4(UB,B3,q0);g E=1.;
 #ifdef BB
-if(BB){h c4=E7(g5(F0));J=clamp(c4,d1(.0),J);}
+if(BB){g l4=A8(I5(R0));E=clamp(l4,v1(.0),E);}
 #endif
-W1;
-#ifdef R
-if(R&&h1!=.0){C x1=unpackHalf2x16(V0(c1));h M4=x1.y;h yc=M4==h1?x1.x:d1(.0);J=min(J,yc);}
+h2;
+#ifdef T
+if(T&&j5!=.0){G I1=unpackHalf2x16(j1(r1));g k5=I1.y;g Sd=k5==j5?I1.x:v1(.0);E=min(E,Sd);}
 #endif
-j.w*=l0.G2*J;i e1=C0(B0);
+i w1=I0(H0);
 #ifdef FB
-if(FB&&l0.m3!=F7){j=R5(j,w4(e1),M1(l0.m3));}else
+if(FB&&m0.z3!=B8){j.xyz=M4(Y3(j),w1,Q1(m0.z3))*j.w;}
 #endif
-{j.xyz*=j.w;j=j+e1*(1.-j.w);}H0(B0,j);X1(c1);X1(i4);Y1;E2;}
+j*=m0.H2*E;j+=w1*(1.-j.w);T0(H0,j);i2(r1);i2(x4);j2;M2;}
 #else
-T1(i,NB){Z(A0,c);i j=p3(UB,q3,A0);j.w*=l0.G2;
+e2(i,NB){N(q0,c);i j=o4(UB,B3,q0)*m0.H2;
 #ifdef FB
-if(FB){i e1=f1(MC,f0(floor(v0.xy)));j=R5(j,w4(e1),l0.m3);}else
+if(FB){i w1=d1(PC,c0(floor(y0.xy)));j.xyz=M4(Y3(j),w1,m0.z3);j.xyz*=j.w;}
 #endif
-{j=y9(j);}U1(j);}
+f2(j);}
 #endif
 #endif
 )===";

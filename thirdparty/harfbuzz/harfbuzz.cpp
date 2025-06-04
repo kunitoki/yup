@@ -21,9 +21,14 @@
 
 #include "harfbuzz.h"
 
-#if __GNUC__
+#if __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wempty-body"
+ #pragma clang diagnostic ignored "-Wunused-function"
+#elif __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wempty-body"
+ #pragma GCC diagnostic ignored "-Wunused-function"
 #endif
 
 #include "upstream/graph/gsubgpos-context.cc"
@@ -38,7 +43,8 @@
 #include "upstream/hb-cairo-utils.cc"
 #include "upstream/hb-cairo.cc"
 #include "upstream/hb-common.cc"
-#include "upstream/hb-coretext.cc"
+#include "upstream/hb-coretext-font.cc"
+#include "upstream/hb-coretext-shape.cc"
 #include "upstream/hb-directwrite.cc"
 #include "upstream/hb-draw.cc"
 #include "upstream/hb-face-builder.cc"
@@ -105,6 +111,8 @@
 #include "upstream/hb-wasm-api.cc"
 #include "upstream/hb-wasm-shape.cc"
 
-#if __GNUC__
+#if __clang__
+ #pragma clang diagnostic pop
+#elif __GNUC__
  #pragma GCC diagnostic pop
 #endif
