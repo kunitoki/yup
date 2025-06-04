@@ -21,11 +21,7 @@
 
 #include "harfbuzz.h"
 
-#if __clang__
- #pragma clang diagnostic push
- #pragma clang diagnostic ignored "-Wempty-body"
- #pragma clang diagnostic ignored "-Wunused-function"
-#elif __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wempty-body"
  #pragma GCC diagnostic ignored "-Wunused-function"
@@ -111,8 +107,6 @@
 #include "upstream/hb-wasm-api.cc"
 #include "upstream/hb-wasm-shape.cc"
 
-#if __clang__
- #pragma clang diagnostic pop
-#elif __GNUC__
+#if defined(__GNUC__) || defined(__clang__)
  #pragma GCC diagnostic pop
 #endif

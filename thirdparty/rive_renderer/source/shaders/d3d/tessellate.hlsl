@@ -1,5 +1,0 @@
-#include "../../generated/shaders/hlsl.minified.glsl"
-#include "../../generated/shaders/constants.minified.glsl"
-#include "../../generated/shaders/common.minified.glsl"
-#include "../../generated/shaders/bezier_utils.minified.glsl"
-#include "../../generated/shaders/tessellate.minified.glsl"
