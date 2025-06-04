@@ -20,10 +20,6 @@
 #==============================================================================
 
 macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_tag)
-    if (NOT DEFINED FETCHCONTENT_BASE_DIR)
-        set (FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/externals")
-    endif()
-
     FetchContent_Declare(
 		"${name}"
 		GIT_REPOSITORY "${git_repository}"
@@ -31,6 +27,9 @@ macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_
         GIT_SUBMODULES_RECURSE ON
         SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
 
+    #if (NOT DEFINED FETCHCONTENT_BASE_DIR)
+    #    set (FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/externals")
+    #endif()
     #FetchContent_Declare(
 	#	"${name}"
 	#	DOWNLOAD_COMMAND
@@ -111,28 +110,4 @@ function (_yup_fetch_perfetto)
     endif()
 
     add_library (perfetto::perfetto ALIAS perfetto)
-endfunction()
-
-#==============================================================================
-
-function (_yup_fetch_googletest)
-    if (TARGET GTest::gtest_main)
-        return()
-    endif()
-
-    if (YUP_PLATFORM_EMSCRIPTEN)
-        set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
-    endif()
-
-    _yup_fetchcontent_declare (googletest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG v1.17.0)
-
-    set (gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable (googletest)
-
-    set_target_properties (gtest PROPERTIES FOLDER "Tests")
-    set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
-    set_target_properties (gmock PROPERTIES FOLDER "Tests")
-    set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 endfunction()
