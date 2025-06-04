@@ -28,7 +28,8 @@ macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_
 		"${name}"
 		GIT_REPOSITORY "${git_repository}"
         GIT_TAG "${git_tag}"
-        GIT_SUBMODULES_RECURSE ON)
+        GIT_SUBMODULES_RECURSE ON
+        SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
 
     #FetchContent_Declare(
 	#	"${name}"
