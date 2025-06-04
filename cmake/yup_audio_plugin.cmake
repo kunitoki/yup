@@ -94,8 +94,7 @@ function (yup_audio_plugin)
     # ==== Fetch clap SDK and build clap target
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
         _yup_message (STATUS "Fetching CLAP SDK")
-        FetchContent_Declare (
-            clap
+        _yup_fetchcontent_declare (clap
             GIT_REPOSITORY https://github.com/free-audio/clap.git
             GIT_TAG main)
         FetchContent_MakeAvailable (clap)
@@ -148,11 +147,9 @@ function (yup_audio_plugin)
         else()
             set (SMTG_RUN_VST_VALIDATOR OFF)
         endif()
-        FetchContent_Declare (
-            vst3sdk
+        _yup_fetchcontent_declare (vst3sdk
             GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
-            GIT_TAG master
-            GIT_SUBMODULES_RECURSE ON)
+            GIT_TAG master)
         FetchContent_MakeAvailable (vst3sdk)
 
         _yup_message (STATUS "Setting up VST3 plugin client")
