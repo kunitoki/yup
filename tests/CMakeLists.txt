@@ -24,6 +24,8 @@ enable_testing()
 # ==== Setup googletests
 if (YUP_PLATFORM_EMSCRIPTEN)
     set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+    set (gtest_disable_warnings ON CACHE BOOL "" FORCE)
+    set (gtest_hide_internal_symbols ON CACHE BOOL "" FORCE)
     add_definitions (-DTEST_HAS_PTHREAD=0)
 endif()
 
@@ -34,6 +36,11 @@ _yup_fetchcontent_declare (googletest
     GIT_TAG v1.17.0)
 
 FetchContent_MakeAvailable (googletest)
+
+if (YUP_PLATFORM_EMSCRIPTEN)
+    target_compile_options(gmock PRIVATE -pthread)
+    target_compile_options(gtest PRIVATE -pthread)
+endif()
 
 set_target_properties (gtest PROPERTIES FOLDER "Tests")
 set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
