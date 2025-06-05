@@ -1,32 +1,51 @@
-#define I1 3.141592653589793238
+#define O2 3.14159265359
+#define e7 6.28318530718
+#define S5 1.57079632679
 #ifndef RENDER_MODE_MSAA
-#define g3 float(.5)
+#define q3 float(.5)
 #else
-#define g3 float(.0)
+#define q3 float(.0)
 #endif
-#ifdef r9
-d h T3(float x){return x;}d h n6(uint x){return float(x);}d h Lb(O x){return float(x);}d h J7(int x){return float(x);}d i g5(e xyzw){return xyzw;}d C T5(c xy){return xy;}d i m9(D xyzw){return vec4(xyzw);}d O K7(h x){return uint(x);}d O M1(uint x){return x;}
+#define F2(l) d7(l,q.bd,q.cd)
+#ifdef TESS_TEXTURE_FLOATING_POINT
+#define wa(g0,e,a) r4(g0,e,a)
+#define H3 f
+#define K8(m) m
+#define Y4(m) m
+#define L8(m) uintBitsToFloat(m)
+#define v4(m) floatBitsToUint(m)
 #else
-d h T3(float x){return(h)x;}d h n6(uint x){return(h)x;}d h Lb(O x){return(h)x;}d h J7(int x){return(h)x;}d i g5(e xyzw){return(i)xyzw;}d C T5(c xy){return(C)xy;}d i m9(D xyzw){return(i)xyzw;}d O K7(h x){return(O)x;}d O M1(uint x){return(O)x;}
+#define wa(g0,e,a) I3(g0,e,a)
+#define H3 M
+#define K8(m) floatBitsToUint(m)
+#define Y4(m) uintBitsToFloat(m)
+#define L8(m) m
+#define v4(m) m
 #endif
-d h d1(h x){return x;}d C Q3(C xy){return xy;}d C Q3(h x,h y){C S;S.x=x,S.y=y;return S;}d C Q3(h x){C S;S.x=x,S.y=x;return S;}d c Mb(float x){return c(x,x);}d p K0(h x,h y,h z){p S;S.x=x,S.y=y,S.z=z;return S;}d p K0(h x){p S;S.x=x,S.y=x,S.z=x;return S;}d i f2(h x,h y,h z,h w){i S;S.x=x,S.y=y,S.z=z,S.w=w;return S;}d i f2(p xyz,h w){i S;S.xyz=xyz;S.w=w;return S;}d i f2(h x){i S;S.x=x,S.y=x,S.z=x,S.w=x;return S;}d D4 Nb(bool b){return D4(b,b);}d j5 zb(p k,p b,p D0){j5 S;S[0]=k;S[1]=b;S[2]=D0;return S;}d k5 Ab(p k,p b){k5 S;S[0]=k;S[1]=b;return S;}d Y r1(e x){return Y(x.xy,x.zw);}d uint l9(O x){return x;}d uint v9(uint T){return(T&Ob)-1u;}d c E4(c k,c b,float t){return(b-k)*t+k;}d h o6(uint w9,uint F4){return w9==0u?.0:unpackHalf2x16((w9+Pb)*F4).x;}d float x9(c B1){B1=normalize(B1);float g1=acos(clamp(B1.x,-1.,1.));return B1.y>=.0?g1:-g1;}d i y9(i j){return f2(j.xyz*j.w,j.w);}d i w4(i j){if(.0<j.w&&j.w<1.){j.xyz*=1./j.w;j.xyz=mix(j.xyz,K0(1.),greaterThan(j.xyz,K0(254.5/255.)));}return j;}d h E7(i z9){C A9=min(z9.xy,z9.zw);h Qb=min(A9.x,A9.y);return Qb;}d float j7(c x){return abs(x.x)+abs(x.y);}
+#define J3(m) T5(JC,M8,m,xa,float(xa),.0).x
+#define Z4(m) T5(JC,M8,m,ya,float(ya),.0).x
+#ifdef za
+d g d4(float x){return x;}d g f7(uint x){return float(x);}d g dd(a0 x){return float(x);}d g N8(int x){return float(x);}d i I5(f xyzw){return xyzw;}d G F6(c xy){return xy;}d i ra(M xyzw){return vec4(xyzw);}d a0 O8(g x){return uint(x);}d a0 Q1(uint x){return x;}
+#else
+d g d4(float x){return(g)x;}d g f7(uint x){return(g)x;}d g dd(a0 x){return(g)x;}d g N8(int x){return(g)x;}d i I5(f xyzw){return(i)xyzw;}d G F6(c xy){return(G)xy;}d i ra(M xyzw){return(i)xyzw;}d a0 O8(g x){return(a0)x;}d a0 Q1(uint x){return(a0)x;}
+#endif
+d g v1(g x){return x;}d G Z3(G xy){return xy;}d G Z3(g x,g y){G V;V.x=x,V.y=y;return V;}d G Z3(g x){G V;V.x=x,V.y=x;return V;}d c J5(float x){return c(x,x);}d A K0(g x,g y,g z){A V;V.x=x,V.y=y,V.z=z;return V;}d A K0(g x){A V;V.x=x,V.y=x,V.z=x;return V;}d i E1(g x,g y,g z,g w){i V;V.x=x,V.y=y,V.z=z,V.w=w;return V;}d i E1(A xyz,g w){i V;V.xyz=xyz;V.w=w;return V;}d i E1(g x){i V;V.x=x,V.y=x,V.z=x,V.w=x;return V;}d a5 ed(bool b){return a5(b,b);}d U5 qf(A k,A b,A B0){U5 V;V[0]=k;V[1]=b;V[2]=B0;return V;}d V5 Ic(A k,A b){V5 V;V[0]=k;V[1]=b;return V;}d S D1(f x){return S(x.xy,x.zw);}d uint ea(a0 x){return x;}d uint Aa(uint Y){return(Y&fd)-1u;}d c c5(c k,c b,float t){return(b-k)*t+k;}d g g7(uint Ba,uint d5){return Ba==0u?.0:unpackHalf2x16((Ba+gd)*d5).x;}d float Ca(c M1){M1=normalize(M1);float O0=acos(clamp(M1.x,-1.,1.));return M1.y>=.0?O0:-O0;}d i rf(i j){return E1(j.xyz*j.w,j.w);}d A Y3(i P8){return P8.xyz*(P8.w!=.0?1./P8.w:.0);}d g A8(i Da){G Ea=min(Da.xy,Da.zw);g hd=min(Ea.x,Ea.y);return hd;}d float f8(c x){return abs(x.x)+abs(x.y);}
 #ifndef UNIFORM_DEFINITIONS_AUTO_GENERATED
-G4(w3,VB)float n9;float B9;float Rb;float Sb;uint C9;uint Tb;uint Gb;uint Hb;p6 X5;c f5;c D9;uint P2;uint F4;float q1;uint Ub;l5(m)
+e5(K3,VB)float sa;float Fa;float bd;float cd;uint Ga;uint id;uint Oc;uint Pc;h7 J6;c U4;c Ha;uint Z2;uint d5;float C1;uint jd;W5(q)
 #endif
 #ifdef VERTEX
-d e m6(c E9,float Vb,float F9){return e(E9.x*Vb-1.,E9.y*F9-sign(F9),0.,1.);}
-#define v2(A) m6(A,m.Rb,m.Sb)
+d f d7(c Ia,float kd,float Ja){return f(Ia.x*kd-1.,Ia.y*Ja-sign(Ja),0.,1.);}
 #ifndef RENDER_MODE_MSAA
-d e W5(Y F1,c O1,c L7){c M7=abs(F1[0])+abs(F1[1]);if(M7.x!=.0&&M7.y!=.0){c g0=1./M7;c g4=q0(F1,L7)+O1;const float Wb=.5;return e(g4,-g4)*g0.xyxy+g0.xyxy+Wb;}else{return O1.xyxy;}}
+d f I6(S R1,c Z1,c Q8){c R8=abs(R1[0])+abs(R1[1]);if(R8.x!=.0&&R8.y!=.0){c d0=1./R8;c w4=C0(R1,Q8)+Z1;const float ld=.5;return f(w4,-w4)*d0.xyxy+d0.xyxy+ld;}else{return Z1.xyxy;}}
 #else
-d float N7(uint m5){return 1.-float(m5)*(2./32768.);}
+d float S8(uint X5){return 1.-float(X5)*(2./32768.);}
 #ifdef ENABLE_CLIP_RECT
-d void G9(Y F1,c O1,c L7){if(F1!=Y(0)){c g4=q0(F1,L7)+O1.xy;gl_ClipDistance[0]=g4.x+1.;gl_ClipDistance[1]=g4.y+1.;gl_ClipDistance[2]=1.-g4.x;gl_ClipDistance[3]=1.-g4.y;}else{gl_ClipDistance[0]=gl_ClipDistance[1]=gl_ClipDistance[2]=gl_ClipDistance[3]=O1.x-.5;}}
+d void Ka(S R1,c Z1,c Q8){if(R1!=S(0)){c w4=C0(R1,Q8)+Z1.xy;gl_ClipDistance[0]=w4.x+1.;gl_ClipDistance[1]=w4.y+1.;gl_ClipDistance[2]=1.-w4.x;gl_ClipDistance[3]=1.-w4.y;}else{gl_ClipDistance[0]=gl_ClipDistance[1]=gl_ClipDistance[2]=gl_ClipDistance[3]=Z1.x-.5;}}
 #endif
 #endif
 #endif
 #ifdef DRAW_IMAGE
 #ifndef UNIFORM_DEFINITIONS_AUTO_GENERATED
-G4(H4,DC)e V5;c G0;float G2;float Rd;e F1;c O1;uint m2;uint m3;uint m5;l5(l0)
+e5(f5,EC)f H6;c S0;float H2;float sf;f R1;c Z1;uint Z0;uint z3;uint X5;W5(m0)
 #endif
 #endif

@@ -1,15 +1,19 @@
 #include "rive/math/math_types.hpp"
 #include "rive/data_bind/converters/data_converter_operation.hpp"
 #include "rive/data_bind/data_values/data_value_number.hpp"
+#include "rive/data_bind/data_values/data_value_symbol_list_index.hpp"
 #include <cmath>
 
 using namespace rive;
 
 DataValue* DataConverterOperation::convertValue(DataValue* input, float value)
 {
-    if (input->is<DataValueNumber>())
+    if (input->is<DataValueNumber>() || input->is<DataValueSymbolListIndex>())
     {
-        float inputValue = input->as<DataValueNumber>()->value();
+        float inputValue =
+            input->is<DataValueNumber>()
+                ? input->as<DataValueNumber>()->value()
+                : (float)(input->as<DataValueSymbolListIndex>()->value());
         float resultValue = value;
         switch (op())
         {
@@ -26,7 +30,7 @@ DataValue* DataConverterOperation::convertValue(DataValue* input, float value)
                 resultValue = inputValue / resultValue;
                 break;
             case ArithmeticOperation::modulo:
-                resultValue = fmodf(inputValue, resultValue);
+                resultValue = math::positive_mod(inputValue, resultValue);
                 break;
             case ArithmeticOperation::squareRoot:
                 resultValue = sqrtf(inputValue);

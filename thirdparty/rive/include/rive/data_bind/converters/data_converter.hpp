@@ -21,10 +21,11 @@ public:
     };
     virtual DataType outputType() { return DataType::none; };
     virtual void bindFromContext(DataContext* dataContext, DataBind* dataBind);
+    virtual void unbind();
     StatusCode import(ImportStack& importStack) override;
     void addDataBind(DataBind* dataBind);
     std::vector<DataBind*> dataBinds() const { return m_dataBinds; }
-    void addDirt(ComponentDirt dirt);
+    void markConverterDirty();
     virtual void update();
     void copy(const DataConverter& object);
     virtual bool advance(float elapsedTime);

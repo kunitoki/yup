@@ -5,6 +5,15 @@
 
 using namespace rive;
 
+ListenerViewModelChange::~ListenerViewModelChange()
+{
+    if (m_bindableProperty != nullptr)
+    {
+        delete m_bindableProperty;
+        m_bindableProperty = nullptr;
+    }
+}
+
 StatusCode ListenerViewModelChange::import(ImportStack& importStack)
 {
 
@@ -40,5 +49,5 @@ void ListenerViewModelChange::perform(
         stateMachineInstance->bindableDataBindToSource(bindableInstance);
     // Apply the change that will assign the value of the bindable property to
     // the view model property instance
-    dataBind->updateSourceBinding();
+    dataBind->updateSourceBinding(true);
 }

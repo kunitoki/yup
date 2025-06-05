@@ -33,7 +33,7 @@
     license:            MIT
 
     dependencies:       rive rive_decoders glad
-    searchpaths:        include source
+    searchpaths:        include source source/generated/shaders
     osxFrameworks:      Metal QuartzCore
     defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
     iosDefines:         RIVE_IOS=1
@@ -42,6 +42,7 @@
     wasmDefines:        RIVE_WEBGL=1
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
+    windowsCppStandard: 20
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION

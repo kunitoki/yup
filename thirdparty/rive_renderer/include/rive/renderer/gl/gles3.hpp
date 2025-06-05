@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <string.h>
 
 #ifdef RIVE_DESKTOP_GL
@@ -34,20 +35,19 @@
 #ifndef GL_ANGLE_shader_pixel_local_storage
 #define GL_ANGLE_shader_pixel_local_storage 1
 #define GL_MAX_PIXEL_LOCAL_STORAGE_PLANES_ANGLE 0x96E0
-#define GL_MAX_COLOR_ATTACHMENTS_WITH_ACTIVE_PIXEL_LOCAL_STORAGE_ANGLE 0x96E1
-#define GL_MAX_COMBINED_DRAW_BUFFERS_AND_PIXEL_LOCAL_STORAGE_PLANES_ANGLE 0x96E2
-#define GL_PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE 0x96E3
-#define GL_LOAD_OP_ZERO_ANGLE 0x96E4
-#define GL_LOAD_OP_CLEAR_ANGLE 0x96E5
-#define GL_LOAD_OP_LOAD_ANGLE 0x96E6
-#define GL_STORE_OP_STORE_ANGLE 0x96E7
-#define GL_PIXEL_LOCAL_FORMAT_ANGLE 0x96E8
-#define GL_PIXEL_LOCAL_TEXTURE_NAME_ANGLE 0x96E9
-#define GL_PIXEL_LOCAL_TEXTURE_LEVEL_ANGLE 0x96EA
-#define GL_PIXEL_LOCAL_TEXTURE_LAYER_ANGLE 0x96EB
-#define GL_PIXEL_LOCAL_CLEAR_VALUE_FLOAT_ANGLE 0x96EC
-#define GL_PIXEL_LOCAL_CLEAR_VALUE_INT_ANGLE 0x96ED
-#define GL_PIXEL_LOCAL_CLEAR_VALUE_UNSIGNED_INT_ANGLE 0x96EE
+#define GL_MAX_COMBINED_DRAW_BUFFERS_AND_PIXEL_LOCAL_STORAGE_PLANES_ANGLE 0x96E1
+#define GL_PIXEL_LOCAL_STORAGE_ACTIVE_PLANES_ANGLE 0x96E2
+#define GL_LOAD_OP_ZERO_ANGLE 0x96E3
+#define GL_LOAD_OP_CLEAR_ANGLE 0x96E4
+#define GL_LOAD_OP_LOAD_ANGLE 0x96E5
+#define GL_STORE_OP_STORE_ANGLE 0x96E6
+#define GL_PIXEL_LOCAL_FORMAT_ANGLE 0x96E7
+#define GL_PIXEL_LOCAL_TEXTURE_NAME_ANGLE 0x96E8
+#define GL_PIXEL_LOCAL_TEXTURE_LEVEL_ANGLE 0x96E9
+#define GL_PIXEL_LOCAL_TEXTURE_LAYER_ANGLE 0x96EA
+#define GL_PIXEL_LOCAL_CLEAR_VALUE_FLOAT_ANGLE 0x96EB
+#define GL_PIXEL_LOCAL_CLEAR_VALUE_INT_ANGLE 0x96EC
+#define GL_PIXEL_LOCAL_CLEAR_VALUE_UNSIGNED_INT_ANGLE 0x96ED
 extern bool webgl_enable_WEBGL_shader_pixel_local_storage_coherent();
 extern bool webgl_enable_WEBGL_provoking_vertex();
 extern bool webgl_shader_pixel_local_storage_is_coherent();
@@ -59,6 +59,9 @@ extern void glFramebufferPixelLocalClearValuefvANGLE(GLint plane,
                                                      const GLfloat value[4]);
 extern void glBeginPixelLocalStorageANGLE(GLsizei n, const GLenum loadops[]);
 extern void glEndPixelLocalStorageANGLE(GLsizei n, const GLenum storeops[]);
+extern void glGetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
+                                                              GLenum pname,
+                                                              GLint* param);
 #endif
 
 #ifndef GL_ANGLE_provoking_vertex
@@ -116,12 +119,28 @@ struct GLCapabilities
                ((major << 16) | minor);
     }
 
+    // GL version.
     int contextVersionMajor;
     int contextVersionMinor;
+
+    // Driver info.
     bool isGLES : 1;
-    bool isAndroidANGLE : 1;
+    bool isANGLEOrWebGL : 1;
     bool isAdreno : 1;
+    bool isMali : 1;
     bool isPowerVR : 1;
+
+    // Workarounds.
+    // Some devices crash when issuing draw commands with a large instancecount.
+    uint32_t maxSupportedInstancesPerDrawCommand = ~0u;
+    // Chrome 136 crashes when trying to run Rive because it attempts to enable
+    // blending on the tessellation texture, which is invalid for an integer
+    // render target. The workaround is to use a floating-point tessellation
+    // texture.
+    // https://issues.chromium.org/issues/416294709
+    bool needsFloatingPointTessellationTexture = false;
+
+    // Extensions
     bool ANGLE_base_vertex_base_instance_shader_builtin : 1;
     bool ANGLE_shader_pixel_local_storage : 1;
     bool ANGLE_shader_pixel_local_storage_coherent : 1;
@@ -135,6 +154,8 @@ struct GLCapabilities
     bool KHR_blend_equation_advanced_coherent : 1;
     bool EXT_base_instance : 1;
     bool EXT_clip_cull_distance : 1;
+    bool EXT_color_buffer_half_float : 1;
+    bool EXT_float_blend : 1; // Implies EXT_color_buffer_float.
     bool EXT_multisampled_render_to_texture : 1;
     bool EXT_shader_framebuffer_fetch : 1;
     bool EXT_shader_pixel_local_storage : 1;

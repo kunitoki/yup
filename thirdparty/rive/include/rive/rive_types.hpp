@@ -49,6 +49,8 @@
 #define RIVE_BUILD_FOR_OSX
 #endif
 
+#define RIVE_NO_STD_SYSTEM
+
 #endif
 
 // We really like these headers, so we include them all the time.
@@ -125,6 +127,11 @@ namespace rivestd
 template <class T, class... Args> std::unique_ptr<T> make_unique(Args&&... args)
 {
     return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+template <typename T> static std::unique_ptr<T> adopt_unique(T* window)
+{
+    return std::unique_ptr<T>(window);
 }
 } // namespace rivestd
 

@@ -59,6 +59,7 @@ public:
         bool synchronousShaderCompilations = false; ///< Controls whether shader compilations are done synchronously.
         bool enableReadPixels = false;              ///< Enables reading pixels directly from the framebuffer.
         bool disableRasterOrdering = false;         ///< Disables specific raster ordering features for performance.
+        bool allowHeadlessRendering = false;        ///< Allows rendering without a visible window (headless mode).
         LoaderFunction loaderFunction = nullptr;    ///< Loader function (used by GL/Vulkan).
     };
 

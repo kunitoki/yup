@@ -87,7 +87,7 @@ public:
         if (m_fiddleOptions.disableRasterOrdering)
             metalOptions.disableFramebufferReads = true;
 
-        m_plsContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
+        m_renderContext = rive::gpu::RenderContextMetalImpl::MakeContext (m_gpu, metalOptions);
 
         NSError* error = nil;
 
@@ -151,9 +151,9 @@ public:
 
     //==============================================================================
 
-    rive::Factory* factory() override { return m_plsContext.get(); }
+    rive::Factory* factory() override { return m_renderContext.get(); }
 
-    rive::gpu::RenderContext* renderContext() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* renderContext() override { return m_renderContext.get(); }
 
     rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
@@ -173,6 +173,7 @@ public:
         m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
+        m_swapchain.drawableSize = CGSizeMake (width, height);
 #if JUCE_MAC
         m_swapchain.displaySyncEnabled = NO;
 #endif
@@ -185,8 +186,8 @@ public:
         view.layer = m_swapchain;
 #endif
 
-        auto plsContextImpl = m_plsContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
-        m_renderTarget = plsContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
+        auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextMetalImpl>();
+        m_renderTarget = renderContextImpl->makeRenderTarget (MTLPixelFormatBGRA8Unorm, width, height);
 
         if (m_currentTexture != nil)
         {
@@ -207,18 +208,18 @@ public:
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<rive::RiveRenderer> (m_plsContext.get());
+        return std::make_unique<rive::RiveRenderer> (m_renderContext.get());
     }
 
     //==============================================================================
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
-        m_plsContext->beginFrame (frameDescriptor);
+        m_renderContext->beginFrame (frameDescriptor);
 
         if (frameDescriptor.loadAction == rive::gpu::LoadAction::clear)
         {
-            id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
+            id<MTLCommandBuffer> presentCommandBuffer = [m_queue commandBuffer];
 
             MTLRenderPassDescriptor* passDescriptor = [MTLRenderPassDescriptor renderPassDescriptor];
             passDescriptor.colorAttachments[0].texture = m_currentTexture;
@@ -226,11 +227,11 @@ public:
             passDescriptor.colorAttachments[0].clearColor = MTLClearColorFromARGB (frameDescriptor.clearColor);
             passDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
 
-            id<MTLRenderCommandEncoder> encoder = [commandBuffer renderCommandEncoderWithDescriptor:passDescriptor];
+            id<MTLRenderCommandEncoder> encoder = [presentCommandBuffer renderCommandEncoderWithDescriptor:passDescriptor];
             [encoder setRenderPipelineState:m_pipelineState];
             [encoder endEncoding];
 
-            [commandBuffer commit];
+            [presentCommandBuffer commit];
         }
     }
 
@@ -243,8 +244,8 @@ public:
         jassert (m_currentTexture.height == m_renderTarget->height());
         m_renderTarget->setTargetTexture (m_currentTexture);
 
-        id<MTLCommandBuffer> commandBuffer = [m_queue commandBuffer];
-        m_plsContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) commandBuffer });
+        id<MTLCommandBuffer> presentCommandBuffer = [m_queue commandBuffer];
+        m_renderContext->flush ({ .renderTarget = m_renderTarget.get(), .externalCommandBuffer = (__bridge void*) presentCommandBuffer });
 
         // Render texture in view drawable
         jassert (m_currentFrameSurface == nil);
@@ -257,15 +258,15 @@ public:
         renderPassDescriptor.colorAttachments[0].loadAction = MTLLoadActionDontCare;
         renderPassDescriptor.colorAttachments[0].storeAction = MTLStoreActionStore;
 
-        id<MTLRenderCommandEncoder> renderEncoder = [commandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
+        id<MTLRenderCommandEncoder> renderEncoder = [presentCommandBuffer renderCommandEncoderWithDescriptor:renderPassDescriptor];
         [renderEncoder setRenderPipelineState:m_pipelineState];
         [renderEncoder setFragmentTexture:m_currentTexture atIndex:0];
         [renderEncoder setVertexBuffer:m_quadVertexBuffer offset:0 atIndex:0];
         [renderEncoder drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
         [renderEncoder endEncoding];
 
-        [commandBuffer presentDrawable:m_currentFrameSurface];
-        [commandBuffer commit];
+        [presentCommandBuffer presentDrawable:m_currentFrameSurface];
+        [presentCommandBuffer commit];
 
         m_currentFrameSurface = nil;
         m_renderTarget->setTargetTexture (nil);
@@ -273,7 +274,7 @@ public:
 
 private:
     const Options m_fiddleOptions;
-    std::unique_ptr<rive::gpu::RenderContext> m_plsContext;
+    std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     id<MTLDevice> m_gpu = MTLCreateSystemDefaultDevice();
     id<MTLCommandQueue> m_queue = [m_gpu newCommandQueue];
     CAMetalLayer* m_swapchain = nil;

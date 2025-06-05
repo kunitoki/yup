@@ -8,15 +8,31 @@
 
 using namespace rive;
 
+ViewModelInstanceList::~ViewModelInstanceList()
+{
+    for (auto item : m_ListItems)
+    {
+        item->unref();
+    }
+}
+
 void ViewModelInstanceList::propertyValueChanged()
 {
-    addDirt(ComponentDirt::Components);
+    addDirt(ComponentDirt::Bindings);
 }
 
 void ViewModelInstanceList::addItem(ViewModelInstanceListItem* item)
 {
+    item->ref();
     m_ListItems.push_back(item);
     propertyValueChanged();
+}
+
+void ViewModelInstanceList::internalAddItem(ViewModelInstanceListItem* item)
+{
+    // For ViewModelInstanceListItems that are built as a core object
+    // we skip the ref since core has already reffed it
+    m_ListItems.push_back(item);
 }
 
 void ViewModelInstanceList::insertItem(int index,
@@ -25,6 +41,7 @@ void ViewModelInstanceList::insertItem(int index,
     // TODO: @hernan decide if we want to return a boolean
     if (index < m_ListItems.size())
     {
+        item->ref();
         m_ListItems.insert(m_ListItems.begin() + index, item);
         propertyValueChanged();
     }
@@ -33,9 +50,11 @@ void ViewModelInstanceList::insertItem(int index,
 void ViewModelInstanceList::removeItem(int index)
 {
     // TODO: @hernan decide if we want to return a boolean
-    if (index < m_ListItems.size())
+    if (index >= 0 && index < m_ListItems.size())
     {
+        auto listItem = m_ListItems[index];
         m_ListItems.erase(m_ListItems.begin() + index);
+        listItem->unref();
         propertyValueChanged();
     }
 }
@@ -74,7 +93,7 @@ Core* ViewModelInstanceList::clone() const
     for (auto property : m_ListItems)
     {
         auto clonedValue = property->clone()->as<ViewModelInstanceListItem>();
-        cloned->addItem(clonedValue);
+        cloned->internalAddItem(clonedValue);
     }
     return cloned;
 }

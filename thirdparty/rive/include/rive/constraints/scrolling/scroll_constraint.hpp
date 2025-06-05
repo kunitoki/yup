@@ -30,6 +30,7 @@ private:
     float indexAtPosition(Vec2D pos);
 
 public:
+    ~ScrollConstraint();
     void constrain(TransformComponent* component) override;
     std::vector<DraggableProxy*> draggables() override;
     void buildDependencies() override;
@@ -164,6 +165,8 @@ public:
     void setScrollPercentX(float value) override;
     void setScrollPercentY(float value) override;
     void setScrollIndex(float value) override;
+    size_t scrollItemCount();
+    Vec2D gap();
 };
 } // namespace rive
 

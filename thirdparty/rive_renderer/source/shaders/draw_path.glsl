@@ -2,6 +2,17 @@
  * Copyright 2022 Rive
  */
 
+#ifdef @ENABLE_ADVANCED_BLEND
+// If advanced blend is enabled, we generate unmultiplied paint colors in the
+// shader. Otherwise we would have to just turn around and unmultiply them in
+// order to run the blend equation.
+#define GENERATE_PREMULTIPLIED_PAINT_COLORS !@ENABLE_ADVANCED_BLEND
+#else
+// As long as advanced blend is not enabled, it's more efficient for the shader
+// to generate premultiplied paint colors from the start.
+#define GENERATE_PREMULTIPLIED_PAINT_COLORS true
+#endif
+
 #ifdef @VERTEX
 ATTR_BLOCK_BEGIN(Attrs)
 #ifdef @DRAW_INTERIOR_TRIANGLES
@@ -18,7 +29,7 @@ ATTR_BLOCK_END
 VARYING_BLOCK_BEGIN
 NO_PERSPECTIVE VARYING(0, float4, v_paint);
 
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
 NO_PERSPECTIVE VARYING(1, float2, v_atlasCoord);
 #elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
@@ -32,7 +43,7 @@ NO_PERSPECTIVE VARYING(2, half2, v_coverages);
 #endif // !@RENDER_MODE_MSAA
 
 #ifdef @ENABLE_CLIPPING
-@OPTIONALLY_FLAT VARYING(4, half, v_clipID);
+@OPTIONALLY_FLAT VARYING(4, half2, v_clipIDs); // [clipID, outerClipID]
 #endif
 #ifdef @ENABLE_CLIP_RECT
 NO_PERSPECTIVE VARYING(5, float4, v_clipRect);
@@ -54,7 +65,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
     VARYING_INIT(v_paint, float4);
 
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_INIT(v_atlasCoord, float2);
 #elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
@@ -68,7 +79,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif // !@RENDER_MODE_MSAA
 
 #ifdef @ENABLE_CLIPPING
-    VARYING_INIT(v_clipID, half);
+    VARYING_INIT(v_clipIDs, half2);
 #endif
 #ifdef @ENABLE_CLIP_RECT
     VARYING_INIT(v_clipRect, float4);
@@ -84,7 +95,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     ushort pathZIndex;
 #endif
 
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     vertexPosition =
         unpack_atlas_coverage_vertex(@a_triangleVertex,
                                      pathID,
@@ -130,7 +141,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
     uint2 paintData = STORAGE_BUFFER_LOAD2(@paintBuffer, pathID);
 
-#if !defined(@ATLAS_COVERAGE) && !defined(@RENDER_MODE_MSAA)
+#if !defined(@ATLAS_BLIT) && !defined(@RENDER_MODE_MSAA)
     // Encode the integral pathID as a "half" that we know the hardware will see
     // as a unique value in the fragment shader.
     v_pathID = id_bits_to_f16(pathID, uniforms.pathIDGranularity);
@@ -138,7 +149,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     // Indicate even-odd fill rule by making pathID negative.
     if ((paintData.x & PAINT_FLAG_EVEN_ODD_FILL) != 0u)
         v_pathID = -v_pathID;
-#endif // !@ATLAS_COVERAGE && !@RENDER_MODE_MSAA
+#endif // !@ATLAS_BLIT && !@RENDER_MODE_MSAA
 
     uint paintType = paintData.x & 0xfu;
 #ifdef @ENABLE_CLIPPING
@@ -147,11 +158,12 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
         uint clipIDBits =
             (paintType == CLIP_UPDATE_PAINT_TYPE ? paintData.y : paintData.x) >>
             16;
-        v_clipID = id_bits_to_f16(clipIDBits, uniforms.pathIDGranularity);
+        half clipID = id_bits_to_f16(clipIDBits, uniforms.pathIDGranularity);
         // Negative clipID means to update the clip buffer instead of the color
         // buffer.
         if (paintType == CLIP_UPDATE_PAINT_TYPE)
-            v_clipID = -v_clipID;
+            clipID = -clipID;
+        v_clipIDs.x = clipID;
     }
 #endif
 #ifdef @ENABLE_ADVANCED_BLEND
@@ -194,6 +206,8 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     if (paintType == SOLID_COLOR_PAINT_TYPE)
     {
         half4 color = unpackUnorm4x8(paintData.y);
+        if (GENERATE_PREMULTIPLIED_PAINT_COLORS)
+            color.rgb *= color.a;
         v_paint = float4(color);
     }
 #ifdef @ENABLE_CLIPPING
@@ -201,7 +215,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     {
         half outerClipID =
             id_bits_to_f16(paintData.x >> 16, uniforms.pathIDGranularity);
-        v_paint = float4(outerClipID, 0, 0, 0);
+        v_clipIDs.y = outerClipID;
     }
 #endif
     else
@@ -284,7 +298,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     }
 
     VARYING_PACK(v_paint);
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_PACK(v_atlasCoord);
 #elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
@@ -298,7 +312,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif // !@RENDER_MODE_MSAA
 
 #ifdef @ENABLE_CLIPPING
-    VARYING_PACK(v_clipID);
+    VARYING_PACK(v_clipIDs);
 #endif
 #ifdef @ENABLE_CLIP_RECT
     VARYING_PACK(v_clipRect);
@@ -314,11 +328,19 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 FRAG_STORAGE_BUFFER_BLOCK_BEGIN
 FRAG_STORAGE_BUFFER_BLOCK_END
 
-INLINE half4 find_paint_color(float4 paint FRAGMENT_CONTEXT_DECL)
+INLINE half4 find_paint_color(float4 paint,
+                              float coverage FRAGMENT_CONTEXT_DECL)
 {
+    half4 color;
     if (paint.a >= .0) // Is the paint a solid color?
     {
-        return cast_float4_to_half4(paint);
+        // The vertex shader will have premultiplied 'paint' (or not) based on
+        // GENERATE_PREMULTIPLIED_PAINT_COLORS.
+        color = cast_float4_to_half4(paint);
+        if (GENERATE_PREMULTIPLIED_PAINT_COLORS)
+            color *= coverage;
+        else
+            color.a *= coverage;
     }
     else if (paint.a > -1.) // Is paint is a gradient (linear or radial)?
     {
@@ -332,22 +354,31 @@ INLINE half4 find_paint_color(float4 paint FRAGMENT_CONTEXT_DECL)
                       : /*two texels*/ (1. / GRAD_TEXTURE_WIDTH) * t + span;
         float row = -paint.a;
         // Our gradient texture is not mipmapped. Issue a texture-sample that
-        // explicitly does not find derivatives for LOD computation (by
-        // specifying derivatives directly).
-        return TEXTURE_SAMPLE_LOD(@gradTexture,
-                                  gradSampler,
-                                  float2(x, row),
-                                  .0);
+        // explicitly does not find derivatives for LOD computation.
+        color =
+            TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, row), .0);
+        color.a *= coverage;
+        // Gradients are always unmultiplied so we don't lose color data while
+        // doing the hardware filter.
+        if (GENERATE_PREMULTIPLIED_PAINT_COLORS)
+            color.rgb *= color.a;
     }
     else // The paint is an image.
     {
         half lod = -paint.a - 2.;
-        half4 color =
-            TEXTURE_SAMPLE_LOD(@imageTexture, imageSampler, paint.rg, lod);
-        half opacity = paint.b;
-        color.a *= opacity;
-        return color;
+        color = TEXTURE_SAMPLE_DYNAMIC_LOD(@imageTexture,
+                                           imageSampler,
+                                           paint.rg,
+                                           lod);
+        half opacity = paint.b * coverage;
+        // Images are always premultiplied so the (transparent) background color
+        // doesn't bleed into the edges during the hardware filter.
+        if (GENERATE_PREMULTIPLIED_PAINT_COLORS)
+            color *= opacity;
+        else
+            color = make_half4(unmultiply_rgb(color), color.a * opacity);
     }
+    return color;
 }
 
 #ifndef @RENDER_MODE_MSAA
@@ -363,7 +394,7 @@ PLS_MAIN(@drawFragmentMain)
 {
     VARYING_UNPACK(v_paint, float4);
 
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_UNPACK(v_atlasCoord, float2);
 #elif !defined(@RENDER_MODE_MSAA)
 #ifdef @DRAW_INTERIOR_TRIANGLES
@@ -377,7 +408,7 @@ PLS_MAIN(@drawFragmentMain)
 #endif // !@RENDER_MODE_MSAA
 
 #ifdef @ENABLE_CLIPPING
-    VARYING_UNPACK(v_clipID, half);
+    VARYING_UNPACK(v_clipIDs, half2);
 #endif
 #ifdef @ENABLE_CLIP_RECT
     VARYING_UNPACK(v_clipRect, float4);
@@ -386,13 +417,13 @@ PLS_MAIN(@drawFragmentMain)
     VARYING_UNPACK(v_blendMode, half);
 #endif
 
-#if !defined(@DRAW_INTERIOR_TRIANGLES) || defined(@ATLAS_COVERAGE)
+#if !defined(@DRAW_INTERIOR_TRIANGLES) || defined(@ATLAS_BLIT)
     // Interior triangles don't overlap, so don't need raster ordering.
     PLS_INTERLOCK_BEGIN;
 #endif
 
     half coverage;
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     coverage = filter_feather_atlas(
         v_atlasCoord,
         uniforms.atlasTextureInverseSize TEXTURE_CONTEXT_FORWARD);
@@ -448,7 +479,22 @@ PLS_MAIN(@drawFragmentMain)
 #ifdef @CLOCKWISE_FILL
     if (@CLOCKWISE_FILL)
     {
-        coverage = clamp(coverageCount, make_half(.0), make_half(1.));
+#ifdef @VULKAN_VENDOR_ID
+        if (@VULKAN_VENDOR_ID == VULKAN_VENDOR_ARM)
+        {
+            // ARM hits a bug if we use clamp() here.
+            if (coverageCount < .0)
+                coverage = .0;
+            else if (coverageCount <= 1.)
+                coverage = coverageCount;
+            else
+                coverage = 1.;
+        }
+        else
+#endif
+        {
+            coverage = clamp(coverageCount, make_half(.0), make_half(1.));
+        }
     }
     else
 #endif // CLOCKWISE_FILL
@@ -463,16 +509,16 @@ PLS_MAIN(@drawFragmentMain)
         // This also caps stroke coverage, which can be >1.
         coverage = min(coverage, make_half(1.));
     }
-#endif // !@ATLAS_COVERAGE
+#endif // !@ATLAS_BLIT
 
 #ifdef @ENABLE_CLIPPING
-    if (@ENABLE_CLIPPING && v_clipID < .0) // Update the clip buffer.
+    if (@ENABLE_CLIPPING && v_clipIDs.x < .0) // Update the clip buffer.
     {
-        half clipID = -v_clipID;
+        half clipID = -v_clipIDs.x;
 #ifdef @ENABLE_NESTED_CLIPPING
         if (@ENABLE_NESTED_CLIPPING)
         {
-            half outerClipID = v_paint.r;
+            half outerClipID = v_clipIDs.y;
             if (outerClipID != .0)
             {
                 // This is a nested clip. Intersect coverage with the enclosing
@@ -521,16 +567,16 @@ PLS_MAIN(@drawFragmentMain)
         if (@ENABLE_CLIPPING)
         {
             // Apply the clip.
-            if (v_clipID != .0)
+            half clipID = v_clipIDs.x;
+            if (clipID != .0)
             {
                 // Clip IDs are not necessarily drawn in monotonically
                 // increasing order, so always check exact equality of the
                 // clipID.
                 half2 clipData = unpackHalf2x16(PLS_LOADUI(clipBuffer));
                 half clipContentID = clipData.g;
-                coverage = (clipContentID == v_clipID)
-                               ? min(clipData.r, coverage)
-                               : make_half(.0);
+                coverage = (clipContentID == clipID) ? min(clipData.r, coverage)
+                                                     : make_half(.0);
             }
         }
 #endif
@@ -542,56 +588,59 @@ PLS_MAIN(@drawFragmentMain)
         }
 #endif // ENABLE_CLIP_RECT
 
-        half4 color = find_paint_color(v_paint FRAGMENT_CONTEXT_UNPACK);
-        color.a *= coverage;
+        half4 color =
+            find_paint_color(v_paint, coverage FRAGMENT_CONTEXT_UNPACK);
 
-        half4 dstColor;
-#ifdef @ATLAS_COVERAGE
-        dstColor = PLS_LOAD4F(colorBuffer);
+        half4 dstColorPremul;
+#ifdef @ATLAS_BLIT
+        dstColorPremul = PLS_LOAD4F(colorBuffer);
 #else
         if (coverageBufferID != v_pathID)
         {
             // This is the first fragment from pathID to touch this pixel.
-            dstColor = PLS_LOAD4F(colorBuffer);
+            dstColorPremul = PLS_LOAD4F(colorBuffer);
 #ifndef @DRAW_INTERIOR_TRIANGLES
             // We don't need to store coverage when drawing interior triangles
             // because they always go last and don't overlap, so every fragment
             // is the final one in the path.
-            PLS_STORE4F(scratchColorBuffer, dstColor);
+            PLS_STORE4F(scratchColorBuffer, dstColorPremul);
 #endif
         }
         else
         {
-            dstColor = PLS_LOAD4F(scratchColorBuffer);
+            dstColorPremul = PLS_LOAD4F(scratchColorBuffer);
 #ifndef @DRAW_INTERIOR_TRIANGLES
             // Since interior triangles are always last, there's no need to
             // preserve this value.
             PLS_PRESERVE_4F(scratchColorBuffer);
 #endif
         }
-#endif // @ATLAS_COVERAGE
+#endif // @ATLAS_BLIT
 
         // Blend with the framebuffer color.
 #ifdef @ENABLE_ADVANCED_BLEND
-        if (@ENABLE_ADVANCED_BLEND &&
-            v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
+        if (@ENABLE_ADVANCED_BLEND)
         {
-            color = advanced_blend(color,
-                                   unmultiply(dstColor),
-                                   cast_half_to_ushort(v_blendMode));
-        }
-        else
-#endif
-        {
+            // GENERATE_PREMULTIPLIED_PAINT_COLORS is false in this case because
+            // advanced blend needs unmultiplied colors.
+            if (v_blendMode != cast_uint_to_half(BLEND_SRC_OVER))
+            {
+                color.rgb =
+                    advanced_color_blend(color.rgb,
+                                         dstColorPremul,
+                                         cast_half_to_ushort(v_blendMode));
+            }
+            // Premultiply alpha now.
             color.rgb *= color.a;
-            color = color + dstColor * (1. - color.a);
         }
+#endif
+        color += dstColorPremul * (1. - color.a);
 
         PLS_STORE4F(colorBuffer, color);
         PLS_PRESERVE_UI(clipBuffer);
     }
 
-#if !defined(@DRAW_INTERIOR_TRIANGLES) || defined(@ATLAS_COVERAGE)
+#if !defined(@DRAW_INTERIOR_TRIANGLES) || defined(@ATLAS_BLIT)
     // Interior triangles don't overlap, so don't need raster ordering.
     PLS_INTERLOCK_END;
 #endif
@@ -604,34 +653,41 @@ PLS_MAIN(@drawFragmentMain)
 FRAG_DATA_MAIN(half4, @drawFragmentMain)
 {
     VARYING_UNPACK(v_paint, float4);
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_UNPACK(v_atlasCoord, float2);
 #endif
 #ifdef @ENABLE_ADVANCED_BLEND
     VARYING_UNPACK(v_blendMode, half);
 #endif
 
-    half4 color = find_paint_color(v_paint);
-#ifdef @ATLAS_COVERAGE
-    color.a *= filter_feather_atlas(
-        v_atlasCoord,
-        uniforms.atlasTextureInverseSize TEXTURE_CONTEXT_FORWARD);
+    half coverage =
+#ifdef @ATLAS_BLIT
+        filter_feather_atlas(
+            v_atlasCoord,
+            uniforms.atlasTextureInverseSize TEXTURE_CONTEXT_FORWARD);
+#else
+        1.;
 #endif
+    half4 color = find_paint_color(v_paint, coverage FRAGMENT_CONTEXT_UNPACK);
 
 #ifdef @ENABLE_ADVANCED_BLEND
     if (@ENABLE_ADVANCED_BLEND)
     {
-        half4 dstColor =
+        // Do the color portion of the blend mode in the shader.
+        //
+        // NOTE: "color" is already unmultiplied because
+        // GENERATE_PREMULTIPLIED_PAINT_COLORS is false when using advanced
+        // blend.
+        half4 dstColorPremul =
             TEXEL_FETCH(@dstColorTexture, int2(floor(_fragCoord.xy)));
-        color = advanced_blend(color,
-                               unmultiply(dstColor),
-                               cast_half_to_ushort(v_blendMode));
+        color.rgb = advanced_color_blend(color.rgb,
+                                         dstColorPremul,
+                                         cast_half_to_ushort(v_blendMode));
+        // Src-over blending is enabled, so just premultiply and let the HW
+        // finish the the the alpha portion of the blend mode.
+        color.rgb *= color.a;
     }
-    else
 #endif // ENABLE_ADVANCED_BLEND
-    {
-        color = premultiply(color);
-    }
     EMIT_FRAG_DATA(color);
 }
 

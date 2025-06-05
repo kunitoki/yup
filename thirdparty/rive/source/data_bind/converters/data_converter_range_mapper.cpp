@@ -50,37 +50,27 @@ DataValueNumber* DataConverterRangeMapper::calculateRange(DataValue* input,
                 // apply modulo to value to wrap whithin the min - max input if
                 // it exceeds its range
                 value =
-                    std::abs(fmodf(value, (maxInput - minInput)) + minInput);
+                    std::abs(math::positive_mod(value, (maxInput - minInput)) +
+                             minInput);
             }
-            if (value < minInput)
+            float perc = (value - minInput) / (maxInput - minInput);
+            // If reverse flag is on, flip the values
+            if ((flagsValue & DataConverterRangeMapperFlags::Reverse) ==
+                DataConverterRangeMapperFlags::Reverse)
             {
-                m_output.value(minOutput);
+                perc = 1 - perc;
             }
-            else if (value > maxInput)
+            // Apply interpolator if exists and value is within range
+            if (m_interpolator != nullptr && perc > 0 && perc < 1)
             {
-                m_output.value(maxOutput);
+                perc = m_interpolator->transform(perc);
             }
-            else
+            // hold keyframe interpolation
+            else if (interpolationType() == 0)
             {
-                float perc = (value - minInput) / (maxInput - minInput);
-                // If reverse flag is on, flip the values
-                if ((flagsValue & DataConverterRangeMapperFlags::Reverse) ==
-                    DataConverterRangeMapperFlags::Reverse)
-                {
-                    perc = 1 - perc;
-                }
-                // hold keyframe interpolation
-                else if (interpolationType() == 0)
-                {
-                    perc = perc <= 0 ? 0 : 1;
-                }
-                // Apply interpolator if exists
-                if (m_interpolator != nullptr)
-                {
-                    perc = m_interpolator->transform(perc);
-                }
-                m_output.value(perc * maxOutput + (1 - perc) * minOutput);
+                perc = perc <= 0 ? 0 : 1;
             }
+            m_output.value(perc * maxOutput + (1 - perc) * minOutput);
         }
     }
     else
@@ -95,9 +85,9 @@ DataValueNumber* DataConverterRangeMapper::calculateReverseRange(
     float minInput,
     float maxInput,
     float minOutput,
-    float maxOutnput)
+    float maxOutput)
 {
-    return calculateRange(input, minOutput, maxOutnput, minInput, maxInput);
+    return calculateRange(input, minOutput, maxOutput, minInput, maxInput);
 }
 
 void DataConverterRangeMapper::interpolator(KeyFrameInterpolator* interpolator)
@@ -124,3 +114,11 @@ DataValue* DataConverterRangeMapper::reverseConvert(DataValue* input,
                                  minOutput(),
                                  maxOutput());
 }
+
+void DataConverterRangeMapper::minInputChanged() { markConverterDirty(); }
+
+void DataConverterRangeMapper::maxInputChanged() { markConverterDirty(); }
+
+void DataConverterRangeMapper::minOutputChanged() { markConverterDirty(); }
+
+void DataConverterRangeMapper::maxOutputChanged() { markConverterDirty(); }

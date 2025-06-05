@@ -114,7 +114,8 @@ public:
             if (propertiesData.size() > 0)
             {
                 animationReset->writeObjectId(keyedObjectData->objectId);
-                animationReset->writeTotalProperties(propertiesData.size());
+                animationReset->writeTotalProperties(
+                    (uint32_t)propertiesData.size());
                 for (auto keyedPropertyData : propertiesData)
                 {
                     auto keyedProperty = keyedPropertyData.keyedProperty;
@@ -152,14 +153,15 @@ public:
                                     auto value = keyedProperty->first()
                                                      ->as<KeyFrameColor>()
                                                      ->value();
-                                    animationReset->writePropertyValue(value);
+                                    animationReset->writePropertyValue(
+                                        (float)value);
                                 }
                             }
                             else
                             {
                                 animationReset->writePropertyValue(
-                                    CoreRegistry::getColor(component,
-                                                           propertyKey));
+                                    (float)CoreRegistry::getColor(component,
+                                                                  propertyKey));
                             }
                             break;
                     }

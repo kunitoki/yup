@@ -52,6 +52,48 @@ static id<MTLRenderPipelineState> make_pipeline_state(
     return state;
 }
 
+static MTLSamplerAddressMode address_mode_for_image_wrap(ImageWrap wrap)
+{
+    switch (wrap)
+    {
+        case ImageWrap::clamp:
+            return MTLSamplerAddressModeClampToEdge;
+        case ImageWrap::repeat:
+            return MTLSamplerAddressModeRepeat;
+        case ImageWrap::mirror:
+            return MTLSamplerAddressModeMirrorRepeat;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
+static MTLSamplerMinMagFilter min_mag_filter_for_image_filter(
+    ImageFilter option)
+{
+    switch (option)
+    {
+        case ImageFilter::trilinear:
+            return MTLSamplerMinMagFilterLinear;
+        case ImageFilter::nearest:
+            return MTLSamplerMinMagFilterNearest;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
+static MTLSamplerMipFilter mip_filter_for_image_filter(ImageFilter option)
+{
+    switch (option)
+    {
+        case ImageFilter::trilinear:
+            return MTLSamplerMipFilterLinear;
+        case ImageFilter::nearest:
+            return MTLSamplerMipFilterNearest;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
 // Renders color ramps to the gradient texture.
 class RenderContextMetalImpl::ColorRampPipeline
 {
@@ -147,7 +189,7 @@ public:
         char namespaceID[] = "000000000";
         static_assert(sizeof(namespaceID) ==
                       gpu::kShaderFeatureCount + 1 /*DRAW_INTERIOR_TRIANGLES*/ +
-                          1 /*ATLAS_COVERAGE*/ + 1 /*null terminator*/);
+                          1 /*ATLAS_BLIT*/ + 1 /*null terminator*/);
         for (size_t i = 0; i < gpu::kShaderFeatureCount; ++i)
         {
             ShaderFeatures feature = static_cast<ShaderFeatures>(1 << i);
@@ -169,8 +211,9 @@ public:
         {
             namespaceID[gpu::kShaderFeatureCount] = '1';
         }
-        if (shaderMiscFlags & gpu::ShaderMiscFlags::atlasCoverage)
+        else if (drawType == DrawType::atlasBlit)
         {
+            namespaceID[gpu::kShaderFeatureCount] = '1';
             namespaceID[gpu::kShaderFeatureCount + 1] = '1';
         }
 
@@ -181,6 +224,7 @@ public:
             case DrawType::midpointFanCenterAAPatches:
             case DrawType::outerCurvePatches:
             case DrawType::interiorTriangulation:
+            case DrawType::atlasBlit:
                 namespacePrefix =
                     (shaderMiscFlags & gpu::ShaderMiscFlags::clockwiseFill)
                         ? 'c'
@@ -193,7 +237,14 @@ public:
                 break;
             case DrawType::atomicInitialize:
             case DrawType::atomicResolve:
-            case DrawType::stencilClipReset:
+            case DrawType::msaaStrokes:
+            case DrawType::msaaMidpointFanBorrowedCoverage:
+            case DrawType::msaaMidpointFans:
+            case DrawType::msaaMidpointFanStencilReset:
+            case DrawType::msaaMidpointFanPathsStencil:
+            case DrawType::msaaMidpointFanPathsCover:
+            case DrawType::msaaOuterCubics:
+            case DrawType::msaaStencilClipReset:
                 RIVE_UNREACHABLE();
         }
 
@@ -212,6 +263,13 @@ public:
                  gpu::ShaderFeatures shaderFeatures,
                  gpu::ShaderMiscFlags shaderMiscFlags)
     {
+        if (library == nil)
+        {
+            // This pipeline is being built from a shader that failed to
+            // compile. Leave everything nil and let draws fail.
+            return;
+        }
+
         auto makePipelineState = [=](id<MTLFunction> vertexMain,
                                      id<MTLFunction> fragmentMain,
                                      MTLPixelFormat pixelFormat) {
@@ -290,8 +348,15 @@ public:
             vertexMain, fragmentMain, MTLPixelFormatBGRA8Unorm);
     }
 
+    bool valid() const
+    {
+        assert((m_pipelineStateRGBA8 != nil) == (m_pipelineStateBGRA8 != nil));
+        return m_pipelineStateRGBA8 != nil;
+    }
+
     id<MTLRenderPipelineState> pipelineState(MTLPixelFormat pixelFormat) const
     {
+        assert(valid());
         assert(pixelFormat == MTLPixelFormatRGBA8Unorm ||
                pixelFormat == MTLPixelFormatRGBA16Float ||
                pixelFormat == MTLPixelFormatRGBA8Unorm_sRGB ||
@@ -310,8 +375,8 @@ public:
     }
 
 private:
-    id<MTLRenderPipelineState> m_pipelineStateRGBA8;
-    id<MTLRenderPipelineState> m_pipelineStateBGRA8;
+    id<MTLRenderPipelineState> m_pipelineStateRGBA8 = nil;
+    id<MTLRenderPipelineState> m_pipelineStateBGRA8 = nil;
 };
 
 #if defined(RIVE_IOS) || defined(RIVE_XROS) || defined(RIVE_APPLETVOS)
@@ -457,6 +522,23 @@ RenderContextMetalImpl::RenderContextMetalImpl(
     }
 #endif
 
+    for (int i = 0; i < rive::ImageSampler::MAX_SAMPLER_PERMUTATIONS; ++i)
+    {
+        auto wrapX = ImageSampler::GetWrapXOptionFromKey(i);
+        auto wrapY = ImageSampler::GetWrapYOptionFromKey(i);
+        auto filter = ImageSampler::GetFilterOptionFromKey(i);
+
+        MTLSamplerDescriptor* samplerDescriptor = [MTLSamplerDescriptor new];
+        samplerDescriptor.minFilter = min_mag_filter_for_image_filter(filter);
+        samplerDescriptor.magFilter = min_mag_filter_for_image_filter(filter);
+        samplerDescriptor.mipFilter = mip_filter_for_image_filter(filter);
+        samplerDescriptor.sAddressMode = address_mode_for_image_wrap(wrapX);
+        samplerDescriptor.tAddressMode = address_mode_for_image_wrap(wrapY);
+
+        m_imageSamplers[i] =
+            [gpu newSamplerStateWithDescriptor:samplerDescriptor];
+    }
+
     m_backgroundShaderCompiler =
         std::make_unique<BackgroundShaderCompiler>(m_gpu, m_metalFeatures);
 
@@ -503,19 +585,26 @@ RenderContextMetalImpl::RenderContextMetalImpl(
 
     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
     desc.pixelFormat = MTLPixelFormatR16Float;
-    desc.width = gpu::FEATHER_TEXTURE_WIDTH;
-    desc.height = gpu::FEATHER_TEXTURE_HEIGHT;
-    desc.usage = MTLTextureUsageShaderRead;
-    desc.textureType = MTLTextureType2D;
+    desc.textureType = MTLTextureType1DArray;
+    desc.width = gpu::GAUSSIAN_TABLE_SIZE;
     desc.mipmapLevelCount = 1;
+    desc.arrayLength = FEATHER_TEXTURE_1D_ARRAY_LENGTH;
+    desc.usage = MTLTextureUsageShaderRead;
     m_featherTexture = [m_gpu newTextureWithDescriptor:desc];
-    [m_featherTexture replaceRegion:MTLRegionMake2D(0,
-                                                    0,
-                                                    gpu::FEATHER_TEXTURE_WIDTH,
-                                                    gpu::FEATHER_TEXTURE_HEIGHT)
-                        mipmapLevel:0
-                          withBytes:gpu::FeatherTextureData().data
-                        bytesPerRow:gpu::FeatherTextureData::BYTES_PER_ROW];
+    [m_featherTexture
+        replaceRegion:MTLRegionMake2D(0, 0, gpu::GAUSSIAN_TABLE_SIZE, 1)
+          mipmapLevel:0
+                slice:FEATHER_FUNCTION_ARRAY_INDEX
+            withBytes:gpu::g_gaussianIntegralTableF16
+          bytesPerRow:sizeof(gpu::g_gaussianIntegralTableF16)
+        bytesPerImage:sizeof(gpu::g_gaussianIntegralTableF16)];
+    [m_featherTexture
+        replaceRegion:MTLRegionMake2D(0, 0, gpu::GAUSSIAN_TABLE_SIZE, 1)
+          mipmapLevel:0
+                slice:FEATHER_INVERSE_FUNCTION_ARRAY_INDEX
+            withBytes:gpu::g_inverseGaussianIntegralTableF16
+          bytesPerRow:sizeof(gpu::g_gaussianIntegralTableF16)
+        bytesPerImage:sizeof(gpu::g_gaussianIntegralTableF16)];
 
     m_tessPipeline =
         std::make_unique<TessellatePipeline>(m_gpu, m_plsPrecompiledLibrary);
@@ -532,24 +621,20 @@ RenderContextMetalImpl::RenderContextMetalImpl(
     {
         for (auto drawType : {DrawType::midpointFanPatches,
                               DrawType::interiorTriangulation,
+                              DrawType::atlasBlit,
                               DrawType::imageMesh})
         {
-            for (auto shaderMiscFlags :
-                 {gpu::ShaderMiscFlags::none,
-                  gpu::ShaderMiscFlags::clockwiseFill,
-                  ShaderMiscFlags(gpu::ShaderMiscFlags::clockwiseFill |
-                                  gpu::ShaderMiscFlags::atlasCoverage)})
+            for (auto shaderMiscFlags : {gpu::ShaderMiscFlags::none,
+                                         gpu::ShaderMiscFlags::clockwiseFill})
             {
-                if ((shaderMiscFlags & gpu::ShaderMiscFlags::atlasCoverage) &&
-                    drawType != gpu::DrawType::interiorTriangulation)
+                if (drawType == gpu::DrawType::atlasBlit &&
+                    shaderMiscFlags != gpu::ShaderMiscFlags::none)
                 {
                     continue;
                 }
                 gpu::ShaderFeatures allShaderFeatures =
                     gpu::ShaderFeaturesMaskFor(
-                        drawType,
-                        shaderMiscFlags,
-                        gpu::InterlockMode::rasterOrdering);
+                        drawType, gpu::InterlockMode::rasterOrdering);
                 uint32_t pipelineKey =
                     ShaderUniqueKey(drawType,
                                     allShaderFeatures,
@@ -561,7 +646,7 @@ RenderContextMetalImpl::RenderContextMetalImpl(
                     DrawPipeline::GetPrecompiledFunctionName(
                         drawType,
                         allShaderFeatures & gpu::kVertexShaderFeaturesMask,
-                        shaderMiscFlags & gpu::VERTEX_SHADER_MISC_FLAGS_MASK,
+                        gpu::ShaderMiscFlags::none,
                         m_plsPrecompiledLibrary,
                         GLSL_drawVertexMain),
                     DrawPipeline::GetPrecompiledFunctionName(
@@ -708,7 +793,7 @@ public:
                      uint32_t width,
                      uint32_t height,
                      uint32_t mipLevelCount,
-                     const uint8_t imageDataRGBA[]) :
+                     const uint8_t imageDataRGBAPremul[]) :
         Texture(width, height)
     {
         // Create the texture.
@@ -725,7 +810,7 @@ public:
         MTLRegion region = MTLRegionMake2D(0, 0, width, height);
         [m_texture replaceRegion:region
                      mipmapLevel:0
-                       withBytes:imageDataRGBA
+                       withBytes:imageDataRGBAPremul
                      bytesPerRow:width * 4];
     }
 
@@ -753,10 +838,10 @@ rcp<Texture> RenderContextMetalImpl::makeImageTexture(
     uint32_t width,
     uint32_t height,
     uint32_t mipLevelCount,
-    const uint8_t imageDataRGBA[])
+    const uint8_t imageDataRGBAPremul[])
 {
     return make_rcp<TextureMetalImpl>(
-        m_gpu, width, height, mipLevelCount, imageDataRGBA);
+        m_gpu, width, height, mipLevelCount, imageDataRGBAPremul);
 }
 
 std::unique_ptr<BufferRing> RenderContextMetalImpl::makeUniformBufferRing(
@@ -854,37 +939,14 @@ void RenderContextMetalImpl::resizeAtlasTexture(uint32_t width, uint32_t height)
 const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
     findCompatibleDrawPipeline(gpu::DrawType drawType,
                                gpu::ShaderFeatures shaderFeatures,
-                               gpu::InterlockMode interlockMode,
+                               const gpu::FlushDescriptor& desc,
                                gpu::ShaderMiscFlags shaderMiscFlags)
 {
-    uint32_t pipelineKey = gpu::ShaderUniqueKey(
-        drawType, shaderFeatures, interlockMode, shaderMiscFlags);
-    auto pipelineIter = m_drawPipelines.find(pipelineKey);
-    if (pipelineIter == m_drawPipelines.end())
-    {
-        // The shader for this pipeline hasn't been scheduled for compiling yet.
-        // Schedule it to compile in the background.
-        m_backgroundShaderCompiler->pushJob({
-            .drawType = drawType,
-            .shaderFeatures = shaderFeatures,
-            .interlockMode = interlockMode,
-            .shaderMiscFlags = shaderMiscFlags,
-        });
-        pipelineIter = m_drawPipelines.insert({pipelineKey, nullptr}).first;
-    }
-
-    if (pipelineIter->second != nullptr)
-    {
-        // The pipeline is fully compiled and loaded.
-        return pipelineIter->second.get();
-    }
-
-    // The shader for this pipeline hasn't finished compiling yet. Start by
-    // finding a fully-featured superset of features whose pipeline we can fall
+    // Find a fully-featured superset of features whose pipeline we can fall
     // back on while waiting for it to compile.
     ShaderFeatures fullyFeaturedPipelineFeatures =
-        gpu::ShaderFeaturesMaskFor(drawType, shaderMiscFlags, interlockMode);
-    if (interlockMode == gpu::InterlockMode::atomics)
+        gpu::ShaderFeaturesMaskFor(drawType, desc.interlockMode);
+    if (desc.interlockMode == gpu::InterlockMode::atomics)
     {
         // Never add ENABLE_ADVANCED_BLEND to an atomic pipeline that doesn't
         // use advanced blend, since in atomic mode, the shaders behave
@@ -900,52 +962,80 @@ const RenderContextMetalImpl::DrawPipeline* RenderContextMetalImpl::
     }
     shaderFeatures &= fullyFeaturedPipelineFeatures;
 
-    // Fully-featured "rasterOrdering" pipelines should have already been
-    // pre-loaded from the static library.
-    assert(shaderFeatures != fullyFeaturedPipelineFeatures ||
-           interlockMode != gpu::InterlockMode::rasterOrdering);
-
-    // Poll to see if the shader is actually done compiling, but only wait if
-    // it's a fully-feature pipeline. Otherwise, we can fall back on the
-    // fully-featured pipeline while we wait for compilation.
-    BackgroundCompileJob job;
-    bool shouldWaitForBackgroundCompilation =
-        shaderFeatures == fullyFeaturedPipelineFeatures ||
-        m_contextOptions.synchronousShaderCompilations;
-    while (m_backgroundShaderCompiler->popFinishedJob(
-        &job, shouldWaitForBackgroundCompilation))
+    uint32_t pipelineKey = gpu::ShaderUniqueKey(
+        drawType, shaderFeatures, desc.interlockMode, shaderMiscFlags);
+    auto pipelineIter = m_drawPipelines.find(pipelineKey);
+    if (pipelineIter == m_drawPipelines.end())
     {
-        uint32_t jobKey = gpu::ShaderUniqueKey(job.drawType,
-                                               job.shaderFeatures,
-                                               job.interlockMode,
-                                               job.shaderMiscFlags);
-        m_drawPipelines[jobKey] =
-            std::make_unique<DrawPipeline>(m_gpu,
-                                           job.compiledLibrary,
-                                           @GLSL_drawVertexMain,
-                                           @GLSL_drawFragmentMain,
-                                           job.drawType,
-                                           job.interlockMode,
-                                           job.shaderFeatures,
-                                           job.shaderMiscFlags);
-        if (jobKey == pipelineKey)
+        // The shader for this pipeline hasn't been scheduled for compiling yet.
+        // Schedule it to compile in the background.
+        m_backgroundShaderCompiler->pushJob({
+            .drawType = drawType,
+            .shaderFeatures = shaderFeatures,
+            .interlockMode = desc.interlockMode,
+            .shaderMiscFlags = shaderMiscFlags,
+#ifdef WITH_RIVE_TOOLS
+            .synthesizeCompilationFailure = desc.synthesizeCompilationFailures,
+#endif
+        });
+        pipelineIter = m_drawPipelines.insert({pipelineKey, nullptr}).first;
+    }
+
+    if (pipelineIter->second == nullptr)
+    {
+        // The shader for this pipeline hasn't finished compiling yet.
+        // Fully-featured "rasterOrdering" pipelines should have already been
+        // pre-loaded from the static library.
+        assert(shaderFeatures != fullyFeaturedPipelineFeatures ||
+               desc.interlockMode != gpu::InterlockMode::rasterOrdering);
+
+        // Poll to see if the shader is actually done compiling, but only wait
+        // if it's a fully-feature pipeline. Otherwise, we can fall back on the
+        // fully-featured pipeline while we wait for compilation.
+        BackgroundCompileJob job;
+        bool shouldWaitForBackgroundCompilation =
+            shaderFeatures == fullyFeaturedPipelineFeatures ||
+            m_contextOptions.synchronousShaderCompilations;
+        while (m_backgroundShaderCompiler->popFinishedJob(
+            &job, shouldWaitForBackgroundCompilation))
         {
-            // The shader we wanted was actually done compiling and pending
-            // being built into a pipeline.
-            return pipelineIter->second.get();
+            uint32_t jobKey = gpu::ShaderUniqueKey(job.drawType,
+                                                   job.shaderFeatures,
+                                                   job.interlockMode,
+                                                   job.shaderMiscFlags);
+            m_drawPipelines[jobKey] =
+                std::make_unique<DrawPipeline>(m_gpu,
+                                               job.compiledLibrary,
+                                               @GLSL_drawVertexMain,
+                                               @GLSL_drawFragmentMain,
+                                               job.drawType,
+                                               job.interlockMode,
+                                               job.shaderFeatures,
+                                               job.shaderMiscFlags);
+            if (jobKey == pipelineKey)
+            {
+                // The shader we wanted was actually done compiling and pending
+                // being built into a pipeline.
+                break;
+            }
         }
     }
 
-    // The shader for this feature set hasn't finished compiling. Use the
-    // pipeline that has all features enabled while we wait for it to finish.
-    assert(shaderFeatures != fullyFeaturedPipelineFeatures);
-    return findCompatibleDrawPipeline(drawType,
-                                      fullyFeaturedPipelineFeatures,
-                                      interlockMode,
-                                      shaderMiscFlags);
+    if ((pipelineIter->second == nullptr || !pipelineIter->second->valid()) &&
+        shaderFeatures != fullyFeaturedPipelineFeatures)
+    {
+        // The shader for this feature set hasn't finished compiling (or it
+        // failed to compile). Use the uber-shader pipeline that has all
+        // features enabled while we wait for it to finish.
+        return findCompatibleDrawPipeline(
+            drawType, fullyFeaturedPipelineFeatures, desc, shaderMiscFlags);
+    }
+
+    return pipelineIter->second.get();
 }
 
-void RenderContextMetalImpl::prepareToMapBuffers()
+void RenderContextMetalImpl::prepareToFlush(uint64_t nextFrameNumber,
+                                            uint64_t safeFrameNumber)
 {
     // Wait until the GPU finishes rendering flush "N + 1 - kBufferRingSize".
     // This ensures it is safe for the CPU to begin modifying the next buffers
@@ -1003,10 +1093,10 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
                         0, 0, renderTarget->width(), renderTarget->height())];
     [encoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
                       offset:flushDesc.flushUniformDataOffsetInBytes
-                     atIndex:FLUSH_UNIFORM_BUFFER_IDX];
+                     atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
     [encoder setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
                         offset:flushDesc.flushUniformDataOffsetInBytes
-                       atIndex:FLUSH_UNIFORM_BUFFER_IDX];
+                       atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
     [encoder setVertexTexture:m_tessVertexTexture
                       atIndex:TESS_VERTEX_TEXTURE_IDX];
     [encoder setVertexTexture:m_featherTexture atIndex:FEATHER_TEXTURE_IDX];
@@ -1017,28 +1107,28 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
     {
         [encoder setVertexBuffer:mtl_buffer(pathBufferRing())
                           offset:flushDesc.firstPath * sizeof(gpu::PathData)
-                         atIndex:PATH_BUFFER_IDX];
+                         atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
         if (flushDesc.interlockMode == gpu::InterlockMode::atomics)
         {
             [encoder
                 setFragmentBuffer:mtl_buffer(paintBufferRing())
                            offset:flushDesc.firstPaint * sizeof(gpu::PaintData)
-                          atIndex:PAINT_BUFFER_IDX];
+                          atIndex:METAL_BUFFER_IDX(PAINT_BUFFER_IDX)];
             [encoder setFragmentBuffer:mtl_buffer(paintAuxBufferRing())
                                 offset:flushDesc.firstPaintAux *
                                        sizeof(gpu::PaintAuxData)
-                               atIndex:PAINT_AUX_BUFFER_IDX];
+                               atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
         }
         else
         {
             [encoder
                 setVertexBuffer:mtl_buffer(paintBufferRing())
                          offset:flushDesc.firstPaint * sizeof(gpu::PaintData)
-                        atIndex:PAINT_BUFFER_IDX];
+                        atIndex:METAL_BUFFER_IDX(PAINT_BUFFER_IDX)];
             [encoder setVertexBuffer:mtl_buffer(paintAuxBufferRing())
                               offset:flushDesc.firstPaintAux *
                                      sizeof(gpu::PaintAuxData)
-                             atIndex:PAINT_AUX_BUFFER_IDX];
+                             atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
         }
     }
     if (flushDesc.contourCount > 0)
@@ -1046,7 +1136,7 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
         [encoder
             setVertexBuffer:mtl_buffer(contourBufferRing())
                      offset:flushDesc.firstContour * sizeof(gpu::ContourData)
-                    atIndex:CONTOUR_BUFFER_IDX];
+                    atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
     }
     if (flushDesc.interlockMode == gpu::InterlockMode::atomics)
     {
@@ -1060,7 +1150,8 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
             [encoder
                 setFragmentBuffer:renderTarget->colorAtomicBuffer()
                            offset:0
-                          atIndex:COLOR_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE];
+                          atIndex:METAL_BUFFER_IDX(COLOR_PLANE_IDX +
+                                                   DEFAULT_BINDINGS_SET_SIZE)];
         }
         if (flushDesc.combinedShaderFeatures &
             gpu::ShaderFeatures::ENABLE_CLIPPING)
@@ -1068,12 +1159,13 @@ id<MTLRenderCommandEncoder> RenderContextMetalImpl::makeRenderPassForDraws(
             [encoder
                 setFragmentBuffer:renderTarget->clipAtomicBuffer()
                            offset:0
-                          atIndex:CLIP_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE];
+                          atIndex:METAL_BUFFER_IDX(CLIP_PLANE_IDX +
+                                                   DEFAULT_BINDINGS_SET_SIZE)];
         }
-        [encoder
-            setFragmentBuffer:renderTarget->coverageAtomicBuffer()
-                       offset:0
-                      atIndex:COVERAGE_PLANE_IDX + DEFAULT_BINDINGS_SET_SIZE];
+        [encoder setFragmentBuffer:renderTarget->coverageAtomicBuffer()
+                            offset:0
+                           atIndex:METAL_BUFFER_IDX(COVERAGE_PLANE_IDX +
+                                                    DEFAULT_BINDINGS_SET_SIZE)];
     }
     if (flushDesc.wireframe)
     {
@@ -1111,9 +1203,10 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                                       static_cast<float>(desc.gradDataHeight))];
         [gradEncoder
             setRenderPipelineState:m_colorRampPipeline->pipelineState()];
-        [gradEncoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
-                              offset:desc.flushUniformDataOffsetInBytes
-                             atIndex:FLUSH_UNIFORM_BUFFER_IDX];
+        [gradEncoder
+            setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+                     offset:desc.flushUniformDataOffsetInBytes
+                    atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
         [gradEncoder
             setVertexBuffer:mtl_buffer(gradSpanBufferRing())
                      offset:desc.firstGradSpan * sizeof(gpu::GradientSpan)
@@ -1143,9 +1236,12 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
             setViewport:make_viewport(
                             0, 0, kTessTextureWidth, desc.tessDataHeight)];
         [tessEncoder setRenderPipelineState:m_tessPipeline->pipelineState()];
-        [tessEncoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
-                              offset:desc.flushUniformDataOffsetInBytes
-                             atIndex:FLUSH_UNIFORM_BUFFER_IDX];
+        [tessEncoder setVertexTexture:m_featherTexture
+                              atIndex:FEATHER_TEXTURE_IDX];
+        [tessEncoder
+            setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+                     offset:desc.flushUniformDataOffsetInBytes
+                    atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
         [tessEncoder setVertexBuffer:mtl_buffer(tessSpanBufferRing())
                               offset:desc.firstTessVertexSpan *
                                      sizeof(gpu::TessVertexSpan)
@@ -1153,12 +1249,12 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         assert(desc.pathCount > 0);
         [tessEncoder setVertexBuffer:mtl_buffer(pathBufferRing())
                               offset:desc.firstPath * sizeof(gpu::PathData)
-                             atIndex:PATH_BUFFER_IDX];
+                             atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
         assert(desc.contourCount > 0);
         [tessEncoder
             setVertexBuffer:mtl_buffer(contourBufferRing())
                      offset:desc.firstContour * sizeof(gpu::ContourData)
-                    atIndex:CONTOUR_BUFFER_IDX];
+                    atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
         [tessEncoder setCullMode:MTLCullModeBack];
         [tessEncoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
                                 indexCount:std::size(gpu::kTessSpanIndices)
@@ -1188,12 +1284,14 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                                                 0,
                                                 desc.atlasContentWidth,
                                                 desc.atlasContentHeight)];
-        [atlasEncoder setVertexBuffer:mtl_buffer(flushUniformBufferRing())
-                               offset:desc.flushUniformDataOffsetInBytes
-                              atIndex:FLUSH_UNIFORM_BUFFER_IDX];
-        [atlasEncoder setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
-                                 offset:desc.flushUniformDataOffsetInBytes
-                                atIndex:FLUSH_UNIFORM_BUFFER_IDX];
+        [atlasEncoder
+            setVertexBuffer:mtl_buffer(flushUniformBufferRing())
+                     offset:desc.flushUniformDataOffsetInBytes
+                    atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
+        [atlasEncoder
+            setFragmentBuffer:mtl_buffer(flushUniformBufferRing())
+                       offset:desc.flushUniformDataOffsetInBytes
+                      atIndex:METAL_BUFFER_IDX(FLUSH_UNIFORM_BUFFER_IDX)];
         [atlasEncoder setVertexTexture:m_tessVertexTexture
                                atIndex:TESS_VERTEX_TEXTURE_IDX];
         [atlasEncoder setVertexTexture:m_featherTexture
@@ -1206,22 +1304,22 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         {
             [atlasEncoder setVertexBuffer:mtl_buffer(pathBufferRing())
                                    offset:desc.firstPath * sizeof(gpu::PathData)
-                                  atIndex:PATH_BUFFER_IDX];
+                                  atIndex:METAL_BUFFER_IDX(PATH_BUFFER_IDX)];
             [atlasEncoder
                 setVertexBuffer:mtl_buffer(paintBufferRing())
                          offset:desc.firstPaint * sizeof(gpu::PaintData)
-                        atIndex:PAINT_BUFFER_IDX];
+                        atIndex:METAL_BUFFER_IDX(PAINT_BUFFER_IDX)];
             [atlasEncoder
                 setVertexBuffer:mtl_buffer(paintAuxBufferRing())
                          offset:desc.firstPaintAux * sizeof(gpu::PaintAuxData)
-                        atIndex:PAINT_AUX_BUFFER_IDX];
+                        atIndex:METAL_BUFFER_IDX(PAINT_AUX_BUFFER_IDX)];
         }
         if (desc.contourCount > 0)
         {
             [atlasEncoder
                 setVertexBuffer:mtl_buffer(contourBufferRing())
                          offset:desc.firstContour * sizeof(gpu::ContourData)
-                        atIndex:CONTOUR_BUFFER_IDX];
+                        atIndex:METAL_BUFFER_IDX(CONTOUR_BUFFER_IDX)];
         }
         [atlasEncoder setVertexBuffer:m_pathPatchVertexBuffer
                                offset:0
@@ -1239,7 +1337,8 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 [atlasEncoder
                     setVertexBytes:&fillBatch.basePatch
                             length:sizeof(uint32_t)
-                           atIndex:PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX];
+                           atIndex:METAL_BUFFER_IDX(
+                                       PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)];
                 [atlasEncoder
                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
                                indexCount:
@@ -1265,7 +1364,8 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 [atlasEncoder
                     setVertexBytes:&strokeBatch.basePatch
                             length:sizeof(uint32_t)
-                           atIndex:PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX];
+                           atIndex:METAL_BUFFER_IDX(
+                                       PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)];
                 [atlasEncoder
                     drawIndexedPrimitives:MTLPrimitiveTypeTriangle
                                indexCount:gpu::kMidpointFanPatchBorderIndexCount
@@ -1303,7 +1403,7 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         case gpu::LoadAction::clear:
         {
             float cc[4];
-            UnpackColorToRGBA32FPremul(desc.clearColor, cc);
+            UnpackColorToRGBA32FPremul(desc.colorClearValue, cc);
             pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
                 MTLLoadActionClear;
             pass.colorAttachments[COLOR_PLANE_IDX].clearColor =
@@ -1350,8 +1450,7 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         pass.colorAttachments[COVERAGE_PLANE_IDX].storeAction =
             MTLStoreActionDontCare;
     }
-    else if (!(desc.combinedShaderFeatures &
-               gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND))
+    else if (desc.atomicFixedFunctionColorOutput)
     {
         assert(desc.interlockMode == gpu::InterlockMode::atomics);
         baselineShaderMiscFlags |=
@@ -1391,11 +1490,6 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         desc, pass, commandBuffer, baselineShaderMiscFlags);
     for (const DrawBatch& batch : *desc.drawList)
     {
-        if (batch.elementCount == 0)
-        {
-            continue;
-        }
-
         // Setup the pipeline for this specific drawType and shaderFeatures.
         gpu::ShaderFeatures shaderFeatures =
             desc.interlockMode == gpu::InterlockMode::atomics
@@ -1436,12 +1530,18 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 }
             }
         }
+        const DrawPipeline* drawPipeline = findCompatibleDrawPipeline(
+            batch.drawType, shaderFeatures, desc, batchMiscFlags);
+        if (drawPipeline == nullptr || !drawPipeline->valid())
+        {
+            // The shader for this draw AND the uber-shader both failed to
+            // compile. This should virtually never happen, and can only happen
+            // on non-Apple Silicon, where we don't use precompiled shaders.
+            // Skip the draw.
+            continue;
+        }
         id<MTLRenderPipelineState> drawPipelineState =
-            findCompatibleDrawPipeline(batch.drawType,
-                                       shaderFeatures,
-                                       desc.interlockMode,
-                                       batchMiscFlags)
-                ->pipelineState(renderTarget->pixelFormat());
+            drawPipeline->pipelineState(renderTarget->pixelFormat());
 
         // Bind the appropriate image texture, if any.
         if (auto imageTextureMetal =
@@ -1449,6 +1549,57 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
         {
             [encoder setFragmentTexture:imageTextureMetal->texture()
                                 atIndex:IMAGE_TEXTURE_IDX];
+
+            [encoder setFragmentSamplerState:m_imageSamplers[batch.imageSampler
+                                                                 .asKey()]
+                                     atIndex:IMAGE_SAMPLER_IDX];
+        }
+        else
+        {
+            [encoder setFragmentSamplerState:
+                         m_imageSamplers[ImageSampler::LINEAR_CLAMP_SAMPLER_KEY]
+                                     atIndex:IMAGE_SAMPLER_IDX];
+        }
+
+        // Issue any barriers if needed.
+        if (batch.barriers &
+            (BarrierFlags::plsAtomic | BarrierFlags::plsAtomicPostInit |
+             BarrierFlags::plsAtomicPreResolve))
+        {
+            assert(desc.interlockMode == gpu::InterlockMode::atomics);
+            switch (m_metalFeatures.atomicBarrierType)
+            {
+                case AtomicBarrierType::memoryBarrier:
+#if defined(RIVE_MACOSX)
+                    if (@available(macOS 10.14, *))
+                    {
+                        [encoder
+                            memoryBarrierWithScope:MTLBarrierScopeBuffers |
+                                                   MTLBarrierScopeRenderTargets
+                                       afterStages:MTLRenderStageFragment
+                                      beforeStages:MTLRenderStageFragment];
+                        break;
+                    }
+#endif
+                    // atomicBarrierType shouldn't be "memoryBarrier" in this
+                    // case.
+                    RIVE_UNREACHABLE();
+
+                case AtomicBarrierType::rasterOrderGroup:
+                    break;
+
+                case AtomicBarrierType::renderPassBreak:
+                    // On very old hardware that can't support barriers, we just
+                    // take a sledge hammer and break the entire render pass
+                    // between overlapping draws.
+                    // TODO: Is there a lighter way to achieve this?
+                    [encoder endEncoding];
+                    pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
+                        MTLLoadActionLoad;
+                    encoder = makeRenderPassForDraws(
+                        desc, pass, commandBuffer, baselineShaderMiscFlags);
+                    break;
+            }
         }
 
         DrawType drawType = batch.drawType;
@@ -1466,9 +1617,11 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 [encoder setCullMode:MTLCullModeBack];
                 // Don't use baseInstance in order to run on Apple GPU Family 2.
                 // TODO: Use baseInstance instead once we deprecate Apple2.
-                [encoder setVertexBytes:&batch.baseElement
-                                 length:sizeof(uint32_t)
-                                atIndex:PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX];
+                [encoder
+                    setVertexBytes:&batch.baseElement
+                            length:sizeof(uint32_t)
+                           atIndex:METAL_BUFFER_IDX(
+                                       PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX)];
                 [encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle
                                     indexCount:gpu::PatchIndexCount(drawType)
                                      indexType:MTLIndexTypeUInt16
@@ -1479,6 +1632,7 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 break;
             }
             case DrawType::interiorTriangulation:
+            case DrawType::atlasBlit:
             {
                 [encoder setRenderPipelineState:drawPipelineState];
                 [encoder setVertexBuffer:mtl_buffer(triangleBufferRing())
@@ -1497,11 +1651,13 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                 [encoder
                     setVertexBuffer:mtl_buffer(imageDrawUniformBufferRing())
                              offset:batch.imageDrawDataOffset
-                            atIndex:IMAGE_DRAW_UNIFORM_BUFFER_IDX];
+                            atIndex:METAL_BUFFER_IDX(
+                                        IMAGE_DRAW_UNIFORM_BUFFER_IDX)];
                 [encoder
                     setFragmentBuffer:mtl_buffer(imageDrawUniformBufferRing())
                                offset:batch.imageDrawDataOffset
-                              atIndex:IMAGE_DRAW_UNIFORM_BUFFER_IDX];
+                              atIndex:METAL_BUFFER_IDX(
+                                          IMAGE_DRAW_UNIFORM_BUFFER_IDX)];
                 [encoder setCullMode:MTLCullModeNone];
                 if (drawType == DrawType::imageRect)
                 {
@@ -1551,62 +1707,34 @@ void RenderContextMetalImpl::flush(const FlushDescriptor& desc)
                             vertexCount:4];
                 break;
             }
-            case DrawType::stencilClipReset:
+            case DrawType::msaaStrokes:
+            case DrawType::msaaMidpointFanBorrowedCoverage:
+            case DrawType::msaaMidpointFans:
+            case DrawType::msaaMidpointFanStencilReset:
+            case DrawType::msaaMidpointFanPathsStencil:
+            case DrawType::msaaMidpointFanPathsCover:
+            case DrawType::msaaOuterCubics:
+            case DrawType::msaaStencilClipReset:
             {
                 RIVE_UNREACHABLE();
             }
         }
-        if (batch.needsBarrier)
-        {
-            assert(desc.interlockMode == gpu::InterlockMode::atomics);
-            switch (m_metalFeatures.atomicBarrierType)
-            {
-                case AtomicBarrierType::memoryBarrier:
-                {
-#if defined(RIVE_MACOSX)
-                    if (@available(macOS 10.14, *))
-                    {
-                        [encoder
-                            memoryBarrierWithScope:MTLBarrierScopeBuffers |
-                                                   MTLBarrierScopeRenderTargets
-                                       afterStages:MTLRenderStageFragment
-                                      beforeStages:MTLRenderStageFragment];
-                        break;
-                    }
-#endif
-                    // atomicBarrierType shouldn't be "memoryBarrier" in this
-                    // case.
-                    RIVE_UNREACHABLE();
-                }
-                case AtomicBarrierType::rasterOrderGroup:
-                    break;
-                case AtomicBarrierType::renderPassBreak:
-                    // On very old hardware that can't support barriers, we just
-                    // take a sledge hammer and break the entire render pass
-                    // between overlapping draws.
-                    // TODO: Is there a lighter way to achieve this?
-                    [encoder endEncoding];
-                    pass.colorAttachments[COLOR_PLANE_IDX].loadAction =
-                        MTLLoadActionLoad;
-                    encoder = makeRenderPassForDraws(
-                        desc, pass, commandBuffer, baselineShaderMiscFlags);
-                    break;
-            }
-        }
     }
     [encoder endEncoding];
+}
 
-    if (desc.isFinalFlushOfFrame)
-    {
-        // Schedule a callback that will unlock the buffers used by this flush,
-        // after the GPU has finished rendering with them. This unblocks the CPU
-        // from reusing them in a future flush.
-        std::mutex& thisFlushLock = m_bufferRingLocks[m_bufferRingIdx];
-        [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer>) {
-          assert(
-              !thisFlushLock.try_lock()); // The mutex should already be locked.
-          thisFlushLock.unlock();
-        }];
-    }
+void RenderContextMetalImpl::postFlush(
+    const RenderContext::FlushResources& flushResources)
+{
+    // Schedule a callback that will unlock the buffers used by this flush,
+    // after the GPU has finished rendering with them. This unblocks the CPU
+    // from reusing them in a future flush.
+    id<MTLCommandBuffer> commandBuffer =
+        (__bridge id<MTLCommandBuffer>)flushResources.externalCommandBuffer;
+    std::mutex& thisFlushLock = m_bufferRingLocks[m_bufferRingIdx];
+    [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer>) {
+      assert(!thisFlushLock.try_lock()); // The mutex should already be locked.
+      thisFlushLock.unlock();
+    }];
 }
 } // namespace rive::gpu

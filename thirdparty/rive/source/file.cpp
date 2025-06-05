@@ -1,6 +1,7 @@
 #include "rive/file.hpp"
 #include "rive/runtime_header.hpp"
 #include "rive/animation/animation.hpp"
+#include "rive/artboard_component_list.hpp"
 #include "rive/core/field_types/core_color_type.hpp"
 #include "rive/core/field_types/core_double_type.hpp"
 #include "rive/core/field_types/core_string_type.hpp"
@@ -10,6 +11,7 @@
 #include "rive/importers/backboard_importer.hpp"
 #include "rive/importers/bindable_property_importer.hpp"
 #include "rive/importers/data_converter_group_importer.hpp"
+#include "rive/importers/data_converter_formula_importer.hpp"
 #include "rive/importers/enum_importer.hpp"
 #include "rive/importers/file_asset_importer.hpp"
 #include "rive/importers/import_stack.hpp"
@@ -35,14 +37,19 @@
 #include "rive/animation/blend_state_1d_viewmodel.hpp"
 #include "rive/animation/blend_state_direct.hpp"
 #include "rive/animation/transition_property_viewmodel_comparator.hpp"
+#include "rive/constraints/scrolling/scroll_physics.hpp"
 #include "rive/data_bind/bindable_property.hpp"
+#include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/bindable_property_number.hpp"
 #include "rive/data_bind/bindable_property_string.hpp"
 #include "rive/data_bind/bindable_property_color.hpp"
 #include "rive/data_bind/bindable_property_enum.hpp"
+#include "rive/data_bind/bindable_property_integer.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
 #include "rive/data_bind/bindable_property_trigger.hpp"
+#include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/converters/data_converter_group.hpp"
+#include "rive/data_bind/converters/data_converter_number_to_list.hpp"
 #include "rive/assets/file_asset.hpp"
 #include "rive/assets/audio_asset.hpp"
 #include "rive/assets/file_asset_contents.hpp"
@@ -58,8 +65,11 @@
 #include "rive/viewmodel/viewmodel_property_number.hpp"
 #include "rive/viewmodel/viewmodel_property_enum.hpp"
 #include "rive/viewmodel/viewmodel_property_enum_custom.hpp"
+#include "rive/viewmodel/viewmodel_property_enum_system.hpp"
 #include "rive/viewmodel/viewmodel_property_list.hpp"
 #include "rive/viewmodel/viewmodel_property_trigger.hpp"
+#include "rive/viewmodel/viewmodel_property_symbol_list_index.hpp"
+#include "rive/viewmodel/runtime/viewmodel_runtime.hpp"
 
 // Default namespace for Rive Cpp code
 using namespace rive;
@@ -153,8 +163,8 @@ static Core* readRuntimeObject(BinaryReader& reader,
     return object;
 }
 
-File::File(Factory* factory, FileAssetLoader* assetLoader) :
-    m_factory(factory), m_assetLoader(assetLoader)
+File::File(Factory* factory, rcp<FileAssetLoader> assetLoader) :
+    m_factory(factory), m_assetLoader(std::move(assetLoader))
 {
     assert(factory);
 }
@@ -170,13 +180,41 @@ File::~File()
     {
         delete asset;
     }
+    for (auto& viewModel : m_ViewModels)
+    {
+        viewModel->unref();
+    }
+    for (auto& viewModelInstance : m_ViewModelInstances)
+    {
+        viewModelInstance->unref();
+    }
+    for (auto& enumData : m_Enums)
+    {
+        enumData->unref();
+    }
+    for (auto& dataConverter : m_DataConverters)
+    {
+        delete dataConverter;
+    }
+    for (auto& viewModelRuntime : m_viewModelRuntimes)
+    {
+        delete viewModelRuntime;
+    }
+    for (auto& keyframeInterpolator : m_keyframeInterpolators)
+    {
+        delete keyframeInterpolator;
+    }
+    for (auto& physics : m_scrollPhysics)
+    {
+        delete physics;
+    }
     delete m_backboard;
 }
 
 std::unique_ptr<File> File::import(Span<const uint8_t> bytes,
                                    Factory* factory,
                                    ImportResult* result,
-                                   FileAssetLoader* assetLoader)
+                                   rcp<FileAssetLoader> assetLoader)
 {
     BinaryReader reader(bytes);
     RuntimeHeader header;
@@ -203,7 +241,7 @@ std::unique_ptr<File> File::import(Span<const uint8_t> bytes,
         }
         return nullptr;
     }
-    auto file = rivestd::make_unique<File>(factory, assetLoader);
+    auto file = rivestd::make_unique<File>(factory, std::move(assetLoader));
 
     auto readResult = file->read(reader, header);
     if (result)
@@ -268,6 +306,12 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
                     m_ViewModels.push_back(vmc);
                     break;
                 }
+                case ViewModelInstance::typeKey:
+                {
+                    auto vmi = object->as<ViewModelInstance>();
+                    m_ViewModelInstances.push_back(vmi);
+                    break;
+                }
                 case DataEnum::typeKey:
                 case DataEnumCustom::typeKey:
                 {
@@ -302,6 +346,7 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
             case Backboard::typeKey:
                 stackObject = rivestd::make_unique<BackboardImporter>(
                     object->as<Backboard>());
+                static_cast<BackboardImporter*>(stackObject.get())->file(this);
                 break;
             case Artboard::typeKey:
                 stackObject = rivestd::make_unique<ArtboardImporter>(
@@ -410,7 +455,9 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
             case BindablePropertyColor::typeKey:
             case BindablePropertyEnum::typeKey:
             case BindablePropertyBoolean::typeKey:
+            case BindablePropertyAsset::typeKey:
             case BindablePropertyTrigger::typeKey:
+            case BindablePropertyInteger::typeKey:
                 stackObject = rivestd::make_unique<BindablePropertyImporter>(
                     object->as<BindableProperty>());
                 stackType = BindablePropertyBase::typeKey;
@@ -419,6 +466,18 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
                 stackObject = rivestd::make_unique<DataConverterGroupImporter>(
                     object->as<DataConverterGroup>());
                 stackType = DataConverterGroupBase::typeKey;
+                break;
+            case DataConverterFormulaBase::typeKey:
+                stackObject =
+                    rivestd::make_unique<DataConverterFormulaImporter>(
+                        object->as<DataConverterFormula>());
+                stackType = DataConverterFormulaBase::typeKey;
+                break;
+            case DataConverterNumberToList::typeKey:
+                object->as<DataConverterNumberToList>()->file(this);
+                break;
+            case ArtboardComponentList::typeKey:
+                object->as<ArtboardComponentList>()->file(this);
                 break;
         }
         if (importStack.makeLatest(stackType, std::move(stackObject)) !=
@@ -435,6 +494,26 @@ ImportResult File::read(BinaryReader& reader, const RuntimeHeader& header)
                 StatusCode::Ok)
         {
             return ImportResult::malformed;
+        }
+        if (object->is<DataConverter>())
+        {
+            m_DataConverters.push_back(object->as<DataConverter>());
+        }
+        else if (object->is<KeyFrameInterpolator>())
+        {
+            // The file only owns the interpolators that don't belong to a
+            // specific artboard
+            auto artboardImporter =
+                importStack.latest<ArtboardImporter>(ArtboardBase::typeKey);
+            if (artboardImporter == nullptr)
+            {
+                m_keyframeInterpolators.push_back(
+                    object->as<KeyFrameInterpolator>());
+            }
+        }
+        else if (object->is<ScrollPhysics>())
+        {
+            m_scrollPhysics.push_back(object->as<ScrollPhysics>());
         }
     }
 
@@ -497,11 +576,21 @@ std::unique_ptr<ArtboardInstance> File::artboardNamed(std::string name) const
     return ab ? ab->instance() : nullptr;
 }
 
-void File::completeViewModelInstance(ViewModelInstance* viewModelInstance)
+void File::completeViewModelInstance(
+    rcp<ViewModelInstance> viewModelInstance) const
+{
+    std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>> instancesMap;
+    completeViewModelInstance(viewModelInstance, instancesMap);
+}
+
+void File::completeViewModelInstance(
+    rcp<ViewModelInstance> viewModelInstance,
+    std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>> instancesMap)
+    const
 {
     auto viewModel = m_ViewModels[viewModelInstance->viewModelId()];
     auto propertyValues = viewModelInstance->propertyValues();
-    for (auto value : propertyValues)
+    for (auto& value : propertyValues)
     {
         if (value->is<ViewModelInstanceViewModel>())
         {
@@ -517,24 +606,49 @@ void File::completeViewModelInstance(ViewModelInstance* viewModelInstance)
                     valueViewModel->propertyValue());
                 if (viewModelInstance != nullptr)
                 {
-                    valueViewModel->referenceViewModelInstance(
-                        copyViewModelInstance(viewModelInstance));
+                    auto itr = instancesMap.find(viewModelInstance);
+
+                    if (itr == instancesMap.end())
+                    {
+                        auto viewModelInstanceCopy =
+                            copyViewModelInstance(viewModelInstance,
+                                                  instancesMap);
+                        instancesMap[viewModelInstance] = viewModelInstanceCopy;
+                        valueViewModel->referenceViewModelInstance(
+                            viewModelInstanceCopy);
+                    }
+                    else
+                    {
+                        valueViewModel->referenceViewModelInstance(itr->second);
+                    }
                 }
             }
         }
         else if (value->is<ViewModelInstanceList>())
         {
             auto viewModelList = value->as<ViewModelInstanceList>();
-            for (auto listItem : viewModelList->listItems())
+            for (auto& listItem : viewModelList->listItems())
             {
                 auto viewModel = m_ViewModels[listItem->viewModelId()];
                 auto viewModelInstance =
                     viewModel->instance(listItem->viewModelInstanceId());
-                listItem->viewModelInstance(
-                    copyViewModelInstance(viewModelInstance));
-                if (listItem->artboardId() < m_artboards.size())
+                if (viewModelInstance != nullptr)
                 {
-                    listItem->artboard(m_artboards[listItem->artboardId()]);
+
+                    auto itr = instancesMap.find(viewModelInstance);
+
+                    if (itr == instancesMap.end())
+                    {
+                        auto viewModelInstanceCopy =
+                            copyViewModelInstance(viewModelInstance,
+                                                  instancesMap);
+                        instancesMap[viewModelInstance] = viewModelInstanceCopy;
+                        listItem->viewModelInstance(viewModelInstanceCopy);
+                    }
+                    else
+                    {
+                        listItem->viewModelInstance(itr->second);
+                    }
                 }
             }
         }
@@ -543,17 +657,20 @@ void File::completeViewModelInstance(ViewModelInstance* viewModelInstance)
     }
 }
 
-ViewModelInstance* File::copyViewModelInstance(
-    ViewModelInstance* viewModelInstance)
+rcp<ViewModelInstance> File::copyViewModelInstance(
+    ViewModelInstance* viewModelInstance,
+    std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>> instancesMap)
+    const
 {
-    auto copy = viewModelInstance->clone()->as<ViewModelInstance>();
-    completeViewModelInstance(copy);
+    auto copy = rcp<ViewModelInstance>(
+        viewModelInstance->clone()->as<ViewModelInstance>());
+    completeViewModelInstance(copy, instancesMap);
     return copy;
 }
 
-ViewModelInstance* File::createViewModelInstance(std::string name)
+rcp<ViewModelInstance> File::createViewModelInstance(std::string name) const
 {
-    for (auto viewModel : m_ViewModels)
+    for (auto& viewModel : m_ViewModels)
     {
         if (viewModel->is<ViewModel>())
         {
@@ -566,28 +683,28 @@ ViewModelInstance* File::createViewModelInstance(std::string name)
     return nullptr;
 }
 
-ViewModelInstance* File::createViewModelInstance(std::string name,
-                                                 std::string instanceName)
+rcp<ViewModelInstance> File::createViewModelInstance(
+    std::string name,
+    std::string instanceName) const
 {
-    for (auto viewModel : m_ViewModels)
+    for (auto& viewModel : m_ViewModels)
     {
-        if (viewModel->is<ViewModel>())
+        if (viewModel->name() == name)
         {
-            if (viewModel->name() == name)
+            auto instance = viewModel->instance(instanceName);
+            if (instance != nullptr)
             {
-                auto instance = viewModel->instance(instanceName);
-                if (instance != nullptr)
-                {
-                    return copyViewModelInstance(instance);
-                }
+                std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>>
+                    instancesMap;
+                return copyViewModelInstance(instance, instancesMap);
             }
         }
     }
     return nullptr;
 }
 
-ViewModelInstance* File::createViewModelInstance(size_t index,
-                                                 size_t instanceIndex)
+rcp<ViewModelInstance> File::createViewModelInstance(size_t index,
+                                                     size_t instanceIndex) const
 {
     if (index < m_ViewModels.size())
     {
@@ -595,23 +712,105 @@ ViewModelInstance* File::createViewModelInstance(size_t index,
         auto instance = viewModel->instance(instanceIndex);
         if (instance != nullptr)
         {
-            return copyViewModelInstance(instance);
+            std::unordered_map<ViewModelInstance*, rcp<ViewModelInstance>>
+                instancesMap;
+            return copyViewModelInstance(instance, instancesMap);
         }
     }
     return nullptr;
 }
 
-ViewModelInstance* File::createViewModelInstance(ViewModel* viewModel)
+uint32_t File::findViewModelId(ViewModel* search) const
+{
+    uint32_t viewModelId = 0;
+    for (auto& viewModel : m_ViewModels)
+    {
+        if (viewModel == search)
+        {
+            break;
+        }
+        viewModelId++;
+    }
+    return viewModelId;
+}
+
+rcp<ViewModelInstance> File::createViewModelInstance(ViewModel* viewModel) const
 {
     if (viewModel != nullptr)
     {
-        auto viewModelInstance = viewModel->defaultInstance();
-        return copyViewModelInstance(viewModelInstance);
+        uint32_t viewModelId = findViewModelId(viewModel);
+
+        auto viewModelInstance = new ViewModelInstance();
+        viewModelInstance->viewModelId(viewModelId);
+        viewModelInstance->viewModel(viewModel);
+        auto properties = viewModel->properties();
+        uint32_t propertyId = 0;
+        for (auto& property : properties)
+        {
+            ViewModelInstanceValue* viewModelInstanceValue = nullptr;
+            switch (property->coreType())
+            {
+                case ViewModelPropertyStringBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceString();
+                    break;
+                case ViewModelPropertyNumberBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceNumber();
+                    break;
+                case ViewModelPropertyBooleanBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceBoolean();
+                    break;
+                case ViewModelPropertyColorBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceColor();
+                    break;
+                case ViewModelPropertyListBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceList();
+                    break;
+                case ViewModelPropertyEnumSystemBase::typeKey:
+                case ViewModelPropertyEnumCustomBase::typeKey:
+                case ViewModelPropertyEnumBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceEnum();
+                    break;
+                case ViewModelPropertyTriggerBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceTrigger();
+                    break;
+                case ViewModelPropertyViewModelBase::typeKey:
+                {
+                    viewModelInstanceValue = new ViewModelInstanceViewModel();
+                    auto propertViewModel =
+                        property->as<ViewModelPropertyViewModel>();
+                    auto viewModelReference =
+                        m_ViewModels[propertViewModel->viewModelReferenceId()];
+                    auto viewModelInstanceViewModel =
+                        viewModelInstanceValue
+                            ->as<ViewModelInstanceViewModel>();
+                    viewModelInstanceViewModel->referenceViewModelInstance(
+                        createViewModelInstance(viewModelReference));
+                }
+                break;
+                case ViewModelPropertyAssetImageBase::typeKey:
+                    viewModelInstanceValue = new ViewModelInstanceAssetImage();
+                    break;
+                case ViewModelPropertySymbolListIndexBase::typeKey:
+                    viewModelInstanceValue =
+                        new ViewModelInstanceSymbolListIndex();
+                    break;
+                default:
+                    break;
+            }
+            if (viewModelInstanceValue != nullptr)
+            {
+                viewModelInstanceValue->viewModelProperty(property);
+                viewModelInstanceValue->viewModelPropertyId(propertyId);
+            }
+            viewModelInstance->addValue(viewModelInstanceValue);
+            propertyId++;
+        }
+        return rcp<ViewModelInstance>(viewModelInstance);
     }
     return nullptr;
 }
 
-ViewModelInstance* File::createViewModelInstance(Artboard* artboard)
+rcp<ViewModelInstance> File::createViewModelInstance(Artboard* artboard) const
 {
     if ((size_t)artboard->viewModelId() < m_ViewModels.size())
     {
@@ -624,14 +823,42 @@ ViewModelInstance* File::createViewModelInstance(Artboard* artboard)
     return nullptr;
 }
 
+rcp<ViewModelInstance> File::createDefaultViewModelInstance(
+    Artboard* artboard) const
+{
+    if ((size_t)artboard->viewModelId() < m_ViewModels.size())
+    {
+        auto viewModel = m_ViewModels[artboard->viewModelId()];
+        if (viewModel != nullptr)
+        {
+            return createDefaultViewModelInstance(viewModel);
+        }
+    }
+    return nullptr;
+}
+
+rcp<ViewModelInstance> File::createDefaultViewModelInstance(
+    ViewModel* viewModel) const
+{
+    auto viewModelInstance = viewModel->instance(0);
+    if (viewModelInstance != nullptr)
+    {
+        auto copy = rcp<ViewModelInstance>(
+            viewModelInstance->clone()->as<ViewModelInstance>());
+        completeViewModelInstance(copy);
+        return copy;
+    }
+    return createViewModelInstance(viewModel);
+}
+
 ViewModelInstanceListItem* File::viewModelInstanceListItem(
-    ViewModelInstance* viewModelInstance)
+    rcp<ViewModelInstance> viewModelInstance)
 {
     // Search for an implicit artboard linked to the viewModel.
     // It will return the first one it finds, but there could be more.
     // We should decide if we want to be more restrictive and only return
     // an artboard if one and only one is found.
-    for (auto artboard : m_artboards)
+    for (auto& artboard : m_artboards)
     {
         if (artboard->viewModelId() == viewModelInstance->viewModelId())
         {
@@ -642,7 +869,7 @@ ViewModelInstanceListItem* File::viewModelInstanceListItem(
 }
 
 ViewModelInstanceListItem* File::viewModelInstanceListItem(
-    ViewModelInstance* viewModelInstance,
+    rcp<ViewModelInstance> viewModelInstance,
     Artboard* artboard)
 {
     auto viewModelInstanceListItem = new ViewModelInstanceListItem();
@@ -653,7 +880,7 @@ ViewModelInstanceListItem* File::viewModelInstanceListItem(
 
 ViewModel* File::viewModel(std::string name)
 {
-    for (auto viewModel : m_ViewModels)
+    for (auto& viewModel : m_ViewModels)
     {
         if (viewModel->name() == name)
         {
@@ -663,7 +890,69 @@ ViewModel* File::viewModel(std::string name)
     return nullptr;
 }
 
+ViewModel* File::viewModel(size_t index)
+{
+    if (index < m_ViewModels.size())
+    {
+        return m_ViewModels[index];
+    }
+    return nullptr;
+}
+
+ViewModelRuntime* File::viewModelByIndex(size_t index) const
+{
+    if (index < m_ViewModels.size())
+    {
+        return createViewModelRuntime(m_ViewModels[index]);
+    }
+    fprintf(stderr,
+            "Could not find View Model. Index %zu is out of range.\n",
+            index);
+    return nullptr;
+}
+
+ViewModelRuntime* File::viewModelByName(std::string name) const
+{
+    for (auto& viewModel : m_ViewModels)
+    {
+        if (viewModel->name() == name)
+        {
+            return createViewModelRuntime(viewModel);
+        }
+    }
+    fprintf(stderr, "Could not find View Model named %s.\n", name.c_str());
+    return nullptr;
+}
+
+ViewModelRuntime* File::defaultArtboardViewModel(Artboard* artboard) const
+{
+    if (artboard == nullptr)
+    {
+        fprintf(stderr, "Invalid Artboard\n");
+        return nullptr;
+    }
+    if ((size_t)artboard->viewModelId() < m_ViewModels.size())
+    {
+        auto viewModel = m_ViewModels[artboard->viewModelId()];
+        return createViewModelRuntime(viewModel);
+    }
+    fprintf(stderr,
+            "Could not find a View Model linked to Artboard %s.\n",
+            artboard->name().c_str());
+    return nullptr;
+}
+
+ViewModelRuntime* File::createViewModelRuntime(ViewModel* viewModel) const
+{
+
+    auto viewModelRuntime = new ViewModelRuntime(viewModel, this);
+    m_viewModelRuntimes.push_back(viewModelRuntime);
+    return viewModelRuntime;
+}
+
 const std::vector<FileAsset*>& File::assets() const { return m_fileAssets; }
+
+const std::vector<DataEnum*>& File::enums() const { return m_Enums; }
 
 #ifdef WITH_RIVE_TOOLS
 const std::vector<uint8_t> File::stripAssets(Span<const uint8_t> bytes,
@@ -727,4 +1016,14 @@ const std::vector<uint8_t> File::stripAssets(Span<const uint8_t> bytes,
     }
     return strippedData;
 }
+
 #endif
+
+FileAsset* File::asset(size_t index)
+{
+    if (index >= 0 && index < m_fileAssets.size())
+    {
+        return m_fileAssets[index];
+    }
+    return nullptr;
+}
