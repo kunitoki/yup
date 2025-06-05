@@ -31,7 +31,6 @@
     description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
-    minimumCppStandard: 17
 
     dependencies:       rive rive_decoders glad
     searchpaths:        include source source/generated/shaders
@@ -43,6 +42,7 @@
     wasmDefines:        RIVE_WEBGL=1
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
+    windowsCppStandard: 20
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION
