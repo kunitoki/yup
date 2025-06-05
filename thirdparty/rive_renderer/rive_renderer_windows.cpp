@@ -28,9 +28,9 @@
 
 #include "source/d3d/pipeline_manager.cpp"
 #include "source/d3d11/render_context_d3d_impl.cpp"
-#include "source/d3d12/d3d12_pipeline_manager.cpp"
-#include "source/d3d12/d3d12_utils.cpp"
-#include "source/d3d12/render_context_d3d12_impl.cpp"
+//#include "source/d3d12/d3d12_pipeline_manager.cpp"
+//#include "source/d3d12/d3d12_utils.cpp"
+//#include "source/d3d12/render_context_d3d12_impl.cpp"
 #endif
 
 #if YUP_RIVE_USE_OPENGL
