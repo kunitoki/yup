@@ -1677,48 +1677,33 @@ void get_pipeline_state(const DrawBatch&,
                         PipelineState*);
 
 constexpr static PipelineState COLOR_ONLY_PIPELINE_STATE = {
-    false,
-    false,
-    false,
-    false,
-    0,
-    0,
-    0,
-    {},
-    {},
-    CullFace::none,
-    BlendEquation::none,
-    true
+    .depthTestEnabled = false,
+    .depthWriteEnabled = false,
+    .stencilTestEnabled = false,
+    .stencilWriteMask = 0,
+    .cullFace = CullFace::none,
+    .blendEquation = BlendEquation::none,
+    .colorWriteEnabled = true,
 };
 
 constexpr static PipelineState ATLAS_FILL_PIPELINE_STATE = {
-    false,
-    false,
-    false,
-    false,
-    0,
-    0,
-    0,
-    {},
-    {},
-    CullFace::counterclockwise,
-    BlendEquation::plus,
-    true
+    .depthTestEnabled = false,
+    .depthWriteEnabled = false,
+    .stencilTestEnabled = false,
+    .stencilWriteMask = 0,
+    .cullFace = CullFace::counterclockwise,
+    .blendEquation = BlendEquation::plus,
+    .colorWriteEnabled = true,
 };
 
 constexpr static PipelineState ATLAS_STROKE_PIPELINE_STATE = {
-    false,
-    false,
-    false,
-    false,
-    0,
-    0,
-    0,
-    {},
-    {},
-    CullFace::counterclockwise,
-    BlendEquation::max,
-    true
+    .depthTestEnabled = false,
+    .depthWriteEnabled = false,
+    .stencilTestEnabled = false,
+    .stencilWriteMask = 0,
+    .cullFace = CullFace::counterclockwise,
+    .blendEquation = BlendEquation::max,
+    .colorWriteEnabled = true,
 };
 
 float4 cast_f16_to_f32(uint16x4 x);
