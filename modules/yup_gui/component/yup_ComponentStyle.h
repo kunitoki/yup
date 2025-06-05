@@ -23,6 +23,7 @@ namespace yup
 {
 
 class Component;
+class ApplicationTheme;
 
 //==============================================================================
 /**
@@ -48,10 +49,11 @@ public:
         This is the main method that derived classes must implement to define
         how a component should be painted with this style.
 
-        @param g The graphics context to use for drawing
-        @param component The component to be painted
+        @param g The graphics context to use for drawing.
+        @param theme The application theme to use when painting.
+        @param component The component to be painted.
     */
-    virtual void paint (Graphics& g, const Component& component) = 0;
+    virtual void paint (Graphics& g, const ApplicationTheme& theme, const Component& component) = 0;
 
     //==============================================================================
     /** Creates a style for a specific component type with a custom paint callback.
@@ -60,14 +62,14 @@ public:
         paint callback when the component needs to be painted. The callback will
         receive a reference to the component cast to the specified ComponentType.
 
-        @param paintCallback A function or lambda that will be called to paint the component
+        @param paintCallback A function or lambda that will be called to paint the component.
 
-        @return A new ComponentStyle object that uses the provided paint callback
+        @return A new ComponentStyle object that uses the provided paint callback.
 
         @code
         // Example usage:
         auto buttonStyle = ComponentStyle::createStyle<Button>(
-            [](Graphics& g, const Button& button) {
+            [](Graphics& g, const ApplicationTheme& theme, const Button& button) {
                 // Custom painting code for buttons
             });
         @endcode
@@ -78,26 +80,16 @@ public:
         class ComponentCachedStyle final : public ComponentStyle
         {
         public:
-            /** The type of the paint callback function. */
-            using PaintCallback = std::function<void (Graphics&, const ComponentType&)>;
+            using PaintCallback = std::function<void (Graphics&, const ApplicationTheme&, const ComponentType&)>;
 
-            /** Constructor that takes a paint callback function.
-
-                @param paintCallback The function to call when painting
-            */
             ComponentCachedStyle (PaintCallback paintCallback)
                 : paintCallback (std::move (paintCallback))
             {
             }
 
-            /** Implements the paint method by calling the stored callback.
-
-                @param g The graphics context
-                @param component The component to paint
-            */
-            void paint (Graphics& g, const Component& component) override
+            void paint (Graphics& g, const ApplicationTheme& theme, const Component& component) override
             {
-                paintCallback (g, static_cast<const ComponentType&> (component));
+                paintCallback (g, theme, static_cast<const ComponentType&> (component));
             }
 
         private:

@@ -3,9 +3,11 @@
  */
 
 #include "rive/renderer/gl/gl_utils.hpp"
+#include "rive/shapes/paint/image_sampler.hpp"
 
 #include <stdio.h>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 #include "generated/shaders/glsl.glsl.hpp"
@@ -95,6 +97,15 @@ GLuint CompileShader(GLuint type,
     {
         shaderSource << "#define " << defines[i] << " true\n";
     }
+    if (!capabilities.ANGLE_base_vertex_base_instance_shader_builtin)
+    {
+        shaderSource << "#define " << GLSL_BASE_INSTANCE_UNIFORM_NAME << ' '
+                     << BASE_INSTANCE_UNIFORM_NAME << '\n';
+    }
+    if (capabilities.needsFloatingPointTessellationTexture)
+    {
+        shaderSource << "#define " << GLSL_TESS_TEXTURE_FLOATING_POINT << '\n';
+    }
     shaderSource << rive::gpu::glsl::glsl << "\n";
     for (size_t i = 0; i < numInputSources; ++i)
     {
@@ -132,6 +143,9 @@ GLuint CompileShader(GLuint type,
         std::vector<GLchar> infoLog(maxLength);
         glGetShaderInfoLog(shader, maxLength, &maxLength, &infoLog[0]);
         fprintf(stderr, "Failed to compile shader\n");
+        // Print the error message *before* the shader in case stderr hasn't
+        // finished flushing when we call abort() further on.
+        fprintf(stderr, "%s\n", &infoLog[0]);
         int l = 1;
         std::stringstream stream(rawGLSL);
         std::string lineStr;
@@ -139,9 +153,13 @@ GLuint CompileShader(GLuint type,
         {
             fprintf(stderr, "%4i| %s\n", l++, lineStr.c_str());
         }
+        // Print the error message, again, *after* the shader where it's easier
+        // to find in the console.
         fprintf(stderr, "%s\n", &infoLog[0]);
         fflush(stderr);
         glDeleteShader(shader);
+        // Give stderr another second to finish flushing before we abort.
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         abort();
     }
 #endif
@@ -216,6 +234,63 @@ void SetTexture2DSamplingParams(GLenum minFilter, GLenum magFilter)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 }
 
+GLint gl_wrap_from_image_wrap(rive::ImageWrap wrap)
+{
+    switch (wrap)
+    {
+        case rive::ImageWrap::clamp:
+            return GL_CLAMP_TO_EDGE;
+        case rive::ImageWrap::repeat:
+            return GL_REPEAT;
+        case rive::ImageWrap::mirror:
+            return GL_MIRRORED_REPEAT;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
+GLint gl_min_filter_for_image_filter(rive::ImageFilter filter)
+{
+    switch (filter)
+    {
+        case rive::ImageFilter::trilinear:
+            return GL_LINEAR_MIPMAP_LINEAR;
+        case rive::ImageFilter::nearest:
+            return GL_NEAREST;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
+GLint gl_mag_filter_for_image_filter(rive::ImageFilter filter)
+{
+    switch (filter)
+    {
+        case rive::ImageFilter::trilinear:
+            return GL_LINEAR;
+        case rive::ImageFilter::nearest:
+            return GL_NEAREST;
+    }
+
+    RIVE_UNREACHABLE();
+}
+
+void SetTexture2DSamplingParams(rive::ImageSampler samplingParams)
+{
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_MIN_FILTER,
+                    gl_min_filter_for_image_filter(samplingParams.filter));
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_MAG_FILTER,
+                    gl_mag_filter_for_image_filter(samplingParams.filter));
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_S,
+                    gl_wrap_from_image_wrap(samplingParams.wrapX));
+    glTexParameteri(GL_TEXTURE_2D,
+                    GL_TEXTURE_WRAP_T,
+                    gl_wrap_from_image_wrap(samplingParams.wrapY));
+}
+
 void BlitFramebuffer(rive::IAABB bounds,
                      uint32_t renderTargetHeight,
                      GLbitfield mask)
@@ -237,5 +312,35 @@ void Uniform1iByName(GLuint programID, const char* name, GLint value)
     // performance reasons.
     assert(location != -1);
     glUniform1i(location, value);
+}
+
+// Setup a small test to verify that GL_PIXEL_LOCAL_FORMAT_ANGLE has the correct
+// value.
+bool validate_pixel_local_storage_angle()
+{
+#if defined(RIVE_DESKTOP_GL) || defined(RIVE_WEBGL)
+    glutils::Texture tex;
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_R32UI, 1, 1);
+
+    glutils::Framebuffer fbo;
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glFramebufferTexturePixelLocalStorageANGLE(0, tex, 0, 0);
+
+    // Clear the error queue. (Should already be empty.)
+    while (GLenum err = glGetError())
+    {
+        fprintf(stderr, "WARNING: unhandled GL error 0x%x\n", err);
+    }
+
+    GLint format = GL_NONE;
+    glGetFramebufferPixelLocalStorageParameterivANGLE(
+        0,
+        GL_PIXEL_LOCAL_FORMAT_ANGLE,
+        &format);
+    return glGetError() == GL_NONE && format == GL_R32UI;
+#else
+    return false;
+#endif
 }
 } // namespace glutils

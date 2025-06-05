@@ -195,6 +195,12 @@ public:
     Point<float> getCenter() const;
     void setCenter (const Point<float>& newCenter);
 
+    float getCenterX() const;
+    void setCenterX (float newCenterX);
+
+    float getCenterY() const;
+    void setCenterY (float newCenterY);
+
     /**
         Called when the position of the component changes.
      */
@@ -278,6 +284,16 @@ public:
         @return The bounds of the component relative to its top most component (on desktop).
      */
     Rectangle<float> getBoundsRelativeToTopLevelComponent() const;
+
+    //==============================================================================
+
+    void setTransform (const AffineTransform& transform);
+
+    AffineTransform getTransform() const;
+
+    bool isTransformed() const;
+
+    virtual void transformChanged();
 
     //==============================================================================
     /**
@@ -890,6 +906,7 @@ private:
     Component* parentComponent = nullptr;
     Array<Component*> children;
     Rectangle<float> boundsInParent;
+    AffineTransform transform;
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;

@@ -33,6 +33,7 @@
     license:            MIT
 
     searchpaths:        include
+    appleFrameworks:    ImageIO
     enableARC:          1
 
   END_JUCE_MODULE_DECLARATION

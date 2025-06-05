@@ -81,6 +81,7 @@
 #include "rive/animation/transition_value_trigger_comparator.hpp"
 #include "rive/animation/transition_viewmodel_condition.hpp"
 #include "rive/artboard.hpp"
+#include "rive/artboard_component_list.hpp"
 #include "rive/assets/asset.hpp"
 #include "rive/assets/audio_asset.hpp"
 #include "rive/assets/drawable_asset.hpp"
@@ -121,20 +122,25 @@
 #include "rive/container_component.hpp"
 #include "rive/custom_property.hpp"
 #include "rive/custom_property_boolean.hpp"
+#include "rive/custom_property_group.hpp"
 #include "rive/custom_property_number.hpp"
 #include "rive/custom_property_string.hpp"
 #include "rive/data_bind/bindable_property.hpp"
+#include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
 #include "rive/data_bind/bindable_property_color.hpp"
 #include "rive/data_bind/bindable_property_enum.hpp"
+#include "rive/data_bind/bindable_property_integer.hpp"
 #include "rive/data_bind/bindable_property_number.hpp"
 #include "rive/data_bind/bindable_property_string.hpp"
 #include "rive/data_bind/bindable_property_trigger.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
 #include "rive/data_bind/converters/data_converter_boolean_negate.hpp"
+#include "rive/data_bind/converters/data_converter_formula.hpp"
 #include "rive/data_bind/converters/data_converter_group.hpp"
 #include "rive/data_bind/converters/data_converter_group_item.hpp"
 #include "rive/data_bind/converters/data_converter_interpolator.hpp"
+#include "rive/data_bind/converters/data_converter_number_to_list.hpp"
 #include "rive/data_bind/converters/data_converter_operation.hpp"
 #include "rive/data_bind/converters/data_converter_operation_value.hpp"
 #include "rive/data_bind/converters/data_converter_operation_viewmodel.hpp"
@@ -147,6 +153,15 @@
 #include "rive/data_bind/converters/data_converter_system_normalizer.hpp"
 #include "rive/data_bind/converters/data_converter_to_string.hpp"
 #include "rive/data_bind/converters/data_converter_trigger.hpp"
+#include "rive/data_bind/converters/formula/formula_token.hpp"
+#include "rive/data_bind/converters/formula/formula_token_argument_separator.hpp"
+#include "rive/data_bind/converters/formula/formula_token_function.hpp"
+#include "rive/data_bind/converters/formula/formula_token_input.hpp"
+#include "rive/data_bind/converters/formula/formula_token_operation.hpp"
+#include "rive/data_bind/converters/formula/formula_token_parenthesis.hpp"
+#include "rive/data_bind/converters/formula/formula_token_parenthesis_close.hpp"
+#include "rive/data_bind/converters/formula/formula_token_parenthesis_open.hpp"
+#include "rive/data_bind/converters/formula/formula_token_value.hpp"
 #include "rive/data_bind/data_bind.hpp"
 #include "rive/data_bind/data_bind_context.hpp"
 #include "rive/draw_rules.hpp"
@@ -203,6 +218,13 @@
 #include "rive/shapes/vertex.hpp"
 #include "rive/solo.hpp"
 #include "rive/text/text.hpp"
+#include "rive/text/text_follow_path_modifier.hpp"
+#include "rive/text/text_input.hpp"
+#include "rive/text/text_input_cursor.hpp"
+#include "rive/text/text_input_drawable.hpp"
+#include "rive/text/text_input_selected_text.hpp"
+#include "rive/text/text_input_selection.hpp"
+#include "rive/text/text_input_text.hpp"
 #include "rive/text/text_modifier.hpp"
 #include "rive/text/text_modifier_group.hpp"
 #include "rive/text/text_modifier_range.hpp"
@@ -210,6 +232,8 @@
 #include "rive/text/text_style.hpp"
 #include "rive/text/text_style_axis.hpp"
 #include "rive/text/text_style_feature.hpp"
+#include "rive/text/text_style_paint.hpp"
+#include "rive/text/text_target_modifier.hpp"
 #include "rive/text/text_value_run.hpp"
 #include "rive/text/text_variation_modifier.hpp"
 #include "rive/transform_component.hpp"
@@ -220,6 +244,8 @@
 #include "rive/viewmodel/viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_component.hpp"
 #include "rive/viewmodel/viewmodel_instance.hpp"
+#include "rive/viewmodel/viewmodel_instance_asset.hpp"
+#include "rive/viewmodel/viewmodel_instance_asset_image.hpp"
 #include "rive/viewmodel/viewmodel_instance_boolean.hpp"
 #include "rive/viewmodel/viewmodel_instance_color.hpp"
 #include "rive/viewmodel/viewmodel_instance_enum.hpp"
@@ -227,10 +253,14 @@
 #include "rive/viewmodel/viewmodel_instance_list_item.hpp"
 #include "rive/viewmodel/viewmodel_instance_number.hpp"
 #include "rive/viewmodel/viewmodel_instance_string.hpp"
+#include "rive/viewmodel/viewmodel_instance_symbol.hpp"
+#include "rive/viewmodel/viewmodel_instance_symbol_list_index.hpp"
 #include "rive/viewmodel/viewmodel_instance_trigger.hpp"
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
 #include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 #include "rive/viewmodel/viewmodel_property.hpp"
+#include "rive/viewmodel/viewmodel_property_asset.hpp"
+#include "rive/viewmodel/viewmodel_property_asset_image.hpp"
 #include "rive/viewmodel/viewmodel_property_boolean.hpp"
 #include "rive/viewmodel/viewmodel_property_color.hpp"
 #include "rive/viewmodel/viewmodel_property_enum.hpp"
@@ -239,6 +269,8 @@
 #include "rive/viewmodel/viewmodel_property_list.hpp"
 #include "rive/viewmodel/viewmodel_property_number.hpp"
 #include "rive/viewmodel/viewmodel_property_string.hpp"
+#include "rive/viewmodel/viewmodel_property_symbol.hpp"
+#include "rive/viewmodel/viewmodel_property_symbol_list_index.hpp"
 #include "rive/viewmodel/viewmodel_property_trigger.hpp"
 #include "rive/viewmodel/viewmodel_property_viewmodel.hpp"
 #include "rive/world_transform_component.hpp"
@@ -271,6 +303,8 @@ public:
                 return new ViewModelPropertyNumber();
             case ViewModelInstanceEnumBase::typeKey:
                 return new ViewModelInstanceEnum();
+            case ViewModelPropertySymbolListIndexBase::typeKey:
+                return new ViewModelPropertySymbolListIndex();
             case ViewModelInstanceStringBase::typeKey:
                 return new ViewModelInstanceString();
             case ViewModelPropertyListBase::typeKey:
@@ -279,16 +313,26 @@ public:
                 return new ViewModelPropertyEnumSystem();
             case ViewModelBase::typeKey:
                 return new ViewModel();
+            case ViewModelPropertyAssetBase::typeKey:
+                return new ViewModelPropertyAsset();
             case DataEnumSystemBase::typeKey:
                 return new DataEnumSystem();
             case ViewModelPropertyViewModelBase::typeKey:
                 return new ViewModelPropertyViewModel();
-            case ViewModelInstanceBase::typeKey:
-                return new ViewModelInstance();
-            case ViewModelPropertyBooleanBase::typeKey:
-                return new ViewModelPropertyBoolean();
+            case DataEnumValueBase::typeKey:
+                return new DataEnumValue();
+            case ViewModelPropertyTriggerBase::typeKey:
+                return new ViewModelPropertyTrigger();
+            case ViewModelPropertyStringBase::typeKey:
+                return new ViewModelPropertyString();
             case ViewModelPropertyColorBase::typeKey:
                 return new ViewModelPropertyColor();
+            case ViewModelPropertyBooleanBase::typeKey:
+                return new ViewModelPropertyBoolean();
+            case ViewModelInstanceBase::typeKey:
+                return new ViewModelInstance();
+            case ViewModelPropertyAssetImageBase::typeKey:
+                return new ViewModelPropertyAssetImage();
             case ViewModelInstanceBooleanBase::typeKey:
                 return new ViewModelInstanceBoolean();
             case ViewModelInstanceListBase::typeKey:
@@ -297,14 +341,14 @@ public:
                 return new ViewModelInstanceNumber();
             case ViewModelInstanceTriggerBase::typeKey:
                 return new ViewModelInstanceTrigger();
-            case ViewModelPropertyStringBase::typeKey:
-                return new ViewModelPropertyString();
+            case ViewModelInstanceSymbolListIndexBase::typeKey:
+                return new ViewModelInstanceSymbolListIndex();
             case ViewModelInstanceViewModelBase::typeKey:
                 return new ViewModelInstanceViewModel();
-            case ViewModelPropertyTriggerBase::typeKey:
-                return new ViewModelPropertyTrigger();
-            case DataEnumValueBase::typeKey:
-                return new DataEnumValue();
+            case ViewModelInstanceAssetBase::typeKey:
+                return new ViewModelInstanceAsset();
+            case ViewModelInstanceAssetImageBase::typeKey:
+                return new ViewModelInstanceAssetImage();
             case DrawTargetBase::typeKey:
                 return new DrawTarget();
             case CustomPropertyNumberBase::typeKey:
@@ -337,6 +381,8 @@ public:
                 return new ForegroundLayoutDrawable();
             case NestedArtboardBase::typeKey:
                 return new NestedArtboard();
+            case ArtboardComponentListBase::typeKey:
+                return new ArtboardComponentList();
             case SoloBase::typeKey:
                 return new Solo();
             case NestedArtboardLayoutBase::typeKey:
@@ -521,6 +567,8 @@ public:
                 return new Image();
             case CubicDetachedVertexBase::typeKey:
                 return new CubicDetachedVertex();
+            case CustomPropertyGroupBase::typeKey:
+                return new CustomPropertyGroup();
             case EventBase::typeKey:
                 return new Event();
             case DrawRulesBase::typeKey:
@@ -537,12 +585,20 @@ public:
                 return new Backboard();
             case OpenUrlEventBase::typeKey:
                 return new OpenUrlEvent();
+            case BindablePropertyIntegerBase::typeKey:
+                return new BindablePropertyInteger();
             case BindablePropertyTriggerBase::typeKey:
                 return new BindablePropertyTrigger();
             case BindablePropertyBooleanBase::typeKey:
                 return new BindablePropertyBoolean();
             case DataBindBase::typeKey:
                 return new DataBind();
+            case BindablePropertyAssetBase::typeKey:
+                return new BindablePropertyAsset();
+            case DataConverterNumberToListBase::typeKey:
+                return new DataConverterNumberToList();
+            case DataConverterFormulaBase::typeKey:
+                return new DataConverterFormula();
             case DataConverterOperationBase::typeKey:
                 return new DataConverterOperation();
             case DataConverterOperationValueBase::typeKey:
@@ -569,6 +625,24 @@ public:
                 return new DataConverterTrigger();
             case DataConverterStringTrimBase::typeKey:
                 return new DataConverterStringTrim();
+            case FormulaTokenBase::typeKey:
+                return new FormulaToken();
+            case FormulaTokenArgumentSeparatorBase::typeKey:
+                return new FormulaTokenArgumentSeparator();
+            case FormulaTokenParenthesisBase::typeKey:
+                return new FormulaTokenParenthesis();
+            case FormulaTokenParenthesisCloseBase::typeKey:
+                return new FormulaTokenParenthesisClose();
+            case FormulaTokenOperationBase::typeKey:
+                return new FormulaTokenOperation();
+            case FormulaTokenFunctionBase::typeKey:
+                return new FormulaTokenFunction();
+            case FormulaTokenValueBase::typeKey:
+                return new FormulaTokenValue();
+            case FormulaTokenParenthesisOpenBase::typeKey:
+                return new FormulaTokenParenthesisOpen();
+            case FormulaTokenInputBase::typeKey:
+                return new FormulaTokenInput();
             case DataConverterOperationViewModelBase::typeKey:
                 return new DataConverterOperationViewModel();
             case DataConverterBooleanNegateBase::typeKey:
@@ -601,6 +675,12 @@ public:
                 return new CubicWeight();
             case TextModifierRangeBase::typeKey:
                 return new TextModifierRange();
+            case TextFollowPathModifierBase::typeKey:
+                return new TextFollowPathModifier();
+            case TextInputCursorBase::typeKey:
+                return new TextInputCursor();
+            case TextInputTextBase::typeKey:
+                return new TextInputText();
             case TextStyleFeatureBase::typeKey:
                 return new TextStyleFeature();
             case TextVariationModifierBase::typeKey:
@@ -609,8 +689,16 @@ public:
                 return new TextModifierGroup();
             case TextStyleBase::typeKey:
                 return new TextStyle();
+            case TextStylePaintBase::typeKey:
+                return new TextStylePaint();
+            case TextInputSelectedTextBase::typeKey:
+                return new TextInputSelectedText();
+            case TextInputBase::typeKey:
+                return new TextInput();
             case TextStyleAxisBase::typeKey:
                 return new TextStyleAxis();
+            case TextInputSelectionBase::typeKey:
+                return new TextInputSelection();
             case TextBase::typeKey:
                 return new Text();
             case TextValueRunBase::typeKey:
@@ -632,131 +720,6 @@ public:
         }
         return nullptr;
     }
-    static void setBool(Core* object, int propertyKey, bool value)
-    {
-        switch (propertyKey)
-        {
-            case ViewModelInstanceListItemBase::useLinkedArtboardPropertyKey:
-                object->as<ViewModelInstanceListItemBase>()->useLinkedArtboard(
-                    value);
-                break;
-            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
-                object->as<ViewModelInstanceBooleanBase>()->propertyValue(
-                    value);
-                break;
-            case TransformComponentConstraintBase::offsetPropertyKey:
-                object->as<TransformComponentConstraintBase>()->offset(value);
-                break;
-            case TransformComponentConstraintBase::doesCopyPropertyKey:
-                object->as<TransformComponentConstraintBase>()->doesCopy(value);
-                break;
-            case TransformComponentConstraintBase::minPropertyKey:
-                object->as<TransformComponentConstraintBase>()->min(value);
-                break;
-            case TransformComponentConstraintBase::maxPropertyKey:
-                object->as<TransformComponentConstraintBase>()->max(value);
-                break;
-            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
-                object->as<TransformComponentConstraintYBase>()->doesCopyY(
-                    value);
-                break;
-            case TransformComponentConstraintYBase::minYPropertyKey:
-                object->as<TransformComponentConstraintYBase>()->minY(value);
-                break;
-            case TransformComponentConstraintYBase::maxYPropertyKey:
-                object->as<TransformComponentConstraintYBase>()->maxY(value);
-                break;
-            case IKConstraintBase::invertDirectionPropertyKey:
-                object->as<IKConstraintBase>()->invertDirection(value);
-                break;
-            case FollowPathConstraintBase::orientPropertyKey:
-                object->as<FollowPathConstraintBase>()->orient(value);
-                break;
-            case FollowPathConstraintBase::offsetPropertyKey:
-                object->as<FollowPathConstraintBase>()->offset(value);
-                break;
-            case ScrollConstraintBase::snapPropertyKey:
-                object->as<ScrollConstraintBase>()->snap(value);
-                break;
-            case ScrollBarConstraintBase::autoSizePropertyKey:
-                object->as<ScrollBarConstraintBase>()->autoSize(value);
-                break;
-            case AxisBase::normalizedPropertyKey:
-                object->as<AxisBase>()->normalized(value);
-                break;
-            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
-                object->as<LayoutComponentStyleBase>()->intrinsicallySizedValue(
-                    value);
-                break;
-            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
-                object->as<LayoutComponentStyleBase>()->linkCornerRadius(value);
-                break;
-            case NestedSimpleAnimationBase::isPlayingPropertyKey:
-                object->as<NestedSimpleAnimationBase>()->isPlaying(value);
-                break;
-            case KeyFrameBoolBase::valuePropertyKey:
-                object->as<KeyFrameBoolBase>()->value(value);
-                break;
-            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
-                object->as<ListenerAlignTargetBase>()->preserveOffset(value);
-                break;
-            case TransitionValueBooleanComparatorBase::valuePropertyKey:
-                object->as<TransitionValueBooleanComparatorBase>()->value(
-                    value);
-                break;
-            case NestedBoolBase::nestedValuePropertyKey:
-                object->as<NestedBoolBase>()->nestedValue(value);
-                break;
-            case LinearAnimationBase::enableWorkAreaPropertyKey:
-                object->as<LinearAnimationBase>()->enableWorkArea(value);
-                break;
-            case LinearAnimationBase::quantizePropertyKey:
-                object->as<LinearAnimationBase>()->quantize(value);
-                break;
-            case StateMachineBoolBase::valuePropertyKey:
-                object->as<StateMachineBoolBase>()->value(value);
-                break;
-            case ShapePaintBase::isVisiblePropertyKey:
-                object->as<ShapePaintBase>()->isVisible(value);
-                break;
-            case DashPathBase::offsetIsPercentagePropertyKey:
-                object->as<DashPathBase>()->offsetIsPercentage(value);
-                break;
-            case DashBase::lengthIsPercentagePropertyKey:
-                object->as<DashBase>()->lengthIsPercentage(value);
-                break;
-            case StrokeBase::transformAffectsStrokePropertyKey:
-                object->as<StrokeBase>()->transformAffectsStroke(value);
-                break;
-            case FeatherBase::innerPropertyKey:
-                object->as<FeatherBase>()->inner(value);
-                break;
-            case PointsPathBase::isClosedPropertyKey:
-                object->as<PointsPathBase>()->isClosed(value);
-                break;
-            case RectangleBase::linkCornerRadiusPropertyKey:
-                object->as<RectangleBase>()->linkCornerRadius(value);
-                break;
-            case ClippingShapeBase::isVisiblePropertyKey:
-                object->as<ClippingShapeBase>()->isVisible(value);
-                break;
-            case CustomPropertyBooleanBase::propertyValuePropertyKey:
-                object->as<CustomPropertyBooleanBase>()->propertyValue(value);
-                break;
-            case LayoutComponentBase::clipPropertyKey:
-                object->as<LayoutComponentBase>()->clip(value);
-                break;
-            case BindablePropertyBooleanBase::propertyValuePropertyKey:
-                object->as<BindablePropertyBooleanBase>()->propertyValue(value);
-                break;
-            case TextModifierRangeBase::clampPropertyKey:
-                object->as<TextModifierRangeBase>()->clamp(value);
-                break;
-            case TextBase::fitFromBaselinePropertyKey:
-                object->as<TextBase>()->fitFromBaseline(value);
-                break;
-        }
-    }
     static void setUint(Core* object, int propertyKey, uint32_t value)
     {
         switch (propertyKey)
@@ -767,9 +730,6 @@ public:
             case ViewModelInstanceListItemBase::viewModelInstanceIdPropertyKey:
                 object->as<ViewModelInstanceListItemBase>()
                     ->viewModelInstanceId(value);
-                break;
-            case ViewModelInstanceListItemBase::artboardIdPropertyKey:
-                object->as<ViewModelInstanceListItemBase>()->artboardId(value);
                 break;
             case ViewModelInstanceValueBase::viewModelPropertyIdPropertyKey:
                 object->as<ViewModelInstanceValueBase>()->viewModelPropertyId(
@@ -802,9 +762,16 @@ public:
                 object->as<ViewModelInstanceTriggerBase>()->propertyValue(
                     value);
                 break;
+            case ViewModelInstanceSymbolListIndexBase::propertyValuePropertyKey:
+                object->as<ViewModelInstanceSymbolListIndexBase>()
+                    ->propertyValue(value);
+                break;
             case ViewModelInstanceViewModelBase::propertyValuePropertyKey:
                 object->as<ViewModelInstanceViewModelBase>()->propertyValue(
                     value);
+                break;
+            case ViewModelInstanceAssetBase::propertyValuePropertyKey:
+                object->as<ViewModelInstanceAssetBase>()->propertyValue(value);
                 break;
             case DrawTargetBase::drawableIdPropertyKey:
                 object->as<DrawTargetBase>()->drawableId(value);
@@ -857,6 +824,9 @@ public:
                 break;
             case NestedArtboardBase::artboardIdPropertyKey:
                 object->as<NestedArtboardBase>()->artboardId(value);
+                break;
+            case ArtboardComponentListBase::listSourcePropertyKey:
+                object->as<ArtboardComponentListBase>()->listSource(value);
                 break;
             case NestedAnimationBase::animationIdPropertyKey:
                 object->as<NestedAnimationBase>()->animationId(value);
@@ -1239,8 +1209,8 @@ public:
             case OpenUrlEventBase::targetValuePropertyKey:
                 object->as<OpenUrlEventBase>()->targetValue(value);
                 break;
-            case BindablePropertyTriggerBase::propertyValuePropertyKey:
-                object->as<BindablePropertyTriggerBase>()->propertyValue(value);
+            case BindablePropertyIntegerBase::propertyValuePropertyKey:
+                object->as<BindablePropertyIntegerBase>()->propertyValue(value);
                 break;
             case DataBindBase::propertyKeyPropertyKey:
                 object->as<DataBindBase>()->propertyKey(value);
@@ -1250,6 +1220,12 @@ public:
                 break;
             case DataBindBase::converterIdPropertyKey:
                 object->as<DataBindBase>()->converterId(value);
+                break;
+            case BindablePropertyAssetBase::propertyValuePropertyKey:
+                object->as<BindablePropertyAssetBase>()->propertyValue(value);
+                break;
+            case DataConverterNumberToListBase::viewModelIdPropertyKey:
+                object->as<DataConverterNumberToListBase>()->viewModelId(value);
                 break;
             case DataConverterOperationBase::operationTypePropertyKey:
                 object->as<DataConverterOperationBase>()->operationType(value);
@@ -1287,6 +1263,12 @@ public:
                 break;
             case DataConverterStringTrimBase::trimTypePropertyKey:
                 object->as<DataConverterStringTrimBase>()->trimType(value);
+                break;
+            case FormulaTokenOperationBase::operationTypePropertyKey:
+                object->as<FormulaTokenOperationBase>()->operationType(value);
+                break;
+            case FormulaTokenFunctionBase::functionTypePropertyKey:
+                object->as<FormulaTokenFunctionBase>()->functionType(value);
                 break;
             case DataConverterToStringBase::flagsPropertyKey:
                 object->as<DataConverterToStringBase>()->flags(value);
@@ -1332,6 +1314,9 @@ public:
                 break;
             case TextModifierRangeBase::runIdPropertyKey:
                 object->as<TextModifierRangeBase>()->runId(value);
+                break;
+            case TextTargetModifierBase::targetIdPropertyKey:
+                object->as<TextTargetModifierBase>()->targetId(value);
                 break;
             case TextStyleFeatureBase::tagPropertyKey:
                 object->as<TextStyleFeatureBase>()->tag(value);
@@ -1417,14 +1402,14 @@ public:
             case ViewModelInstanceStringBase::propertyValuePropertyKey:
                 object->as<ViewModelInstanceStringBase>()->propertyValue(value);
                 break;
-            case ComponentBase::namePropertyKey:
-                object->as<ComponentBase>()->name(value);
-                break;
             case DataEnumValueBase::keyPropertyKey:
                 object->as<DataEnumValueBase>()->key(value);
                 break;
             case DataEnumValueBase::valuePropertyKey:
                 object->as<DataEnumValueBase>()->value(value);
+                break;
+            case ComponentBase::namePropertyKey:
+                object->as<ComponentBase>()->name(value);
                 break;
             case AnimationBase::namePropertyKey:
                 object->as<AnimationBase>()->name(value);
@@ -1453,6 +1438,9 @@ public:
             case BindablePropertyStringBase::propertyValuePropertyKey:
                 object->as<BindablePropertyStringBase>()->propertyValue(value);
                 break;
+            case TextInputBase::textPropertyKey:
+                object->as<TextInputBase>()->text(value);
+                break;
             case TextValueRunBase::textPropertyKey:
                 object->as<TextValueRunBase>()->text(value);
                 break;
@@ -1464,6 +1452,136 @@ public:
                 break;
             case FileAssetBase::cdnBaseUrlPropertyKey:
                 object->as<FileAssetBase>()->cdnBaseUrl(value);
+                break;
+        }
+    }
+    static void setBool(Core* object, int propertyKey, bool value)
+    {
+        switch (propertyKey)
+        {
+            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
+                object->as<ViewModelInstanceBooleanBase>()->propertyValue(
+                    value);
+                break;
+            case TransformComponentConstraintBase::offsetPropertyKey:
+                object->as<TransformComponentConstraintBase>()->offset(value);
+                break;
+            case TransformComponentConstraintBase::doesCopyPropertyKey:
+                object->as<TransformComponentConstraintBase>()->doesCopy(value);
+                break;
+            case TransformComponentConstraintBase::minPropertyKey:
+                object->as<TransformComponentConstraintBase>()->min(value);
+                break;
+            case TransformComponentConstraintBase::maxPropertyKey:
+                object->as<TransformComponentConstraintBase>()->max(value);
+                break;
+            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
+                object->as<TransformComponentConstraintYBase>()->doesCopyY(
+                    value);
+                break;
+            case TransformComponentConstraintYBase::minYPropertyKey:
+                object->as<TransformComponentConstraintYBase>()->minY(value);
+                break;
+            case TransformComponentConstraintYBase::maxYPropertyKey:
+                object->as<TransformComponentConstraintYBase>()->maxY(value);
+                break;
+            case IKConstraintBase::invertDirectionPropertyKey:
+                object->as<IKConstraintBase>()->invertDirection(value);
+                break;
+            case FollowPathConstraintBase::orientPropertyKey:
+                object->as<FollowPathConstraintBase>()->orient(value);
+                break;
+            case FollowPathConstraintBase::offsetPropertyKey:
+                object->as<FollowPathConstraintBase>()->offset(value);
+                break;
+            case ScrollConstraintBase::snapPropertyKey:
+                object->as<ScrollConstraintBase>()->snap(value);
+                break;
+            case ScrollBarConstraintBase::autoSizePropertyKey:
+                object->as<ScrollBarConstraintBase>()->autoSize(value);
+                break;
+            case AxisBase::normalizedPropertyKey:
+                object->as<AxisBase>()->normalized(value);
+                break;
+            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
+                object->as<LayoutComponentStyleBase>()->intrinsicallySizedValue(
+                    value);
+                break;
+            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
+                object->as<LayoutComponentStyleBase>()->linkCornerRadius(value);
+                break;
+            case NestedSimpleAnimationBase::isPlayingPropertyKey:
+                object->as<NestedSimpleAnimationBase>()->isPlaying(value);
+                break;
+            case KeyFrameBoolBase::valuePropertyKey:
+                object->as<KeyFrameBoolBase>()->value(value);
+                break;
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
+                object->as<ListenerAlignTargetBase>()->preserveOffset(value);
+                break;
+            case TransitionValueBooleanComparatorBase::valuePropertyKey:
+                object->as<TransitionValueBooleanComparatorBase>()->value(
+                    value);
+                break;
+            case NestedBoolBase::nestedValuePropertyKey:
+                object->as<NestedBoolBase>()->nestedValue(value);
+                break;
+            case LinearAnimationBase::enableWorkAreaPropertyKey:
+                object->as<LinearAnimationBase>()->enableWorkArea(value);
+                break;
+            case LinearAnimationBase::quantizePropertyKey:
+                object->as<LinearAnimationBase>()->quantize(value);
+                break;
+            case StateMachineBoolBase::valuePropertyKey:
+                object->as<StateMachineBoolBase>()->value(value);
+                break;
+            case ShapePaintBase::isVisiblePropertyKey:
+                object->as<ShapePaintBase>()->isVisible(value);
+                break;
+            case DashPathBase::offsetIsPercentagePropertyKey:
+                object->as<DashPathBase>()->offsetIsPercentage(value);
+                break;
+            case DashBase::lengthIsPercentagePropertyKey:
+                object->as<DashBase>()->lengthIsPercentage(value);
+                break;
+            case StrokeBase::transformAffectsStrokePropertyKey:
+                object->as<StrokeBase>()->transformAffectsStroke(value);
+                break;
+            case FeatherBase::innerPropertyKey:
+                object->as<FeatherBase>()->inner(value);
+                break;
+            case PathBase::isHolePropertyKey:
+                object->as<PathBase>()->isHole(value);
+                break;
+            case PointsPathBase::isClosedPropertyKey:
+                object->as<PointsPathBase>()->isClosed(value);
+                break;
+            case RectangleBase::linkCornerRadiusPropertyKey:
+                object->as<RectangleBase>()->linkCornerRadius(value);
+                break;
+            case ClippingShapeBase::isVisiblePropertyKey:
+                object->as<ClippingShapeBase>()->isVisible(value);
+                break;
+            case CustomPropertyBooleanBase::propertyValuePropertyKey:
+                object->as<CustomPropertyBooleanBase>()->propertyValue(value);
+                break;
+            case LayoutComponentBase::clipPropertyKey:
+                object->as<LayoutComponentBase>()->clip(value);
+                break;
+            case BindablePropertyBooleanBase::propertyValuePropertyKey:
+                object->as<BindablePropertyBooleanBase>()->propertyValue(value);
+                break;
+            case TextModifierRangeBase::clampPropertyKey:
+                object->as<TextModifierRangeBase>()->clamp(value);
+                break;
+            case TextFollowPathModifierBase::radialPropertyKey:
+                object->as<TextFollowPathModifierBase>()->radial(value);
+                break;
+            case TextFollowPathModifierBase::orientPropertyKey:
+                object->as<TextFollowPathModifierBase>()->orient(value);
+                break;
+            case TextBase::fitFromBaselinePropertyKey:
+                object->as<TextBase>()->fitFromBaseline(value);
                 break;
         }
     }
@@ -1557,6 +1675,24 @@ public:
             case NodeBase::yPropertyKey:
             case NodeBase::yArtboardPropertyKey:
                 object->as<NodeBase>()->y(value);
+                break;
+            case NodeBase::computedLocalXPropertyKey:
+                object->as<NodeBase>()->computedLocalX(value);
+                break;
+            case NodeBase::computedLocalYPropertyKey:
+                object->as<NodeBase>()->computedLocalY(value);
+                break;
+            case NodeBase::computedWorldXPropertyKey:
+                object->as<NodeBase>()->computedWorldX(value);
+                break;
+            case NodeBase::computedWorldYPropertyKey:
+                object->as<NodeBase>()->computedWorldY(value);
+                break;
+            case NodeBase::computedWidthPropertyKey:
+                object->as<NodeBase>()->computedWidth(value);
+                break;
+            case NodeBase::computedHeightPropertyKey:
+                object->as<NodeBase>()->computedHeight(value);
                 break;
             case NestedArtboardLayoutBase::instanceWidthPropertyKey:
                 object->as<NestedArtboardLayoutBase>()->instanceWidth(value);
@@ -1802,6 +1938,9 @@ public:
             case MeshVertexBase::vPropertyKey:
                 object->as<MeshVertexBase>()->v(value);
                 break;
+            case ShapeBase::lengthPropertyKey:
+                object->as<ShapeBase>()->length(value);
+                break;
             case StraightVertexBase::radiusPropertyKey:
                 object->as<StraightVertexBase>()->radius(value);
                 break;
@@ -1929,6 +2068,9 @@ public:
             case DataConverterInterpolatorBase::durationPropertyKey:
                 object->as<DataConverterInterpolatorBase>()->duration(value);
                 break;
+            case FormulaTokenValueBase::operationValuePropertyKey:
+                object->as<FormulaTokenValueBase>()->operationValue(value);
+                break;
             case BindablePropertyNumberBase::propertyValuePropertyKey:
                 object->as<BindablePropertyNumberBase>()->propertyValue(value);
                 break;
@@ -2001,6 +2143,18 @@ public:
             case TextModifierRangeBase::offsetPropertyKey:
                 object->as<TextModifierRangeBase>()->offset(value);
                 break;
+            case TextFollowPathModifierBase::startPropertyKey:
+                object->as<TextFollowPathModifierBase>()->start(value);
+                break;
+            case TextFollowPathModifierBase::endPropertyKey:
+                object->as<TextFollowPathModifierBase>()->end(value);
+                break;
+            case TextFollowPathModifierBase::strengthPropertyKey:
+                object->as<TextFollowPathModifierBase>()->strength(value);
+                break;
+            case TextFollowPathModifierBase::offsetPropertyKey:
+                object->as<TextFollowPathModifierBase>()->offset(value);
+                break;
             case TextVariationModifierBase::axisValuePropertyKey:
                 object->as<TextVariationModifierBase>()->axisValue(value);
                 break;
@@ -2036,6 +2190,9 @@ public:
                 break;
             case TextStyleBase::letterSpacingPropertyKey:
                 object->as<TextStyleBase>()->letterSpacing(value);
+                break;
+            case TextInputBase::selectionRadiusPropertyKey:
+                object->as<TextInputBase>()->selectionRadius(value);
                 break;
             case TextStyleAxisBase::axisValuePropertyKey:
                 object->as<TextStyleAxisBase>()->axisValue(value);
@@ -2078,97 +2235,6 @@ public:
                 break;
         }
     }
-    static bool getBool(Core* object, int propertyKey)
-    {
-        switch (propertyKey)
-        {
-            case ViewModelInstanceListItemBase::useLinkedArtboardPropertyKey:
-                return object->as<ViewModelInstanceListItemBase>()
-                    ->useLinkedArtboard();
-            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
-                return object->as<ViewModelInstanceBooleanBase>()
-                    ->propertyValue();
-            case TransformComponentConstraintBase::offsetPropertyKey:
-                return object->as<TransformComponentConstraintBase>()->offset();
-            case TransformComponentConstraintBase::doesCopyPropertyKey:
-                return object->as<TransformComponentConstraintBase>()
-                    ->doesCopy();
-            case TransformComponentConstraintBase::minPropertyKey:
-                return object->as<TransformComponentConstraintBase>()->min();
-            case TransformComponentConstraintBase::maxPropertyKey:
-                return object->as<TransformComponentConstraintBase>()->max();
-            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
-                return object->as<TransformComponentConstraintYBase>()
-                    ->doesCopyY();
-            case TransformComponentConstraintYBase::minYPropertyKey:
-                return object->as<TransformComponentConstraintYBase>()->minY();
-            case TransformComponentConstraintYBase::maxYPropertyKey:
-                return object->as<TransformComponentConstraintYBase>()->maxY();
-            case IKConstraintBase::invertDirectionPropertyKey:
-                return object->as<IKConstraintBase>()->invertDirection();
-            case FollowPathConstraintBase::orientPropertyKey:
-                return object->as<FollowPathConstraintBase>()->orient();
-            case FollowPathConstraintBase::offsetPropertyKey:
-                return object->as<FollowPathConstraintBase>()->offset();
-            case ScrollConstraintBase::snapPropertyKey:
-                return object->as<ScrollConstraintBase>()->snap();
-            case ScrollBarConstraintBase::autoSizePropertyKey:
-                return object->as<ScrollBarConstraintBase>()->autoSize();
-            case AxisBase::normalizedPropertyKey:
-                return object->as<AxisBase>()->normalized();
-            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
-                return object->as<LayoutComponentStyleBase>()
-                    ->intrinsicallySizedValue();
-            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
-                return object->as<LayoutComponentStyleBase>()
-                    ->linkCornerRadius();
-            case NestedSimpleAnimationBase::isPlayingPropertyKey:
-                return object->as<NestedSimpleAnimationBase>()->isPlaying();
-            case KeyFrameBoolBase::valuePropertyKey:
-                return object->as<KeyFrameBoolBase>()->value();
-            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
-                return object->as<ListenerAlignTargetBase>()->preserveOffset();
-            case TransitionValueBooleanComparatorBase::valuePropertyKey:
-                return object->as<TransitionValueBooleanComparatorBase>()
-                    ->value();
-            case NestedBoolBase::nestedValuePropertyKey:
-                return object->as<NestedBoolBase>()->nestedValue();
-            case LinearAnimationBase::enableWorkAreaPropertyKey:
-                return object->as<LinearAnimationBase>()->enableWorkArea();
-            case LinearAnimationBase::quantizePropertyKey:
-                return object->as<LinearAnimationBase>()->quantize();
-            case StateMachineBoolBase::valuePropertyKey:
-                return object->as<StateMachineBoolBase>()->value();
-            case ShapePaintBase::isVisiblePropertyKey:
-                return object->as<ShapePaintBase>()->isVisible();
-            case DashPathBase::offsetIsPercentagePropertyKey:
-                return object->as<DashPathBase>()->offsetIsPercentage();
-            case DashBase::lengthIsPercentagePropertyKey:
-                return object->as<DashBase>()->lengthIsPercentage();
-            case StrokeBase::transformAffectsStrokePropertyKey:
-                return object->as<StrokeBase>()->transformAffectsStroke();
-            case FeatherBase::innerPropertyKey:
-                return object->as<FeatherBase>()->inner();
-            case PointsPathBase::isClosedPropertyKey:
-                return object->as<PointsPathBase>()->isClosed();
-            case RectangleBase::linkCornerRadiusPropertyKey:
-                return object->as<RectangleBase>()->linkCornerRadius();
-            case ClippingShapeBase::isVisiblePropertyKey:
-                return object->as<ClippingShapeBase>()->isVisible();
-            case CustomPropertyBooleanBase::propertyValuePropertyKey:
-                return object->as<CustomPropertyBooleanBase>()->propertyValue();
-            case LayoutComponentBase::clipPropertyKey:
-                return object->as<LayoutComponentBase>()->clip();
-            case BindablePropertyBooleanBase::propertyValuePropertyKey:
-                return object->as<BindablePropertyBooleanBase>()
-                    ->propertyValue();
-            case TextModifierRangeBase::clampPropertyKey:
-                return object->as<TextModifierRangeBase>()->clamp();
-            case TextBase::fitFromBaselinePropertyKey:
-                return object->as<TextBase>()->fitFromBaseline();
-        }
-        return false;
-    }
     static uint32_t getUint(Core* object, int propertyKey)
     {
         switch (propertyKey)
@@ -2179,9 +2245,6 @@ public:
             case ViewModelInstanceListItemBase::viewModelInstanceIdPropertyKey:
                 return object->as<ViewModelInstanceListItemBase>()
                     ->viewModelInstanceId();
-            case ViewModelInstanceListItemBase::artboardIdPropertyKey:
-                return object->as<ViewModelInstanceListItemBase>()
-                    ->artboardId();
             case ViewModelInstanceValueBase::viewModelPropertyIdPropertyKey:
                 return object->as<ViewModelInstanceValueBase>()
                     ->viewModelPropertyId();
@@ -2205,8 +2268,14 @@ public:
             case ViewModelInstanceTriggerBase::propertyValuePropertyKey:
                 return object->as<ViewModelInstanceTriggerBase>()
                     ->propertyValue();
+            case ViewModelInstanceSymbolListIndexBase::propertyValuePropertyKey:
+                return object->as<ViewModelInstanceSymbolListIndexBase>()
+                    ->propertyValue();
             case ViewModelInstanceViewModelBase::propertyValuePropertyKey:
                 return object->as<ViewModelInstanceViewModelBase>()
+                    ->propertyValue();
+            case ViewModelInstanceAssetBase::propertyValuePropertyKey:
+                return object->as<ViewModelInstanceAssetBase>()
                     ->propertyValue();
             case DrawTargetBase::drawableIdPropertyKey:
                 return object->as<DrawTargetBase>()->drawableId();
@@ -2244,6 +2313,8 @@ public:
                 return object->as<DrawableBase>()->drawableFlags();
             case NestedArtboardBase::artboardIdPropertyKey:
                 return object->as<NestedArtboardBase>()->artboardId();
+            case ArtboardComponentListBase::listSourcePropertyKey:
+                return object->as<ArtboardComponentListBase>()->listSource();
             case NestedAnimationBase::animationIdPropertyKey:
                 return object->as<NestedAnimationBase>()->animationId();
             case SoloBase::activeComponentIdPropertyKey:
@@ -2517,8 +2588,8 @@ public:
                 return object->as<JoystickBase>()->handleSourceId();
             case OpenUrlEventBase::targetValuePropertyKey:
                 return object->as<OpenUrlEventBase>()->targetValue();
-            case BindablePropertyTriggerBase::propertyValuePropertyKey:
-                return object->as<BindablePropertyTriggerBase>()
+            case BindablePropertyIntegerBase::propertyValuePropertyKey:
+                return object->as<BindablePropertyIntegerBase>()
                     ->propertyValue();
             case DataBindBase::propertyKeyPropertyKey:
                 return object->as<DataBindBase>()->propertyKey();
@@ -2526,6 +2597,11 @@ public:
                 return object->as<DataBindBase>()->flags();
             case DataBindBase::converterIdPropertyKey:
                 return object->as<DataBindBase>()->converterId();
+            case BindablePropertyAssetBase::propertyValuePropertyKey:
+                return object->as<BindablePropertyAssetBase>()->propertyValue();
+            case DataConverterNumberToListBase::viewModelIdPropertyKey:
+                return object->as<DataConverterNumberToListBase>()
+                    ->viewModelId();
             case DataConverterOperationBase::operationTypePropertyKey:
                 return object->as<DataConverterOperationBase>()
                     ->operationType();
@@ -2553,6 +2629,10 @@ public:
                 return object->as<DataConverterStringPadBase>()->padType();
             case DataConverterStringTrimBase::trimTypePropertyKey:
                 return object->as<DataConverterStringTrimBase>()->trimType();
+            case FormulaTokenOperationBase::operationTypePropertyKey:
+                return object->as<FormulaTokenOperationBase>()->operationType();
+            case FormulaTokenFunctionBase::functionTypePropertyKey:
+                return object->as<FormulaTokenFunctionBase>()->functionType();
             case DataConverterToStringBase::flagsPropertyKey:
                 return object->as<DataConverterToStringBase>()->flags();
             case DataConverterToStringBase::decimalsPropertyKey:
@@ -2583,6 +2663,8 @@ public:
                 return object->as<TextModifierRangeBase>()->modeValue();
             case TextModifierRangeBase::runIdPropertyKey:
                 return object->as<TextModifierRangeBase>()->runId();
+            case TextTargetModifierBase::targetIdPropertyKey:
+                return object->as<TextTargetModifierBase>()->targetId();
             case TextStyleFeatureBase::tagPropertyKey:
                 return object->as<TextStyleFeatureBase>()->tag();
             case TextStyleFeatureBase::featureValuePropertyKey:
@@ -2648,12 +2730,12 @@ public:
             case ViewModelInstanceStringBase::propertyValuePropertyKey:
                 return object->as<ViewModelInstanceStringBase>()
                     ->propertyValue();
-            case ComponentBase::namePropertyKey:
-                return object->as<ComponentBase>()->name();
             case DataEnumValueBase::keyPropertyKey:
                 return object->as<DataEnumValueBase>()->key();
             case DataEnumValueBase::valuePropertyKey:
                 return object->as<DataEnumValueBase>()->value();
+            case ComponentBase::namePropertyKey:
+                return object->as<ComponentBase>()->name();
             case AnimationBase::namePropertyKey:
                 return object->as<AnimationBase>()->name();
             case StateMachineComponentBase::namePropertyKey:
@@ -2674,6 +2756,8 @@ public:
             case BindablePropertyStringBase::propertyValuePropertyKey:
                 return object->as<BindablePropertyStringBase>()
                     ->propertyValue();
+            case TextInputBase::textPropertyKey:
+                return object->as<TextInputBase>()->text();
             case TextValueRunBase::textPropertyKey:
                 return object->as<TextValueRunBase>()->text();
             case CustomPropertyStringBase::propertyValuePropertyKey:
@@ -2684,6 +2768,100 @@ public:
                 return object->as<FileAssetBase>()->cdnBaseUrl();
         }
         return "";
+    }
+    static bool getBool(Core* object, int propertyKey)
+    {
+        switch (propertyKey)
+        {
+            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
+                return object->as<ViewModelInstanceBooleanBase>()
+                    ->propertyValue();
+            case TransformComponentConstraintBase::offsetPropertyKey:
+                return object->as<TransformComponentConstraintBase>()->offset();
+            case TransformComponentConstraintBase::doesCopyPropertyKey:
+                return object->as<TransformComponentConstraintBase>()
+                    ->doesCopy();
+            case TransformComponentConstraintBase::minPropertyKey:
+                return object->as<TransformComponentConstraintBase>()->min();
+            case TransformComponentConstraintBase::maxPropertyKey:
+                return object->as<TransformComponentConstraintBase>()->max();
+            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
+                return object->as<TransformComponentConstraintYBase>()
+                    ->doesCopyY();
+            case TransformComponentConstraintYBase::minYPropertyKey:
+                return object->as<TransformComponentConstraintYBase>()->minY();
+            case TransformComponentConstraintYBase::maxYPropertyKey:
+                return object->as<TransformComponentConstraintYBase>()->maxY();
+            case IKConstraintBase::invertDirectionPropertyKey:
+                return object->as<IKConstraintBase>()->invertDirection();
+            case FollowPathConstraintBase::orientPropertyKey:
+                return object->as<FollowPathConstraintBase>()->orient();
+            case FollowPathConstraintBase::offsetPropertyKey:
+                return object->as<FollowPathConstraintBase>()->offset();
+            case ScrollConstraintBase::snapPropertyKey:
+                return object->as<ScrollConstraintBase>()->snap();
+            case ScrollBarConstraintBase::autoSizePropertyKey:
+                return object->as<ScrollBarConstraintBase>()->autoSize();
+            case AxisBase::normalizedPropertyKey:
+                return object->as<AxisBase>()->normalized();
+            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
+                return object->as<LayoutComponentStyleBase>()
+                    ->intrinsicallySizedValue();
+            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
+                return object->as<LayoutComponentStyleBase>()
+                    ->linkCornerRadius();
+            case NestedSimpleAnimationBase::isPlayingPropertyKey:
+                return object->as<NestedSimpleAnimationBase>()->isPlaying();
+            case KeyFrameBoolBase::valuePropertyKey:
+                return object->as<KeyFrameBoolBase>()->value();
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
+                return object->as<ListenerAlignTargetBase>()->preserveOffset();
+            case TransitionValueBooleanComparatorBase::valuePropertyKey:
+                return object->as<TransitionValueBooleanComparatorBase>()
+                    ->value();
+            case NestedBoolBase::nestedValuePropertyKey:
+                return object->as<NestedBoolBase>()->nestedValue();
+            case LinearAnimationBase::enableWorkAreaPropertyKey:
+                return object->as<LinearAnimationBase>()->enableWorkArea();
+            case LinearAnimationBase::quantizePropertyKey:
+                return object->as<LinearAnimationBase>()->quantize();
+            case StateMachineBoolBase::valuePropertyKey:
+                return object->as<StateMachineBoolBase>()->value();
+            case ShapePaintBase::isVisiblePropertyKey:
+                return object->as<ShapePaintBase>()->isVisible();
+            case DashPathBase::offsetIsPercentagePropertyKey:
+                return object->as<DashPathBase>()->offsetIsPercentage();
+            case DashBase::lengthIsPercentagePropertyKey:
+                return object->as<DashBase>()->lengthIsPercentage();
+            case StrokeBase::transformAffectsStrokePropertyKey:
+                return object->as<StrokeBase>()->transformAffectsStroke();
+            case FeatherBase::innerPropertyKey:
+                return object->as<FeatherBase>()->inner();
+            case PathBase::isHolePropertyKey:
+                return object->as<PathBase>()->isHole();
+            case PointsPathBase::isClosedPropertyKey:
+                return object->as<PointsPathBase>()->isClosed();
+            case RectangleBase::linkCornerRadiusPropertyKey:
+                return object->as<RectangleBase>()->linkCornerRadius();
+            case ClippingShapeBase::isVisiblePropertyKey:
+                return object->as<ClippingShapeBase>()->isVisible();
+            case CustomPropertyBooleanBase::propertyValuePropertyKey:
+                return object->as<CustomPropertyBooleanBase>()->propertyValue();
+            case LayoutComponentBase::clipPropertyKey:
+                return object->as<LayoutComponentBase>()->clip();
+            case BindablePropertyBooleanBase::propertyValuePropertyKey:
+                return object->as<BindablePropertyBooleanBase>()
+                    ->propertyValue();
+            case TextModifierRangeBase::clampPropertyKey:
+                return object->as<TextModifierRangeBase>()->clamp();
+            case TextFollowPathModifierBase::radialPropertyKey:
+                return object->as<TextFollowPathModifierBase>()->radial();
+            case TextFollowPathModifierBase::orientPropertyKey:
+                return object->as<TextFollowPathModifierBase>()->orient();
+            case TextBase::fitFromBaselinePropertyKey:
+                return object->as<TextBase>()->fitFromBaseline();
+        }
+        return false;
     }
     static float getDouble(Core* object, int propertyKey)
     {
@@ -2753,6 +2931,18 @@ public:
             case NodeBase::yPropertyKey:
             case NodeBase::yArtboardPropertyKey:
                 return object->as<NodeBase>()->y();
+            case NodeBase::computedLocalXPropertyKey:
+                return object->as<NodeBase>()->computedLocalX();
+            case NodeBase::computedLocalYPropertyKey:
+                return object->as<NodeBase>()->computedLocalY();
+            case NodeBase::computedWorldXPropertyKey:
+                return object->as<NodeBase>()->computedWorldX();
+            case NodeBase::computedWorldYPropertyKey:
+                return object->as<NodeBase>()->computedWorldY();
+            case NodeBase::computedWidthPropertyKey:
+                return object->as<NodeBase>()->computedWidth();
+            case NodeBase::computedHeightPropertyKey:
+                return object->as<NodeBase>()->computedHeight();
             case NestedArtboardLayoutBase::instanceWidthPropertyKey:
                 return object->as<NestedArtboardLayoutBase>()->instanceWidth();
             case NestedArtboardLayoutBase::instanceHeightPropertyKey:
@@ -2917,6 +3107,8 @@ public:
                 return object->as<MeshVertexBase>()->u();
             case MeshVertexBase::vPropertyKey:
                 return object->as<MeshVertexBase>()->v();
+            case ShapeBase::lengthPropertyKey:
+                return object->as<ShapeBase>()->length();
             case StraightVertexBase::radiusPropertyKey:
                 return object->as<StraightVertexBase>()->radius();
             case CubicAsymmetricVertexBase::rotationPropertyKey:
@@ -3002,6 +3194,8 @@ public:
                 return object->as<DataConverterRangeMapperBase>()->maxOutput();
             case DataConverterInterpolatorBase::durationPropertyKey:
                 return object->as<DataConverterInterpolatorBase>()->duration();
+            case FormulaTokenValueBase::operationValuePropertyKey:
+                return object->as<FormulaTokenValueBase>()->operationValue();
             case BindablePropertyNumberBase::propertyValuePropertyKey:
                 return object->as<BindablePropertyNumberBase>()
                     ->propertyValue();
@@ -3051,6 +3245,14 @@ public:
                 return object->as<TextModifierRangeBase>()->falloffTo();
             case TextModifierRangeBase::offsetPropertyKey:
                 return object->as<TextModifierRangeBase>()->offset();
+            case TextFollowPathModifierBase::startPropertyKey:
+                return object->as<TextFollowPathModifierBase>()->start();
+            case TextFollowPathModifierBase::endPropertyKey:
+                return object->as<TextFollowPathModifierBase>()->end();
+            case TextFollowPathModifierBase::strengthPropertyKey:
+                return object->as<TextFollowPathModifierBase>()->strength();
+            case TextFollowPathModifierBase::offsetPropertyKey:
+                return object->as<TextFollowPathModifierBase>()->offset();
             case TextVariationModifierBase::axisValuePropertyKey:
                 return object->as<TextVariationModifierBase>()->axisValue();
             case TextModifierGroupBase::originXPropertyKey:
@@ -3075,6 +3277,8 @@ public:
                 return object->as<TextStyleBase>()->lineHeight();
             case TextStyleBase::letterSpacingPropertyKey:
                 return object->as<TextStyleBase>()->letterSpacing();
+            case TextInputBase::selectionRadiusPropertyKey:
+                return object->as<TextInputBase>()->selectionRadius();
             case TextStyleAxisBase::axisValuePropertyKey:
                 return object->as<TextStyleAxisBase>()->axisValue();
             case TextBase::widthPropertyKey:
@@ -3100,48 +3304,8 @@ public:
     {
         switch (propertyKey)
         {
-            case ViewModelInstanceListItemBase::useLinkedArtboardPropertyKey:
-            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
-            case TransformComponentConstraintBase::offsetPropertyKey:
-            case TransformComponentConstraintBase::doesCopyPropertyKey:
-            case TransformComponentConstraintBase::minPropertyKey:
-            case TransformComponentConstraintBase::maxPropertyKey:
-            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
-            case TransformComponentConstraintYBase::minYPropertyKey:
-            case TransformComponentConstraintYBase::maxYPropertyKey:
-            case IKConstraintBase::invertDirectionPropertyKey:
-            case FollowPathConstraintBase::orientPropertyKey:
-            case FollowPathConstraintBase::offsetPropertyKey:
-            case ScrollConstraintBase::snapPropertyKey:
-            case ScrollBarConstraintBase::autoSizePropertyKey:
-            case AxisBase::normalizedPropertyKey:
-            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
-            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
-            case NestedSimpleAnimationBase::isPlayingPropertyKey:
-            case KeyFrameBoolBase::valuePropertyKey:
-            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
-            case TransitionValueBooleanComparatorBase::valuePropertyKey:
-            case NestedBoolBase::nestedValuePropertyKey:
-            case LinearAnimationBase::enableWorkAreaPropertyKey:
-            case LinearAnimationBase::quantizePropertyKey:
-            case StateMachineBoolBase::valuePropertyKey:
-            case ShapePaintBase::isVisiblePropertyKey:
-            case DashPathBase::offsetIsPercentagePropertyKey:
-            case DashBase::lengthIsPercentagePropertyKey:
-            case StrokeBase::transformAffectsStrokePropertyKey:
-            case FeatherBase::innerPropertyKey:
-            case PointsPathBase::isClosedPropertyKey:
-            case RectangleBase::linkCornerRadiusPropertyKey:
-            case ClippingShapeBase::isVisiblePropertyKey:
-            case CustomPropertyBooleanBase::propertyValuePropertyKey:
-            case LayoutComponentBase::clipPropertyKey:
-            case BindablePropertyBooleanBase::propertyValuePropertyKey:
-            case TextModifierRangeBase::clampPropertyKey:
-            case TextBase::fitFromBaselinePropertyKey:
-                return CoreBoolType::id;
             case ViewModelInstanceListItemBase::viewModelIdPropertyKey:
             case ViewModelInstanceListItemBase::viewModelInstanceIdPropertyKey:
-            case ViewModelInstanceListItemBase::artboardIdPropertyKey:
             case ViewModelInstanceValueBase::viewModelPropertyIdPropertyKey:
             case ViewModelPropertyEnumCustomBase::enumIdPropertyKey:
             case ViewModelInstanceEnumBase::propertyValuePropertyKey:
@@ -3152,7 +3316,9 @@ public:
             case ComponentBase::parentIdPropertyKey:
             case ViewModelInstanceBase::viewModelIdPropertyKey:
             case ViewModelInstanceTriggerBase::propertyValuePropertyKey:
+            case ViewModelInstanceSymbolListIndexBase::propertyValuePropertyKey:
             case ViewModelInstanceViewModelBase::propertyValuePropertyKey:
+            case ViewModelInstanceAssetBase::propertyValuePropertyKey:
             case DrawTargetBase::drawableIdPropertyKey:
             case DrawTargetBase::placementValuePropertyKey:
             case TargetedConstraintBase::targetIdPropertyKey:
@@ -3169,6 +3335,7 @@ public:
             case DrawableBase::blendModeValuePropertyKey:
             case DrawableBase::drawableFlagsPropertyKey:
             case NestedArtboardBase::artboardIdPropertyKey:
+            case ArtboardComponentListBase::listSourcePropertyKey:
             case NestedAnimationBase::animationIdPropertyKey:
             case SoloBase::activeComponentIdPropertyKey:
             case NestedArtboardLayoutBase::instanceWidthUnitsValuePropertyKey:
@@ -3283,10 +3450,12 @@ public:
             case JoystickBase::joystickFlagsPropertyKey:
             case JoystickBase::handleSourceIdPropertyKey:
             case OpenUrlEventBase::targetValuePropertyKey:
-            case BindablePropertyTriggerBase::propertyValuePropertyKey:
+            case BindablePropertyIntegerBase::propertyValuePropertyKey:
             case DataBindBase::propertyKeyPropertyKey:
             case DataBindBase::flagsPropertyKey:
             case DataBindBase::converterIdPropertyKey:
+            case BindablePropertyAssetBase::propertyValuePropertyKey:
+            case DataConverterNumberToListBase::viewModelIdPropertyKey:
             case DataConverterOperationBase::operationTypePropertyKey:
             case DataConverterRangeMapperBase::interpolationTypePropertyKey:
             case DataConverterRangeMapperBase::interpolatorIdPropertyKey:
@@ -3298,6 +3467,8 @@ public:
             case DataConverterStringPadBase::lengthPropertyKey:
             case DataConverterStringPadBase::padTypePropertyKey:
             case DataConverterStringTrimBase::trimTypePropertyKey:
+            case FormulaTokenOperationBase::operationTypePropertyKey:
+            case FormulaTokenFunctionBase::functionTypePropertyKey:
             case DataConverterToStringBase::flagsPropertyKey:
             case DataConverterToStringBase::decimalsPropertyKey:
             case BindablePropertyEnumBase::propertyValuePropertyKey:
@@ -3313,6 +3484,7 @@ public:
             case TextModifierRangeBase::typeValuePropertyKey:
             case TextModifierRangeBase::modeValuePropertyKey:
             case TextModifierRangeBase::runIdPropertyKey:
+            case TextTargetModifierBase::targetIdPropertyKey:
             case TextStyleFeatureBase::tagPropertyKey:
             case TextStyleFeatureBase::featureValuePropertyKey:
             case TextVariationModifierBase::axisTagPropertyKey:
@@ -3339,9 +3511,9 @@ public:
             case ViewModelComponentBase::namePropertyKey:
             case DataEnumCustomBase::namePropertyKey:
             case ViewModelInstanceStringBase::propertyValuePropertyKey:
-            case ComponentBase::namePropertyKey:
             case DataEnumValueBase::keyPropertyKey:
             case DataEnumValueBase::valuePropertyKey:
+            case ComponentBase::namePropertyKey:
             case AnimationBase::namePropertyKey:
             case StateMachineComponentBase::namePropertyKey:
             case KeyFrameStringBase::valuePropertyKey:
@@ -3351,11 +3523,53 @@ public:
             case DataConverterStringPadBase::textPropertyKey:
             case DataConverterToStringBase::colorFormatPropertyKey:
             case BindablePropertyStringBase::propertyValuePropertyKey:
+            case TextInputBase::textPropertyKey:
             case TextValueRunBase::textPropertyKey:
             case CustomPropertyStringBase::propertyValuePropertyKey:
             case AssetBase::namePropertyKey:
             case FileAssetBase::cdnBaseUrlPropertyKey:
                 return CoreStringType::id;
+            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
+            case TransformComponentConstraintBase::offsetPropertyKey:
+            case TransformComponentConstraintBase::doesCopyPropertyKey:
+            case TransformComponentConstraintBase::minPropertyKey:
+            case TransformComponentConstraintBase::maxPropertyKey:
+            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
+            case TransformComponentConstraintYBase::minYPropertyKey:
+            case TransformComponentConstraintYBase::maxYPropertyKey:
+            case IKConstraintBase::invertDirectionPropertyKey:
+            case FollowPathConstraintBase::orientPropertyKey:
+            case FollowPathConstraintBase::offsetPropertyKey:
+            case ScrollConstraintBase::snapPropertyKey:
+            case ScrollBarConstraintBase::autoSizePropertyKey:
+            case AxisBase::normalizedPropertyKey:
+            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
+            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
+            case NestedSimpleAnimationBase::isPlayingPropertyKey:
+            case KeyFrameBoolBase::valuePropertyKey:
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
+            case TransitionValueBooleanComparatorBase::valuePropertyKey:
+            case NestedBoolBase::nestedValuePropertyKey:
+            case LinearAnimationBase::enableWorkAreaPropertyKey:
+            case LinearAnimationBase::quantizePropertyKey:
+            case StateMachineBoolBase::valuePropertyKey:
+            case ShapePaintBase::isVisiblePropertyKey:
+            case DashPathBase::offsetIsPercentagePropertyKey:
+            case DashBase::lengthIsPercentagePropertyKey:
+            case StrokeBase::transformAffectsStrokePropertyKey:
+            case FeatherBase::innerPropertyKey:
+            case PathBase::isHolePropertyKey:
+            case PointsPathBase::isClosedPropertyKey:
+            case RectangleBase::linkCornerRadiusPropertyKey:
+            case ClippingShapeBase::isVisiblePropertyKey:
+            case CustomPropertyBooleanBase::propertyValuePropertyKey:
+            case LayoutComponentBase::clipPropertyKey:
+            case BindablePropertyBooleanBase::propertyValuePropertyKey:
+            case TextModifierRangeBase::clampPropertyKey:
+            case TextFollowPathModifierBase::radialPropertyKey:
+            case TextFollowPathModifierBase::orientPropertyKey:
+            case TextBase::fitFromBaselinePropertyKey:
+                return CoreBoolType::id;
             case ViewModelInstanceNumberBase::propertyValuePropertyKey:
             case CustomPropertyNumberBase::propertyValuePropertyKey:
             case ConstraintBase::strengthPropertyKey:
@@ -3385,6 +3599,12 @@ public:
             case NodeBase::xArtboardPropertyKey:
             case NodeBase::yPropertyKey:
             case NodeBase::yArtboardPropertyKey:
+            case NodeBase::computedLocalXPropertyKey:
+            case NodeBase::computedLocalYPropertyKey:
+            case NodeBase::computedWorldXPropertyKey:
+            case NodeBase::computedWorldYPropertyKey:
+            case NodeBase::computedWidthPropertyKey:
+            case NodeBase::computedHeightPropertyKey:
             case NestedArtboardLayoutBase::instanceWidthPropertyKey:
             case NestedArtboardLayoutBase::instanceHeightPropertyKey:
             case AxisBase::offsetPropertyKey:
@@ -3466,6 +3686,7 @@ public:
             case VertexBase::yPropertyKey:
             case MeshVertexBase::uPropertyKey:
             case MeshVertexBase::vPropertyKey:
+            case ShapeBase::lengthPropertyKey:
             case StraightVertexBase::radiusPropertyKey:
             case CubicAsymmetricVertexBase::rotationPropertyKey:
             case CubicAsymmetricVertexBase::inDistancePropertyKey:
@@ -3508,6 +3729,7 @@ public:
             case DataConverterRangeMapperBase::minOutputPropertyKey:
             case DataConverterRangeMapperBase::maxOutputPropertyKey:
             case DataConverterInterpolatorBase::durationPropertyKey:
+            case FormulaTokenValueBase::operationValuePropertyKey:
             case BindablePropertyNumberBase::propertyValuePropertyKey:
             case NestedArtboardLeafBase::alignmentXPropertyKey:
             case NestedArtboardLeafBase::alignmentYPropertyKey:
@@ -3532,6 +3754,10 @@ public:
             case TextModifierRangeBase::falloffFromPropertyKey:
             case TextModifierRangeBase::falloffToPropertyKey:
             case TextModifierRangeBase::offsetPropertyKey:
+            case TextFollowPathModifierBase::startPropertyKey:
+            case TextFollowPathModifierBase::endPropertyKey:
+            case TextFollowPathModifierBase::strengthPropertyKey:
+            case TextFollowPathModifierBase::offsetPropertyKey:
             case TextVariationModifierBase::axisValuePropertyKey:
             case TextModifierGroupBase::originXPropertyKey:
             case TextModifierGroupBase::originYPropertyKey:
@@ -3544,6 +3770,7 @@ public:
             case TextStyleBase::fontSizePropertyKey:
             case TextStyleBase::lineHeightPropertyKey:
             case TextStyleBase::letterSpacingPropertyKey:
+            case TextInputBase::selectionRadiusPropertyKey:
             case TextStyleAxisBase::axisValuePropertyKey:
             case TextBase::widthPropertyKey:
             case TextBase::heightPropertyKey:
@@ -3580,87 +3807,9 @@ public:
     {
         switch (propertyKey)
         {
-            case ViewModelInstanceListItemBase::useLinkedArtboardPropertyKey:
-                return object->is<ViewModelInstanceListItemBase>();
-            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
-                return object->is<ViewModelInstanceBooleanBase>();
-            case TransformComponentConstraintBase::offsetPropertyKey:
-                return object->is<TransformComponentConstraintBase>();
-            case TransformComponentConstraintBase::doesCopyPropertyKey:
-                return object->is<TransformComponentConstraintBase>();
-            case TransformComponentConstraintBase::minPropertyKey:
-                return object->is<TransformComponentConstraintBase>();
-            case TransformComponentConstraintBase::maxPropertyKey:
-                return object->is<TransformComponentConstraintBase>();
-            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
-                return object->is<TransformComponentConstraintYBase>();
-            case TransformComponentConstraintYBase::minYPropertyKey:
-                return object->is<TransformComponentConstraintYBase>();
-            case TransformComponentConstraintYBase::maxYPropertyKey:
-                return object->is<TransformComponentConstraintYBase>();
-            case IKConstraintBase::invertDirectionPropertyKey:
-                return object->is<IKConstraintBase>();
-            case FollowPathConstraintBase::orientPropertyKey:
-                return object->is<FollowPathConstraintBase>();
-            case FollowPathConstraintBase::offsetPropertyKey:
-                return object->is<FollowPathConstraintBase>();
-            case ScrollConstraintBase::snapPropertyKey:
-                return object->is<ScrollConstraintBase>();
-            case ScrollBarConstraintBase::autoSizePropertyKey:
-                return object->is<ScrollBarConstraintBase>();
-            case AxisBase::normalizedPropertyKey:
-                return object->is<AxisBase>();
-            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
-                return object->is<LayoutComponentStyleBase>();
-            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
-                return object->is<LayoutComponentStyleBase>();
-            case NestedSimpleAnimationBase::isPlayingPropertyKey:
-                return object->is<NestedSimpleAnimationBase>();
-            case KeyFrameBoolBase::valuePropertyKey:
-                return object->is<KeyFrameBoolBase>();
-            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
-                return object->is<ListenerAlignTargetBase>();
-            case TransitionValueBooleanComparatorBase::valuePropertyKey:
-                return object->is<TransitionValueBooleanComparatorBase>();
-            case NestedBoolBase::nestedValuePropertyKey:
-                return object->is<NestedBoolBase>();
-            case LinearAnimationBase::enableWorkAreaPropertyKey:
-                return object->is<LinearAnimationBase>();
-            case LinearAnimationBase::quantizePropertyKey:
-                return object->is<LinearAnimationBase>();
-            case StateMachineBoolBase::valuePropertyKey:
-                return object->is<StateMachineBoolBase>();
-            case ShapePaintBase::isVisiblePropertyKey:
-                return object->is<ShapePaintBase>();
-            case DashPathBase::offsetIsPercentagePropertyKey:
-                return object->is<DashPathBase>();
-            case DashBase::lengthIsPercentagePropertyKey:
-                return object->is<DashBase>();
-            case StrokeBase::transformAffectsStrokePropertyKey:
-                return object->is<StrokeBase>();
-            case FeatherBase::innerPropertyKey:
-                return object->is<FeatherBase>();
-            case PointsPathBase::isClosedPropertyKey:
-                return object->is<PointsPathBase>();
-            case RectangleBase::linkCornerRadiusPropertyKey:
-                return object->is<RectangleBase>();
-            case ClippingShapeBase::isVisiblePropertyKey:
-                return object->is<ClippingShapeBase>();
-            case CustomPropertyBooleanBase::propertyValuePropertyKey:
-                return object->is<CustomPropertyBooleanBase>();
-            case LayoutComponentBase::clipPropertyKey:
-                return object->is<LayoutComponentBase>();
-            case BindablePropertyBooleanBase::propertyValuePropertyKey:
-                return object->is<BindablePropertyBooleanBase>();
-            case TextModifierRangeBase::clampPropertyKey:
-                return object->is<TextModifierRangeBase>();
-            case TextBase::fitFromBaselinePropertyKey:
-                return object->is<TextBase>();
             case ViewModelInstanceListItemBase::viewModelIdPropertyKey:
                 return object->is<ViewModelInstanceListItemBase>();
             case ViewModelInstanceListItemBase::viewModelInstanceIdPropertyKey:
-                return object->is<ViewModelInstanceListItemBase>();
-            case ViewModelInstanceListItemBase::artboardIdPropertyKey:
                 return object->is<ViewModelInstanceListItemBase>();
             case ViewModelInstanceValueBase::viewModelPropertyIdPropertyKey:
                 return object->is<ViewModelInstanceValueBase>();
@@ -3681,8 +3830,12 @@ public:
                 return object->is<ViewModelInstanceBase>();
             case ViewModelInstanceTriggerBase::propertyValuePropertyKey:
                 return object->is<ViewModelInstanceTriggerBase>();
+            case ViewModelInstanceSymbolListIndexBase::propertyValuePropertyKey:
+                return object->is<ViewModelInstanceSymbolListIndexBase>();
             case ViewModelInstanceViewModelBase::propertyValuePropertyKey:
                 return object->is<ViewModelInstanceViewModelBase>();
+            case ViewModelInstanceAssetBase::propertyValuePropertyKey:
+                return object->is<ViewModelInstanceAssetBase>();
             case DrawTargetBase::drawableIdPropertyKey:
                 return object->is<DrawTargetBase>();
             case DrawTargetBase::placementValuePropertyKey:
@@ -3715,6 +3868,8 @@ public:
                 return object->is<DrawableBase>();
             case NestedArtboardBase::artboardIdPropertyKey:
                 return object->is<NestedArtboardBase>();
+            case ArtboardComponentListBase::listSourcePropertyKey:
+                return object->is<ArtboardComponentListBase>();
             case NestedAnimationBase::animationIdPropertyKey:
                 return object->is<NestedAnimationBase>();
             case SoloBase::activeComponentIdPropertyKey:
@@ -3942,14 +4097,18 @@ public:
                 return object->is<JoystickBase>();
             case OpenUrlEventBase::targetValuePropertyKey:
                 return object->is<OpenUrlEventBase>();
-            case BindablePropertyTriggerBase::propertyValuePropertyKey:
-                return object->is<BindablePropertyTriggerBase>();
+            case BindablePropertyIntegerBase::propertyValuePropertyKey:
+                return object->is<BindablePropertyIntegerBase>();
             case DataBindBase::propertyKeyPropertyKey:
                 return object->is<DataBindBase>();
             case DataBindBase::flagsPropertyKey:
                 return object->is<DataBindBase>();
             case DataBindBase::converterIdPropertyKey:
                 return object->is<DataBindBase>();
+            case BindablePropertyAssetBase::propertyValuePropertyKey:
+                return object->is<BindablePropertyAssetBase>();
+            case DataConverterNumberToListBase::viewModelIdPropertyKey:
+                return object->is<DataConverterNumberToListBase>();
             case DataConverterOperationBase::operationTypePropertyKey:
                 return object->is<DataConverterOperationBase>();
             case DataConverterRangeMapperBase::interpolationTypePropertyKey:
@@ -3972,6 +4131,10 @@ public:
                 return object->is<DataConverterStringPadBase>();
             case DataConverterStringTrimBase::trimTypePropertyKey:
                 return object->is<DataConverterStringTrimBase>();
+            case FormulaTokenOperationBase::operationTypePropertyKey:
+                return object->is<FormulaTokenOperationBase>();
+            case FormulaTokenFunctionBase::functionTypePropertyKey:
+                return object->is<FormulaTokenFunctionBase>();
             case DataConverterToStringBase::flagsPropertyKey:
                 return object->is<DataConverterToStringBase>();
             case DataConverterToStringBase::decimalsPropertyKey:
@@ -4002,6 +4165,8 @@ public:
                 return object->is<TextModifierRangeBase>();
             case TextModifierRangeBase::runIdPropertyKey:
                 return object->is<TextModifierRangeBase>();
+            case TextTargetModifierBase::targetIdPropertyKey:
+                return object->is<TextTargetModifierBase>();
             case TextStyleFeatureBase::tagPropertyKey:
                 return object->is<TextStyleFeatureBase>();
             case TextStyleFeatureBase::featureValuePropertyKey:
@@ -4050,12 +4215,12 @@ public:
                 return object->is<DataEnumCustomBase>();
             case ViewModelInstanceStringBase::propertyValuePropertyKey:
                 return object->is<ViewModelInstanceStringBase>();
-            case ComponentBase::namePropertyKey:
-                return object->is<ComponentBase>();
             case DataEnumValueBase::keyPropertyKey:
                 return object->is<DataEnumValueBase>();
             case DataEnumValueBase::valuePropertyKey:
                 return object->is<DataEnumValueBase>();
+            case ComponentBase::namePropertyKey:
+                return object->is<ComponentBase>();
             case AnimationBase::namePropertyKey:
                 return object->is<AnimationBase>();
             case StateMachineComponentBase::namePropertyKey:
@@ -4074,6 +4239,8 @@ public:
                 return object->is<DataConverterToStringBase>();
             case BindablePropertyStringBase::propertyValuePropertyKey:
                 return object->is<BindablePropertyStringBase>();
+            case TextInputBase::textPropertyKey:
+                return object->is<TextInputBase>();
             case TextValueRunBase::textPropertyKey:
                 return object->is<TextValueRunBase>();
             case CustomPropertyStringBase::propertyValuePropertyKey:
@@ -4082,6 +4249,86 @@ public:
                 return object->is<AssetBase>();
             case FileAssetBase::cdnBaseUrlPropertyKey:
                 return object->is<FileAssetBase>();
+            case ViewModelInstanceBooleanBase::propertyValuePropertyKey:
+                return object->is<ViewModelInstanceBooleanBase>();
+            case TransformComponentConstraintBase::offsetPropertyKey:
+                return object->is<TransformComponentConstraintBase>();
+            case TransformComponentConstraintBase::doesCopyPropertyKey:
+                return object->is<TransformComponentConstraintBase>();
+            case TransformComponentConstraintBase::minPropertyKey:
+                return object->is<TransformComponentConstraintBase>();
+            case TransformComponentConstraintBase::maxPropertyKey:
+                return object->is<TransformComponentConstraintBase>();
+            case TransformComponentConstraintYBase::doesCopyYPropertyKey:
+                return object->is<TransformComponentConstraintYBase>();
+            case TransformComponentConstraintYBase::minYPropertyKey:
+                return object->is<TransformComponentConstraintYBase>();
+            case TransformComponentConstraintYBase::maxYPropertyKey:
+                return object->is<TransformComponentConstraintYBase>();
+            case IKConstraintBase::invertDirectionPropertyKey:
+                return object->is<IKConstraintBase>();
+            case FollowPathConstraintBase::orientPropertyKey:
+                return object->is<FollowPathConstraintBase>();
+            case FollowPathConstraintBase::offsetPropertyKey:
+                return object->is<FollowPathConstraintBase>();
+            case ScrollConstraintBase::snapPropertyKey:
+                return object->is<ScrollConstraintBase>();
+            case ScrollBarConstraintBase::autoSizePropertyKey:
+                return object->is<ScrollBarConstraintBase>();
+            case AxisBase::normalizedPropertyKey:
+                return object->is<AxisBase>();
+            case LayoutComponentStyleBase::intrinsicallySizedValuePropertyKey:
+                return object->is<LayoutComponentStyleBase>();
+            case LayoutComponentStyleBase::linkCornerRadiusPropertyKey:
+                return object->is<LayoutComponentStyleBase>();
+            case NestedSimpleAnimationBase::isPlayingPropertyKey:
+                return object->is<NestedSimpleAnimationBase>();
+            case KeyFrameBoolBase::valuePropertyKey:
+                return object->is<KeyFrameBoolBase>();
+            case ListenerAlignTargetBase::preserveOffsetPropertyKey:
+                return object->is<ListenerAlignTargetBase>();
+            case TransitionValueBooleanComparatorBase::valuePropertyKey:
+                return object->is<TransitionValueBooleanComparatorBase>();
+            case NestedBoolBase::nestedValuePropertyKey:
+                return object->is<NestedBoolBase>();
+            case LinearAnimationBase::enableWorkAreaPropertyKey:
+                return object->is<LinearAnimationBase>();
+            case LinearAnimationBase::quantizePropertyKey:
+                return object->is<LinearAnimationBase>();
+            case StateMachineBoolBase::valuePropertyKey:
+                return object->is<StateMachineBoolBase>();
+            case ShapePaintBase::isVisiblePropertyKey:
+                return object->is<ShapePaintBase>();
+            case DashPathBase::offsetIsPercentagePropertyKey:
+                return object->is<DashPathBase>();
+            case DashBase::lengthIsPercentagePropertyKey:
+                return object->is<DashBase>();
+            case StrokeBase::transformAffectsStrokePropertyKey:
+                return object->is<StrokeBase>();
+            case FeatherBase::innerPropertyKey:
+                return object->is<FeatherBase>();
+            case PathBase::isHolePropertyKey:
+                return object->is<PathBase>();
+            case PointsPathBase::isClosedPropertyKey:
+                return object->is<PointsPathBase>();
+            case RectangleBase::linkCornerRadiusPropertyKey:
+                return object->is<RectangleBase>();
+            case ClippingShapeBase::isVisiblePropertyKey:
+                return object->is<ClippingShapeBase>();
+            case CustomPropertyBooleanBase::propertyValuePropertyKey:
+                return object->is<CustomPropertyBooleanBase>();
+            case LayoutComponentBase::clipPropertyKey:
+                return object->is<LayoutComponentBase>();
+            case BindablePropertyBooleanBase::propertyValuePropertyKey:
+                return object->is<BindablePropertyBooleanBase>();
+            case TextModifierRangeBase::clampPropertyKey:
+                return object->is<TextModifierRangeBase>();
+            case TextFollowPathModifierBase::radialPropertyKey:
+                return object->is<TextFollowPathModifierBase>();
+            case TextFollowPathModifierBase::orientPropertyKey:
+                return object->is<TextFollowPathModifierBase>();
+            case TextBase::fitFromBaselinePropertyKey:
+                return object->is<TextBase>();
             case ViewModelInstanceNumberBase::propertyValuePropertyKey:
                 return object->is<ViewModelInstanceNumberBase>();
             case CustomPropertyNumberBase::propertyValuePropertyKey:
@@ -4137,6 +4384,18 @@ public:
                 return object->is<NodeBase>();
             case NodeBase::yPropertyKey:
             case NodeBase::yArtboardPropertyKey:
+                return object->is<NodeBase>();
+            case NodeBase::computedLocalXPropertyKey:
+                return object->is<NodeBase>();
+            case NodeBase::computedLocalYPropertyKey:
+                return object->is<NodeBase>();
+            case NodeBase::computedWorldXPropertyKey:
+                return object->is<NodeBase>();
+            case NodeBase::computedWorldYPropertyKey:
+                return object->is<NodeBase>();
+            case NodeBase::computedWidthPropertyKey:
+                return object->is<NodeBase>();
+            case NodeBase::computedHeightPropertyKey:
                 return object->is<NodeBase>();
             case NestedArtboardLayoutBase::instanceWidthPropertyKey:
                 return object->is<NestedArtboardLayoutBase>();
@@ -4300,6 +4559,8 @@ public:
                 return object->is<MeshVertexBase>();
             case MeshVertexBase::vPropertyKey:
                 return object->is<MeshVertexBase>();
+            case ShapeBase::lengthPropertyKey:
+                return object->is<ShapeBase>();
             case StraightVertexBase::radiusPropertyKey:
                 return object->is<StraightVertexBase>();
             case CubicAsymmetricVertexBase::rotationPropertyKey:
@@ -4384,6 +4645,8 @@ public:
                 return object->is<DataConverterRangeMapperBase>();
             case DataConverterInterpolatorBase::durationPropertyKey:
                 return object->is<DataConverterInterpolatorBase>();
+            case FormulaTokenValueBase::operationValuePropertyKey:
+                return object->is<FormulaTokenValueBase>();
             case BindablePropertyNumberBase::propertyValuePropertyKey:
                 return object->is<BindablePropertyNumberBase>();
             case NestedArtboardLeafBase::alignmentXPropertyKey:
@@ -4432,6 +4695,14 @@ public:
                 return object->is<TextModifierRangeBase>();
             case TextModifierRangeBase::offsetPropertyKey:
                 return object->is<TextModifierRangeBase>();
+            case TextFollowPathModifierBase::startPropertyKey:
+                return object->is<TextFollowPathModifierBase>();
+            case TextFollowPathModifierBase::endPropertyKey:
+                return object->is<TextFollowPathModifierBase>();
+            case TextFollowPathModifierBase::strengthPropertyKey:
+                return object->is<TextFollowPathModifierBase>();
+            case TextFollowPathModifierBase::offsetPropertyKey:
+                return object->is<TextFollowPathModifierBase>();
             case TextVariationModifierBase::axisValuePropertyKey:
                 return object->is<TextVariationModifierBase>();
             case TextModifierGroupBase::originXPropertyKey:
@@ -4456,6 +4727,8 @@ public:
                 return object->is<TextStyleBase>();
             case TextStyleBase::letterSpacingPropertyKey:
                 return object->is<TextStyleBase>();
+            case TextInputBase::selectionRadiusPropertyKey:
+                return object->is<TextInputBase>();
             case TextStyleAxisBase::axisValuePropertyKey:
                 return object->is<TextStyleAxisBase>();
             case TextBase::widthPropertyKey:

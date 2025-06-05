@@ -4,15 +4,59 @@
 
 // Common definitions and functions shared by multiple shaders.
 
-#define PI 3.141592653589793238
-#define ONE_OVER_SQRT_2PI 0.398942280401433 // 1/sqrt(2*pi)
-#define ONE_OVER_SQRT_2 0.70710678118       // 1/sqrt(2)
+#define PI 3.14159265359
+#define _2PI 6.28318530718
+#define PI_OVER_2 1.57079632679
+#define ONE_OVER_SQRT_2 0.70710678118 // 1/sqrt(2)
 
 #ifndef @RENDER_MODE_MSAA
 #define AA_RADIUS float(.5)
 #else
 #define AA_RADIUS float(.0)
 #endif
+
+// Defined as a macro because 'uniforms' isn't always available at global scope.
+#define RENDER_TARGET_COORD_TO_CLIP_COORD(COORD)                               \
+    pixel_coord_to_clip_coord(COORD,                                           \
+                              uniforms.renderTargetInverseViewportX,           \
+                              uniforms.renderTargetInverseViewportY)
+
+#ifdef @TESS_TEXTURE_FLOATING_POINT
+#define TEXTURE_TESSDATA4(SET, IDX, NAME) TEXTURE_RGBA32F(SET, IDX, NAME)
+#define TESSDATA4 float4
+#define FLOAT_AS_TESSDATA(X) X
+#define TESSDATA_AS_FLOAT(X) X
+#define UINT_AS_TESSDATA(X) uintBitsToFloat(X)
+#define TESSDATA_AS_UINT(X) floatBitsToUint(X)
+#else
+#define TEXTURE_TESSDATA4(SET, IDX, NAME) TEXTURE_RGBA32UI(SET, IDX, NAME)
+#define TESSDATA4 uint4
+#define FLOAT_AS_TESSDATA(X) floatBitsToUint(X)
+#define TESSDATA_AS_FLOAT(X) uintBitsToFloat(X)
+#define UINT_AS_TESSDATA(X) X
+#define TESSDATA_AS_UINT(X) X
+#endif
+
+// This is a macro because we can't (at least for now) forward texture refs to a
+// function in a way that works in all the languages we support.
+// This is a macro because we can't (at least for now) forward texture refs to a
+// function in a way that works in all the languages we support.
+#define FEATHER(X)                                                             \
+    TEXTURE_SAMPLE_LOD_1D_ARRAY(@featherTexture,                               \
+                                featherSampler,                                \
+                                X,                                             \
+                                FEATHER_FUNCTION_ARRAY_INDEX,                  \
+                                float(FEATHER_FUNCTION_ARRAY_INDEX),           \
+                                .0)                                            \
+        .r
+#define INVERSE_FEATHER(X)                                                     \
+    TEXTURE_SAMPLE_LOD_1D_ARRAY(@featherTexture,                               \
+                                featherSampler,                                \
+                                X,                                             \
+                                FEATHER_INVERSE_FUNCTION_ARRAY_INDEX,          \
+                                float(FEATHER_INVERSE_FUNCTION_ARRAY_INDEX),   \
+                                .0)                                            \
+        .r
 
 #ifdef GLSL
 // GLSL has different semantics around precision. Normalize type conversions
@@ -147,19 +191,12 @@ INLINE half4 premultiply(half4 color)
     return make_half4(color.rgb * color.a, color.a);
 }
 
-INLINE half4 unmultiply(half4 color)
+INLINE half3 unmultiply_rgb(half4 premul)
 {
-    if (.0 < color.a && color.a < 1.)
-    {
-        color.rgb *= 1. / color.a;
-        // Since multiplying by the reciprocal isn't exact, and to handle
-        // invalid premultiplied data, take extra steps to ensure
-        // color * 1/alpha == 1 when color >= alpha.
-        color.rgb = mix(color.rgb,
-                        make_half3(1.),
-                        greaterThan(color.rgb, make_half3(254.5 / 255.)));
-    }
-    return color;
+    // We *could* return preciesly 1 when premul.rgb == premul.a, but we can
+    // also be approximate here. The blend modes that depend on this exact level
+    // of precision (colordodge and colorburn) account for it with dstPremul.
+    return premul.rgb * (premul.a != .0 ? 1. / premul.a : .0);
 }
 
 INLINE half min_value(half4 min4)
@@ -205,12 +242,6 @@ INLINE float4 pixel_coord_to_clip_coord(float2 pixelCoord,
                   0.,
                   1.);
 }
-
-// Defined as a macro because 'uniforms' isn't always available at global scope.
-#define RENDER_TARGET_COORD_TO_CLIP_COORD(COORD)                               \
-    pixel_coord_to_clip_coord(COORD,                                           \
-                              uniforms.renderTargetInverseViewportX,           \
-                              uniforms.renderTargetInverseViewportY)
 
 #ifndef @RENDER_MODE_MSAA
 // Calculates the Manhattan distance in pixels from the given pixelPosition, to

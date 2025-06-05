@@ -29,9 +29,8 @@ extern const std::size_t RobotoFlexFont_size;
 
 //==============================================================================
 
-void paintSlider (Graphics& g, const Slider& s)
+void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 {
-    const auto& font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
     auto bounds = s.getLocalBounds().reduced (s.proportionOfWidth (0.1f));
     const auto center = bounds.getCenter();
 
@@ -41,10 +40,10 @@ void paintSlider (Graphics& g, const Slider& s)
     Path backgroundPath;
     backgroundPath.addEllipse (bounds.reduced (s.proportionOfWidth (0.105f)));
 
-    g.setFillColor (Color (0xff3d3d3d));
+    g.setFillColor (Color (0xff3d3d3d)); // TODO - findColor
     g.fillPath (backgroundPath);
 
-    g.setStrokeColor (Color (0xff2b2b2b));
+    g.setStrokeColor (Color (0xff2b2b2b)); // TODO - findColor
     g.setStrokeWidth (s.proportionOfWidth (0.0175f));
     g.strokePath (backgroundPath);
 
@@ -58,11 +57,11 @@ void paintSlider (Graphics& g, const Slider& s)
                                   true);
 
     g.setStrokeCap (StrokeCap::Round);
-    g.setStrokeColor (Color (0xff636363));
+    g.setStrokeColor (Color (0xff636363)); // TODO - findColor
     g.setStrokeWidth (s.proportionOfWidth (0.075f));
     g.strokePath (backgroundArc);
 
-    const auto toCurrentRadians = fromRadians + degreesToRadians (270.0f) * s.getValue();
+    const auto toCurrentRadians = fromRadians + degreesToRadians (270.0f) * s.getValueNormalised();
 
     Path foregroundArc;
     foregroundArc.addCenteredArc (center,
@@ -74,7 +73,7 @@ void paintSlider (Graphics& g, const Slider& s)
                                   true);
 
     g.setStrokeCap (StrokeCap::Round);
-    g.setStrokeColor (s.isMouseOver() ? Color (0xff4ebfff).brighter (0.3f) : Color (0xff4ebfff));
+    g.setStrokeColor (s.isMouseOver() ? Color (0xff4ebfff).brighter (0.3f) : Color (0xff4ebfff)); // TODO - findColor
     g.setStrokeWidth (s.proportionOfWidth (0.075f));
     g.strokePath (foregroundArc);
 
@@ -88,10 +87,11 @@ void paintSlider (Graphics& g, const Slider& s)
     foregroundLine.addLine (Line<float> (pos, center).keepOnlyStart (0.25f));
 
     g.setStrokeCap (StrokeCap::Round);
-    g.setStrokeColor (Color (0xffffffff));
+    g.setStrokeColor (Color (0xffffffff)); // TODO - findColor
     g.setStrokeWidth (s.proportionOfWidth (0.03f));
     g.strokePath (foregroundLine);
 
+    const auto& font = theme.getDefaultFont();
     /*
     StyledText text;
     text.appendText (font, s.proportionOfHeight (0.1f), s.proportionOfHeight (0.1f), String (s.getValue(), 3).toRawUTF8());
@@ -103,7 +103,7 @@ void paintSlider (Graphics& g, const Slider& s)
 
     if (s.hasKeyboardFocus())
     {
-        g.setStrokeColor (Color (0xffff5f2b));
+        g.setStrokeColor (Color (0xffff5f2b)); // TODO - findColor
         g.setStrokeWidth (s.proportionOfWidth (0.0175f));
         g.strokeRect (s.getLocalBounds());
     }
@@ -111,7 +111,7 @@ void paintSlider (Graphics& g, const Slider& s)
 
 //==============================================================================
 
-void paintTextButton (Graphics& g, const TextButton& b)
+void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
     const auto& font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
     auto bounds = b.getLocalBounds().reduced (b.proportionOfWidth (0.01f));
@@ -134,6 +134,25 @@ void paintTextButton (Graphics& g, const TextButton& b)
 
 //==============================================================================
 
+void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
+{
+    auto& styledText = l.getStyledText();
+    const auto bounds = l.getLocalBounds();
+
+    if (const auto strokeColor = l.findColor (Label::Colors::strokeColorId); strokeColor && ! strokeColor->isTransparent())
+    {
+        g.setStrokeColor (*strokeColor);
+        g.setStrokeWidth (l.getStrokeWidth());
+        g.strokeFittedText (styledText, bounds);
+    }
+
+    const auto fillColor = l.findColor (Label::Colors::fillColorId).value_or (Colors::white);
+    g.setFillColor (fillColor);
+    g.fillFittedText (styledText, bounds);
+}
+
+//==============================================================================
+
 ApplicationTheme::Ptr createThemeVersion1()
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
@@ -148,6 +167,10 @@ ApplicationTheme::Ptr createThemeVersion1()
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
+
+    theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
+    theme->setColor (Label::Colors::fillColorId, Colors::white);
+    theme->setColor (Label::Colors::strokeColorId, Colors::transparentBlack);
 
     return theme;
 }

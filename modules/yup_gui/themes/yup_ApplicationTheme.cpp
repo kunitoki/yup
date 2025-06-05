@@ -24,9 +24,9 @@ namespace yup
 
 //==============================================================================
 
-ApplicationTheme::ApplicationTheme()
-{
-}
+ApplicationTheme::ApplicationTheme() = default;
+
+ApplicationTheme::~ApplicationTheme() = default;
 
 //==============================================================================
 
@@ -65,6 +65,14 @@ void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
     JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     defaultColors.insert_or_assign (colorId, color);
+}
+
+void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors)
+{
+    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
+    for (const auto& entry : colors)
+        defaultColors.insert_or_assign (entry.first, entry.second);
 }
 
 //==============================================================================

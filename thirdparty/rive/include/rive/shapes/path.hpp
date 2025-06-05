@@ -44,8 +44,13 @@ protected:
     PathFlags m_pathFlags = PathFlags::none;
     RawPath m_rawPath;
     RenderPathDeformer* deformer() const;
+    void isHoleChanged() override;
 
 public:
+    static float computeIdealControlPointDistance(const Vec2D& toPrev,
+                                                  const Vec2D& toNext,
+                                                  float radius);
+
     Shape* shape() const { return m_Shape; }
     StatusCode onAddedClean(CoreContext* context) override;
     void buildDependencies() override;

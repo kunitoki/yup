@@ -76,7 +76,7 @@ ATTR_BLOCK_END
 #endif
 
 VARYING_BLOCK_BEGIN
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
 NO_PERSPECTIVE VARYING(0, float2, v_atlasCoord);
 #else
 @OPTIONALLY_FLAT VARYING(0, half, v_windingWeight);
@@ -89,7 +89,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 {
     ATTR_UNPACK(_vertexID, attrs, @a_triangleVertex, float3);
 
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_INIT(v_atlasCoord, float2);
 #else
     VARYING_INIT(v_windingWeight, half);
@@ -98,7 +98,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
     uint pathID;
     float2 vertexPosition;
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     vertexPosition =
         unpack_atlas_coverage_vertex(@a_triangleVertex,
                                      pathID,
@@ -112,7 +112,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     v_pathID = cast_uint_to_ushort(pathID);
     float4 pos = RENDER_TARGET_COORD_TO_CLIP_COORD(vertexPosition);
 
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_PACK(v_atlasCoord);
 #else
     VARYING_PACK(v_windingWeight);
@@ -305,15 +305,20 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 
 #ifdef @FRAGMENT
 PLS_BLOCK_BEGIN
-// We only write the framebuffer as a storage texture when there are blend
-// modes. Otherwise, we render to it as a normal color attachment.
+// We only bind the framebuffer as PLS when there are blend modes. Otherwise, we
+// render to it as a normal color attachment.
 #ifndef @FIXED_FUNCTION_COLOR_OUTPUT
 #ifdef @COLOR_PLANE_IDX_OVERRIDE
 // D3D11 doesn't let us bind the framebuffer UAV to slot 0 when there is a color
 // output.
-PLS_DECL4F(@COLOR_PLANE_IDX_OVERRIDE, colorBuffer);
+#define LOCAL_COLOR_PLANE_IDX @COLOR_PLANE_IDX_OVERRIDE
 #else
-PLS_DECL4F(COLOR_PLANE_IDX, colorBuffer);
+#define LOCAL_COLOR_PLANE_IDX COLOR_PLANE_IDX
+#endif
+#ifdef @COALESCED_PLS_RESOLVE_AND_TRANSFER
+PLS_DECL4F_READONLY(LOCAL_COLOR_PLANE_IDX, colorBuffer);
+#else
+PLS_DECL4F(LOCAL_COLOR_PLANE_IDX, colorBuffer);
 #endif
 #endif // !FIXED_FUNCTION_COLOR_OUTPUT
 #ifdef @PLS_BLEND_SRC_OVER
@@ -487,11 +492,9 @@ INLINE void resolve_paint(uint pathID,
     if (@ENABLE_ADVANCED_BLEND && fragColorOut.a != .0 &&
         (blendMode = cast_uint_to_ushort((paintData.x >> 4) & 0xfu)) != 0u)
     {
-        half4 dstColor = PLS_LOAD4F(colorBuffer);
+        half4 dstColorPremul = PLS_LOAD4F(colorBuffer);
         fragColorOut.rgb =
-            advanced_color_blend_pre_src_over(fragColorOut.rgb,
-                                              unmultiply(dstColor),
-                                              blendMode);
+            advanced_color_blend(fragColorOut.rgb, dstColorPremul, blendMode);
     }
 #endif // !FIXED_FUNCTION_COLOR_OUTPUT && ENABLE_ADVANCED_BLEND
 
@@ -503,20 +506,20 @@ INLINE void resolve_paint(uint pathID,
 #endif
 }
 
-#ifndef @FIXED_FUNCTION_COLOR_OUTPUT
-INLINE void emit_pls_color(half4 fragColorOut PLS_CONTEXT_DECL)
+#if !defined(@FIXED_FUNCTION_COLOR_OUTPUT) &&                                  \
+    !defined(@COALESCED_PLS_RESOLVE_AND_TRANSFER)
+INLINE void blend_pls_color_src_over(half4 fragColorOut PLS_CONTEXT_DECL)
 {
 #ifndef @PLS_BLEND_SRC_OVER
     if (fragColorOut.a == .0)
         return;
     float oneMinusSrcAlpha = 1. - fragColorOut.a;
     if (oneMinusSrcAlpha != .0)
-        fragColorOut =
-            PLS_LOAD4F(colorBuffer) * oneMinusSrcAlpha + fragColorOut;
+        fragColorOut += PLS_LOAD4F(colorBuffer) * oneMinusSrcAlpha;
 #endif
     PLS_STORE4F(colorBuffer, fragColorOut);
 }
-#endif // !FIXED_FUNCTION_COLOR_OUTPUT
+#endif // !@FIXED_FUNCTION_COLOR_OUTPUT && !@COALESCED_PLS_RESOLVE_AND_TRANSFER
 
 #if defined(@ENABLE_CLIPPING) && !defined(@RESOLVE_PLS)
 INLINE void emit_pls_clip(CLIP_VALUE_TYPE fragClipOut PLS_CONTEXT_DECL)
@@ -572,6 +575,11 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
                 make_half(1.));
     }
 
+    half4 fragColorOut = make_half4(.0);
+#ifdef @ENABLE_CLIPPING
+    CLIP_VALUE_TYPE fragClipOut = MAKE_NON_UPDATING_CLIP_VALUE;
+#endif
+
     // Since v_pathID increases monotonically with every draw, and since it
     // lives in the most significant bits of the coverage data, an atomic max()
     // function will serve 3 purposes:
@@ -606,29 +614,26 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
             PLS_ATOMIC_ADD(coverageAtomicBuffer,
                            fixedCoverage); // Count coverage.
         }
-        discard;
     }
-
-    // We crossed into a new path! Resolve the previous path now that we know
-    // its exact coverage.
-    half coverageCount = from_fixed(lastCoverageData & FIXED_COVERAGE_MASK);
-    half4 fragColorOut;
+    else
+    {
+        // We crossed into a new path! Resolve the previous path now that we
+        // know its exact coverage.
+        half coverageCount = from_fixed(lastCoverageData & FIXED_COVERAGE_MASK);
+        resolve_paint(lastPathID,
+                      coverageCount,
+                      fragColorOut
 #ifdef @ENABLE_CLIPPING
-    CLIP_VALUE_TYPE fragClipOut = MAKE_NON_UPDATING_CLIP_VALUE;
+                      ,
+                      fragClipOut
 #endif
-    resolve_paint(lastPathID,
-                  coverageCount,
-                  fragColorOut
-#ifdef @ENABLE_CLIPPING
-                  ,
-                  fragClipOut
-#endif
-                      FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
+                          FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
+    }
 
 #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
     _fragColor = fragColorOut;
 #else
-    emit_pls_color(fragColorOut PLS_CONTEXT_UNPACK);
+    blend_pls_color_src_over(fragColorOut PLS_CONTEXT_UNPACK);
 #endif
 #ifdef @ENABLE_CLIPPING
     emit_pls_clip(fragClipOut PLS_CONTEXT_UNPACK);
@@ -641,7 +646,7 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
 #ifdef @DRAW_INTERIOR_TRIANGLES
 ATOMIC_PLS_MAIN(@drawFragmentMain)
 {
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     VARYING_UNPACK(v_atlasCoord, float2);
 #else
     VARYING_UNPACK(v_windingWeight, half);
@@ -656,7 +661,7 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
     // triangle. This does not need to be atomic since interior triangles don't
     // overlap.
     uint currPathCoverageData;
-#ifndef @ATLAS_COVERAGE
+#ifndef @ATLAS_BLIT
     if (lastPathID == v_pathID)
     {
         currPathCoverageData = lastCoverageData;
@@ -670,7 +675,7 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
     }
 
     half coverage;
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
     coverage = filter_feather_atlas(
         v_atlasCoord,
         uniforms.atlasTextureInverseSize TEXTURE_CONTEXT_FORWARD);
@@ -682,35 +687,35 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
     PLS_STOREUI_ATOMIC(coverageAtomicBuffer,
                        currPathCoverageData + uint(coverageDeltaFixed));
 
-#ifndef @ATLAS_COVERAGE
-    if (lastPathID == v_pathID)
-    {
-        // This is not the first fragment of the current path to touch this
-        // pixel. We already resolved the previous path, so just move on.
-        discard;
-    }
-#endif
-
-    // We crossed into a new path! Resolve the previous path now that we know
-    // its exact coverage.
-    half lastCoverageCount = from_fixed(lastCoverageData & FIXED_COVERAGE_MASK);
-    half4 fragColorOut;
+    half4 fragColorOut = make_half4(.0);
 #ifdef @ENABLE_CLIPPING
     CLIP_VALUE_TYPE fragClipOut = MAKE_NON_UPDATING_CLIP_VALUE;
 #endif
-    resolve_paint(lastPathID,
-                  lastCoverageCount,
-                  fragColorOut
-#ifdef @ENABLE_CLIPPING
-                  ,
-                  fragClipOut
+
+#ifndef @ATLAS_BLIT
+    // If this is not the first fragment of the current path to touch this
+    // pixel, then we've already resolved the previous path and can move on.
+    if (lastPathID != v_pathID)
 #endif
-                      FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
+    {
+        // We crossed into a new path! Resolve the previous path now that we
+        // know its exact coverage.
+        half lastCoverageCount =
+            from_fixed(lastCoverageData & FIXED_COVERAGE_MASK);
+        resolve_paint(lastPathID,
+                      lastCoverageCount,
+                      fragColorOut
+#ifdef @ENABLE_CLIPPING
+                      ,
+                      fragClipOut
+#endif
+                          FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
+    }
 
 #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
     _fragColor = fragColorOut;
 #else
-    emit_pls_color(fragColorOut PLS_CONTEXT_UNPACK);
+    blend_pls_color_src_over(fragColorOut PLS_CONTEXT_UNPACK);
 #endif
 #ifdef @ENABLE_CLIPPING
     emit_pls_clip(fragClipOut PLS_CONTEXT_UNPACK);
@@ -736,7 +741,8 @@ ATOMIC_PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
     // @imageTexture binding is liable to change, and furthermore in the case of
     // imageMeshes, we can't calculate UV coordinates based on fragment
     // position.
-    half4 imageColor = TEXTURE_SAMPLE(@imageTexture, imageSampler, v_texCoord);
+    half4 imageColor =
+        TEXTURE_SAMPLE_DYNAMIC(@imageTexture, imageSampler, v_texCoord);
     half imageCoverage = 1.;
 #ifdef @DRAW_IMAGE_RECT
     imageCoverage = min(v_edgeCoverage, imageCoverage);
@@ -790,28 +796,24 @@ ATOMIC_PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
         apply_clip(imageDrawUniforms.clipID, clipData, imageCoverage);
     }
 #endif // ENABLE_CLIPPING
-    imageColor.a *=
-        imageCoverage * cast_float_to_half(imageDrawUniforms.opacity);
 
     // Prepare imageColor for premultiplied src-over blending.
 #if !defined(@FIXED_FUNCTION_COLOR_OUTPUT) && defined(@ENABLE_ADVANCED_BLEND)
     if (@ENABLE_ADVANCED_BLEND && imageDrawUniforms.blendMode != BLEND_SRC_OVER)
     {
-        // Calculate what dstColor will be after applying fragColorOut.
-        half4 dstColor =
+        // Calculate what dstColorPremul will be after applying fragColorOut.
+        half4 dstColorPremul =
             PLS_LOAD4F(colorBuffer) * (1. - fragColorOut.a) + fragColorOut;
         // Calculate the imageColor to emit *BEFORE* src-over blending, such
         // that the post-src-over-blend result is equivalent to the blendMode.
-        imageColor.rgb = advanced_color_blend_pre_src_over(
-            imageColor.rgb,
-            unmultiply(dstColor),
-            cast_uint_to_ushort(imageDrawUniforms.blendMode));
+        imageColor.rgb = advanced_color_blend(
+                             unmultiply_rgb(imageColor),
+                             dstColorPremul,
+                             cast_uint_to_ushort(imageDrawUniforms.blendMode)) *
+                         imageColor.a;
     }
 #endif // !FIXED_FUNCTION_COLOR_OUTPUT && ENABLE_ADVANCED_BLEND
-
-    // Image draws use a premultiplied blend state; premultiply alpha here in
-    // the shader.
-    imageColor.rgb *= imageColor.a;
+    imageColor *= imageCoverage * cast_float_to_half(imageDrawUniforms.opacity);
 
     // Leverage the property that premultiplied src-over blending is associative
     // and blend the imageColor and fragColorOut before passing them on to the
@@ -821,7 +823,7 @@ ATOMIC_PLS_MAIN_WITH_IMAGE_UNIFORMS(@drawFragmentMain)
 #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
     _fragColor = fragColorOut;
 #else
-    emit_pls_color(fragColorOut PLS_CONTEXT_UNPACK);
+    blend_pls_color_src_over(fragColorOut PLS_CONTEXT_UNPACK);
 #endif
 #ifdef @ENABLE_CLIPPING
     emit_pls_clip(fragClipOut PLS_CONTEXT_UNPACK);
@@ -878,13 +880,22 @@ ATOMIC_PLS_MAIN(@drawFragmentMain)
                   coverageCount,
                   fragColorOut FRAGMENT_CONTEXT_UNPACK PLS_CONTEXT_UNPACK);
 #ifdef @COALESCED_PLS_RESOLVE_AND_TRANSFER
-    _fragColor = PLS_LOAD4F(colorBuffer) * (1. - fragColorOut.a) + fragColorOut;
+#ifdef @PLS_BLEND_SRC_OVER
+    // When PLS_BLEND_SRC_OVER is defined, the blend state usually multiplies
+    // alpha into fragColorOut for us. But since the coalesced resolve does not
+    // use blend, premultiply it now.
+    fragColorOut.rgb *= fragColorOut.a;
+#endif
+    float oneMinusSrcAlpha = 1. - fragColorOut.a;
+    if (oneMinusSrcAlpha != .0)
+        fragColorOut += PLS_LOAD4F(colorBuffer) * oneMinusSrcAlpha;
+    _fragColor = fragColorOut;
     EMIT_PLS_AND_FRAG_COLOR
 #else
 #ifdef @FIXED_FUNCTION_COLOR_OUTPUT
     _fragColor = fragColorOut;
 #else
-    emit_pls_color(fragColorOut PLS_CONTEXT_UNPACK);
+    blend_pls_color_src_over(fragColorOut PLS_CONTEXT_UNPACK);
 #endif
     EMIT_ATOMIC_PLS
 #endif // COALESCED_PLS_RESOLVE_AND_TRANSFER

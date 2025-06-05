@@ -499,6 +499,29 @@ public:
         return { 1.0f, factorX, 0.0f, factorY, 1.0f, 0.0f };
     }
 
+    /** Create a shearing transformation around a point
+
+        Creates an AffineTransform object representing a shearing by specified factors along the x and y axes around a specified point.
+
+        @param factorX The shear factor to apply to the x-axis.
+        @param factorY The shear factor to apply to the y-axis.
+        @param centerX The x-coordinate of the center point for shearing.
+        @param centerY The y-coordinate of the center point for shearing.
+
+        @return An AffineTransform object representing the specified shearing around the point.
+    */
+    [[nodiscard]] static constexpr AffineTransform shearing (float factorX, float factorY, float centerX, float centerY) noexcept
+    {
+        return {
+            1.0f,
+            factorX,
+            -centerY * factorX,
+            factorY,
+            1.0f,
+            -centerX * factorY
+        };
+    }
+
     //==============================================================================
     /** Create a transformation that follows another.
 

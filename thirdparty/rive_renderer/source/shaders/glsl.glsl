@@ -133,6 +133,9 @@
 #define FRAG_TEXTURE_BLOCK_END
 #endif
 
+#define DYNAMIC_SAMPLER_BLOCK_BEGIN
+#define DYNAMIC_SAMPLER_BLOCK_END
+
 #ifdef @TARGET_VULKAN
 #define TEXTURE_RGBA32UI(SET, IDX, NAME)                                       \
     layout(set = SET, binding = IDX) uniform highp utexture2D NAME
@@ -158,14 +161,15 @@
 #define TEXTURE_R16F(SET, IDX, NAME) uniform mediump sampler2D NAME
 #endif
 
-#define TEXTURE_RG32UI(SET, IDX, NAME) TEXTURE_RGBA32UI(SET, IDX, NAME)
-
 #ifdef @TARGET_VULKAN
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)                                      \
-    layout(set = SAMPLER_BINDINGS_SET, binding = TEXTURE_IDX)                  \
+    layout(set = IMMUTABLE_SAMPLER_BINDINGS_SET, binding = TEXTURE_IDX)        \
         uniform mediump sampler NAME;
 #define SAMPLER_MIPMAP(TEXTURE_IDX, NAME)                                      \
-    layout(set = SAMPLER_BINDINGS_SET, binding = TEXTURE_IDX)                  \
+    layout(set = IMMUTABLE_SAMPLER_BINDINGS_SET, binding = TEXTURE_IDX)        \
+        uniform mediump sampler NAME;
+#define SAMPLER_DYNAMIC(TEXTURE_IDX, NAME)                                     \
+    layout(set = PER_DRAW_BINDINGS_SET, binding = TEXTURE_IDX)                 \
         uniform mediump sampler NAME;
 #define TEXTURE_SAMPLE(NAME, SAMPLER_NAME, COORD)                              \
     texture(sampler2D(NAME, SAMPLER_NAME), COORD)
@@ -173,26 +177,47 @@
     textureLod(sampler2D(NAME, SAMPLER_NAME), COORD, LOD)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(sampler2D(NAME, SAMPLER_NAME), COORD, DDX, DDY)
-#define SAMPLED_R16F(NAME, SAMPLER_NAME) NAME, SAMPLER_NAME
 #else
 // SAMPLER_LINEAR and SAMPLER_MIPMAP are no-ops because in GL, sampling
 // parameters are API-level state tied to the texture.
 #define SAMPLER_LINEAR(TEXTURE_IDX, NAME)
 #define SAMPLER_MIPMAP(TEXTURE_IDX, NAME)
+#define SAMPLER_DYNAMIC(TEXTURE_IDX, NAME)
 #define TEXTURE_SAMPLE(NAME, SAMPLER_NAME, COORD) texture(NAME, COORD)
 #define TEXTURE_SAMPLE_LOD(NAME, SAMPLER_NAME, COORD, LOD)                     \
     textureLod(NAME, COORD, LOD)
 #define TEXTURE_SAMPLE_GRAD(NAME, SAMPLER_NAME, COORD, DDX, DDY)               \
     textureGrad(NAME, COORD, DDX, DDY)
-#define SAMPLED_R16F(NAME, SAMPLER_NAME) NAME
 #endif // !@TARGET_VULKAN
+
+#define TEXTURE_SAMPLE_DYNAMIC(TEXTURE, SAMPLER_NAME, COORD)                   \
+    TEXTURE_SAMPLE(TEXTURE, SAMPLER_NAME, COORD)
+#define TEXTURE_SAMPLE_DYNAMIC_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)          \
+    TEXTURE_SAMPLE_LOD(TEXTURE, SAMPLER_NAME, COORD, LOD)
+
+// Polyfill the feather texture as a sampler2D since ES doesn't support
+// sampler1DArray. This is why the macro needs "ARRAY_INDEX_NORMALIZED": when
+// polyfilled as a 2D texture, the "array index" needs to be a 0..1 normalized
+// y coordinate instead of the literal array index.
+#define TEXTURE_R16F_1D_ARRAY(SET, IDX, NAME) TEXTURE_R16F(SET, IDX, NAME)
+// clang-format off
+// Clang formatting on this line trips up the Qualcomm compiler.
+#define TEXTURE_SAMPLE_LOD_1D_ARRAY(NAME, SAMPLER_NAME, X, ARRAY_INDEX, ARRAY_INDEX_NORMALIZED, LOD)                                       \
+    TEXTURE_SAMPLE_LOD(NAME, SAMPLER_NAME, float2(X, ARRAY_INDEX_NORMALIZED), LOD)
+// clang-format on
+
+#define TEXTURE_RG32UI(SET, IDX, NAME) TEXTURE_RGBA32UI(SET, IDX, NAME)
 
 #define TEXTURE_CONTEXT_DECL
 
 #define TEXTURE_CONTEXT_FORWARD
 #define TEXEL_FETCH(NAME, COORD) texelFetch(NAME, COORD, 0)
 
-#if @GLSL_VERSION >= 310
+#ifdef @TARGET_VULKAN
+#define TEXTURE_GATHER(NAME, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)        \
+    textureGather(sampler2D(NAME, SAMPLER_NAME),                               \
+                  (COORD) * (TEXTURE_INVERSE_SIZE))
+#elif @GLSL_VERSION >= 310
 #define TEXTURE_GATHER(NAME, SAMPLER_NAME, COORD, TEXTURE_INVERSE_SIZE)        \
     textureGather(NAME, (COORD) * (TEXTURE_INVERSE_SIZE))
 #else
@@ -431,7 +456,7 @@
 #define PLS_STORE4F(PLANE, VALUE) PLANE = (VALUE)
 #define PLS_STOREUI(PLANE, VALUE) PLANE.r = (VALUE)
 
-#define PLS_PRESERVE_4F(PLANE) PLANE = vec4(1, 0, 1, 1)
+#define PLS_PRESERVE_4F(PLANE) PLANE = vec4(0)
 #define PLS_PRESERVE_UI(PLANE) PLANE.r = 0u
 
 #define PLS_INTERLOCK_BEGIN
@@ -448,11 +473,11 @@
 #  ifdef @TARGET_VULKAN
 #    define INSTANCE_INDEX gl_InstanceIndex
 #  else
-#    ifdef @ENABLE_SPIRV_CROSS_BASE_INSTANCE
-       // This uniform is specifically named "SPIRV_Cross_BaseInstance" for compatibility with
-       // SPIRV-Cross sytems that search for it by name.
-       uniform highp int $SPIRV_Cross_BaseInstance;
-#      define INSTANCE_INDEX (gl_InstanceID + $SPIRV_Cross_BaseInstance)
+#    ifdef @BASE_INSTANCE_UNIFORM_NAME
+       // gl_BaseInstance isn't supported on this platform. The rendering
+       // backend will set this uniform for us instead.
+       uniform highp int @BASE_INSTANCE_UNIFORM_NAME;
+#      define INSTANCE_INDEX (gl_InstanceID + @BASE_INSTANCE_UNIFORM_NAME)
 #    else
 #        define INSTANCE_INDEX (gl_InstanceID + gl_BaseInstance)
 #    endif

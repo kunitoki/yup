@@ -120,10 +120,6 @@ void BackgroundShaderCompiler::threadMain()
         {
             defines[@GLSL_CLOCKWISE_FILL] = @"1";
         }
-        if (shaderMiscFlags & gpu::ShaderMiscFlags::atlasCoverage)
-        {
-            defines[@GLSL_ATLAS_COVERAGE] = @"1";
-        }
 
         auto source =
             [[NSMutableString alloc] initWithCString:gpu::glsl::metal
@@ -154,6 +150,9 @@ void BackgroundShaderCompiler::threadMain()
                                          : gpu::glsl::atomic_draw];
 #endif
                 break;
+            case DrawType::atlasBlit:
+                defines[@GLSL_ATLAS_BLIT] = @"1";
+                [[fallthrough]];
             case DrawType::interiorTriangulation:
                 defines[@GLSL_DRAW_INTERIOR_TRIANGLES] = @"";
                 [source appendFormat:@"%s\n", gpu::glsl::draw_path_common];
@@ -231,7 +230,14 @@ void BackgroundShaderCompiler::threadMain()
                 [source appendFormat:@"%s\n", gpu::glsl::atomic_draw];
 #endif
                 break;
-            case DrawType::stencilClipReset:
+            case DrawType::msaaStrokes:
+            case DrawType::msaaMidpointFanBorrowedCoverage:
+            case DrawType::msaaMidpointFans:
+            case DrawType::msaaMidpointFanStencilReset:
+            case DrawType::msaaMidpointFanPathsStencil:
+            case DrawType::msaaMidpointFanPathsCover:
+            case DrawType::msaaOuterCubics:
+            case DrawType::msaaStencilClipReset:
                 RIVE_UNREACHABLE();
         }
 
@@ -252,24 +258,51 @@ void BackgroundShaderCompiler::threadMain()
             compileOptions.preserveInvariance = YES;
         }
         compileOptions.preprocessorMacros = defines;
-        job.compiledLibrary = [m_gpu newLibraryWithSource:source
-                                                  options:compileOptions
-                                                    error:&err];
-        if (job.compiledLibrary == nil)
+#ifdef WITH_RIVE_TOOLS
+        if (job.synthesizeCompilationFailure)
         {
-            int lineNumber = 1;
-            std::stringstream stream(source.UTF8String);
-            std::string lineStr;
-            while (std::getline(stream, lineStr, '\n'))
-            {
-                fprintf(stderr, "%4i| %s\n", lineNumber++, lineStr.c_str());
-            }
-            fprintf(stderr, "%s\n", err.localizedDescription.UTF8String);
-            fprintf(stderr, "Failed to compile shader.\n\n");
-            abort();
+            assert(job.compiledLibrary == nil);
+        }
+        else
+#endif
+        {
+            job.compiledLibrary = [m_gpu newLibraryWithSource:source
+                                                      options:compileOptions
+                                                        error:&err];
         }
 
         lock.lock();
+
+        if (job.compiledLibrary == nil)
+        {
+#ifdef WITH_RIVE_TOOLS
+            if (job.synthesizeCompilationFailure)
+            {
+                fprintf(stderr, "Synthesizing shader compilation failure...\n");
+            }
+            else
+#endif
+            {
+                // The compile job failed, most likely to external environmental
+                // factors. Give up on this shader and let the render context
+                // fall back on an uber shader instead.
+                int lineNumber = 1;
+                std::stringstream stream(source.UTF8String);
+                std::string lineStr;
+                while (std::getline(stream, lineStr, '\n'))
+                {
+                    fprintf(stderr, "%4i| %s\n", lineNumber++, lineStr.c_str());
+                }
+                fprintf(stderr, "%s\n", err.localizedDescription.UTF8String);
+            }
+
+            fprintf(stderr, "Failed to compile shader.\n");
+            assert(false
+#ifdef WITH_RIVE_TOOLS
+                   || job.synthesizeCompilationFailure
+#endif
+            );
+        }
 
         m_finishedJobs.push_back(std::move(job));
         m_workFinishedCondition.notify_all();

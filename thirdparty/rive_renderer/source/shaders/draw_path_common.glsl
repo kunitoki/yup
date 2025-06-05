@@ -26,15 +26,15 @@
 
 #ifdef @VERTEX
 VERTEX_TEXTURE_BLOCK_BEGIN
-TEXTURE_RGBA32UI(PER_FLUSH_BINDINGS_SET,
-                 TESS_VERTEX_TEXTURE_IDX,
-                 @tessVertexTexture);
-#if defined(@ENABLE_FEATHER)
-TEXTURE_R16F(PER_FLUSH_BINDINGS_SET, FEATHER_TEXTURE_IDX, @featherTexture);
+TEXTURE_TESSDATA4(PER_FLUSH_BINDINGS_SET,
+                  TESS_VERTEX_TEXTURE_IDX,
+                  @tessVertexTexture);
+#ifdef @ENABLE_FEATHER
+TEXTURE_R16F_1D_ARRAY(PER_FLUSH_BINDINGS_SET,
+                      FEATHER_TEXTURE_IDX,
+                      @featherTexture);
 #endif
 VERTEX_TEXTURE_BLOCK_END
-
-SAMPLER_LINEAR(FEATHER_TEXTURE_IDX, featherSampler)
 
 VERTEX_STORAGE_BUFFER_BLOCK_BEGIN
 STORAGE_BUFFER_U32x4(PATH_BUFFER_IDX, PathBuffer, @pathBuffer);
@@ -44,13 +44,19 @@ STORAGE_BUFFER_U32x4(CONTOUR_BUFFER_IDX, ContourBuffer, @contourBuffer);
 VERTEX_STORAGE_BUFFER_BLOCK_END
 #endif // @VERTEX
 
+#if defined(@ENABLE_FEATHER) || defined(@ATLAS_BLIT)
+SAMPLER_LINEAR(FEATHER_TEXTURE_IDX, featherSampler)
+#endif
+
 #ifdef @FRAGMENT
 FRAG_TEXTURE_BLOCK_BEGIN
 TEXTURE_RGBA8(PER_FLUSH_BINDINGS_SET, GRAD_TEXTURE_IDX, @gradTexture);
-#if defined(@ENABLE_FEATHER) || defined(@ATLAS_COVERAGE)
-TEXTURE_R16F(PER_FLUSH_BINDINGS_SET, FEATHER_TEXTURE_IDX, @featherTexture);
+#if defined(@ENABLE_FEATHER) || defined(@ATLAS_BLIT)
+TEXTURE_R16F_1D_ARRAY(PER_FLUSH_BINDINGS_SET,
+                      FEATHER_TEXTURE_IDX,
+                      @featherTexture);
 #endif
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
 TEXTURE_R16F(PER_DRAW_BINDINGS_SET, ATLAS_TEXTURE_IDX, @atlasTexture);
 #endif
 TEXTURE_RGBA8(PER_DRAW_BINDINGS_SET, IMAGE_TEXTURE_IDX, @imageTexture);
@@ -62,13 +68,12 @@ FRAG_TEXTURE_BLOCK_END
 SAMPLER_LINEAR(GRAD_TEXTURE_IDX, gradSampler)
 // Metal defines @VERTEX and @FRAGMENT at the same time, so yield to the vertex
 // definition of featherSampler in this case.
-#if (defined(@ENABLE_FEATHER) || defined(@ATLAS_COVERAGE)) && !defined(@VERTEX)
-SAMPLER_LINEAR(FEATHER_TEXTURE_IDX, featherSampler)
-#endif
-#ifdef @ATLAS_COVERAGE
+#ifdef @ATLAS_BLIT
 SAMPLER_LINEAR(ATLAS_TEXTURE_IDX, atlasSampler)
 #endif
-SAMPLER_MIPMAP(IMAGE_TEXTURE_IDX, imageSampler)
+DYNAMIC_SAMPLER_BLOCK_BEGIN
+SAMPLER_DYNAMIC(IMAGE_SAMPLER_IDX, imageSampler)
+DYNAMIC_SAMPLER_BLOCK_END
 #endif // @FRAGMENT
 
 // We distinguish between strokes and fills by the sign of coverages.y,
@@ -78,15 +83,6 @@ SAMPLER_MIPMAP(IMAGE_TEXTURE_IDX, imageSampler)
 INLINE bool is_stroke(float4 coverages) { return coverages.y >= .0; }
 INLINE bool is_stroke(half2 coverages) { return coverages.y >= .0; }
 #endif // FRAGMENT
-
-#if defined(@ENABLE_FEATHER) || defined(@ATLAS_COVERAGE)
-// This is a macro because we can't (at least for now) forward texture refs to a
-// function in a way that works in all the languages we support.
-#define FEATHER(X)                                                             \
-    TEXTURE_SAMPLE_LOD(@featherTexture, featherSampler, float2(X, .0), .0).r
-#define INVERSE_FEATHER(X)                                                     \
-    TEXTURE_SAMPLE_LOD(@featherTexture, featherSampler, float2(X, 1.), .0).r
-#endif
 
 #if defined(@FRAGMENT) && defined(@ENABLE_FEATHER)
 // We can also classify a fragments as feathered/not-feathered strokes/fills by
@@ -116,7 +112,7 @@ float4 pack_feathered_fill_coverages(float cornerTheta,
     // Calculate cotTheta and y0 for the fragment shader.
     // (See eval_feathered_fill() for details.)
     float cotTheta, y0;
-    if (abs(cornerTheta - PI / 2.) < 1. / HORIZONTAL_COTANGENT_THRESHOLD)
+    if (abs(cornerTheta - PI_OVER_2) < 1. / HORIZONTAL_COTANGENT_THRESHOLD)
     {
         cotTheta = .0;
         y0 = .0;
@@ -124,7 +120,7 @@ float4 pack_feathered_fill_coverages(float cornerTheta,
     else
     {
         float tanTheta = tan(cornerTheta);
-        cotTheta = sign(PI / 2. - cornerTheta) /
+        cotTheta = sign(PI_OVER_2 - cornerTheta) /
                    max(abs(tanTheta), 1. / HORIZONTAL_COTANGENT_VALUE);
         y0 = cotTheta >= .0
                  ? cornerLocalCoord.y - (1. - cornerLocalCoord.x) * tanTheta
@@ -149,7 +145,7 @@ float4 pack_feathered_fill_coverages(float cornerTheta,
 #endif // @VERTEX
 
 #ifdef @ENABLE_FEATHER
-INLINE float eval_feathered_fill(float4 coverages TEXTURE_CONTEXT_DECL)
+INLINE half eval_feathered_fill(float4 coverages TEXTURE_CONTEXT_DECL)
 {
     // x and y are the relative coordinates of the corner vertex within the
     // feather convolution. They are oriented above center=[.5, .5], with the
@@ -233,6 +229,8 @@ INLINE float eval_feathered_fill(float4 coverages TEXTURE_CONTEXT_DECL)
         featherCoverage += dot(feathers, ddtFeather) * dt;
     }
 
+    // Clockwise triangles add to the featherCoverage, counterclockwise
+    // triangles subtract from it.
     return featherCoverage * sign(coverages.x);
 }
 
@@ -255,7 +253,7 @@ INLINE half eval_feathered_stroke(float4 coverages TEXTURE_CONTEXT_DECL)
 }
 #endif // @ENABLE_FEATHER
 
-#if defined(@FRAGMENT) && defined(@ATLAS_COVERAGE)
+#if defined(@FRAGMENT) && defined(@ATLAS_BLIT)
 // Upscales a pre-rendered feather from the atlas, converting from gaussian
 // space to linear before doing a bilerp.
 INLINE half
@@ -285,7 +283,7 @@ filter_feather_atlas(float2 atlasCoord,
     // Go back to gaussian now that the bilerp is finished.
     return FEATHER(coverages.x);
 }
-#endif // @FRAGMENT && @ATLAS_COVERAGE
+#endif // @FRAGMENT && @ATLAS_BLIT
 
 #if defined(@VERTEX) && defined(@DRAW_PATH)
 INLINE int2 tess_texel_coord(int texelIndex)
@@ -325,9 +323,9 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
     // Fetch a vertex that definitely belongs to the contour we're drawing.
     int vertexIDOnContour = min(localVertexID, patchSegmentSpan - 1);
     int tessVertexIdx = _instanceID * patchSegmentSpan + vertexIDOnContour;
-    uint4 tessVertexData =
+    TESSDATA4 tessVertexData =
         TEXEL_FETCH(@tessVertexTexture, tess_texel_coord(tessVertexIdx));
-    uint contourIDWithFlags = tessVertexData.w;
+    uint contourIDWithFlags = TESSDATA_AS_UINT(tessVertexData.w);
 
     // Fetch and unpack the contour referenced by the tessellation vertex.
     uint4 contourData =
@@ -342,7 +340,6 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         uintBitsToFloat(STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u)));
     uint4 pathData = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 1u);
     float2 translate = uintBitsToFloat(pathData.xy);
-
     float strokeRadius = uintBitsToFloat(pathData.z);
     float featherRadius = uintBitsToFloat(pathData.w);
 
@@ -362,10 +359,12 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
         // This can peek one vertex before or after the contour, but the
         // tessellator guarantees there is always at least one padding vertex at
         // the beginning and end of the data.
-        tessVertexIdx += localVertexID - vertexIDOnContour;
-        uint4 replacementTessVertexData =
-            TEXEL_FETCH(@tessVertexTexture, tess_texel_coord(tessVertexIdx));
-        if ((replacementTessVertexData.w &
+        int replacementTessVertexIdx =
+            tessVertexIdx + localVertexID - vertexIDOnContour;
+        TESSDATA4 replacementTessVertexData =
+            TEXEL_FETCH(@tessVertexTexture,
+                        tess_texel_coord(replacementTessVertexIdx));
+        if ((TESSDATA_AS_UINT(replacementTessVertexData.w) &
              (MIRRORED_CONTOUR_CONTOUR_FLAG | 0xffffu)) !=
             (contourIDWithFlags & (MIRRORED_CONTOUR_CONTOUR_FLAG | 0xffffu)))
         {
@@ -376,28 +375,130 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
                             midpoint.x != .0;     // explicity closed stroke
             if (isClosed)
             {
-                tessVertexData =
-                    TEXEL_FETCH(@tessVertexTexture,
-                                tess_texel_coord(int(vertexIndex0)));
+                tessVertexIdx = int(vertexIndex0);
+                tessVertexData = TEXEL_FETCH(@tessVertexTexture,
+                                             tess_texel_coord(tessVertexIdx));
             }
         }
         else
         {
+            tessVertexIdx = replacementTessVertexIdx;
             tessVertexData = replacementTessVertexData;
         }
         // MIRRORED_CONTOUR_CONTOUR_FLAG is not preserved at vertexIndex0.
         // Preserve it here. By not preserving this flag, the normal and
         // mirrored contour can both share the same contour record.
-        contourIDWithFlags =
-            (tessVertexData.w & ~MIRRORED_CONTOUR_CONTOUR_FLAG) |
-            mirroredContourFlag;
+        contourIDWithFlags = (TESSDATA_AS_UINT(tessVertexData.w) &
+                              ~MIRRORED_CONTOUR_CONTOUR_FLAG) |
+                             mirroredContourFlag;
     }
 
-    // Finish unpacking tessVertexData.
-    float theta = uintBitsToFloat(tessVertexData.z);
+    // Find the tangent angle of the curve at our vertex.
+    float theta;
+#ifdef @ENABLE_FEATHER
+    float featherJoinEdge0Theta;
+    float featherJoinCornerTheta;
+    if ((contourIDWithFlags & JOIN_TYPE_MASK) == FEATHER_JOIN_CONTOUR_FLAG &&
+        vertexType == STROKE_VERTEX)
+    {
+        // Feather joins work out their stepping here in the vertex shader.
+        // Instead of emitting just the tangent angle, the tessellation shader
+        // gave us the original tessellation parameters.
+        uint joinDataPacked = TESSDATA_AS_UINT(tessVertexData.z);
+        float joinVertexID = float(joinDataPacked & 0xffffu);
+        float joinSegmentCount = float(joinDataPacked >> 16);
+
+        // Find the tessellation vertices immediately before and after the
+        // feather join in order to work out the corner angles.
+        int2 edgeVertexOffsets =
+            int2(-joinVertexID - 1., joinSegmentCount - joinVertexID + 1.);
+        if ((contourIDWithFlags & MIRRORED_CONTOUR_CONTOUR_FLAG) != 0u)
+            edgeVertexOffsets = -edgeVertexOffsets;
+        TESSDATA4 tessDataBeforeJoin =
+            TEXEL_FETCH(@tessVertexTexture,
+                        tess_texel_coord(tessVertexIdx + edgeVertexOffsets.x));
+        TESSDATA4 tessDataAfterJoin =
+            TEXEL_FETCH(@tessVertexTexture,
+                        tess_texel_coord(tessVertexIdx + edgeVertexOffsets.y));
+        if ((TESSDATA_AS_UINT(tessDataAfterJoin.w) &
+             (MIRRORED_CONTOUR_CONTOUR_FLAG | 0xffffu)) !=
+            (TESSDATA_AS_UINT(tessDataBeforeJoin.w) &
+             (MIRRORED_CONTOUR_CONTOUR_FLAG | 0xffffu)))
+        {
+            // We reached over into a new contour. The edge immediately after
+            // this feather join is actually the first vertex in the countour.
+            tessDataAfterJoin =
+                TEXEL_FETCH(@tessVertexTexture,
+                            tess_texel_coord(int(vertexIndex0)));
+        }
+
+        featherJoinEdge0Theta = TESSDATA_AS_FLOAT(tessDataBeforeJoin.z);
+        float featherJoinEdge1Theta = TESSDATA_AS_FLOAT(tessDataAfterJoin.z);
+        featherJoinCornerTheta = featherJoinEdge1Theta - featherJoinEdge0Theta;
+        if (abs(featherJoinCornerTheta) > PI)
+            featherJoinCornerTheta -= _2PI * sign(featherJoinCornerTheta);
+
+        // Feather joins draw backwards segments across the angle outside the
+        // join, in order to erase some of the coverage that got written. Divide
+        // the forward and backward segments proportionally to their respective
+        // angles.
+        float nonHelperSegmentCount =
+            joinSegmentCount + 1. - float(FEATHER_JOIN_HELPER_VERTEX_COUNT);
+        float forwardSegmentCount = clamp(
+            round(abs(featherJoinCornerTheta) / PI * nonHelperSegmentCount),
+            1.,
+            nonHelperSegmentCount - 1.);
+        float backwardSegmentCount =
+            nonHelperSegmentCount - forwardSegmentCount;
+        if (joinVertexID <= backwardSegmentCount)
+        {
+            // We're a backwards segment of the feather join.
+            featherJoinCornerTheta =
+                -(PI * sign(featherJoinCornerTheta) - featherJoinCornerTheta);
+            joinSegmentCount = backwardSegmentCount;
+            // On the final backward vertex, negate outset (later we will use
+            // theta=featherJoinEdge1Theta instead of
+            // featherJoinEdge1Theta - PI). This creates a crack-free
+            // tessellation with the edge we're joining.
+            if (joinVertexID == backwardSegmentCount)
+                outset = -outset;
+        }
+        else if (joinVertexID == backwardSegmentCount + 1.)
+        {
+            // There's a discontinuous jump between the backward and forward
+            // segments. This is a throwaway vertex to disconnect them.
+            joinVertexID = .0;
+            joinSegmentCount = .0;
+            outset = .0;
+        }
+        else
+        {
+            // We're a forward segment of the feather join.
+            joinVertexID -= backwardSegmentCount + 2.;
+            joinSegmentCount = forwardSegmentCount;
+        }
+
+        if (joinVertexID == joinSegmentCount)
+        {
+            // Emit "featherJoinEdge1Theta" precisely (instead of the
+            // approximate lerp below) to create crack-free tessellation with
+            // the edges we're joining.
+            theta = featherJoinEdge1Theta;
+        }
+        else
+        {
+            theta = featherJoinEdge0Theta +
+                    featherJoinCornerTheta * (joinVertexID / joinSegmentCount);
+        }
+    }
+    else
+#endif // @ENABLE_FEATHER
+    {
+        theta = TESSDATA_AS_FLOAT(tessVertexData.z);
+    }
     float2 norm = float2(sin(theta), -cos(theta));
-    float2 origin = uintBitsToFloat(tessVertexData.xy);
-    float2 postTransformVertexOffset;
+    float2 origin = TESSDATA_AS_FLOAT(tessVertexData.xy);
+    float2 postTransformVertexOffset = float2(0, 0);
 
     if (featherRadius != .0)
     {
@@ -436,7 +537,7 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
 
         // Extend the vertex by half the width of the AA ramp.
         float2 vertexOffset =
-            MUL(norm, strokeRadius + aaRadius); // Bloat stroke width for AA.
+            norm * (strokeRadius + aaRadius); // Bloat stroke width for AA.
 
 #ifndef @RENDER_MODE_MSAA
         // Calculate the AA distance to both the outset and inset edges of the
@@ -461,12 +562,12 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
                 peekDir = -peekDir;
             int2 otherJoinTexelCoord =
                 tess_texel_coord(tessVertexIdx + peekDir);
-            uint4 otherJoinData =
+            TESSDATA4 otherJoinData =
                 TEXEL_FETCH(@tessVertexTexture, otherJoinTexelCoord);
-            float otherJoinTheta = uintBitsToFloat(otherJoinData.z);
+            float otherJoinTheta = TESSDATA_AS_FLOAT(otherJoinData.z);
             float joinAngle = abs(otherJoinTheta - theta);
             if (joinAngle > PI)
-                joinAngle = 2. * PI - joinAngle;
+                joinAngle = _2PI - joinAngle;
             bool isTan0 =
                 (contourIDWithFlags & JOIN_TANGENT_0_CONTOUR_FLAG) != 0u;
             bool isLeftJoin =
@@ -598,104 +699,74 @@ INLINE bool unpack_tessellated_path_vertex(float4 patchVertexData,
             outCoverages.w = fillCoverage;
 
             if ((contourIDWithFlags & JOIN_TYPE_MASK) ==
-                FEATHER_JOIN_CONTOUR_FLAG)
+                    FEATHER_JOIN_CONTOUR_FLAG &&
+                vertexType == STROKE_VERTEX)
             {
-                // Feather joins need to know the corner angle, but there wasn't
-                // any room left in the tessellation texture. Luckily, since
-                // feather joins are all colocated on the same point, we were
-                // able to slip in a sneaky backset to a different tessellation
-                // vertex with the same location, which then freed up 32 bits
-                // for the corner angle.
-                int backset = int(tessVertexData.x);
-                if ((contourIDWithFlags & MIRRORED_CONTOUR_CONTOUR_FLAG) != 0u)
-                    backset = -backset;
-
-                // Replace origin with the real one.
-                uint4 featherJoinData =
-                    TEXEL_FETCH(@tessVertexTexture,
-                                tess_texel_coord(tessVertexIdx + backset));
-                origin = uintBitsToFloat(featherJoinData.xy);
-
-                if (vertexType == STROKE_VERTEX)
+                // Feathered corners are symmetric; swap the first and second
+                // edge if needed so the corner angle is always positive.
+                if (featherJoinCornerTheta < .0)
                 {
-                    // Unpack the angle of our first edge and the corner angle.
-                    float edge0Theta = uintBitsToFloat(featherJoinData.z);
-                    float cornerTheta = uintBitsToFloat(tessVertexData.y);
+                    featherJoinEdge0Theta += featherJoinCornerTheta;
+                    featherJoinCornerTheta = -featherJoinCornerTheta;
+                }
 
-                    // Feathered corners are symmetric; swap the first and
-                    // second edge if needed so the corner angle is always
-                    // positive.
-                    if (cornerTheta < .0)
-                    {
-                        edge0Theta += cornerTheta;
-                        cornerTheta = -cornerTheta;
-                    }
+                // Find the angle and local outset direction of our specific
+                // spoke in the feather join, relative to the first edge. Take
+                // advantage of the fact that feathered corners are symmetric
+                // again, and limit spokeTheta to the first half of the join
+                // angle.
+                float spokeTheta = theta - featherJoinEdge0Theta;
+                spokeTheta = mod(spokeTheta + PI_OVER_2, _2PI) - PI_OVER_2;
+                spokeTheta = clamp(spokeTheta, .0, featherJoinCornerTheta);
+                if (spokeTheta > featherJoinCornerTheta * .5)
+                {
+                    spokeTheta = featherJoinCornerTheta - spokeTheta;
+                }
+                float2 spokeNorm = float2(sin(spokeTheta), cos(spokeTheta));
 
-                    // Find the angle and local outset direction of our specific
-                    // spoke in the feather join, relative to the first edge.
-                    // Take advantage of the fact that feathered corners are
-                    // symmetric again, and limit spokeTheta to the first half
-                    // of the join angle.
-                    float spokeTheta = theta - edge0Theta;
-                    spokeTheta = mod(spokeTheta + PI / 2., 2. * PI) - PI / 2.;
-                    spokeTheta = clamp(spokeTheta, .0, cornerTheta);
-                    if (spokeTheta > cornerTheta * .5)
-                    {
-                        spokeTheta = cornerTheta - spokeTheta;
-                    }
-                    float2 spokeNorm = float2(sin(spokeTheta), cos(spokeTheta));
-
-                    // TODO: This contraction logic generates cracks in
-                    // geometry. It needs more investigation.
+                // TODO: This contraction logic generates cracks in geometry. It
+                // needs more investigation.
 #if 0
-                    // When coners have stong curvature, their feather
-                    // diminishes faster than it does for flat edges. In this
-                    // scenario we can contract the tessellation a little to
-                    // save on performance without losing visual fidelity.
-                    //
-                    // This code attempts to be somewhat methodical, but it's
-                    // just hackery. The idea is to measure actual feather
-                    // coverage at an outset of N standard deviations, compare
-                    // that to what coverage would have been for a flat edge,
-                    // and contract accordingly. By observation, a logarithmic
-                    // function of cornerTheta gives values for N with a good
-                    // balance of perf and quality.
-                    float N =
-                        1. + .33 * log2((PI / 2.) /
-                                        (PI - min(cornerTheta, PI - PI / 16.)));
-                    float4 coveragesAtNStddevOutset =
-                        pack_feathered_fill_coverages(cornerTheta,
-                                                      spokeNorm,
-                                                      .5 * (N / 3.));
-                    float featherAtNStddevOutset = eval_feathered_fill(
+                // When coners have stong curvature, their feather diminishes
+                // faster than it does for flat edges. In this scenario we can
+                // contract the tessellation a little to save on performance
+                // without losing visual fidelity.
+                //
+                // This code attempts to be somewhat methodical, but it's just
+                // hackery. The idea is to measure actual feather coverage at an
+                // outset of N standard deviations, compare that to what
+                // coverage would have been for a flat edge, and contract
+                // accordingly. By observation, a logarithmic function of
+                // featherJoinCornerTheta gives values for N with a good balance
+                // of perf and quality.
+                float N =
+                    1. + .33 * log2(PI_OVER_2 /
+                            (PI - min(featherJoinCornerTheta, PI - PI / 16.)));
+                float4 coveragesAtNStddevOutset =
+                    pack_feathered_fill_coverages(featherJoinCornerTheta,
+                            spokeNorm,
+                            .5 * (N / 3.));
+                float featherAtNStddevOutset = eval_feathered_fill(
                         coveragesAtNStddevOutset TEXTURE_CONTEXT_FORWARD);
-                    float inverseFeather =
-                        INVERSE_FEATHER(featherAtNStddevOutset);
-                    float stddevsAwayFromCenter =
-                        (.5 - inverseFeather) * (FEATHER_TEXTURE_STDDEVS * 2.);
-                    float contraction = N / max(stddevsAwayFromCenter, N);
-                    outset *= contraction;
+                float inverseFeather =
+                    INVERSE_FEATHER(featherAtNStddevOutset);
+                float stddevsAwayFromCenter =
+                    (.5 - inverseFeather) * (FEATHER_TEXTURE_STDDEVS * 2.);
+                float contraction = N / max(stddevsAwayFromCenter, N);
+                outset *= contraction;
 #endif
 
-                    // Emit coverage values for the fragment shader.
-                    outCoverages = pack_feathered_fill_coverages(cornerTheta,
-                                                                 spokeNorm,
-                                                                 outset);
-                }
-                if ((contourIDWithFlags & ZERO_FEATHER_OUTSET_CONTOUR_FLAG) !=
-                    0u)
-                {
-                    // There's a discontinuous jump between the backwards and
-                    // forward segments of a feather join. This zero-length
-                    // spoke is used to pivot the feather's triangle strip.
-                    outset = .0;
-                }
+                // Emit coverage values for the fragment shader.
+                outCoverages =
+                    pack_feathered_fill_coverages(featherJoinCornerTheta,
+                                                  spokeNorm,
+                                                  outset);
             }
             // Offset the vertex for feathering.
             postTransformVertexOffset = MUL(M, (outset * featherRadius) * norm);
         }
         else
-#endif // ENABLE_FEATHER
+#endif // @ENABLE_FEATHER
         {
             // Offset the vertex for Manhattan AA.
             postTransformVertexOffset =
@@ -759,7 +830,7 @@ INLINE float2 unpack_interior_triangle_vertex(float3 triangleVertex,
     outWindingWeight = cast_int_to_half(floatBitsToInt(triangleVertex.z) >> 16);
 #endif
     float2 vertexPos = triangleVertex.xy;
-    // ATLAS_COVERAGE draws vertices in screen space.
+    // ATLAS_BLIT draws vertices in screen space.
     float2x2 M = make_float2x2(
         uintBitsToFloat(STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u)));
     uint4 pathData = STORAGE_BUFFER_LOAD4(@pathBuffer, outPathID * 4u + 1u);
@@ -769,7 +840,7 @@ INLINE float2 unpack_interior_triangle_vertex(float3 triangleVertex,
 }
 #endif // @VERTEX && @DRAW_INTERIOR_TRIANGLES
 
-#if defined(@VERTEX) && defined(@ATLAS_COVERAGE)
+#if defined(@VERTEX) && defined(@ATLAS_BLIT)
 INLINE float2
 unpack_atlas_coverage_vertex(float3 triangleVertex,
                              OUT(uint) outPathID,
@@ -790,4 +861,4 @@ unpack_atlas_coverage_vertex(float3 triangleVertex,
     outAtlasCoord = vertexPos * atlasTransform.x + atlasTransform.yz;
     return vertexPos;
 }
-#endif // @VERTEX && @ATLAS_COVERAGE
+#endif // @VERTEX && @ATLAS_BLIT

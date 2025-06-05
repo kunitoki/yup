@@ -1,10 +1,10 @@
 #ifdef VERTEX
-L0(P1)h0(0,c,SB);M0 L0(h2)h0(1,c,TB);M0
+U0(a2)i0(0,c,SB);V0 U0(v2)i0(1,c,TB);V0
 #endif
-o1 o0 H(0,c,A0);p1
+o1 n0 H(0,c,q0);p1
 #ifdef VERTEX
-H2 I2 v4(PB,P1,Q1,h2,i2,l){k0(l,Q1,SB,c);k0(l,i2,TB,c);P(A0,c);c K=q0(r1(l0.V5),SB)+l0.G0;A0=TB;e Q=v2(K);X(A0);U0(Q);}
+P2 Q2 N4(PB,a2,c2,v2,w2,n){l0(n,c2,SB,c);l0(n,w2,TB,c);L(q0,c);c J=C0(D1(m0.H6),SB)+m0.S0;q0=TB;f Q=F2(J);P(q0);h1(Q);}
 #endif
 #ifdef FRAGMENT
-J2 o2(w6,I4,UB);L2 h4(I4,q3)j3 k3 T1(i,NB){Z(A0,c);i Y9=p3(UB,q3,A0);Y9.w*=l0.G2;U1(Y9);}
+R2 C2(Y5,W8,UB);S2 p4 G3(X8,B3)q4 w3 x3 e2(i,NB){N(q0,c);i n7=o4(UB,B3,q0);n7=E1(Y3(n7),n7.w*m0.H2);f2(n7);}
 #endif

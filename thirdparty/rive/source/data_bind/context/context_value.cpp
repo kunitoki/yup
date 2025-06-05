@@ -8,6 +8,9 @@
 #include "rive/data_bind/data_values/data_value_color.hpp"
 #include "rive/data_bind/data_values/data_value_boolean.hpp"
 #include "rive/data_bind/data_values/data_value_trigger.hpp"
+#include "rive/data_bind/data_values/data_value_list.hpp"
+#include "rive/data_bind/data_values/data_value_symbol_list_index.hpp"
+#include "rive/data_bind/data_values/data_value_asset_image.hpp"
 #include "rive/generated/core_registry.hpp"
 
 using namespace rive;
@@ -52,13 +55,23 @@ DataBindContextValue::DataBindContextValue(DataBind* dataBind) :
                 m_dataValue = new DataValueTrigger(
                     source->as<ViewModelInstanceTrigger>()->propertyValue());
                 break;
+            case ViewModelInstanceListBase::typeKey:
+                m_dataValue = new DataValueList();
+                break;
+            case ViewModelInstanceSymbolListIndexBase::typeKey:
+                m_dataValue = new DataValueSymbolListIndex();
+                break;
+            case ViewModelInstanceAssetImageBase::typeKey:
+                m_dataValue = new DataValueAssetImage(
+                    source->as<ViewModelInstanceAssetImage>()->propertyValue());
+                break;
             default:
                 m_dataValue = new DataValue();
         }
     }
 }
 
-void DataBindContextValue::updateSourceValue()
+void DataBindContextValue::syncSourceValue()
 {
     auto source = m_dataBind->source();
     if (source != nullptr)
@@ -89,6 +102,26 @@ void DataBindContextValue::updateSourceValue()
                 m_dataValue->as<DataValueTrigger>()->value(
                     source->as<ViewModelInstanceTrigger>()->propertyValue());
                 break;
+            case ViewModelInstanceListBase::typeKey:
+            {
+                m_dataValue->as<DataValueList>()->clear();
+                auto items = source->as<ViewModelInstanceList>()->listItems();
+                for (auto& item : items)
+                {
+                    m_dataValue->as<DataValueList>()->addItem(item);
+                }
+                break;
+            }
+            case ViewModelInstanceSymbolListIndexBase::typeKey:
+                m_dataValue->as<DataValueSymbolListIndex>()->value(
+                    source->as<ViewModelInstanceSymbolListIndex>()
+                        ->propertyValue());
+                break;
+
+            case ViewModelInstanceAssetImageBase::typeKey:
+                m_dataValue->as<DataValueAssetImage>()->value(
+                    source->as<ViewModelInstanceAssetImage>()->propertyValue());
+                break;
         }
     }
 }
@@ -98,59 +131,95 @@ void DataBindContextValue::applyToSource(Core* component,
                                          bool isMainDirection)
 {
     auto source = m_dataBind->source();
-    auto targetValue = getTargetValue(component, propertyKey);
     switch (source->coreType())
     {
         case ViewModelInstanceNumberBase::typeKey:
         {
 
-            auto value = calculateValue<DataValueNumber, float>(targetValue,
-                                                                isMainDirection,
-                                                                m_dataBind);
-            source->as<ViewModelInstanceNumber>()->propertyValue(value);
+            calculateValueAndApply<DataValueNumber,
+                                   float,
+                                   ViewModelInstanceNumber>(targetValue(),
+                                                            isMainDirection,
+                                                            m_dataBind,
+                                                            component,
+                                                            propertyKey);
         }
         break;
         case ViewModelInstanceStringBase::typeKey:
         {
-            auto value =
-                calculateValue<DataValueString, std::string>(targetValue,
-                                                             isMainDirection,
-                                                             m_dataBind);
-            source->as<ViewModelInstanceString>()->propertyValue(value);
+            calculateValueAndApply<DataValueString,
+                                   std::string,
+                                   ViewModelInstanceString>(targetValue(),
+                                                            isMainDirection,
+                                                            m_dataBind,
+                                                            component,
+                                                            propertyKey);
         }
         break;
         case ViewModelInstanceColorBase::typeKey:
         {
-            auto value = calculateValue<DataValueColor, int>(targetValue,
-                                                             isMainDirection,
-                                                             m_dataBind);
-            source->as<ViewModelInstanceColor>()->propertyValue(value);
+            calculateValueAndApply<DataValueColor, int, ViewModelInstanceColor>(
+                targetValue(),
+                isMainDirection,
+                m_dataBind,
+                component,
+                propertyKey);
         }
         break;
         case ViewModelInstanceBooleanBase::typeKey:
         {
-            auto value = calculateValue<DataValueBoolean, bool>(targetValue,
-                                                                isMainDirection,
-                                                                m_dataBind);
-            source->as<ViewModelInstanceBoolean>()->propertyValue(value);
+            calculateValueAndApply<DataValueBoolean,
+                                   bool,
+                                   ViewModelInstanceBoolean>(targetValue(),
+                                                             isMainDirection,
+                                                             m_dataBind,
+                                                             component,
+                                                             propertyKey);
         }
         break;
         case ViewModelInstanceEnumBase::typeKey:
         {
-            auto value =
-                calculateValue<DataValueEnum, uint32_t>(targetValue,
-                                                        isMainDirection,
-                                                        m_dataBind);
-            source->as<ViewModelInstanceEnum>()->propertyValue(value);
+            calculateValueAndApply<DataValueEnum,
+                                   uint32_t,
+                                   ViewModelInstanceEnum>(targetValue(),
+                                                          isMainDirection,
+                                                          m_dataBind,
+                                                          component,
+                                                          propertyKey);
         }
         break;
         case ViewModelInstanceTriggerBase::typeKey:
         {
-            auto value =
-                calculateValue<DataValueTrigger, uint32_t>(targetValue,
-                                                           isMainDirection,
-                                                           m_dataBind);
-            source->as<ViewModelInstanceTrigger>()->propertyValue(value);
+            calculateValueAndApply<DataValueTrigger,
+                                   uint32_t,
+                                   ViewModelInstanceTrigger>(targetValue(),
+                                                             isMainDirection,
+                                                             m_dataBind,
+                                                             component,
+                                                             propertyKey);
+        }
+        break;
+        case ViewModelInstanceSymbolListIndexBase::typeKey:
+        {
+            calculateValueAndApply<DataValueTrigger,
+                                   uint32_t,
+                                   ViewModelInstanceSymbolListIndex>(
+                targetValue(),
+                isMainDirection,
+                m_dataBind,
+                component,
+                propertyKey);
+        }
+        break;
+        case ViewModelInstanceAssetImageBase::typeKey:
+        {
+            calculateValueAndApply<DataValueAssetImage,
+                                   uint32_t,
+                                   ViewModelInstanceAssetImage>(targetValue(),
+                                                                isMainDirection,
+                                                                m_dataBind,
+                                                                component,
+                                                                propertyKey);
         }
         break;
     }

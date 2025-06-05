@@ -624,6 +624,13 @@ public:
         return xy.getX() + size.getWidth() / static_cast<ValueType> (2);
     }
 
+    constexpr Rectangle& setCenterX (ValueType centerX) noexcept
+    {
+        xy.setX (centerX - size.getWidth() / static_cast<ValueType> (2));
+
+        return *this;
+    }
+
     /** Returns the center Y of the rectangle.
 
         @return The center Y of the rectangle.
@@ -631,6 +638,13 @@ public:
     [[nodiscard]] constexpr ValueType getCenterY() const noexcept
     {
         return xy.getY() + size.getHeight() / static_cast<ValueType> (2);
+    }
+
+    constexpr Rectangle& setCenterY (ValueType centerY) noexcept
+    {
+        xy.setY (centerY - size.getHeight() / static_cast<ValueType> (2));
+
+        return *this;
     }
 
     /** Returns the center point of the rectangle.
@@ -701,6 +715,20 @@ public:
     {
         Rectangle result = *this;
         result.setCenter (center);
+        return result;
+    }
+
+    [[nodiscard]] constexpr Rectangle withCenterX (ValueType centerX) noexcept
+    {
+        Rectangle result = *this;
+        result.setCenterX (centerX);
+        return result;
+    }
+
+    [[nodiscard]] constexpr Rectangle withCenterY (ValueType centerY) noexcept
+    {
+        Rectangle result = *this;
+        result.setCenterY (centerY);
         return result;
     }
 
@@ -1324,7 +1352,7 @@ public:
 
         @return A Rectangle representing the smallest containing rectangle of two rectangles.
     */
-    [[nodiscard]] constexpr Rectangle smallestContainingRectangle (const Rectangle& other) const noexcept
+    [[nodiscard]] constexpr Rectangle unionWith (const Rectangle& other) const noexcept
     {
         const auto x1 = jmin (getX(), other.getX());
         const auto x2 = jmax (getX() + getWidth(), other.getX() + other.getWidth());

@@ -11,11 +11,21 @@
 #include "rive/data_bind/bindable_property_string.hpp"
 #include "rive/data_bind/bindable_property_color.hpp"
 #include "rive/data_bind/bindable_property_enum.hpp"
+#include "rive/data_bind/bindable_property_integer.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
 #include "rive/data_bind/bindable_property_trigger.hpp"
 #include "rive/viewmodel/viewmodel_instance_trigger.hpp"
 
 using namespace rive;
+
+TransitionPropertyViewModelComparator::~TransitionPropertyViewModelComparator()
+{
+    if (m_bindableProperty != nullptr)
+    {
+        delete m_bindableProperty;
+        m_bindableProperty = nullptr;
+    }
+}
 
 StatusCode TransitionPropertyViewModelComparator::import(
     ImportStack& importStack)
@@ -32,6 +42,27 @@ StatusCode TransitionPropertyViewModelComparator::import(
     return Super::import(importStack);
 }
 
+float TransitionPropertyViewModelComparator::valueToFloat(
+    const StateMachineInstance* stateMachineInstance)
+{
+    auto bindableInstance =
+        stateMachineInstance->bindablePropertyInstance(m_bindableProperty);
+    if (bindableInstance != nullptr)
+    {
+        if (bindableInstance->is<BindablePropertyInteger>())
+        {
+            return (float)this->value<BindablePropertyInteger, uint32_t>(
+                stateMachineInstance);
+        }
+        else if (bindableInstance->is<BindablePropertyNumber>())
+        {
+            return this->value<BindablePropertyNumber, float>(
+                stateMachineInstance);
+        }
+    }
+    return 0;
+}
+
 bool TransitionPropertyViewModelComparator::compare(
     TransitionComparator* comparand,
     TransitionConditionOp operation,
@@ -45,21 +76,18 @@ bool TransitionPropertyViewModelComparator::compare(
             {
                 auto rightValue =
                     comparand->as<TransitionPropertyViewModelComparator>()
-                        ->value<BindablePropertyNumber, float>(
-                            stateMachineInstance);
-                return compareNumbers(
-                    value<BindablePropertyNumber, float>(stateMachineInstance),
-                    rightValue,
-                    operation);
+                        ->valueToFloat(stateMachineInstance);
+                return compareNumbers(valueToFloat(stateMachineInstance),
+                                      rightValue,
+                                      operation);
             }
             else if (comparand->is<TransitionValueNumberComparator>())
             {
                 auto rightValue =
                     comparand->as<TransitionValueNumberComparator>()->value();
-                return compareNumbers(
-                    value<BindablePropertyNumber, float>(stateMachineInstance),
-                    rightValue,
-                    operation);
+                return compareNumbers(valueToFloat(stateMachineInstance),
+                                      rightValue,
+                                      operation);
             }
             break;
         case BindablePropertyString::typeKey:
@@ -193,6 +221,41 @@ bool TransitionPropertyViewModelComparator::compare(
                 }
             }
             break;
+        case BindablePropertyInteger::typeKey:
+            if (comparand->is<TransitionPropertyViewModelComparator>())
+            {
+                auto rightValue =
+                    comparand->as<TransitionPropertyViewModelComparator>()
+                        ->valueToFloat(stateMachineInstance);
+                return compareNumbers(valueToFloat(stateMachineInstance),
+                                      rightValue,
+                                      operation);
+            }
+            else if (comparand->is<TransitionValueNumberComparator>())
+            {
+                auto rightValue =
+                    comparand->as<TransitionValueNumberComparator>()->value();
+                switch (instanceDataType(stateMachineInstance))
+                {
+                    case DataType::number:
+                        return compareNumbers(
+                            valueToFloat(stateMachineInstance),
+                            rightValue,
+                            operation);
+                    case DataType::integer:
+                    {
+
+                        auto val = value<BindablePropertyInteger, uint32_t>(
+                            stateMachineInstance);
+                        return compareNumbers((float)val,
+                                              rightValue,
+                                              operation);
+                    }
+                    default:
+                        break;
+                }
+            }
+            break;
     }
     return false;
 }
@@ -204,6 +267,10 @@ void TransitionPropertyViewModelComparator::useInLayer(
 
     auto bindableInstance =
         stateMachineInstance->bindablePropertyInstance(m_bindableProperty);
+    if (bindableInstance == nullptr)
+    {
+        return;
+    }
     auto dataBind =
         stateMachineInstance->bindableDataBindToTarget(bindableInstance);
     auto source = dataBind->source();
@@ -211,4 +278,34 @@ void TransitionPropertyViewModelComparator::useInLayer(
     {
         source->as<ViewModelInstanceTrigger>()->useInLayer(layerInstance);
     }
+}
+
+DataType TransitionPropertyViewModelComparator::instanceDataType(
+    const StateMachineInstance* stateMachineInstance)
+{
+    auto bindableInstance =
+        stateMachineInstance->bindablePropertyInstance(m_bindableProperty);
+    if (bindableInstance != nullptr)
+    {
+
+        switch (bindableInstance->coreType())
+        {
+            case BindablePropertyNumberBase::typeKey:
+
+                return DataType::number;
+            case BindablePropertyBooleanBase::typeKey:
+                return DataType::boolean;
+            case BindablePropertyColorBase::typeKey:
+                return DataType::color;
+            case BindablePropertyStringBase::typeKey:
+                return DataType::string;
+            case BindablePropertyEnumBase::typeKey:
+                return DataType::enumType;
+            case BindablePropertyTriggerBase::typeKey:
+                return DataType::trigger;
+            case BindablePropertyIntegerBase::typeKey:
+                return DataType::integer;
+        }
+    }
+    return DataType::none;
 }

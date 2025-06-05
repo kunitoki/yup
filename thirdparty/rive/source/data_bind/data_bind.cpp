@@ -2,13 +2,16 @@
 #include "rive/artboard.hpp"
 #include "rive/data_bind_flags.hpp"
 #include "rive/generated/core_registry.hpp"
+#include "rive/data_bind/bindable_property_asset.hpp"
 #include "rive/data_bind/bindable_property_number.hpp"
 #include "rive/data_bind/bindable_property_string.hpp"
 #include "rive/data_bind/bindable_property_color.hpp"
 #include "rive/data_bind/bindable_property_enum.hpp"
 #include "rive/data_bind/bindable_property_boolean.hpp"
 #include "rive/data_bind/bindable_property_trigger.hpp"
+#include "rive/data_bind/bindable_property_integer.hpp"
 #include "rive/data_bind/context/context_value.hpp"
+#include "rive/data_bind/context/context_value_asset_image.hpp"
 #include "rive/data_bind/context/context_value_boolean.hpp"
 #include "rive/data_bind/context/context_value_number.hpp"
 #include "rive/data_bind/context/context_value_string.hpp"
@@ -16,8 +19,10 @@
 #include "rive/data_bind/context/context_value_list.hpp"
 #include "rive/data_bind/context/context_value_color.hpp"
 #include "rive/data_bind/context/context_value_trigger.hpp"
+#include "rive/data_bind/context/context_value_symbol_list_index.hpp"
 #include "rive/data_bind/data_values/data_type.hpp"
 #include "rive/data_bind/converters/data_converter.hpp"
+#include "rive/data_bind/converters/formula/formula_token.hpp"
 #include "rive/animation/transition_viewmodel_condition.hpp"
 #include "rive/animation/state_machine.hpp"
 #include "rive/importers/artboard_importer.hpp"
@@ -45,6 +50,7 @@ StatusCode DataBind::import(ImportStack& importStack)
     {
         return StatusCode::MissingObject;
     }
+    file(backboardImporter->file());
     backboardImporter->addDataConverterReferencer(this);
     if (target())
     {
@@ -52,9 +58,12 @@ StatusCode DataBind::import(ImportStack& importStack)
         {
             target()->as<DataConverter>()->addDataBind(this);
         }
+        else if (target()->is<FormulaToken>())
+        {
+            target()->as<FormulaToken>()->addDataBind(this);
+        }
         else
         {
-
             switch (target()->coreType())
             {
                 case BindablePropertyNumberBase::typeKey:
@@ -63,7 +72,10 @@ StatusCode DataBind::import(ImportStack& importStack)
                 case BindablePropertyEnumBase::typeKey:
                 case BindablePropertyColorBase::typeKey:
                 case BindablePropertyTriggerBase::typeKey:
+                case BindablePropertyIntegerBase::typeKey:
+                case BindablePropertyAssetBase::typeKey:
                 case TransitionPropertyViewModelComparatorBase::typeKey:
+                case StateTransitionBase::typeKey:
                 {
                     auto stateMachineImporter =
                         importStack.latest<StateMachineImporter>(
@@ -117,12 +129,45 @@ DataType DataBind::outputType()
             return DataType::list;
         case ViewModelInstanceTriggerBase::typeKey:
             return DataType::trigger;
+        case ViewModelInstanceSymbolListIndexBase::typeKey:
+            return DataType::symbolListIndex;
+        case ViewModelInstanceAssetImageBase::typeKey:
+            return DataType::assetImage;
     }
     return DataType::none;
 }
 
+void DataBind::source(ViewModelInstanceValue* value)
+{
+    if (!bindsOnce())
+    {
+        value->addDependent(this);
+        value->ref();
+    }
+    m_Source = value;
+}
+
+void DataBind::clearSource()
+{
+    if (m_Source != nullptr)
+    {
+
+        if (!bindsOnce())
+        {
+            m_Source->removeDependent(this);
+            m_Source->unref();
+        }
+        if (m_dataConverter != nullptr)
+        {
+            m_dataConverter->unbind();
+        }
+        m_Source = nullptr;
+    }
+}
+
 DataBind::~DataBind()
 {
+    clearSource();
     delete m_ContextValue;
     m_ContextValue = nullptr;
     delete m_dataConverter;
@@ -152,10 +197,15 @@ void DataBind::bind()
             break;
         case DataType::list:
             m_ContextValue = new DataBindContextValueList(this);
-            m_ContextValue->update(m_target);
             break;
         case DataType::trigger:
             m_ContextValue = new DataBindContextValueTrigger(this);
+            break;
+        case DataType::symbolListIndex:
+            m_ContextValue = new DataBindContextValueSymbolListIndex(this);
+            break;
+        case DataType::assetImage:
+            m_ContextValue = new DataBindContextValueAssetImage(this);
             break;
         default:
             break;
@@ -165,9 +215,10 @@ void DataBind::bind()
 
 void DataBind::unbind()
 {
+    clearSource();
     if (m_ContextValue != nullptr)
     {
-        m_ContextValue->dispose();
+        delete m_ContextValue;
         m_ContextValue = nullptr;
     }
 }
@@ -181,13 +232,6 @@ void DataBind::update(ComponentDirt value)
     }
     if (m_Source != nullptr && m_ContextValue != nullptr)
     {
-
-        // Use the ComponentDirt::Components flag to indicate the viewmodel has
-        // added or removed an element to a list.
-        if ((value & ComponentDirt::Components) == ComponentDirt::Components)
-        {
-            m_ContextValue->update(m_target);
-        }
         if ((value & ComponentDirt::Bindings) == ComponentDirt::Bindings)
         {
             // TODO: @hernan review how dirt and mode work together. If dirt is
@@ -205,13 +249,23 @@ void DataBind::update(ComponentDirt value)
     }
 }
 
-void DataBind::updateSourceBinding()
+void DataBind::updateSourceBinding(bool invalidate)
 {
+    if ((m_Dirt & ComponentDirt::Dependents) == ComponentDirt::Dependents &&
+        m_dataConverter != nullptr)
+    {
+        m_Dirt &= ~ComponentDirt::Dependents;
+        m_dataConverter->update();
+    }
     auto flagsValue = static_cast<DataBindFlags>(flags());
     if (toSource())
     {
         if (m_ContextValue != nullptr)
         {
+            if (invalidate)
+            {
+                m_ContextValue->invalidate();
+            }
             m_ContextValue->applyToSource(
                 m_target,
                 propertyKey(),
@@ -221,12 +275,12 @@ void DataBind::updateSourceBinding()
     }
 }
 
-bool DataBind::addDirt(ComponentDirt value, bool recurse)
+void DataBind::addDirt(ComponentDirt value, bool recurse)
 {
-    if ((m_Dirt & value) == value)
+    if (m_suppressDirt || (m_Dirt & value) == value)
     {
         // Already marked.
-        return false;
+        return;
     }
 
     m_Dirt |= value;
@@ -236,11 +290,31 @@ bool DataBind::addDirt(ComponentDirt value, bool recurse)
         m_changedCallback();
     }
 #endif
-    if (target() != nullptr && target()->is<DataConverter>())
+    if (target() != nullptr)
     {
-        target()->as<DataConverter>()->addDirt(value);
+        if (target()->is<DataConverter>())
+        {
+
+            target()->as<DataConverter>()->markConverterDirty();
+        }
+        else if (target()->is<FormulaToken>())
+        {
+
+            target()->as<FormulaToken>()->markDirty();
+        }
+        else if (target()->is<Component>())
+        {
+            auto artboard = target()->as<Component>()->artboard();
+            if (artboard != nullptr)
+            {
+                artboard->onComponentDirty(target()->as<Component>());
+            }
+        }
     }
-    return true;
+    if ((m_Dirt & ComponentDirt::Dependents) != 0 && m_ContextValue != nullptr)
+    {
+        m_ContextValue->invalidate();
+    }
 }
 
 bool DataBind::bindsOnce()

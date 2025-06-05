@@ -1,10 +1,11 @@
-layout(constant_id=gc)const bool pd=false;layout(constant_id=hc)const bool qd=false;layout(constant_id=ic)const bool rd=false;layout(constant_id=jc)const bool sd=false;layout(constant_id=kc)const bool td=false;layout(constant_id=lc)const bool ud=false;layout(constant_id=mc)const bool vd=false;layout(constant_id=nc)const bool wd=false;layout(constant_id=oc)const bool xd=false;
-#define ENABLE_CLIPPING pd
-#define ENABLE_CLIP_RECT qd
-#define ENABLE_ADVANCED_BLEND rd
-#define ENABLE_FEATHER sd
-#define ENABLE_EVEN_ODD td
-#define ENABLE_NESTED_CLIPPING ud
-#define ENABLE_HSL_BLEND_MODES vd
-#define CLOCKWISE_FILL wd
-#define BORROWED_COVERAGE_PREPASS xd
+layout(constant_id=zd)const bool Le=true;layout(constant_id=Ad)const bool Me=true;layout(constant_id=Bd)const bool Ne=true;layout(constant_id=Cd)const bool Oe=true;layout(constant_id=Dd)const bool Pe=true;layout(constant_id=Ed)const bool Qe=true;layout(constant_id=Fd)const bool Re=true;layout(constant_id=Gd)const bool Se=true;layout(constant_id=Hd)const bool Te=true;layout(constant_id=Id)const uint Ue=0;
+#define ENABLE_CLIPPING Le
+#define ENABLE_CLIP_RECT Me
+#define ENABLE_ADVANCED_BLEND Ne
+#define ENABLE_FEATHER Oe
+#define ENABLE_EVEN_ODD Pe
+#define ENABLE_NESTED_CLIPPING Qe
+#define ENABLE_HSL_BLEND_MODES Re
+#define CLOCKWISE_FILL Se
+#define BORROWED_COVERAGE_PREPASS Te
+#define VULKAN_VENDOR_ID Ue

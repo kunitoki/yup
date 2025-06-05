@@ -28,6 +28,11 @@ public:
         m_fillRule = fillRule;
         rewind();
     }
+    void rewind(bool isLocal)
+    {
+        m_isLocal = isLocal;
+        rewind();
+    }
     void addPath(const RawPath& rawPath, const Mat2D* transform = nullptr);
     void addPathBackwards(const RawPath& rawPath,
                           const Mat2D* transform = nullptr);
@@ -51,7 +56,10 @@ public:
         m_rawPath.addRect(aabb, dir);
     }
 
-    const bool hasRenderPath() const { return m_renderPath != nullptr; }
+    const bool hasRenderPath() const
+    {
+        return m_renderPath != nullptr && !m_isRenderPathDirty;
+    }
 
 #ifdef TESTING
     size_t numContours()
@@ -68,6 +76,7 @@ public:
     }
 #endif
 private:
+    bool m_isRenderPathDirty = true;
     rcp<RenderPath> m_renderPath;
     RawPath m_rawPath;
     bool m_isLocal;
