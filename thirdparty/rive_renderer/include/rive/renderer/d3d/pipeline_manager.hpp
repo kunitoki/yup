@@ -1,6 +1,8 @@
 /*
  * Copyright 2025 Rive
  */
+#pragma once
+
 #include "rive/renderer/d3d/d3d.hpp"
 #include "rive/renderer/gpu.hpp"
 
