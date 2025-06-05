@@ -173,7 +173,7 @@ public:
         m_swapchain.framebufferOnly = ! m_fiddleOptions.readableFramebuffer;
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
-		m_swapchain.drawableSize = CGSizeMake (width, height);
+        m_swapchain.drawableSize = CGSizeMake (width, height);
 #if JUCE_MAC
         m_swapchain.displaySyncEnabled = NO;
 #endif

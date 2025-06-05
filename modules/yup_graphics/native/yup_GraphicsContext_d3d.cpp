@@ -35,9 +35,10 @@ public:
     LowLevelRenderContextD3D (ComPtr<IDXGIFactory2> d3dFactory,
                               ComPtr<ID3D11Device> gpu,
                               ComPtr<ID3D11DeviceContext> gpuContext,
-							  bool isHeadless,
+                              bool isHeadless,
                               const rive::gpu::D3DContextOptions& contextOptions)
-        : m_isHeadless(isHeadless),
+        : m_isHeadless (isHeadless)
+        ,
         , m_d3dFactory (std::move (d3dFactory))
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
@@ -55,7 +56,7 @@ public:
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-        if (!m_isHeadless)
+        if (! m_isHeadless)
         {
             m_swapchain.Reset();
 
@@ -77,7 +78,7 @@ public:
         }
         else
         {
-            D3D11_TEXTURE2D_DESC desc{};
+            D3D11_TEXTURE2D_DESC desc {};
             desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
             desc.MipLevels = 1;
             desc.Width = width;
@@ -88,8 +89,8 @@ public:
             desc.BindFlags = D3D11_BIND_RENDER_TARGET;
             desc.CPUAccessFlags = 0;
             desc.MiscFlags = 0;
-            VERIFY_OK(
-                m_gpu->CreateTexture2D(&desc, NULL, &m_headlessDrawTexture));
+            VERIFY_OK (
+                m_gpu->CreateTexture2D (&desc, NULL, &m_headlessDrawTexture));
         }
 
         auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
@@ -113,7 +114,7 @@ public:
         {
             if (m_isHeadless)
             {
-                m_renderTarget->setTargetTexture(m_headlessDrawTexture);
+                m_renderTarget->setTargetTexture (m_headlessDrawTexture);
             }
             else
             {
@@ -130,7 +131,7 @@ public:
         flushDesc.renderTarget = m_renderTarget.get();
         m_renderContext->flush (flushDesc);
 
-        if (!m_isHeadless)
+        if (! m_isHeadless)
             m_swapchain->Present (0, 0);
 
         m_renderTarget->setTargetTexture (nullptr);
