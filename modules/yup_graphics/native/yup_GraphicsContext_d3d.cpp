@@ -21,8 +21,8 @@
 
 #if YUP_RIVE_USE_D3D
 #include "rive/renderer/rive_renderer.hpp"
-#include "rive/renderer/d3d/render_context_d3d_impl.hpp"
-#include "rive/renderer/d3d/d3d11.hpp"
+#include "rive/renderer/d3d11/render_context_d3d_impl.hpp"
+#include "rive/renderer/d3d11/d3d11.hpp"
 
 namespace yup
 {
