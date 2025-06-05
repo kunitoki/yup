@@ -23,7 +23,6 @@
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/d3d11/render_context_d3d_impl.hpp"
 #include "rive/renderer/d3d11/d3d11.hpp"
-#include <array>
 #include <dxgi1_2.h>
 
 namespace yup
@@ -38,7 +37,6 @@ public:
                               bool isHeadless,
                               const rive::gpu::D3DContextOptions& contextOptions)
         : m_isHeadless (isHeadless)
-        ,
         , m_d3dFactory (std::move (d3dFactory))
         , m_gpu (std::move (gpu))
         , m_gpuContext (std::move (gpuContext))
@@ -89,8 +87,7 @@ public:
             desc.BindFlags = D3D11_BIND_RENDER_TARGET;
             desc.CPUAccessFlags = 0;
             desc.MiscFlags = 0;
-            VERIFY_OK (
-                m_gpu->CreateTexture2D (&desc, NULL, &m_headlessDrawTexture));
+            VERIFY_OK (m_gpu->CreateTexture2D (&desc, nullptr, &m_headlessDrawTexture));
         }
 
         auto renderContextImpl = m_renderContext->static_impl_cast<rive::gpu::RenderContextD3DImpl>();
