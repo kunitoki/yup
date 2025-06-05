@@ -24,8 +24,8 @@ namespace yup
 
 //==============================================================================
 
-const Identifier Label::Colors::fillColorId{ "Label_fillColorId" };
-const Identifier Label::Colors::strokeColorId{ "Label_strokeColorId" };
+const Identifier Label::Colors::fillColorId { "Label_fillColorId" };
+const Identifier Label::Colors::strokeColorId { "Label_strokeColorId" };
 
 //==============================================================================
 
@@ -76,7 +76,6 @@ void Label::resetFont()
 }
 
 //==============================================================================
-
 
 void Label::setStrokeWidth (float newWidth) noexcept
 {
