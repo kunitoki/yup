@@ -240,6 +240,31 @@ private:
 
 //==============================================================================
 /**
+    This is a type that can be used to indicate that a ReferenceCountedObjectPtr is adopting an object.
+
+    This is used to prevent the object from being deleted when the ReferenceCountedObjectPtr is destroyed.
+    Normally you won't need to use this type, but it can be useful in some cases, especially when a reference
+    counted object is being grabbed by multiple pointers before it finished its initialization.
+
+    @tags{Core}
+ */
+struct ReferenceCountedObjectAdoptType {};
+
+/**
+    This is a constant that can be used to indicate that a ReferenceCountedObjectPtr is adopting an object.
+
+    This is used to prevent the object from being deleted when the ReferenceCountedObjectPtr is destroyed.
+    Normally you won't need to use this constant, but it can be useful in some cases, especially when a reference
+    counted object is being grabbed by multiple pointers before it finished its initialization.
+
+    @see ReferenceCountedObjectAdoptType
+
+    @tags{Core}
+ */
+constexpr inline ReferenceCountedObjectAdoptType ReferenceCountedObjectAdopt;
+
+//==============================================================================
+/**
     A smart-pointer class which points to a reference-counted object.
 
     The template parameter specifies the class of the object you want to point to - the easiest
@@ -267,6 +292,7 @@ template <class ObjectType>
 class ReferenceCountedObjectPtr
 {
 public:
+    //==============================================================================
     /** The class being referenced by this pointer. */
     using ReferencedType = ObjectType;
 
@@ -287,12 +313,28 @@ public:
     }
 
     /** Creates a pointer to an object.
+        This will NOT increment the object's reference-count.
+    */
+    ReferenceCountedObjectPtr (ReferenceCountedObjectAdoptType, ReferencedType* refCountedObject) noexcept
+        : referencedObject (refCountedObject)
+    {
+    }
+
+    /** Creates a pointer to an object.
         This will increment the object's reference-count.
     */
     ReferenceCountedObjectPtr (ReferencedType& refCountedObject) noexcept
         : referencedObject (&refCountedObject)
     {
         refCountedObject.incReferenceCount();
+    }
+
+    /** Creates a pointer to an object.
+        This will NOT increment the object's reference-count.
+    */
+    ReferenceCountedObjectPtr (ReferenceCountedObjectAdoptType, ReferencedType& refCountedObject) noexcept
+        : referencedObject (&refCountedObject)
+    {
     }
 
     /** Copies another pointer.

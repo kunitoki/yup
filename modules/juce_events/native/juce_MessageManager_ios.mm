@@ -48,6 +48,9 @@ void runNSApplication()
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                  beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
     }
+
+    for (const auto& func : shutdownCallbacks)
+        func();
 }
 
 //==============================================================================

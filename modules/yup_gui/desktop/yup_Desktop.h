@@ -104,6 +104,19 @@ public:
     void setCurrentMouseLocation (const Point<float>& location);
 
     //==============================================================================
+    /** Adds a global mouse listener that will receive mouse events from anywhere on the desktop.
+
+        @param listener The mouse listener to add
+    */
+    void addGlobalMouseListener (MouseListener* listener);
+
+    /** Removes a global mouse listener.
+
+        @param listener The mouse listener to remove
+    */
+    void removeGlobalMouseListener (MouseListener* listener);
+
+    //==============================================================================
     /** Updates the list of screens. */
     void updateScreens();
 
@@ -117,6 +130,15 @@ public:
     /** @internal */
     void handleScreenOrientationChanged (int screenIndex);
 
+    /** @internal */
+    void handleGlobalMouseDown (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseUp (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseMove (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseDrag (const MouseEvent& event);
+
     //==============================================================================
     JUCE_DECLARE_SINGLETON (Desktop, false)
 
@@ -127,6 +149,8 @@ private:
 
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
+
+    std::vector<WeakReference<MouseListener>> globalMouseListeners;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

@@ -56,6 +56,8 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
     , shouldRenderContinuous (options.flags.test (renderContinuous))
     , updateOnlyWhenFocused (options.updateOnlyWhenFocused)
 {
+    incReferenceCount();
+
     SDL_AddEventWatch (eventDispatcher, this);
 
     // Setup window hints and get flags
@@ -488,6 +490,9 @@ void SDL2ComponentNative::run()
         cancelPendingUpdate();
         triggerAsyncUpdate();
         renderEvent.wait (maxFrameTimeMs - 4.0);
+
+        if (threadShouldExit())
+            break;
 
         // Measure spent time and cap the framerate
         double currentTimeSeconds = juce::Time::getMillisecondCounterHiRes() / 1000.0;
@@ -1035,15 +1040,6 @@ void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 
 //==============================================================================
 
-std::unique_ptr<ComponentNative> ComponentNative::createFor (Component& component,
-                                                             const Options& options,
-                                                             void* parent)
-{
-    return std::make_unique<SDL2ComponentNative> (component, options, parent);
-}
-
-//==============================================================================
-
 void SDL2ComponentNative::handleWindowEvent (const SDL_WindowEvent& windowEvent)
 {
     YUP_PROFILE_INTERNAL_TRACE();
@@ -1145,12 +1141,6 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
     switch (event->type)
     {
-        case SDL_QUIT:
-        {
-            YUP_WINDOWING_LOG ("SDL_QUIT");
-            break;
-        }
-
         case SDL_WINDOWEVENT:
         {
             if (event->window.windowID == SDL_GetWindowID (window))
@@ -1266,8 +1256,33 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
 int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 {
-    static_cast<SDL2ComponentNative*> (userdata)->handleEvent (event);
+    switch (event->type)
+    {
+        case SDL_QUIT:
+        {
+            YUP_WINDOWING_LOG ("SDL_QUIT");
+            break;
+        }
+
+        default:
+        {
+            auto nativeComponent = SDL2ComponentNative::Ptr (static_cast<SDL2ComponentNative*> (userdata));
+            nativeComponent->handleEvent (event);
+            break;
+        }
+    }
+
+
     return 0;
+}
+
+//==============================================================================
+
+ComponentNative::Ptr ComponentNative::createFor (Component& component,
+                                                 const Options& options,
+                                                 void* parent)
+{
+    return ComponentNative::Ptr (ReferenceCountedObjectAdopt, new SDL2ComponentNative (component, options, parent));
 }
 
 //==============================================================================
@@ -1307,6 +1322,8 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
 }
 
 } // namespace
+
+//==============================================================================
 
 void Desktop::updateScreens()
 {

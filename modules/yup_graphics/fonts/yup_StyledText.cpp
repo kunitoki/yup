@@ -171,6 +171,15 @@ void StyledText::setWrap (TextWrap value)
 //==============================================================================
 
 void StyledText::appendText (StringRef text,
+                             const Font& font,
+                             float fontSize,
+                             float lineHeight,
+                             float letterSpacing)
+{
+    appendText (text, nullptr, font, fontSize, lineHeight, letterSpacing);
+}
+
+void StyledText::appendText (StringRef text,
                              rive::rcp<rive::RenderPaint> paint,
                              const Font& font,
                              float fontSize,

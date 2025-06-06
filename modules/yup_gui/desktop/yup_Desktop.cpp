@@ -97,6 +97,106 @@ MouseCursor Desktop::getMouseCursor() const
 
 //==============================================================================
 
+void Desktop::addGlobalMouseListener (MouseListener* listener)
+{
+    if (listener == nullptr)
+        return;
+
+    // Remove any existing weak reference to this listener first
+    removeGlobalMouseListener (listener);
+
+    // Add the new weak reference
+    globalMouseListeners.push_back (WeakReference<MouseListener> (listener));
+}
+
+void Desktop::removeGlobalMouseListener (MouseListener* listener)
+{
+    if (listener == nullptr)
+        return;
+
+    globalMouseListeners.erase (
+        std::remove_if (globalMouseListeners.begin(), globalMouseListeners.end(),
+            [listener] (const WeakReference<MouseListener>& ref)
+            {
+                return ref.get() == listener || ref.get() == nullptr;
+            }),
+        globalMouseListeners.end());
+}
+
+void Desktop::handleGlobalMouseDown (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseDown (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseUp (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseUp (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseMove (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseMove (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseDrag (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseDrag (event);
+            ++it;
+        }
+    }
+}
+
+//==============================================================================
+
 void Desktop::handleScreenConnected (int screenIndex)
 {
     updateScreens();

@@ -83,7 +83,10 @@ void JUCEApplicationBase::appWillTerminateByForce()
 
 void JUCEApplicationBase::quit()
 {
-    MessageManager::getInstance()->stopDispatchLoop();
+    MessageManager::callAsync([]
+    {
+        MessageManager::getInstance()->stopDispatchLoop();
+    });
 }
 
 void JUCEApplicationBase::sendUnhandledException (const std::exception* const e,

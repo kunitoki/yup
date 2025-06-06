@@ -37,6 +37,9 @@ class SDL2ComponentNative final
 
 public:
     //==============================================================================
+    using Ptr = ReferenceCountedObjectPtr<SDL2ComponentNative>;
+
+    //==============================================================================
     SDL2ComponentNative (Component& component,
                          const Options& options,
                          void* parent);

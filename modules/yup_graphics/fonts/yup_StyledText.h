@@ -77,6 +77,12 @@ public:
     //==============================================================================
 
     void appendText (StringRef text,
+                     const Font& font,
+                     float fontSize = 16.0f,
+                     float lineHeight = -1.0f,
+                     float letterSpacing = 0.0f);
+
+    void appendText (StringRef text,
                      rive::rcp<rive::RenderPaint> paint,
                      const Font& font,
                      float fontSize = 16.0f,

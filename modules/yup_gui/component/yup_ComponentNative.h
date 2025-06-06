@@ -37,7 +37,7 @@ class Component;
 
     @see Component
 */
-class JUCE_API ComponentNative
+class JUCE_API ComponentNative : public ReferenceCountedObject
 {
     struct decoratedWindowTag;
     struct resizableWindowTag;
@@ -45,6 +45,10 @@ class JUCE_API ComponentNative
     struct allowHighDensityDisplayTag;
 
 public:
+    //==============================================================================
+    /** The pointer defintion for this native component. */
+    using Ptr = ReferenceCountedObjectPtr<ComponentNative>;
+
     //==============================================================================
     /** Type definition for window configuration flags. */
     using Flags = FlagSet<uint32, decoratedWindowTag, resizableWindowTag, renderContinuousTag, allowHighDensityDisplayTag>;
@@ -393,11 +397,11 @@ public:
         @param options The options to configure the native component.
         @param parent Optional pointer to a parent native window, or nullptr for a top-level window.
 
-        @return A unique_ptr to the created ComponentNative instance.
+        @return A reference counted pointer to the created ComponentNative instance.
     */
-    static std::unique_ptr<ComponentNative> createFor (Component& component,
-                                                       const Options& options,
-                                                       void* parent);
+    static ComponentNative::Ptr createFor (Component& component,
+                                           const Options& options,
+                                           void* parent);
 
 protected:
     /** The Component associated with this native component. */

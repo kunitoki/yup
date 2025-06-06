@@ -105,6 +105,14 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 }
 
 //==============================================================================
+void MessageManager::registerShutdownCallback (std::function<void()> shutdownCallbackToAdd)
+{
+    jassert (isThisTheMessageThread()); // must only be called by the message thread
+
+    shutdownCallbacks.push_back (std::move (shutdownCallbackToAdd));
+}
+
+//==============================================================================
 #if ! (JUCE_MAC || JUCE_IOS || JUCE_WASM)
 // implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
 bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
@@ -138,6 +146,9 @@ void MessageManager::runDispatchLoop()
         }
         JUCE_CATCH_EXCEPTION
     }
+
+    for (const auto& func : shutdownCallbacks)
+        func();
 }
 
 void MessageManager::stopDispatchLoop()

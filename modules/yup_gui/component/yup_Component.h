@@ -272,18 +272,37 @@ public:
     Rectangle<float> getBounds() const;
 
     /**
-        Get the local bounds of the component, with zero position.
+        Get the bounds of the component in screen coordinates.
+
+        @return The bounds of the component in screen coordinates.
+     */
+    Rectangle<float> getScreenBounds() const;
+
+    /**
+        Get the local bounds of the component.
+
+        The local bounds is the same as getBounds() but with the position set to (0, 0).
 
         @return The local bounds of the component.
      */
     Rectangle<float> getLocalBounds() const;
 
     /**
-        Get the bounds of the component relative to its top level component.
+        Get the bounds of the component relative to the top level component.
 
-        @return The bounds of the component relative to its top most component (on desktop).
+        @return The bounds of the component relative to the top level component.
      */
     Rectangle<float> getBoundsRelativeToTopLevelComponent() const;
+
+    /**
+        Get the position of the component in absolute screen coordinates.
+
+        This method traverses up the parent hierarchy to calculate the component's
+        absolute position on the screen.
+
+        @return The absolute screen position of the component.
+     */
+    Point<float> getScreenPosition() const;
 
     //==============================================================================
 
@@ -907,7 +926,7 @@ private:
     Array<Component*> children;
     Rectangle<float> boundsInParent;
     AffineTransform transform;
-    std::unique_ptr<ComponentNative> native;
+    ComponentNative::Ptr native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
     ComponentStyle::Ptr style;

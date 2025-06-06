@@ -1070,9 +1070,14 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDown (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDown, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDown, event);
 }
 
 //==============================================================================
@@ -1084,9 +1089,14 @@ void Component::internalMouseMove (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseMove (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseMove, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseMove, event);
 }
 
 //==============================================================================
@@ -1098,9 +1108,14 @@ void Component::internalMouseDrag (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDrag (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDrag, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDrag, event);
 }
 
 //==============================================================================
@@ -1112,9 +1127,14 @@ void Component::internalMouseUp (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseUp (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseUp, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseUp, event);
 }
 
 //==============================================================================
@@ -1124,9 +1144,14 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
     if (! isVisible())
         return;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDoubleClick (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDoubleClick, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDoubleClick, event);
 }
 
 //==============================================================================
@@ -1136,9 +1161,14 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
     if (! isVisible())
         return;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseWheel (event, wheelData);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseWheel, event, wheelData);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
 }
 
 //==============================================================================
@@ -1212,6 +1242,43 @@ void Component::internalUserTriedToCloseWindow()
 void Component::updateMouseCursor()
 {
     Desktop::getInstance()->setMouseCursor (mouseCursor);
+}
+
+Point<float> Component::getScreenPosition() const
+{
+    // If this component is on the desktop, its position is already in screen coordinates
+    if (options.onDesktop && native != nullptr)
+        return native->getPosition().to<float>();
+
+    // For child components, accumulate transformations up the hierarchy
+    auto screenPos = getPosition();
+    auto parent = getParentComponent();
+
+    while (parent != nullptr)
+    {
+        if (parent->options.onDesktop)
+        {
+            // Found the top-level component, add its screen position
+            if (parent->native != nullptr)
+                screenPos = screenPos + parent->native->getPosition().to<float>();
+
+            break;
+        }
+        else
+        {
+            // Add parent's position relative to its parent
+            screenPos = screenPos + parent->getPosition();
+        }
+
+        parent = parent->getParentComponent();
+    }
+
+    return screenPos;
+}
+
+Rectangle<float> Component::getScreenBounds() const
+{
+    return Rectangle<float> (getScreenPosition(), getSize());
 }
 
 } // namespace yup

@@ -107,6 +107,15 @@ Point<float> MouseEvent::getPosition() const noexcept
     return position;
 }
 
+Point<float> MouseEvent::getScreenPosition() const noexcept
+{
+    if (sourceComponent == nullptr)
+        return position;
+
+    // Get the source component's screen position and add our relative position
+    return sourceComponent->getScreenPosition() + position;
+}
+
 MouseEvent MouseEvent::withPosition (const Point<float>& newPosition) const noexcept
 {
     return { buttons, modifiers, newPosition, lastMouseDownPosition, lastMouseDownTime, sourceComponent };

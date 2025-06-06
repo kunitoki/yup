@@ -531,6 +531,22 @@ public:
         return *this;
     }
 
+    /** Sets the size of the rectangle.
+
+        @param newSize The new size for the rectangle as a Size object.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    template <class T>
+    constexpr Rectangle& setSize (T width, T height) noexcept
+    {
+        static_assert (std::numeric_limits<ValueType>::max() >= std::numeric_limits<T>::max(), "Invalid narrow cast");
+
+        size = { static_cast<ValueType> (width), static_cast<ValueType> (height) };
+
+        return *this;
+    }
+
     /** Returns a new rectangle with the specified size.
 
         This method creates a new rectangle with the same position but a different size.

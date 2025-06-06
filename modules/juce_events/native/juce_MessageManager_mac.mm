@@ -451,6 +451,10 @@ void MessageManager::stopDispatchLoop()
     if (isThisTheMessageThread())
     {
         quitMessagePosted = true;
+
+        for (const auto& func : shutdownCallbacks)
+            func();
+
         shutdownNSApp();
     }
     else
