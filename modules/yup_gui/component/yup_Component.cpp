@@ -76,7 +76,6 @@ void Component::setEnabled (bool shouldBeEnabled)
     //    native->setEnabled (shouldBeEnabled);
 
     if (options.isDisabled && hasKeyboardFocus())
-
         enablementChanged();
 }
 
@@ -99,7 +98,12 @@ void Component::setVisible (bool shouldBeVisible)
     if (options.onDesktop && native != nullptr)
         native->setVisible (shouldBeVisible);
 
+    auto bailOutChecker = BailOutChecker (this);
+
     visibilityChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     repaint();
 }
@@ -337,7 +341,13 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     if (options.onDesktop && native != nullptr)
         native->setBounds (newBounds.to<int>());
 
+    auto bailOutChecker = BailOutChecker (this);
+
     resized();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     moved();
 }
 
@@ -717,7 +727,12 @@ void Component::removeChildComponent (int index)
     auto component = children.removeAndReturn (index);
     component->parentComponent = nullptr;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     component->internalHierarchyChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     childrenChanged();
 }
@@ -732,13 +747,13 @@ void Component::internalHierarchyChanged()
 {
     parentHierarchyChanged();
 
-    auto checker = BailOutChecker (this);
+    auto bailOutChecker = BailOutChecker (this);
 
     for (int index = children.size(); --index >= 0;)
     {
         auto child = children.getUnchecked (index);
 
-        if (checker.shouldBailOut())
+        if (bailOutChecker.shouldBailOut())
         {
             jassertfalse; // Deleting a parent component when notifying its children!
             return;
@@ -927,7 +942,12 @@ void Component::setStyle (ComponentStyle::Ptr newStyle)
 
     style = std::move (newStyle);
 
+    auto bailOutChecker = BailOutChecker (this);
+
     styleChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     repaint();
 }
@@ -1042,9 +1062,14 @@ void Component::internalMouseEnter (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseEnter (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseEnter, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseEnter, event);
 }
 
 //==============================================================================
@@ -1056,9 +1081,14 @@ void Component::internalMouseExit (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseExit (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseExit, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseExit, event);
 }
 
 //==============================================================================
