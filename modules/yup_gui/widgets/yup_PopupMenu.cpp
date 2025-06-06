@@ -43,17 +43,23 @@ public:
     }
 
     PopupMenuItem (const String& itemText, int itemID, bool isEnabled = true, bool isTicked = false)
-        : text (itemText), itemID (itemID), isEnabled (isEnabled), isTicked (isTicked)
+        : text (itemText)
+        , itemID (itemID)
+        , isEnabled (isEnabled)
+        , isTicked (isTicked)
     {
     }
 
     PopupMenuItem (const String& itemText, PopupMenu::Ptr subMenu, bool isEnabled = true)
-        : text (itemText), isEnabled (isEnabled), subMenu (std::move (subMenu))
+        : text (itemText)
+        , isEnabled (isEnabled)
+        , subMenu (std::move (subMenu))
     {
     }
 
     PopupMenuItem (std::unique_ptr<Component> component, int itemID)
-        : itemID (itemID), customComponent (std::move (component))
+        : itemID (itemID)
+        , customComponent (std::move (component))
     {
     }
 
@@ -361,10 +367,8 @@ private:
                     auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getY() + 4.0f, 12.0f, 12.0f);
                     g.setStrokeColor (textColor);
                     g.setStrokeWidth (2.0f);
-                    g.strokeLine (checkRect.getX() + 2.0f, checkRect.getCenterY(),
-                                 checkRect.getCenterX(), checkRect.getBottom() - 2.0f);
-                    g.strokeLine (checkRect.getCenterX(), checkRect.getBottom() - 2.0f,
-                                 checkRect.getRight() - 2.0f, checkRect.getY() + 2.0f);
+                    g.strokeLine (checkRect.getX() + 2.0f, checkRect.getCenterY(), checkRect.getCenterX(), checkRect.getBottom() - 2.0f);
+                    g.strokeLine (checkRect.getCenterX(), checkRect.getBottom() - 2.0f, checkRect.getRight() - 2.0f, checkRect.getY() + 2.0f);
                 }
 
                 // Draw shortcut text
@@ -387,10 +391,8 @@ private:
                     auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getY() + 4.0f, 8.0f, rect.getHeight() - 8.0f);
                     g.setStrokeColor (textColor);
                     g.setStrokeWidth (1.5f);
-                    g.strokeLine (arrowRect.getX() + 2.0f, arrowRect.getY() + 2.0f,
-                                  arrowRect.getRight() - 2.0f, arrowRect.getCenterY());
-                    g.strokeLine (arrowRect.getRight() - 2.0f, arrowRect.getCenterY(),
-                                  arrowRect.getX() + 2.0f, arrowRect.getBottom() - 2.0f);
+                    g.strokeLine (arrowRect.getX() + 2.0f, arrowRect.getY() + 2.0f, arrowRect.getRight() - 2.0f, arrowRect.getCenterY());
+                    g.strokeLine (arrowRect.getRight() - 2.0f, arrowRect.getCenterY(), arrowRect.getX() + 2.0f, arrowRect.getBottom() - 2.0f);
                 }
             }
         }
@@ -438,10 +440,13 @@ void installGlobalMouseListener()
 {
     static bool mouseListenerAdded = []
     {
-        static GlobalMouseListener globalMouseListener{};
+        static GlobalMouseListener globalMouseListener {};
         Desktop::getInstance()->addGlobalMouseListener (&globalMouseListener);
 
-        MessageManager::getInstance()->registerShutdownCallback([] { PopupMenu::dismissAllPopups(); });
+        MessageManager::getInstance()->registerShutdownCallback ([]
+        {
+            PopupMenu::dismissAllPopups();
+        });
 
         return true;
     }();
@@ -523,8 +528,7 @@ void PopupMenu::addItemsFromMenu (const PopupMenu& otherMenu)
         }
         else
         {
-            auto item = std::make_unique<PopupMenuItem> (otherItem->text, otherItem->itemID,
-                                                         otherItem->isEnabled, otherItem->isTicked);
+            auto item = std::make_unique<PopupMenuItem> (otherItem->text, otherItem->itemID, otherItem->isEnabled, otherItem->isTicked);
             item->shortcutKeyText = otherItem->shortcutKeyText;
             item->textColor = otherItem->textColor;
             items.push_back (std::move (item));
@@ -546,7 +550,7 @@ void PopupMenu::clear()
 
 //==============================================================================
 
-void PopupMenu::show (const Options& options, std::function<void(int)> callback)
+void PopupMenu::show (const Options& options, std::function<void (int)> callback)
 {
     if (isEmpty())
     {
@@ -565,7 +569,7 @@ void PopupMenu::show (const Options& options, std::function<void(int)> callback)
 
 //==============================================================================
 
-void PopupMenu::showAt (Point<int> screenPos, std::function<void(int)> callback)
+void PopupMenu::showAt (Point<int> screenPos, std::function<void (int)> callback)
 {
     Options options;
     options.targetScreenPosition = screenPos;
@@ -575,7 +579,7 @@ void PopupMenu::showAt (Point<int> screenPos, std::function<void(int)> callback)
 
 //==============================================================================
 
-void PopupMenu::showAt (Component* targetComp, std::function<void(int)> callback)
+void PopupMenu::showAt (Component* targetComp, std::function<void (int)> callback)
 {
     if (targetComp == nullptr)
     {
@@ -593,7 +597,7 @@ void PopupMenu::showAt (Component* targetComp, std::function<void(int)> callback
 
 //==============================================================================
 
-void PopupMenu::showCustom (const Options& options, std::function<void(int)> callback)
+void PopupMenu::showCustom (const Options& options, std::function<void (int)> callback)
 {
     installGlobalMouseListener();
 

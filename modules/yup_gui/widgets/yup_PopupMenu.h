@@ -98,8 +98,6 @@ public:
     */
     void addItem (const String& text, int itemID, bool isEnabled = true, bool isTicked = false, const String& shortcutText = {});
 
-
-
     /** Adds a separator line. */
     void addSeparator();
 
@@ -137,25 +135,25 @@ public:
         @param options      Options for showing the menu
         @param callback     Function to call when an item is selected (optional)
     */
-    void show (const Options& options = Options{}, std::function<void(int)> callback = nullptr);
+    void show (const Options& options = Options {}, std::function<void (int)> callback = nullptr);
 
     /** Shows the menu at a specific screen position.
 
         @param screenPos    Screen position to show the menu
         @param callback     Function to call when an item is selected (optional)
     */
-    void showAt (Point<int> screenPos, std::function<void(int)> callback = nullptr);
+    void showAt (Point<int> screenPos, std::function<void (int)> callback = nullptr);
 
     /** Shows the menu relative to a component.
 
         @param targetComp   Component to show the menu relative to
         @param callback     Function to call when an item is selected (optional)
     */
-    void showAt (Component* targetComp, std::function<void(int)> callback = nullptr);
+    void showAt (Component* targetComp, std::function<void (int)> callback = nullptr);
 
     //==============================================================================
     /** Callback type for menu item selection. */
-    std::function<void(int selectedItemID)> onItemSelected;
+    std::function<void (int selectedItemID)> onItemSelected;
 
     //==============================================================================
     /** Dismisses all currently open popup menus. */
@@ -172,7 +170,7 @@ private:
     class PopupMenuItem;
     std::vector<std::unique_ptr<PopupMenuItem>> items;
 
-    void showCustom (const Options& options, std::function<void(int)> callback);
+    void showCustom (const Options& options, std::function<void (int)> callback);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };

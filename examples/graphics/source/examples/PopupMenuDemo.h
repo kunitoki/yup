@@ -39,19 +39,31 @@ public:
 
         addAndMakeVisible (basicMenuButton);
         basicMenuButton.setTitle ("Show Basic Menu");
-        basicMenuButton.onClick = [this] { showBasicMenu(); };
+        basicMenuButton.onClick = [this]
+        {
+            showBasicMenu();
+        };
 
         addAndMakeVisible (subMenuButton);
         subMenuButton.setTitle ("Show Sub-Menu");
-        subMenuButton.onClick = [this] { showSubMenu(); };
+        subMenuButton.onClick = [this]
+        {
+            showSubMenu();
+        };
 
         addAndMakeVisible (customMenuButton);
         customMenuButton.setTitle ("Show Custom Menu");
-        customMenuButton.onClick = [this] { showCustomMenu(); };
+        customMenuButton.onClick = [this]
+        {
+            showCustomMenu();
+        };
 
         addAndMakeVisible (nativeMenuButton);
         nativeMenuButton.setTitle ("Show Native Menu");
-        nativeMenuButton.onClick = [this] { showNativeMenu(); };
+        nativeMenuButton.onClick = [this]
+        {
+            showNativeMenu();
+        };
 
         setSize ({ 400, 300 });
     }
@@ -82,7 +94,7 @@ public:
 
         g.setFillColor (yup::Color (0xffffffff));
         auto styledText = yup::StyledText();
-        styledText.appendText("PopupMenu Demo", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
+        styledText.appendText ("PopupMenu Demo", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
         g.fillFittedText (styledText, area.removeFromTop (20).to<float>());
     }
 
