@@ -1272,7 +1272,6 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
         }
     }
 
-
     return 0;
 }
 

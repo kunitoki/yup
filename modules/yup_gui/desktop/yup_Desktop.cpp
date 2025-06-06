@@ -115,11 +115,10 @@ void Desktop::removeGlobalMouseListener (MouseListener* listener)
         return;
 
     globalMouseListeners.erase (
-        std::remove_if (globalMouseListeners.begin(), globalMouseListeners.end(),
-            [listener] (const WeakReference<MouseListener>& ref)
-            {
-                return ref.get() == listener || ref.get() == nullptr;
-            }),
+        std::remove_if (globalMouseListeners.begin(), globalMouseListeners.end(), [listener] (const WeakReference<MouseListener>& ref)
+    {
+        return ref.get() == listener || ref.get() == nullptr;
+    }),
         globalMouseListeners.end());
 }
 

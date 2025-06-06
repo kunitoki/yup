@@ -248,7 +248,9 @@ private:
 
     @tags{Core}
  */
-struct ReferenceCountedObjectAdoptType {};
+struct ReferenceCountedObjectAdoptType
+{
+};
 
 /**
     This is a constant that can be used to indicate that a ReferenceCountedObjectPtr is adopting an object.

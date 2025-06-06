@@ -83,7 +83,7 @@ void JUCEApplicationBase::appWillTerminateByForce()
 
 void JUCEApplicationBase::quit()
 {
-    MessageManager::callAsync([]
+    MessageManager::callAsync ([]
     {
         MessageManager::getInstance()->stopDispatchLoop();
     });
