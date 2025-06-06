@@ -84,6 +84,7 @@
 #include "widgets/yup_TextButton.h"
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
+#include "widgets/yup_PopupMenu.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 

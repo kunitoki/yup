@@ -1,0 +1,309 @@
+/*
+  ==============================================================================
+
+   This file is part of the YUP library.
+   Copyright (c) 2024 - kunitoki@gmail.com
+
+   YUP is an open source library subject to open-source licensing.
+
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   to use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
+
+   YUP IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
+
+  ==============================================================================
+*/
+
+#include <yup_gui/yup_gui.h>
+
+//==============================================================================
+
+class PopupMenuDemo : public yup::Component
+{
+public:
+    PopupMenuDemo()
+        : Component ("PopupMenuDemo")
+        , basicMenuButton ("basicMenuButton")
+        , subMenuButton ("subMenuButton")
+        , customMenuButton ("customMenuButton")
+        , nativeMenuButton ("nativeMenuButton")
+        , statusLabel ("statusLabel")
+    {
+        addAndMakeVisible (statusLabel);
+        statusLabel.setTitle ("Right-click anywhere to show context menu");
+
+        addAndMakeVisible (basicMenuButton);
+        basicMenuButton.setTitle ("Show Basic Menu");
+        basicMenuButton.onClick = [this] { showBasicMenu(); };
+
+        addAndMakeVisible (subMenuButton);
+        subMenuButton.setTitle ("Show Sub-Menu");
+        subMenuButton.onClick = [this] { showSubMenu(); };
+
+        addAndMakeVisible (customMenuButton);
+        customMenuButton.setTitle ("Show Custom Menu");
+        customMenuButton.onClick = [this] { showCustomMenu(); };
+
+        addAndMakeVisible (nativeMenuButton);
+        nativeMenuButton.setTitle ("Show Native Menu");
+        nativeMenuButton.onClick = [this] { showNativeMenu(); };
+
+        setSize ({ 400, 300 });
+    }
+
+    void resized() override
+    {
+        auto area = getLocalBounds().reduced (20);
+
+        area.removeFromTop (20);
+        statusLabel.setBounds (area.removeFromTop (30));
+
+        basicMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
+        subMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
+        customMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
+        nativeMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        auto area = getLocalBounds().reduced (20);
+
+        g.setFillColor (yup::Color (0xff1e1e1e));
+        g.fillAll();
+
+        g.setStrokeColor (yup::Color (0xff555555));
+        g.setStrokeWidth (1.0f);
+        g.strokeRect (getLocalBounds().to<float>().reduced (2.0f));
+
+        g.setFillColor (yup::Color (0xffffffff));
+        auto styledText = yup::StyledText();
+        styledText.appendText("PopupMenu Demo", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
+        g.fillFittedText (styledText, area.removeFromTop (20).to<float>());
+    }
+
+    void mouseDown (const yup::MouseEvent& event) override
+    {
+        if (event.isRightButtonDown())
+        {
+            showContextMenu (event.getPosition());
+        }
+    }
+
+private:
+    yup::TextButton basicMenuButton;
+    yup::TextButton subMenuButton;
+    yup::TextButton customMenuButton;
+    yup::TextButton nativeMenuButton;
+    yup::Label statusLabel;
+
+    enum MenuItemIDs
+    {
+        newFile = 1,
+        openFile,
+        saveFile,
+        saveAsFile,
+        recentFile1,
+        recentFile2,
+        exitApp,
+
+        editUndo = 10,
+        editRedo,
+        editCut,
+        editCopy,
+        editPaste,
+
+        colorRed = 20,
+        colorGreen,
+        colorBlue,
+
+        customSlider = 30,
+        customButton = 31
+    };
+
+    void showBasicMenu()
+    {
+        auto menu = yup::PopupMenu::create();
+
+        menu->addItem ("New File", newFile, true, false, "Cmd+N");
+        menu->addItem ("Open File", openFile, true, false, "Cmd+O");
+        menu->addSeparator();
+        menu->addItem ("Save File", saveFile, true, false, "Cmd+S");
+        menu->addItem ("Save As...", saveAsFile, true, false, "Shift+Cmd+S");
+        menu->addSeparator();
+        menu->addItem ("Disabled Item", 999, false);
+        menu->addItem ("Checked Item", 998, true, true);
+        menu->addSeparator();
+        menu->addItem ("Exit", exitApp, true, false, "Cmd+Q");
+
+        menu->onItemSelected = [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        };
+
+        menu->showAt (&basicMenuButton);
+    }
+
+    void showSubMenu()
+    {
+        auto recentFilesMenu = yup::PopupMenu::create();
+        recentFilesMenu->addItem ("Recent File 1.txt", recentFile1);
+        recentFilesMenu->addItem ("Recent File 2.txt", recentFile2);
+
+        auto colorMenu = yup::PopupMenu::create();
+        colorMenu->addItem ("Red", colorRed);
+        colorMenu->addItem ("Green", colorGreen);
+        colorMenu->addItem ("Blue", colorBlue);
+
+        auto menu = yup::PopupMenu::create();
+        menu->addItem ("New", newFile);
+        menu->addItem ("Open", openFile);
+        menu->addSubMenu ("Recent Files", recentFilesMenu);
+        menu->addSeparator();
+        menu->addSubMenu ("Colors", colorMenu);
+        menu->addSeparator();
+        menu->addItem ("Exit", exitApp);
+
+        menu->onItemSelected = [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        };
+
+        menu->showAt (&subMenuButton);
+    }
+
+    void showCustomMenu()
+    {
+        auto menu = yup::PopupMenu::create();
+
+        menu->addItem ("Regular Item", 1);
+        menu->addSeparator();
+
+        // Add custom slider component
+        auto slider = std::make_unique<yup::Slider> ("CustomSlider");
+        slider->setSize ({ 250, 250 });
+        slider->setValue (0.5);
+        menu->addCustomItem (std::move (slider), customSlider);
+
+        menu->addSeparator();
+
+        // Add custom button component
+        auto button = std::make_unique<yup::TextButton> ("CustomButton");
+        button->setSize ({ 120, 30 });
+        button->setTitle ("Custom Button");
+        menu->addCustomItem (std::move (button), customButton);
+
+        menu->addSeparator();
+        menu->addItem ("Another Item", 2);
+
+        menu->onItemSelected = [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        };
+
+        menu->showAt (&customMenuButton);
+    }
+
+    void showNativeMenu()
+    {
+        auto menu = yup::PopupMenu::create();
+
+        menu->addItem ("Native Item 1", 1);
+        menu->addItem ("Native Item 2", 2);
+        menu->addSeparator();
+        menu->addItem ("Native Item 3", 3);
+
+        menu->onItemSelected = [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        };
+
+        yup::PopupMenu::Options options;
+        options.useNativeMenus = true;
+        options.parentComponent = this;
+
+        menu->show (options, [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        });
+    }
+
+    void showContextMenu (yup::Point<float> position)
+    {
+        auto contextMenu = yup::PopupMenu::create();
+
+        contextMenu->addItem ("Copy", editCopy);
+        contextMenu->addItem ("Paste", editPaste);
+        contextMenu->addSeparator();
+        contextMenu->addItem ("Select All", 100);
+        contextMenu->addSeparator();
+        contextMenu->addItem ("Properties", 101);
+
+        contextMenu->onItemSelected = [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        };
+
+        yup::PopupMenu::Options options;
+        options.parentComponent = this;
+        options.targetScreenPosition = position.to<int>();
+
+        contextMenu->show (options, [this] (int selectedID)
+        {
+            handleMenuSelection (selectedID);
+        });
+    }
+
+    void handleMenuSelection (int selectedID)
+    {
+        yup::String message = "Selected item ID: " + yup::String (selectedID);
+
+        switch (selectedID)
+        {
+            case newFile:
+                message = "New File selected";
+                break;
+            case openFile:
+                message = "Open File selected";
+                break;
+            case saveFile:
+                message = "Save File selected";
+                break;
+            case saveAsFile:
+                message = "Save As selected";
+                break;
+            case exitApp:
+                message = "Exit selected";
+                break;
+            case editCopy:
+                message = "Copy selected";
+                break;
+            case editPaste:
+                message = "Paste selected";
+                break;
+            case colorRed:
+                message = "Red color selected";
+                break;
+            case colorGreen:
+                message = "Green color selected";
+                break;
+            case colorBlue:
+                message = "Blue color selected";
+                break;
+            case customSlider:
+                message = "Custom slider interacted";
+                break;
+            case customButton:
+                message = "Custom button clicked";
+                break;
+            default:
+                break;
+        }
+
+        statusLabel.setTitle (message);
+    }
+};

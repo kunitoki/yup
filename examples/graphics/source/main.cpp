@@ -32,6 +32,7 @@
 #include "examples/LayoutFonts.h"
 #include "examples/VariableFonts.h"
 #include "examples/Paths.h"
+#include "examples/PopupMenuDemo.h"
 
 //==============================================================================
 
@@ -74,7 +75,7 @@ public:
         */
 
         // Add the demos
-        int demo = 1;
+        int demo = 4;
 
         if (demo == 0)
         {
@@ -97,6 +98,12 @@ public:
         if (demo == 3)
         {
             components.add (std::make_unique<PathsExample>());
+            addAndMakeVisible (components.getLast());
+        }
+
+        if (demo == 4)
+        {
+            components.add (std::make_unique<PopupMenuDemo>());
             addAndMakeVisible (components.getLast());
         }
 

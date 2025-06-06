@@ -97,6 +97,7 @@
 #include "widgets/yup_TextButton.cpp"
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
+#include "widgets/yup_PopupMenu.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
 #include "themes/yup_ApplicationTheme.cpp"

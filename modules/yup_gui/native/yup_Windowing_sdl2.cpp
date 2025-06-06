@@ -1163,8 +1163,10 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEMOTION:
         {
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+
             if (event->window.windowID == SDL_GetWindowID (window))
-                handleMouseMoveOrDrag ({ static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) });
+                handleMouseMoveOrDrag (cursorPosition);
 
             break;
         }
@@ -1291,30 +1293,76 @@ namespace
 
 int displayEventDispatcher (void* userdata, SDL_Event* event)
 {
-    if (event->type != SDL_DISPLAYEVENT)
-        return 0;
-
     auto desktop = static_cast<Desktop*> (userdata);
 
-    switch (event->display.event)
+    if (event->type == SDL_DISPLAYEVENT)
     {
-        case SDL_DISPLAYEVENT_CONNECTED:
-            desktop->handleScreenConnected (event->display.display);
-            break;
+        switch (event->display.event)
+        {
+            case SDL_DISPLAYEVENT_CONNECTED:
+                desktop->handleScreenConnected (event->display.display);
+                break;
 
-        case SDL_DISPLAYEVENT_DISCONNECTED:
-            desktop->handleScreenDisconnected (event->display.display);
-            break;
+            case SDL_DISPLAYEVENT_DISCONNECTED:
+                desktop->handleScreenDisconnected (event->display.display);
+                break;
 
-        case SDL_DISPLAYEVENT_ORIENTATION:
-            desktop->handleScreenOrientationChanged (event->display.display);
-            break;
+            case SDL_DISPLAYEVENT_ORIENTATION:
+                desktop->handleScreenOrientationChanged (event->display.display);
+                break;
 
 #if ! JUCE_EMSCRIPTEN
-        case SDL_DISPLAYEVENT_MOVED:
-            desktop->handleScreenMoved (event->display.display);
-            break;
+            case SDL_DISPLAYEVENT_MOVED:
+                desktop->handleScreenMoved (event->display.display);
+                break;
 #endif
+
+            default:
+                break;
+        }
+
+        return;
+    }
+
+    switch (event->type)
+    {
+        case SDL_MOUSEMOTION:
+        {
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+
+            break;
+        }
+
+        case SDL_MOUSEBUTTONDOWN:
+        {
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            auto button = toMouseButton (event->button.button);
+            auto keyModifiers = KeyModifiers();
+
+            break;
+        }
+
+        case SDL_MOUSEBUTTONUP:
+        {
+            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            auto button = toMouseButton (event->button.button);
+            auto keyModifiers = KeyModifiers();
+
+            break;
+        }
+
+        case SDL_MOUSEWHEEL:
+        {
+            int x = 0, y = 0;
+            SDL_GetMouseState (&x, &y);
+            auto cursorPosition = Point<float> { static_cast<float> (x), static_cast<float> (y) };
+            auto mouseWheelData = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
+
+            break;
+        }
+
+        default:
+            break;
     }
 
     return 0;
