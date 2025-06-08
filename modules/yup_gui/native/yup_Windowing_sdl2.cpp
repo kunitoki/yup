@@ -58,6 +58,8 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 {
     incReferenceCount();
 
+    Desktop::getInstance()->registerNativeComponent (this);
+
     SDL_AddEventWatch (eventDispatcher, this);
 
     // Setup window hints and get flags
@@ -126,11 +128,14 @@ SDL2ComponentNative::SDL2ComponentNative (Component& component,
 
 SDL2ComponentNative::~SDL2ComponentNative()
 {
-    // Stop the rendering
-    stopRendering();
-
     // Remove event watch
     SDL_DelEventWatch (eventDispatcher, this);
+
+    // Unregister this component from the desktop
+    Desktop::getInstance()->unregisterNativeComponent (this);
+
+    // Stop the rendering
+    stopRendering();
 
     // Destroy the window
     if (window != nullptr)
@@ -1163,7 +1168,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEMOTION:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) };
 
             if (event->window.windowID == SDL_GetWindowID (window))
                 handleMouseMoveOrDrag (cursorPosition);
@@ -1176,7 +1181,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
-                handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers());
+                handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
 
             break;
         }
@@ -1186,7 +1191,7 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
-                handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers());
+                handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
 
             break;
         }
@@ -1268,8 +1273,9 @@ int SDL2ComponentNative::eventDispatcher (void* userdata, SDL_Event* event)
 
         default:
         {
-            auto nativeComponent = SDL2ComponentNative::Ptr (static_cast<SDL2ComponentNative*> (userdata));
-            nativeComponent->handleEvent (event);
+            if (auto nativeComponent = Desktop::getInstance()->getNativeComponent (userdata))
+                dynamic_cast<SDL2ComponentNative*> (nativeComponent.get())->handleEvent (event);
+
             break;
         }
     }
@@ -1321,43 +1327,84 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
                 break;
         }
 
-        return;
+        return 0;
     }
 
     switch (event->type)
     {
         case SDL_MOUSEMOTION:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            int x = 0, y = 0;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { static_cast<float> (x), static_cast<float> (y) };
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
+
+            MouseEvent mouseEvent (
+                static_cast<MouseEvent::Buttons> (event->motion.state),
+                keyModifiers,
+                cursorPosition
+            );
+
+            // Call drag handler if any mouse buttons are pressed, otherwise call move handler
+            if (event->motion.state != 0)
+                desktop->handleGlobalMouseDrag (mouseEvent);
+            else
+                desktop->handleGlobalMouseMove (mouseEvent);
 
             break;
         }
 
         case SDL_MOUSEBUTTONDOWN:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            int x = 0, y = 0;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { static_cast<float> (x), static_cast<float> (y) };
             auto button = toMouseButton (event->button.button);
-            auto keyModifiers = KeyModifiers();
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
+            MouseEvent mouseEvent (
+                button,
+                keyModifiers,
+                cursorPosition
+            );
+
+            desktop->handleGlobalMouseDown (mouseEvent);
             break;
         }
 
         case SDL_MOUSEBUTTONUP:
         {
-            auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
+            int x = 0, y = 0;
+            SDL_GetGlobalMouseState (&x, &y);
+            auto cursorPosition = Point<float> { static_cast<float> (x), static_cast<float> (y) };
             auto button = toMouseButton (event->button.button);
-            auto keyModifiers = KeyModifiers();
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
 
+            MouseEvent mouseEvent (
+                button,
+                keyModifiers,
+                cursorPosition
+            );
+
+            desktop->handleGlobalMouseUp (mouseEvent);
             break;
         }
 
         case SDL_MOUSEWHEEL:
         {
             int x = 0, y = 0;
-            SDL_GetMouseState (&x, &y);
+            SDL_GetGlobalMouseState (&x, &y);
             auto cursorPosition = Point<float> { static_cast<float> (x), static_cast<float> (y) };
+            auto keyModifiers = toKeyModifiers (SDL_GetModState());
             auto mouseWheelData = MouseWheelData { static_cast<float> (event->wheel.x), static_cast<float> (event->wheel.y) };
 
+            MouseEvent mouseEvent (
+                MouseEvent::noButtons,
+                keyModifiers,
+                cursorPosition
+            );
+
+            desktop->handleGlobalMouseWheel (mouseEvent, mouseWheelData);
             break;
         }
 

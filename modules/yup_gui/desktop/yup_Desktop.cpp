@@ -194,6 +194,24 @@ void Desktop::handleGlobalMouseDrag (const MouseEvent& event)
     }
 }
 
+void Desktop::handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseWheel (event, wheelData);
+            ++it;
+        }
+    }
+}
+
 //==============================================================================
 
 void Desktop::handleScreenConnected (int screenIndex)
@@ -214,6 +232,32 @@ void Desktop::handleScreenMoved (int screenIndex)
 void Desktop::handleScreenOrientationChanged (int screenIndex)
 {
     updateScreens();
+}
+
+//==============================================================================
+
+void Desktop::registerNativeComponent (ComponentNative* nativeComponent)
+{
+    if (nativeComponent != nullptr)
+        nativeComponents[nativeComponent] = nativeComponent;
+}
+
+void Desktop::unregisterNativeComponent (ComponentNative* nativeComponent)
+{
+    if (nativeComponent != nullptr)
+        nativeComponents.erase (nativeComponent);
+}
+
+ComponentNative::Ptr Desktop::getNativeComponent (void* userdata) const
+{
+    if (userdata == nullptr)
+        return nullptr;
+
+    auto it = nativeComponents.find (userdata);
+    if (it != nativeComponents.end())
+        return ComponentNative::Ptr{ it->second };
+
+    return nullptr;
 }
 
 } // namespace yup

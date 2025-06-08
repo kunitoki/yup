@@ -22,6 +22,8 @@
 namespace yup
 {
 
+class ComponentNative;
+
 //==============================================================================
 /** Represents the desktop environment, providing access to screen information and management.
 
@@ -117,6 +119,14 @@ public:
     void removeGlobalMouseListener (MouseListener* listener);
 
     //==============================================================================
+    /** Gets a native component by its userdata pointer.
+
+        @param userdata The userdata pointer used to identify the component
+        @return The native component, or nullptr if not found
+    */
+    ReferenceCountedObjectPtr<ComponentNative> getNativeComponent (void* userdata) const;
+
+    //==============================================================================
     /** Updates the list of screens. */
     void updateScreens();
 
@@ -129,7 +139,6 @@ public:
     void handleScreenMoved (int screenIndex);
     /** @internal */
     void handleScreenOrientationChanged (int screenIndex);
-
     /** @internal */
     void handleGlobalMouseDown (const MouseEvent& event);
     /** @internal */
@@ -138,19 +147,26 @@ public:
     void handleGlobalMouseMove (const MouseEvent& event);
     /** @internal */
     void handleGlobalMouseDrag (const MouseEvent& event);
+    /** @internal */
+    void handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
 
     //==============================================================================
     JUCE_DECLARE_SINGLETON (Desktop, false)
 
 private:
     friend class YUPApplication;
+    friend class SDL2ComponentNative;
 
     Desktop();
+
+    void registerNativeComponent (ComponentNative* nativeComponent);
+    void unregisterNativeComponent (ComponentNative* nativeComponent);
 
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
 
     std::vector<WeakReference<MouseListener>> globalMouseListeners;
+    std::unordered_map<void*, ComponentNative*> nativeComponents;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };

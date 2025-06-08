@@ -65,6 +65,7 @@
 #include <rive/static_scene.hpp>
 
 #include <tuple>
+#include <unordered_map>
 
 //==============================================================================
 
