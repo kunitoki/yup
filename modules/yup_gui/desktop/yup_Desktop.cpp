@@ -255,7 +255,7 @@ ComponentNative::Ptr Desktop::getNativeComponent (void* userdata) const
 
     auto it = nativeComponents.find (userdata);
     if (it != nativeComponents.end())
-        return ComponentNative::Ptr{ it->second };
+        return ComponentNative::Ptr { it->second };
 
     return nullptr;
 }

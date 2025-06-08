@@ -1342,8 +1342,7 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
             MouseEvent mouseEvent (
                 static_cast<MouseEvent::Buttons> (event->motion.state),
                 keyModifiers,
-                cursorPosition
-            );
+                cursorPosition);
 
             // Call drag handler if any mouse buttons are pressed, otherwise call move handler
             if (event->motion.state != 0)
@@ -1365,8 +1364,7 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
             MouseEvent mouseEvent (
                 button,
                 keyModifiers,
-                cursorPosition
-            );
+                cursorPosition);
 
             desktop->handleGlobalMouseDown (mouseEvent);
             break;
@@ -1383,8 +1381,7 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
             MouseEvent mouseEvent (
                 button,
                 keyModifiers,
-                cursorPosition
-            );
+                cursorPosition);
 
             desktop->handleGlobalMouseUp (mouseEvent);
             break;
@@ -1401,8 +1398,7 @@ int displayEventDispatcher (void* userdata, SDL_Event* event)
             MouseEvent mouseEvent (
                 MouseEvent::noButtons,
                 keyModifiers,
-                cursorPosition
-            );
+                cursorPosition);
 
             desktop->handleGlobalMouseWheel (mouseEvent, mouseWheelData);
             break;
