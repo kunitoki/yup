@@ -961,9 +961,17 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
         if (! isRendering())
             startRendering();
+
+        component.internalFocusChanged (true);
     }
     else
     {
+        component.internalFocusChanged (false);
+
+        lastComponentClicked = nullptr;
+        lastMouseDownPosition.reset();
+        lastMouseDownTime.reset();
+
         SDL_StopTextInput();
 
         if (updateOnlyWhenFocused)
@@ -1168,6 +1176,8 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEMOTION:
         {
+            //YUP_WINDOWING_LOG ("SDL_MOUSEMOTION " << event->motion.x << " " << event->motion.y);
+
             auto cursorPosition = Point<float> { static_cast<float> (event->motion.x), static_cast<float> (event->motion.y) };
 
             if (event->window.windowID == SDL_GetWindowID (window))
@@ -1178,26 +1188,36 @@ void SDL2ComponentNative::handleEvent (SDL_Event* event)
 
         case SDL_MOUSEBUTTONDOWN:
         {
+            YUP_WINDOWING_LOG ("SDL_MOUSEBUTTONDOWN " << event->button.x << " " << event->button.y);
+
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseDown (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
+            else
+                ; // TODO - when opening a window in mouse down, mouse up is sent to the other window
 
             break;
         }
 
         case SDL_MOUSEBUTTONUP:
         {
+            YUP_WINDOWING_LOG ("SDL_MOUSEBUTTONUP " << event->button.x << " " << event->button.y);
+
             auto cursorPosition = Point<float> { static_cast<float> (event->button.x), static_cast<float> (event->button.y) };
 
             if (event->button.windowID == SDL_GetWindowID (window))
                 handleMouseUp (cursorPosition, toMouseButton (event->button.button), KeyModifiers (SDL_GetModState()));
+            else
+                ; // TODO - when opening a window in mouse down, mouse up is sent to the other window
 
             break;
         }
 
         case SDL_MOUSEWHEEL:
         {
+            YUP_WINDOWING_LOG ("SDL_MOUSEWHEEL " << event->wheel.x << " " << event->wheel.y);
+
             auto cursorPosition = getCursorPosition();
 
             if (event->wheel.windowID == SDL_GetWindowID (window))

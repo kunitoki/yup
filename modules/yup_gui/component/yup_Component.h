@@ -906,8 +906,9 @@ private:
     void internalKeyDown (const KeyPress& keys, const Point<float>& position);
     void internalKeyUp (const KeyPress& keys, const Point<float>& position);
     void internalTextInput (const String& text);
-    void internalMoved (int xpos, int ypos);
     void internalResized (int width, int height);
+    void internalMoved (int xpos, int ypos);
+    void internalFocusChanged (bool gotFocus);
     void internalDisplayChanged();
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();

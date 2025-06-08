@@ -27,7 +27,7 @@ namespace yup
 namespace
 {
 
-static std::vector<Component*> activePopups;
+static std::vector<WeakReference<Component>> activePopups;
 
 } // namespace
 
@@ -211,7 +211,7 @@ public:
     void dismiss (int itemID)
     {
         selectedItemID = itemID;
-        setVisible (false);
+        //setVisible (false);
 
         // Call the owner's callback
         if (owner->onItemSelected)
@@ -419,9 +419,9 @@ struct GlobalMouseListener : public MouseListener
         Point<float> globalPos = event.getScreenPosition().to<float>();
 
         bool clickedInsidePopup = false;
-        for (auto* popup : activePopups)
+        for (const auto& popup : activePopups)
         {
-            if (auto* menuWindow = dynamic_cast<PopupMenu::MenuWindow*> (popup))
+            if (auto* menuWindow = dynamic_cast<PopupMenu::MenuWindow*> (popup.get()))
             {
                 if (menuWindow->isWithinBounds (globalPos))
                 {
@@ -474,9 +474,9 @@ void PopupMenu::dismissAllPopups()
     // Make a copy to avoid issues with the vector being modified during iteration
     auto popupsToClose = std::move (activePopups);
 
-    for (auto* popup : popupsToClose)
+    for (const auto& popup : popupsToClose)
     {
-        if (auto* menuWindow = dynamic_cast<PopupMenu::MenuWindow*> (popup))
+        if (auto* menuWindow = dynamic_cast<PopupMenu::MenuWindow*> (popup.get()))
             menuWindow->dismiss (0);
     }
 

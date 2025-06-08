@@ -95,10 +95,13 @@ void Component::setVisible (bool shouldBeVisible)
 
     options.isVisible = shouldBeVisible;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     if (options.onDesktop && native != nullptr)
         native->setVisible (shouldBeVisible);
 
-    auto bailOutChecker = BailOutChecker (this);
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     visibilityChanged();
 
@@ -138,7 +141,7 @@ void Component::setTitle (const String& title)
 {
     componentTitle = title;
 
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         native->setTitle (title);
 }
 
@@ -441,7 +444,7 @@ void Component::displayChanged() {}
 
 float Component::getScaleDpi() const
 {
-    if (native != nullptr)
+    if (options.onDesktop && native != nullptr)
         return native->getScaleDpi();
 
     if (parentComponent == nullptr)
@@ -460,7 +463,7 @@ void Component::setOpacity (float newOpacity)
 
     opacity = static_cast<uint8> (newOpacity * 255);
 
-    if (native != nullptr)
+    if (options.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
 }
 
@@ -1247,6 +1250,16 @@ void Component::internalMoved (int xpos, int ypos)
     boundsInParent = boundsInParent.withPosition (Point<int> (xpos, ypos).to<float>());
 
     moved();
+}
+
+//==============================================================================
+
+void Component::internalFocusChanged (bool gotFocus)
+{
+    if (gotFocus)
+        focusGained();
+    else
+        focusLost();
 }
 
 //==============================================================================
