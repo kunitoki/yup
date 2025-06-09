@@ -321,14 +321,21 @@ TEST(ClassNameTests, StaticMethodBehavesCorrectly)
 
 ### Error handling patterns:
 ```cpp
-// Use YUP Result for operations that can fail
+// Use YUP Result or ResultValue<T> for operations that can fail
 yup::Result performOperation()
 {
     if (preconditionFailed)
         return yup::Result::fail("Precondition not met");
 
-    // do work
     return yup::Result::ok();
+}
+
+yup::ResultValue<int> maybeGetInteger()
+{
+    if (preconditionFailed)
+        return yup::ResultValue<int>::fail("Precondition not met");
+
+    return 1;
 }
 
 // Use assertions for programming errors
