@@ -40,7 +40,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 juce_audio_devices
     vendor:             juce
@@ -59,7 +59,7 @@
     androidDeps:        oboe_library
     mingwLibs:          winmm
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

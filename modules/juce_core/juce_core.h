@@ -40,7 +40,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 juce_core
     vendor:             juce
@@ -60,7 +60,7 @@
     androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures
     mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

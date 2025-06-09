@@ -40,7 +40,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 juce_audio_basics
     vendor:             juce
@@ -54,7 +54,7 @@
     dependencies:       juce_core
     appleFrameworks:    Accelerate
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

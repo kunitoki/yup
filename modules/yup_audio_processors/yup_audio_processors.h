@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 yup_audio_processors
     vendor:             yup
@@ -36,7 +36,7 @@
     dependencies:       juce_audio_basics yup_gui
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */
