@@ -51,7 +51,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_audio_basics juce_events
+    dependencies:       juce_audio_basics yup_events
     appleFrameworks:    CoreAudio CoreMIDI AudioToolbox
     iosFrameworks:      AVFoundation
     iosSimFrameworks:   AVFoundation
@@ -67,7 +67,8 @@
 #pragma once
 #define JUCE_AUDIO_DEVICES_H_INCLUDED
 
-#include <juce_events/juce_events.h>
+#include <yup_events/yup_events.h>
+
 #include <juce_audio_basics/juce_audio_basics.h>
 
 #if JUCE_MODULE_AVAILABLE_juce_graphics

@@ -33,7 +33,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_events yup_graphics rive
+    dependencies:       yup_events yup_graphics rive
     appleFrameworks:    Metal
     enableARC:          1
 
@@ -45,8 +45,7 @@
 #pragma once
 #define YUP_GUI_H_INCLUDED
 
-#include <juce_events/juce_events.h>
-
+#include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 
 //==============================================================================

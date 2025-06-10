@@ -20,7 +20,7 @@
 */
 
 #include <juce_core/juce_core.h>
-#include <juce_events/juce_events.h>
+#include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 

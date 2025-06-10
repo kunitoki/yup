@@ -552,11 +552,11 @@ function (_yup_add_default_modules modules_path)
 
     # Original juce modules
     yup_add_module (${modules_path}/modules/juce_core ${modules_group})
-    yup_add_module (${modules_path}/modules/juce_events ${modules_group})
     yup_add_module (${modules_path}/modules/juce_audio_basics ${modules_group})
     yup_add_module (${modules_path}/modules/juce_audio_devices ${modules_group})
 
-    # New yup modules
+    # Yup modules
+    yup_add_module (${modules_path}/modules/yup_events ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
     yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
