@@ -1,0 +1,160 @@
+name: Coverage
+
+on:
+  push:
+    paths:
+      - "CMakeLists.txt"
+      - "codecov.yml"
+      - "**/workflows/coverage.yml"
+      - "**/cmake/**"
+      - "**/modules/**"
+      - "**/tests/**"
+      - "!**/native/*_android.*"
+      - "!**/native/*_apple.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_ios.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
+    branches:
+      - "**"
+  pull_request:
+    paths:
+      - "CMakeLists.txt"
+      - "codecov.yml"
+      - "**/workflows/coverage.yml"
+      - "**/cmake/**"
+      - "**/modules/**"
+      - "**/tests/**"
+      - "!**/native/*_android.*"
+      - "!**/native/*_apple.*"
+      - "!**/native/*_emscripten.*"
+      - "!**/native/*_ios.*"
+      - "!**/native/*_mac.*"
+      - "!**/native/*_wasm.*"
+      - "!**/native/*_windows.*"
+    branches:
+      - main
+      - "dev/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  INSTALL_DEPS: >-
+    libasound2-dev libjack-jackd2-dev ladspa-sdk libcurl4-openssl-dev libfreetype6-dev
+    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxi-dev libxinerama-dev
+    libxrandr-dev libxrender-dev libglu1-mesa-dev libegl1-mesa-dev mesa-common-dev lcov
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Ninja
+      uses: seanmiddleditch/gha-setup-ninja@master
+
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
+
+    - name: Create Build Environment
+      run: cmake -E make_directory ${{runner.workspace}}/build
+
+    - name: Configure CMake with Coverage
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        cmake $GITHUB_WORKSPACE \
+          -G "Ninja Multi-Config" \
+          -DYUP_BUILD_TESTS=ON \
+          -DYUP_BUILD_EXAMPLES=OFF \
+          -DYUP_ENABLE_COVERAGE=ON \
+          -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build Tests
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --config Debug --parallel 4 --target yup_tests
+
+    - name: Clean Coverage Data
+      working-directory: ${{runner.workspace}}/build
+      run: cmake --build . --target coverage_clean
+
+    - name: Run Tests
+      working-directory: ${{runner.workspace}}/build/tests/Debug
+      run: ./yup_tests --gtest_output=xml:test_results.xml
+
+    - name: Generate Combined Coverage Report
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        lcov --directory . --capture --output-file coverage/coverage.info
+        lcov --remove coverage/coverage.info \
+          "*/thirdparty/*" \
+          "*/build/*" \
+          "*/tests/*" \
+          "*/examples/*" \
+          "*/usr/*" \
+          "*/opt/*" \
+          "*/.conan/*" \
+          "*/CMakeFiles/*" \
+          --output-file coverage/coverage_final.info
+        lcov --list coverage/coverage_final.info
+
+    - name: Generate Per-Module Coverage Reports
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        # Create coverage reports for each module
+        modules=("yup_core" "yup_events" "yup_audio_basics" "yup_audio_devices" "yup_audio_processors" "yup_graphics" "yup_gui")
+
+        for module in "${modules[@]}"; do
+          echo "Generating coverage for $module"
+          mkdir -p coverage/$module
+
+          # Extract coverage for this specific module
+          lcov --extract coverage/coverage_final.info "*/modules/$module/*" \
+            --output-file coverage/$module/coverage.info
+
+          # Show summary for this module
+          lcov --list coverage/$module/coverage.info
+        done
+
+    - name: Upload Overall Coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        file: ${{runner.workspace}}/build/coverage/coverage_final.info
+        name: overall-coverage
+        fail_ci_if_error: false
+        verbose: true
+
+    - name: Upload Per-Module Coverage to Codecov
+      working-directory: ${{runner.workspace}}/build
+      run: |
+        modules=("yup_core" "yup_events" "yup_audio_basics" "yup_audio_devices" "yup_audio_processors" "yup_graphics" "yup_gui")
+
+        for module in "${modules[@]}"; do
+          if [ -f "coverage/$module/coverage.info" ] && [ -s "coverage/$module/coverage.info" ]; then
+            echo "Uploading coverage for $module"
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -f "coverage/$module/coverage.info" -F "$module" -t "${{ secrets.CODECOV_TOKEN }}" || true
+          else
+            echo "No coverage data found for $module"
+          fi
+        done
+
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ${{runner.workspace}}/build/tests/Debug/test_results.xml
+
+    - name: Upload Coverage Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-reports
+        path: ${{runner.workspace}}/build/coverage/

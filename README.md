@@ -21,6 +21,8 @@ Example Rive animation display ([source code](./examples/render/source/main.cpp)
 [![Build And Test Wasm](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_wasm.yml)
 [![Build And Test iOS](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml)
 [![Build And Test Android](https://github.com/kunitoki/yup/actions/workflows/build_android.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_android.yml)
+[![Coverage](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg)](https://codecov.io/gh/kunitoki/yup)
 
 
 ## Introduction
