@@ -79,9 +79,9 @@ void MACAddress::findAllAddresses(Array<MACAddress>& result)
 
 //==============================================================================
 bool YUP_CALLTYPE Process::openEmailWithAttachments([[maybe_unused]] const String& targetEmailAddress,
-                                                     [[maybe_unused]] const String& emailSubject,
-                                                     [[maybe_unused]] const String& bodyText,
-                                                     [[maybe_unused]] const StringArray& filesToAttach)
+                                                    [[maybe_unused]] const String& emailSubject,
+                                                    [[maybe_unused]] const String& bodyText,
+                                                    [[maybe_unused]] const StringArray& filesToAttach)
 {
 #if YUP_IOS
     // xxx probably need to use MFMailComposeViewController

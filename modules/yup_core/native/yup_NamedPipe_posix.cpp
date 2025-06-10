@@ -239,9 +239,9 @@ private:
                                          : (createdPipe ? pipeOutName : pipeInName);
 
         return pipe.get ([this, &pipeName, &flags, &timeoutEnd]
-                         {
-                             return openPipe (pipeName, flags, timeoutEnd);
-                         });
+        {
+            return openPipe (pipeName, flags, timeoutEnd);
+        });
     }
 
     static void waitForInput (int handle, int timeoutMsecs) noexcept

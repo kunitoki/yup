@@ -67,15 +67,15 @@ public:
                    PacketCallbackFunction&& callback)
     {
         std::for_each (begin, end, [&] (uint32_t word)
-                       {
-                           nextPacket[currentPacketLen++] = word;
+        {
+            nextPacket[currentPacketLen++] = word;
 
-                           if (currentPacketLen == Utils::getNumWordsForMessageType (nextPacket.front()))
-                           {
-                               callback (View (nextPacket.data()), timeStamp);
-                               currentPacketLen = 0;
-                           }
-                       });
+            if (currentPacketLen == Utils::getNumWordsForMessageType (nextPacket.front()))
+            {
+                callback (View (nextPacket.data()), timeStamp);
+                currentPacketLen = 0;
+            }
+        });
     }
 
 private:
@@ -143,9 +143,9 @@ public:
             void handleIncomingMidiMessage (void*, const MidiMessage& msg) const
             {
                 Conversion::toMidi1 (BytestreamMidiView (&msg), [&] (const View& view)
-                                     {
-                                         dispatch.converter.convert (view, *callbackPtr);
-                                     });
+                {
+                    dispatch.converter.convert (view, *callbackPtr);
+                });
             }
 
             void handlePartialSysexMessage (void*, const uint8_t*, int, double) const {}
@@ -207,9 +207,9 @@ public:
                    BytestreamMessageCallback&& callback)
     {
         dispatcher.dispatch (begin, end, timestamp, [&] (const View& view, double time)
-                             {
-                                 converter.convert (view, time, callback);
-                             });
+        {
+            converter.convert (view, time, callback);
+        });
     }
 
 private:

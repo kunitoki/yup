@@ -631,9 +631,9 @@ IPAddress IPAddress::getInterfaceBroadcastAddress (const IPAddress&)
 
 //==============================================================================
 bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& targetEmailAddress,
-                                                      const String& emailSubject,
-                                                      const String& bodyText,
-                                                      const StringArray& filesToAttach)
+                                                     const String& emailSubject,
+                                                     const String& bodyText,
+                                                     const StringArray& filesToAttach)
 {
     DynamicLibrary dll ("MAPI32.dll");
     YUP_LOAD_WINAPI_FUNCTION (dll, MAPISendMail, mapiSendMail, ULONG, (LHANDLE, ULONG, lpMapiMessage, ::FLAGS, ULONG))

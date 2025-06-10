@@ -83,9 +83,9 @@ private:
 
         StringArray result;
         std::for_each (begin, end, [&] (const auto& pair)
-                       {
-                           result.add (pair.second);
-                       });
+        {
+            result.add (pair.second);
+        });
 
         return result;
     }
@@ -750,14 +750,14 @@ private:
     }
 
     std::multimap<String, String> typeForExtension = createMultiMap ([] (auto e)
-                                                                     {
-                                                                         return std::make_pair (e.fileExtension, e.mimeType);
-                                                                     });
+    {
+        return std::make_pair (e.fileExtension, e.mimeType);
+    });
 
     std::multimap<String, String> extensionForType = createMultiMap ([] (auto e)
-                                                                     {
-                                                                         return std::make_pair (e.mimeType, e.fileExtension);
-                                                                     });
+    {
+        return std::make_pair (e.mimeType, e.fileExtension);
+    });
 };
 
 } // namespace

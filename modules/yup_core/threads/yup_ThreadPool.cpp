@@ -91,9 +91,9 @@ void ThreadPoolJob::signalJobShouldExit()
 {
     shouldStop = true;
     listeners.call ([] (Thread::Listener& l)
-                    {
-                        l.exitSignalSent();
-                    });
+    {
+        l.exitSignalSent();
+    });
 }
 
 void ThreadPoolJob::addListener (Thread::Listener* listener)

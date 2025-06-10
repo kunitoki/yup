@@ -1055,13 +1055,13 @@ public:
         }
 
         YUP_DBG ("OpenSL: numInputChannels = " << numInputChannels
-                                                << ", numOutputChannels = " << numOutputChannels
-                                                << ", nativeBufferSize = " << AndroidHighPerformanceAudioHelpers::getNativeBufferSizeHint()
-                                                << ", nativeSampleRate = " << AndroidHighPerformanceAudioHelpers::getNativeSampleRate()
-                                                << ", actualBufferSize = " << actualBufferSize
-                                                << ", audioBuffersToEnqueue = " << audioBuffersToEnqueue
-                                                << ", sampleRate = " << sampleRate
-                                                << ", supportsFloatingPoint = " << (session != nullptr && session->supportsFloatingPoint() ? "true" : "false"));
+                                               << ", numOutputChannels = " << numOutputChannels
+                                               << ", nativeBufferSize = " << AndroidHighPerformanceAudioHelpers::getNativeBufferSizeHint()
+                                               << ", nativeSampleRate = " << AndroidHighPerformanceAudioHelpers::getNativeSampleRate()
+                                               << ", actualBufferSize = " << actualBufferSize
+                                               << ", audioBuffersToEnqueue = " << audioBuffersToEnqueue
+                                               << ", sampleRate = " << sampleRate
+                                               << ", supportsFloatingPoint = " << (session != nullptr && session->supportsFloatingPoint() ? "true" : "false"));
 
         if (session == nullptr)
             lastError = "Unknown error initializing opensl session";

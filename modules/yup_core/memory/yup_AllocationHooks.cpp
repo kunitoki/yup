@@ -51,9 +51,9 @@ static AllocationHooks& getAllocationHooksForThread()
 void notifyAllocationHooksForThread()
 {
     getAllocationHooksForThread().listenerList.call ([] (AllocationHooks::Listener& l)
-                                                     {
-                                                         l.newOrDeleteCalled();
-                                                     });
+    {
+        l.newOrDeleteCalled();
+    });
 }
 
 } // namespace yup

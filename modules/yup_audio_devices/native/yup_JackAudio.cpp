@@ -55,23 +55,23 @@ static void* yup_loadJackFunction (const char* const name)
 }
 
 #define YUP_DECL_JACK_FUNCTION(return_type, fn_name, argument_types, arguments) \
-    return_type fn_name argument_types                                           \
-    {                                                                            \
-        using ReturnType = return_type;                                          \
-        typedef return_type (*fn_type) argument_types;                           \
+    return_type fn_name argument_types                                          \
+    {                                                                           \
+        using ReturnType = return_type;                                         \
+        typedef return_type (*fn_type) argument_types;                          \
         static fn_type fn = (fn_type) yup_loadJackFunction (#fn_name);          \
-        jassert (fn != nullptr);                                                 \
-        return (fn != nullptr) ? ((*fn) arguments) : ReturnType();               \
+        jassert (fn != nullptr);                                                \
+        return (fn != nullptr) ? ((*fn) arguments) : ReturnType();              \
     }
 
 #define YUP_DECL_VOID_JACK_FUNCTION(fn_name, argument_types, arguments) \
-    void fn_name argument_types                                          \
-    {                                                                    \
-        typedef void (*fn_type) argument_types;                          \
+    void fn_name argument_types                                         \
+    {                                                                   \
+        typedef void (*fn_type) argument_types;                         \
         static fn_type fn = (fn_type) yup_loadJackFunction (#fn_name);  \
-        jassert (fn != nullptr);                                         \
-        if (fn != nullptr)                                               \
-            (*fn) arguments;                                             \
+        jassert (fn != nullptr);                                        \
+        if (fn != nullptr)                                              \
+            (*fn) arguments;                                            \
     }
 
 //==============================================================================
@@ -131,7 +131,7 @@ const char* getJackErrorMessage (const jack_status_t status)
 }
 } // namespace
 
-#define YUP_JACK_LOG_STATUS(x)                      \
+#define YUP_JACK_LOG_STATUS(x)                       \
     {                                                \
         if (const char* m = getJackErrorMessage (x)) \
             jack_Log (m);                            \
@@ -139,10 +139,10 @@ const char* getJackErrorMessage (const jack_status_t status)
 #define YUP_JACK_LOG(x) jack_Log (x)
 #else
 #define YUP_JACK_LOG_STATUS(x) \
-    {                           \
+    {                          \
     }
 #define YUP_JACK_LOG(x) \
-    {                    \
+    {                   \
     }
 #endif
 
@@ -489,7 +489,7 @@ private:
         {
             if (activeInputChannels[i])
                 if (auto* in = (jack_default_audio_sample_t*) yup::jack_port_get_buffer (inputPorts.getUnchecked (i),
-                                                                                          static_cast<jack_nframes_t> (numSamples)))
+                                                                                         static_cast<jack_nframes_t> (numSamples)))
                     inChans[numActiveInChans++] = (float*) in;
         }
 
@@ -497,7 +497,7 @@ private:
         {
             if (activeOutputChannels[i])
                 if (auto* out = (jack_default_audio_sample_t*) yup::jack_port_get_buffer (outputPorts.getUnchecked (i),
-                                                                                           static_cast<jack_nframes_t> (numSamples)))
+                                                                                          static_cast<jack_nframes_t> (numSamples)))
                     outChans[numActiveOutChans++] = (float*) out;
         }
 

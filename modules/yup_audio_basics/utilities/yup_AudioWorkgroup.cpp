@@ -128,9 +128,9 @@ public:
 
         if (handle.get() != nullptr)
             token = WorkgroupToken { [provider = WorkgroupToken::TokenProvider { handle.get() }]
-                                     {
-                                         return &provider;
-                                     } };
+            {
+                return &provider;
+            } };
     }
 
     static os_workgroup_t getWorkgroup (const AudioWorkgroup& wg)
@@ -213,15 +213,15 @@ public:
 
 AudioWorkgroup::AudioWorkgroup (const AudioWorkgroup& other)
     : erased ([&]() -> Erased
-              {
-                  if (auto* p = other.getWorkgroupProvider())
-                      return [provider = *p]
-                      {
-                          return &provider;
-                      };
+{
+    if (auto* p = other.getWorkgroupProvider())
+        return [provider = *p]
+        {
+            return &provider;
+        };
 
-                  return nullptr;
-              }())
+    return nullptr;
+}())
 {
 }
 
@@ -270,9 +270,9 @@ AudioWorkgroup makeRealAudioWorkgroup (os_workgroup_t handle)
         return AudioWorkgroup {};
 
     return AudioWorkgroup { [provider = AudioWorkgroup::WorkgroupProvider { handle }]
-                            {
-                                return &provider;
-                            } };
+    {
+        return &provider;
+    } };
 }
 
 #endif

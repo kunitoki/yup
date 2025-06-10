@@ -800,10 +800,10 @@ constexpr unsigned char javaMidiByteCode[]
 };
 // clang-format on
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                              \
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                            \
     METHOD (getYupAndroidMidiInputDeviceNameAndIDs, "getYupAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
     METHOD (getYupAndroidMidiOutputDeviceNameAndIDs, "getYupAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
-    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")        \
+    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")     \
     METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/kunitoki/yup/YupMidiSupport$MidiDeviceManager", 23)
@@ -1006,8 +1006,8 @@ private:
         MidiDeviceListConnectionBroadcaster::get().notify();
     }
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                 \
-    CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                            \
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                   \
+    CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                              \
     STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/kunitoki/yup/YupMidiSupport$MidiDeviceManager;") \
     STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/kunitoki/yup/YupMidiSupport$BluetoothMidiManager;")
 

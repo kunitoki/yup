@@ -118,14 +118,14 @@ public:
 
     /** Tries to launch the OS's default reader application for a given file or URL, using an explicit environment. */
     static bool YUP_CALLTYPE openDocument (const String& documentURL,
-                                            const String& parameters,
-                                            const StringPairArray& environment);
+                                           const String& parameters,
+                                           const StringPairArray& environment);
 
     /** Tries to launch the OS's default email application to let the user create a message. */
     static bool YUP_CALLTYPE openEmailWithAttachments (const String& targetEmailAddress,
-                                                        const String& emailSubject,
-                                                        const String& bodyText,
-                                                        const StringArray& filesToAttach);
+                                                       const String& emailSubject,
+                                                       const String& bodyText,
+                                                       const StringArray& filesToAttach);
 
     //==============================================================================
 #if YUP_WINDOWS || DOXYGEN

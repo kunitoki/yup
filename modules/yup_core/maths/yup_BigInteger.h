@@ -241,7 +241,7 @@ public:
 
     bool operator== (const BigInteger&) const noexcept;
     bool operator!= (const BigInteger&) const noexcept;
-    bool operator<(const BigInteger&) const noexcept;
+    bool operator< (const BigInteger&) const noexcept;
     bool operator<= (const BigInteger&) const noexcept;
     bool operator> (const BigInteger&) const noexcept;
     bool operator>= (const BigInteger&) const noexcept;

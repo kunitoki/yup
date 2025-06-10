@@ -51,13 +51,13 @@ bool Thread::createNativeThread (Priority)
     PosixSchedulerPriority::getNativeSchedulerAndPriority (realtimeOptions, {}).apply (attr);
 
     threadId = threadHandle = makeThreadHandle (attr, this, [] (void* userData) -> void*
-                                                {
-                                                    auto* myself = static_cast<Thread*> (userData);
+    {
+        auto* myself = static_cast<Thread*> (userData);
 
-                                                    yup_threadEntryPoint (myself);
+        yup_threadEntryPoint (myself);
 
-                                                    return nullptr;
-                                                });
+        return nullptr;
+    });
 
     return threadId != nullptr;
 }

@@ -336,7 +336,7 @@ private:
      the YUPApplicationBase::sendUnhandledException() method.
      This functionality can be enabled with the YUP_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
-#define YUP_CATCH_EXCEPTION                                                                                        \
+#define YUP_CATCH_EXCEPTION                                                                                       \
     catch (const std::exception& e) { yup::YUPApplicationBase::sendUnhandledException (&e, __FILE__, __LINE__); } \
     catch (...) { yup::YUPApplicationBase::sendUnhandledException (nullptr, __FILE__, __LINE__); }
 

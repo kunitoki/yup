@@ -26,7 +26,7 @@ namespace
 {
 
 template <class T>
-using hasAudioSampleFrameSamplesPerChannel = decltype(T::samplesPerChannel);
+using hasAudioSampleFrameSamplesPerChannel = decltype (T::samplesPerChannel);
 
 template <class T>
 int getNumSamplesPerChannel (const T& frame)
@@ -85,8 +85,7 @@ public:
 
     double getDefaultSampleRate()
     {
-        int outputSampleRate = EM_ASM_INT ({
-            return emscriptenGetAudioObject ($0).sampleRate;
+        int outputSampleRate = EM_ASM_INT ({ return emscriptenGetAudioObject ($0).sampleRate;
         }, context);
 
         if (outputSampleRate == 0)
@@ -144,8 +143,7 @@ public:
 
         if (isDeviceOpen)
         {
-            EM_ASM ({
-                emscriptenGetAudioObject ($0).disconnect();
+            EM_ASM ({ emscriptenGetAudioObject ($0).disconnect();
             }, audioWorkletNode);
             audioWorkletNode = {};
 
@@ -220,8 +218,7 @@ public:
 
         isRunning = false;
 
-        EM_ASM ({
-            emscriptenGetAudioObject ($0).suspend();
+        EM_ASM ({ emscriptenGetAudioObject ($0).suspend();
         }, context);
 
         if (oldCallback != nullptr)
@@ -273,8 +270,7 @@ private:
 
     void audioThreadInitialized()
     {
-        WebAudioWorkletProcessorCreateOptions opts =
-        {
+        WebAudioWorkletProcessorCreateOptions opts = {
             .name = audioWorkletTypeName
         };
 
@@ -285,8 +281,7 @@ private:
     void audioWorkletProcessorCreated()
     {
         int outputChannelCounts[1] = { actualNumberOfOutputs };
-        EmscriptenAudioWorkletNodeCreateOptions options =
-        {
+        EmscriptenAudioWorkletNodeCreateOptions options = {
             .numberOfInputs = actualNumberOfInputs,
             .numberOfOutputs = 1,
             .outputChannelCounts = outputChannelCounts
@@ -298,16 +293,13 @@ private:
 
         // Connect it to audio context destination
         // emscripten_audio_node_connect (audioWorkletNode, context, 0, 0);
-        EM_ASM ({
-            emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination);
+        EM_ASM ({ emscriptenGetAudioObject ($0).connect (emscriptenGetAudioObject ($1).destination);
         }, audioWorkletNode, context);
 
         emscripten_set_click_callback ("canvas", reinterpret_cast<void*> (this), 0, canvasClickCallback);
     }
 
-    EM_BOOL renderAudio (int numInputs, const AudioSampleFrame* inputs,
-                         int numOutputs, AudioSampleFrame* outputs,
-                         int numParams, const AudioParamFrame* params)
+    EM_BOOL renderAudio (int numInputs, const AudioSampleFrame* inputs, int numOutputs, AudioSampleFrame* outputs, int numParams, const AudioParamFrame* params)
     {
         const int samplesPerChannel = [&]
         {
@@ -368,22 +360,21 @@ private:
 
     static void audioThreadInitializedCallback (EMSCRIPTEN_WEBAUDIO_T audioContext, EM_BOOL success, void* userData)
     {
-        if (! success) return; // Check browser console in a debug build for detailed errors
+        if (! success)
+            return; // Check browser console in a debug build for detailed errors
 
         static_cast<AudioWorkletAudioIODevice*> (userData)->audioThreadInitialized();
     }
 
     static void audioWorkletProcessorCreatedCallback (EMSCRIPTEN_WEBAUDIO_T audioContext, EM_BOOL success, void* userData)
     {
-        if (! success) return; // Check browser console in a debug build for detailed errors
+        if (! success)
+            return; // Check browser console in a debug build for detailed errors
 
         static_cast<AudioWorkletAudioIODevice*> (userData)->audioWorkletProcessorCreated();
     }
 
-    static EM_BOOL renderAudioCallback (int numInputs, const AudioSampleFrame* inputs,
-                                        int numOutputs, AudioSampleFrame* outputs,
-                                        int numParams, const AudioParamFrame* params,
-                                        void* userData)
+    static EM_BOOL renderAudioCallback (int numInputs, const AudioSampleFrame* inputs, int numOutputs, AudioSampleFrame* outputs, int numParams, const AudioParamFrame* params, void* userData)
     {
         return static_cast<AudioWorkletAudioIODevice*> (userData)->renderAudio (numInputs, inputs, numOutputs, outputs, numParams, params);
     }
@@ -422,8 +413,8 @@ private:
     }
 
     //==============================================================================
-    EMSCRIPTEN_WEBAUDIO_T context{};
-    EMSCRIPTEN_AUDIO_WORKLET_NODE_T audioWorkletNode{};
+    EMSCRIPTEN_WEBAUDIO_T context {};
+    EMSCRIPTEN_AUDIO_WORKLET_NODE_T audioWorkletNode {};
 
     bool isDeviceOpen = false;
     bool isRunning = false;
@@ -440,7 +431,7 @@ private:
     HeapBlock<const float*> channelInBuffer;
     HeapBlock<float*> channelOutBuffer;
 
-    alignas(16) uint8 audioThreadStack[4096] = {};
+    alignas (16) uint8 audioThreadStack[4096] = {};
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioWorkletAudioIODevice)
 };

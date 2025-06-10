@@ -121,9 +121,9 @@ bool TimeSliceThread::contains (const TimeSliceClient* c) const
 {
     const ScopedLock sl (listLock);
     return std::any_of (clients.begin(), clients.end(), [=] (auto* registered)
-                        {
-                            return registered == c;
-                        });
+    {
+        return registered == c;
+    });
 }
 
 //==============================================================================

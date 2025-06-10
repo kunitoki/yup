@@ -231,7 +231,7 @@ bool IPAddress::operator== (const IPAddress& other) const noexcept { return comp
 
 bool IPAddress::operator!= (const IPAddress& other) const noexcept { return compare (other) != 0; }
 
-bool IPAddress::operator<(const IPAddress& other) const noexcept { return compare (other) < 0; }
+bool IPAddress::operator< (const IPAddress& other) const noexcept { return compare (other) < 0; }
 
 bool IPAddress::operator<= (const IPAddress& other) const noexcept { return compare (other) <= 0; }
 

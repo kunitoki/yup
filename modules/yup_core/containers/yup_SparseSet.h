@@ -172,9 +172,9 @@ public:
             removeRange (range);
             ranges.add (range);
             std::sort (ranges.begin(), ranges.end(), [] (Range<Type> a, Range<Type> b)
-                       {
-                           return a.getStart() < b.getStart();
-                       });
+            {
+                return a.getStart() < b.getStart();
+            });
             simplify();
         }
     }

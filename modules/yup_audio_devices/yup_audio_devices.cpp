@@ -238,12 +238,12 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 #endif
 
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wunused-parameter",
-                                     "-Wzero-as-null-pointer-constant",
-                                     "-Winconsistent-missing-destructor-override",
-                                     "-Wshadow-field-in-constructor",
-                                     "-Wshadow-field",
-                                     "-Wsign-conversion",
-                                     "-Wswitch-enum")
+                                    "-Wzero-as-null-pointer-constant",
+                                    "-Winconsistent-missing-destructor-override",
+                                    "-Wshadow-field-in-constructor",
+                                    "-Wshadow-field",
+                                    "-Wsign-conversion",
+                                    "-Wswitch-enum")
 #include <oboe_library/oboe_library.h>
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 

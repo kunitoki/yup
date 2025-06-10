@@ -235,9 +235,9 @@ void RuntimePermissions::request (PermissionID permission, Callback callback)
     const auto allPermissionsInManifest = std::all_of (requestedPermissions.begin(),
                                                        requestedPermissions.end(),
                                                        [] (const auto& p)
-                                                       {
-                                                           return isPermissionDeclaredInManifest (p);
-                                                       });
+    {
+        return isPermissionDeclaredInManifest (p);
+    });
 
     if (! allPermissionsInManifest)
     {
@@ -290,9 +290,9 @@ bool RuntimePermissions::isGranted (PermissionID permission)
     const auto requestedPermissions = yupPermissionToAndroidPermissions (permission);
 
     return std::all_of (requestedPermissions.begin(), requestedPermissions.end(), [env] (const auto& p)
-                        {
-                            return 0 == env->CallIntMethod (getAppContext().get(), AndroidContext.checkCallingOrSelfPermission, javaString (p).get());
-                        });
+    {
+        return 0 == env->CallIntMethod (getAppContext().get(), AndroidContext.checkCallingOrSelfPermission, javaString (p).get());
+    });
 }
 
 } // namespace yup

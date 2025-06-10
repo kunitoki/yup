@@ -72,10 +72,10 @@ static void logFailure ([[maybe_unused]] HRESULT hr)
                 m = "E_NOINTERFACE";
                 break;
 
-#define YUP_WASAPI_ERR(desc, n) \
-case MAKE_HRESULT (1, 0x889, n): \
-m = #desc;                       \
-break;
+#define YUP_WASAPI_ERR(desc, n)      \
+    case MAKE_HRESULT (1, 0x889, n): \
+        m = #desc;                   \
+        break;
 
                 YUP_WASAPI_ERR (AUDCLNT_E_NOT_INITIALIZED, 0x001)
                 YUP_WASAPI_ERR (AUDCLNT_E_ALREADY_INITIALIZED, 0x002)
@@ -639,7 +639,7 @@ private:
     void createSessionEventCallback()
     {
         deleteSessionEventCallback();
-        client->GetService (__uuidof(IAudioSessionControl),
+        client->GetService (__uuidof (IAudioSessionControl),
                             (void**) audioSessionControl.resetAndGetPointerAddress());
 
         if (audioSessionControl != nullptr)
@@ -664,7 +664,7 @@ private:
         ComSmartPtr<IAudioClient> newClient;
 
         if (device != nullptr)
-            logFailure (device->Activate (__uuidof(IAudioClient), CLSCTX_INPROC_SERVER, nullptr, (void**) newClient.resetAndGetPointerAddress()));
+            logFailure (device->Activate (__uuidof (IAudioClient), CLSCTX_INPROC_SERVER, nullptr, (void**) newClient.resetAndGetPointerAddress()));
 
         return newClient;
     }
@@ -967,7 +967,7 @@ public:
     bool open (double newSampleRate, const BigInteger& newChannels, int bufferSizeSamples)
     {
         return openClient (newSampleRate, newChannels, bufferSizeSamples)
-            && (numChannels == 0 || check (client->GetService (__uuidof(IAudioCaptureClient), (void**) captureClient.resetAndGetPointerAddress())));
+            && (numChannels == 0 || check (client->GetService (__uuidof (IAudioCaptureClient), (void**) captureClient.resetAndGetPointerAddress())));
     }
 
     void close()
@@ -1118,7 +1118,7 @@ public:
     bool open (double newSampleRate, const BigInteger& newChannels, int bufferSizeSamples)
     {
         return openClient (newSampleRate, newChannels, bufferSizeSamples)
-            && (numChannels == 0 || check (client->GetService (__uuidof(IAudioRenderClient), (void**) renderClient.resetAndGetPointerAddress())));
+            && (numChannels == 0 || check (client->GetService (__uuidof (IAudioRenderClient), (void**) renderClient.resetAndGetPointerAddress())));
     }
 
     void close()
@@ -1682,7 +1682,7 @@ private:
     {
         ComSmartPtr<IMMDeviceEnumerator> enumerator;
 
-        if (! check (enumerator.CoCreateInstance (__uuidof(MMDeviceEnumerator))))
+        if (! check (enumerator.CoCreateInstance (__uuidof (MMDeviceEnumerator))))
             return false;
 
         ComSmartPtr<IMMDeviceCollection> deviceCollection;
@@ -1858,9 +1858,9 @@ public:
 
 private:
     DeviceChangeDetector deviceChangeDetector { L"Windows Audio", [this]
-                                                {
-                                                    systemDeviceChanged();
-                                                } };
+    {
+        systemDeviceChanged();
+    } };
     WASAPIDeviceMode deviceMode;
     bool hasScanned = false;
     ComSmartPtr<IMMDeviceEnumerator> enumerator;
@@ -1927,7 +1927,7 @@ private:
     {
         if (enumerator == nullptr)
         {
-            if (! check (enumerator.CoCreateInstance (__uuidof(MMDeviceEnumerator))))
+            if (! check (enumerator.CoCreateInstance (__uuidof (MMDeviceEnumerator))))
                 return {};
 
             notifyClient = becomeComSmartPtrOwner (new ChangeNotificationClient (this));
@@ -2038,12 +2038,12 @@ struct MMDeviceMasterVolume
     {
         ComSmartPtr<IMMDeviceEnumerator> enumerator;
 
-        if (check (enumerator.CoCreateInstance (__uuidof(MMDeviceEnumerator))))
+        if (check (enumerator.CoCreateInstance (__uuidof (MMDeviceEnumerator))))
         {
             ComSmartPtr<IMMDevice> device;
 
             if (check (enumerator->GetDefaultAudioEndpoint (eRender, eConsole, device.resetAndGetPointerAddress())))
-                check (device->Activate (__uuidof(IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr, (void**) endpointVolume.resetAndGetPointerAddress()));
+                check (device->Activate (__uuidof (IAudioEndpointVolume), CLSCTX_INPROC_SERVER, nullptr, (void**) endpointVolume.resetAndGetPointerAddress()));
         }
     }
 

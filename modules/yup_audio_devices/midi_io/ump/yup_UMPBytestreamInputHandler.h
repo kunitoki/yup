@@ -156,9 +156,9 @@ struct BytestreamToUMPHandler : public BytestreamInputHandler
     {
         const auto* ptr = static_cast<const uint8_t*> (data);
         dispatcher.dispatch (ptr, ptr + bytes, time, [&] (const View& v)
-                             {
-                                 recipient.packetReceived (v, time);
-                             });
+        {
+            recipient.packetReceived (v, time);
+        });
     }
 
     Receiver& recipient;

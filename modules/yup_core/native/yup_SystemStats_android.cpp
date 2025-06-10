@@ -60,8 +60,8 @@ DECLARE_JNI_CLASS (JavaLocale, "java/util/Locale")
 static String getSystemProperty (const String& name)
 {
     return yupString (LocalRef<jstring> ((jstring) getEnv()->CallStaticObjectMethod (SystemClass,
-                                                                                      SystemClass.getProperty,
-                                                                                      javaString (name).get())));
+                                                                                     SystemClass.getProperty,
+                                                                                     javaString (name).get())));
 }
 
 static String getAndroidID()

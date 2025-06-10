@@ -291,9 +291,9 @@ void StringArray::sort (bool ignoreCase)
 {
     if (ignoreCase)
         std::sort (strings.begin(), strings.end(), [] (const String& a, const String& b)
-                   {
-                       return a.compareIgnoreCase (b) < 0;
-                   });
+        {
+            return a.compareIgnoreCase (b) < 0;
+        });
     else
         std::sort (strings.begin(), strings.end());
 }
@@ -301,9 +301,9 @@ void StringArray::sort (bool ignoreCase)
 void StringArray::sortNatural()
 {
     std::sort (strings.begin(), strings.end(), [] (const String& a, const String& b)
-               {
-                   return a.compareNatural (b) < 0;
-               });
+    {
+        return a.compareNatural (b) < 0;
+    });
 }
 
 //==============================================================================

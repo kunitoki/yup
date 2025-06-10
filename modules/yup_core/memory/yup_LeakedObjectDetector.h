@@ -148,8 +148,8 @@ private:
 
       @see YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR, LeakedObjectDetector
   */
-#define YUP_LEAK_DETECTOR(OwnerClass)                                             \
-    friend class yup::LeakedObjectDetector<OwnerClass>;                           \
+#define YUP_LEAK_DETECTOR(OwnerClass)                                              \
+    friend class yup::LeakedObjectDetector<OwnerClass>;                            \
     static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
     yup::LeakedObjectDetector<OwnerClass> YUP_JOIN_MACRO (leakDetector, __LINE__);
 #else

@@ -665,10 +665,10 @@ String SystemStats::getDisplayLanguage()
 {
     DynamicLibrary dll ("kernel32.dll");
     YUP_LOAD_WINAPI_FUNCTION (dll,
-                               GetUserPreferredUILanguages,
-                               getUserPreferredUILanguages,
-                               BOOL,
-                               (DWORD, PULONG, PZZWSTR, PULONG))
+                              GetUserPreferredUILanguages,
+                              getUserPreferredUILanguages,
+                              BOOL,
+                              (DWORD, PULONG, PZZWSTR, PULONG))
 
     constexpr auto defaultResult = "en";
 

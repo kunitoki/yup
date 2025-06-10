@@ -42,12 +42,12 @@ namespace yup
 
 namespace FloatVectorHelpers
 {
-#define YUP_INCREMENT_SRC_DEST    \
+#define YUP_INCREMENT_SRC_DEST     \
     dest += (16 / sizeof (*dest)); \
     src += (16 / sizeof (*dest));
 #define YUP_INCREMENT_SRC1_SRC2_DEST \
-    dest += (16 / sizeof (*dest));    \
-    src1 += (16 / sizeof (*dest));    \
+    dest += (16 / sizeof (*dest));   \
+    src1 += (16 / sizeof (*dest));   \
     src2 += (16 / sizeof (*dest));
 #define YUP_INCREMENT_DEST dest += (16 / sizeof (*dest));
 
@@ -175,12 +175,12 @@ struct BasicOps64
     }
 };
 
-#define YUP_BEGIN_VEC_OP                                            \
+#define YUP_BEGIN_VEC_OP                                             \
     using Mode = FloatVectorHelpers::ModeType<sizeof (*dest)>::Mode; \
     {                                                                \
         const auto numLongOps = num / Mode::numParallel;
 
-#define YUP_FINISH_VEC_OP(normalOp)                \
+#define YUP_FINISH_VEC_OP(normalOp)                 \
     num &= (Mode::numParallel - 1);                 \
     if (num == 0)                                   \
         return;                                     \
@@ -188,103 +188,103 @@ struct BasicOps64
     for (auto i = (decltype (num)) 0; i < num; ++i) \
         normalOp;
 
-#define YUP_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                                                                                                                                                                   \
-    YUP_BEGIN_VEC_OP                                                                                                                                                                                                                \
+#define YUP_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                                                                                                                                                                \
+    YUP_BEGIN_VEC_OP                                                                                                                                                                                                             \
     setupOp if (FloatVectorHelpers::isAligned (dest)) YUP_VEC_LOOP (vecOp, dummy, Mode::loadA, Mode::storeA, locals, YUP_INCREMENT_DEST) else YUP_VEC_LOOP (vecOp, dummy, Mode::loadU, Mode::storeU, locals, YUP_INCREMENT_DEST) \
         YUP_FINISH_VEC_OP (normalOp)
 
 #define YUP_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp)            \
     YUP_BEGIN_VEC_OP                                                                        \
-    setupOp if (FloatVectorHelpers::isAligned (dest))                                        \
-    {                                                                                        \
-        if (FloatVectorHelpers::isAligned (src))                                             \
+    setupOp if (FloatVectorHelpers::isAligned (dest))                                       \
+    {                                                                                       \
+        if (FloatVectorHelpers::isAligned (src))                                            \
             YUP_VEC_LOOP (vecOp, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-        else                                                                                 \
+        else                                                                                \
             YUP_VEC_LOOP (vecOp, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-    }                                                                                        \
-    else                                                                                     \
-    {                                                                                        \
-        if (FloatVectorHelpers::isAligned (src))                                             \
+    }                                                                                       \
+    else                                                                                    \
+    {                                                                                       \
+        if (FloatVectorHelpers::isAligned (src))                                            \
             YUP_VEC_LOOP (vecOp, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-        else                                                                                 \
+        else                                                                                \
             YUP_VEC_LOOP (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-    }                                                                                        \
+    }                                                                                       \
     YUP_FINISH_VEC_OP (normalOp)
 
 #define YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp)                      \
     YUP_BEGIN_VEC_OP                                                                                        \
-    setupOp if (FloatVectorHelpers::isAligned (dest))                                                        \
-    {                                                                                                        \
-        if (FloatVectorHelpers::isAligned (src1))                                                            \
-        {                                                                                                    \
-            if (FloatVectorHelpers::isAligned (src2))                                                        \
+    setupOp if (FloatVectorHelpers::isAligned (dest))                                                       \
+    {                                                                                                       \
+        if (FloatVectorHelpers::isAligned (src1))                                                           \
+        {                                                                                                   \
+            if (FloatVectorHelpers::isAligned (src2))                                                       \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-            else                                                                                             \
+            else                                                                                            \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadU, Mode::storeA, locals, increment) \
-        }                                                                                                    \
-        else                                                                                                 \
-        {                                                                                                    \
-            if (FloatVectorHelpers::isAligned (src2))                                                        \
+        }                                                                                                   \
+        else                                                                                                \
+        {                                                                                                   \
+            if (FloatVectorHelpers::isAligned (src2))                                                       \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-            else                                                                                             \
+            else                                                                                            \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeA, locals, increment) \
-        }                                                                                                    \
-    }                                                                                                        \
-    else                                                                                                     \
-    {                                                                                                        \
-        if (FloatVectorHelpers::isAligned (src1))                                                            \
-        {                                                                                                    \
-            if (FloatVectorHelpers::isAligned (src2))                                                        \
+        }                                                                                                   \
+    }                                                                                                       \
+    else                                                                                                    \
+    {                                                                                                       \
+        if (FloatVectorHelpers::isAligned (src1))                                                           \
+        {                                                                                                   \
+            if (FloatVectorHelpers::isAligned (src2))                                                       \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadA, Mode::storeU, locals, increment) \
-            else                                                                                             \
+            else                                                                                            \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-        }                                                                                                    \
-        else                                                                                                 \
-        {                                                                                                    \
-            if (FloatVectorHelpers::isAligned (src2))                                                        \
+        }                                                                                                   \
+        else                                                                                                \
+        {                                                                                                   \
+            if (FloatVectorHelpers::isAligned (src2))                                                       \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadA, Mode::storeU, locals, increment) \
-            else                                                                                             \
+            else                                                                                            \
                 YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-        }                                                                                                    \
-    }                                                                                                        \
+        }                                                                                                   \
+    }                                                                                                       \
     YUP_FINISH_VEC_OP (normalOp)
 
 #define YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp)                                             \
     YUP_BEGIN_VEC_OP                                                                                                                    \
-    setupOp if (FloatVectorHelpers::isAligned (dest))                                                                                    \
-    {                                                                                                                                    \
-        if (FloatVectorHelpers::isAligned (src1))                                                                                        \
-        {                                                                                                                                \
-            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+    setupOp if (FloatVectorHelpers::isAligned (dest))                                                                                   \
+    {                                                                                                                                   \
+        if (FloatVectorHelpers::isAligned (src1))                                                                                       \
+        {                                                                                                                               \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                   \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-            else                                                                                                                         \
+            else                                                                                                                        \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-        }                                                                                                                                \
-        else                                                                                                                             \
-        {                                                                                                                                \
-            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+        }                                                                                                                               \
+        else                                                                                                                            \
+        {                                                                                                                               \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                   \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadA, Mode::loadA, Mode::storeA, locals, increment) \
-            else                                                                                                                         \
+            else                                                                                                                        \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadA, Mode::storeA, locals, increment) \
-        }                                                                                                                                \
-    }                                                                                                                                    \
-    else                                                                                                                                 \
-    {                                                                                                                                    \
-        if (FloatVectorHelpers::isAligned (src1))                                                                                        \
-        {                                                                                                                                \
-            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+        }                                                                                                                               \
+    }                                                                                                                                   \
+    else                                                                                                                                \
+    {                                                                                                                                   \
+        if (FloatVectorHelpers::isAligned (src1))                                                                                       \
+        {                                                                                                                               \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                   \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-            else                                                                                                                         \
+            else                                                                                                                        \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadA, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-        }                                                                                                                                \
-        else                                                                                                                             \
-        {                                                                                                                                \
-            if (FloatVectorHelpers::isAligned (src2))                                                                                    \
+        }                                                                                                                               \
+        else                                                                                                                            \
+        {                                                                                                                               \
+            if (FloatVectorHelpers::isAligned (src2))                                                                                   \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadA, Mode::loadU, Mode::storeU, locals, increment) \
-            else                                                                                                                         \
+            else                                                                                                                        \
                 YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
-        }                                                                                                                                \
-    }                                                                                                                                    \
+        }                                                                                                                               \
+    }                                                                                                                                   \
     YUP_FINISH_VEC_OP (normalOp)
 
 //==============================================================================
@@ -428,13 +428,13 @@ struct BasicOps64
     static forcedinline Type min (ParallelType a) noexcept { return a; }
 };
 
-#define YUP_BEGIN_VEC_OP                                            \
+#define YUP_BEGIN_VEC_OP                                             \
     using Mode = FloatVectorHelpers::ModeType<sizeof (*dest)>::Mode; \
     if (Mode::numParallel > 1)                                       \
     {                                                                \
         const auto numLongOps = num / Mode::numParallel;
 
-#define YUP_FINISH_VEC_OP(normalOp)                \
+#define YUP_FINISH_VEC_OP(normalOp)                 \
     num &= (Mode::numParallel - 1);                 \
     if (num == 0)                                   \
         return;                                     \
@@ -442,73 +442,73 @@ struct BasicOps64
     for (auto i = (decltype (num)) 0; i < num; ++i) \
         normalOp;
 
-#define YUP_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                           \
-    YUP_BEGIN_VEC_OP                                                                        \
-    setupOp                                                                                  \
+#define YUP_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp)                          \
+    YUP_BEGIN_VEC_OP                                                                       \
+    setupOp                                                                                \
         YUP_VEC_LOOP (vecOp, dummy, Mode::loadU, Mode::storeU, locals, YUP_INCREMENT_DEST) \
             YUP_FINISH_VEC_OP (normalOp)
 
 #define YUP_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp)        \
     YUP_BEGIN_VEC_OP                                                                    \
-    setupOp                                                                              \
+    setupOp                                                                             \
         YUP_VEC_LOOP (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
             YUP_FINISH_VEC_OP (normalOp)
 
 #define YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp)              \
     YUP_BEGIN_VEC_OP                                                                                \
-    setupOp                                                                                          \
+    setupOp                                                                                         \
         YUP_VEC_LOOP_TWO_SOURCES (vecOp, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
             YUP_FINISH_VEC_OP (normalOp)
 
 #define YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp)                                     \
     YUP_BEGIN_VEC_OP                                                                                                            \
-    setupOp                                                                                                                      \
+    setupOp                                                                                                                     \
         YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD (vecOp, Mode::loadU, Mode::loadU, Mode::loadU, Mode::storeU, locals, increment) \
             YUP_FINISH_VEC_OP (normalOp)
 
 //==============================================================================
 #else
 #define YUP_PERFORM_VEC_OP_DEST(normalOp, vecOp, locals, setupOp) \
-    for (auto i = (decltype (num)) 0; i < num; ++i)                \
+    for (auto i = (decltype (num)) 0; i < num; ++i)               \
         normalOp;
 
 #define YUP_PERFORM_VEC_OP_SRC_DEST(normalOp, vecOp, locals, increment, setupOp) \
-    for (auto i = (decltype (num)) 0; i < num; ++i)                               \
+    for (auto i = (decltype (num)) 0; i < num; ++i)                              \
         normalOp;
 
 #define YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST(normalOp, vecOp, locals, increment, setupOp) \
-    for (auto i = (decltype (num)) 0; i < num; ++i)                                     \
+    for (auto i = (decltype (num)) 0; i < num; ++i)                                    \
         normalOp;
 
 #define YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST(normalOp, vecOp, locals, increment, setupOp) \
-    for (auto i = (decltype (num)) 0; i < num; ++i)                                          \
+    for (auto i = (decltype (num)) 0; i < num; ++i)                                         \
         normalOp;
 
 #endif
 
 //==============================================================================
 #define YUP_VEC_LOOP(vecOp, srcLoad, dstLoad, dstStore, locals, increment) \
-    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)           \
-    {                                                                       \
-        locals (srcLoad, dstLoad);                                          \
-        dstStore (dest, vecOp);                                             \
-        increment;                                                          \
+    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)          \
+    {                                                                      \
+        locals (srcLoad, dstLoad);                                         \
+        dstStore (dest, vecOp);                                            \
+        increment;                                                         \
     }
 
 #define YUP_VEC_LOOP_TWO_SOURCES(vecOp, src1Load, src2Load, dstStore, locals, increment) \
-    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                         \
-    {                                                                                     \
-        locals (src1Load, src2Load);                                                      \
-        dstStore (dest, vecOp);                                                           \
-        increment;                                                                        \
+    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                        \
+    {                                                                                    \
+        locals (src1Load, src2Load);                                                     \
+        dstStore (dest, vecOp);                                                          \
+        increment;                                                                       \
     }
 
 #define YUP_VEC_LOOP_TWO_SOURCES_WITH_DEST_LOAD(vecOp, src1Load, src2Load, dstLoad, dstStore, locals, increment) \
-    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                                                 \
-    {                                                                                                             \
-        locals (src1Load, src2Load, dstLoad);                                                                     \
-        dstStore (dest, vecOp);                                                                                   \
-        increment;                                                                                                \
+    for (auto i = (decltype (numLongOps)) 0; i < numLongOps; ++i)                                                \
+    {                                                                                                            \
+        locals (src1Load, src2Load, dstLoad);                                                                    \
+        dstStore (dest, vecOp);                                                                                  \
+        increment;                                                                                               \
     }
 
 #define YUP_LOAD_NONE(srcLoad, dstLoad)
@@ -708,9 +708,9 @@ void fill (float* dest, float valueToFill, Size num) noexcept
     vDSP_vfill (&valueToFill, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_DEST (dest[i] = valueToFill,
-                              val,
-                              YUP_LOAD_NONE,
-                              const Mode::ParallelType val = Mode::load1 (valueToFill);)
+                             val,
+                             YUP_LOAD_NONE,
+                             const Mode::ParallelType val = Mode::load1 (valueToFill);)
 #endif
 }
 
@@ -721,9 +721,9 @@ void fill (double* dest, double valueToFill, Size num) noexcept
     vDSP_vfillD (&valueToFill, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_DEST (dest[i] = valueToFill,
-                              val,
-                              YUP_LOAD_NONE,
-                              const Mode::ParallelType val = Mode::load1 (valueToFill);)
+                             val,
+                             YUP_LOAD_NONE,
+                             const Mode::ParallelType val = Mode::load1 (valueToFill);)
 #endif
 }
 
@@ -734,10 +734,10 @@ void copyWithMultiply (float* dest, const float* src, float multiplier, Size num
     vDSP_vsmul (src, 1, &multiplier, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] * multiplier,
-                                  Mode::mul (mult, s),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::mul (mult, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -748,10 +748,10 @@ void copyWithMultiply (double* dest, const double* src, double multiplier, Size 
     vDSP_vsmulD (src, 1, &multiplier, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] * multiplier,
-                                  Mode::mul (mult, s),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::mul (mult, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -762,9 +762,9 @@ void add (float* dest, float amount, Size num) noexcept
     vDSP_vsadd (dest, 1, &amount, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_DEST (dest[i] += amount,
-                              Mode::add (d, amountToAdd),
-                              YUP_LOAD_DEST,
-                              const Mode::ParallelType amountToAdd = Mode::load1 (amount);)
+                             Mode::add (d, amountToAdd),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType amountToAdd = Mode::load1 (amount);)
 #endif
 }
 
@@ -772,9 +772,9 @@ template <typename Size>
 void add (double* dest, double amount, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_DEST (dest[i] += amount,
-                              Mode::add (d, amountToAdd),
-                              YUP_LOAD_DEST,
-                              const Mode::ParallelType amountToAdd = Mode::load1 (amount);)
+                             Mode::add (d, amountToAdd),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType amountToAdd = Mode::load1 (amount);)
 }
 
 template <typename Size>
@@ -784,10 +784,10 @@ void add (float* dest, const float* src, float amount, Size num) noexcept
     vDSP_vsadd (src, 1, &amount, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] + amount,
-                                  Mode::add (am, s),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType am = Mode::load1 (amount);)
+                                 Mode::add (am, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType am = Mode::load1 (amount);)
 #endif
 }
 
@@ -798,10 +798,10 @@ void add (double* dest, const double* src, double amount, Size num) noexcept
     vDSP_vsaddD (src, 1, &amount, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] + amount,
-                                  Mode::add (am, s),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType am = Mode::load1 (amount);)
+                                 Mode::add (am, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType am = Mode::load1 (amount);)
 #endif
 }
 
@@ -812,9 +812,9 @@ void add (float* dest, const float* src, Size num) noexcept
     vDSP_vadd (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] += src[i],
-                                  Mode::add (d, s),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 Mode::add (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -825,9 +825,9 @@ void add (double* dest, const double* src, Size num) noexcept
     vDSP_vaddD (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] += src[i],
-                                  Mode::add (d, s),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 Mode::add (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -838,9 +838,9 @@ void add (float* dest, const float* src1, const float* src2, Size num) noexcept
     vDSP_vadd (src1, 1, src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] + src2[i],
-                                        Mode::add (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::add (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -851,9 +851,9 @@ void add (double* dest, const double* src1, const double* src2, Size num) noexce
     vDSP_vaddD (src1, 1, src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] + src2[i],
-                                        Mode::add (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::add (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -864,9 +864,9 @@ void subtract (float* dest, const float* src, Size num) noexcept
     vDSP_vsub (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] -= src[i],
-                                  Mode::sub (d, s),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 Mode::sub (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -877,9 +877,9 @@ void subtract (double* dest, const double* src, Size num) noexcept
     vDSP_vsubD (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] -= src[i],
-                                  Mode::sub (d, s),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 Mode::sub (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -890,9 +890,9 @@ void subtract (float* dest, const float* src1, const float* src2, Size num) noex
     vDSP_vsub (src2, 1, src1, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] - src2[i],
-                                        Mode::sub (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::sub (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -903,9 +903,9 @@ void subtract (double* dest, const double* src1, const double* src2, Size num) n
     vDSP_vsubD (src2, 1, src1, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] - src2[i],
-                                        Mode::sub (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::sub (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -916,10 +916,10 @@ void addWithMultiply (float* dest, const float* src, float multiplier, Size num)
     vDSP_vsma (src, 1, &multiplier, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] += src[i] * multiplier,
-                                  Mode::add (d, Mode::mul (mult, s)),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::add (d, Mode::mul (mult, s)),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -930,10 +930,10 @@ void addWithMultiply (double* dest, const double* src, double multiplier, Size n
     vDSP_vsmaD (src, 1, &multiplier, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] += src[i] * multiplier,
-                                  Mode::add (d, Mode::mul (mult, s)),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::add (d, Mode::mul (mult, s)),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -944,9 +944,9 @@ void addWithMultiply (float* dest, const float* src1, const float* src2, Size nu
     vDSP_vma ((float*) src1, 1, (float*) src2, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST (dest[i] += src1[i] * src2[i],
-                                             Mode::add (d, Mode::mul (s1, s2)),
-                                             YUP_LOAD_SRC1_SRC2_DEST,
-                                             YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                            Mode::add (d, Mode::mul (s1, s2)),
+                                            YUP_LOAD_SRC1_SRC2_DEST,
+                                            YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -957,9 +957,9 @@ void addWithMultiply (double* dest, const double* src1, const double* src2, Size
     vDSP_vmaD ((double*) src1, 1, (double*) src2, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST (dest[i] += src1[i] * src2[i],
-                                             Mode::add (d, Mode::mul (s1, s2)),
-                                             YUP_LOAD_SRC1_SRC2_DEST,
-                                             YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                            Mode::add (d, Mode::mul (s1, s2)),
+                                            YUP_LOAD_SRC1_SRC2_DEST,
+                                            YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -967,38 +967,38 @@ template <typename Size>
 void subtractWithMultiply (float* dest, const float* src, float multiplier, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] -= src[i] * multiplier,
-                                  Mode::sub (d, Mode::mul (mult, s)),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::sub (d, Mode::mul (mult, s)),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 }
 
 template <typename Size>
 void subtractWithMultiply (double* dest, const double* src, double multiplier, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] -= src[i] * multiplier,
-                                  Mode::sub (d, Mode::mul (mult, s)),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::sub (d, Mode::mul (mult, s)),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 }
 
 template <typename Size>
 void subtractWithMultiply (float* dest, const float* src1, const float* src2, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST (dest[i] -= src1[i] * src2[i],
-                                             Mode::sub (d, Mode::mul (s1, s2)),
-                                             YUP_LOAD_SRC1_SRC2_DEST,
-                                             YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                            Mode::sub (d, Mode::mul (s1, s2)),
+                                            YUP_LOAD_SRC1_SRC2_DEST,
+                                            YUP_INCREMENT_SRC1_SRC2_DEST, )
 }
 
 template <typename Size>
 void subtractWithMultiply (double* dest, const double* src1, const double* src2, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST_DEST (dest[i] -= src1[i] * src2[i],
-                                             Mode::sub (d, Mode::mul (s1, s2)),
-                                             YUP_LOAD_SRC1_SRC2_DEST,
-                                             YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                            Mode::sub (d, Mode::mul (s1, s2)),
+                                            YUP_LOAD_SRC1_SRC2_DEST,
+                                            YUP_INCREMENT_SRC1_SRC2_DEST, )
 }
 
 template <typename Size>
@@ -1008,9 +1008,9 @@ void multiply (float* dest, const float* src, Size num) noexcept
     vDSP_vmul (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] *= src[i],
-                                  Mode::mul (d, s),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 Mode::mul (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -1021,9 +1021,9 @@ void multiply (double* dest, const double* src, Size num) noexcept
     vDSP_vmulD (src, 1, dest, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] *= src[i],
-                                  Mode::mul (d, s),
-                                  YUP_LOAD_SRC_DEST,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 Mode::mul (d, s),
+                                 YUP_LOAD_SRC_DEST,
+                                 YUP_INCREMENT_SRC_DEST, )
 #endif
 }
 
@@ -1034,9 +1034,9 @@ void multiply (float* dest, const float* src1, const float* src2, Size num) noex
     vDSP_vmul (src1, 1, src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] * src2[i],
-                                        Mode::mul (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::mul (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1047,9 +1047,9 @@ void multiply (double* dest, const double* src1, const double* src2, Size num) n
     vDSP_vmulD (src1, 1, src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = src1[i] * src2[i],
-                                        Mode::mul (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::mul (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1060,9 +1060,9 @@ void multiply (float* dest, float multiplier, Size num) noexcept
     vDSP_vsmul (dest, 1, &multiplier, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_DEST (dest[i] *= multiplier,
-                              Mode::mul (d, mult),
-                              YUP_LOAD_DEST,
-                              const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                             Mode::mul (d, mult),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -1073,9 +1073,9 @@ void multiply (double* dest, double multiplier, Size num) noexcept
     vDSP_vsmulD (dest, 1, &multiplier, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_DEST (dest[i] *= multiplier,
-                              Mode::mul (d, mult),
-                              YUP_LOAD_DEST,
-                              const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                             Mode::mul (d, mult),
+                             YUP_LOAD_DEST,
+                             const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -1083,20 +1083,20 @@ template <typename Size>
 void multiply (float* dest, const float* src, float multiplier, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] * multiplier,
-                                  Mode::mul (mult, s),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::mul (mult, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 }
 
 template <typename Size>
 void multiply (double* dest, const double* src, double multiplier, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = src[i] * multiplier,
-                                  Mode::mul (mult, s),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::mul (mult, s),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 }
 
 template <typename Size>
@@ -1128,10 +1128,10 @@ void abs (float* dest, const float* src, Size num) noexcept
     [[maybe_unused]] FloatVectorHelpers::signMask32 signMask;
     signMask.i = 0x7fffffffUL;
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = std::abs (src[i]),
-                                  Mode::bit_and (s, mask),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mask = Mode::load1 (signMask.f);)
+                                 Mode::bit_and (s, mask),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mask = Mode::load1 (signMask.f);)
 #endif
 }
 
@@ -1145,10 +1145,10 @@ void abs (double* dest, const double* src, Size num) noexcept
     signMask.i = 0x7fffffffffffffffULL;
 
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = std::abs (src[i]),
-                                  Mode::bit_and (s, mask),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mask = Mode::load1 (signMask.d);)
+                                 Mode::bit_and (s, mask),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mask = Mode::load1 (signMask.d);)
 #endif
 }
 
@@ -1156,20 +1156,20 @@ template <typename Size>
 void min (float* dest, const float* src, float comp, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = jmin (src[i], comp),
-                                  Mode::min (s, cmp),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType cmp = Mode::load1 (comp);)
+                                 Mode::min (s, cmp),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType cmp = Mode::load1 (comp);)
 }
 
 template <typename Size>
 void min (double* dest, const double* src, double comp, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = jmin (src[i], comp),
-                                  Mode::min (s, cmp),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType cmp = Mode::load1 (comp);)
+                                 Mode::min (s, cmp),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType cmp = Mode::load1 (comp);)
 }
 
 template <typename Size>
@@ -1179,9 +1179,9 @@ void min (float* dest, const float* src1, const float* src2, Size num) noexcept
     vDSP_vmin ((float*) src1, 1, (float*) src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = jmin (src1[i], src2[i]),
-                                        Mode::min (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::min (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1192,9 +1192,9 @@ void min (double* dest, const double* src1, const double* src2, Size num) noexce
     vDSP_vminD ((double*) src1, 1, (double*) src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = jmin (src1[i], src2[i]),
-                                        Mode::min (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::min (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1202,20 +1202,20 @@ template <typename Size>
 void max (float* dest, const float* src, float comp, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = jmax (src[i], comp),
-                                  Mode::max (s, cmp),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType cmp = Mode::load1 (comp);)
+                                 Mode::max (s, cmp),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType cmp = Mode::load1 (comp);)
 }
 
 template <typename Size>
 void max (double* dest, const double* src, double comp, Size num) noexcept
 {
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = jmax (src[i], comp),
-                                  Mode::max (s, cmp),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType cmp = Mode::load1 (comp);)
+                                 Mode::max (s, cmp),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType cmp = Mode::load1 (comp);)
 }
 
 template <typename Size>
@@ -1225,9 +1225,9 @@ void max (float* dest, const float* src1, const float* src2, Size num) noexcept
     vDSP_vmax ((float*) src1, 1, (float*) src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = jmax (src1[i], src2[i]),
-                                        Mode::max (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::max (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1238,9 +1238,9 @@ void max (double* dest, const double* src1, const double* src2, Size num) noexce
     vDSP_vmaxD ((double*) src1, 1, (double*) src2, 1, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC1_SRC2_DEST (dest[i] = jmax (src1[i], src2[i]),
-                                        Mode::max (s1, s2),
-                                        YUP_LOAD_SRC1_SRC2,
-                                        YUP_INCREMENT_SRC1_SRC2_DEST, )
+                                       Mode::max (s1, s2),
+                                       YUP_LOAD_SRC1_SRC2,
+                                       YUP_INCREMENT_SRC1_SRC2_DEST, )
 #endif
 }
 
@@ -1253,11 +1253,11 @@ void clip (float* dest, const float* src, float low, float high, Size num) noexc
     vDSP_vclip ((float*) src, 1, &low, &high, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = jmax (jmin (src[i], high), low),
-                                  Mode::max (Mode::min (s, hi), lo),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType lo = Mode::load1 (low);
-                                  const Mode::ParallelType hi = Mode::load1 (high);)
+                                 Mode::max (Mode::min (s, hi), lo),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType lo = Mode::load1 (low);
+                                 const Mode::ParallelType hi = Mode::load1 (high);)
 #endif
 }
 
@@ -1270,11 +1270,11 @@ void clip (double* dest, const double* src, double low, double high, Size num) n
     vDSP_vclipD ((double*) src, 1, &low, &high, dest, 1, (vDSP_Length) num);
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = jmax (jmin (src[i], high), low),
-                                  Mode::max (Mode::min (s, hi), lo),
-                                  YUP_LOAD_SRC,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType lo = Mode::load1 (low);
-                                  const Mode::ParallelType hi = Mode::load1 (high);)
+                                 Mode::max (Mode::min (s, hi), lo),
+                                 YUP_LOAD_SRC,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType lo = Mode::load1 (low);
+                                 const Mode::ParallelType hi = Mode::load1 (high);)
 #endif
 }
 
@@ -1343,15 +1343,15 @@ void convertFixedToFloat (float* dest, const int* src, float multiplier, Size nu
 {
 #if YUP_USE_ARM_NEON
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
-                                  vmulq_n_f32 (vcvtq_f32_s32 (vld1q_s32 (src)), multiplier),
-                                  YUP_LOAD_NONE,
-                                  YUP_INCREMENT_SRC_DEST, )
+                                 vmulq_n_f32 (vcvtq_f32_s32 (vld1q_s32 (src)), multiplier),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST, )
 #else
     YUP_PERFORM_VEC_OP_SRC_DEST (dest[i] = (float) src[i] * multiplier,
-                                  Mode::mul (mult, _mm_cvtepi32_ps (_mm_loadu_si128 (reinterpret_cast<const __m128i*> (src)))),
-                                  YUP_LOAD_NONE,
-                                  YUP_INCREMENT_SRC_DEST,
-                                  const Mode::ParallelType mult = Mode::load1 (multiplier);)
+                                 Mode::mul (mult, _mm_cvtepi32_ps (_mm_loadu_si128 (reinterpret_cast<const __m128i*> (src)))),
+                                 YUP_LOAD_NONE,
+                                 YUP_INCREMENT_SRC_DEST,
+                                 const Mode::ParallelType mult = Mode::load1 (multiplier);)
 #endif
 }
 
@@ -1361,236 +1361,236 @@ void convertFixedToFloat (float* dest, const int* src, float multiplier, Size nu
 //==============================================================================
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::clear (FloatType* dest,
-                                                                           CountType numValues) noexcept
+                                                                          CountType numValues) noexcept
 {
     FloatVectorHelpers::clear (dest, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::fill (FloatType* dest,
-                                                                          FloatType valueToFill,
-                                                                          CountType numValues) noexcept
+                                                                         FloatType valueToFill,
+                                                                         CountType numValues) noexcept
 {
     FloatVectorHelpers::fill (dest, valueToFill, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copy (FloatType* dest,
-                                                                          const FloatType* src,
-                                                                          CountType numValues) noexcept
+                                                                         const FloatType* src,
+                                                                         CountType numValues) noexcept
 {
     memcpy (dest, src, (size_t) numValues * sizeof (FloatType));
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::copyWithMultiply (FloatType* dest,
-                                                                                      const FloatType* src,
-                                                                                      FloatType multiplier,
-                                                                                      CountType numValues) noexcept
+                                                                                     const FloatType* src,
+                                                                                     FloatType multiplier,
+                                                                                     CountType numValues) noexcept
 {
     FloatVectorHelpers::copyWithMultiply (dest, src, multiplier, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatType* dest,
-                                                                         FloatType amountToAdd,
-                                                                         CountType numValues) noexcept
+                                                                        FloatType amountToAdd,
+                                                                        CountType numValues) noexcept
 {
     FloatVectorHelpers::add (dest, amountToAdd, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatType* dest,
-                                                                         const FloatType* src,
-                                                                         FloatType amount,
-                                                                         CountType numValues) noexcept
+                                                                        const FloatType* src,
+                                                                        FloatType amount,
+                                                                        CountType numValues) noexcept
 {
     FloatVectorHelpers::add (dest, src, amount, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatType* dest,
-                                                                         const FloatType* src,
-                                                                         CountType numValues) noexcept
+                                                                        const FloatType* src,
+                                                                        CountType numValues) noexcept
 {
     FloatVectorHelpers::add (dest, src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::add (FloatType* dest,
-                                                                         const FloatType* src1,
-                                                                         const FloatType* src2,
-                                                                         CountType num) noexcept
+                                                                        const FloatType* src1,
+                                                                        const FloatType* src2,
+                                                                        CountType num) noexcept
 {
     FloatVectorHelpers::add (dest, src1, src2, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtract (FloatType* dest,
-                                                                              const FloatType* src,
-                                                                              CountType numValues) noexcept
+                                                                             const FloatType* src,
+                                                                             CountType numValues) noexcept
 {
     FloatVectorHelpers::subtract (dest, src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtract (FloatType* dest,
-                                                                              const FloatType* src1,
-                                                                              const FloatType* src2,
-                                                                              CountType num) noexcept
+                                                                             const FloatType* src1,
+                                                                             const FloatType* src2,
+                                                                             CountType num) noexcept
 {
     FloatVectorHelpers::subtract (dest, src1, src2, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::addWithMultiply (FloatType* dest,
-                                                                                     const FloatType* src,
-                                                                                     FloatType multiplier,
-                                                                                     CountType numValues) noexcept
+                                                                                    const FloatType* src,
+                                                                                    FloatType multiplier,
+                                                                                    CountType numValues) noexcept
 {
     FloatVectorHelpers::addWithMultiply (dest, src, multiplier, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::addWithMultiply (FloatType* dest,
-                                                                                     const FloatType* src1,
-                                                                                     const FloatType* src2,
-                                                                                     CountType num) noexcept
+                                                                                    const FloatType* src1,
+                                                                                    const FloatType* src2,
+                                                                                    CountType num) noexcept
 {
     FloatVectorHelpers::addWithMultiply (dest, src1, src2, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtractWithMultiply (FloatType* dest,
-                                                                                          const FloatType* src,
-                                                                                          FloatType multiplier,
-                                                                                          CountType numValues) noexcept
+                                                                                         const FloatType* src,
+                                                                                         FloatType multiplier,
+                                                                                         CountType numValues) noexcept
 {
     FloatVectorHelpers::subtractWithMultiply (dest, src, multiplier, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::subtractWithMultiply (FloatType* dest,
-                                                                                          const FloatType* src1,
-                                                                                          const FloatType* src2,
-                                                                                          CountType num) noexcept
+                                                                                         const FloatType* src1,
+                                                                                         const FloatType* src2,
+                                                                                         CountType num) noexcept
 {
     FloatVectorHelpers::subtractWithMultiply (dest, src1, src2, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (FloatType* dest,
-                                                                              const FloatType* src,
-                                                                              CountType numValues) noexcept
+                                                                             const FloatType* src,
+                                                                             CountType numValues) noexcept
 {
     FloatVectorHelpers::multiply (dest, src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (FloatType* dest,
-                                                                              const FloatType* src1,
-                                                                              const FloatType* src2,
-                                                                              CountType numValues) noexcept
+                                                                             const FloatType* src1,
+                                                                             const FloatType* src2,
+                                                                             CountType numValues) noexcept
 {
     FloatVectorHelpers::multiply (dest, src1, src2, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (FloatType* dest,
-                                                                              FloatType multiplier,
-                                                                              CountType numValues) noexcept
+                                                                             FloatType multiplier,
+                                                                             CountType numValues) noexcept
 {
     FloatVectorHelpers::multiply (dest, multiplier, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::multiply (FloatType* dest,
-                                                                              const FloatType* src,
-                                                                              FloatType multiplier,
-                                                                              CountType num) noexcept
+                                                                             const FloatType* src,
+                                                                             FloatType multiplier,
+                                                                             CountType num) noexcept
 {
     FloatVectorHelpers::multiply (dest, src, multiplier, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::negate (FloatType* dest,
-                                                                            const FloatType* src,
-                                                                            CountType numValues) noexcept
+                                                                           const FloatType* src,
+                                                                           CountType numValues) noexcept
 {
     FloatVectorHelpers::negate (dest, src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::abs (FloatType* dest,
-                                                                         const FloatType* src,
-                                                                         CountType numValues) noexcept
+                                                                        const FloatType* src,
+                                                                        CountType numValues) noexcept
 {
     FloatVectorHelpers::abs (dest, src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::min (FloatType* dest,
-                                                                         const FloatType* src,
-                                                                         FloatType comp,
-                                                                         CountType num) noexcept
+                                                                        const FloatType* src,
+                                                                        FloatType comp,
+                                                                        CountType num) noexcept
 {
     FloatVectorHelpers::min (dest, src, comp, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::min (FloatType* dest,
-                                                                         const FloatType* src1,
-                                                                         const FloatType* src2,
-                                                                         CountType num) noexcept
+                                                                        const FloatType* src1,
+                                                                        const FloatType* src2,
+                                                                        CountType num) noexcept
 {
     FloatVectorHelpers::min (dest, src1, src2, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::max (FloatType* dest,
-                                                                         const FloatType* src,
-                                                                         FloatType comp,
-                                                                         CountType num) noexcept
+                                                                        const FloatType* src,
+                                                                        FloatType comp,
+                                                                        CountType num) noexcept
 {
     FloatVectorHelpers::max (dest, src, comp, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::max (FloatType* dest,
-                                                                         const FloatType* src1,
-                                                                         const FloatType* src2,
-                                                                         CountType num) noexcept
+                                                                        const FloatType* src1,
+                                                                        const FloatType* src2,
+                                                                        CountType num) noexcept
 {
     FloatVectorHelpers::max (dest, src1, src2, num);
 }
 
 template <typename FloatType, typename CountType>
 void YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::clip (FloatType* dest,
-                                                                          const FloatType* src,
-                                                                          FloatType low,
-                                                                          FloatType high,
-                                                                          CountType num) noexcept
+                                                                         const FloatType* src,
+                                                                         FloatType low,
+                                                                         FloatType high,
+                                                                         CountType num) noexcept
 {
     FloatVectorHelpers::clip (dest, src, low, high, num);
 }
 
 template <typename FloatType, typename CountType>
 Range<FloatType> YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMinAndMax (const FloatType* src,
-                                                                                               CountType numValues) noexcept
+                                                                                              CountType numValues) noexcept
 {
     return FloatVectorHelpers::findMinAndMax (src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMinimum (const FloatType* src,
-                                                                                      CountType numValues) noexcept
+                                                                                     CountType numValues) noexcept
 {
     return FloatVectorHelpers::findMinimum (src, numValues);
 }
 
 template <typename FloatType, typename CountType>
 FloatType YUP_CALLTYPE FloatVectorOperationsBase<FloatType, CountType>::findMaximum (const FloatType* src,
-                                                                                      CountType numValues) noexcept
+                                                                                     CountType numValues) noexcept
 {
     return FloatVectorHelpers::findMaximum (src, numValues);
 }

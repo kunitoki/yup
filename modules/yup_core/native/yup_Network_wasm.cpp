@@ -28,9 +28,9 @@ void MACAddress::findAllAddresses (Array<MACAddress>& result)
 }
 
 bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmailAddress */,
-                                                      const String& /* emailSubject */,
-                                                      const String& /* bodyText */,
-                                                      const StringArray& /* filesToAttach */)
+                                                     const String& /* emailSubject */,
+                                                     const String& /* bodyText */,
+                                                     const StringArray& /* filesToAttach */)
 {
     jassertfalse; // xxx todo
     return false;
@@ -109,7 +109,7 @@ public:
         if (hasBodyDataToSend)
         {
             WebInputStream::createHeadersAndPostData (url, headers, postData, addParametersToRequestBody);
-            fetchAttr.requestData = (const char*)postData.getData();
+            fetchAttr.requestData = (const char*) postData.getData();
             fetchAttr.requestDataSize = postData.getSize();
         }
 
@@ -214,7 +214,7 @@ private:
         self->finished = true;
 
         // Parse response headers
-        if (auto headersSize = emscripten_fetch_get_response_headers_length(fetch); headersSize > 0)
+        if (auto headersSize = emscripten_fetch_get_response_headers_length (fetch); headersSize > 0)
         {
             std::vector<char> headersBuffer (headersSize + 1);
             emscripten_fetch_get_response_headers (fetch, headersBuffer.data(), headersBuffer.size());

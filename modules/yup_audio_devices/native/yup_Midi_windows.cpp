@@ -772,7 +772,7 @@ Array<Win32MidiService::MidiInCollector*, CriticalSection> Win32MidiService::Mid
 #define YUP_WINRT_MIDI_LOG(x) YUP_DBG (x)
 #else
 #define YUP_WINRT_MIDI_LOG(x) \
-    {                          \
+    {                         \
     }
 #endif
 
@@ -1163,7 +1163,7 @@ private:
                         info.isConnected = getBoolFromInspectable (*connectedValue);
 
                     YUP_WINRT_MIDI_LOG ("Adding BLE device: " << deviceID << " " << info.containerID
-                                                               << " " << (info.isConnected ? "connected" : "disconnected"));
+                                                              << " " << (info.isConnected ? "connected" : "disconnected"));
                     devices.set (deviceID, info);
 
                     return S_OK;
@@ -1629,7 +1629,7 @@ private:
             if (containerID == deviceInfo.containerID)
             {
                 YUP_WINRT_MIDI_LOG ("Disconnecting MIDI port from BLE disconnection: " << deviceInfo.deviceID
-                                                                                        << " " << deviceInfo.containerID << " " << deviceInfo.name);
+                                                                                       << " " << deviceInfo.containerID << " " << deviceInfo.name);
                 disconnect();
             }
         }

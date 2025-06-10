@@ -48,36 +48,36 @@ static const uint8 javaYupHttpStream[] = { 31, 139, 8, 8, 71, 116, 161, 94, 0, 3
 // clang-format on
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (constructor, "<init>", "()V")                                         \
-METHOD (toString, "toString", "()Ljava/lang/String;")
+    METHOD (constructor, "<init>", "()V")                                     \
+    METHOD (toString, "toString", "()Ljava/lang/String;")
 
 DECLARE_JNI_CLASS (StringBuffer, "java/lang/StringBuffer")
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                                \
-STATICMETHOD (createHTTPStream, "createHTTPStream", "(Ljava/lang/String;Z[BLjava/lang/String;I[ILjava/lang/StringBuffer;ILjava/lang/String;)Lcom/kunitoki/yup/YupHTTPStream;") \
-METHOD (connect, "connect", "()Z")                                                                                                                                           \
-METHOD (release, "release", "()V")                                                                                                                                           \
-METHOD (read, "read", "([BI)I")                                                                                                                                              \
-METHOD (getPosition, "getPosition", "()J")                                                                                                                                   \
-METHOD (getTotalLength, "getTotalLength", "()J")                                                                                                                             \
-METHOD (isExhausted, "isExhausted", "()Z")                                                                                                                                   \
-METHOD (setPosition, "setPosition", "(J)Z")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                                      \
+    STATICMETHOD (createHTTPStream, "createHTTPStream", "(Ljava/lang/String;Z[BLjava/lang/String;I[ILjava/lang/StringBuffer;ILjava/lang/String;)Lcom/kunitoki/yup/YupHTTPStream;") \
+    METHOD (connect, "connect", "()Z")                                                                                                                                             \
+    METHOD (release, "release", "()V")                                                                                                                                             \
+    METHOD (read, "read", "([BI)I")                                                                                                                                                \
+    METHOD (getPosition, "getPosition", "()J")                                                                                                                                     \
+    METHOD (getTotalLength, "getTotalLength", "()J")                                                                                                                               \
+    METHOD (isExhausted, "isExhausted", "()Z")                                                                                                                                     \
+    METHOD (setPosition, "setPosition", "(J)Z")
 
 DECLARE_JNI_CLASS_WITH_BYTECODE (HTTPStream, "com/kunitoki/yup/YupHTTPStream", 16, javaYupHttpStream)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (acquire, "acquire", "()V")                                            \
-METHOD (release, "release", "()V")
+    METHOD (acquire, "acquire", "()V")                                        \
+    METHOD (release, "release", "()V")
 
 DECLARE_JNI_CLASS (AndroidMulticastLock, "android/net/wifi/WifiManager$MulticastLock")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (createMulticastLock, "createMulticastLock", "(Ljava/lang/String;)Landroid/net/wifi/WifiManager$MulticastLock;")
+    METHOD (createMulticastLock, "createMulticastLock", "(Ljava/lang/String;)Landroid/net/wifi/WifiManager$MulticastLock;")
 
 DECLARE_JNI_CLASS (AndroidWifiManager, "android/net/wifi/WifiManager")
 #undef JNI_CLASS_MEMBERS
@@ -130,9 +130,9 @@ void MACAddress::findAllAddresses (Array<MACAddress>& /*result*/)
 }
 
 YUP_API bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& /*targetEmailAddress*/,
-                                                               const String& /*emailSubject*/,
-                                                               const String& /*bodyText*/,
-                                                               const StringArray& /*filesToAttach*/)
+                                                             const String& /*emailSubject*/,
+                                                             const String& /*bodyText*/,
+                                                             const StringArray& /*filesToAttach*/)
 {
     // TODO
     return false;

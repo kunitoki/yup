@@ -76,36 +76,36 @@ static const uint8 invocationHandleByteCode[] = {
 
 //==============================================================================
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-STATICMETHOD (newProxyInstance, "newProxyInstance", "(Ljava/lang/ClassLoader;[Ljava/lang/Class;Ljava/lang/reflect/InvocationHandler;)Ljava/lang/Object;")
+    STATICMETHOD (newProxyInstance, "newProxyInstance", "(Ljava/lang/ClassLoader;[Ljava/lang/Class;Ljava/lang/reflect/InvocationHandler;)Ljava/lang/Object;")
 
 DECLARE_JNI_CLASS (JavaProxy, "java/lang/reflect/Proxy")
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                               \
-METHOD (constructor, "<init>", "(J)V")                                                                                                      \
-METHOD (clear, "clear", "()V")                                                                                                              \
-CALLBACK (yup_invokeImplementer, "dispatchInvoke", "(JLjava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;") \
-CALLBACK (yup_dispatchDelete, "dispatchFinalize", "(J)V")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                  \
+    METHOD (constructor, "<init>", "(J)V")                                                                                                     \
+    METHOD (clear, "clear", "()V")                                                                                                             \
+    CALLBACK (yup_invokeImplementer, "dispatchInvoke", "(JLjava/lang/Object;Ljava/lang/reflect/Method;[Ljava/lang/Object;)Ljava/lang/Object;") \
+    CALLBACK (yup_dispatchDelete, "dispatchFinalize", "(J)V")
 
 DECLARE_JNI_CLASS_WITH_BYTECODE (YupInvocationHandler, "com/kunitoki/yup/YupInvocationHandler", 10, invocationHandleByteCode)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (loadClass, "loadClass", "(Ljava/lang/String;Z)Ljava/lang/Class;")     \
-STATICMETHOD (getSystemClassLoader, "getSystemClassLoader", "()Ljava/lang/ClassLoader;")
+    METHOD (loadClass, "loadClass", "(Ljava/lang/String;Z)Ljava/lang/Class;") \
+    STATICMETHOD (getSystemClassLoader, "getSystemClassLoader", "()Ljava/lang/ClassLoader;")
 
 DECLARE_JNI_CLASS (JavaClassLoader, "java/lang/ClassLoader")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (constructor, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V")
+    METHOD (constructor, "<init>", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/ClassLoader;)V")
 
 DECLARE_JNI_CLASS (AndroidDexClassLoader, "dalvik/system/DexClassLoader")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (constructor, "<init>", "(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V")
+    METHOD (constructor, "<init>", "(Ljava/nio/ByteBuffer;Ljava/lang/ClassLoader;)V")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (AndroidInMemoryDexClassLoader, "dalvik/system/InMemoryDexClassLoader", 26)
 #undef JNI_CLASS_MEMBERS
@@ -456,93 +456,93 @@ jobject ActivityLifecycleCallbacks::invoke (jobject proxy, jobject method, jobje
 
     static const std::map<const char*, void (*) (ActivityLifecycleCallbacks&, jobject, jobject), Comparator> entries {
         { "onActivityConfigurationChanged", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityConfigurationChanged (activity);
-          } },
+    {
+        t.onActivityConfigurationChanged (activity);
+    } },
         { "onActivityCreated", [] (auto& t, auto activity, auto bundle)
-          {
-              t.onActivityCreated (activity, bundle);
-          } },
+    {
+        t.onActivityCreated (activity, bundle);
+    } },
         { "onActivityDestroyed", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityDestroyed (activity);
-          } },
+    {
+        t.onActivityDestroyed (activity);
+    } },
         { "onActivityPaused", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPaused (activity);
-          } },
+    {
+        t.onActivityPaused (activity);
+    } },
         { "onActivityPostCreated", [] (auto& t, auto activity, auto bundle)
-          {
-              t.onActivityPostCreated (activity, bundle);
-          } },
+    {
+        t.onActivityPostCreated (activity, bundle);
+    } },
         { "onActivityPostDestroyed", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPostDestroyed (activity);
-          } },
+    {
+        t.onActivityPostDestroyed (activity);
+    } },
         { "onActivityPostPaused", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPostPaused (activity);
-          } },
+    {
+        t.onActivityPostPaused (activity);
+    } },
         { "onActivityPostResumed", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPostResumed (activity);
-          } },
+    {
+        t.onActivityPostResumed (activity);
+    } },
         { "onActivityPostSaveInstanceState", [] (auto& t, auto activity, auto bundle)
-          {
-              t.onActivityPostSaveInstanceState (activity, bundle);
-          } },
+    {
+        t.onActivityPostSaveInstanceState (activity, bundle);
+    } },
         { "onActivityPostStarted", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPostStarted (activity);
-          } },
+    {
+        t.onActivityPostStarted (activity);
+    } },
         { "onActivityPostStopped", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPostStopped (activity);
-          } },
+    {
+        t.onActivityPostStopped (activity);
+    } },
         { "onActivityPreCreated", [] (auto& t, auto activity, auto bundle)
-          {
-              t.onActivityPreCreated (activity, bundle);
-          } },
+    {
+        t.onActivityPreCreated (activity, bundle);
+    } },
         { "onActivityPreDestroyed", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPreDestroyed (activity);
-          } },
+    {
+        t.onActivityPreDestroyed (activity);
+    } },
         { "onActivityPrePaused", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPrePaused (activity);
-          } },
+    {
+        t.onActivityPrePaused (activity);
+    } },
         { "onActivityPreResumed", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPreResumed (activity);
-          } },
+    {
+        t.onActivityPreResumed (activity);
+    } },
         { "onActivityPreSaveInstanceState", [] (auto& t, auto activity, auto bundle)
-          {
-              t.onActivityPreSaveInstanceState (activity, bundle);
-          } },
+    {
+        t.onActivityPreSaveInstanceState (activity, bundle);
+    } },
         { "onActivityPreStarted", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPreStarted (activity);
-          } },
+    {
+        t.onActivityPreStarted (activity);
+    } },
         { "onActivityPreStopped", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityPreStopped (activity);
-          } },
+    {
+        t.onActivityPreStopped (activity);
+    } },
         { "onActivityResumed", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityResumed (activity);
-          } },
+    {
+        t.onActivityResumed (activity);
+    } },
         { "onActivitySaveInstanceState", [] (auto& t, auto activity, auto bundle)
-          {
-              t.onActivitySaveInstanceState (activity, bundle);
-          } },
+    {
+        t.onActivitySaveInstanceState (activity, bundle);
+    } },
         { "onActivityStarted", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityStarted (activity);
-          } },
+    {
+        t.onActivityStarted (activity);
+    } },
         { "onActivityStopped", [] (auto& t, auto activity, auto)
-          {
-              t.onActivityStopped (activity);
-          } },
+    {
+        t.onActivityStopped (activity);
+    } },
     };
 
     const auto methodName = yupString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
@@ -609,19 +609,19 @@ bool isPermissionDeclaredInManifest (const String& requestedPermission)
 static const uint8 javaFragmentOverlay[] = { 31, 139, 8, 8, 26, 116, 161, 94, 0, 3, 106, 97, 118, 97, 70, 114, 97, 103, 109, 101, 110, 116, 79, 118, 101, 114, 108, 97, 121, 46, 100, 101, 120, 0, 133, 149, 77, 136, 28, 69, 20, 199, 255, 53, 253, 181, 159, 179, 147, 221, 184, 140, 235, 198, 140, 43, 70, 197, 224, 172, 104, 36, 56, 99, 216, 152, 32, 204, 100, 226, 71, 54, 204, 97, 227, 165, 153, 105, 39, 189, 206, 118, 79, 186, 123, 150, 4, 20, 53, 4, 146, 131, 8, 6, 252, 130, 28, 114, 80, 65, 48, 8, 226, 65, 196, 83, 8, 66, 64, 65, 146, 75, 252, 184, 152, 179, 160, 160, 4, 17, 5, 255, 175, 187, 58, 27, 150, 136, 195, 252, 250, 189, 122, 245, 234, 189, 170, 215, 213, 85, 93, 239, 248, 216, 226, 163, 187, 96, 79, 85, 156, 198, 103, 91, 86, 175, 30, 189, 252, 253, 193, 79, 203, 15, 189, 242, 199, 245, 246, 129, 179, 245, 238, 53, 27, 24, 0, 56, 222, 126, 108, 26, 250, 183, 155, 182, 7, 145, 217, 199, 200, 86, 149, 201, 58, 37, 255, 248, 156, 143, 18, 229, 87, 186, 93, 47, 0, 47, 155, 192, 11, 148, 87, 12, 224, 7, 242, 27, 249, 157, 220, 32, 127, 145, 127, 200, 93, 244, 217, 69, 154, 228, 37, 242, 42, 57, 73, 206, 144, 55, 201, 89, 242, 62, 57, 79, 62, 36, 31, 147, 11, 228, 34, 185, 76, 174, 144, 107, 228, 103, 242, 43, 249, 147, 216, 22, 80, 38, 139, 228, 9, 210, 36, 47, 146, 51, 228, 45, 114, 158, 92, 32, 95, 146, 175, 201, 183, 132, 211, 4, 167, 3, 46, 19, 14, 25, 33, 163, 122, 173, 227, 100, 70, 214, 76, 24, 62, 93, 223, 41, 58, 91, 186, 13, 237, 227, 104, 125, 66, 235, 111, 208, 103, 82, 235, 239, 81, 47, 106, 253, 3, 234, 83, 90, 255, 196, 200, 234, 38, 250, 23, 212, 183, 104, 253, 18, 245, 105, 173, 127, 147, 230, 82, 152, 133, 204, 179, 144, 230, 40, 112, 118, 119, 235, 246, 130, 158, 199, 28, 196, 47, 235, 23, 121, 135, 150, 101, 100, 227, 239, 76, 165, 129, 249, 84, 218, 216, 150, 202, 44, 142, 197, 21, 111, 79, 165, 137, 74, 42, 29, 220, 163, 199, 47, 164, 210, 194, 189, 200, 214, 172, 0, 157, 37, 211, 229, 55, 98, 103, 210, 160, 69, 108, 87, 173, 172, 134, 131, 146, 248, 202, 204, 87, 42, 82, 129, 188, 255, 71, 221, 159, 247, 4, 37, 155, 126, 69, 214, 209, 76, 223, 193, 117, 43, 91, 255, 50, 55, 220, 44, 147, 61, 194, 48, 187, 217, 187, 28, 177, 38, 199, 212, 41, 245, 182, 243, 209, 186, 61, 202, 88, 69, 200, 72, 89, 255, 47, 28, 35, 107, 10, 43, 10, 135, 25, 209, 161, 117, 2, 115, 106, 22, 65, 197, 96, 149, 199, 177, 178, 196, 136, 75, 183, 70, 116, 210, 246, 96, 137, 121, 159, 47, 166, 239, 49, 203, 127, 227, 127, 242, 59, 105, 254, 201, 52, 191, 212, 86, 246, 142, 12, 148, 247, 23, 150, 100, 62, 183, 205, 179, 56, 5, 83, 21, 117, 221, 108, 189, 231, 160, 101, 166, 143, 166, 117, 81, 154, 124, 191, 73, 111, 174, 139, 71, 33, 213, 77, 237, 99, 215, 253, 192, 79, 246, 96, 235, 211, 145, 219, 91, 243, 130, 228, 217, 117, 47, 234, 187, 39, 30, 94, 117, 215, 93, 168, 6, 84, 19, 133, 102, 11, 170, 133, 249, 150, 27, 116, 163, 208, 239, 86, 221, 193, 160, 186, 223, 119, 251, 97, 47, 31, 85, 67, 249, 102, 111, 39, 12, 18, 154, 170, 141, 84, 212, 48, 115, 179, 39, 140, 171, 79, 13, 131, 110, 223, 171, 97, 123, 171, 19, 174, 85, 163, 181, 184, 95, 93, 29, 118, 188, 234, 166, 244, 53, 76, 183, 100, 6, 213, 190, 27, 244, 170, 203, 73, 228, 7, 189, 26, 84, 27, 102, 187, 209, 104, 201, 179, 213, 66, 161, 221, 132, 213, 110, 138, 65, 4, 45, 70, 187, 41, 102, 114, 164, 129, 153, 35, 183, 9, 97, 117, 250, 97, 236, 193, 233, 12, 6, 135, 143, 250, 49, 204, 174, 155, 184, 112, 186, 126, 188, 230, 199, 49, 38, 122, 94, 178, 55, 234, 13, 101, 42, 49, 28, 182, 90, 97, 208, 163, 57, 114, 131, 228, 144, 23, 15, 251, 52, 151, 194, 96, 111, 39, 241, 215, 253, 228, 68, 102, 194, 236, 102, 203, 51, 46, 91, 30, 70, 194, 96, 95, 228, 185, 137, 135, 98, 174, 233, 158, 185, 48, 56, 228, 29, 27, 122, 113, 242, 156, 23, 73, 106, 63, 12, 98, 29, 173, 242, 223, 125, 122, 180, 19, 6, 203, 137, 27, 37, 152, 212, 138, 182, 143, 15, 54, 6, 96, 60, 202, 130, 236, 11, 187, 30, 198, 162, 116, 124, 170, 91, 113, 34, 83, 50, 19, 41, 192, 54, 56, 197, 194, 206, 26, 246, 83, 30, 168, 99, 143, 177, 227, 254, 178, 83, 60, 253, 14, 22, 212, 3, 78, 177, 126, 233, 244, 10, 30, 55, 118, 220, 55, 79, 219, 187, 216, 73, 167, 39, 105, 129, 178, 248, 121, 155, 175, 191, 102, 254, 100, 90, 39, 121, 146, 220, 130, 165, 254, 54, 13, 117, 206, 42, 168, 239, 200, 57, 155, 210, 158, 220, 244, 205, 139, 204, 239, 4, 217, 143, 249, 189, 96, 96, 227, 110, 200, 247, 172, 220, 15, 114, 118, 228, 119, 132, 141, 141, 123, 66, 85, 178, 182, 220, 21, 170, 148, 157, 11, 114, 190, 22, 42, 89, 124, 185, 63, 12, 237, 35, 231, 138, 28, 80, 42, 63, 115, 74, 153, 46, 247, 211, 191, 81, 33, 150, 205, 216, 6, 0, 0, 0, 0 };
 
 //==============================================================================
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                        \
-METHOD (construct, "<init>", "()V")                                                                                                  \
-METHOD (close, "close", "()V")                                                                                                       \
-CALLBACK (generatedCallback<&FragmentOverlay::onActivityResultCallback>, "onActivityResultNative", "(JIILandroid/content/Intent;)V") \
-CALLBACK (generatedCallback<&FragmentOverlay::onCreatedCallback>, "onCreateNative", "(JLandroid/os/Bundle;)V")                       \
-CALLBACK (generatedCallback<&FragmentOverlay::onStartCallback>, "onStartNative", "(J)V")                                             \
-CALLBACK (generatedCallback<&FragmentOverlay::onRequestPermissionsResultCallback>, "onRequestPermissionsResultNative", "(JI[Ljava/lang/String;[I)V")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                            \
+    METHOD (construct, "<init>", "()V")                                                                                                  \
+    METHOD (close, "close", "()V")                                                                                                       \
+    CALLBACK (generatedCallback<&FragmentOverlay::onActivityResultCallback>, "onActivityResultNative", "(JIILandroid/content/Intent;)V") \
+    CALLBACK (generatedCallback<&FragmentOverlay::onCreatedCallback>, "onCreateNative", "(JLandroid/os/Bundle;)V")                       \
+    CALLBACK (generatedCallback<&FragmentOverlay::onStartCallback>, "onStartNative", "(J)V")                                             \
+    CALLBACK (generatedCallback<&FragmentOverlay::onRequestPermissionsResultCallback>, "onRequestPermissionsResultNative", "(JI[Ljava/lang/String;[I)V")
 
 DECLARE_JNI_CLASS_WITH_BYTECODE (YupFragmentOverlay, "com/kunitoki/yup/FragmentOverlay", 16, javaFragmentOverlay)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (show, "show", "(Landroid/app/FragmentManager;Ljava/lang/String;)V")
+    METHOD (show, "show", "(Landroid/app/FragmentManager;Ljava/lang/String;)V")
 
 DECLARE_JNI_CLASS (AndroidDialogFragment, "android/app/DialogFragment")
 #undef JNI_CLASS_MEMBERS
@@ -743,8 +743,8 @@ String audioManagerGetProperty (const String& property)
 
             if (methodID != nullptr)
                 return yupString (LocalRef<jstring> ((jstring) env->CallObjectMethod (audioManager.get(),
-                                                                                       methodID,
-                                                                                       javaString (property).get())));
+                                                                                      methodID,
+                                                                                      javaString (property).get())));
         }
     }
 

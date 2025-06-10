@@ -49,10 +49,10 @@ namespace
 
 #if YUP_ALSA_LOGGING
 #define YUP_ALSA_LOG(dbgtext)              \
-    {                                       \
+    {                                      \
         yup::String tempDbgBuf ("ALSA: "); \
-        tempDbgBuf << dbgtext;              \
-        Logger::writeToLog (tempDbgBuf);    \
+        tempDbgBuf << dbgtext;             \
+        Logger::writeToLog (tempDbgBuf);   \
         YUP_DBG (tempDbgBuf);              \
     }
 #define YUP_CHECKED_RESULT(x) (logErrorMessage (x, __LINE__))
@@ -66,7 +66,7 @@ static int logErrorMessage (int err, int lineNum)
 }
 #else
 #define YUP_ALSA_LOG(x) \
-    {                    \
+    {                   \
     }
 #define YUP_CHECKED_RESULT(x) (x)
 #endif
@@ -218,7 +218,7 @@ public:
             return false;
 
         YUP_ALSA_LOG ("ALSADevice::setParameters(" << deviceID << ", "
-                                                    << (int) sampleRate << ", " << numChannels << ", " << bufferSize << ")");
+                                                   << (int) sampleRate << ", " << numChannels << ", " << bufferSize << ")");
 
         snd_pcm_hw_params_t* hwParams;
         snd_pcm_hw_params_alloca (&hwParams);
@@ -292,7 +292,7 @@ public:
             latency = (int) frames * ((int) periods - 1); // (this is the method JACK uses to guess the latency..)
 
         YUP_ALSA_LOG ("frames: " << (int) frames << ", periods: " << (int) periods
-                                  << ", samplesPerPeriod: " << (int) samplesPerPeriod);
+                                 << ", samplesPerPeriod: " << (int) samplesPerPeriod);
 
         snd_pcm_sw_params_t* swParams;
         snd_pcm_sw_params_alloca (&swParams);
@@ -463,7 +463,7 @@ private:
     static AudioData::Converter* createConverter (bool forInput, int bitDepth, bool isFloat, bool isLittleEndian, bool useOnlyLower24Bits, int numInterleavedChannels, bool interleaved)
     {
         YUP_ALSA_LOG ("format: bitDepth=" << bitDepth << ", isFloat=" << (int) isFloat
-                                           << ", isLittleEndian=" << (int) isLittleEndian << ", numChannels=" << numInterleavedChannels);
+                                          << ", isLittleEndian=" << (int) isLittleEndian << ", numChannels=" << numInterleavedChannels);
 
         if (isFloat)
             return ConverterHelper<AudioData::Float32>::createConverter (forInput, isLittleEndian, numInterleavedChannels, interleaved);
@@ -1096,7 +1096,7 @@ private:
         if ((isInput || isOutput) && rates.size() > 0)
         {
             YUP_ALSA_LOG ("testDevice: '" << id.toUTF8().getAddress() << "' -> isInput: "
-                                           << (int) isInput << ", isOutput: " << (int) isOutput);
+                                          << (int) isInput << ", isOutput: " << (int) isOutput);
 
             if (isInput)
             {
@@ -1187,8 +1187,8 @@ private:
                             }
 
                             YUP_ALSA_LOG ("Soundcard ID: " << id << ", name: '" << name
-                                                            << ", isInput:" << (int) isInput
-                                                            << ", isOutput:" << (int) isOutput << "\n");
+                                                           << ", isInput:" << (int) isInput
+                                                           << ", isOutput:" << (int) isOutput << "\n");
 
                             if (isInput)
                             {

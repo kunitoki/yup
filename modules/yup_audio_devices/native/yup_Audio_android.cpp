@@ -121,7 +121,7 @@ public:
         }
 
         YUP_DBG ("Audio device - min buffers: " << minBufferSizeOut << ", " << minBufferSizeIn << "; "
-                                                 << sampleRate << " Hz; input chans: " << numDeviceInputChannelsAvailable);
+                                                << sampleRate << " Hz; input chans: " << numDeviceInputChannelsAvailable);
     }
 
     ~AndroidAudioIODevice() override

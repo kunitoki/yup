@@ -203,11 +203,11 @@ class YUP_API ScopedAutoReleasePool
 extern YUP_API void* yupDLL_malloc(size_t);
 extern YUP_API void yupDLL_free(void*);
 
-#define YUP_LEAK_DETECTOR(OwnerClass)         \
+#define YUP_LEAK_DETECTOR(OwnerClass)          \
    public:                                     \
     static void* operator new(size_t sz)       \
     {                                          \
-        return yup::yupDLL_malloc(sz);       \
+        return yup::yupDLL_malloc(sz);         \
     }                                          \
     static void* operator new(size_t, void* p) \
     {                                          \
@@ -215,7 +215,7 @@ extern YUP_API void yupDLL_free(void*);
     }                                          \
     static void operator delete(void* p)       \
     {                                          \
-        yup::yupDLL_free(p);                 \
+        yup::yupDLL_free(p);                   \
     }                                          \
     static void operator delete(void*, void*) {}
 #endif

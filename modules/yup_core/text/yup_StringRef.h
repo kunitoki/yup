@@ -134,7 +134,7 @@ public:
     bool operator!= (const String& s) const noexcept { return text.compare (s.getCharPointer()) != 0; }
 
     /** Compares this StringRef with a String. */
-    bool operator<(const String& s) const noexcept { return text.compare (s.getCharPointer()) < 0; }
+    bool operator< (const String& s) const noexcept { return text.compare (s.getCharPointer()) < 0; }
 
     /** Compares this StringRef with a String. */
     bool operator<= (const String& s) const noexcept { return text.compare (s.getCharPointer()) <= 0; }
@@ -168,7 +168,7 @@ YUP_API bool YUP_CALLTYPE operator== (const String& string1, StringRef string2) 
 /** Case-sensitive comparison of two strings. */
 YUP_API bool YUP_CALLTYPE operator!= (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-YUP_API bool YUP_CALLTYPE operator<(const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator< (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
 YUP_API bool YUP_CALLTYPE operator<= (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */

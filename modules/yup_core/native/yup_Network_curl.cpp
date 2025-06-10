@@ -64,9 +64,9 @@ struct CURLSymbols
 
 #if YUP_LOAD_CURL_SYMBOLS_LAZILY
         const ScopedLock sl (getLibcurlLock());
-#define YUP_INIT_CURL_SYMBOL(name)               \
-if (! symbols->loadSymbol (symbols->name, #name)) \
-return nullptr;
+#define YUP_INIT_CURL_SYMBOL(name)                    \
+    if (! symbols->loadSymbol (symbols->name, #name)) \
+        return nullptr;
 #else
 #define YUP_INIT_CURL_SYMBOL(name) symbols->name = ::name;
 #endif

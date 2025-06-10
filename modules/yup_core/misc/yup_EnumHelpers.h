@@ -66,35 +66,35 @@
 
     @endcode
 */
-#define YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(EnumType)  \
-static_assert (std::is_enum_v<EnumType>,                      \
-               "YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS "  \
-               "should only be used with enum types");        \
-constexpr auto operator& (EnumType a, EnumType b)             \
-{                                                             \
-using base_type = std::underlying_type<EnumType>::type;       \
-return static_cast<EnumType> (base_type (a) & base_type (b)); \
-}                                                             \
-constexpr auto operator| (EnumType a, EnumType b)             \
-{                                                             \
-using base_type = std::underlying_type<EnumType>::type;       \
-return static_cast<EnumType> (base_type (a) | base_type (b)); \
-}                                                             \
-constexpr auto operator~(EnumType a)                          \
-{                                                             \
-using base_type = std::underlying_type<EnumType>::type;       \
-return static_cast<EnumType> (~base_type (a));                \
-}                                                             \
-constexpr auto& operator|= (EnumType& a, EnumType b)          \
-{                                                             \
-a = (a | b);                                                  \
-return a;                                                     \
-}                                                             \
-constexpr auto& operator&= (EnumType& a, EnumType b)          \
-{                                                             \
-a = (a & b);                                                  \
-return a;                                                     \
-}
+#define YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(EnumType)           \
+    static_assert (std::is_enum_v<EnumType>,                          \
+                   "YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS "       \
+                   "should only be used with enum types");            \
+    constexpr auto operator& (EnumType a, EnumType b)                 \
+    {                                                                 \
+        using base_type = std::underlying_type<EnumType>::type;       \
+        return static_cast<EnumType> (base_type (a) & base_type (b)); \
+    }                                                                 \
+    constexpr auto operator| (EnumType a, EnumType b)                 \
+    {                                                                 \
+        using base_type = std::underlying_type<EnumType>::type;       \
+        return static_cast<EnumType> (base_type (a) | base_type (b)); \
+    }                                                                 \
+    constexpr auto operator~(EnumType a)                              \
+    {                                                                 \
+        using base_type = std::underlying_type<EnumType>::type;       \
+        return static_cast<EnumType> (~base_type (a));                \
+    }                                                                 \
+    constexpr auto& operator|= (EnumType& a, EnumType b)              \
+    {                                                                 \
+        a = (a | b);                                                  \
+        return a;                                                     \
+    }                                                                 \
+    constexpr auto& operator&= (EnumType& a, EnumType b)              \
+    {                                                                 \
+        a = (a & b);                                                  \
+        return a;                                                     \
+    }
 
 namespace yup
 {

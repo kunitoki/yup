@@ -243,9 +243,9 @@ void Synthesiser::processNextBlock (AudioBuffer<floatType>& outputAudio,
     std::for_each (midiIterator,
                    midiData.cend(),
                    [&] (const MidiMessageMetadata& meta)
-                   {
-                       handleMidiEvent (meta.getMessage());
-                   });
+    {
+        handleMidiEvent (meta.getMessage());
+    });
 }
 
 // explicit template instantiation

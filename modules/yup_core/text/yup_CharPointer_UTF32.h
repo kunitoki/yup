@@ -79,7 +79,7 @@ public:
 
     inline bool operator<= (CharPointer_UTF32 other) const noexcept { return data <= other.data; }
 
-    inline bool operator<(CharPointer_UTF32 other) const noexcept { return data < other.data; }
+    inline bool operator< (CharPointer_UTF32 other) const noexcept { return data < other.data; }
 
     inline bool operator>= (CharPointer_UTF32 other) const noexcept { return data >= other.data; }
 

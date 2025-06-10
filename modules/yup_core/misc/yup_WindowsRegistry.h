@@ -73,8 +73,8 @@ public:
         e.g. "HKEY_CURRENT_USER\Software\foo\bar"
     */
     static String YUP_CALLTYPE getValue (const String& regValuePath,
-                                          const String& defaultValue = String(),
-                                          WoW64Mode mode = WoW64_Default);
+                                         const String& defaultValue = String(),
+                                         WoW64Mode mode = WoW64_Default);
 
     /** Reads a binary block from the registry.
         The path is a string for the entire path of a value in the registry,
@@ -133,12 +133,12 @@ public:
         @param mode                 the WoW64 mode to use for choosing the database
     */
     static bool YUP_CALLTYPE registerFileAssociation (const String& fileExtension,
-                                                       const String& symbolicDescription,
-                                                       const String& fullDescription,
-                                                       const File& targetExecutable,
-                                                       int iconResourceNumber,
-                                                       bool registerForCurrentUserOnly,
-                                                       WoW64Mode mode = WoW64_Default);
+                                                      const String& symbolicDescription,
+                                                      const String& fullDescription,
+                                                      const File& targetExecutable,
+                                                      int iconResourceNumber,
+                                                      bool registerForCurrentUserOnly,
+                                                      WoW64Mode mode = WoW64_Default);
 
 private:
     WindowsRegistry() = delete;

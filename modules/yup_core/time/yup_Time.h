@@ -407,7 +407,7 @@ YUP_API bool operator== (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
 YUP_API bool operator!= (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-YUP_API bool operator<(Time time1, Time time2) noexcept;
+YUP_API bool operator< (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
 YUP_API bool operator<= (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */

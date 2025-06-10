@@ -316,7 +316,7 @@ public:
 
 private:
     template <typename Value>
-    Args with (Value Args::*member, Value v) const
+    Args with (Value Args::* member, Value v) const
     {
         auto copy = *this;
         copy.*member = std::move (v);
@@ -331,10 +331,10 @@ AndroidDocumentInfo::AndroidDocumentInfo (Args args)
     , sizeInBytes (args.sizeInBytes.value)
     , nativeFlags (args.flags)
     , yupFlags (flagExists
-                 | (args.lastModified.valid ? flagValidModified : 0)
-                 | (args.sizeInBytes.valid ? flagValidSize : 0)
-                 | (args.readPermission ? flagHasReadPermission : 0)
-                 | (args.writePermission ? flagHasWritePermission : 0))
+                | (args.lastModified.valid ? flagValidModified : 0)
+                | (args.sizeInBytes.valid ? flagValidSize : 0)
+                | (args.readPermission ? flagHasReadPermission : 0)
+                | (args.writePermission ? flagHasWritePermission : 0))
 {
 }
 
@@ -413,16 +413,16 @@ struct AndroidDocument::Utils
         {
             const auto javaStr = javaString (str);
             return yupString ((jstring) getEnv()->CallObjectMethod (map.get(),
-                                                                     AndroidMimeTypeMap.getMimeTypeFromExtension,
-                                                                     javaStr.get()));
+                                                                    AndroidMimeTypeMap.getMimeTypeFromExtension,
+                                                                    javaStr.get()));
         }
 
         String getExtensionFromMimeType (const String& str) const
         {
             const auto javaStr = javaString (str);
             return yupString ((jstring) getEnv()->CallObjectMethod (map.get(),
-                                                                     AndroidMimeTypeMap.getExtensionFromMimeType,
-                                                                     javaStr.get()));
+                                                                    AndroidMimeTypeMap.getExtensionFromMimeType,
+                                                                    javaStr.get()));
         }
 
     private:

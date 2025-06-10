@@ -41,7 +41,7 @@ namespace yup
 {
 
 #if YUP_COREAUDIO_LOGGING_ENABLED
-#define YUP_COREAUDIOLOG(a)          \
+#define YUP_COREAUDIOLOG(a)           \
     {                                 \
         String camsg ("CoreAudio: "); \
         camsg << a;                   \
@@ -345,9 +345,9 @@ struct CoreAudioClasses
 
             updateDetailsFromDevice();
             YUP_COREAUDIOLOG ("Creating CoreAudioInternal\n"
-                               << (inStream != nullptr ? ("    inputDeviceId " + String (deviceID) + "\n") : "")
-                               << (outStream != nullptr ? ("    outputDeviceId " + String (deviceID) + "\n") : "")
-                               << getDeviceDetails().joinIntoString ("\n    "));
+                              << (inStream != nullptr ? ("    inputDeviceId " + String (deviceID) + "\n") : "")
+                              << (outStream != nullptr ? ("    outputDeviceId " + String (deviceID) + "\n") : "")
+                              << getDeviceDetails().joinIntoString ("\n    "));
 
             AudioObjectPropertyAddress pa;
             pa.mSelector = kAudioObjectPropertySelectorWildcard;
@@ -1022,7 +1022,7 @@ struct CoreAudioClasses
         }
 
         template <typename Value>
-        static auto getWithDefault (const std::unique_ptr<Stream>& ptr, Value (Stream::*member))
+        static auto getWithDefault (const std::unique_ptr<Stream>& ptr, Value (Stream::* member))
         {
             return getWithDefault (ptr, [&] (Stream& s)
             {

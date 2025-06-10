@@ -55,7 +55,7 @@ bool AudioChannelSet::operator== (const AudioChannelSet& other) const noexcept {
 
 bool AudioChannelSet::operator!= (const AudioChannelSet& other) const noexcept { return channels != other.channels; }
 
-bool AudioChannelSet::operator<(const AudioChannelSet& other) const noexcept { return channels < other.channels; }
+bool AudioChannelSet::operator< (const AudioChannelSet& other) const noexcept { return channels < other.channels; }
 
 String AudioChannelSet::getChannelTypeName (AudioChannelSet::ChannelType type)
 {
@@ -840,9 +840,9 @@ bool AudioChannelSet::isDiscreteLayout() const noexcept
     return std::none_of (std::begin (channelTypes),
                          std::end (channelTypes),
                          [] (const auto& t)
-                         {
-                             return t < discreteChannel0;
-                         });
+    {
+        return t < discreteChannel0;
+    });
 }
 
 int AudioChannelSet::size() const noexcept
@@ -1064,54 +1064,54 @@ Array<AudioChannelSet> AudioChannelSet::channelSetsWithNumberOfChannels (int num
         retval.add (AudioChannelSet::discreteChannels (numChannels));
 
         retval.addArray ([numChannels]() -> Array<AudioChannelSet>
-                         {
-                             switch (numChannels)
-                             {
-                                 case 1:
-                                     return { AudioChannelSet::mono() };
-                                 case 2:
-                                     return { AudioChannelSet::stereo() };
-                                 case 3:
-                                     return { AudioChannelSet::createLCR(),
-                                              AudioChannelSet::createLRS() };
-                                 case 4:
-                                     return { AudioChannelSet::quadraphonic(),
-                                              AudioChannelSet::createLCRS() };
-                                 case 5:
-                                     return { AudioChannelSet::create5point0(),
-                                              AudioChannelSet::pentagonal() };
-                                 case 6:
-                                     return { AudioChannelSet::create5point1(),
-                                              AudioChannelSet::create6point0(),
-                                              AudioChannelSet::create6point0Music(),
-                                              AudioChannelSet::hexagonal() };
-                                 case 7:
-                                     return { AudioChannelSet::create7point0(),
-                                              AudioChannelSet::create7point0SDDS(),
-                                              AudioChannelSet::create6point1(),
-                                              AudioChannelSet::create6point1Music() };
-                                 case 8:
-                                     return { AudioChannelSet::create7point1(),
-                                              AudioChannelSet::create7point1SDDS(),
-                                              AudioChannelSet::octagonal(),
-                                              AudioChannelSet::create5point1point2() };
-                                 case 9:
-                                     return { AudioChannelSet::create7point0point2() };
-                                 case 10:
-                                     return { AudioChannelSet::create5point1point4(),
-                                              AudioChannelSet::create7point1point2() };
-                                 case 11:
-                                     return { AudioChannelSet::create7point0point4() };
-                                 case 12:
-                                     return { AudioChannelSet::create7point1point4() };
-                                 case 14:
-                                     return { AudioChannelSet::create7point1point6() };
-                                 case 16:
-                                     return { AudioChannelSet::create9point1point6() };
-                             }
+        {
+            switch (numChannels)
+            {
+                case 1:
+                    return { AudioChannelSet::mono() };
+                case 2:
+                    return { AudioChannelSet::stereo() };
+                case 3:
+                    return { AudioChannelSet::createLCR(),
+                             AudioChannelSet::createLRS() };
+                case 4:
+                    return { AudioChannelSet::quadraphonic(),
+                             AudioChannelSet::createLCRS() };
+                case 5:
+                    return { AudioChannelSet::create5point0(),
+                             AudioChannelSet::pentagonal() };
+                case 6:
+                    return { AudioChannelSet::create5point1(),
+                             AudioChannelSet::create6point0(),
+                             AudioChannelSet::create6point0Music(),
+                             AudioChannelSet::hexagonal() };
+                case 7:
+                    return { AudioChannelSet::create7point0(),
+                             AudioChannelSet::create7point0SDDS(),
+                             AudioChannelSet::create6point1(),
+                             AudioChannelSet::create6point1Music() };
+                case 8:
+                    return { AudioChannelSet::create7point1(),
+                             AudioChannelSet::create7point1SDDS(),
+                             AudioChannelSet::octagonal(),
+                             AudioChannelSet::create5point1point2() };
+                case 9:
+                    return { AudioChannelSet::create7point0point2() };
+                case 10:
+                    return { AudioChannelSet::create5point1point4(),
+                             AudioChannelSet::create7point1point2() };
+                case 11:
+                    return { AudioChannelSet::create7point0point4() };
+                case 12:
+                    return { AudioChannelSet::create7point1point4() };
+                case 14:
+                    return { AudioChannelSet::create7point1point6() };
+                case 16:
+                    return { AudioChannelSet::create9point1point6() };
+            }
 
-                             return {};
-                         }());
+            return {};
+        }());
 
         auto order = getAmbisonicOrderForNumChannels (numChannels);
         if (order >= 0)

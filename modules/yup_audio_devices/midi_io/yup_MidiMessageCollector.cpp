@@ -125,10 +125,10 @@ void MidiMessageCollector::removeNextBlockOfMessages (MidiBuffer& destBuffer,
             scale = (numSamples << 10) / numSourceSamples;
 
             std::for_each (iter, incomingMessages.cend(), [&] (const MidiMessageMetadata& meta)
-                           {
-                               const auto pos = ((meta.samplePosition - startSample) * scale) >> 10;
-                               destBuffer.addEvent (meta.data, meta.numBytes, jlimit (0, numSamples - 1, pos));
-                           });
+            {
+                const auto pos = ((meta.samplePosition - startSample) * scale) >> 10;
+                destBuffer.addEvent (meta.data, meta.numBytes, jlimit (0, numSamples - 1, pos));
+            });
         }
         else
         {

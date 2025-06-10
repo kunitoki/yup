@@ -71,9 +71,9 @@ MPEZoneLayout& MPEZoneLayout::operator= (const MPEZoneLayout& other)
 void MPEZoneLayout::sendLayoutChangeMessage()
 {
     listeners.call ([this] (Listener& l)
-                    {
-                        l.zoneLayoutChanged (*this);
-                    });
+    {
+        l.zoneLayoutChanged (*this);
+    });
 }
 
 //==============================================================================

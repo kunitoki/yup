@@ -104,9 +104,9 @@ int MPEChannelAssigner::findMidiChannelForNewNote (int noteNumber) noexcept
 int MPEChannelAssigner::findMidiChannelForExistingNote (int noteNumber) noexcept
 {
     const auto iter = std::find_if (midiChannels.cbegin(), midiChannels.cend(), [&] (auto& ch)
-                                    {
-                                        return std::find (ch.notes.begin(), ch.notes.end(), noteNumber) != ch.notes.end();
-                                    });
+    {
+        return std::find (ch.notes.begin(), ch.notes.end(), noteNumber) != ch.notes.end();
+    });
 
     return iter != midiChannels.cend() ? (int) std::distance (midiChannels.cbegin(), iter) : -1;
 }

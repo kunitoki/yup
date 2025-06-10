@@ -105,7 +105,7 @@ template <typename T>
 struct Named
 {
 #define X(op) \
-auto operator op (const Named& other) const { return value op other.value; }
+    auto operator op (const Named& other) const { return value op other.value; }
     YUP_COMPARISON_OPS
 #undef X
 
@@ -144,7 +144,7 @@ template <typename T>
 struct SerialisationSize
 {
 #define X(op) \
-auto operator op (const SerialisationSize& other) const { return size op other.size; }
+    auto operator op (const SerialisationSize& other) const { return size op other.size; }
     YUP_COMPARISON_OPS
 #undef X
 

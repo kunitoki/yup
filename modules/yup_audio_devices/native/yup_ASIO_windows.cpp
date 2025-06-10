@@ -107,7 +107,7 @@ static void dummyLog()
 
 #define YUP_ASIO_LOG(msg) ASIODebugging::dummyLog()
 #define YUP_ASIO_LOG_ERROR(msg, errNum) \
-    ignoreUnused (errNum);               \
+    ignoreUnused (errNum);              \
     ASIODebugging::dummyLog()
 #endif
 } // namespace ASIODebugging
@@ -1013,7 +1013,7 @@ private:
     {
         // find a list of buffer sizes..
         YUP_ASIO_LOG (String ((int) minSize) + "->" + String ((int) maxSize) + ", "
-                       + String ((int) preferredSize) + ", " + String ((int) granularity));
+                      + String ((int) preferredSize) + ", " + String ((int) granularity));
 
         if (granularity >= 0)
         {

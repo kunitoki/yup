@@ -21,7 +21,8 @@
 
 #include <yup_gui/yup_gui.h>
 
-class Application : public yup::YUPApplication, public yup::Timer
+class Application : public yup::YUPApplication
+    , public yup::Timer
 {
 public:
     Application() = default;

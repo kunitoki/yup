@@ -191,7 +191,7 @@
     params: list of params (bracketed)
  */
 #define YUP_LOAD_WINAPI_FUNCTION(dll, functionName, localFunctionName, returnType, params) \
-    typedef returnType (WINAPI* type##localFunctionName) params;                            \
+    typedef returnType (WINAPI* type##localFunctionName) params;                           \
     type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFunction (#functionName);
 
 //==============================================================================

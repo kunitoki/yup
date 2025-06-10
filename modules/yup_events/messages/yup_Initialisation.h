@@ -106,8 +106,8 @@ class YUP_API ScopedYupInitialiser_GUI final
 #define START_YUP_APPLICATION(AppClass)
 #else
 #if YUP_WINDOWS && !defined(_CONSOLE)
-#define YUP_MAIN_FUNCTION                                                      \
-    YUP_BEGIN_IGNORE_WARNINGS_MSVC(28251)                                      \
+#define YUP_MAIN_FUNCTION                                                       \
+    YUP_BEGIN_IGNORE_WARNINGS_MSVC(28251)                                       \
     int __stdcall WinMain(struct HINSTANCE__*, struct HINSTANCE__*, char*, int) \
         YUP_END_IGNORE_WARNINGS_MSVC
 #define YUP_MAIN_FUNCTION_ARGS
@@ -123,31 +123,31 @@ class YUP_API ScopedYupInitialiser_GUI final
 
 #define YUP_CREATE_APPLICATION_DEFINE(AppClass)                \
     YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
-    yup::YUPApplicationBase* yup_CreateApplication()         \
-    {                                                           \
-        return new AppClass();                                  \
-    }                                                           \
+    yup::YUPApplicationBase* yup_CreateApplication()           \
+    {                                                          \
+        return new AppClass();                                 \
+    }                                                          \
     void* yup_GetIOSCustomDelegateClass()                      \
-    {                                                           \
-        return nullptr;                                         \
-    }                                                           \
+    {                                                          \
+        return nullptr;                                        \
+    }                                                          \
     YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 #define YUP_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
     YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")                 \
-    yup::YUPApplicationBase* yup_CreateApplication()                         \
-    {                                                                           \
-        return new AppClass();                                                  \
-    }                                                                           \
+    yup::YUPApplicationBase* yup_CreateApplication()                           \
+    {                                                                          \
+        return new AppClass();                                                 \
+    }                                                                          \
     void* yup_GetIOSCustomDelegateClass()                                      \
-    {                                                                           \
-        return [DelegateClass class];                                           \
-    }                                                                           \
+    {                                                                          \
+        return [DelegateClass class];                                          \
+    }                                                                          \
     YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-#define YUP_MAIN_FUNCTION_DEFINITION                                                    \
-    YUP_MAIN_FUNCTION                                                                   \
-    {                                                                                    \
+#define YUP_MAIN_FUNCTION_DEFINITION                                                  \
+    YUP_MAIN_FUNCTION                                                                 \
+    {                                                                                 \
         yup::YUPApplicationBase::createInstance = &yup_CreateApplication;             \
         yup::YUPApplicationBase::iOSCustomDelegate = yup_GetIOSCustomDelegateClass(); \
         return yup::YUPApplicationBase::main(YUP_MAIN_FUNCTION_ARGS);                 \
@@ -155,16 +155,16 @@ class YUP_API ScopedYupInitialiser_GUI final
 
 #else
 
-#define YUP_CREATE_APPLICATION_DEFINE(AppClass)         \
+#define YUP_CREATE_APPLICATION_DEFINE(AppClass)       \
     yup::YUPApplicationBase* yup_CreateApplication(); \
     yup::YUPApplicationBase* yup_CreateApplication()  \
-    {                                                    \
-        return new AppClass();                           \
+    {                                                 \
+        return new AppClass();                        \
     }
 
-#define YUP_MAIN_FUNCTION_DEFINITION                                        \
-    YUP_MAIN_FUNCTION                                                       \
-    {                                                                        \
+#define YUP_MAIN_FUNCTION_DEFINITION                                      \
+    YUP_MAIN_FUNCTION                                                     \
+    {                                                                     \
         yup::YUPApplicationBase::createInstance = &yup_CreateApplication; \
         return yup::YUPApplicationBase::main(YUP_MAIN_FUNCTION_ARGS);     \
     }

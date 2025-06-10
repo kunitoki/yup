@@ -269,7 +269,7 @@ public:
         Only participates in overload resolution if the wrapped iterators are comparable.
     */
     template <typename OtherIter, typename OtherInd, std::enable_if_t<detail::canLessThan<Iter, OtherIter>, int> = 0>
-    [[nodiscard]] constexpr bool operator<(const EnumerateIterator<OtherIter, OtherInd>& other) const
+    [[nodiscard]] constexpr bool operator< (const EnumerateIterator<OtherIter, OtherInd>& other) const
     {
         return iterator < other.iterator;
     }

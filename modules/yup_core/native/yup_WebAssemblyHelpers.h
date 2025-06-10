@@ -19,8 +19,10 @@
   ==============================================================================
 */
 
-namespace yup {
-namespace {
+namespace yup
+{
+namespace
+{
 
 std::chrono::steady_clock::time_point yup_getTimeSinceStartupFallback() noexcept
 {
@@ -33,8 +35,7 @@ bool yup_isRunningUnderBrowser()
 #if YUP_EMSCRIPTEN
     static bool hasBrowserWindowObject = []
     {
-        return EM_ASM_INT({
-            return typeof window !== "undefined" ? 1 : 0;
+        return EM_ASM_INT({ return typeof window != = "undefined" ? 1 : 0;
         });
     }();
 

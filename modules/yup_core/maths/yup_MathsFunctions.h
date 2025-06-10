@@ -799,9 +799,9 @@ uint32 readLittleEndianBitsInBuffer (const void* sourceBuffer, uint32 startBit, 
      On CPUs that aren't vulnerable to denormalisation problems, this will have no effect.
  */
 #define YUP_UNDENORMALISE(x) \
-    {                         \
-        (x) += 0.1f;          \
-        (x) -= 0.1f;          \
+    {                        \
+        (x) += 0.1f;         \
+        (x) -= 0.1f;         \
     }
 #else
 #define YUP_UNDENORMALISE(x)

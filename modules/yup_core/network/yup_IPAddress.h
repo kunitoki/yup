@@ -119,7 +119,7 @@ public:
 
     bool operator== (const IPAddress&) const noexcept;
     bool operator!= (const IPAddress&) const noexcept;
-    bool operator<(const IPAddress&) const noexcept;
+    bool operator< (const IPAddress&) const noexcept;
     bool operator> (const IPAddress&) const noexcept;
     bool operator<= (const IPAddress&) const noexcept;
     bool operator>= (const IPAddress&) const noexcept;

@@ -397,7 +397,7 @@ private:
     {
         TrackingMode trackingMode = lastNotePlayedOnChannel;
         MPEValue lastValueReceivedOnChannel[16];
-        MPEValue MPENote::*value;
+        MPEValue MPENote::* value;
 
         MPEValue& getValue (MPENote& note) noexcept { return note.*(value); }
     };

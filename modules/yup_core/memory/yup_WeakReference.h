@@ -269,12 +269,12 @@ private:
 
      @see WeakReference, WeakReference::Master
 */
-#define YUP_DECLARE_WEAK_REFERENCEABLE(Class)                   \
-struct WeakRefMaster : public yup::WeakReference<Class>::Master \
-{                                                                \
-~WeakRefMaster() { this->clear(); }                              \
-};                                                               \
-WeakRefMaster masterReference;                                   \
-friend class yup::WeakReference<Class>;
+#define YUP_DECLARE_WEAK_REFERENCEABLE(Class)                       \
+    struct WeakRefMaster : public yup::WeakReference<Class>::Master \
+    {                                                               \
+        ~WeakRefMaster() { this->clear(); }                         \
+    };                                                              \
+    WeakRefMaster masterReference;                                  \
+    friend class yup::WeakReference<Class>;
 
 } // namespace yup

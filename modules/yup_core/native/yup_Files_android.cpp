@@ -40,123 +40,123 @@
 namespace yup
 {
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                     \
-METHOD (constructor, "<init>", "(Landroid/content/Context;Landroid/media/MediaScannerConnection$MediaScannerConnectionClient;)V") \
-METHOD (connect, "connect", "()V")                                                                                                \
-METHOD (disconnect, "disconnect", "()V")                                                                                          \
-METHOD (scanFile, "scanFile", "(Ljava/lang/String;Ljava/lang/String;)V")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                         \
+    METHOD (constructor, "<init>", "(Landroid/content/Context;Landroid/media/MediaScannerConnection$MediaScannerConnectionClient;)V") \
+    METHOD (connect, "connect", "()V")                                                                                                \
+    METHOD (disconnect, "disconnect", "()V")                                                                                          \
+    METHOD (scanFile, "scanFile", "(Ljava/lang/String;Ljava/lang/String;)V")
 
 DECLARE_JNI_CLASS (MediaScannerConnection, "android/media/MediaScannerConnection")
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                     \
-METHOD (query, "query", "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;") \
-METHOD (openInputStream, "openInputStream", "(Landroid/net/Uri;)Ljava/io/InputStream;")                                                           \
-METHOD (openOutputStream, "openOutputStream", "(Landroid/net/Uri;)Ljava/io/OutputStream;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                         \
+    METHOD (query, "query", "(Landroid/net/Uri;[Ljava/lang/String;Ljava/lang/String;[Ljava/lang/String;Ljava/lang/String;)Landroid/database/Cursor;") \
+    METHOD (openInputStream, "openInputStream", "(Landroid/net/Uri;)Ljava/io/InputStream;")                                                           \
+    METHOD (openOutputStream, "openOutputStream", "(Landroid/net/Uri;)Ljava/io/OutputStream;")
 
 DECLARE_JNI_CLASS (ContentResolver, "android/content/ContentResolver")
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                        \
-METHOD (takePersistableUriPermission, "takePersistableUriPermission", "(Landroid/net/Uri;I)V")       \
-METHOD (releasePersistableUriPermission, "releasePersistableUriPermission", "(Landroid/net/Uri;I)V") \
-METHOD (getPersistedUriPermissions, "getPersistedUriPermissions", "()Ljava/util/List;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                            \
+    METHOD (takePersistableUriPermission, "takePersistableUriPermission", "(Landroid/net/Uri;I)V")       \
+    METHOD (releasePersistableUriPermission, "releasePersistableUriPermission", "(Landroid/net/Uri;I)V") \
+    METHOD (getPersistedUriPermissions, "getPersistedUriPermissions", "()Ljava/util/List;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (ContentResolver19, "android/content/ContentResolver", 19)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (moveToFirst, "moveToFirst", "()Z")                                    \
-METHOD (moveToNext, "moveToNext", "()Z")                                      \
-METHOD (getColumnIndex, "getColumnIndex", "(Ljava/lang/String;)I")            \
-METHOD (getString, "getString", "(I)Ljava/lang/String;")                      \
-METHOD (isNull, "isNull", "(I)Z")                                             \
-METHOD (getInt, "getInt", "(I)I")                                             \
-METHOD (getLong, "getLong", "(I)J")                                           \
-METHOD (close, "close", "()V")
+    METHOD (moveToFirst, "moveToFirst", "()Z")                                \
+    METHOD (moveToNext, "moveToNext", "()Z")                                  \
+    METHOD (getColumnIndex, "getColumnIndex", "(Ljava/lang/String;)I")        \
+    METHOD (getString, "getString", "(I)Ljava/lang/String;")                  \
+    METHOD (isNull, "isNull", "(I)Z")                                         \
+    METHOD (getInt, "getInt", "(I)I")                                         \
+    METHOD (getLong, "getLong", "(I)J")                                       \
+    METHOD (close, "close", "()V")
 
 DECLARE_JNI_CLASS (AndroidCursor, "android/database/Cursor")
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                               \
-STATICMETHOD (getExternalStorageDirectory, "getExternalStorageDirectory", "()Ljava/io/File;")                               \
-STATICMETHOD (getExternalStoragePublicDirectory, "getExternalStoragePublicDirectory", "(Ljava/lang/String;)Ljava/io/File;") \
-STATICMETHOD (getDataDirectory, "getDataDirectory", "()Ljava/io/File;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                   \
+    STATICMETHOD (getExternalStorageDirectory, "getExternalStorageDirectory", "()Ljava/io/File;")                               \
+    STATICMETHOD (getExternalStoragePublicDirectory, "getExternalStoragePublicDirectory", "(Ljava/lang/String;)Ljava/io/File;") \
+    STATICMETHOD (getDataDirectory, "getDataDirectory", "()Ljava/io/File;")
 
 DECLARE_JNI_CLASS (AndroidEnvironment, "android/os/Environment")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (close, "close", "()V")                                                \
-METHOD (flush, "flush", "()V")                                                \
-METHOD (write, "write", "([BII)V")
+    METHOD (close, "close", "()V")                                            \
+    METHOD (flush, "flush", "()V")                                            \
+    METHOD (write, "write", "([BII)V")
 
 DECLARE_JNI_CLASS (AndroidOutputStream, "java/io/OutputStream")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (close, "close", "()V")                                                \
-METHOD (read, "read", "([B)I")                                                \
-METHOD (skip, "skip", "(J)J")
+    METHOD (close, "close", "()V")                                            \
+    METHOD (read, "read", "([B)I")                                            \
+    METHOD (skip, "skip", "(J)J")
 
 DECLARE_JNI_CLASS (AndroidInputStream, "java/io/InputStream")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-FIELD (publicSourceDir, "publicSourceDir", "Ljava/lang/String;")              \
-FIELD (dataDir, "dataDir", "Ljava/lang/String;")                              \
-FIELD (targetSdkVersion, "targetSdkVersion", "I")
+    FIELD (publicSourceDir, "publicSourceDir", "Ljava/lang/String;")          \
+    FIELD (dataDir, "dataDir", "Ljava/lang/String;")                          \
+    FIELD (targetSdkVersion, "targetSdkVersion", "I")
 
 DECLARE_JNI_CLASS (AndroidApplicationInfo, "android/content/pm/ApplicationInfo")
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                  \
-STATICMETHOD (buildChildDocumentsUri, "buildChildDocumentsUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                     \
-STATICMETHOD (buildDocumentUri, "buildDocumentUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                                 \
-STATICMETHOD (buildRecentDocumentsUri, "buildRecentDocumentsUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                   \
-STATICMETHOD (buildRootUri, "buildRootUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                                         \
-STATICMETHOD (buildRootsUri, "buildRootsUri", "(Ljava/lang/String;)Landroid/net/Uri;")                                                         \
-STATICMETHOD (buildSearchDocumentsUri, "buildSearchDocumentsUri", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
-STATICMETHOD (deleteDocument, "deleteDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;)Z")                                       \
-STATICMETHOD (getDocumentId, "getDocumentId", "(Landroid/net/Uri;)Ljava/lang/String;")                                                         \
-STATICMETHOD (getRootId, "getRootId", "(Landroid/net/Uri;)Ljava/lang/String;")                                                                 \
-STATICMETHOD (isDocumentUri, "isDocumentUri", "(Landroid/content/Context;Landroid/net/Uri;)Z")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                      \
+    STATICMETHOD (buildChildDocumentsUri, "buildChildDocumentsUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                     \
+    STATICMETHOD (buildDocumentUri, "buildDocumentUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                                 \
+    STATICMETHOD (buildRecentDocumentsUri, "buildRecentDocumentsUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                   \
+    STATICMETHOD (buildRootUri, "buildRootUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                                         \
+    STATICMETHOD (buildRootsUri, "buildRootsUri", "(Ljava/lang/String;)Landroid/net/Uri;")                                                         \
+    STATICMETHOD (buildSearchDocumentsUri, "buildSearchDocumentsUri", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
+    STATICMETHOD (deleteDocument, "deleteDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;)Z")                                       \
+    STATICMETHOD (getDocumentId, "getDocumentId", "(Landroid/net/Uri;)Ljava/lang/String;")                                                         \
+    STATICMETHOD (getRootId, "getRootId", "(Landroid/net/Uri;)Ljava/lang/String;")                                                                 \
+    STATICMETHOD (isDocumentUri, "isDocumentUri", "(Landroid/content/Context;Landroid/net/Uri;)Z")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (DocumentsContract19, "android/provider/DocumentsContract", 19)
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                \
-STATICMETHOD (buildChildDocumentsUriUsingTree, "buildChildDocumentsUriUsingTree", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")                  \
-STATICMETHOD (buildDocumentUriUsingTree, "buildDocumentUriUsingTree", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")                              \
-STATICMETHOD (buildTreeDocumentUri, "buildTreeDocumentUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                                       \
-STATICMETHOD (createDocument, "createDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
-STATICMETHOD (getTreeDocumentId, "getTreeDocumentId", "(Landroid/net/Uri;)Ljava/lang/String;")                                                               \
-STATICMETHOD (renameDocument, "renameDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                    \
+    STATICMETHOD (buildChildDocumentsUriUsingTree, "buildChildDocumentsUriUsingTree", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")                  \
+    STATICMETHOD (buildDocumentUriUsingTree, "buildDocumentUriUsingTree", "(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")                              \
+    STATICMETHOD (buildTreeDocumentUri, "buildTreeDocumentUri", "(Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;")                                       \
+    STATICMETHOD (createDocument, "createDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;Ljava/lang/String;)Landroid/net/Uri;") \
+    STATICMETHOD (getTreeDocumentId, "getTreeDocumentId", "(Landroid/net/Uri;)Ljava/lang/String;")                                                               \
+    STATICMETHOD (renameDocument, "renameDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (DocumentsContract21, "android/provider/DocumentsContract", 21)
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                          \
-STATICMETHOD (copyDocument, "copyDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;)Landroid/net/Uri;")                  \
-STATICMETHOD (moveDocument, "moveDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;Landroid/net/Uri;)Landroid/net/Uri;") \
-STATICMETHOD (removeDocument, "removeDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;)Z")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                              \
+    STATICMETHOD (copyDocument, "copyDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;)Landroid/net/Uri;")                  \
+    STATICMETHOD (moveDocument, "moveDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;Landroid/net/Uri;)Landroid/net/Uri;") \
+    STATICMETHOD (removeDocument, "removeDocument", "(Landroid/content/ContentResolver;Landroid/net/Uri;Landroid/net/Uri;)Z")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (DocumentsContract24, "android/provider/DocumentsContract", 24)
 #undef JNI_CLASS_MEMBERS
 
-#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                           \
-STATICMETHOD (getSingleton, "getSingleton", "()Landroid/webkit/MimeTypeMap;")                           \
-METHOD (getExtensionFromMimeType, "getExtensionFromMimeType", "(Ljava/lang/String;)Ljava/lang/String;") \
-METHOD (getMimeTypeFromExtension, "getMimeTypeFromExtension", "(Ljava/lang/String;)Ljava/lang/String;")
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                               \
+    STATICMETHOD (getSingleton, "getSingleton", "()Landroid/webkit/MimeTypeMap;")                           \
+    METHOD (getExtensionFromMimeType, "getExtensionFromMimeType", "(Ljava/lang/String;)Ljava/lang/String;") \
+    METHOD (getMimeTypeFromExtension, "getMimeTypeFromExtension", "(Ljava/lang/String;)Ljava/lang/String;")
 
 DECLARE_JNI_CLASS (AndroidMimeTypeMap, "android/webkit/MimeTypeMap")
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-METHOD (getPersistedTime, "getPersistedTime", "()J")                          \
-METHOD (getUri, "getUri", "()Landroid/net/Uri;")                              \
-METHOD (isReadPermission, "isReadPermission", "()Z")                          \
-METHOD (isWritePermission, "isWritePermission", "()Z")
+    METHOD (getPersistedTime, "getPersistedTime", "()J")                      \
+    METHOD (getUri, "getUri", "()Landroid/net/Uri;")                          \
+    METHOD (isReadPermission, "isReadPermission", "()Z")                      \
+    METHOD (isWritePermission, "isWritePermission", "()Z")
 
 DECLARE_JNI_CLASS_WITH_MIN_SDK (AndroidUriPermission, "android/content/UriPermission", 19)
 #undef JNI_CLASS_MEMBERS
@@ -168,7 +168,7 @@ static File yupFile (LocalRef<jobject> obj)
 
     if (env->IsInstanceOf (obj.get(), JavaFile) != 0)
         return File (yupString (LocalRef<jstring> ((jstring) env->CallObjectMethod (obj.get(),
-                                                                                     JavaFile.getAbsolutePath))));
+                                                                                    JavaFile.getAbsolutePath))));
 
     return {};
 }
@@ -449,7 +449,7 @@ private:
 
         for (int i = 0; i < n; ++i)
             files.add (yupFile (LocalRef<jobject> (env->GetObjectArrayElement ((jobjectArray) obj.get(),
-                                                                                (jsize) i))));
+                                                                               (jsize) i))));
 
         return files;
     }

@@ -65,21 +65,21 @@ public:
             Midi1ToBytestreamTranslator translator (0);
 
             forEachNonSysExTestMessage (random, [&] (const MidiMessage& m)
-                                        {
-                                            const auto packets = toMidi1 (m);
-                                            expect (packets.size() == 1);
+            {
+                const auto packets = toMidi1 (m);
+                expect (packets.size() == 1);
 
-                                            // Make sure that the message type is correct
-                                            const auto msgType = Utils::getMessageType (packets.data()[0]);
-                                            expect (msgType == ((m.getRawData()[0] >> 0x4) == 0xf ? 0x1 : 0x2));
+                // Make sure that the message type is correct
+                const auto msgType = Utils::getMessageType (packets.data()[0]);
+                expect (msgType == ((m.getRawData()[0] >> 0x4) == 0xf ? 0x1 : 0x2));
 
-                                            translator.dispatch (View { packets.data() },
-                                                                 0,
-                                                                 [&] (const BytestreamMidiView& roundTripped)
-                                                                 {
-                                                                     expect (equal (m, roundTripped.getMessage()));
-                                                                 });
-                                        });
+                translator.dispatch (View { packets.data() },
+                                     0,
+                                     [&] (const BytestreamMidiView& roundTripped)
+                {
+                    expect (equal (m, roundTripped.getMessage()));
+                });
+            });
         }
 
         beginTest ("Bytestream SysEx converts to universal packets");
@@ -147,18 +147,18 @@ public:
         {
             for (const auto meta : expected)
                 Conversion::toMidi1 (ump::BytestreamMidiView (meta), [&] (const auto p)
-                                     {
-                                         packets.add (p);
-                                     });
+                {
+                    packets.add (p);
+                });
 
             MidiBuffer output;
             converter.dispatch (packets.data(),
                                 packets.data() + packets.size(),
                                 0,
                                 [&] (const BytestreamMidiView& roundTripped)
-                                {
-                                    output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
-                                });
+            {
+                output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
+            });
             packets.clear();
 
             expect (equal (expected, output));
@@ -199,9 +199,9 @@ public:
                                 modifiedPackets.data() + modifiedPackets.size(),
                                 0,
                                 [&] (const BytestreamMidiView& roundTripped)
-                                {
-                                    output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
-                                });
+            {
+                output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
+            });
 
             // All Utility messages should have been ignored
             expect (output.getNumEvents() == 1);
@@ -237,9 +237,9 @@ public:
                                 modifiedPackets.data() + modifiedPackets.size(),
                                 0,
                                 [&] (const BytestreamMidiView& roundTripped)
-                                {
-                                    output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
-                                });
+            {
+                output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
+            });
 
             const auto numOutputs = output.getNumEvents();
             const auto numInputs = realtimeMessages.getNumEvents();
@@ -304,9 +304,9 @@ public:
                                 modifiedPackets.data() + modifiedPackets.size(),
                                 0,
                                 [&] (const BytestreamMidiView& roundTripped)
-                                {
-                                    output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
-                                });
+            {
+                output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
+            });
 
             const auto numOutputs = output.getNumEvents();
             const auto numInputs = realtimeMessages.getNumEvents();
@@ -350,9 +350,9 @@ public:
 
                 for (const auto meta : noteOn)
                     Conversion::toMidi1 (ump::BytestreamMidiView (meta), [&] (const auto packet)
-                                         {
-                                             p.add (packet);
-                                         });
+                    {
+                        p.add (packet);
+                    });
 
                 return p;
             }();
@@ -369,9 +369,9 @@ public:
                 std::for_each (originalPackets.begin(),
                                insertionPoint,
                                [&] (const View& view)
-                               {
-                                   p.add (view);
-                               });
+                {
+                    p.add (view);
+                });
 
                 for (const auto& view : noteOnPackets)
                     p.add (view);
@@ -379,9 +379,9 @@ public:
                 std::for_each (insertionPoint,
                                originalPackets.end(),
                                [&] (const View& view)
-                               {
-                                   p.add (view);
-                               });
+                {
+                    p.add (view);
+                });
 
                 return p;
             }();
@@ -396,9 +396,9 @@ public:
                                     p.data() + p.size(),
                                     0,
                                     [&] (const BytestreamMidiView& roundTripped)
-                                    {
-                                        output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
-                                    });
+                {
+                    output.addEvent (roundTripped.getMessage(), int (roundTripped.timestamp));
+                });
             };
 
             pushToOutput (modifiedPackets);
@@ -899,9 +899,9 @@ private:
     {
         Packets packets;
         Conversion::toMidi1 (ump::BytestreamMidiView (&msg), [&] (const auto p)
-                             {
-                                 packets.add (p);
-                             });
+        {
+            packets.add (p);
+        });
         return packets;
     }
 
@@ -911,9 +911,9 @@ private:
 
         for (const auto& packet : midi2)
             Conversion::midi2ToMidi1DefaultTranslation (packet, [&r] (const View& v)
-                                                        {
-                                                            r.add (v);
-                                                        });
+            {
+                r.add (v);
+            });
 
         return r;
     }
@@ -925,9 +925,9 @@ private:
 
         for (const auto& packet : midi1)
             translator.dispatch (packet, [&r] (const View& v)
-                                 {
-                                     r.add (v);
-                                 });
+            {
+                r.add (v);
+            });
 
         return r;
     }
@@ -944,9 +944,9 @@ private:
         std::for_each (expected.data(),
                        expected.data() + expected.size(),
                        [&] (const uint32_t word)
-                       {
-                           expectEquals ((uint64_t) *actualPtr++, (uint64_t) word);
-                       });
+        {
+            expectEquals ((uint64_t) *actualPtr++, (uint64_t) word);
+        });
     }
 
     void checkMidi2ToMidi1Conversion (const Packets& midi2, const Packets& expected)

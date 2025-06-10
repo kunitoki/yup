@@ -198,9 +198,9 @@ inline uint32 ByteOrder::swap (uint32 n) noexcept
 #if YUP_MAC || YUP_IOS
     return OSSwapInt32 (n);
 #elif (YUP_GCC || YUP_CLANG) && YUP_INTEL && ! YUP_NO_INLINE_ASM
-    asm("bswap %%eax"
-        : "=a"(n)
-        : "a"(n));
+    asm ("bswap %%eax"
+         : "=a"(n)
+         : "a"(n));
     return n;
 #elif YUP_MSVC
     return _byteswap_ulong (n);

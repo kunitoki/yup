@@ -373,25 +373,25 @@ private:
     static ElementType* mallocWrapper (size_t size)
     {
         return wrapper (size, [size]
-                        {
-                            return std::malloc (size);
-                        });
+        {
+            return std::malloc (size);
+        });
     }
 
     static ElementType* callocWrapper (size_t num, size_t size)
     {
         return wrapper (num * size, [num, size]
-                        {
-                            return std::calloc (num, size);
-                        });
+        {
+            return std::calloc (num, size);
+        });
     }
 
     static ElementType* reallocWrapper (void* ptr, size_t newSize)
     {
         return wrapper (newSize, [ptr, newSize]
-                        {
-                            return std::realloc (ptr, newSize);
-                        });
+        {
+            return std::realloc (ptr, newSize);
+        });
     }
 
     template <class OtherElementType, bool otherThrowOnFailure>

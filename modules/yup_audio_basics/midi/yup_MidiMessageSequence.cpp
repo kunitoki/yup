@@ -247,9 +247,9 @@ void MidiMessageSequence::addSequence (const MidiMessageSequence& other,
 void MidiMessageSequence::sort() noexcept
 {
     std::stable_sort (list.begin(), list.end(), [] (const MidiEventHolder* a, const MidiEventHolder* b)
-                      {
-                          return a->message.getTimeStamp() < b->message.getTimeStamp();
-                      });
+    {
+        return a->message.getTimeStamp() < b->message.getTimeStamp();
+    });
 }
 
 void MidiMessageSequence::updateMatchedPairs() noexcept

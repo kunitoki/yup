@@ -435,17 +435,17 @@ void MidiFile::readNextTrack (const uint8* data, int size, bool createMatchingNo
 
     // sort so that we put all the note-offs before note-ons that have the same time
     std::stable_sort (sequence.list.begin(), sequence.list.end(), [] (const MidiMessageSequence::MidiEventHolder* a, const MidiMessageSequence::MidiEventHolder* b)
-                      {
-                          auto t1 = a->message.getTimeStamp();
-                          auto t2 = b->message.getTimeStamp();
+    {
+        auto t1 = a->message.getTimeStamp();
+        auto t2 = b->message.getTimeStamp();
 
-                          if (t1 < t2)
-                              return true;
-                          if (t2 < t1)
-                              return false;
+        if (t1 < t2)
+            return true;
+        if (t2 < t1)
+            return false;
 
-                          return a->message.isNoteOff() && b->message.isNoteOn();
-                      });
+        return a->message.isNoteOff() && b->message.isNoteOn();
+    });
 
     if (createMatchingNoteOffs)
         sequence.updateMatchedPairs();
@@ -576,14 +576,14 @@ struct MidiFileTest final : public UnitTest
         beginTest ("ReadTrack respects running status");
         {
             const auto sequence = parseSequence ([] (OutputStream& os)
-                                                 {
-                                                     MidiFileHelpers::writeVariableLengthInt (os, 100);
-                                                     writeBytes (os, { 0x90, 0x40, 0x40 });
-                                                     MidiFileHelpers::writeVariableLengthInt (os, 200);
-                                                     writeBytes (os, { 0x40, 0x40 });
-                                                     MidiFileHelpers::writeVariableLengthInt (os, 300);
-                                                     writeBytes (os, { 0xff, 0x2f, 0x00 });
-                                                 });
+            {
+                MidiFileHelpers::writeVariableLengthInt (os, 100);
+                writeBytes (os, { 0x90, 0x40, 0x40 });
+                MidiFileHelpers::writeVariableLengthInt (os, 200);
+                writeBytes (os, { 0x40, 0x40 });
+                MidiFileHelpers::writeVariableLengthInt (os, 300);
+                writeBytes (os, { 0xff, 0x2f, 0x00 });
+            });
 
             expectEquals (sequence.getNumEvents(), 3);
             expect (sequence.getEventPointer (0)->message.isNoteOn());
@@ -595,31 +595,31 @@ struct MidiFileTest final : public UnitTest
         {
             {
                 const auto sequence = parseSequence ([] (OutputStream& os)
-                                                     {
-                                                         // Incomplete delta time
-                                                         writeBytes (os, { 0xff });
-                                                     });
+                {
+                    // Incomplete delta time
+                    writeBytes (os, { 0xff });
+                });
 
                 expectEquals (sequence.getNumEvents(), 0);
             }
 
             {
                 const auto sequence = parseSequence ([] (OutputStream& os)
-                                                     {
-                                                         // Complete delta with no following event
-                                                         MidiFileHelpers::writeVariableLengthInt (os, 0xffff);
-                                                     });
+                {
+                    // Complete delta with no following event
+                    MidiFileHelpers::writeVariableLengthInt (os, 0xffff);
+                });
 
                 expectEquals (sequence.getNumEvents(), 0);
             }
 
             {
                 const auto sequence = parseSequence ([] (OutputStream& os)
-                                                     {
-                                                         // Complete delta with malformed following event
-                                                         MidiFileHelpers::writeVariableLengthInt (os, 0xffff);
-                                                         writeBytes (os, { 0x90, 0x40 });
-                                                     });
+                {
+                    // Complete delta with malformed following event
+                    MidiFileHelpers::writeVariableLengthInt (os, 0xffff);
+                    writeBytes (os, { 0x90, 0x40 });
+                });
 
                 expectEquals (sequence.getNumEvents(), 1);
                 expect (sequence.getEventPointer (0)->message.isNoteOff());
@@ -639,9 +639,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // Invalid initial byte
                 const auto header = parseHeader ([] (OutputStream& os)
-                                                 {
-                                                     writeBytes (os, { 0xff });
-                                                 });
+                {
+                    writeBytes (os, { 0xff });
+                });
 
                 expect (! header.hasValue());
             }
@@ -649,9 +649,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // Type block, but no header data
                 const auto header = parseHeader ([] (OutputStream& os)
-                                                 {
-                                                     writeBytes (os, { 'M', 'T', 'h', 'd' });
-                                                 });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd' });
+                });
 
                 expect (! header.hasValue());
             }
@@ -659,9 +659,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // We (ll-formed header, but track type is 0 and channels != 1
                 const auto header = parseHeader ([] (OutputStream& os)
-                                                 {
-                                                     writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 16, 0, 1 });
-                                                 });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 16, 0, 1 });
+                });
 
                 expect (! header.hasValue());
             }
@@ -669,9 +669,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // Well-formed header, but track type is 5
                 const auto header = parseHeader ([] (OutputStream& os)
-                                                 {
-                                                     writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 5, 0, 16, 0, 1 });
-                                                 });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 5, 0, 16, 0, 1 });
+                });
 
                 expect (! header.hasValue());
             }
@@ -679,9 +679,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // Well-formed header
                 const auto header = parseHeader ([] (OutputStream& os)
-                                                 {
-                                                     writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 16, 0, 1 });
-                                                 });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 16, 0, 1 });
+                });
 
                 expect (header.hasValue());
 
@@ -703,9 +703,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // Malformed header
                 const auto file = parseFile ([] (OutputStream& os)
-                                             {
-                                                 writeBytes (os, { 'M', 'T', 'h', 'd' });
-                                             });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd' });
+                });
 
                 expect (! file.hasValue());
             }
@@ -713,9 +713,9 @@ struct MidiFileTest final : public UnitTest
             {
                 // Header, no channels
                 const auto file = parseFile ([] (OutputStream& os)
-                                             {
-                                                 writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 0, 0, 1 });
-                                             });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 0, 0, 1 });
+                });
 
                 expect (file.hasValue());
                 expectEquals (file->getNumTracks(), 0);
@@ -724,10 +724,10 @@ struct MidiFileTest final : public UnitTest
             {
                 // Header, one malformed channel
                 const auto file = parseFile ([] (OutputStream& os)
-                                             {
-                                                 writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                                                 writeBytes (os, { 'M', 'T', 'r', '?' });
-                                             });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
+                    writeBytes (os, { 'M', 'T', 'r', '?' });
+                });
 
                 expect (! file.hasValue());
             }
@@ -735,10 +735,10 @@ struct MidiFileTest final : public UnitTest
             {
                 // Header, one channel with malformed message
                 const auto file = parseFile ([] (OutputStream& os)
-                                             {
-                                                 writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                                                 writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 1, 0xff });
-                                             });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
+                    writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 1, 0xff });
+                });
 
                 expect (file.hasValue());
                 expectEquals (file->getNumTracks(), 1);
@@ -748,10 +748,10 @@ struct MidiFileTest final : public UnitTest
             {
                 // Header, one channel with incorrect length message
                 const auto file = parseFile ([] (OutputStream& os)
-                                             {
-                                                 writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                                                 writeBytes (os, { 'M', 'T', 'r', 'k', 0x0f, 0, 0, 0, 0xff });
-                                             });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
+                    writeBytes (os, { 'M', 'T', 'r', 'k', 0x0f, 0, 0, 0, 0xff });
+                });
 
                 expect (! file.hasValue());
             }
@@ -759,13 +759,13 @@ struct MidiFileTest final : public UnitTest
             {
                 // Header, one channel, all well-formed
                 const auto file = parseFile ([] (OutputStream& os)
-                                             {
-                                                 writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
-                                                 writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 4 });
+                {
+                    writeBytes (os, { 'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 1, 0, 1, 0, 1 });
+                    writeBytes (os, { 'M', 'T', 'r', 'k', 0, 0, 0, 4 });
 
-                                                 MidiFileHelpers::writeVariableLengthInt (os, 0x0f);
-                                                 writeBytes (os, { 0x80, 0x00, 0x00 });
-                                             });
+                    MidiFileHelpers::writeVariableLengthInt (os, 0x0f);
+                    writeBytes (os, { 0x80, 0x00, 0x00 });
+                });
 
                 expect (file.hasValue());
                 expectEquals (file->getNumTracks(), 1);

@@ -252,9 +252,9 @@ struct BufferedInputStreamTests final : public UnitTest
             auto r = getRandom();
 
             std::for_each (mb.begin(), mb.end(), [&] (char& item)
-                           {
-                               item = (char) r.nextInt (std::numeric_limits<char>::max());
-                           });
+            {
+                item = (char) r.nextInt (std::numeric_limits<char>::max());
+            });
 
             return mb;
         }();

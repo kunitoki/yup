@@ -53,8 +53,8 @@ bool File::copyInternal(const File& dest) const
         NSFileManager* fm = [NSFileManager defaultManager];
 
         return [fm fileExistsAtPath:yupStringToNS(fullPath)] && [fm copyItemAtPath:yupStringToNS(fullPath)
-                                                                             toPath:yupStringToNS(dest.getFullPathName())
-                                                                              error:nil];
+                                                                            toPath:yupStringToNS(dest.getFullPathName())
+                                                                             error:nil];
     }
 }
 

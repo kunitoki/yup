@@ -369,9 +369,9 @@ private:
                          numOutputSamplesToProduce,
                          process,
                          [this, input, &numUsed]
-                         {
-                             pushInterpolationSample (input[numUsed++]);
-                         });
+        {
+            pushInterpolationSample (input[numUsed++]);
+        });
 
         return numUsed;
     }

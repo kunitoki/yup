@@ -45,7 +45,7 @@
 #define YUP_OBOE_LOG(x) YUP_DBG (x)
 #else
 #define YUP_OBOE_LOG(x) \
-    {                    \
+    {                   \
     }
 #endif
 
@@ -512,20 +512,20 @@ private:
                 startResult = stream->waitForStateChange (expectedState, &nextState, timeoutNanos);
 
                 YUP_OBOE_LOG ("Starting Oboe stream with result: " + getOboeString (startResult);
-                               +"\nUses AAudio = " + String ((int) stream->usesAAudio())
-                               + "\nDirection = " + getOboeString (stream->getDirection())
-                               + "\nSharingMode = " + getOboeString (stream->getSharingMode())
-                               + "\nChannelCount = " + String (stream->getChannelCount())
-                               + "\nFormat = " + getOboeString (stream->getFormat())
-                               + "\nSampleRate = " + String (stream->getSampleRate())
-                               + "\nBufferSizeInFrames = " + String (stream->getBufferSizeInFrames())
-                               + "\nBufferCapacityInFrames = " + String (stream->getBufferCapacityInFrames())
-                               + "\nFramesPerBurst = " + String (stream->getFramesPerBurst())
-                               + "\nFramesPerCallback = " + String (stream->getFramesPerCallback())
-                               + "\nBytesPerFrame = " + String (stream->getBytesPerFrame())
-                               + "\nBytesPerSample = " + String (stream->getBytesPerSample())
-                               + "\nPerformanceMode = " + getOboeString (stream->getPerformanceMode())
-                               + "\ngetDeviceId = " + String (stream->getDeviceId()));
+                              +"\nUses AAudio = " + String ((int) stream->usesAAudio())
+                              + "\nDirection = " + getOboeString (stream->getDirection())
+                              + "\nSharingMode = " + getOboeString (stream->getSharingMode())
+                              + "\nChannelCount = " + String (stream->getChannelCount())
+                              + "\nFormat = " + getOboeString (stream->getFormat())
+                              + "\nSampleRate = " + String (stream->getSampleRate())
+                              + "\nBufferSizeInFrames = " + String (stream->getBufferSizeInFrames())
+                              + "\nBufferCapacityInFrames = " + String (stream->getBufferCapacityInFrames())
+                              + "\nFramesPerBurst = " + String (stream->getFramesPerBurst())
+                              + "\nFramesPerCallback = " + String (stream->getFramesPerCallback())
+                              + "\nBytesPerFrame = " + String (stream->getBytesPerFrame())
+                              + "\nBytesPerSample = " + String (stream->getBytesPerSample())
+                              + "\nPerformanceMode = " + getOboeString (stream->getPerformanceMode())
+                              + "\ngetDeviceId = " + String (stream->getDeviceId()));
             }
         }
 
@@ -579,19 +579,19 @@ private:
 #endif
 
             YUP_OBOE_LOG (String ("Preparing Oboe stream with params:")
-                           + "\nAAudio supported = " + String (int (builder.isAAudioSupported()))
-                           + "\nAPI = " + getOboeString (builder.getAudioApi())
-                           + "\nDeviceId = " + String (deviceId)
-                           + "\nDirection = " + getOboeString (direction)
-                           + "\nSharingMode = " + getOboeString (sharingMode)
-                           + "\nChannelCount = " + String (channelCount)
-                           + "\nFormat = " + getOboeString (format)
-                           + "\nSampleRate = " + String (newSampleRate)
-                           + "\nPerformanceMode = " + getOboeString (oboe::PerformanceMode::LowLatency));
+                          + "\nAAudio supported = " + String (int (builder.isAAudioSupported()))
+                          + "\nAPI = " + getOboeString (builder.getAudioApi())
+                          + "\nDeviceId = " + String (deviceId)
+                          + "\nDirection = " + getOboeString (direction)
+                          + "\nSharingMode = " + getOboeString (sharingMode)
+                          + "\nChannelCount = " + String (channelCount)
+                          + "\nFormat = " + getOboeString (format)
+                          + "\nSampleRate = " + String (newSampleRate)
+                          + "\nPerformanceMode = " + getOboeString (oboe::PerformanceMode::LowLatency));
 
             openResult = builder.openStream (&stream);
             YUP_OBOE_LOG ("Building Oboe stream with result: " + getOboeString (openResult)
-                           + "\nStream state = " + (stream != nullptr ? getOboeString (stream->getState()) : String ("?")));
+                          + "\nStream state = " + (stream != nullptr ? getOboeString (stream->getState()) : String ("?")));
 
             if (stream != nullptr && newBufferSize != 0)
             {
@@ -600,20 +600,20 @@ private:
             }
 
             YUP_OBOE_LOG (String ("Stream details:")
-                           + "\nUses AAudio = " + (stream != nullptr ? String ((int) stream->usesAAudio()) : String ("?"))
-                           + "\nDeviceId = " + (stream != nullptr ? String (stream->getDeviceId()) : String ("?"))
-                           + "\nDirection = " + (stream != nullptr ? getOboeString (stream->getDirection()) : String ("?"))
-                           + "\nSharingMode = " + (stream != nullptr ? getOboeString (stream->getSharingMode()) : String ("?"))
-                           + "\nChannelCount = " + (stream != nullptr ? String (stream->getChannelCount()) : String ("?"))
-                           + "\nFormat = " + (stream != nullptr ? getOboeString (stream->getFormat()) : String ("?"))
-                           + "\nSampleRate = " + (stream != nullptr ? String (stream->getSampleRate()) : String ("?"))
-                           + "\nBufferSizeInFrames = " + (stream != nullptr ? String (stream->getBufferSizeInFrames()) : String ("?"))
-                           + "\nBufferCapacityInFrames = " + (stream != nullptr ? String (stream->getBufferCapacityInFrames()) : String ("?"))
-                           + "\nFramesPerBurst = " + (stream != nullptr ? String (stream->getFramesPerBurst()) : String ("?"))
-                           + "\nFramesPerCallback = " + (stream != nullptr ? String (stream->getFramesPerCallback()) : String ("?"))
-                           + "\nBytesPerFrame = " + (stream != nullptr ? String (stream->getBytesPerFrame()) : String ("?"))
-                           + "\nBytesPerSample = " + (stream != nullptr ? String (stream->getBytesPerSample()) : String ("?"))
-                           + "\nPerformanceMode = " + (stream != nullptr ? getOboeString (stream->getPerformanceMode()) : String ("?")));
+                          + "\nUses AAudio = " + (stream != nullptr ? String ((int) stream->usesAAudio()) : String ("?"))
+                          + "\nDeviceId = " + (stream != nullptr ? String (stream->getDeviceId()) : String ("?"))
+                          + "\nDirection = " + (stream != nullptr ? getOboeString (stream->getDirection()) : String ("?"))
+                          + "\nSharingMode = " + (stream != nullptr ? getOboeString (stream->getSharingMode()) : String ("?"))
+                          + "\nChannelCount = " + (stream != nullptr ? String (stream->getChannelCount()) : String ("?"))
+                          + "\nFormat = " + (stream != nullptr ? getOboeString (stream->getFormat()) : String ("?"))
+                          + "\nSampleRate = " + (stream != nullptr ? String (stream->getSampleRate()) : String ("?"))
+                          + "\nBufferSizeInFrames = " + (stream != nullptr ? String (stream->getBufferSizeInFrames()) : String ("?"))
+                          + "\nBufferCapacityInFrames = " + (stream != nullptr ? String (stream->getBufferCapacityInFrames()) : String ("?"))
+                          + "\nFramesPerBurst = " + (stream != nullptr ? String (stream->getFramesPerBurst()) : String ("?"))
+                          + "\nFramesPerCallback = " + (stream != nullptr ? String (stream->getFramesPerCallback()) : String ("?"))
+                          + "\nBytesPerFrame = " + (stream != nullptr ? String (stream->getBytesPerFrame()) : String ("?"))
+                          + "\nBytesPerSample = " + (stream != nullptr ? String (stream->getBytesPerSample()) : String ("?"))
+                          + "\nPerformanceMode = " + (stream != nullptr ? getOboeString (stream->getPerformanceMode()) : String ("?")));
         }
 
         void close()
@@ -890,19 +890,19 @@ private:
         void printStreamDebugInfo ([[maybe_unused]] oboe::AudioStream* stream)
         {
             YUP_OBOE_LOG ("\nUses AAudio = " + (stream != nullptr ? String ((int) stream->usesAAudio()) : String ("?"))
-                           + "\nDirection = " + (stream != nullptr ? getOboeString (stream->getDirection()) : String ("?"))
-                           + "\nSharingMode = " + (stream != nullptr ? getOboeString (stream->getSharingMode()) : String ("?"))
-                           + "\nChannelCount = " + (stream != nullptr ? String (stream->getChannelCount()) : String ("?"))
-                           + "\nFormat = " + (stream != nullptr ? getOboeString (stream->getFormat()) : String ("?"))
-                           + "\nSampleRate = " + (stream != nullptr ? String (stream->getSampleRate()) : String ("?"))
-                           + "\nBufferSizeInFrames = " + (stream != nullptr ? String (stream->getBufferSizeInFrames()) : String ("?"))
-                           + "\nBufferCapacityInFrames = " + (stream != nullptr ? String (stream->getBufferCapacityInFrames()) : String ("?"))
-                           + "\nFramesPerBurst = " + (stream != nullptr ? String (stream->getFramesPerBurst()) : String ("?"))
-                           + "\nFramesPerCallback = " + (stream != nullptr ? String (stream->getFramesPerCallback()) : String ("?"))
-                           + "\nBytesPerFrame = " + (stream != nullptr ? String (stream->getBytesPerFrame()) : String ("?"))
-                           + "\nBytesPerSample = " + (stream != nullptr ? String (stream->getBytesPerSample()) : String ("?"))
-                           + "\nPerformanceMode = " + (stream != nullptr ? getOboeString (stream->getPerformanceMode()) : String ("?"))
-                           + "\ngetDeviceId = " + (stream != nullptr ? String (stream->getDeviceId()) : String ("?")));
+                          + "\nDirection = " + (stream != nullptr ? getOboeString (stream->getDirection()) : String ("?"))
+                          + "\nSharingMode = " + (stream != nullptr ? getOboeString (stream->getSharingMode()) : String ("?"))
+                          + "\nChannelCount = " + (stream != nullptr ? String (stream->getChannelCount()) : String ("?"))
+                          + "\nFormat = " + (stream != nullptr ? getOboeString (stream->getFormat()) : String ("?"))
+                          + "\nSampleRate = " + (stream != nullptr ? String (stream->getSampleRate()) : String ("?"))
+                          + "\nBufferSizeInFrames = " + (stream != nullptr ? String (stream->getBufferSizeInFrames()) : String ("?"))
+                          + "\nBufferCapacityInFrames = " + (stream != nullptr ? String (stream->getBufferCapacityInFrames()) : String ("?"))
+                          + "\nFramesPerBurst = " + (stream != nullptr ? String (stream->getFramesPerBurst()) : String ("?"))
+                          + "\nFramesPerCallback = " + (stream != nullptr ? String (stream->getFramesPerCallback()) : String ("?"))
+                          + "\nBytesPerFrame = " + (stream != nullptr ? String (stream->getBytesPerFrame()) : String ("?"))
+                          + "\nBytesPerSample = " + (stream != nullptr ? String (stream->getBytesPerSample()) : String ("?"))
+                          + "\nPerformanceMode = " + (stream != nullptr ? getOboeString (stream->getPerformanceMode()) : String ("?"))
+                          + "\ngetDeviceId = " + (stream != nullptr ? String (stream->getDeviceId()) : String ("?")));
         }
 
         int getLatencyFor (OboeStream& stream)

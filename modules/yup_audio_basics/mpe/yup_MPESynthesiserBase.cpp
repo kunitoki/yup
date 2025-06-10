@@ -206,7 +206,7 @@ class MpeSynthesiserBaseTests final : public UnitTest
 
         bool operator!= (const StartAndLength& other) const noexcept { return tie() != other.tie(); }
 
-        bool operator<(const StartAndLength& other) const noexcept { return tie() < other.tie(); }
+        bool operator< (const StartAndLength& other) const noexcept { return tie() < other.tie(); }
     };
 
     struct Events

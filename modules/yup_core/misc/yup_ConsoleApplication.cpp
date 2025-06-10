@@ -356,14 +356,14 @@ const ConsoleApplication::Command* ConsoleApplication::findCommand (const Argume
 int ConsoleApplication::findAndRunCommand (const ArgumentList& args, bool optionMustBeFirstArg) const
 {
     return invokeCatchingFailures ([&args, optionMustBeFirstArg, this]
-                                   {
-                                       if (auto c = findCommand (args, optionMustBeFirstArg))
-                                           c->command (args);
-                                       else
-                                           fail ("Unrecognised arguments");
+    {
+        if (auto c = findCommand (args, optionMustBeFirstArg))
+            c->command (args);
+        else
+            fail ("Unrecognised arguments");
 
-                                       return 0;
-                                   });
+        return 0;
+    });
 }
 
 int ConsoleApplication::findAndRunCommand (int argc, char* argv[]) const
@@ -385,10 +385,10 @@ void ConsoleApplication::addDefaultCommand (Command c)
 void ConsoleApplication::addHelpCommand (String arg, String helpMessage, bool makeDefaultCommand)
 {
     Command c { arg, arg, "Prints the list of commands", {}, [this, helpMessage] (const ArgumentList& args)
-                {
-                    std::cout << helpMessage << std::endl;
-                    printCommandList (args);
-                } };
+    {
+        std::cout << helpMessage << std::endl;
+        printCommandList (args);
+    } };
 
     if (makeDefaultCommand)
         addDefaultCommand (std::move (c));
@@ -399,9 +399,9 @@ void ConsoleApplication::addHelpCommand (String arg, String helpMessage, bool ma
 void ConsoleApplication::addVersionCommand (String arg, String versionText)
 {
     addCommand ({ arg, arg, "Prints the current version number", {}, [versionText] (const ArgumentList&)
-                  {
-                      std::cout << versionText << std::endl;
-                  } });
+    {
+        std::cout << versionText << std::endl;
+    } });
 }
 
 const std::vector<ConsoleApplication::Command>& ConsoleApplication::getCommands() const

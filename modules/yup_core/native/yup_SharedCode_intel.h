@@ -47,15 +47,15 @@ static void doCPUID (uint32& a, uint32& b, uint32& c, uint32& d, uint32 type)
     uint32 la = a, lb = b, lc = c, ld = d;
 
 #if YUP_32BIT && defined(__pic__)
-    asm("mov %%ebx, %%edi\n"
-        "cpuid\n"
-        "xchg %%edi, %%ebx\n"
-        : "=a"(la), "=D"(lb), "=c"(lc), "=d"(ld)
-        : "a"(type), "c"(0));
+    asm ("mov %%ebx, %%edi\n"
+         "cpuid\n"
+         "xchg %%edi, %%ebx\n"
+         : "=a"(la), "=D"(lb), "=c"(lc), "=d"(ld)
+         : "a"(type), "c"(0));
 #else
-    asm("cpuid\n"
-        : "=a"(la), "=b"(lb), "=c"(lc), "=d"(ld)
-        : "a"(type), "c"(0));
+    asm ("cpuid\n"
+         : "=a"(la), "=b"(lb), "=c"(lc), "=d"(ld)
+         : "a"(type), "c"(0));
 #endif
 
     a = la;

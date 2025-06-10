@@ -81,8 +81,8 @@
 #endif
 
 #if ! defined(YUP_SILENCE_XCODE_15_LINKER_WARNING) \
-    && defined(__apple_build_version__)             \
-    && __apple_build_version__ >= 15000000          \
+    && defined(__apple_build_version__)            \
+    && __apple_build_version__ >= 15000000         \
     && __apple_build_version__ < 15000100
 
     // Due to known issues, the linker in Xcode 15.0 may produce broken binaries.

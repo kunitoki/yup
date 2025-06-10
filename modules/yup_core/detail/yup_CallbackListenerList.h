@@ -65,18 +65,18 @@ public:
         listeners.add (&*it);
 
         return ErasedScopeGuard { [this, it]
-                                  {
-                                      listeners.remove (&*it);
-                                      callbacks.erase (it);
-                                  } };
+        {
+            listeners.remove (&*it);
+            callbacks.erase (it);
+        } };
     }
 
     void call (Args... args)
     {
         listeners.call ([&] (auto& l)
-                        {
-                            l (std::forward<Args> (args)...);
-                        });
+        {
+            l (std::forward<Args> (args)...);
+        });
     }
 
 private:

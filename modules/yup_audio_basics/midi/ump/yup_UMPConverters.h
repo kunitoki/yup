@@ -74,9 +74,9 @@ struct ToUMP2Converter
     void convert (const BytestreamMidiView& m, Fn&& fn)
     {
         Conversion::toMidi1 (m, [&] (const View& v)
-                             {
-                                 translator.dispatch (v, fn);
-                             });
+        {
+            translator.dispatch (v, fn);
+        });
     }
 
     template <typename Fn>
@@ -139,9 +139,9 @@ public:
     static void convertImpl (Converter& converter, Iterator b, Iterator e, Fn&& fn)
     {
         std::for_each (b, e, [&] (const auto& v)
-                       {
-                           convertImpl (converter, v, fn);
-                       });
+        {
+            convertImpl (converter, v, fn);
+        });
     }
 
     template <typename Fn>
@@ -192,9 +192,9 @@ struct ToBytestreamConverter
     void convert (const View& v, double time, Fn&& fn)
     {
         Conversion::midi2ToMidi1DefaultTranslation (v, [&] (const View& midi1)
-                                                    {
-                                                        translator.dispatch (midi1, time, fn);
-                                                    });
+        {
+            translator.dispatch (midi1, time, fn);
+        });
     }
 
     void reset() { translator.reset(); }

@@ -125,7 +125,7 @@ YUP_API bool YUP_CALLTYPE operator!= (RelativeTime t1, RelativeTime t2) noexcept
 
 YUP_API bool YUP_CALLTYPE operator> (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() > t2.inSeconds(); }
 
-YUP_API bool YUP_CALLTYPE operator<(RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() < t2.inSeconds(); }
+YUP_API bool YUP_CALLTYPE operator< (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() < t2.inSeconds(); }
 
 YUP_API bool YUP_CALLTYPE operator>= (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() >= t2.inSeconds(); }
 

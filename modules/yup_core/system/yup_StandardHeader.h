@@ -175,9 +175,9 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
 #if YUP_MSVC && YUP_DLL_BUILD
 #define YUP_PUBLIC_IN_DLL_BUILD(declaration) \
-public:                                       \
-    declaration;                              \
-                                              \
+public:                                      \
+    declaration;                             \
+                                             \
 private:
 #else
 #define YUP_PUBLIC_IN_DLL_BUILD(declaration) declaration;

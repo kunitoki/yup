@@ -100,8 +100,8 @@
 #define YUP_EACH_49_(FN, X, ...) FN (X) YUP_EACH_48_ (FN, __VA_ARGS__)
 
 /** Apply the macro FN to each of the other arguments. */
-#define YUP_EACH(FN, ...)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      \
-    YUP_NTH_ARG_ (, __VA_ARGS__, YUP_EACH_49_, YUP_EACH_48_, YUP_EACH_47_, YUP_EACH_46_, YUP_EACH_45_, YUP_EACH_44_, YUP_EACH_43_, YUP_EACH_42_, YUP_EACH_41_, YUP_EACH_40_, YUP_EACH_39_, YUP_EACH_38_, YUP_EACH_37_, YUP_EACH_36_, YUP_EACH_35_, YUP_EACH_34_, YUP_EACH_33_, YUP_EACH_32_, YUP_EACH_31_, YUP_EACH_30_, YUP_EACH_29_, YUP_EACH_28_, YUP_EACH_27_, YUP_EACH_26_, YUP_EACH_25_, YUP_EACH_24_, YUP_EACH_23_, YUP_EACH_22_, YUP_EACH_21_, YUP_EACH_20_, YUP_EACH_19_, YUP_EACH_18_, YUP_EACH_17_, YUP_EACH_16_, YUP_EACH_15_, YUP_EACH_14_, YUP_EACH_13_, YUP_EACH_12_, YUP_EACH_11_, YUP_EACH_10_, YUP_EACH_09_, YUP_EACH_08_, YUP_EACH_07_, YUP_EACH_06_, YUP_EACH_05_, YUP_EACH_04_, YUP_EACH_03_, YUP_EACH_02_, YUP_EACH_01_, YUP_EACH_00_) \
+#define YUP_EACH(FN, ...) \
+    YUP_NTH_ARG_ (, __VA_ARGS__, YUP_EACH_49_, YUP_EACH_48_, YUP_EACH_47_, YUP_EACH_46_, YUP_EACH_45_, YUP_EACH_44_, YUP_EACH_43_, YUP_EACH_42_, YUP_EACH_41_, YUP_EACH_40_, YUP_EACH_39_, YUP_EACH_38_, YUP_EACH_37_, YUP_EACH_36_, YUP_EACH_35_, YUP_EACH_34_, YUP_EACH_33_, YUP_EACH_32_, YUP_EACH_31_, YUP_EACH_30_, YUP_EACH_29_, YUP_EACH_28_, YUP_EACH_27_, YUP_EACH_26_, YUP_EACH_25_, YUP_EACH_24_, YUP_EACH_23_, YUP_EACH_22_, YUP_EACH_21_, YUP_EACH_20_, YUP_EACH_19_, YUP_EACH_18_, YUP_EACH_17_, YUP_EACH_16_, YUP_EACH_15_, YUP_EACH_14_, YUP_EACH_13_, YUP_EACH_12_, YUP_EACH_11_, YUP_EACH_10_, YUP_EACH_09_, YUP_EACH_08_, YUP_EACH_07_, YUP_EACH_06_, YUP_EACH_05_, YUP_EACH_04_, YUP_EACH_03_, YUP_EACH_02_, YUP_EACH_01_, YUP_EACH_00_)          \
     (FN, __VA_ARGS__)
 
 /** Concatenate two tokens to form a new token. */
@@ -119,7 +119,7 @@
 
 /** If 'warning' is recognised by this compiler, ignore it. */
 #if defined(__has_warning)
-#define YUP_IGNORE_GCC_LIKE(compiler, warning)                  \
+#define YUP_IGNORE_GCC_LIKE(compiler, warning)                 \
     YUP_CONCAT (YUP_IGNORE_GCC_IMPL_, __has_warning (warning)) \
     (compiler, warning)
 #else
@@ -171,8 +171,7 @@
     compilers (like clang and gcc).
 */
 #if YUP_MSVC
-#define YUP_IGNORE_MSVC(warnings) __pragma (warning (disable \
-                                                      : warnings))
+#define YUP_IGNORE_MSVC(warnings) __pragma (warning (disable : warnings))
 #define YUP_BEGIN_IGNORE_WARNINGS_LEVEL_MSVC(level, warnings) \
     __pragma (warning (push, level)) YUP_IGNORE_MSVC (warnings)
 #define YUP_BEGIN_IGNORE_WARNINGS_MSVC(warnings) \

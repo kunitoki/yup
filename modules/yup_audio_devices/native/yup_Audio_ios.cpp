@@ -229,7 +229,7 @@ namespace yup
 #define YUP_IOS_AUDIO_LOG(x) YUP_DBG (x)
 #else
 #define YUP_IOS_AUDIO_LOG(x) \
-    {                         \
+    {                        \
     }
 #endif
 
@@ -242,7 +242,7 @@ static void logNSError (NSError* e)
     }
 }
 
-#define YUP_NSERROR_CHECK(X) \
+#define YUP_NSERROR_CHECK(X)  \
     {                         \
         NSError* error = nil; \
         X;                    \
@@ -326,14 +326,14 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         }
 
         YUP_NSERROR_CHECK ([[AVAudioSession sharedInstance] setCategory:category
-                                                             withOptions:options
-                                                                   error:&error]);
+                                                            withOptions:options
+                                                                  error:&error]);
     }
 
     static void setAudioSessionActive (bool enabled)
     {
         YUP_NSERROR_CHECK ([[AVAudioSession sharedInstance] setActive:enabled
-                                                                 error:&error]);
+                                                                error:&error]);
     }
 
     int getBufferSize (const double currentSampleRate)
@@ -347,7 +347,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
 
         auto session = [AVAudioSession sharedInstance];
         YUP_NSERROR_CHECK ([session setPreferredIOBufferDuration:bufferDuration
-                                                            error:&error]);
+                                                           error:&error]);
 
         return getBufferSize (currentSampleRate);
     }
@@ -390,7 +390,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
     {
         auto session = [AVAudioSession sharedInstance];
         YUP_NSERROR_CHECK ([session setPreferredSampleRate:rate
-                                                      error:&error]);
+                                                     error:&error]);
 
         return session.sampleRate;
     }
@@ -502,10 +502,10 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         targetBufferSize = bufferSizeWanted > 0 ? bufferSizeWanted : defaultBufferSize;
 
         YUP_IOS_AUDIO_LOG ("Opening audio device:"
-                            << " inputChannelsWanted: " << requestedInputChannels.toString (2)
-                            << ", outputChannelsWanted: " << requestedOutputChannels.toString (2)
-                            << ", targetSampleRate: " << targetSampleRate
-                            << ", targetBufferSize: " << targetBufferSize);
+                           << " inputChannelsWanted: " << requestedInputChannels.toString (2)
+                           << ", outputChannelsWanted: " << requestedOutputChannels.toString (2)
+                           << ", targetSampleRate: " << targetSampleRate
+                           << ", targetBufferSize: " << targetBufferSize);
 
         setAudioSessionActive (true);
         setAudioSessionCategory (requestedInputChannels > 0 ? AVAudioSessionCategoryPlayAndRecord
@@ -589,7 +589,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                                  : AVAudioSessionModeMeasurement);
 
         YUP_NSERROR_CHECK ([session setMode:mode
-                                       error:&error]);
+                                      error:&error]);
 
         return session.mode == mode;
     }
@@ -848,8 +848,8 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                                         [[maybe_unused]] AudioUnitElement element)
     {
         YUP_IOS_AUDIO_LOG ("handleAudioUnitPropertyChange: propertyID: " << String (propertyID)
-                                                                          << " scope: " << String (scope)
-                                                                          << " element: " << String (element));
+                                                                         << " scope: " << String (scope)
+                                                                         << " element: " << String (element));
 
         switch (propertyID)
         {
@@ -872,7 +872,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         jassert (err == noErr);
 
         YUP_IOS_AUDIO_LOG ("handleInterAppAudioConnectionChange: " << (connected ? "connected"
-                                                                                  : "disconnected"));
+                                                                                 : "disconnected"));
 
         if (connected != interAppAudioConnected)
         {
@@ -1146,7 +1146,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             if ([port.portName isEqualToString:@"Receiver"])
             {
                 YUP_NSERROR_CHECK ([session overrideOutputAudioPort:AVAudioSessionPortOverrideSpeaker
-                                                               error:&error]);
+                                                              error:&error]);
                 setAudioSessionActive (true);
             }
         }

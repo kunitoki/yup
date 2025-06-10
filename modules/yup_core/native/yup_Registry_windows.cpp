@@ -245,12 +245,12 @@ bool YUP_CALLTYPE WindowsRegistry::deleteKey (const String& regKeyPath, WoW64Mod
 }
 
 bool YUP_CALLTYPE WindowsRegistry::registerFileAssociation (const String& fileExtension,
-                                                             const String& symbolicDescription,
-                                                             const String& fullDescription,
-                                                             const File& targetExecutable,
-                                                             const int iconResourceNumber,
-                                                             const bool registerForCurrentUserOnly,
-                                                             WoW64Mode mode)
+                                                            const String& symbolicDescription,
+                                                            const String& fullDescription,
+                                                            const File& targetExecutable,
+                                                            const int iconResourceNumber,
+                                                            const bool registerForCurrentUserOnly,
+                                                            WoW64Mode mode)
 {
     auto root = registerForCurrentUserOnly ? "HKEY_CURRENT_USER\\Software\\Classes\\"
                                            : "HKEY_CLASSES_ROOT\\";

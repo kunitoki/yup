@@ -170,17 +170,17 @@ public:
         return opt.value_or (std::forward<U> (fallback));
     }
 
-#define X(op)                                                     \
-template <typename T, typename U>                                 \
-friend bool operator op (const Optional<T>&, const Optional<U>&); \
-template <typename T>                                             \
-friend bool operator op (const Optional<T>&, Nullopt);            \
-template <typename T>                                             \
-friend bool operator op (Nullopt, const Optional<T>&);            \
-template <typename T, typename U>                                 \
-friend bool operator op (const Optional<T>&, const U&);           \
-template <typename T, typename U>                                 \
-friend bool operator op (const T&, const Optional<U>&);
+#define X(op)                                                         \
+    template <typename T, typename U>                                 \
+    friend bool operator op (const Optional<T>&, const Optional<U>&); \
+    template <typename T>                                             \
+    friend bool operator op (const Optional<T>&, Nullopt);            \
+    template <typename T>                                             \
+    friend bool operator op (Nullopt, const Optional<T>&);            \
+    template <typename T, typename U>                                 \
+    friend bool operator op (const Optional<T>&, const U&);           \
+    template <typename T, typename U>                                 \
+    friend bool operator op (const T&, const Optional<U>&);
 
     YUP_OPTIONAL_OPERATORS
 
@@ -202,32 +202,32 @@ Optional<std::decay_t<Value>> makeOptional (Value&& v)
 }
 
 #ifndef DOXYGEN
-#define X(op)                                                     \
-template <typename T, typename U>                                 \
-bool operator op (const Optional<T>& lhs, const Optional<U>& rhs) \
-{                                                                 \
-return lhs.opt op rhs.opt;                                        \
-}                                                                 \
-template <typename T>                                             \
-bool operator op (const Optional<T>& lhs, Nullopt rhs)            \
-{                                                                 \
-return lhs.opt op rhs;                                            \
-}                                                                 \
-template <typename T>                                             \
-bool operator op (Nullopt lhs, const Optional<T>& rhs)            \
-{                                                                 \
-return lhs op rhs.opt;                                            \
-}                                                                 \
-template <typename T, typename U>                                 \
-bool operator op (const Optional<T>& lhs, const U& rhs)           \
-{                                                                 \
-return lhs.opt op rhs;                                            \
-}                                                                 \
-template <typename T, typename U>                                 \
-bool operator op (const T& lhs, const Optional<U>& rhs)           \
-{                                                                 \
-return lhs op rhs.opt;                                            \
-}
+#define X(op)                                                         \
+    template <typename T, typename U>                                 \
+    bool operator op (const Optional<T>& lhs, const Optional<U>& rhs) \
+    {                                                                 \
+        return lhs.opt op rhs.opt;                                    \
+    }                                                                 \
+    template <typename T>                                             \
+    bool operator op (const Optional<T>& lhs, Nullopt rhs)            \
+    {                                                                 \
+        return lhs.opt op rhs;                                        \
+    }                                                                 \
+    template <typename T>                                             \
+    bool operator op (Nullopt lhs, const Optional<T>& rhs)            \
+    {                                                                 \
+        return lhs op rhs.opt;                                        \
+    }                                                                 \
+    template <typename T, typename U>                                 \
+    bool operator op (const Optional<T>& lhs, const U& rhs)           \
+    {                                                                 \
+        return lhs.opt op rhs;                                        \
+    }                                                                 \
+    template <typename T, typename U>                                 \
+    bool operator op (const T& lhs, const Optional<U>& rhs)           \
+    {                                                                 \
+        return lhs op rhs.opt;                                        \
+    }
 
 YUP_OPTIONAL_OPERATORS
 

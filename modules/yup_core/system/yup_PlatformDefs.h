@@ -325,13 +325,13 @@ constexpr bool isConstantEvaluated() noexcept
     @endcode
 */
 #define YUP_DECLARE_NON_COPYABLE(className) \
-    className (const className&) = delete;   \
+    className (const className&) = delete;  \
     className& operator= (const className&) = delete;
 
 /** This is a shorthand macro for deleting a class's move constructor and
     move assignment operator. */
 #define YUP_DECLARE_NON_MOVEABLE(className) \
-    className (className&&) = delete;        \
+    className (className&&) = delete;       \
     className& operator= (className&&) = delete;
 
 /** This is a shorthand way of writing both a YUP_DECLARE_NON_COPYABLE and
@@ -342,7 +342,7 @@ constexpr bool isConstantEvaluated() noexcept
 
 /** This macro can be added to class definitions to disable the use of new/delete to
     allocate the object on the heap, forcing it to only be used as a stack or member variable. */
-#define YUP_PREVENT_HEAP_ALLOCATION             \
+#define YUP_PREVENT_HEAP_ALLOCATION              \
 private:                                         \
     static void* operator new (size_t) = delete; \
     static void operator delete (void*) = delete;

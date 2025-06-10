@@ -34,13 +34,14 @@ struct NoneSuch
 {
     NoneSuch() = delete;
     ~NoneSuch() = delete;
-    NoneSuch(NoneSuch const&) = delete;
-    void operator=(NoneSuch const&) = delete;
-    NoneSuch(NoneSuch&&) = delete;
-    void operator=(NoneSuch&&) = delete;
+    NoneSuch (const NoneSuch&) = delete;
+    void operator= (const NoneSuch&) = delete;
+    NoneSuch (NoneSuch&&) = delete;
+    void operator= (NoneSuch&&) = delete;
 };
 
-namespace detail {
+namespace detail
+{
 template <class Default, class AlwaysVoid, template <class...> class Op, class... Args>
 struct Detector
 {
@@ -71,7 +72,8 @@ using detectedType = typename detail::Detector<NoneSuch, void, Op, Args...>::Typ
 template <class Default, template <class...> class Op, class... Args>
 using detectedOr = typename detail::detectedOr<Default, Op, Args...>::Type;
 
-namespace detail {
+namespace detail
+{
 template <class Expected, template <class...> class Op, class... Args>
 using isDetectedExact = std::is_same<Expected, detectedType<Op, Args...>>;
 

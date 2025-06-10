@@ -54,16 +54,16 @@ bool WaitableEvent::wait (double timeOutMilliseconds) const
         if (timeOutMilliseconds < 0.0)
         {
             condition.wait (lock, [this]
-                            {
-                                return triggered == true;
-                            });
+            {
+                return triggered == true;
+            });
         }
         else
         {
             if (! condition.wait_for (lock, std::chrono::duration<double, std::milli> { timeOutMilliseconds }, [this]
-                                      {
-                                          return triggered == true;
-                                      }))
+            {
+                return triggered == true;
+            }))
             {
                 return false;
             }

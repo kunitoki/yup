@@ -90,9 +90,9 @@ void MidiKeyboardState::noteOnInternal (const int midiChannel, const int midiNot
     {
         noteStates[midiNoteNumber] = static_cast<uint16> (noteStates[midiNoteNumber] | (1 << (midiChannel - 1)));
         listeners.call ([&] (Listener& l)
-                        {
-                            l.handleNoteOn (this, midiChannel, midiNoteNumber, velocity);
-                        });
+        {
+            l.handleNoteOn (this, midiChannel, midiNoteNumber, velocity);
+        });
     }
 }
 
@@ -116,9 +116,9 @@ void MidiKeyboardState::noteOffInternal (const int midiChannel, const int midiNo
     {
         noteStates[midiNoteNumber] = static_cast<uint16> (noteStates[midiNoteNumber] & ~(1 << (midiChannel - 1)));
         listeners.call ([&] (Listener& l)
-                        {
-                            l.handleNoteOff (this, midiChannel, midiNoteNumber, velocity);
-                        });
+        {
+            l.handleNoteOff (this, midiChannel, midiNoteNumber, velocity);
+        });
     }
 }
 

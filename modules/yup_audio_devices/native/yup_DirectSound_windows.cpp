@@ -300,9 +300,9 @@ namespace
     static type##functionName ds##functionName = nullptr;
 
 #define DSOUND_FUNCTION_LOAD(functionName)                                     \
-    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-function-type")               \
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wcast-function-type")                \
     ds##functionName = (type##functionName) GetProcAddress (h, #functionName); \
-    YUP_END_IGNORE_WARNINGS_GCC_LIKE                                          \
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE                                           \
     jassert (ds##functionName != nullptr);
 
 typedef BOOL (CALLBACK* LPDSENUMCALLBACKW) (LPGUID, LPCWSTR, LPCWSTR, LPVOID);
@@ -382,7 +382,7 @@ public:
     String open()
     {
         YUP_DS_LOG ("opening output: " + name + "  rate=" + String (sampleRate)
-                     + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
+                    + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
 
         pDirectSound = nullptr;
         pOutputBuffer = nullptr;
@@ -696,7 +696,7 @@ public:
     String open()
     {
         YUP_DS_LOG ("opening input: " + name
-                     + "  rate=" + String (sampleRate) + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
+                    + "  rate=" + String (sampleRate) + " bits=" + String (bitDepth) + " buf=" + String (bufferSizeSamples));
 
         pDirectSound = nullptr;
         pDirectSoundCapture = nullptr;

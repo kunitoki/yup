@@ -151,8 +151,8 @@ private:
 
       @see HeavyweightLeakedObjectDetector, YUP_LEAK_DETECTOR, LeakedObjectDetector
   */
-#define YUP_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                                 \
-    friend class yup::HeavyweightLeakedObjectDetector<OwnerClass>;                \
+#define YUP_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                                  \
+    friend class yup::HeavyweightLeakedObjectDetector<OwnerClass>;                 \
     static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
     yup::HeavyweightLeakedObjectDetector<OwnerClass> YUP_JOIN_MACRO (leakDetector, __LINE__);
 #else

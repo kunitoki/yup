@@ -63,7 +63,7 @@ struct UUIDGetter<::IUnknown>
     static CLSID get() { return { 0, 0, 0, { 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } }; }
 };
 
-#define YUP_DECLARE_UUID_GETTER(name, uuid)                 \
+#define YUP_DECLARE_UUID_GETTER(name, uuid)                  \
     template <>                                              \
     struct UUIDGetter<name>                                  \
     {                                                        \
@@ -71,7 +71,7 @@ struct UUIDGetter<::IUnknown>
     };
 
 #define YUP_COMCLASS(name, guid)         \
-    struct name;                          \
+    struct name;                         \
     YUP_DECLARE_UUID_GETTER (name, guid) \
     struct name
 
