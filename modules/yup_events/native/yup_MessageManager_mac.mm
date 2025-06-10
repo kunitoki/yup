@@ -50,7 +50,7 @@ MenuTrackingChangedCallback menuTrackingChangedCallback = nullptr;
 struct AppDelegateClass final : public ObjCClass<NSObject>
 {
     AppDelegateClass()
-        : ObjCClass("JUCEAppDelegate_")
+        : ObjCClass("YUPAppDelegate_")
     {
         // clang-format off
         addMethod(@selector(applicationWillFinishLaunching:), [](id self, SEL, NSNotification*)
@@ -538,7 +538,7 @@ struct MountedVolumeListChangeDetector::Pimpl
     struct ObserverClass final : public ObjCClass<NSObject>
     {
         ObserverClass()
-            : ObjCClass<NSObject>("JUCEDriveObserver_")
+            : ObjCClass<NSObject>("YUPDriveObserver_")
         {
             addIvar<Pimpl*>("owner");
 

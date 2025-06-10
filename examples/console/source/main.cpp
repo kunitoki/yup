@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 
 int main (int argc, char* argv[])
 {

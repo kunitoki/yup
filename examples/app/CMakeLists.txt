@@ -40,7 +40,7 @@ yup_standalone_app (
     TARGET_APP_ID "org.yup.${target_name}"
     TARGET_APP_NAMESPACE "org.yup"
     MODULES
-        juce_core
+        yup_core
         yup_audio_basics
         yup_audio_devices
         yup_events

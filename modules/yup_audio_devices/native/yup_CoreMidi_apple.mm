@@ -575,7 +575,7 @@ static String getGlobalMidiClientName()
     if (auto* app = YUPApplicationBase::getInstance())
         return app->getApplicationName();
 
-    return "JUCE";
+    return "YUP";
 }
 
 static MIDIClientRef getGlobalMidiClient()

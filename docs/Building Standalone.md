@@ -13,7 +13,7 @@ A basic YUP application consists of the following components:
 Here's a minimal example of a standalone application:
 
 ```cpp
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>

@@ -687,7 +687,7 @@ public:
     */
     [[nodiscard]] constexpr bool isCollinear (const Point& other) const noexcept
     {
-        return juce_abs (crossProduct (other)) == ValueType (0);
+        return yup_abs (crossProduct (other)) == ValueType (0);
     }
 
     //==============================================================================

@@ -45,7 +45,7 @@
     ID:                 yup_audio_devices
     vendor:             juce
     version:            7.0.12
-    name:               JUCE audio and MIDI I/O device classes
+    name:               YUP audio and MIDI I/O device classes
     description:        Classes to play and record from audio and MIDI I/O devices
     website:            http://www.juce.com/juce
     license:            ISC

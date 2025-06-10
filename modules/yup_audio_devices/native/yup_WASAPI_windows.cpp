@@ -1242,7 +1242,7 @@ public:
                          const String& inputDeviceID,
                          WASAPIDeviceMode mode)
         : AudioIODevice (deviceName, typeNameIn)
-        , Thread ("JUCE WASAPI")
+        , Thread ("YUP WASAPI")
         , outputDeviceId (outputDeviceID)
         , inputDeviceId (inputDeviceID)
         , deviceMode (mode)

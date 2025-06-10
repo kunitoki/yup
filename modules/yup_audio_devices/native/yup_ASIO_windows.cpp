@@ -398,7 +398,7 @@ constexpr int maxNumASIODevices = 16;
 class ASIOAudioIODevice;
 static ASIOAudioIODevice* currentASIODev[maxNumASIODevices] = {};
 
-extern HWND juce_messageWindowHandle;
+extern HWND yup_messageWindowHandle;
 
 class ASIOAudioIODeviceType;
 static void sendASIODeviceChangeToListeners (ASIOAudioIODeviceType*);
@@ -1261,7 +1261,7 @@ private:
         if (asioObject == nullptr)
             return "No Driver";
 
-        auto initOk = (asioObject->init (juce_messageWindowHandle) > 0);
+        auto initOk = (asioObject->init (yup_messageWindowHandle) > 0);
         String driverError;
 
         // Get error message if init() failed, or if it's a buggy Denon driver,

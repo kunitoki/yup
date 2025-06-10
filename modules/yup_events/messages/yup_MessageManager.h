@@ -172,7 +172,7 @@ public:
     static bool existsAndIsCurrentThread() noexcept;
 
     //==============================================================================
-    /** Sends a message to all other JUCE applications that are running.
+    /** Sends a message to all other YUP applications that are running.
 
         @param messageText      the string that will be passed to the actionListenerCallback()
                                 method of the broadcast listeners in the other app.
@@ -249,7 +249,7 @@ public:
             This method behaves identically to enter, except that it will abort waiting for
             the lock if the abort method is called.
 
-            Unlike other JUCE critical sections, this method **will** block waiting for the lock.
+            Unlike other YUP critical sections, this method **will** block waiting for the lock.
 
             To ensure predictable behaviour, you should re-check your abort condition if tryEnter
             returns false.

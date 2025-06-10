@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 #include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>

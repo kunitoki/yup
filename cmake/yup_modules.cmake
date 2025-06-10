@@ -535,9 +535,8 @@ endfunction()
 #==============================================================================
 
 function (_yup_add_default_modules modules_path)
+    # Thirdparty modules
     set (thirdparty_group "Thirdparty")
-    set (modules_group "Modules")
-
     yup_add_module (${modules_path}/thirdparty/zlib ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/glad ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/harfbuzz ${thirdparty_group})
@@ -550,10 +549,9 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/rive_renderer ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/oboe_library ${thirdparty_group})
 
-    # Original juce modules
-    yup_add_module (${modules_path}/modules/juce_core ${modules_group})
-
     # Yup modules
+    set (modules_group "Modules")
+    yup_add_module (${modules_path}/modules/yup_core ${modules_group})
     yup_add_module (${modules_path}/modules/yup_events ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})

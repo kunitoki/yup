@@ -732,7 +732,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
     };
 
     //==============================================================================
-#if YUP_MODULE_AVAILABLE_juce_graphics
+#if YUP_MODULE_AVAILABLE_yup_graphics
     YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
     Image getIcon (int size)
@@ -744,7 +744,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
             if (interAppAudioConnected)
             {
                 if (UIImage* hostUIImage = AudioOutputUnitGetHostIcon (audioUnit, (float) size))
-                    return juce_createImageFromUIImage (hostUIImage);
+                    return yup_createImageFromUIImage (hostUIImage);
             }
         }
 
@@ -1489,7 +1489,7 @@ void iOSAudioIODevice::setMidiMessageCollector (MidiMessageCollector* collector)
 AudioPlayHead* iOSAudioIODevice::getAudioPlayHead() const { return &pimpl->playhead; }
 
 bool iOSAudioIODevice::isInterAppAudioConnected() const { return pimpl->interAppAudioConnected; }
-#if YUP_MODULE_AVAILABLE_juce_graphics
+#if YUP_MODULE_AVAILABLE_yup_graphics
 Image iOSAudioIODevice::getIcon (int size)
 {
     return pimpl->getIcon (size);

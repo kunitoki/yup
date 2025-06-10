@@ -82,7 +82,7 @@ public:
         if (auto* app = YUPApplicationBase::getInstance())
             return app->getApplicationName();
 
-        return "JUCE";
+        return "YUP";
 #endif
     }
 
@@ -372,7 +372,7 @@ private:
         UpdateNotifier notifier;
         std::thread thread { [this]
         {
-            Thread::setCurrentThreadName ("JUCE MIDI Input");
+            Thread::setCurrentThreadName ("YUP MIDI Input");
 
             auto seqHandle = client.get();
 

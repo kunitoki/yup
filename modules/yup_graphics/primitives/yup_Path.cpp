@@ -866,7 +866,7 @@ bool Path::parsePathData (const String& pathData)
 
     while (! data.isEmpty())
     {
-        juce_wchar command = *data;
+        yup_wchar command = *data;
 
         data++;
 

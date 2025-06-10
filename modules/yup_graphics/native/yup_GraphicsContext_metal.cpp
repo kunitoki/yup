@@ -287,7 +287,7 @@ private:
 
 //==============================================================================
 
-std::unique_ptr<GraphicsContext> juce_constructMetalGraphicsContext (GraphicsContext::Options fiddleOptions)
+std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
     return std::make_unique<LowLevelRenderContextMetal> (fiddleOptions);
 }

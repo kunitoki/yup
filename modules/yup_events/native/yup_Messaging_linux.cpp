@@ -331,7 +331,7 @@ static void installKeyboardBreakHandler()
 
 //==============================================================================
 // this function expects that it will NEVER be called simultaneously for two concurrent threads
-bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
 {
     for (;;)
     {

@@ -41,31 +41,31 @@ namespace yup
 {
 
 //==============================================================================
-/** Initialises JUCE's GUI classes.
+/** Initialises YUP's GUI classes.
 
-    If you're embedding JUCE into an application that uses its own event-loop rather
+    If you're embedding YUP into an application that uses its own event-loop rather
     than using the START_YUP_APPLICATION macro, call this function before making any
-    JUCE calls, to make sure things are initialised correctly.
+    YUP calls, to make sure things are initialised correctly.
 
-    Note that if you're creating a JUCE DLL for Windows, you may also need to call the
+    Note that if you're creating a YUP DLL for Windows, you may also need to call the
     Process::setCurrentModuleInstanceHandle() method.
 
     @see shutdownJuce_GUI()
 */
 YUP_API void YUP_CALLTYPE initialiseJuce_GUI();
 
-/** Clears up any static data being used by JUCE's GUI classes.
+/** Clears up any static data being used by YUP's GUI classes.
 
-    If you're embedding JUCE into an application that uses its own event-loop rather
+    If you're embedding YUP into an application that uses its own event-loop rather
     than using the START_YUP_APPLICATION macro, call this function in your shutdown
-    code to clean up any JUCE objects that might be lying around.
+    code to clean up any YUP objects that might be lying around.
 
     @see initialiseJuce_GUI()
 */
 YUP_API void YUP_CALLTYPE shutdownJuce_GUI();
 
 //==============================================================================
-/** A utility object that helps you initialise and shutdown JUCE correctly
+/** A utility object that helps you initialise and shutdown YUP correctly
     using an RAII pattern.
 
     When the first instance of this class is created, it calls initialiseJuce_GUI(),
@@ -97,7 +97,7 @@ class YUP_API ScopedJuceInitialiser_GUI final
 
 //==============================================================================
 /**
-    To start a JUCE app, use this macro: START_YUP_APPLICATION (AppSubClass) where
+    To start a YUP app, use this macro: START_YUP_APPLICATION (AppSubClass) where
     AppSubClass is the name of a class derived from YUPApplication or YUPApplicationBase.
 
     See the YUPApplication and YUPApplicationBase class documentation for more details.
@@ -123,11 +123,11 @@ class YUP_API ScopedJuceInitialiser_GUI final
 
 #define YUP_CREATE_APPLICATION_DEFINE(AppClass)                \
     YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
-    yup::YUPApplicationBase* juce_CreateApplication()         \
+    yup::YUPApplicationBase* yup_CreateApplication()         \
     {                                                           \
         return new AppClass();                                  \
     }                                                           \
-    void* juce_GetIOSCustomDelegateClass()                      \
+    void* yup_GetIOSCustomDelegateClass()                      \
     {                                                           \
         return nullptr;                                         \
     }                                                           \
@@ -135,11 +135,11 @@ class YUP_API ScopedJuceInitialiser_GUI final
 
 #define YUP_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
     YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")                 \
-    yup::YUPApplicationBase* juce_CreateApplication()                         \
+    yup::YUPApplicationBase* yup_CreateApplication()                         \
     {                                                                           \
         return new AppClass();                                                  \
     }                                                                           \
-    void* juce_GetIOSCustomDelegateClass()                                      \
+    void* yup_GetIOSCustomDelegateClass()                                      \
     {                                                                           \
         return [DelegateClass class];                                           \
     }                                                                           \
@@ -148,16 +148,16 @@ class YUP_API ScopedJuceInitialiser_GUI final
 #define YUP_MAIN_FUNCTION_DEFINITION                                                    \
     YUP_MAIN_FUNCTION                                                                   \
     {                                                                                    \
-        yup::YUPApplicationBase::createInstance = &juce_CreateApplication;             \
-        yup::YUPApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
+        yup::YUPApplicationBase::createInstance = &yup_CreateApplication;             \
+        yup::YUPApplicationBase::iOSCustomDelegate = yup_GetIOSCustomDelegateClass(); \
         return yup::YUPApplicationBase::main(YUP_MAIN_FUNCTION_ARGS);                 \
     }
 
 #else
 
 #define YUP_CREATE_APPLICATION_DEFINE(AppClass)         \
-    yup::YUPApplicationBase* juce_CreateApplication(); \
-    yup::YUPApplicationBase* juce_CreateApplication()  \
+    yup::YUPApplicationBase* yup_CreateApplication(); \
+    yup::YUPApplicationBase* yup_CreateApplication()  \
     {                                                    \
         return new AppClass();                           \
     }
@@ -165,7 +165,7 @@ class YUP_API ScopedJuceInitialiser_GUI final
 #define YUP_MAIN_FUNCTION_DEFINITION                                        \
     YUP_MAIN_FUNCTION                                                       \
     {                                                                        \
-        yup::YUPApplicationBase::createInstance = &juce_CreateApplication; \
+        yup::YUPApplicationBase::createInstance = &yup_CreateApplication; \
         return yup::YUPApplicationBase::main(YUP_MAIN_FUNCTION_ARGS);     \
     }
 
@@ -193,8 +193,8 @@ class YUP_API ScopedJuceInitialiser_GUI final
 
 #if YUP_IOS
 /**
-   You can instruct JUCE to use a custom iOS app delegate class instead of JUCE's default
-   app delegate. For JUCE to work you must pass all messages to JUCE's internal app delegate.
+   You can instruct YUP to use a custom iOS app delegate class instead of YUP's default
+   app delegate. For YUP to work you must pass all messages to YUP's internal app delegate.
    Below is an example of minimal forwarding custom delegate. Note that you are at your own
    risk if you decide to use your own delegate and subtle, hard to debug bugs may occur.
 

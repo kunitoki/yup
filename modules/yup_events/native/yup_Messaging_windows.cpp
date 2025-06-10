@@ -40,10 +40,10 @@
 namespace yup
 {
 
-extern HWND juce_messageWindowHandle;
+extern HWND yup_essageWindowHandle;
 
-#if YUP_MODULE_AVAILABLE_juce_gui_extra
-LRESULT juce_offerEventToActiveXControl (::MSG&);
+#if YUP_MODULE_AVAILABLE_yup_gui_extra
+LRESULT yup_offerEventToActiveXControl (::MSG&);
 #endif
 
 using SettingChangeCallbackFunc = void (*) (void);
@@ -56,12 +56,12 @@ public:
     InternalMessageQueue()
     {
         messageWindow = std::make_unique<HiddenMessageWindow> (messageWindowName, (WNDPROC) messageWndProc);
-        juce_messageWindowHandle = messageWindow->getHWND();
+        yup_messageWindowHandle = messageWindow->getHWND();
     }
 
     ~InternalMessageQueue()
     {
-        juce_messageWindowHandle = nullptr;
+        yup_messageWindowHandle = nullptr;
         clearSingletonInstance();
     }
 
@@ -83,7 +83,7 @@ public:
             data.lpData = (void*) localCopy.toUTF32().getAddress();
 
             DWORD_PTR result;
-            SendMessageTimeout (windows.getUnchecked (i), WM_COPYDATA, (WPARAM) juce_messageWindowHandle, (LPARAM) &data, SMTO_BLOCK | SMTO_ABORTIFHUNG, 8000, &result);
+            SendMessageTimeout (windows.getUnchecked (i), WM_COPYDATA, (WPARAM) yup_messageWindowHandle, (LPARAM) &data, SMTO_BLOCK | SMTO_ABORTIFHUNG, 8000, &result);
         }
     }
 
@@ -103,11 +103,11 @@ public:
 
         if (detail::RunningInUnity::state)
         {
-            SendNotifyMessage (juce_messageWindowHandle, customMessageID, 0, 0);
+            SendNotifyMessage (yup_messageWindowHandle, customMessageID, 0, 0);
             return;
         }
 
-        PostMessage (juce_messageWindowHandle, customMessageID, 0, 0);
+        PostMessage (yup_messageWindowHandle, customMessageID, 0, 0);
     }
 
     bool dispatchNextMessage (bool returnIfNoPendingMessages)
@@ -119,12 +119,12 @@ public:
 
         if (GetMessage (&m, nullptr, 0, 0) >= 0)
         {
-#if YUP_MODULE_AVAILABLE_juce_gui_extra
-            if (juce_offerEventToActiveXControl (m) != S_FALSE)
+#if YUP_MODULE_AVAILABLE_yup_gui_extra
+            if (yup_offerEventToActiveXControl (m) != S_FALSE)
                 return true;
 #endif
 
-            if (m.message == customMessageID && m.hwnd == juce_messageWindowHandle)
+            if (m.message == customMessageID && m.hwnd == yup_messageWindowHandle)
             {
                 dispatchMessages();
             }
@@ -136,13 +136,13 @@ public:
             else
             {
                 if ((m.message == WM_LBUTTONDOWN || m.message == WM_RBUTTONDOWN)
-                    && ! JuceWindowIdentifier::isJUCEWindow (m.hwnd))
+                    && ! JuceWindowIdentifier::isYUPWindow (m.hwnd))
                 {
                     // if it's someone else's window being clicked on, and the focus is
                     // currently on a yup window, pass the kb focus over..
                     auto currentFocus = GetFocus();
 
-                    if (currentFocus == nullptr || JuceWindowIdentifier::isJUCEWindow (currentFocus))
+                    if (currentFocus == nullptr || JuceWindowIdentifier::isYUPWindow (currentFocus))
                         SetFocus (m.hwnd);
                 }
 
@@ -158,7 +158,7 @@ private:
     //==============================================================================
     static LRESULT CALLBACK messageWndProc (HWND h, UINT message, WPARAM wParam, LPARAM lParam) noexcept
     {
-        if (h == juce_messageWindowHandle)
+        if (h == yup_messageWindowHandle)
         {
             if (message == customMessageID)
             {
@@ -183,7 +183,7 @@ private:
 
     static BOOL CALLBACK broadcastEnumWindowProc (HWND hwnd, LPARAM lParam)
     {
-        if (hwnd != juce_messageWindowHandle)
+        if (hwnd != yup_messageWindowHandle)
         {
             TCHAR windowName[64] = { 0 }; // no need to read longer strings than this
             GetWindowText (hwnd, windowName, 63);
@@ -267,10 +267,10 @@ private:
 
 YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
-const TCHAR InternalMessageQueue::messageWindowName[] = _T("JUCEWindow");
+const TCHAR InternalMessageQueue::messageWindowName[] = _T("YUPWindow");
 
 //==============================================================================
-bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
 {
     if (auto* queue = InternalMessageQueue::getInstanceWithoutCreating())
         return queue->dispatchNextMessage (returnIfNoPendingMessages);

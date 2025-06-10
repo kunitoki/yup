@@ -155,7 +155,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
    ..unfortunately that would break Steinberg's license agreement for use of
    their SDK, so I'm not allowed to do this.
 
-   This means that anyone who wants to use JUCE's ASIO abilities will have to:
+   This means that anyone who wants to use YUP's ASIO abilities will have to:
 
    1) Agree to Steinberg's licensing terms and download the ASIO SDK
        (see http://www.steinberg.net/en/company/developers.html).
@@ -164,7 +164,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
    3) Make sure that your header search path contains the iasiodrv.h file that
       comes with the SDK. (Only about a handful of the SDK header files are actually
-      needed - so to simplify things, you could just copy these into your JUCE directory).
+      needed - so to simplify things, you could just copy these into your YUP directory).
 */
 #include <iasiodrv.h>
 #include "native/yup_ASIO_windows.cpp"
@@ -180,7 +180,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 
    The package you need to install to get ASLA support is "libasound2-dev".
 
-   If you don't have the ALSA library and don't want to build JUCE with audio support,
+   If you don't have the ALSA library and don't want to build YUP with audio support,
    just set the YUP_ALSA flag to 0.
 */
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wzero-length-array")
@@ -278,7 +278,7 @@ RealtimeThreadFactory getAndroidRealtimeThreadFactory() { return nullptr; }
    Windows: The package you need to install to get JACK support is available from the
    JACK Audio website. Download and run the installer for Windows.
    If you don't have the jack-audio-connection-kit library and don't want to build
-   JUCE with low latency audio support, just set the YUP_JACK flag to 0.
+   YUP with low latency audio support, just set the YUP_JACK flag to 0.
 */
 #include <jack/jack.h>
 

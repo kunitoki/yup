@@ -105,7 +105,7 @@ private:
 YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
 //==============================================================================
-bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
+bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
 {
     return InternalMessageQueue::getInstance()->dispatchNextMessage (returnIfNoPendingMessages);
 }
@@ -133,7 +133,7 @@ void MessageManager::broadcastMessage (const String&)
 }
 
 //==============================================================================
-void juce_juceEventsAndroidStartApp()
+void yup_juceEventsAndroidStartApp()
 {
 }
 

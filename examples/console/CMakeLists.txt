@@ -41,7 +41,7 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     TARGET_CONSOLE ON
     MODULES
-        juce_core
+        yup_core
         yup_audio_basics
         yup_audio_devices
         yup_events)

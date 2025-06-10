@@ -42,7 +42,7 @@ namespace yup
 
 //==============================================================================
 // This byte-code is generated from native/java/com/rmsl/juce/JuceMidiSupport.java with min sdk version 23
-// See juce_core/native/java/README.txt on how to generate this byte-code.
+// See yup_core/native/java/README.txt on how to generate this byte-code.
 
 // clang-format off
 constexpr unsigned char javaMidiByteCode[]

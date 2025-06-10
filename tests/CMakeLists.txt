@@ -51,7 +51,7 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
-    juce_core
+    yup_core
     yup_audio_basics
     yup_audio_devices
     yup_events

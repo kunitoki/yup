@@ -53,11 +53,11 @@ struct CoreAudioLayouts
 
     //==============================================================================
     // This list has been derived from https://pastebin.com/24dQ4BPJ
-    // Apple channel labels have been replaced by JUCE channel names
-    // This means that some layouts will be identical in JUCE but not in CoreAudio
+    // Apple channel labels have been replaced by YUP channel names
+    // This means that some layouts will be identical in YUP but not in CoreAudio
 
     // In Apple's official definition the following tags exist with the same speaker layout and order
-    // even when *not* represented in JUCE channels
+    // even when *not* represented in YUP channels
     // kAudioChannelLayoutTag_Binaural = kAudioChannelLayoutTag_Stereo
     // kAudioChannelLayoutTag_MPEG_5_0_B = kAudioChannelLayoutTag_Pentagonal
     // kAudioChannelLayoutTag_ITU_2_2 = kAudioChannelLayoutTag_Quadraphonic
@@ -186,7 +186,7 @@ public:
     };
 
     //==============================================================================
-    /** Convert CoreAudio's native AudioChannelLayout to JUCE's AudioChannelSet.
+    /** Convert CoreAudio's native AudioChannelLayout to YUP's AudioChannelSet.
 
         Note that this method cannot preserve the order of channels.
     */
@@ -195,7 +195,7 @@ public:
         return AudioChannelSet::channelSetWithChannels (getCoreAudioLayoutChannels (layout));
     }
 
-    /** Convert CoreAudio's native AudioChannelLayoutTag to JUCE's AudioChannelSet.
+    /** Convert CoreAudio's native AudioChannelLayoutTag to YUP's AudioChannelSet.
 
         Note that this method cannot preserve the order of channels.
     */
@@ -204,7 +204,7 @@ public:
         return AudioChannelSet::channelSetWithChannels (getSpeakerLayoutForCoreAudioTag (layoutTag));
     }
 
-    /** Convert JUCE's AudioChannelSet to CoreAudio's AudioChannelLayoutTag.
+    /** Convert YUP's AudioChannelSet to CoreAudio's AudioChannelLayoutTag.
 
         Note that this method cannot preserve the order of channels.
     */
@@ -236,7 +236,7 @@ public:
     }
 
     //==============================================================================
-    /** Convert CoreAudio's native AudioChannelLayout to an array of JUCE ChannelTypes. */
+    /** Convert CoreAudio's native AudioChannelLayout to an array of YUP ChannelTypes. */
     static Array<AudioChannelSet::ChannelType> getCoreAudioLayoutChannels (const AudioChannelLayout& layout)
     {
         switch (layout.mChannelLayoutTag & 0xffff0000)
@@ -252,7 +252,7 @@ public:
 
                     // Suppressing clang-analyzer-optin.core.EnumCastOutOfRange
 #ifndef __clang_analyzer__
-                // different speaker mappings may point to the same JUCE speaker so fill up
+                // different speaker mappings may point to the same YUP speaker so fill up
                 // this array with discrete channels
                 for (int j = 0; channels.size() < static_cast<int> (layout.mNumberChannelDescriptions); ++j)
                     channels.addIfNotAlreadyThere (static_cast<AudioChannelSet::ChannelType> (AudioChannelSet::discreteChannel0 + j));

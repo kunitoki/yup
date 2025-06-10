@@ -43,7 +43,7 @@ namespace yup
 struct InterprocessConnection::ConnectionThread final : public Thread
 {
     ConnectionThread (InterprocessConnection& c)
-        : Thread ("JUCE IPC")
+        : Thread ("YUP IPC")
         , owner (c)
     {
     }

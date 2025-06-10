@@ -1576,7 +1576,7 @@ private:
             if (deviceInfo.deviceID.isEmpty())
                 throw std::runtime_error ("Invalid device index");
 
-            YUP_WINRT_MIDI_LOG ("Creating JUCE MIDI IO: " << deviceInfo.deviceID);
+            YUP_WINRT_MIDI_LOG ("Creating YUP MIDI IO: " << deviceInfo.deviceID);
 
             if (deviceInfo.containerID.isNotEmpty())
             {

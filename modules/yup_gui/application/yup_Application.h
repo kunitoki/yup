@@ -23,9 +23,9 @@ namespace yup
 {
 
 //==============================================================================
-/** Main application class for the YUPApplication, extending JUCE application functionality.
+/** Main application class for the YUPApplication, extending YUP application functionality.
 
-    This class defines the lifecycle and behavior of the application using the JUCE framework, handling
+    This class defines the lifecycle and behavior of the application using the YUP framework, handling
     events such as application start and quit, as well as managing application instances.
  */
 class YUP_API YUPApplication : public YUPApplicationBase

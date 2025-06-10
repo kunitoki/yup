@@ -47,7 +47,7 @@ namespace yup
     Note that in the yup_gui module, there's a utility class YUPApplication
     which derives from YUPApplicationBase, and takes care of a few chores. Most
     of the time you'll want to derive your class from YUPApplication rather than
-    using YUPApplicationBase directly, but if you're not using the juce_gui_basics
+    using YUPApplicationBase directly, but if you're not using the yup_gui_basics
     module then you might need to go straight to this base class.
 
     Any application that wants to run an event loop must declare a subclass of
@@ -78,7 +78,7 @@ namespace yup
 
             const String getApplicationName() override
             {
-                return "Super JUCE-o-matic";
+                return "Super YUP-o-matic";
             }
 
             const String getApplicationVersion() override

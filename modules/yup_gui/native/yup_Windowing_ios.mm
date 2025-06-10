@@ -80,8 +80,8 @@
 namespace yup
 {
 
-int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
-int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
+int yup_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
+int yup_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
 {
     Class delegateClass = (customDelegatePtr != nullptr ? reinterpret_cast<Class>(customDelegatePtr) : [YupApplicationDelegate class]);
 

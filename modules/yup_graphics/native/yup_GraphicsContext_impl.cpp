@@ -28,22 +28,22 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
     {
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
         case Api::Metal:
-            return juce_constructMetalGraphicsContext (options);
+            return yup_constructMetalGraphicsContext (options);
 #endif
 
 #if YUP_RIVE_USE_D3D && YUP_WINDOWS
         case Api::Direct3D:
-            return juce_constructDirect3DGraphicsContext (options);
+            return yup_constructDirect3DGraphicsContext (options);
 #endif
 
 #if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_WASM || YUP_ANDROID
         case Api::OpenGL:
-            return juce_constructOpenGLGraphicsContext (options);
+            return yup_constructOpenGLGraphicsContext (options);
 #endif
 
 #if YUP_RIVE_USE_DAWN
         case Api::Dawn:
-            return juce_constructDawnGraphicsContext (options);
+            return yup_constructDawnGraphicsContext (options);
 #endif
 
         default:

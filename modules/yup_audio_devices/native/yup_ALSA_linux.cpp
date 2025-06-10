@@ -499,7 +499,7 @@ class ALSAThread final : public Thread
 {
 public:
     ALSAThread (const String& inputDeviceID, const String& outputDeviceID)
-        : Thread ("JUCE ALSA")
+        : Thread ("YUP ALSA")
         , inputId (inputDeviceID)
         , outputId (outputDeviceID)
     {

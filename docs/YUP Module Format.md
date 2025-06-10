@@ -106,7 +106,7 @@ The value_name must be one of the items listed below, and is case-sensitive. Whi
 Possible values:
 
 - ID
-  - (Compulsory) This ID must match the name of the file and folder, e.g. juce_core. The main reason for also including it here is as a sanity-check.
+  - (Compulsory) This ID must match the name of the file and folder, e.g. yup_core. The main reason for also including it here is as a sanity-check.
 
 - vendor
   - (Compulsory) A unique ID for the vendor, e.g. "juce". This should be short and shouldn't contain any spaces.

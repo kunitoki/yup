@@ -41,7 +41,7 @@ namespace yup
 {
 
 InterprocessConnectionServer::InterprocessConnectionServer()
-    : Thread ("JUCE IPC server")
+    : Thread ("YUP IPC server")
 {
 }
 

@@ -40,17 +40,17 @@
 namespace yup
 {
 
-static void* juce_libjackHandle = nullptr;
+static void* yup_libjackHandle = nullptr;
 
-static void* juce_loadJackFunction (const char* const name)
+static void* yup_loadJackFunction (const char* const name)
 {
-    if (juce_libjackHandle == nullptr)
+    if (yup_libjackHandle == nullptr)
         return nullptr;
 
 #if YUP_WINDOWS
-    return GetProcAddress ((HMODULE) juce_libjackHandle, name);
+    return GetProcAddress ((HMODULE) yup_libjackHandle, name);
 #else
-    return dlsym (juce_libjackHandle, name);
+    return dlsym (yup_libjackHandle, name);
 #endif
 }
 
@@ -59,7 +59,7 @@ static void* juce_loadJackFunction (const char* const name)
     {                                                                            \
         using ReturnType = return_type;                                          \
         typedef return_type (*fn_type) argument_types;                           \
-        static fn_type fn = (fn_type) juce_loadJackFunction (#fn_name);          \
+        static fn_type fn = (fn_type) yup_loadJackFunction (#fn_name);          \
         jassert (fn != nullptr);                                                 \
         return (fn != nullptr) ? ((*fn) arguments) : ReturnType();               \
     }
@@ -68,7 +68,7 @@ static void* juce_loadJackFunction (const char* const name)
     void fn_name argument_types                                          \
     {                                                                    \
         typedef void (*fn_type) argument_types;                          \
-        static fn_type fn = (fn_type) juce_loadJackFunction (#fn_name);  \
+        static fn_type fn = (fn_type) yup_loadJackFunction (#fn_name);  \
         jassert (fn != nullptr);                                         \
         if (fn != nullptr)                                               \
             (*fn) arguments;                                             \
@@ -638,24 +638,24 @@ public:
         outputNames.clear();
 
 #if (YUP_LINUX || YUP_BSD)
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = dlopen ("libjack.so.0", RTLD_LAZY);
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = dlopen ("libjack.so", RTLD_LAZY);
+        if (yup_libjackHandle == nullptr)
+            yup_libjackHandle = dlopen ("libjack.so.0", RTLD_LAZY);
+        if (yup_libjackHandle == nullptr)
+            yup_libjackHandle = dlopen ("libjack.so", RTLD_LAZY);
 #elif YUP_MAC
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = dlopen ("libjack.dylib", RTLD_LAZY);
+        if (yup_libjackHandle == nullptr)
+            yup_libjackHandle = dlopen ("libjack.dylib", RTLD_LAZY);
 #elif YUP_WINDOWS
 #if YUP_64BIT
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = LoadLibraryA ("libjack64.dll");
+        if (yup_libjackHandle == nullptr)
+            yup_libjackHandle = LoadLibraryA ("libjack64.dll");
 #else
-        if (juce_libjackHandle == nullptr)
-            juce_libjackHandle = LoadLibraryA ("libjack.dll");
+        if (yup_libjackHandle == nullptr)
+            yup_libjackHandle = LoadLibraryA ("libjack.dll");
 #endif
 #endif
 
-        if (juce_libjackHandle == nullptr)
+        if (yup_libjackHandle == nullptr)
             return;
 
         jack_status_t status = {};

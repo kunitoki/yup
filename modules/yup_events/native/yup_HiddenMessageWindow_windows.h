@@ -84,12 +84,12 @@ private:
 class JuceWindowIdentifier
 {
 public:
-    static bool isJUCEWindow (HWND hwnd) noexcept
+    static bool isYUPWindow (HWND hwnd) noexcept
     {
         return GetWindowLongPtr (hwnd, GWLP_USERDATA) == getImprobableWindowNumber();
     }
 
-    static void setAsJUCEWindow (HWND hwnd, bool isJuceWindow) noexcept
+    static void setAsYUPWindow (HWND hwnd, bool isJuceWindow) noexcept
     {
         SetWindowLongPtr (hwnd, GWLP_USERDATA, isJuceWindow ? getImprobableWindowNumber() : 0);
     }

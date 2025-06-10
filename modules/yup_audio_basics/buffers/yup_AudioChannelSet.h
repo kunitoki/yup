@@ -279,11 +279,11 @@ public:
 
     /** Creates a set for a 9.1.6 surround setup (left, right, centre, LFE, leftSurroundSide, rightSurroundSide, leftSurroundRear, rightSurroundRear, wideLeft, wideRight, topFrontLeft, topFrontRight, topSideLeft, topSideRight, topRearLeft, topRearRight).
 
-        Note that the VST3 layout arranges the front speakers "L Lc C Rc R", but the JUCE layout
+        Note that the VST3 layout arranges the front speakers "L Lc C Rc R", but the YUP layout
         uses the arrangement "wideLeft left centre right wideRight". To maintain the relative
         positions of the speakers, the channels will be remapped accordingly. This means that the
-        VST3 host's "L" channel will be received on a JUCE plugin's "wideLeft" channel, the
-        "Lc" channel will be received on a JUCE plugin's "left" channel, and so on.
+        VST3 host's "L" channel will be received on a YUP plugin's "wideLeft" channel, the
+        "Lc" channel will be received on a YUP plugin's "left" channel, and so on.
 
         Is equivalent to: k91_6 (VST3), kAudioChannelLayoutTag_Atmos_9_1_6 (CoreAudio).
     */

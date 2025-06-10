@@ -51,7 +51,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_core
+    dependencies:       yup_core
 
   END_YUP_MODULE_DECLARATION
 
@@ -61,7 +61,7 @@
 #pragma once
 #define YUP_EVENTS_H_INCLUDED
 
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 
 //==============================================================================
 /** Config: YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK

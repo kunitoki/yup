@@ -51,7 +51,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_core
+    dependencies:       yup_core
     appleFrameworks:    Accelerate
 
   END_YUP_MODULE_DECLARATION
@@ -62,7 +62,7 @@
 #pragma once
 #define YUP_AUDIO_BASICS_H_INCLUDED
 
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 
 //==============================================================================
 #undef Complex // apparently some C libraries actually define these symbols (!)

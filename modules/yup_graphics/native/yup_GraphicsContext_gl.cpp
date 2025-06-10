@@ -155,7 +155,7 @@ private:
     rive::rcp<rive::gpu::RenderTargetGL> m_renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsContext::Options options)
+std::unique_ptr<GraphicsContext> yup_constructOpenGLGraphicsContext (GraphicsContext::Options options)
 {
     return std::make_unique<LowLevelRenderContextGL> (options);
 }

@@ -51,7 +51,7 @@ public:
     YUP_DECLARE_SINGLETON (TimerThread, true)
 
     TimerThread()
-        : Thread ("JUCE Timer")
+        : Thread ("YUP Timer")
     {
         timers.reserve (32);
     }

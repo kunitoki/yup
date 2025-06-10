@@ -189,7 +189,7 @@ StringArray YUP_CALLTYPE YUPApplicationBase::getCommandLineParameterArray()
 #else
 
 #if YUP_IOS && YUP_MODULE_AVAILABLE_yup_gui
-extern int juce_iOSMain (int argc, const char* argv[], void* classPtr);
+extern int yup_iOSMain (int argc, const char* argv[], void* classPtr);
 #endif
 
 #if YUP_MAC
@@ -197,11 +197,11 @@ extern void initialiseNSApplication();
 #endif
 
 #if YUP_WINDOWS || YUP_ANDROID
-const char* const* juce_argv = nullptr;
-int juce_argc = 0;
+const char* const* yup_argv = nullptr;
+int yup_argc = 0;
 #else
-extern const char* const* juce_argv; // declared in juce_core
-extern int juce_argc;
+extern const char* const* yup_argv; // declared in yup_core
+extern int yup_argc;
 #endif
 
 String YUPApplicationBase::getCommandLineParameters()
@@ -223,8 +223,8 @@ StringArray YUPApplicationBase::getCommandLineParameterArray()
 {
     StringArray result;
 
-    for (int i = 1; i < juce_argc; ++i)
-        result.add (CharPointer_UTF8 (juce_argv[i]));
+    for (int i = 1; i < yup_argc; ++i)
+        result.add (CharPointer_UTF8 (yup_argv[i]));
 
     return result;
 }
@@ -233,15 +233,15 @@ int YUPApplicationBase::main (int argc, const char* argv[])
 {
     YUP_AUTORELEASEPOOL
     {
-        juce_argc = argc;
-        juce_argv = argv;
+        yup_argc = argc;
+        yup_argv = argv;
 
 #if YUP_MAC
         initialiseNSApplication();
 #endif
 
 #if YUP_IOS && YUP_MODULE_AVAILABLE_yup_gui
-        return juce_iOSMain (argc, argv, iOSCustomDelegate);
+        return yup_iOSMain (argc, argv, iOSCustomDelegate);
 #else
 
         return YUPApplicationBase::main();
@@ -253,7 +253,7 @@ int YUPApplicationBase::main (int argc, const char* argv[])
 
 //==============================================================================
 #if YUP_ANDROID
-extern "C" jint JNIEXPORT juce_JNI_OnLoad (JavaVM* vm, void*);
+extern "C" jint JNIEXPORT yup_JNI_OnLoad (JavaVM* vm, void*);
 #endif
 
 int YUPApplicationBase::main()
@@ -265,10 +265,10 @@ int YUPApplicationBase::main()
 
     if (env != nullptr && env->GetJavaVM (&vm) == 0)
     {
-        juce_JNI_OnLoad (vm, nullptr);
+        yup_JNI_OnLoad (vm, nullptr);
 
         JNIClassBase::initialiseAllClasses (env, clazz);
-        Thread::initialiseJUCE (env, clazz);
+        Thread::initialiseYUP (env, clazz);
     }
 #endif
 

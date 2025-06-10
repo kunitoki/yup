@@ -135,7 +135,7 @@ public class JuceMidiSupport
 
             if (bluetoothAdapter == null)
             {
-                Log.d ("JUCE", "BluetoothMidiManager error: could not get default Bluetooth adapter");
+                Log.d ("YUP", "BluetoothMidiManager error: could not get default Bluetooth adapter");
                 return;
             }
 
@@ -143,7 +143,7 @@ public class JuceMidiSupport
 
             if (bluetoothLeScanner == null)
             {
-                Log.d ("JUCE", "BluetoothMidiManager error: could not get Bluetooth LE scanner");
+                Log.d ("YUP", "BluetoothMidiManager error: could not get Bluetooth LE scanner");
                 return;
             }
 
@@ -172,7 +172,7 @@ public class JuceMidiSupport
 
             if (btDevice == null)
             {
-                Log.d ("JUCE", "failed to create buletooth device from address");
+                Log.d ("YUP", "failed to create buletooth device from address");
                 return false;
             }
 
@@ -201,7 +201,7 @@ public class JuceMidiSupport
 
             if (callbackType == ScanSettings.CALLBACK_TYPE_MATCH_LOST)
             {
-                Log.d ("JUCE", "ScanSettings.CALLBACK_TYPE_MATCH_LOST");
+                Log.d ("YUP", "ScanSettings.CALLBACK_TYPE_MATCH_LOST");
                 BluetoothDevice device = result.getDevice ();
 
                 if (device != null)
@@ -281,7 +281,7 @@ public class JuceMidiSupport
                     androidPort.close ();
                 } catch (IOException exception)
                 {
-                    Log.d ("JUCE", "IO Exception while closing port");
+                    Log.d ("YUP", "IO Exception while closing port");
                 }
             }
 
@@ -363,7 +363,7 @@ public class JuceMidiSupport
                     androidPort.send (msg, offset, count);
                 } catch (IOException exception)
                 {
-                    Log.d ("JUCE", "send midi had IO exception");
+                    Log.d ("YUP", "send midi had IO exception");
                 }
             }
         }
@@ -378,7 +378,7 @@ public class JuceMidiSupport
                     androidPort.close ();
                 } catch (IOException exception)
                 {
-                    Log.d ("JUCE", "IO Exception while closing port");
+                    Log.d ("YUP", "IO Exception while closing port");
                 }
             }
 
@@ -567,7 +567,7 @@ public class JuceMidiSupport
 
             if (manager == null)
             {
-                Log.d ("JUCE", "MidiDeviceManager error: could not get MidiManager system service");
+                Log.d ("YUP", "MidiDeviceManager error: could not get MidiManager system service");
                 return;
             }
 
@@ -626,7 +626,7 @@ public class JuceMidiSupport
 
         private String[] getJuceAndroidMidiDeviceNameAndIDs (int portType)
         {
-            // only update the list when JUCE asks for a new list
+            // only update the list when YUP asks for a new list
             synchronized (MidiDeviceManager.class)
             {
                 deviceInfos = getDeviceInfos ();
@@ -795,7 +795,7 @@ public class JuceMidiSupport
                         midiDevice.close ();
                     } catch (IOException exception)
                     {
-                        Log.d ("JUCE", "IOException while closing midi device");
+                        Log.d ("YUP", "IOException while closing midi device");
                     }
                 }
             }

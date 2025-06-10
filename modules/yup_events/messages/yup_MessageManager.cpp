@@ -46,7 +46,7 @@ MessageManager::MessageManager() noexcept
     YUP_VERSION_ID
 
     if (YUPApplicationBase::isStandaloneApp())
-        Thread::setCurrentThreadName ("JUCE Message Thread");
+        Thread::setCurrentThreadName ("YUP Message Thread");
 }
 
 MessageManager::~MessageManager() noexcept
@@ -106,8 +106,8 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 
 //==============================================================================
 #if ! (YUP_MAC || YUP_IOS || YUP_WASM)
-// implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
-bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
+// implemented in platform-specific code (yup_Messaging_linux.cpp, yup_Messaging_android.cpp and yup_Messaging_windows.cpp)
+bool yup_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 
 class MessageManager::QuitMessage final : public MessageManager::MessageBase
 {
@@ -133,7 +133,7 @@ void MessageManager::runDispatchLoop()
         {
             loopCallback();
 
-            if (! juce_dispatchNextMessageOnSystemQueue (false))
+            if (! yup_dispatchNextMessageOnSystemQueue (false))
                 Thread::sleep (1);
         }
         YUP_CATCH_EXCEPTION
@@ -159,7 +159,7 @@ bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
         {
             loopCallback();
 
-            if (! juce_dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
+            if (! yup_dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
                 Thread::sleep (1);
         }
         YUP_CATCH_EXCEPTION

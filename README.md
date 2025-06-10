@@ -209,7 +209,7 @@ Compile example targets like example_app, example_console, or example_render to 
 Here is a simple example of creating a basic window using YUP, save this as `main.cpp`:
 
 ```cpp
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
