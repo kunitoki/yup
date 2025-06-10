@@ -39,7 +39,7 @@
 
 #include <gtest/gtest.h>
 
-#include <yup_ore/yup_core.h>
+#include <yup_core/yup_core.h>
 
 using namespace yup;
 
