@@ -93,4 +93,6 @@ if (YUP_ENABLE_COVERAGE)
     foreach (module ${target_modules})
         _yup_setup_coverage_flags (${module})
     endforeach()
+
+    _yup_setup_coverage_targets ("${target_modules}")
 endif()
