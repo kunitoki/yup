@@ -35,4 +35,4 @@ constexpr unsigned char javaYupMidiSupportBytecode[]
 };
 // clang-format on
 
-constexpr auto javaYupMidiSupportBytecodeSize = sizeof(javaYupMidiSupportBytecode);
+constexpr auto javaYupMidiSupportBytecodeSize = sizeof (javaYupMidiSupportBytecode);

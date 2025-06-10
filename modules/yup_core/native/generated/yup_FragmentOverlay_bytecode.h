@@ -35,4 +35,4 @@ constexpr unsigned char javaFragmentOverlayBytecode[]
 };
 // clang-format on
 
-constexpr auto javaFragmentOverlayBytecodeSize = sizeof(javaFragmentOverlayBytecode);
+constexpr auto javaFragmentOverlayBytecodeSize = sizeof (javaFragmentOverlayBytecode);

@@ -35,4 +35,4 @@ constexpr unsigned char javaYupInvocationHandlerBytecode[]
 };
 // clang-format on
 
-constexpr auto javaYupInvocationHandlerBytecodeSize = sizeof(javaYupInvocationHandlerBytecode);
+constexpr auto javaYupInvocationHandlerBytecodeSize = sizeof (javaYupInvocationHandlerBytecode);

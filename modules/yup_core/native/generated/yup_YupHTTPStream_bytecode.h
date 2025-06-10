@@ -35,4 +35,4 @@ constexpr unsigned char javaYupHTTPStreamBytecode[]
 };
 // clang-format on
 
-constexpr auto javaYupHTTPStreamBytecodeSize = sizeof(javaYupHTTPStreamBytecode);
+constexpr auto javaYupHTTPStreamBytecodeSize = sizeof (javaYupHTTPStreamBytecode);
