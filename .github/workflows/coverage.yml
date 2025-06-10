@@ -89,7 +89,7 @@ jobs:
     - name: Generate Combined Coverage Report
       working-directory: ${{runner.workspace}}/build
       run: |
-        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors mismatch,gcov,source,negative,unused
+        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors mismatch,gcov,source,negative,unused,empty
         lcov --remove coverage/coverage.info \
           "*/thirdparty/*" \
           "*/build/*" \
@@ -97,26 +97,8 @@ jobs:
           "*/usr/*" \
           "*/opt/*" \
           "*/CMakeFiles/*" \
-          --output-file coverage/coverage_final.info --ignore-errors mismatch,gcov,source,negative,unused
+          --output-file coverage/coverage_final.info --ignore-errors mismatch,gcov,source,negative,unused,empty
         lcov --list coverage/coverage_final.info
-
-    - name: Generate Per-Module Coverage Reports
-      working-directory: ${{runner.workspace}}/build
-      run: |
-        # Create coverage reports for each module
-        modules=("yup_core" "yup_events" "yup_audio_basics" "yup_audio_devices" "yup_audio_processors" "yup_graphics" "yup_gui")
-
-        for module in "${modules[@]}"; do
-          echo "Generating coverage for $module"
-          mkdir -p coverage/$module
-
-          # Extract coverage for this specific module
-          lcov --extract coverage/coverage_final.info "*/modules/$module/*" \
-            --output-file coverage/$module/coverage.info --ignore-errors mismatch,gcov,source,negative,unused
-
-          # Show summary for this module
-          lcov --list coverage/$module/coverage.info
-        done
 
     - name: Upload Overall Coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -126,22 +108,6 @@ jobs:
         name: overall-coverage
         fail_ci_if_error: false
         verbose: true
-
-    - name: Upload Per-Module Coverage to Codecov
-      working-directory: ${{runner.workspace}}/build
-      run: |
-        modules=("yup_core" "yup_events" "yup_audio_basics" "yup_audio_devices" "yup_audio_processors" "yup_graphics" "yup_gui")
-
-        for module in "${modules[@]}"; do
-          if [ -f "coverage/$module/coverage.info" ] && [ -s "coverage/$module/coverage.info" ]; then
-            echo "Uploading coverage for $module"
-            curl -Os https://uploader.codecov.io/latest/linux/codecov
-            chmod +x codecov
-            ./codecov -f "coverage/$module/coverage.info" -F "$module" -t "${{ secrets.CODECOV_TOKEN }}" || true
-          else
-            echo "No coverage data found for $module"
-          fi
-        done
 
     - name: Upload Test Results
       uses: actions/upload-artifact@v4
