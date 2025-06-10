@@ -89,7 +89,7 @@ jobs:
     - name: Generate Combined Coverage Report
       working-directory: ${{runner.workspace}}/build
       run: |
-        lcov --directory . --capture --output-file coverage/coverage.info
+        lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors mismatch,gcov,source
         lcov --remove coverage/coverage.info \
           "*/thirdparty/*" \
           "*/build/*" \
@@ -97,9 +97,8 @@ jobs:
           "*/examples/*" \
           "*/usr/*" \
           "*/opt/*" \
-          "*/.conan/*" \
           "*/CMakeFiles/*" \
-          --output-file coverage/coverage_final.info
+          --output-file coverage/coverage_final.info --ignore-errors mismatch,gcov,source
         lcov --list coverage/coverage_final.info
 
     - name: Generate Per-Module Coverage Reports
@@ -114,7 +113,7 @@ jobs:
 
           # Extract coverage for this specific module
           lcov --extract coverage/coverage_final.info "*/modules/$module/*" \
-            --output-file coverage/$module/coverage.info
+            --output-file coverage/$module/coverage.info --ignore-errors mismatch,gcov,source
 
           # Show summary for this module
           lcov --list coverage/$module/coverage.info
