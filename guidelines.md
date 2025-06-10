@@ -169,6 +169,8 @@ modules/yup_module_name/
 ```
 Avoid going deeply nested into modules. Prefer a single subdirectory whenever possible for YUP modules (might be ok for thirdparties as we don't control the upstream structure).
 
+**Headers and Implementation files are designed to be included through the main module header/implementation, so linter errors are expected when parsing the files in isolation.**
+
 ### Test Structure
 ```
 tests/module_name/
