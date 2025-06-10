@@ -40,7 +40,7 @@
 namespace yup
 {
 
-extern HWND yup_essageWindowHandle;
+extern HWND yup_messageWindowHandle;
 
 #if YUP_MODULE_AVAILABLE_yup_gui_extra
 LRESULT yup_offerEventToActiveXControl (::MSG&);
