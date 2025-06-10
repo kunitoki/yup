@@ -85,3 +85,14 @@ target_sources (${target_name} PRIVATE ${sources})
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
     VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")
+
+# ==== Setup coverage support
+if (YUP_ENABLE_COVERAGE)
+    _yup_setup_coverage_flags (${target_name})
+
+    foreach (module ${target_modules})
+        _yup_setup_coverage_flags (${module})
+    endforeach()
+
+    _yup_setup_coverage_targets ("${target_modules}")
+endif()

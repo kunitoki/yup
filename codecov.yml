@@ -1,0 +1,78 @@
+codecov:
+  require_ci_to_pass: yes
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+        base: auto
+        flags:
+          - yup_core
+          - yup_events
+          - yup_audio_basics
+          - yup_audio_devices
+          - yup_audio_processors
+          - yup_graphics
+          - yup_gui
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+flags:
+  yup_core:
+    paths:
+      - modules/yup_core/
+    carryforward: true
+  yup_events:
+    paths:
+      - modules/yup_events/
+    carryforward: true
+  yup_audio_basics:
+    paths:
+      - modules/yup_audio_basics/
+    carryforward: true
+  yup_audio_devices:
+    paths:
+      - modules/yup_audio_devices/
+    carryforward: true
+  yup_audio_processors:
+    paths:
+      - modules/yup_audio_processors/
+    carryforward: true
+  yup_graphics:
+    paths:
+      - modules/yup_graphics/
+    carryforward: true
+  yup_gui:
+    paths:
+      - modules/yup_gui/
+    carryforward: true
+
+ignore:
+  - "thirdparty/**/*"
+  - "examples/**/*"
+  - "tests/**/*"
+  - "tools/**/*"
+  - "cmake/**/*"
+  - "docs/**/*"
+  - "standalone/**/*"
+  - "**/*.mm"
+  - "**/*_android.*"
+  - "**/*_windows.*"
+  - "**/*_ios.*"
+  - "**/*_mac.*"
+  - "**/*_apple.*"
+  - "**/*_emscripten.*"
+  - "**/*_wasm.*"
+
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
