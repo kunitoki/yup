@@ -1402,7 +1402,7 @@ void initialiseYup_Windowing()
         JUCE_DBG ("Error initialising SDL: " << SDL_GetError());
 
         jassertfalse;
-        JUCEApplicationBase::quit();
+        YUPApplicationBase::quit();
 
         return;
     }

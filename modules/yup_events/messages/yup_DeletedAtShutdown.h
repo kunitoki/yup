@@ -44,7 +44,7 @@ namespace yup
 /**
     Classes derived from this will be automatically deleted when the application exits.
 
-    After JUCEApplicationBase::shutdown() has been called, any objects derived from
+    After YUPApplicationBase::shutdown() has been called, any objects derived from
     DeletedAtShutdown which are still in existence will be deleted in the reverse
     order to that in which they were created.
 
@@ -70,7 +70,7 @@ public:
     /** Deletes all extant objects.
 
         This shouldn't be used by applications, as it's called automatically
-        in the shutdown code of the JUCEApplicationBase class.
+        in the shutdown code of the YUPApplicationBase class.
     */
     static void deleteAll();
 

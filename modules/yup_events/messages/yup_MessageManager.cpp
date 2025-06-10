@@ -45,7 +45,7 @@ MessageManager::MessageManager() noexcept
 {
     JUCE_VERSION_ID
 
-    if (JUCEApplicationBase::isStandaloneApp())
+    if (YUPApplicationBase::isStandaloneApp())
         Thread::setCurrentThreadName ("JUCE Message Thread");
 }
 

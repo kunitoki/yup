@@ -268,7 +268,7 @@ private:
     std::unique_ptr<MyWindow> window;
 };
 
-START_JUCE_APPLICATION (MyApplication)
+START_YUP_APPLICATION (MyApplication)
 ```
 
 And add this as `CMakeLists.txt`:

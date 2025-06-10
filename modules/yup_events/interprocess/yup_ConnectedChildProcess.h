@@ -49,7 +49,7 @@ namespace yup
 
     To use the system, you need to create subclasses of both ChildProcessWorker and
     ChildProcessCoordinator. To instantiate the ChildProcessWorker object, you must
-    add some code to your main() or JUCEApplication::initialise() function that
+    add some code to your main() or YUPApplication::initialise() function that
     calls the initialiseFromCommandLine() method to check the app's command-line
     parameters to see whether it's being launched as a child process. If this returns
     true then the worker process can be allowed to run, and its handleMessageFromCoordinator()
@@ -74,7 +74,7 @@ public:
         ChildProcessCoordinator::launchWorkerProcess(), and if so, connects to that coordinator process.
 
         In an exe that can be used as a child process, you should add some code to your
-        main() or JUCEApplication::initialise() that calls this method.
+        main() or YUPApplication::initialise() that calls this method.
 
         The commandLineUniqueID should be a short alphanumeric identifier (no spaces!)
         that matches the string passed to ChildProcessCoordinator::launchWorkerProcess().

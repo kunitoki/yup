@@ -53,7 +53,7 @@ using MessageCallbackFunction = void*(void* userData);
 /**
     This class is in charge of the application's event-dispatch loop.
 
-    @see Message, CallbackMessage, MessageManagerLock, JUCEApplication, JUCEApplicationBase
+    @see Message, CallbackMessage, MessageManagerLock, YUPApplication, YUPApplicationBase
 
     @tags{Events}
 */

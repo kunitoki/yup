@@ -130,7 +130,7 @@ public:
             }
             else if (m.message == WM_QUIT)
             {
-                if (auto* app = JUCEApplicationBase::getInstance())
+                if (auto* app = YUPApplicationBase::getInstance())
                     app->systemRequestedQuit();
             }
             else

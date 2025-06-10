@@ -79,7 +79,7 @@ public:
 #ifdef JUCE_ALSA_MIDI_NAME
         return JUCE_ALSA_MIDI_NAME;
 #else
-        if (auto* app = JUCEApplicationBase::getInstance())
+        if (auto* app = YUPApplicationBase::getInstance())
             return app->getApplicationName();
 
         return "JUCE";

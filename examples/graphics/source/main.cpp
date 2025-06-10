@@ -243,4 +243,4 @@ private:
     std::unique_ptr<CustomWindow> window;
 };
 
-START_JUCE_APPLICATION (Application)
+START_YUP_APPLICATION (Application)

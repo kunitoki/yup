@@ -39,7 +39,7 @@
 
 - (void)applicationDidFinishLaunching:(UIApplication* __unused)application
 {
-    if (auto* app = juce::JUCEApplicationBase::createInstance())
+    if (auto* app = juce::YUPApplicationBase::createInstance())
     {
         if (!app->initialiseApp())
             exit(app->shutdownApp());
@@ -52,18 +52,18 @@
 
 - (void)applicationWillTerminate:(UIApplication* __unused)application
 {
-    juce::JUCEApplicationBase::appWillTerminateByForce();
+    juce::YUPApplicationBase::appWillTerminateByForce();
 }
 
 - (void)applicationDidEnterBackground:(UIApplication* __unused)application
 {
-    if (auto* app = juce::JUCEApplicationBase::getInstance())
+    if (auto* app = juce::YUPApplicationBase::getInstance())
         app->suspended();
 }
 
 - (void)applicationWillEnterForeground:(UIApplication* __unused)application
 {
-    if (auto* app = juce::JUCEApplicationBase::getInstance())
+    if (auto* app = juce::YUPApplicationBase::getInstance())
         app->resumed();
 }
 

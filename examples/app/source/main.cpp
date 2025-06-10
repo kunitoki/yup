@@ -60,4 +60,4 @@ public:
     }
 };
 
-START_JUCE_APPLICATION (Application)
+START_YUP_APPLICATION (Application)

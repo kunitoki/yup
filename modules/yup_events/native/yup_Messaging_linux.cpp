@@ -336,7 +336,7 @@ bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
     for (;;)
     {
         if (LinuxErrorHandling::keyboardBreakOccurred)
-            JUCEApplicationBase::quit();
+            YUPApplicationBase::quit();
 
         if (auto* runLoop = InternalRunLoop::getInstanceWithoutCreating())
         {
@@ -356,7 +356,7 @@ bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)
 //==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
 {
-    if (JUCEApplicationBase::isStandaloneApp())
+    if (YUPApplicationBase::isStandaloneApp())
         LinuxErrorHandling::installKeyboardBreakHandler();
 
     InternalRunLoop::getInstance();

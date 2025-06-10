@@ -44,25 +44,25 @@ namespace yup
 /**
     Abstract base class for application classes.
 
-    Note that in the juce_gui_basics module, there's a utility class JUCEApplication
-    which derives from JUCEApplicationBase, and takes care of a few chores. Most
-    of the time you'll want to derive your class from JUCEApplication rather than
-    using JUCEApplicationBase directly, but if you're not using the juce_gui_basics
+    Note that in the yup_gui module, there's a utility class YUPApplication
+    which derives from YUPApplicationBase, and takes care of a few chores. Most
+    of the time you'll want to derive your class from YUPApplication rather than
+    using YUPApplicationBase directly, but if you're not using the juce_gui_basics
     module then you might need to go straight to this base class.
 
     Any application that wants to run an event loop must declare a subclass of
-    JUCEApplicationBase, and implement its various pure virtual methods.
+    YUPApplicationBase, and implement its various pure virtual methods.
 
-    It then needs to use the START_JUCE_APPLICATION macro somewhere in a CPP file
+    It then needs to use the START_YUP_APPLICATION macro somewhere in a CPP file
     to declare an instance of this class and generate suitable platform-specific
     boilerplate code to launch the app.
 
     e.g. @code
-        class MyJUCEApp  : public JUCEApplication
+        class MyYUPApp  : public YUPApplication
         {
         public:
-            MyJUCEApp()  {}
-            ~MyJUCEApp() {}
+            MyYUPApp()  {}
+            ~MyYUPApp() {}
 
             void initialise (const String& commandLine) override
             {
@@ -91,26 +91,26 @@ namespace yup
         };
 
         // this generates boilerplate code to launch our app class:
-        START_JUCE_APPLICATION (MyJUCEApp)
+        START_YUP_APPLICATION (MyYUPApp)
     @endcode
 
-    @see JUCEApplication, START_JUCE_APPLICATION
+    @see YUPApplication, START_YUP_APPLICATION
 
     @tags{Events}
 */
-class JUCE_API JUCEApplicationBase
+class JUCE_API YUPApplicationBase
 {
 protected:
     //==============================================================================
-    JUCEApplicationBase();
+    YUPApplicationBase();
 
 public:
     /** Destructor. */
-    virtual ~JUCEApplicationBase();
+    virtual ~YUPApplicationBase();
 
     //==============================================================================
     /** Returns the global instance of the application object that's running. */
-    static JUCEApplicationBase* getInstance() noexcept { return appInstance; }
+    static YUPApplicationBase* getInstance() noexcept { return appInstance; }
 
     //==============================================================================
     /** Returns the application's name. */
@@ -148,14 +148,14 @@ public:
         @param commandLineParameters    the line passed in does not include the name of
                                         the executable, just the parameter list. To get the
                                         parameters as an array, you can call
-                                        JUCEApplication::getCommandLineParameters()
+                                        YUPApplication::getCommandLineParameters()
         @see shutdown, quit
     */
     virtual void initialise (const String& commandLineParameters) = 0;
 
     /* Called to allow the application to clear up before exiting.
 
-       After JUCEApplication::quit() has been called, the event-dispatch loop will
+       After YUPApplication::quit() has been called, the event-dispatch loop will
        terminate, and this method will get called to allow the app to sort itself
        out.
 
@@ -298,7 +298,7 @@ public:
     static int main (int argc, const char* argv[]);
 
     static void appWillTerminateByForce();
-    using CreateInstanceFunction = JUCEApplicationBase* (*) ();
+    using CreateInstanceFunction = YUPApplicationBase* (*) ();
     static CreateInstanceFunction createInstance;
 
 #if JUCE_IOS
@@ -313,32 +313,32 @@ public:
 
 private:
     //==============================================================================
-    static JUCEApplicationBase* appInstance;
+    static YUPApplicationBase* appInstance;
     int appReturnValue = 0;
     bool stillInitialising = true;
 
     struct MultipleInstanceHandler;
     std::unique_ptr<MultipleInstanceHandler> multipleInstanceHandler;
 
-    JUCE_DECLARE_NON_COPYABLE (JUCEApplicationBase)
+    JUCE_DECLARE_NON_COPYABLE (YUPApplicationBase)
 };
 
 //==============================================================================
 #if JUCE_CATCH_UNHANDLED_EXCEPTIONS || DOXYGEN
 
 /** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
-     the JUCEApplicationBase::sendUnhandledException() method.
+     the YUPApplicationBase::sendUnhandledException() method.
      This functionality can be enabled with the JUCE_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
 #define JUCE_TRY try
 
 /** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
-     the JUCEApplicationBase::sendUnhandledException() method.
+     the YUPApplicationBase::sendUnhandledException() method.
      This functionality can be enabled with the JUCE_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
 #define JUCE_CATCH_EXCEPTION                                                                                        \
-    catch (const std::exception& e) { yup::JUCEApplicationBase::sendUnhandledException (&e, __FILE__, __LINE__); } \
-    catch (...) { yup::JUCEApplicationBase::sendUnhandledException (nullptr, __FILE__, __LINE__); }
+    catch (const std::exception& e) { yup::YUPApplicationBase::sendUnhandledException (&e, __FILE__, __LINE__); } \
+    catch (...) { yup::YUPApplicationBase::sendUnhandledException (nullptr, __FILE__, __LINE__); }
 
 #else
 #define JUCE_TRY

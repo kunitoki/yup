@@ -78,7 +78,7 @@ private:
     std::unique_ptr<MainWindow> window;
 };
 
-START_JUCE_APPLICATION (MyApplication)
+START_YUP_APPLICATION (MyApplication)
 ```
 
 ## Building with CMake

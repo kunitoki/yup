@@ -40,37 +40,37 @@
 namespace yup
 {
 
-JUCEApplicationBase::CreateInstanceFunction JUCEApplicationBase::createInstance = nullptr;
-JUCEApplicationBase* JUCEApplicationBase::appInstance = nullptr;
+YUPApplicationBase::CreateInstanceFunction YUPApplicationBase::createInstance = nullptr;
+YUPApplicationBase* YUPApplicationBase::appInstance = nullptr;
 
 #if JUCE_IOS
-void* JUCEApplicationBase::iOSCustomDelegate = nullptr;
+void* YUPApplicationBase::iOSCustomDelegate = nullptr;
 #endif
 
-JUCEApplicationBase::JUCEApplicationBase()
+YUPApplicationBase::YUPApplicationBase()
 {
     jassert (isStandaloneApp() && appInstance == nullptr);
     appInstance = this;
 }
 
-JUCEApplicationBase::~JUCEApplicationBase()
+YUPApplicationBase::~YUPApplicationBase()
 {
     jassert (appInstance == this);
     appInstance = nullptr;
 }
 
-void JUCEApplicationBase::setApplicationReturnValue (const int newReturnValue) noexcept
+void YUPApplicationBase::setApplicationReturnValue (const int newReturnValue) noexcept
 {
     appReturnValue = newReturnValue;
 }
 
 // This is called on the Mac and iOS where the OS doesn't allow the stack to unwind on shutdown..
-void JUCEApplicationBase::appWillTerminateByForce()
+void YUPApplicationBase::appWillTerminateByForce()
 {
     JUCE_AUTORELEASEPOOL
     {
         {
-            const std::unique_ptr<JUCEApplicationBase> app (appInstance);
+            const std::unique_ptr<YUPApplicationBase> app (appInstance);
 
             if (app != nullptr)
                 app->shutdownApp();
@@ -81,16 +81,16 @@ void JUCEApplicationBase::appWillTerminateByForce()
     }
 }
 
-void JUCEApplicationBase::quit()
+void YUPApplicationBase::quit()
 {
     MessageManager::getInstance()->stopDispatchLoop();
 }
 
-void JUCEApplicationBase::sendUnhandledException (const std::exception* const e,
+void YUPApplicationBase::sendUnhandledException (const std::exception* const e,
                                                   const char* const sourceFile,
                                                   const int lineNumber)
 {
-    if (auto* app = JUCEApplicationBase::getInstance())
+    if (auto* app = YUPApplicationBase::getInstance())
     {
         // If you hit this assertion then the __FILE__ macro is providing a
         // relative path instead of an absolute path. On Windows this will be
@@ -108,7 +108,7 @@ void JUCEApplicationBase::sendUnhandledException (const std::exception* const e,
 #endif
 
 #if JUCE_HANDLE_MULTIPLE_INSTANCES
-struct JUCEApplicationBase::MultipleInstanceHandler final : public ActionListener
+struct YUPApplicationBase::MultipleInstanceHandler final : public ActionListener
 {
     MultipleInstanceHandler (const String& appName)
         : appLock ("juceAppLock_" + appName)
@@ -120,7 +120,7 @@ struct JUCEApplicationBase::MultipleInstanceHandler final : public ActionListene
         if (appLock.enter (0))
             return false;
 
-        if (auto* app = JUCEApplicationBase::getInstance())
+        if (auto* app = YUPApplicationBase::getInstance())
         {
             MessageManager::broadcastMessage (app->getApplicationName() + "/" + app->getCommandLineParameters());
             return true;
@@ -132,7 +132,7 @@ struct JUCEApplicationBase::MultipleInstanceHandler final : public ActionListene
 
     void actionListenerCallback (const String& message) override
     {
-        if (auto* app = JUCEApplicationBase::getInstance())
+        if (auto* app = YUPApplicationBase::getInstance())
         {
             auto appName = app->getApplicationName();
 
@@ -147,7 +147,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultipleInstanceHandler)
 };
 
-bool JUCEApplicationBase::sendCommandLineToPreexistingInstance()
+bool YUPApplicationBase::sendCommandLineToPreexistingInstance()
 {
     jassert (multipleInstanceHandler == nullptr); // this must only be called once!
 
@@ -156,7 +156,7 @@ bool JUCEApplicationBase::sendCommandLineToPreexistingInstance()
 }
 
 #else
-struct JUCEApplicationBase::MultipleInstanceHandler
+struct YUPApplicationBase::MultipleInstanceHandler
 {
 };
 #endif
@@ -164,7 +164,7 @@ struct JUCEApplicationBase::MultipleInstanceHandler
 //==============================================================================
 #if JUCE_WINDOWS && ! defined(_CONSOLE)
 
-String JUCE_CALLTYPE JUCEApplicationBase::getCommandLineParameters()
+String JUCE_CALLTYPE YUPApplicationBase::getCommandLineParameters()
 {
     return CharacterFunctions::findEndOfToken (CharPointer_UTF16 (GetCommandLineW()),
                                                CharPointer_UTF16 (L" "),
@@ -172,7 +172,7 @@ String JUCE_CALLTYPE JUCEApplicationBase::getCommandLineParameters()
         .findEndOfWhitespace();
 }
 
-StringArray JUCE_CALLTYPE JUCEApplicationBase::getCommandLineParameterArray()
+StringArray JUCE_CALLTYPE YUPApplicationBase::getCommandLineParameterArray()
 {
     StringArray s;
     int argc = 0;
@@ -204,7 +204,7 @@ extern const char* const* juce_argv; // declared in juce_core
 extern int juce_argc;
 #endif
 
-String JUCEApplicationBase::getCommandLineParameters()
+String YUPApplicationBase::getCommandLineParameters()
 {
     String argString;
 
@@ -219,7 +219,7 @@ String JUCEApplicationBase::getCommandLineParameters()
     return argString.trim();
 }
 
-StringArray JUCEApplicationBase::getCommandLineParameterArray()
+StringArray YUPApplicationBase::getCommandLineParameterArray()
 {
     StringArray result;
 
@@ -229,7 +229,7 @@ StringArray JUCEApplicationBase::getCommandLineParameterArray()
     return result;
 }
 
-int JUCEApplicationBase::main (int argc, const char* argv[])
+int YUPApplicationBase::main (int argc, const char* argv[])
 {
     JUCE_AUTORELEASEPOOL
     {
@@ -244,7 +244,7 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
         return juce_iOSMain (argc, argv, iOSCustomDelegate);
 #else
 
-        return JUCEApplicationBase::main();
+        return YUPApplicationBase::main();
 #endif
     }
 }
@@ -256,7 +256,7 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
 extern "C" jint JNIEXPORT juce_JNI_OnLoad (JavaVM* vm, void*);
 #endif
 
-int JUCEApplicationBase::main()
+int YUPApplicationBase::main()
 {
 #if JUCE_ANDROID
     auto env = (JNIEnv*) SDL_AndroidGetJNIEnv();
@@ -275,7 +275,7 @@ int JUCEApplicationBase::main()
     ScopedJuceInitialiser_GUI libraryInitialiser;
     jassert (createInstance != nullptr);
 
-    const std::unique_ptr<JUCEApplicationBase> app (createInstance());
+    const std::unique_ptr<YUPApplicationBase> app (createInstance());
     jassert (app != nullptr);
 
     if (! app->initialiseApp())
@@ -292,7 +292,7 @@ int JUCEApplicationBase::main()
 }
 
 //==============================================================================
-bool JUCEApplicationBase::initialiseApp()
+bool YUPApplicationBase::initialiseApp()
 {
 #if JUCE_HANDLE_MULTIPLE_INSTANCES
     if ((! moreThanOneInstanceAllowed()) && sendCommandLineToPreexistingInstance())
@@ -335,9 +335,9 @@ bool JUCEApplicationBase::initialiseApp()
     return true;
 }
 
-int JUCEApplicationBase::shutdownApp()
+int YUPApplicationBase::shutdownApp()
 {
-    jassert (JUCEApplicationBase::getInstance() == this);
+    jassert (YUPApplicationBase::getInstance() == this);
 
 #if JUCE_HANDLE_MULTIPLE_INSTANCES
     if (auto* mih = multipleInstanceHandler.get())

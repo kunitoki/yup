@@ -165,4 +165,4 @@ private:
 
 } // namespace yup
 
-START_JUCE_APPLICATION (yup::AudioProcessorApplication)
+START_YUP_APPLICATION (yup::AudioProcessorApplication)

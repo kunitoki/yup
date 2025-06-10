@@ -75,7 +75,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
         addMethod(@selector(applicationShouldTerminate:), [](id /*self*/, SEL, NSApplication*)
         {
-            if (auto* app = JUCEApplicationBase::getInstance())
+            if (auto* app = YUPApplicationBase::getInstance())
             {
                 app->systemRequestedQuit();
 
@@ -88,18 +88,18 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
         addMethod(@selector(applicationWillTerminate:), [](id /*self*/, SEL, NSNotification*)
         {
-            JUCEApplicationBase::appWillTerminateByForce();
+            YUPApplicationBase::appWillTerminateByForce();
         });
 
         addMethod(@selector(handleQuitEvent:withReplyEvent:), [](id self, SEL, NSAppleEventDescriptor*, NSAppleEventDescriptor*)
         {
-            if (auto* app = JUCEApplicationBase::getInstance())
+            if (auto* app = YUPApplicationBase::getInstance())
                 app->systemRequestedQuit();
         });
 
         addMethod(@selector(application:openFile:), [](id /*self*/, SEL, NSApplication*, NSString* filename)
         {
-            if (auto* app = JUCEApplicationBase::getInstance())
+            if (auto* app = YUPApplicationBase::getInstance())
             {
                 app->anotherInstanceStarted (quotedIfContainsSpaces (filename));
                 return YES;
@@ -110,7 +110,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
         addMethod(@selector(application:openFiles:), [](id /*self*/, SEL, NSApplication*, NSArray* filenames)
         {
-            if (auto* app = JUCEApplicationBase::getInstance())
+            if (auto* app = YUPApplicationBase::getInstance())
             {
                 StringArray files;
 
@@ -140,7 +140,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(getUrl:withReplyEvent:), [](id /*self*/, SEL, NSAppleEventDescriptor* event, NSAppleEventDescriptor*)
         {
-            if (auto* app = JUCEApplicationBase::getInstance())
+            if (auto* app = YUPApplicationBase::getInstance())
                 app->anotherInstanceStarted (quotedIfContainsSpaces ([[event paramDescriptorForKeyword: keyDirectObject] stringValue]));
         });
 
@@ -304,7 +304,7 @@ struct AppDelegate
                      object:nil];
         JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-        if (JUCEApplicationBase::isStandaloneApp())
+        if (YUPApplicationBase::isStandaloneApp())
         {
             [NSApp setDelegate:delegate];
 
@@ -340,7 +340,7 @@ struct AppDelegate
         [[NSRunLoop currentRunLoop] cancelPerformSelectorsWithTarget:delegate];
         [[NSNotificationCenter defaultCenter] removeObserver:delegate];
 
-        if (JUCEApplicationBase::isStandaloneApp())
+        if (YUPApplicationBase::isStandaloneApp())
         {
             [NSApp setDelegate:nil];
 
@@ -354,7 +354,7 @@ struct AppDelegate
 
     static NSString* getBroadcastEventName()
     {
-        return juceStringToNS("juce_" + String::toHexString(File::getSpecialLocation(File::currentExecutableFile).hashCode64()));
+        return juceStringToNS("yup_" + String::toHexString(File::getSpecialLocation(File::currentExecutableFile).hashCode64()));
     }
 
     InternalMessageQueue messageQueue;
@@ -384,7 +384,7 @@ static void runNSApplication()
         {
             // An AppKit exception will kill the app, but at least this provides a chance to log it.,
             std::runtime_error ex(std::string("NSException: ") + [[e name] UTF8String] + ", Reason:" + [[e reason] UTF8String]);
-            JUCEApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
+            YUPApplicationBase::sendUnhandledException(&ex, __FILE__, __LINE__);
         }
         @finally
         {

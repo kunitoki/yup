@@ -28,7 +28,7 @@ namespace yup
     This class defines the lifecycle and behavior of the application using the JUCE framework, handling
     events such as application start and quit, as well as managing application instances.
  */
-class JUCE_API YUPApplication : public JUCEApplicationBase
+class JUCE_API YUPApplication : public YUPApplicationBase
 {
 public:
     //==============================================================================

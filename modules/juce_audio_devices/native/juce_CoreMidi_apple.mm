@@ -572,7 +572,7 @@ static void globalSystemChangeCallback(const MIDINotification* notification, voi
 
 static String getGlobalMidiClientName()
 {
-    if (auto* app = JUCEApplicationBase::getInstance())
+    if (auto* app = YUPApplicationBase::getInstance())
         return app->getApplicationName();
 
     return "JUCE";
