@@ -199,6 +199,8 @@ public:
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
     /** @internal */
+    void mouseDoubleClick (const MouseEvent& event) override;
+    /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void textInput (const String& text) override;

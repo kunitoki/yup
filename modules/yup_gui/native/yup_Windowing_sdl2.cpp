@@ -800,8 +800,6 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
     }
 
     lastMouseMovePosition = position;
-    lastMouseDownPosition.reset();
-    lastMouseDownTime.reset();
 
     if (isMouseOutsideWindow (window))
         handleFocusChanged (false);

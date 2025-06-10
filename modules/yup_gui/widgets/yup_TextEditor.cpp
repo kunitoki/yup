@@ -383,6 +383,13 @@ void TextEditor::mouseUp (const MouseEvent& event)
 
 //==============================================================================
 
+void TextEditor::mouseDoubleClick (const MouseEvent& event)
+{
+    selectAll();
+}
+
+//==============================================================================
+
 void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
 {
     bool shiftDown = key.getModifiers().isShiftDown();
