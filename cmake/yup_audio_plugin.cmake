@@ -142,6 +142,7 @@ function (yup_audio_plugin)
         set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
         set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
+        set (SMTG_CREATE_PLUGIN_LINK OFF)
         if (NOT YUP_PLATFORM_OSX OR XCODE)
             set (SMTG_RUN_VST_VALIDATOR ON)
         else()
@@ -208,7 +209,7 @@ function (yup_audio_plugin)
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
 
-        #yup_audio_plugin_copy_bundle (${target_name} vst3)
+        yup_audio_plugin_copy_bundle (${target_name} vst3)
     endif()
 
     # ==== Build standalone plugin target
@@ -245,8 +246,6 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin_copy_bundle target_name plugin_type)
-    return()
-
     if (NOT YUP_PLATFORM_OSX)
         return()
     endif()
@@ -260,14 +259,14 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
 
     if ("${plugin_type}" STREQUAL "clap")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
-            COMMAND unlink ${plugin_path}
-            COMMAND cmake -E create_symlink "$<TARGET_FILE:${dependency_target}>" ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE:${dependency_target}>" ${plugin_path}
             COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "vst3")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
-            COMMAND unlink ${plugin_path}
-            COMMAND cmake -E create_symlink "$<TARGET_FILE_DIR:${dependency_target}>/../../../${target_file_name}" ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE_DIR:${dependency_target}>/../../../${target_file_name}" ${plugin_path}
             COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     else()

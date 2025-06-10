@@ -98,9 +98,9 @@ void toString128 (const String& source, Vst::String128 destination)
 
 static std::atomic_int numScopedInitInstancesGui = 0;
 
-struct ScopedYupInitialiser_GUI
+struct VST3ScopedYupInitialiser
 {
-    ScopedYupInitialiser_GUI()
+    VST3ScopedYupInitialiser()
     {
         if (numScopedInitInstancesGui.fetch_add (1) == 0)
         {
@@ -109,7 +109,7 @@ struct ScopedYupInitialiser_GUI
         }
     }
 
-    ~ScopedYupInitialiser_GUI()
+    ~VST3ScopedYupInitialiser()
     {
         if (numScopedInitInstancesGui.fetch_add (-1) == 1)
         {
@@ -1028,7 +1028,7 @@ public:
     }
 
 private:
-    ScopedYupInitialiser_GUI scopeInitialiser;
+    VST3ScopedYupInitialiser scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
 
