@@ -219,9 +219,9 @@ void NetworkServiceDiscovery::AvailableServiceList::removeTimedOutServices()
 
     auto oldEnd = std::end (services);
     auto newEnd = std::remove_if (std::begin (services), oldEnd, [=] (const Service& s)
-                                  {
-                                      return s.lastSeen < oldestAllowedTime;
-                                  });
+    {
+        return s.lastSeen < oldestAllowedTime;
+    });
 
     if (newEnd != oldEnd)
     {

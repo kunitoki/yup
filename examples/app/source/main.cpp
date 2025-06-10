@@ -54,9 +54,9 @@ public:
         stopTimer();
 
         yup::MessageManager::callAsync ([this]
-                                        {
-                                            systemRequestedQuit();
-                                        });
+        {
+            systemRequestedQuit();
+        });
     }
 };
 

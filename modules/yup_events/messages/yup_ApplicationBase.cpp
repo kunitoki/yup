@@ -87,8 +87,8 @@ void YUPApplicationBase::quit()
 }
 
 void YUPApplicationBase::sendUnhandledException (const std::exception* const e,
-                                                  const char* const sourceFile,
-                                                  const int lineNumber)
+                                                 const char* const sourceFile,
+                                                 const int lineNumber)
 {
     if (auto* app = YUPApplicationBase::getInstance())
     {

@@ -123,7 +123,7 @@ class JUCE_API ScopedJuceInitialiser_GUI final
 
 #define JUCE_CREATE_APPLICATION_DEFINE(AppClass)                \
     JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
-    yup::YUPApplicationBase* juce_CreateApplication()         \
+    yup::YUPApplicationBase* juce_CreateApplication()           \
     {                                                           \
         return new AppClass();                                  \
     }                                                           \
@@ -135,7 +135,7 @@ class JUCE_API ScopedJuceInitialiser_GUI final
 
 #define JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
     JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")                 \
-    yup::YUPApplicationBase* juce_CreateApplication()                         \
+    yup::YUPApplicationBase* juce_CreateApplication()                           \
     {                                                                           \
         return new AppClass();                                                  \
     }                                                                           \
@@ -145,9 +145,9 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     }                                                                           \
     JUCE_END_IGNORE_WARNINGS_GCC_LIKE
 
-#define JUCE_MAIN_FUNCTION_DEFINITION                                                    \
-    JUCE_MAIN_FUNCTION                                                                   \
-    {                                                                                    \
+#define JUCE_MAIN_FUNCTION_DEFINITION                                                  \
+    JUCE_MAIN_FUNCTION                                                                 \
+    {                                                                                  \
         yup::YUPApplicationBase::createInstance = &juce_CreateApplication;             \
         yup::YUPApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
         return yup::YUPApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);                 \
@@ -155,16 +155,16 @@ class JUCE_API ScopedJuceInitialiser_GUI final
 
 #else
 
-#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)         \
+#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)       \
     yup::YUPApplicationBase* juce_CreateApplication(); \
     yup::YUPApplicationBase* juce_CreateApplication()  \
-    {                                                    \
-        return new AppClass();                           \
+    {                                                  \
+        return new AppClass();                         \
     }
 
-#define JUCE_MAIN_FUNCTION_DEFINITION                                        \
-    JUCE_MAIN_FUNCTION                                                       \
-    {                                                                        \
+#define JUCE_MAIN_FUNCTION_DEFINITION                                      \
+    JUCE_MAIN_FUNCTION                                                     \
+    {                                                                      \
         yup::YUPApplicationBase::createInstance = &juce_CreateApplication; \
         return yup::YUPApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);     \
     }
@@ -185,7 +185,7 @@ class JUCE_API ScopedJuceInitialiser_GUI final
 #endif
 #else
 
-#define START_YUP_APPLICATION(AppClass)                        \
+#define START_YUP_APPLICATION(AppClass)                         \
     JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
     JUCE_CREATE_APPLICATION_DEFINE(AppClass)                    \
     JUCE_MAIN_FUNCTION_DEFINITION                               \

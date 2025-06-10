@@ -114,9 +114,9 @@ private:
     std::set<std::shared_ptr<ChildProcess>> processes;
     detail::CallbackListenerList<ChildProcess*> listeners;
     TimedCallback timer { [this]
-                          {
-                              checkProcesses();
-                          } };
+    {
+        checkProcesses();
+    } };
 };
 
 } // namespace yup

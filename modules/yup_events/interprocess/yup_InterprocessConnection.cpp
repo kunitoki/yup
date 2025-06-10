@@ -284,12 +284,12 @@ struct ConnectionStateMessage final : public MessageManager::MessageBase
     void messageCallback() override
     {
         safeAction->ifSafe ([this] (InterprocessConnection& owner)
-                            {
-                                if (connectionMade)
-                                    owner.connectionMade();
-                                else
-                                    owner.connectionLost();
-                            });
+        {
+            if (connectionMade)
+                owner.connectionMade();
+            else
+                owner.connectionLost();
+        });
     }
 
     std::shared_ptr<SafeActionImpl> safeAction;
@@ -335,9 +335,9 @@ struct DataDeliveryMessage final : public Message
     void messageCallback() override
     {
         safeAction->ifSafe ([this] (InterprocessConnection& owner)
-                            {
-                                owner.messageReceived (data);
-                            });
+        {
+            owner.messageReceived (data);
+        });
     }
 
     std::shared_ptr<SafeActionImpl> safeAction;

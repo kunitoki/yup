@@ -112,7 +112,7 @@ public:
         auto now = Time::getMillisecondCounter();
         auto timeout = now + maxTimeoutMilliseconds;
 
-#if JUCE_EMSCRIPTEN && !defined(__EMSCRIPTEN_PTHREADS__)
+#if JUCE_EMSCRIPTEN && ! defined(__EMSCRIPTEN_PTHREADS__)
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
                                                   : (std::numeric_limits<uint32>::max() - (lastCallTime - now)));
         lastCallTime = now;
@@ -169,9 +169,9 @@ public:
         // Trying to add a timer that's already here - shouldn't get to this point,
         // so if you get this assertion, let me know!
         jassert (std::none_of (timers.begin(), timers.end(), [t] (TimerCountdown i)
-                               {
-                                   return i.timer == t;
-                               }));
+        {
+            return i.timer == t;
+        }));
 
         auto pos = timers.size();
 

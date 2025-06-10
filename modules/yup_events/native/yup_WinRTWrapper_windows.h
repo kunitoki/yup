@@ -79,7 +79,7 @@ public:
             ScopedHString classID (runtimeClassID);
 
             if (classID.get() != nullptr)
-                roGetActivationFactory (classID.get(), __uuidof(ComClass), (void**) comPtr.resetAndGetPointerAddress());
+                roGetActivationFactory (classID.get(), __uuidof (ComClass), (void**) comPtr.resetAndGetPointerAddress());
         }
 
         return comPtr;
