@@ -389,11 +389,11 @@ void Graphics::setClipPath (const Path& clipPath)
 
     options.clipPath = clipPath;
 
-    rive::RiveRenderPath renderPath;
-    renderPath.fillRule (rive::FillRule::nonZero);
-    renderPath.addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
+    auto renderPath = rive::make_rcp<rive::RiveRenderPath>();
+    renderPath->fillRule (rive::FillRule::nonZero);
+    renderPath->addRenderPath (clipPath.getRenderPath(), options.getLocalTransform().toMat2D());
 
-    renderer.clipPath (std::addressof (renderPath));
+    renderer.clipPath (renderPath.get());
 }
 
 Path Graphics::getClipPath() const
