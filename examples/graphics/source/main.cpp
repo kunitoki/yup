@@ -31,6 +31,7 @@
 #include "examples/Audio.h"
 #include "examples/LayoutFonts.h"
 #include "examples/VariableFonts.h"
+#include "examples/TextEditor.h"
 #include "examples/Paths.h"
 
 //==============================================================================
@@ -97,6 +98,12 @@ public:
         if (demo == 3)
         {
             components.add (std::make_unique<PathsExample>());
+            addAndMakeVisible (components.getLast());
+        }
+
+        if (demo == 4)
+        {
+            components.add (std::make_unique<yup::TextEditorDemo>());
             addAndMakeVisible (components.getLast());
         }
 

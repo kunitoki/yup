@@ -77,6 +77,12 @@ public:
     //==============================================================================
 
     void appendText (StringRef text,
+                     const Font& font,
+                     float fontSize = 16.0f,
+                     float lineHeight = -1.0f,
+                     float letterSpacing = 0.0f);
+
+    void appendText (StringRef text,
                      rive::rcp<rive::RenderPaint> paint,
                      const Font& font,
                      float fontSize = 16.0f,
@@ -140,7 +146,37 @@ public:
 
     //==============================================================================
 
-    Rectangle<float> getGlyphPosition (int index) const;
+    /** Find the glyph index at a given position in the text area.
+
+        @param position The position to check
+
+        @returns The glyph index at the position, or -1 if not found
+    */
+    int getGlyphIndexAtPosition (const Point<float>& position);
+
+    /** Get the bounds of the caret at a given character position.
+
+        @param characterIndex The character index to get bounds for
+
+        @returns Rectangle representing the caret bounds
+    */
+    Rectangle<float> getCaretBounds (int characterIndex);
+
+
+    /** Returns all selection rectangles for multiline selections.
+
+        @param startIndex   The start character index
+        @param endIndex     The end character index
+        @returns            A vector of rectangles representing the selection
+    */
+    std::vector<Rectangle<float>> getSelectionRectangles (int startIndex, int endIndex);
+
+    /** Validates if a character index is within valid bounds.
+
+        @param characterIndex   The character index to validate
+        @returns                True if the index is valid
+    */
+    bool isValidCharacterIndex (int characterIndex) const;
 
 private:
     rive::SimpleArray<rive::Paragraph> shape;
@@ -150,6 +186,7 @@ private:
     rive::StyledText styledTexts;
     std::vector<RenderStyle> styles;
     std::vector<RenderStyle*> renderStyles;
+    rive::GlyphLookup glyphLookup;
 
     TextOrigin origin = TextOrigin::topOrigin;
     TextOverflow overflow = TextOverflow::visible;

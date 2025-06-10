@@ -128,6 +128,9 @@ void Label::prepareText()
 
     if (text.isNotEmpty())
     {
+        if (! font)
+            font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
+
         styledText.appendText (text, nullptr, font->getFont(), fontSize);
         styledText.update();
     }

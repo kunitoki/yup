@@ -122,14 +122,11 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
     g.setFillColor (b.isButtonDown() ? Color (0xff000000) : Color (0xffffffff));
     g.fillPath (backgroundPath);
 
-    /*
     StyledText text;
-    text.appendText (font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f, b.getComponentID().toRawUTF8());
-    text.layout (bounds.reduced (0.0f, 10.0f), yup::StyledText::center);
+    text.appendText (b.getComponentID(), nullptr, font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f);
 
-    g.setStrokeColor (isButtonDown ? Color (0xffffffff) : Color (0xff000000));
+    g.setStrokeColor (b.isButtonDown() ? Color (0xffffffff) : Color (0xff000000));
     g.strokeFittedText (text, {});
-    */
 }
 
 //==============================================================================

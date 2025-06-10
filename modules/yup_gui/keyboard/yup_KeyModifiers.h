@@ -69,6 +69,15 @@ public:
         return modifiers & controlMask;
     }
 
+    /** Checks if the Command key is down.
+
+        @return True if Command is active, false otherwise.
+    */
+    constexpr bool isCommandDown() const noexcept
+    {
+        return modifiers & commandMask;
+    }
+
     /** Checks if the Alt key is down.
 
         @return True if Alt is active, false otherwise.
@@ -176,10 +185,11 @@ public:
     //==============================================================================
     static constexpr int shiftMask = 0x0001;
     static constexpr int controlMask = 0x0002;
-    static constexpr int altMask = 0x0004;
-    static constexpr int superMask = 0x0008;
-    static constexpr int capsLockMask = 0x0010;
-    static constexpr int numLockMask = 0x0020;
+    static constexpr int commandMask = 0x0004;
+    static constexpr int altMask = 0x0008;
+    static constexpr int superMask = 0x0010;
+    static constexpr int capsLockMask = 0x0020;
+    static constexpr int numLockMask = 0x0040;
 
 private:
     int32_t modifiers = 0;

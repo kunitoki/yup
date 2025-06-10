@@ -75,6 +75,7 @@
 #include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
 #include "mouse/yup_MouseListener.h"
+#include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
@@ -84,10 +85,12 @@
 #include "widgets/yup_TextButton.h"
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
+#include "widgets/yup_TextEditor.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 
 //==============================================================================
+
 #include "native/yup_WindowingHelpers.h"
 
 //==============================================================================

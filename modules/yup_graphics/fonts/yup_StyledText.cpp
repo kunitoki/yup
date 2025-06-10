@@ -171,6 +171,15 @@ void StyledText::setWrap (TextWrap value)
 //==============================================================================
 
 void StyledText::appendText (StringRef text,
+                             const Font& font,
+                             float fontSize,
+                             float lineHeight,
+                             float letterSpacing)
+{
+    appendText (text, nullptr, font, fontSize, lineHeight, letterSpacing);
+}
+
+void StyledText::appendText (StringRef text,
                              rive::rcp<rive::RenderPaint> paint,
                              const Font& font,
                              float fontSize,
@@ -235,6 +244,9 @@ void StyledText::update()
         bounds = { 0.0f, 0.0f, 0.0f, 0.0f };
         return;
     }
+
+    // Compute glyph lookup for text positioning
+    glyphLookup.compute (styledTexts.unichars(), shape);
 
     // Build up ordered runs as we go.
     int paragraphIndex = 0;
@@ -316,7 +328,7 @@ void StyledText::update()
                 float renderX = x;
                 int numGlyphs = 0;
 
-                for (auto [run, glyphIndex] : orderedLines[lineIndex])
+                for (const auto& [run, glyphIndex] : orderedLines[lineIndex])
                 {
                     const rive::Vec2D& offset = run->offsets[glyphIndex];
                     renderX += run->advances[glyphIndex] + offset.x;
@@ -328,7 +340,7 @@ void StyledText::update()
                     adjustX = (measuredWidth - renderX) / numGlyphs;
             }
 
-            for (auto [run, glyphIndex] : orderedLines[lineIndex])
+            for (const auto& [run, glyphIndex] : orderedLines[lineIndex])
             {
                 const rive::Font* font = run->font.get();
                 const rive::Vec2D& offset = run->offsets[glyphIndex];
@@ -375,9 +387,323 @@ void StyledText::update()
 
 //==============================================================================
 
-Rectangle<float> StyledText::getGlyphPosition (int index) const
+int StyledText::getGlyphIndexAtPosition (const Point<float>& position)
 {
-    return {}; // TODO
+    update();
+
+    if (orderedLines.empty())
+        return 0;
+
+    float clickX = position.getX();
+    float clickY = position.getY();
+
+    // Use the same approach as getSelectionRectangles to find the line
+    int targetLineIndex = -1;
+
+    for (size_t lineIdx = 0; lineIdx < orderedLines.size(); ++lineIdx)
+    {
+        const rive::OrderedLine& line = orderedLines[lineIdx];
+        const rive::GlyphLine& glyphLine = line.glyphLine();
+
+        float lineY = line.y();
+        float lineTop = lineY + glyphLine.top;
+        float lineBottom = lineY + glyphLine.bottom;
+
+        // Check if click is within this line's vertical bounds (same as getSelectionRectangles)
+        if (clickY >= lineTop && clickY <= lineBottom)
+        {
+            targetLineIndex = static_cast<int>(lineIdx);
+            break;
+        }
+        // If click is above the first line, use the first line
+        else if (lineIdx == 0 && clickY < lineTop)
+        {
+            targetLineIndex = 0;
+            break;
+        }
+        // If click is below all lines, use the last line
+        else if (lineIdx == orderedLines.size() - 1 && clickY > lineBottom)
+        {
+            targetLineIndex = static_cast<int>(lineIdx);
+            break;
+        }
+    }
+
+    if (targetLineIndex == -1)
+        return static_cast<int>(styledTexts.unichars().size());
+
+    const rive::OrderedLine& targetLine = orderedLines[targetLineIndex];
+    const rive::GlyphLine& glyphLine = targetLine.glyphLine();
+
+    // Find the closest character using the same xpos logic as getSelectionRectangles
+    int bestCharIndex = 0;
+    float minDistance = std::numeric_limits<float>::max();
+    bool foundAnyGlyph = false;
+
+    // If click is before the line start, return the first character in the line
+    if (clickX <= glyphLine.startX)
+    {
+        for (const auto& [glyphRun, glyphIndex] : targetLine)
+        {
+            if (glyphIndex < glyphRun->textIndices.size())
+                return static_cast<int>(glyphRun->textIndices[glyphIndex]);
+        }
+
+        return 0;
+    }
+
+    for (const auto& [glyphRun, glyphIndex] : targetLine)
+    {
+        // Check if this glyph run has valid data (same check as getSelectionRectangles)
+        if (glyphIndex >= glyphRun->textIndices.size() || glyphIndex >= glyphRun->xpos.size())
+            continue;
+
+        uint32_t textIndex = glyphRun->textIndices[glyphIndex];
+        int charIndex = static_cast<int>(textIndex);
+
+        // Use the same X positioning logic as getSelectionRectangles
+        float glyphX = glyphRun->xpos[glyphIndex];
+        float nextGlyphX = (glyphIndex + 1 < glyphRun->xpos.size()) ?
+                          glyphRun->xpos[glyphIndex + 1] :
+                          glyphX + (glyphIndex < glyphRun->advances.size() ? glyphRun->advances[glyphIndex] : 0);
+
+        // Check if click is within this character's bounds
+        if (clickX >= glyphX && clickX <= nextGlyphX)
+        {
+            // Return the closest boundary
+            float midPoint = (glyphX + nextGlyphX) * 0.5f;
+            return (clickX <= midPoint) ? charIndex : charIndex + 1;
+        }
+
+        // Calculate distances to start and end of this character
+        float distanceToStart = std::abs(clickX - glyphX);
+        float distanceToEnd = std::abs(clickX - nextGlyphX);
+
+        // Check if click is closer to the start of this character
+        if (distanceToStart < minDistance)
+        {
+            minDistance = distanceToStart;
+            bestCharIndex = charIndex;
+            foundAnyGlyph = true;
+        }
+
+        // Check if click is closer to the end of this character
+        if (distanceToEnd < minDistance)
+        {
+            minDistance = distanceToEnd;
+            bestCharIndex = charIndex + 1;
+            foundAnyGlyph = true;
+        }
+    }
+
+    // If no glyph was found, return the start of this line
+    if (!foundAnyGlyph)
+    {
+        // Find the first character in this line
+        for (const auto& [glyphRun, glyphIndex] : targetLine)
+        {
+            if (glyphIndex < glyphRun->textIndices.size())
+                return static_cast<int>(glyphRun->textIndices[glyphIndex]);
+        }
+
+        return 0;
+    }
+
+    // Ensure the result is within valid bounds
+    return jlimit(0, static_cast<int>(styledTexts.unichars().size()), bestCharIndex);
+}
+
+//==============================================================================
+
+Rectangle<float> StyledText::getCaretBounds (int characterIndex)
+{
+    update();
+
+    if (orderedLines.empty())
+        return {};
+
+    // Handle bounds checking
+    if (characterIndex < 0)
+        characterIndex = 0;
+
+    // Use the same approach as getSelectionRectangles
+    for (size_t lineIdx = 0; lineIdx < orderedLines.size(); ++lineIdx)
+    {
+        const rive::OrderedLine& line = orderedLines[lineIdx];
+        const rive::GlyphLine& glyphLine = line.glyphLine();
+
+        float lineY = line.y();
+        float lineHeight = glyphLine.bottom - glyphLine.top;
+
+        for (const auto& [glyphRun, glyphIndex] : line)
+        {
+            // Check if this glyph run has valid data
+            if (glyphIndex >= glyphRun->textIndices.size() || glyphIndex >= glyphRun->xpos.size())
+                continue;
+
+            uint32_t textIndex = glyphRun->textIndices[glyphIndex];
+            int charIndex = static_cast<int>(textIndex);
+
+            // Check if this is our target character
+            if (charIndex == characterIndex)
+            {
+                float caretX = glyphRun->xpos[glyphIndex];
+                const float caretWidth = 1.0f;
+
+                return Rectangle<float>(
+                    caretX,
+                    lineY + glyphLine.top,
+                    caretWidth,
+                    lineHeight
+                );
+            }
+            // Check if we've passed our target character (for end-of-line positioning)
+            else if (charIndex > characterIndex)
+            {
+                float caretX = glyphRun->xpos[glyphIndex];
+                const float caretWidth = 1.0f;
+
+                return Rectangle<float>(
+                    caretX,
+                    lineY + glyphLine.top,
+                    caretWidth,
+                    lineHeight
+                );
+            }
+        }
+
+        // If we've checked all glyphs in this line and character index is beyond them,
+        // position at the end of this line
+        if (characterIndex <= static_cast<int>(line.lastCodePointIndex(glyphLookup)))
+        {
+            // Find the rightmost position in this line
+            float endX = glyphLine.startX;
+            for (auto [glyphRun, glyphIndex] : line)
+            {
+                if (glyphIndex < glyphRun->xpos.size())
+                {
+                    if (glyphIndex + 1 < glyphRun->xpos.size())
+                        endX = glyphRun->xpos[glyphIndex + 1];
+                    else
+                        endX = glyphRun->xpos[glyphIndex] + (glyphIndex < glyphRun->advances.size() ? glyphRun->advances[glyphIndex] : 0);
+                }
+            }
+
+            const float caretWidth = 1.0f;
+            return Rectangle<float>(
+                endX,
+                lineY + glyphLine.top,
+                caretWidth,
+                lineHeight
+            );
+        }
+    }
+
+    // If character index is beyond all text, position at the end of the last line
+    if (!orderedLines.empty())
+    {
+        const rive::OrderedLine& lastLine = orderedLines.back();
+        const rive::GlyphLine& glyphLine = lastLine.glyphLine();
+
+        float lineY = lastLine.y();
+        float lineHeight = glyphLine.bottom - glyphLine.top;
+
+        // Find the rightmost position in the last line
+        float endX = glyphLine.startX;
+        for (const auto& [glyphRun, glyphIndex] : lastLine)
+        {
+            if (glyphIndex < glyphRun->xpos.size())
+            {
+                if (glyphIndex + 1 < glyphRun->xpos.size())
+                    endX = glyphRun->xpos[glyphIndex + 1];
+                else
+                    endX = glyphRun->xpos[glyphIndex] + (glyphIndex < glyphRun->advances.size() ? glyphRun->advances[glyphIndex] : 0);
+            }
+        }
+
+        const float caretWidth = 1.0f;
+        return Rectangle<float>(
+            endX,
+            lineY + glyphLine.top,
+            caretWidth,
+            lineHeight
+        );
+    }
+
+    return {};
+}
+
+//==============================================================================
+
+std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex, int endIndex)
+{
+    update();
+
+    std::vector<Rectangle<float>> rectangles;
+
+    if (orderedLines.empty() || startIndex < 0 || endIndex < 0 || startIndex >= endIndex)
+        return rectangles;
+
+    rectangles.reserve (orderedLines.size());
+
+    // Use the orderedLines to find selection rectangles
+    for (size_t lineIdx = 0; lineIdx < orderedLines.size(); ++lineIdx)
+    {
+        const rive::OrderedLine& line = orderedLines[lineIdx];
+        const rive::GlyphLine& glyphLine = line.glyphLine();
+
+        // Track selection bounds for this line
+        float selectionStartX = -1.0f;
+        float selectionEndX = -1.0f;
+        float lineY = line.y();
+        float lineHeight = glyphLine.bottom - glyphLine.top;
+
+        bool hasSelectionInLine = false;
+
+        for (auto [glyphRun, glyphIndex] : line)
+        {
+            // Check if this glyph run has valid data
+            if (glyphIndex >= glyphRun->textIndices.size() || glyphIndex >= glyphRun->xpos.size())
+                continue;
+
+            uint32_t textIndex = glyphRun->textIndices[glyphIndex];
+            int charIndex = static_cast<int>(textIndex);
+
+            // Check if this character is within the selection
+            if (charIndex >= startIndex && charIndex < endIndex)
+            {
+                float glyphX = glyphRun->xpos[glyphIndex];
+                float nextGlyphX = (glyphIndex + 1 < glyphRun->xpos.size()) ?
+                                  glyphRun->xpos[glyphIndex + 1] :
+                                  glyphX + (glyphIndex < glyphRun->advances.size() ? glyphRun->advances[glyphIndex] : 0);
+
+                if (!hasSelectionInLine)
+                {
+                    selectionStartX = glyphX;
+                    selectionEndX = nextGlyphX;
+                    hasSelectionInLine = true;
+                }
+                else
+                {
+                    selectionStartX = std::min(selectionStartX, glyphX);
+                    selectionEndX = std::max(selectionEndX, nextGlyphX);
+                }
+            }
+        }
+
+        // If this line has selection, add a rectangle for it
+        if (hasSelectionInLine && selectionStartX >= 0.0f && selectionEndX > selectionStartX)
+        {
+            rectangles.push_back(Rectangle<float>(
+                selectionStartX,
+                lineY + glyphLine.top,
+                selectionEndX - selectionStartX,
+                lineHeight
+            ));
+        }
+    }
+
+    return rectangles;
 }
 
 //==============================================================================
@@ -387,6 +713,8 @@ Rectangle<float> StyledText::getComputedTextBounds()
     update();
     return bounds;
 }
+
+//==============================================================================
 
 Point<float> StyledText::getOffset (const Rectangle<float>& area)
 {
@@ -419,6 +747,21 @@ const std::vector<StyledText::RenderStyle*>& StyledText::getRenderStyles()
 {
     update();
     return renderStyles;
+}
+
+//==============================================================================
+
+bool StyledText::isValidCharacterIndex (int characterIndex) const
+{
+    const_cast<StyledText*>(this)->update();
+
+    if (characterIndex < 0)
+        return false;
+
+    if (glyphLookup.size() == 0)
+        return characterIndex == 0;
+
+    return characterIndex <= (int)styledTexts.unichars().size();
 }
 
 } // namespace yup
