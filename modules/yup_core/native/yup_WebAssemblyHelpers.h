@@ -35,8 +35,9 @@ bool yup_isRunningUnderBrowser()
 #if YUP_EMSCRIPTEN
     static bool hasBrowserWindowObject = []
     {
-        return EM_ASM_INT({ return typeof window != = "undefined" ? 1 : 0;
-        });
+        // clang-format off
+        return EM_ASM_INT({ return typeof window !== "undefined" ? 1 : 0; });
+        // clang-format on
     }();
 
     return hasBrowserWindowObject;
