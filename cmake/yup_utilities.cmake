@@ -277,6 +277,7 @@ function (_yup_setup_coverage_flags target_name)
         target_compile_options (${target_name} INTERFACE
             --coverage
             -fprofile-arcs
+            -fprofile-update=atomic
             -ftest-coverage
             -fno-elide-constructors)
 
