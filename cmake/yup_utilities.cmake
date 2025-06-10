@@ -274,16 +274,16 @@ function (_yup_setup_coverage_flags target_name)
     if (YUP_ENABLE_COVERAGE AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
         _yup_message (STATUS "Enabling coverage for target: ${target_name}")
 
-        target_compile_options (${target_name} PRIVATE
+        target_compile_options (${target_name} INTERFACE
             --coverage
             -fprofile-arcs
             -ftest-coverage
             -fno-elide-constructors)
 
-        target_link_options (${target_name} PRIVATE --coverage)
+        target_link_options (${target_name} INTERFACE --coverage)
 
         if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
-            target_link_libraries (${target_name} PRIVATE gcov)
+            target_link_libraries (${target_name} INTERFACE gcov)
         endif()
     endif()
 endfunction()
