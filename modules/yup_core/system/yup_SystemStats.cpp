@@ -62,15 +62,15 @@ String SystemStats::getYUPVersion()
 #endif
 
 #if YUP_DEBUG && ! YUP_DISABLE_YUP_VERSION_PRINTING
-struct JuceVersionPrinter
+struct YupVersionPrinter
 {
-    JuceVersionPrinter()
+    YupVersionPrinter()
     {
         YUP_DBG (SystemStats::getYUPVersion());
     }
 };
 
-static JuceVersionPrinter juceVersionPrinter;
+static YupVersionPrinter yupVersionPrinter;
 #endif
 
 String getLegacyUniqueDeviceID();

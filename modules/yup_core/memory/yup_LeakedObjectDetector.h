@@ -50,7 +50,7 @@ namespace yup
     it can check whether there are any left-over instances that may have been leaked.
 
     To use it, use the YUP_LEAK_DETECTOR macro as a simple way to put one in your
-    class declaration. Have a look through the juce codebase for examples, it's used
+    class declaration. Have a look through the yup codebase for examples, it's used
     in most of the classes.
 
     @tags{Core}

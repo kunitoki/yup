@@ -298,7 +298,7 @@ private:
 
     void createConnection (const String& address, WebInputStream::Listener* listener)
     {
-        static HINTERNET sessionHandle = InternetOpen (_T ("juce"), INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+        static HINTERNET sessionHandle = InternetOpen (_T ("yup"), INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
 
         closeConnection();
 

@@ -116,7 +116,7 @@ bool YUP_CALLTYPE Process::openEmailWithAttachments([[maybe_unused]] const Strin
         script << "end tell\r\n"
                   "end tell\r\n";
 
-        NSAppleScript* s = [[NSAppleScript alloc] initWithSource:juceStringToNS(script)];
+        NSAppleScript* s = [[NSAppleScript alloc] initWithSource:yupStringToNS(script)];
         NSDictionary* error = nil;
         const bool ok = [s executeAndReturnError:&error] != nil;
         [s release];
@@ -301,7 +301,7 @@ class URLConnectionStatePreYosemite final : public URLConnectionStateBase
 
     void didFailWithError([[maybe_unused]] NSError* error)
     {
-        YUP_DBG(nsStringToJuce([error description]));
+        YUP_DBG(nsStringToYup([error description]));
 
         nsUrlErrorCode = [error code];
         hasFailed = true;
@@ -554,7 +554,7 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
 
 #if YUP_DEBUG
         if (error != nullptr)
-            YUP_DBG(nsStringToJuce([error description]));
+            YUP_DBG(nsStringToYup([error description]));
 #endif
 
         hasFailed = (error != nullptr);
@@ -706,7 +706,7 @@ struct BackgroundDownloadTask final : public URL::DownloadTask
         DelegateClass::setState(delegate, this);
 
         activeSessions.set(uniqueIdentifier, this);
-        auto nsUrl = [NSURL URLWithString:juceStringToNS(urlToUse.toString(true))];
+        auto nsUrl = [NSURL URLWithString:yupStringToNS(urlToUse.toString(true))];
 
         jassert(nsUrl != nullptr);
 
@@ -727,13 +727,13 @@ struct BackgroundDownloadTask final : public URL::DownloadTask
             String value = headerLines[i].fromFirstOccurrenceOf(":", false, false).trim();
 
             if (key.isNotEmpty() && value.isNotEmpty())
-                [request addValue:juceStringToNS(value) forHTTPHeaderField:juceStringToNS(key)];
+                [request addValue:yupStringToNS(value) forHTTPHeaderField:yupStringToNS(key)];
         }
 
-        auto* configuration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:juceStringToNS(uniqueIdentifier)];
+        auto* configuration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:yupStringToNS(uniqueIdentifier)];
 
         if (options.sharedContainer.isNotEmpty())
-            [configuration setSharedContainerIdentifier:juceStringToNS(options.sharedContainer)];
+            [configuration setSharedContainerIdentifier:yupStringToNS(options.sharedContainer)];
 
         session = [NSURLSession sessionWithConfiguration:configuration
                                                 delegate:delegate
@@ -1018,8 +1018,8 @@ class WebInputStream::Pimpl
             NSEnumerator* enumerator = [connectionHeaders keyEnumerator];
 
             while (NSString* key = [enumerator nextObject])
-                responseHeaders.set(nsStringToJuce(key),
-                                    nsStringToJuce((NSString*)[connectionHeaders objectForKey:key]));
+                responseHeaders.set(nsStringToYup(key),
+                                    nsStringToYup((NSString*)[connectionHeaders objectForKey:key]));
 
             return true;
         }
@@ -1126,7 +1126,7 @@ class WebInputStream::Pimpl
     {
         jassert(connection == nullptr);
 
-        if (NSURL* nsURL = [NSURL URLWithString:juceStringToNS(url.toString(!addParametersToRequestBody))])
+        if (NSURL* nsURL = [NSURL URLWithString:yupStringToNS(url.toString(!addParametersToRequestBody))])
         {
             const auto timeOutSeconds = [this]
             {
@@ -1166,7 +1166,7 @@ class WebInputStream::Pimpl
                         auto value = headerLines[i].fromFirstOccurrenceOf(":", false, false).trim();
 
                         if (key.isNotEmpty() && value.isNotEmpty())
-                            [req addValue:juceStringToNS(value) forHTTPHeaderField:juceStringToNS(key)];
+                            [req addValue:yupStringToNS(value) forHTTPHeaderField:yupStringToNS(key)];
                     }
 
                     // Workaround for an Apple bug. See https://github.com/AFNetworking/AFNetworking/issues/2334

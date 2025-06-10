@@ -1227,14 +1227,14 @@ private:
         if (deviceTypeString.isEmpty()) // unknown device
             return;
 
-        auto name = juceString ((jstring) env->CallObjectMethod (device, getProductNameMethod)) + " " + deviceTypeString;
+        auto name = yupString ((jstring) env->CallObjectMethod (device, getProductNameMethod)) + " " + deviceTypeString;
         auto id = env->CallIntMethod (device, getIdMethod);
 
         auto jSampleRates = LocalRef<jintArray> ((jintArray) env->CallObjectMethod (device, getSampleRatesMethod));
-        auto sampleRates = jintArrayToJuceArray (jSampleRates);
+        auto sampleRates = jintArrayToYupArray (jSampleRates);
 
         auto jChannelCounts = LocalRef<jintArray> ((jintArray) env->CallObjectMethod (device, getChannelCountsMethod));
-        auto channelCounts = jintArrayToJuceArray (jChannelCounts);
+        auto channelCounts = jintArrayToYupArray (jChannelCounts);
         int numChannels = channelCounts.isEmpty() ? -1 : channelCounts.getLast();
 
         auto isInput = env->CallBooleanMethod (device, isSourceMethod);
@@ -1315,20 +1315,20 @@ private:
         }
     }
 
-    static Array<int> jintArrayToJuceArray (const LocalRef<jintArray>& jArray)
+    static Array<int> jintArrayToYupArray (const LocalRef<jintArray>& jArray)
     {
         auto* env = getEnv();
 
         jint* jArrayElems = env->GetIntArrayElements (jArray, nullptr);
         int numElems = env->GetArrayLength (jArray);
 
-        Array<int> juceArray;
+        Array<int> yupArray;
 
         for (int s = 0; s < numElems; ++s)
-            juceArray.add (jArrayElems[s]);
+            yupArray.add (jArrayElems[s]);
 
         env->ReleaseIntArrayElements (jArray, jArrayElems, 0);
-        return juceArray;
+        return yupArray;
     }
 
     struct DeviceInfo

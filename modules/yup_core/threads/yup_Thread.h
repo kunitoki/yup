@@ -530,28 +530,22 @@ public:
 
 #if YUP_ANDROID || DOXYGEN
     //==============================================================================
-    /** Initialises the YUP subsystem for projects not created by the Projucer
+    /** Initialises the YUP subsystem for projects.
 
-        On Android, YUP needs to be initialised once before it is used. The Projucer
-        will automatically generate the necessary java code to do this. However, if
-        you are using YUP without the Projucer or are creating a library made with
-        YUP intended for use in non-YUP apks, then you must call this method
-        manually once on apk startup.
+        On Android, YUP needs to be initialised once before it is used.
 
         You can call this method from C++ or directly from java by calling the
         following java method:
 
         @code
-        com.rmsl.juce.Java.initialiseYUP (myContext);
+        com.kunitoki.yup.Java.initialiseYUP (myContext);
         @endcode
 
-        Note that the above java method is only available in Android Studio projects
-        created by the Projucer. If you need to call this from another type of project
-        then you need to add the following java file to
-        your project:
+        If you need to call this from another type of project then you need to add
+        the following java file to your project:
 
         @code
-        package com.rmsl.juce;
+        package com.kunitoki.yup;
 
         public class Java
         {

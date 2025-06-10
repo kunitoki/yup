@@ -58,7 +58,7 @@ public:
     AndroidDocumentInfo() = default;
 
     /** True if this file really exists. */
-    bool exists() const { return isJuceFlagSet (flagExists); }
+    bool exists() const { return isYupFlagSet (flagExists); }
 
     /** True if this is a directory rather than a file. */
     bool isDirectory() const;
@@ -71,7 +71,7 @@ public:
         If this returns true, and the AndroidDocument refers to a file rather than a directory,
         then AndroidDocument::createInputStream should work on this document.
     */
-    bool canRead() const { return isJuceFlagSet (flagHasReadPermission) && type.isNotEmpty(); }
+    bool canRead() const { return isYupFlagSet (flagHasReadPermission) && type.isNotEmpty(); }
 
     /** True if this is a document that can be written, or a directory that can be modified.
 
@@ -80,7 +80,7 @@ public:
     */
     bool canWrite() const
     {
-        return isJuceFlagSet (flagHasWritePermission)
+        return isYupFlagSet (flagHasWritePermission)
             && type.isNotEmpty()
             && (isNativeFlagSet (flagSupportsWrite)
                 || isNativeFlagSet (flagSupportsDelete)
@@ -120,20 +120,20 @@ public:
         Use isLastModifiedValid() to determine whether or not the result of this
         function is valid.
     */
-    int64 getLastModified() const { return isJuceFlagSet (flagValidModified) ? lastModified : 0; }
+    int64 getLastModified() const { return isYupFlagSet (flagValidModified) ? lastModified : 0; }
 
     /** True if the filesystem provided a modification time. */
-    bool isLastModifiedValid() const { return isJuceFlagSet (flagValidModified); }
+    bool isLastModifiedValid() const { return isYupFlagSet (flagValidModified); }
 
     /** The size of the document in bytes, if known.
 
         Use isSizeInBytesValid() to determine whether or not the result of this
         function is valid.
     */
-    int64 getSizeInBytes() const { return isJuceFlagSet (flagValidSize) ? sizeInBytes : 0; }
+    int64 getSizeInBytes() const { return isYupFlagSet (flagValidSize) ? sizeInBytes : 0; }
 
     /** True if the filesystem provided a size in bytes. */
-    bool isSizeInBytesValid() const { return isJuceFlagSet (flagValidSize); }
+    bool isSizeInBytesValid() const { return isYupFlagSet (flagValidSize); }
 
     /** @internal */
     class Args;
@@ -143,7 +143,7 @@ private:
 
     bool isNativeFlagSet (int flag) const { return (nativeFlags & flag) != 0; }
 
-    bool isJuceFlagSet (int flag) const { return (juceFlags & flag) != 0; }
+    bool isYupFlagSet (int flag) const { return (yupFlags & flag) != 0; }
 
     /*  Native Android flags that might be set in the COLUMN_FLAGS for a particular document */
     enum
@@ -171,7 +171,7 @@ private:
     String type;
     int64 lastModified = 0;
     int64 sizeInBytes = 0;
-    int nativeFlags = 0, juceFlags = 0;
+    int nativeFlags = 0, yupFlags = 0;
 };
 
 //==============================================================================

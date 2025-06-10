@@ -123,7 +123,7 @@ Thread::Priority Thread::getPriority() const
     jassert (Thread::getCurrentThreadId() == getThreadId());
 
     const auto native = GetThreadPriority (threadHandle);
-    return ThreadPriorities::getJucePriority (native);
+    return ThreadPriorities::getYupPriority (native);
 }
 
 bool Thread::setPriority (Priority priority)

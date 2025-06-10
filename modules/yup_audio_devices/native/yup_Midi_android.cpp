@@ -41,7 +41,7 @@ namespace yup
 {
 
 //==============================================================================
-// This byte-code is generated from native/java/com/rmsl/juce/JuceMidiSupport.java with min sdk version 23
+// This byte-code is generated from native/java/com/kunitoki/yup/YupMidiSupport.java with min sdk version 23
 // See yup_core/native/java/README.txt on how to generate this byte-code.
 
 // clang-format off
@@ -801,12 +801,12 @@ constexpr unsigned char javaMidiByteCode[]
 // clang-format on
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                              \
-    METHOD (getJuceAndroidMidiInputDeviceNameAndIDs, "getJuceAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
-    METHOD (getJuceAndroidMidiOutputDeviceNameAndIDs, "getJuceAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
-    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")        \
-    METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/rmsl/juce/JuceMidiSupport$JuceMidiPort;")
+    METHOD (getYupAndroidMidiInputDeviceNameAndIDs, "getYupAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
+    METHOD (getYupAndroidMidiOutputDeviceNameAndIDs, "getYupAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
+    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")        \
+    METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")
 
-DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/rmsl/juce/JuceMidiSupport$MidiDeviceManager", 23)
+DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/kunitoki/yup/YupMidiSupport$MidiDeviceManager", 23)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
@@ -816,7 +816,7 @@ DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/rmsl/juce/JuceMidiSuppor
     METHOD (sendMidi, "sendMidi", "([BII)V")                                  \
     METHOD (getName, "getName", "()Ljava/lang/String;")
 
-DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiPort", 23)
+DECLARE_JNI_CLASS_WITH_MIN_SDK (YupMidiPort, "com/kunitoki/yup/YupMidiSupport$YupMidiPort", 23)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -824,7 +824,7 @@ class MidiInput::Pimpl
 {
 public:
     Pimpl (MidiInput* midiInput, int deviceID, yup::MidiInputCallback* midiInputCallback, jobject deviceManager)
-        : juceMidiInput (midiInput)
+        : yupMidiInput (midiInput)
         , callback (midiInputCallback)
         , midiConcatenator (2048)
         , javaMidiDevice (LocalRef<jobject> (getEnv()->CallObjectMethod (deviceManager,
@@ -838,7 +838,7 @@ public:
     {
         if (jobject d = javaMidiDevice.get())
         {
-            getEnv()->CallVoidMethod (d, JuceMidiPort.close);
+            getEnv()->CallVoidMethod (d, YupMidiPort.close);
             javaMidiDevice.clear();
         }
     }
@@ -851,13 +851,13 @@ public:
     void start()
     {
         if (jobject d = javaMidiDevice.get())
-            getEnv()->CallVoidMethod (d, JuceMidiPort.start);
+            getEnv()->CallVoidMethod (d, YupMidiPort.start);
     }
 
     void stop()
     {
         if (jobject d = javaMidiDevice.get())
-            getEnv()->CallVoidMethod (d, JuceMidiPort.stop);
+            getEnv()->CallVoidMethod (d, YupMidiPort.stop);
 
         callback = nullptr;
     }
@@ -865,7 +865,7 @@ public:
     String getName() const noexcept
     {
         if (jobject d = javaMidiDevice.get())
-            return juceString (LocalRef<jstring> ((jstring) getEnv()->CallObjectMethod (d, JuceMidiPort.getName)));
+            return yupString (LocalRef<jstring> ((jstring) getEnv()->CallObjectMethod (d, YupMidiPort.getName)));
 
         return {};
     }
@@ -881,14 +881,14 @@ public:
         myself.midiConcatenator.pushMidiData (buffer.data(),
                                               len,
                                               static_cast<double> (timestamp) * 1.0e-9,
-                                              myself.juceMidiInput,
+                                              myself.yupMidiInput,
                                               *myself.callback);
 
         env->ReleaseByteArrayElements (byteArray, data, 0);
     }
 
 private:
-    MidiInput* juceMidiInput;
+    MidiInput* yupMidiInput;
     MidiInputCallback* callback;
     MidiDataConcatenator midiConcatenator;
     GlobalRef javaMidiDevice;
@@ -907,7 +907,7 @@ public:
     {
         if (jobject d = javaMidiDevice.get())
         {
-            getEnv()->CallVoidMethod (d, JuceMidiPort.close);
+            getEnv()->CallVoidMethod (d, YupMidiPort.close);
             javaMidiDevice.clear();
         }
     }
@@ -916,7 +916,7 @@ public:
     {
         if (jobject d = javaMidiDevice.get())
             getEnv()->CallVoidMethod (d,
-                                      JuceMidiPort.sendMidi,
+                                      YupMidiPort.sendMidi,
                                       byteArray,
                                       offset,
                                       len);
@@ -925,7 +925,7 @@ public:
     String getName() const noexcept
     {
         if (jobject d = javaMidiDevice.get())
-            return juceString (LocalRef<jstring> ((jstring) getEnv()->CallObjectMethod (d, JuceMidiPort.getName)));
+            return yupString (LocalRef<jstring> ((jstring) getEnv()->CallObjectMethod (d, YupMidiPort.getName)));
 
         return {};
     }
@@ -938,7 +938,7 @@ private:
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
     CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V")
 
-DECLARE_JNI_CLASS_WITH_MIN_SDK (JuceMidiInputPort, "com/rmsl/juce/JuceMidiSupport$JuceMidiInputPort", 23)
+DECLARE_JNI_CLASS_WITH_MIN_SDK (YupMidiInputPort, "com/kunitoki/yup/YupMidiSupport$YupMidiInputPort", 23)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -951,12 +951,12 @@ public:
     {
         if (jobject dm = deviceManager.get())
         {
-            jobjectArray jDeviceNameAndIDs = (jobjectArray) getEnv()->CallObjectMethod (dm, input ? MidiDeviceManager.getJuceAndroidMidiInputDeviceNameAndIDs : MidiDeviceManager.getJuceAndroidMidiOutputDeviceNameAndIDs);
+            jobjectArray jDeviceNameAndIDs = (jobjectArray) getEnv()->CallObjectMethod (dm, input ? MidiDeviceManager.getYupAndroidMidiInputDeviceNameAndIDs : MidiDeviceManager.getYupAndroidMidiOutputDeviceNameAndIDs);
 
             // Create a local reference as converting this to a JUCE string will call into JNI
             LocalRef<jobjectArray> localDeviceNameAndIDs (jDeviceNameAndIDs);
 
-            auto deviceNameAndIDs = javaStringArrayToJuce (localDeviceNameAndIDs);
+            auto deviceNameAndIDs = javaStringArrayToYup (localDeviceNameAndIDs);
             deviceNameAndIDs.appendNumbersToDuplicates (false, false, CharPointer_UTF8 ("-"), CharPointer_UTF8 (""));
 
             Array<MidiDeviceInfo> devices;
@@ -970,11 +970,11 @@ public:
         return {};
     }
 
-    MidiInput::Pimpl* openMidiInputPortWithID (int deviceID, MidiInput* juceMidiInput, yup::MidiInputCallback* callback)
+    MidiInput::Pimpl* openMidiInputPortWithID (int deviceID, MidiInput* yupMidiInput, yup::MidiInputCallback* callback)
     {
         if (auto dm = deviceManager.get())
         {
-            auto androidMidiInput = std::make_unique<MidiInput::Pimpl> (juceMidiInput, deviceID, callback, dm);
+            auto androidMidiInput = std::make_unique<MidiInput::Pimpl> (yupMidiInput, deviceID, callback, dm);
 
             if (androidMidiInput->isOpen())
                 return androidMidiInput.release();
@@ -1008,14 +1008,14 @@ private:
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                 \
     CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                            \
-    STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$MidiDeviceManager;") \
-    STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/rmsl/juce/JuceMidiSupport$BluetoothMidiManager;")
+    STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/kunitoki/yup/YupMidiSupport$MidiDeviceManager;") \
+    STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/kunitoki/yup/YupMidiSupport$BluetoothMidiManager;")
 
-    DECLARE_JNI_CLASS_WITH_BYTECODE (JuceMidiSupport, "com/rmsl/juce/JuceMidiSupport", 23, javaMidiByteCode)
+    DECLARE_JNI_CLASS_WITH_BYTECODE (YupMidiSupport, "com/kunitoki/yup/YupMidiSupport", 23, javaMidiByteCode)
 #undef JNI_CLASS_MEMBERS
 
-    GlobalRef deviceManager { LocalRef<jobject> (getEnv()->CallStaticObjectMethod (JuceMidiSupport,
-                                                                                   JuceMidiSupport.getAndroidMidiDeviceManager,
+    GlobalRef deviceManager { LocalRef<jobject> (getEnv()->CallStaticObjectMethod (YupMidiSupport,
+                                                                                   YupMidiSupport.getAndroidMidiDeviceManager,
                                                                                    getAppContext().get())) };
 };
 

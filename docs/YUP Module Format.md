@@ -74,7 +74,7 @@ To simplify the use of obj-C++ there's also a special-case rule: If the folder c
 Precompiled libraries can be included in a module by placing them in a libs/ subdirectory. The following directories are automatically added to the library search paths, and libraries placed in these directories can be linked with projects via the OSXLibs, iOSLibs, windowsLibs, linuxLibs and mingwLibs keywords in the module declaration (see the following section).
 
 - OS X
-  - libs/MacOSX - to support multiple architectures, you may place libraries built as universal binaries at this location. For backwards compatibility, the Projucer will also include the directories libs/MacOSX/{arch}, where {arch} is the architecture you are targeting in Xcode ("x86_64" or "i386", for example). When building with CMake, only libraries built as universal binaries are supported and the arch subfolders are ignored.
+  - libs/MacOSX - to support multiple architectures, you may place libraries built as universal binaries at this location. When building with CMake, only libraries built as universal binaries are supported and the arch subfolders are ignored.
 
 - Visual Studio
   - libs/VisualStudio{year}/{arch}/{run-time}, where {year} is the four digit year of the Visual Studio release, arch is the target architecture in Visual Studio ("x64" or "Win32", for example), and {runtime} is the type of the run-time library indicated by the corresponding compiler flag ("MD", "MDd", "MT", "MTd").
@@ -86,7 +86,7 @@ Precompiled libraries can be included in a module by placing them in a libs/ sub
   - libs/MinGW/{arch}, where {arch} can take the same values as Linux.
 
 - iOS
-  - libs/iOS - to support multiple architectures, you may place libraries built as universal binaries at this location. For backwards compatibility, the Projucer will also include the directories libs/iOS/{arch}, where {arch} is the architecture you are targeting in Xcode ("arm64" or "x86_64", for example). When building with CMake, only libraries built as universal binaries are supported and the arch subfolders are ignored.
+  - libs/iOS - to support multiple architectures, you may place libraries built as universal binaries at this location. When building with CMake, only libraries built as universal binaries are supported and the arch subfolders are ignored.
 
 - Android
   - libs/Android/{arch}, where {arch} is the architecture provided by the Android Studio variable "${ANDROID_ABI}" ("x86", "armeabi-v7a", "mips", for example).
@@ -109,7 +109,7 @@ Possible values:
   - (Compulsory) This ID must match the name of the file and folder, e.g. yup_core. The main reason for also including it here is as a sanity-check.
 
 - vendor
-  - (Compulsory) A unique ID for the vendor, e.g. "juce". This should be short and shouldn't contain any spaces.
+  - (Compulsory) A unique ID for the vendor, e.g. "yup". This should be short and shouldn't contain any spaces.
 
 - version
   - (Compulsory) A version number for the module.

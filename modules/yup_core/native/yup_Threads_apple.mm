@@ -70,7 +70,7 @@ static auto getNativeQOS(Thread::Priority priority)
 }
 
 API_AVAILABLE(macos(10.10))
-static auto getJucePriority(qos_class_t qos)
+static auto getYupPriority(qos_class_t qos)
 {
     switch (qos)
     {
@@ -196,7 +196,7 @@ Thread::Priority Thread::getPriority() const
     if (!isRealtime())
     {
         if (@available(macOS 10.10, *))
-            return getJucePriority(qos_class_self());
+            return getYupPriority(qos_class_self());
 
         // fallback for older versions of macOS
         const auto min = jmax(0, sched_get_priority_min(SCHED_OTHER));
@@ -206,7 +206,7 @@ Thread::Priority Thread::getPriority() const
         {
             const auto native = PosixSchedulerPriority::findCurrentSchedulerAndPriority().getPriority();
             const auto mapped = jmap(native, min, max, 0, 4);
-            return ThreadPriorities::getJucePriority(mapped);
+            return ThreadPriorities::getYupPriority(mapped);
         }
     }
 

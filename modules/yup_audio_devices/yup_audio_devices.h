@@ -43,11 +43,11 @@
   BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 yup_audio_devices
-    vendor:             juce
+    vendor:             yup
     version:            7.0.12
     name:               YUP audio and MIDI I/O device classes
     description:        Classes to play and record from audio and MIDI I/O devices
-    website:            http://www.juce.com/juce
+    website:            https://github.com/kunitoki/yup
     license:            ISC
     minimumCppStandard: 17
 

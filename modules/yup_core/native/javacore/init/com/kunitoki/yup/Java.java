@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-package com.rmsl.juce;
+package com.kunitoki.yup;
 
 import android.content.Context;
 

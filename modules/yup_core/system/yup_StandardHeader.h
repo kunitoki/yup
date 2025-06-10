@@ -60,7 +60,7 @@
 
 #if ! DOXYGEN
 #define YUP_VERSION_ID \
-    [[maybe_unused]] volatile auto juceVersionId = "yup_version_" YUP_STRINGIFY (YUP_MAJOR_VERSION) "_" YUP_STRINGIFY (YUP_MINOR_VERSION) "_" YUP_STRINGIFY (YUP_BUILDNUMBER);
+    [[maybe_unused]] volatile auto yupVersionId = "yup_version_" YUP_STRINGIFY (YUP_MAJOR_VERSION) "_" YUP_STRINGIFY (YUP_MINOR_VERSION) "_" YUP_STRINGIFY (YUP_BUILDNUMBER);
 #endif
 
 //==============================================================================
@@ -187,5 +187,5 @@ private:
 #define YUP_PUBLIC_FUNCTION YUP_API YUP_CALLTYPE
 
 #ifndef DOXYGEN
-#define YUP_NAMESPACE juce // This old macro is deprecated: you should just use the juce namespace directly.
+#define YUP_NAMESPACE yup // This old macro is deprecated: you should just use the yup namespace directly.
 #endif

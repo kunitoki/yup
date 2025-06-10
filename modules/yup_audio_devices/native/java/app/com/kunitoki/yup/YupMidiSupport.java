@@ -37,8 +37,7 @@
   ==============================================================================
 */
 
-package com.rmsl.juce;
-
+package com.kunitoki.yup;
 
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
@@ -77,10 +76,10 @@ import java.util.List;
 import static android.content.Context.MIDI_SERVICE;
 import static android.content.Context.BLUETOOTH_SERVICE;
 
-public class JuceMidiSupport
+public class YupMidiSupport
 {
     //==============================================================================
-    public interface JuceMidiPort
+    public interface YupMidiPort
     {
         boolean isInputPort ();
 
@@ -225,16 +224,16 @@ public class JuceMidiSupport
         private Context appContext = null;
     }
 
-    public static class JuceMidiInputPort extends MidiReceiver implements JuceMidiPort
+    public static class YupMidiInputPort extends MidiReceiver implements YupMidiPort
     {
         private native void handleReceive (long host, byte[] msg, int offset, int count, long timestamp);
 
-        public JuceMidiInputPort (MidiDeviceManager mm, MidiOutputPort actualPort, MidiPortPath portPathToUse, long hostToUse)
+        public YupMidiInputPort (MidiDeviceManager mm, MidiOutputPort actualPort, MidiPortPath portPathToUse, long hostToUse)
         {
             owner = mm;
             androidPort = actualPort;
             portPath = portPathToUse;
-            juceHost = hostToUse;
+            yupHost = hostToUse;
             isConnected = false;
         }
 
@@ -296,7 +295,7 @@ public class JuceMidiSupport
         public void onSend (byte[] msg, int offset, int count, long timestamp)
         {
             if (count > 0)
-                handleReceive (juceHost, msg, offset, count, timestamp);
+                handleReceive (yupHost, msg, offset, count, timestamp);
         }
 
         @Override
@@ -317,13 +316,13 @@ public class JuceMidiSupport
         MidiDeviceManager owner;
         MidiOutputPort androidPort;
         MidiPortPath portPath;
-        long juceHost;
+        long yupHost;
         boolean isConnected;
     }
 
-    public static class JuceMidiOutputPort implements JuceMidiPort
+    public static class YupMidiOutputPort implements YupMidiPort
     {
-        public JuceMidiOutputPort (MidiDeviceManager mm, MidiInputPort actualPort, MidiPortPath portPathToUse)
+        public YupMidiOutputPort (MidiDeviceManager mm, MidiInputPort actualPort, MidiPortPath portPathToUse)
         {
             owner = mm;
             androidPort = actualPort;
@@ -614,17 +613,17 @@ public class JuceMidiSupport
             super.finalize ();
         }
 
-        public String[] getJuceAndroidMidiOutputDeviceNameAndIDs ()
+        public String[] getYupAndroidMidiOutputDeviceNameAndIDs ()
         {
-            return getJuceAndroidMidiDeviceNameAndIDs (MidiDeviceInfo.PortInfo.TYPE_OUTPUT);
+            return getYupAndroidMidiDeviceNameAndIDs (MidiDeviceInfo.PortInfo.TYPE_OUTPUT);
         }
 
-        public String[] getJuceAndroidMidiInputDeviceNameAndIDs ()
+        public String[] getYupAndroidMidiInputDeviceNameAndIDs ()
         {
-            return getJuceAndroidMidiDeviceNameAndIDs (MidiDeviceInfo.PortInfo.TYPE_INPUT);
+            return getYupAndroidMidiDeviceNameAndIDs (MidiDeviceInfo.PortInfo.TYPE_INPUT);
         }
 
-        private String[] getJuceAndroidMidiDeviceNameAndIDs (int portType)
+        private String[] getYupAndroidMidiDeviceNameAndIDs (int portType)
         {
             // only update the list when YUP asks for a new list
             synchronized (MidiDeviceManager.class)
@@ -644,7 +643,7 @@ public class JuceMidiSupport
             return portNameAndIDs.toArray (names);
         }
 
-        private JuceMidiPort openMidiPortWithID (int deviceID, long host, boolean isInput)
+        private YupMidiPort openMidiPortWithID (int deviceID, long host, boolean isInput)
         {
             synchronized (MidiDeviceManager.class)
             {
@@ -664,27 +663,27 @@ public class JuceMidiSupport
                         MidiDevice device = devicePair.first;
                         if (device != null)
                         {
-                            JuceMidiPort juceMidiPort = null;
+                            YupMidiPort yupMidiPort = null;
 
                             if (isInput)
                             {
                                 MidiOutputPort outputPort = device.openOutputPort (portInfo.portIndex);
 
                                 if (outputPort != null)
-                                    juceMidiPort = new JuceMidiInputPort (this, outputPort, portInfo, host);
+                                    yupMidiPort = new YupMidiInputPort (this, outputPort, portInfo, host);
                             } else
                             {
                                 MidiInputPort inputPort = device.openInputPort (portInfo.portIndex);
 
                                 if (inputPort != null)
-                                    juceMidiPort = new JuceMidiOutputPort (this, inputPort, portInfo);
+                                    yupMidiPort = new YupMidiOutputPort (this, inputPort, portInfo);
                             }
 
-                            if (juceMidiPort != null)
+                            if (yupMidiPort != null)
                             {
-                                openPorts.put (portInfo, new WeakReference<JuceMidiPort> (juceMidiPort));
+                                openPorts.put (portInfo, new WeakReference<YupMidiPort> (yupMidiPort));
 
-                                return juceMidiPort;
+                                return yupMidiPort;
                             }
                         }
                     }
@@ -694,12 +693,12 @@ public class JuceMidiSupport
             return null;
         }
 
-        public JuceMidiPort openMidiInputPortWithID (int deviceID, long host)
+        public YupMidiPort openMidiInputPortWithID (int deviceID, long host)
         {
             return openMidiPortWithID (deviceID, host, true);
         }
 
-        public JuceMidiPort openMidiOutputPortWithID (int deviceID)
+        public YupMidiPort openMidiOutputPortWithID (int deviceID)
         {
             return openMidiPortWithID (deviceID, 0, false);
         }
@@ -964,7 +963,8 @@ public class JuceMidiSupport
                         midiDevices.add (new Pair<MidiDevice, BluetoothGatt> (theDevice, gatt));
                         handleDevicesChanged();
                     }
-                } else
+                }
+                else
                 {
                     // unpair was called in the mean time
                     MidiDeviceInfo info = theDevice.getInfo ();
@@ -988,7 +988,8 @@ public class JuceMidiSupport
                     try
                     {
                         theDevice.close ();
-                    } catch (IOException e)
+                    }
+                    catch (IOException e)
                     {
                     }
                 }
@@ -1081,7 +1082,7 @@ public class JuceMidiSupport
         private HashMap<Integer, MidiDeviceOpenTask> openTasks = new HashMap<Integer, MidiDeviceOpenTask>();
         private ArrayList<Pair<MidiDevice, BluetoothGatt>> midiDevices = new ArrayList<Pair<MidiDevice, BluetoothGatt>>();
         private MidiDeviceInfo[] deviceInfos;
-        private HashMap<MidiPortPath, WeakReference<JuceMidiPort>> openPorts = new HashMap<MidiPortPath, WeakReference<JuceMidiPort>>();
+        private HashMap<MidiPortPath, WeakReference<YupMidiPort>> openPorts = new HashMap<MidiPortPath, WeakReference<YupMidiPort>>();
         private Context appContext = null;
     }
 
@@ -1090,7 +1091,7 @@ public class JuceMidiSupport
         if (context.getSystemService (MIDI_SERVICE) == null)
             return null;
 
-        synchronized (JuceMidiSupport.class)
+        synchronized (YupMidiSupport.class)
         {
             if (midiDeviceManager == null)
                 midiDeviceManager = new MidiDeviceManager (context);
@@ -1109,7 +1110,7 @@ public class JuceMidiSupport
         if (adapter.getBluetoothLeScanner () == null)
             return null;
 
-        synchronized (JuceMidiSupport.class)
+        synchronized (YupMidiSupport.class)
         {
             if (bluetoothManager == null)
                 bluetoothManager = new BluetoothMidiManager (context);

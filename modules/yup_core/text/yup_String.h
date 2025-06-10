@@ -1496,7 +1496,7 @@ YUP_API bool YUP_CALLTYPE operator!= (const String& string1, CharPointer_UTF16 s
 YUP_API bool YUP_CALLTYPE operator!= (const String& string1, CharPointer_UTF32 string2) noexcept;
 
 //==============================================================================
-/** This operator allows you to write a juce String directly to std output streams.
+/** This operator allows you to write a yup String directly to std output streams.
     This is handy for writing strings to std::cout, std::cerr, etc.
 */
 template <class traits>
@@ -1505,7 +1505,7 @@ std::basic_ostream<char, traits>& YUP_CALLTYPE operator<< (std::basic_ostream<ch
     return stream << stringToWrite.toRawUTF8();
 }
 
-/** This operator allows you to write a juce String directly to std output streams.
+/** This operator allows you to write a yup String directly to std output streams.
     This is handy for writing strings to std::wcout, std::wcerr, etc.
 */
 template <class traits>

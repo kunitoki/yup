@@ -417,7 +417,7 @@ namespace yup
     As the very long class names here try to explain, the purpose of this code is to cause
     a linker error if not all of your compile units are consistent in the options that they
     enable before including YUP headers. The reason this is important is that if you have
-    two cpp files, and one includes the juce headers with debug enabled, and another does so
+    two cpp files, and one includes the yup headers with debug enabled, and another does so
     without that, then each will be generating code with different class layouts, and you'll
     get subtle and hard-to-track-down memory corruption!
  */

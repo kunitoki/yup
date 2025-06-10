@@ -37,18 +37,41 @@
   ==============================================================================
 */
 
-package com.rmsl.juce;
+package com.kunitoki.yup;
 
-import com.rmsl.juce.Java;
+import java.lang.reflect.*;
 
-import android.app.Application;
-
-public class JuceApp extends Application
+public class YupInvocationHandler implements InvocationHandler
 {
-    @Override
-    public void onCreate()
-    {
-        super.onCreate();
-        Java.initialiseYUP (this);
-    }
+        public YupInvocationHandler (long nativeContextRef)
+        {
+                nativeContext = nativeContextRef;
+        }
+
+        public void clear()
+        {
+                nativeContext = 0;
+        }
+
+        @Override
+        public void finalize()
+        {
+                if (nativeContext != 0)
+                        dispatchFinalize (nativeContext);
+        }
+
+        @Override
+        public Object invoke (Object proxy, Method method, Object[] args) throws Throwable
+        {
+                if (nativeContext != 0)
+                        return dispatchInvoke (nativeContext, proxy, method, args);
+
+                return null;
+        }
+
+        //==============================================================================
+        private long nativeContext = 0;
+
+        private native void dispatchFinalize (long nativeContextRef);
+        private native Object dispatchInvoke (long nativeContextRef, Object proxy, Method method, Object[] args);
 }

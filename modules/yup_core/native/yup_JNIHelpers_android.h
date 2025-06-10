@@ -931,7 +931,7 @@ DECLARE_JNI_CLASS (AndroidSurfaceHolder, "android/view/SurfaceHolder")
 //==============================================================================
 namespace
 {
-inline String juceString (JNIEnv* env, jstring s)
+inline String yupString (JNIEnv* env, jstring s)
 {
     if (s == nullptr)
         return {};
@@ -943,9 +943,9 @@ inline String juceString (JNIEnv* env, jstring s)
     return result;
 }
 
-inline String juceString (jstring s)
+inline String yupString (jstring s)
 {
-    return juceString (getEnv(), s);
+    return yupString (getEnv(), s);
 }
 
 inline LocalRef<jstring> javaString (const String& s)
@@ -960,21 +960,21 @@ inline LocalRef<jstring> javaStringFromChar (const yup_wchar c)
     return LocalRef<jstring> (getEnv()->NewStringUTF (utf8));
 }
 
-inline LocalRef<jobjectArray> juceStringArrayToJava (const StringArray& juceArray)
+inline LocalRef<jobjectArray> yupStringArrayToJava (const StringArray& yupArray)
 {
     auto* env = getEnv();
 
-    LocalRef<jobjectArray> result (env->NewObjectArray ((jsize) juceArray.size(),
+    LocalRef<jobjectArray> result (env->NewObjectArray ((jsize) yupArray.size(),
                                                         JavaString,
                                                         javaString ("").get()));
 
-    for (int i = 0; i < juceArray.size(); ++i)
-        env->SetObjectArrayElement (result.get(), i, javaString (juceArray[i]).get());
+    for (int i = 0; i < yupArray.size(); ++i)
+        env->SetObjectArrayElement (result.get(), i, javaString (yupArray[i]).get());
 
     return result;
 }
 
-inline StringArray javaStringArrayToJuce (const LocalRef<jobjectArray>& javaArray)
+inline StringArray javaStringArrayToYup (const LocalRef<jobjectArray>& javaArray)
 {
     if (javaArray.get() == nullptr)
         return {};
@@ -986,7 +986,7 @@ inline StringArray javaStringArrayToJuce (const LocalRef<jobjectArray>& javaArra
     for (int i = 0; i < env->GetArrayLength (javaArray.get()); ++i)
     {
         LocalRef<jstring> javaString ((jstring) env->GetObjectArrayElement (javaArray.get(), i));
-        result.add (juceString (javaString.get()));
+        result.add (yupString (javaString.get()));
     }
 
     return result;
@@ -1111,7 +1111,7 @@ private:
     jobject invoke (jobject proxy, jobject method, jobjectArray args) override
     {
         auto* env = getEnv();
-        auto methodName = juceString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
+        auto methodName = yupString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
         LocalRef<jobject> holder (env->GetArrayLength (args) > 0 ? env->GetObjectArrayElement (args, 0) : (jobject) nullptr);
 
         if (methodName == "surfaceChanged")

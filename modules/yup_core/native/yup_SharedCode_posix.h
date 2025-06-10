@@ -844,9 +844,9 @@ public:
     Pimpl (const String& lockName, int timeOutMillisecs)
     {
 #if YUP_MAC
-        if (! createLockFile (File ("~/Library/Caches/com.juce.locks").getChildFile (lockName), timeOutMillisecs))
+        if (! createLockFile (File ("~/Library/Caches/com.yup.locks").getChildFile (lockName), timeOutMillisecs))
             // Fallback if the user's home folder is on a network drive with no ability to lock..
-            createLockFile (File ("/tmp/com.juce.locks").getChildFile (lockName), timeOutMillisecs);
+            createLockFile (File ("/tmp/com.yup.locks").getChildFile (lockName), timeOutMillisecs);
 
 #else
         File tempFolder ("/var/tmp");
@@ -1120,7 +1120,7 @@ void YUP_CALLTYPE Thread::setCurrentThreadName (const String& name)
 #if YUP_IOS || YUP_MAC
     YUP_AUTORELEASEPOOL
     {
-        [[NSThread currentThread] setName:juceStringToNS (name)];
+        [[NSThread currentThread] setName:yupStringToNS (name)];
     }
 #elif YUP_LINUX || YUP_BSD || YUP_ANDROID
 #if (YUP_BSD                                                        \

@@ -136,13 +136,13 @@ public:
             else
             {
                 if ((m.message == WM_LBUTTONDOWN || m.message == WM_RBUTTONDOWN)
-                    && ! JuceWindowIdentifier::isYUPWindow (m.hwnd))
+                    && ! YupWindowIdentifier::isYUPWindow (m.hwnd))
                 {
                     // if it's someone else's window being clicked on, and the focus is
                     // currently on a yup window, pass the kb focus over..
                     auto currentFocus = GetFocus();
 
-                    if (currentFocus == nullptr || JuceWindowIdentifier::isYUPWindow (currentFocus))
+                    if (currentFocus == nullptr || YupWindowIdentifier::isYUPWindow (currentFocus))
                         SetFocus (m.hwnd);
                 }
 

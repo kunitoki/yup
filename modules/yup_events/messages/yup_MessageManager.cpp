@@ -547,7 +547,7 @@ void MessageManagerLock::exitSignalSent()
 }
 
 //==============================================================================
-YUP_API void YUP_CALLTYPE initialiseJuce_GUI()
+YUP_API void YUP_CALLTYPE initialiseYup_GUI()
 {
     YUP_AUTORELEASEPOOL
     {
@@ -555,7 +555,7 @@ YUP_API void YUP_CALLTYPE initialiseJuce_GUI()
     }
 }
 
-YUP_API void YUP_CALLTYPE shutdownJuce_GUI()
+YUP_API void YUP_CALLTYPE shutdownYup_GUI()
 {
     YUP_AUTORELEASEPOOL
     {
@@ -566,16 +566,16 @@ YUP_API void YUP_CALLTYPE shutdownJuce_GUI()
 
 static std::atomic_int numScopedInitInstances = 0;
 
-ScopedJuceInitialiser_GUI::ScopedJuceInitialiser_GUI()
+ScopedYupInitialiser_GUI::ScopedYupInitialiser_GUI()
 {
     if (numScopedInitInstances.fetch_add (1) == 0)
-        initialiseJuce_GUI();
+        initialiseYup_GUI();
 }
 
-ScopedJuceInitialiser_GUI::~ScopedJuceInitialiser_GUI()
+ScopedYupInitialiser_GUI::~ScopedYupInitialiser_GUI()
 {
     if (numScopedInitInstances.fetch_add (-1) == 1)
-        shutdownJuce_GUI();
+        shutdownYup_GUI();
 }
 
 } // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-package com.rmsl.juce;
+package com.kunitoki.yup;
 
 import android.app.DialogFragment;
 import android.content.Intent;

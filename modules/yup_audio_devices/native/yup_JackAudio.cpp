@@ -148,8 +148,8 @@ const char* getJackErrorMessage (const jack_status_t status)
 
 //==============================================================================
 #ifndef YUP_JACK_CLIENT_NAME
-#ifdef JucePlugin_Name
-#define YUP_JACK_CLIENT_NAME JucePlugin_Name
+#ifdef YupPlugin_Name
+#define YUP_JACK_CLIENT_NAME YupPlugin_Name
 #else
 #define YUP_JACK_CLIENT_NAME "JUCEJack"
 #endif
@@ -661,7 +661,7 @@ public:
         jack_status_t status = {};
 
         // open a dummy client
-        if (auto* const client = yup::jack_client_open ("JuceJackDummy", JackNoStartServer, &status))
+        if (auto* const client = yup::jack_client_open ("YupJackDummy", JackNoStartServer, &status))
         {
             // scan for output devices
             for (JackPortIterator i (client, false); i.next();)

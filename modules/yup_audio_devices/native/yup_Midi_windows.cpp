@@ -1930,7 +1930,7 @@ struct MidiService final : public DeletedAtShutdown
 
 private:
     std::unique_ptr<MidiServiceType> internal;
-    DeviceChangeDetector detector { L"JuceMidiDeviceDetector_", []
+    DeviceChangeDetector detector { L"YupMidiDeviceDetector_", []
     {
         MidiDeviceListConnectionBroadcaster::get().notify();
     } };

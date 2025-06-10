@@ -147,7 +147,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         addMethod(@selector(broadcastMessageCallback:), [](id /*self*/, SEL, NSNotification* n)
         {
             NSDictionary* dict = (NSDictionary*) [n userInfo];
-            auto messageString = nsStringToJuce ((NSString*) [dict valueForKey: nsStringLiteral ("message")]);
+            auto messageString = nsStringToYup ((NSString*) [dict valueForKey: nsStringLiteral ("message")]);
             MessageManager::getInstance()->deliverBroadcastMessage (messageString);
         });
 
@@ -261,7 +261,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
     static String quotedIfContainsSpaces(NSString* file)
     {
-        String s(nsStringToJuce(file));
+        String s(nsStringToYup(file));
         s = s.unquoted().replace("\"", "\\\"");
 
         if (s.containsChar(' '))
@@ -354,7 +354,7 @@ struct AppDelegate
 
     static NSString* getBroadcastEventName()
     {
-        return juceStringToNS("yup_" + String::toHexString(File::getSpecialLocation(File::currentExecutableFile).hashCode64()));
+        return yupStringToNS("yup_" + String::toHexString(File::getSpecialLocation(File::currentExecutableFile).hashCode64()));
     }
 
     InternalMessageQueue messageQueue;
@@ -498,7 +498,7 @@ bool MessageManager::postMessageToSystemQueue(MessageBase* message)
 
 void MessageManager::broadcastMessage(const String& message)
 {
-    NSDictionary* info = [NSDictionary dictionaryWithObject:juceStringToNS(message)
+    NSDictionary* info = [NSDictionary dictionaryWithObject:yupStringToNS(message)
                                                      forKey:nsStringLiteral("message")];
 
     [[NSDistributedNotificationCenter defaultCenter] postNotificationName:AppDelegate::getBroadcastEventName()

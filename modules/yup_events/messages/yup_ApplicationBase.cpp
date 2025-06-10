@@ -111,7 +111,7 @@ void YUPApplicationBase::sendUnhandledException (const std::exception* const e,
 struct YUPApplicationBase::MultipleInstanceHandler final : public ActionListener
 {
     MultipleInstanceHandler (const String& appName)
-        : appLock ("juceAppLock_" + appName)
+        : appLock ("yupAppLock_" + appName)
     {
     }
 
@@ -272,7 +272,7 @@ int YUPApplicationBase::main()
     }
 #endif
 
-    ScopedJuceInitialiser_GUI libraryInitialiser;
+    ScopedYupInitialiser_GUI libraryInitialiser;
     jassert (createInstance != nullptr);
 
     const std::unique_ptr<YUPApplicationBase> app (createInstance());

@@ -47,12 +47,12 @@ void Logger::outputDebugString (const String& text)
 
 //==============================================================================
 #ifdef YUP_DLL_BUILD
-YUP_API void* juceDLL_malloc (size_t sz)
+YUP_API void* yupDLL_malloc (size_t sz)
 {
     return std::malloc (sz);
 }
 
-YUP_API void juceDLL_free (void* block) { std::free (block); }
+YUP_API void yupDLL_free (void* block) { std::free (block); }
 #endif
 
 static int findNumberOfPhysicalCores() noexcept

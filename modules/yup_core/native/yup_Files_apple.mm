@@ -52,8 +52,8 @@ bool File::copyInternal(const File& dest) const
     {
         NSFileManager* fm = [NSFileManager defaultManager];
 
-        return [fm fileExistsAtPath:juceStringToNS(fullPath)] && [fm copyItemAtPath:juceStringToNS(fullPath)
-                                                                             toPath:juceStringToNS(dest.getFullPathName())
+        return [fm fileExistsAtPath:yupStringToNS(fullPath)] && [fm copyItemAtPath:yupStringToNS(fullPath)
+                                                                             toPath:yupStringToNS(dest.getFullPathName())
                                                                               error:nil];
     }
 }
@@ -100,7 +100,7 @@ static bool isHiddenFile(const String& path)
 #if YUP_IOS
 static String getIOSSystemLocation(NSSearchPathDirectory type)
 {
-    return nsStringToJuce([NSSearchPathForDirectoriesInDomains(type, NSUserDomainMask, YES)
+    return nsStringToYup([NSSearchPathForDirectoriesInDomains(type, NSUserDomainMask, YES)
         objectAtIndex:0]);
 }
 #else
@@ -130,7 +130,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 {
     YUP_AUTORELEASEPOOL
     {
-        NSString* fileNameAsNS(juceStringToNS(fileName));
+        NSString* fileNameAsNS(yupStringToNS(fileName));
         NSURL* filenameAsURL = File::createFileWithoutCheckingPath(fileName).exists() ? [NSURL fileURLWithPath:fileNameAsNS]
                                                                                       : [NSURL URLWithString:fileNameAsNS];
 
@@ -165,7 +165,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 
                 NSMutableArray* paramArray = [[NSMutableArray new] autorelease];
                 for (int i = 0; i < params.size(); ++i)
-                    [paramArray addObject:juceStringToNS(params[i])];
+                    [paramArray addObject:yupStringToNS(params[i])];
 
                 NSMutableDictionary* envDict = [[NSMutableDictionary new] autorelease];
                 if (environment)
@@ -177,8 +177,8 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
 
                         auto keyValue = String(const_cast<const char*>(environment->getUnchecked(i)));
 
-                        [envDict setObject:juceStringToNS(keyValue.fromFirstOccurrenceOf("=", false, false))
-                                    forKey:juceStringToNS(keyValue.upToFirstOccurrenceOf("=", false, false))];
+                        [envDict setObject:yupStringToNS(keyValue.fromFirstOccurrenceOf("=", false, false))
+                                    forKey:yupStringToNS(keyValue.upToFirstOccurrenceOf("=", false, false))];
                     }
                 }
 
@@ -269,7 +269,7 @@ bool File::isOnRemovableDrive() const
         BOOL removable = false;
 
         [[NSWorkspace sharedWorkspace]
-            getFileSystemInfoForPath:juceStringToNS(getFullPathName())
+            getFileSystemInfoForPath:yupStringToNS(getFullPathName())
                          isRemovable:&removable
                           isWritable:nil
                        isUnmountable:nil
@@ -299,7 +299,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
         switch (type)
         {
             case userHomeDirectory:
-                resultPath = nsStringToJuce(NSHomeDirectory());
+                resultPath = nsStringToYup(NSHomeDirectory());
                 break;
 
 #if YUP_IOS
@@ -405,10 +405,10 @@ String File::getVersion() const
 {
     YUP_AUTORELEASEPOOL
     {
-        if (NSBundle* bundle = [NSBundle bundleWithPath:juceStringToNS(getFullPathName())])
+        if (NSBundle* bundle = [NSBundle bundleWithPath:yupStringToNS(getFullPathName())])
             if (NSDictionary* info = [bundle infoDictionary])
                 if (NSString* name = [info valueForKey:nsStringLiteral("CFBundleShortVersionString")])
-                    return nsStringToJuce(name);
+                    return nsStringToYup(name);
     }
 
     return {};
@@ -417,7 +417,7 @@ String File::getVersion() const
 //==============================================================================
 static NSString* getFileLink(const String& path)
 {
-    return [[NSFileManager defaultManager] destinationOfSymbolicLinkAtPath:juceStringToNS(path) error:nil];
+    return [[NSFileManager defaultManager] destinationOfSymbolicLinkAtPath:yupStringToNS(path) error:nil];
 }
 
 bool File::isSymbolicLink() const
@@ -428,7 +428,7 @@ bool File::isSymbolicLink() const
 String File::getNativeLinkedTarget() const
 {
     if (NSString* dest = getFileLink(fullPath))
-        return nsStringToJuce(dest);
+        return nsStringToYup(dest);
 
     return {};
 }
@@ -481,7 +481,7 @@ class DirectoryIterator::NativeIterator::Pimpl
     {
         YUP_AUTORELEASEPOOL
         {
-            enumerator = [[[NSFileManager defaultManager] enumeratorAtPath:juceStringToNS(directory.getFullPathName())] retain];
+            enumerator = [[[NSFileManager defaultManager] enumeratorAtPath:yupStringToNS(directory.getFullPathName())] retain];
         }
     }
 
@@ -513,7 +513,7 @@ class DirectoryIterator::NativeIterator::Pimpl
                     return false;
 
                 [enumerator skipDescendents];
-                filenameFound = nsStringToJuce(file).convertToPrecomposedUnicode();
+                filenameFound = nsStringToYup(file).convertToPrecomposedUnicode();
 
                 if (wildcardUTF8 == nullptr)
                     wildcardUTF8 = wildCard.toUTF8();
@@ -587,7 +587,7 @@ void File::revealToUser() const
 {
 #if !YUP_IOS
     if (exists())
-        [[NSWorkspace sharedWorkspace] selectFile:juceStringToNS(getFullPathName()) inFileViewerRootedAtPath:nsEmptyString()];
+        [[NSWorkspace sharedWorkspace] selectFile:yupStringToNS(getFullPathName()) inFileViewerRootedAtPath:nsEmptyString()];
     else if (getParentDirectory().exists())
         getParentDirectory().revealToUser();
 #endif
@@ -598,7 +598,7 @@ OSType File::getMacOSType() const
 {
     YUP_AUTORELEASEPOOL
     {
-        NSDictionary* fileDict = [[NSFileManager defaultManager] attributesOfItemAtPath:juceStringToNS(getFullPathName()) error:nil];
+        NSDictionary* fileDict = [[NSFileManager defaultManager] attributesOfItemAtPath:yupStringToNS(getFullPathName()) error:nil];
         return [fileDict fileHFSTypeCode];
     }
 }
@@ -610,7 +610,7 @@ bool File::isBundle() const
 #else
     YUP_AUTORELEASEPOOL
     {
-        return [[NSWorkspace sharedWorkspace] isFilePackageAtPath:juceStringToNS(getFullPathName())];
+        return [[NSWorkspace sharedWorkspace] isFilePackageAtPath:yupStringToNS(getFullPathName())];
     }
 #endif
 }
@@ -631,8 +631,8 @@ void File::addToDock() const
 File File::getContainerForSecurityApplicationGroupIdentifier(const String& appGroup)
 {
     if (@available(macOS 10.8, *))
-        if (auto* url = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:juceStringToNS(appGroup)])
-            return File(nsStringToJuce([url path]));
+        if (auto* url = [[NSFileManager defaultManager] containerURLForSecurityApplicationGroupIdentifier:yupStringToNS(appGroup)])
+            return File(nsStringToYup([url path]));
 
     return File();
 }

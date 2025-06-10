@@ -50,9 +50,9 @@ namespace yup
     Note that if you're creating a YUP DLL for Windows, you may also need to call the
     Process::setCurrentModuleInstanceHandle() method.
 
-    @see shutdownJuce_GUI()
+    @see shutdownYup_GUI()
 */
-YUP_API void YUP_CALLTYPE initialiseJuce_GUI();
+YUP_API void YUP_CALLTYPE initialiseYup_GUI();
 
 /** Clears up any static data being used by YUP's GUI classes.
 
@@ -60,16 +60,16 @@ YUP_API void YUP_CALLTYPE initialiseJuce_GUI();
     than using the START_YUP_APPLICATION macro, call this function in your shutdown
     code to clean up any YUP objects that might be lying around.
 
-    @see initialiseJuce_GUI()
+    @see initialiseYup_GUI()
 */
-YUP_API void YUP_CALLTYPE shutdownJuce_GUI();
+YUP_API void YUP_CALLTYPE shutdownYup_GUI();
 
 //==============================================================================
 /** A utility object that helps you initialise and shutdown YUP correctly
     using an RAII pattern.
 
-    When the first instance of this class is created, it calls initialiseJuce_GUI(),
-    and when the last instance is deleted, it calls shutdownJuce_GUI(), so that you
+    When the first instance of this class is created, it calls initialiseYup_GUI(),
+    and when the last instance is deleted, it calls shutdownYup_GUI(), so that you
     can easily be sure that as long as at least one instance of the class exists, the
     library will be initialised.
 
@@ -82,17 +82,17 @@ YUP_API void YUP_CALLTYPE shutdownJuce_GUI();
 
     @tags{Events}
 */
-class YUP_API ScopedJuceInitialiser_GUI final
+class YUP_API ScopedYupInitialiser_GUI final
 {
    public:
-    /** The constructor simply calls initialiseJuce_GUI(). */
-    ScopedJuceInitialiser_GUI();
+    /** The constructor simply calls initialiseYup_GUI(). */
+    ScopedYupInitialiser_GUI();
 
-    /** The destructor simply calls shutdownJuce_GUI(). */
-    ~ScopedJuceInitialiser_GUI();
+    /** The destructor simply calls shutdownYup_GUI(). */
+    ~ScopedYupInitialiser_GUI();
 
-    YUP_DECLARE_NON_COPYABLE(ScopedJuceInitialiser_GUI)
-    YUP_DECLARE_NON_MOVEABLE(ScopedJuceInitialiser_GUI)
+    YUP_DECLARE_NON_COPYABLE(ScopedYupInitialiser_GUI)
+    YUP_DECLARE_NON_MOVEABLE(ScopedYupInitialiser_GUI)
 };
 
 //==============================================================================
@@ -171,7 +171,7 @@ class YUP_API ScopedJuceInitialiser_GUI final
 
 #endif
 
-#if JucePlugin_Build_Standalone
+#if YupPlugin_Build_Standalone
 #if YUP_USE_CUSTOM_PLUGIN_STANDALONE_APP
 #define START_YUP_APPLICATION(AppClass) YUP_CREATE_APPLICATION_DEFINE(AppClass)
 #if YUP_IOS
@@ -198,34 +198,34 @@ class YUP_API ScopedJuceInitialiser_GUI final
    Below is an example of minimal forwarding custom delegate. Note that you are at your own
    risk if you decide to use your own delegate and subtle, hard to debug bugs may occur.
 
-   @interface MyCustomDelegate : NSObject <UIApplicationDelegate> { NSObject<UIApplicationDelegate>* juceDelegate; } @end
+   @interface MyCustomDelegate : NSObject <UIApplicationDelegate> { NSObject<UIApplicationDelegate>* yupDelegate; } @end
 
    @implementation MyCustomDelegate
 
    -(id) init
    {
        self = [super init];
-       juceDelegate = reinterpret_cast<NSObject<UIApplicationDelegate>*> ([[NSClassFromString (@"JuceAppStartupDelegate") alloc] init]);
+       yupDelegate = reinterpret_cast<NSObject<UIApplicationDelegate>*> ([[NSClassFromString (@"YupAppStartupDelegate") alloc] init]);
        return self;
    }
 
    -(void) dealloc
    {
-       [juceDelegate release];
+       [yupDelegate release];
        [super dealloc];
    }
 
    - (void) forwardInvocation: (NSInvocation*) anInvocation
    {
-       if (juceDelegate != nullptr && [juceDelegate respondsToSelector: [anInvocation selector]])
-           [anInvocation invokeWithTarget: juceDelegate];
+       if (yupDelegate != nullptr && [yupDelegate respondsToSelector: [anInvocation selector]])
+           [anInvocation invokeWithTarget: yupDelegate];
        else
            [super forwardInvocation: anInvocation];
    }
 
    -(BOOL) respondsToSelector: (SEL) aSelector
    {
-       if (juceDelegate != nullptr && [juceDelegate respondsToSelector: aSelector])
+       if (yupDelegate != nullptr && [yupDelegate respondsToSelector: aSelector])
            return YES;
 
        return [super respondsToSelector: aSelector];

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-package com.rmsl.juce;
+package com.kunitoki.yup;
 
 import java.lang.Runnable;
 import java.io.*;
@@ -52,9 +52,9 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.atomic.*;
 
-public class JuceHTTPStream
+public class YupHTTPStream
 {
-    public JuceHTTPStream(String address, boolean isPostToUse, byte[] postDataToUse,
+    public YupHTTPStream(String address, boolean isPostToUse, byte[] postDataToUse,
                           String headersToUse, int timeOutMsToUse,
                           int[] statusCodeToUse, StringBuffer responseHeadersToUse,
                           int numRedirectsToFollowToUse, String httpRequestCmdToUse) throws IOException
@@ -72,7 +72,7 @@ public class JuceHTTPStream
         connection = createConnection(address, isPost, postData, headers, timeOutMs, httpRequestCmd);
     }
 
-    public static final JuceHTTPStream createHTTPStream(String address, boolean isPost, byte[] postData,
+    public static final YupHTTPStream createHTTPStream(String address, boolean isPost, byte[] postData,
                                                         String headers, int timeOutMs, int[] statusCode,
                                                         StringBuffer responseHeaders, int numRedirectsToFollow,
                                                         String httpRequestCmd)
@@ -87,7 +87,7 @@ public class JuceHTTPStream
         {
             try
             {
-                JuceHTTPStream httpStream = new JuceHTTPStream(address, isPost, postData, headers,
+                YupHTTPStream httpStream = new YupHTTPStream(address, isPost, postData, headers,
                         timeOutMs, statusCode, responseHeaders,
                         numRedirectsToFollow, httpRequestCmd);
 

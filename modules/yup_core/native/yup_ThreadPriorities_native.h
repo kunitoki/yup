@@ -99,7 +99,7 @@ struct ThreadPriorities
     static_assert (std::size (table) == 5,
                    "The platform may be unsupported or there may be a priority entry missing.");
 
-    static Thread::Priority getJucePriority (const int value)
+    static Thread::Priority getYupPriority (const int value)
     {
         const auto iter = std::min_element (std::begin (table),
                                             std::end (table),

@@ -104,7 +104,7 @@ struct ScopedYupInitialiser_GUI
     {
         if (numScopedInitInstancesGui.fetch_add (1) == 0)
         {
-            initialiseJuce_GUI();
+            initialiseYup_GUI();
             initialiseYup_Windowing();
         }
     }
@@ -114,7 +114,7 @@ struct ScopedYupInitialiser_GUI
         if (numScopedInitInstancesGui.fetch_add (-1) == 1)
         {
             shutdownYup_Windowing();
-            shutdownJuce_GUI();
+            shutdownYup_GUI();
         }
     }
 };

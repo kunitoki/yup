@@ -59,7 +59,7 @@ DECLARE_JNI_CLASS (JavaLocale, "java/util/Locale")
 
 static String getSystemProperty (const String& name)
 {
-    return juceString (LocalRef<jstring> ((jstring) getEnv()->CallStaticObjectMethod (SystemClass,
+    return yupString (LocalRef<jstring> ((jstring) getEnv()->CallStaticObjectMethod (SystemClass,
                                                                                       SystemClass.getProperty,
                                                                                       javaString (name).get())));
 }
@@ -73,7 +73,7 @@ static String getAndroidID()
         if (auto fId = env->GetStaticFieldID (settings, "ANDROID_ID", "Ljava/lang/String;"))
         {
             auto androidID = (jstring) env->GetStaticObjectField (settings, fId);
-            return juceString (LocalRef<jstring> (androidID));
+            return yupString (LocalRef<jstring> (androidID));
         }
     }
 
@@ -88,12 +88,12 @@ static String getLocaleValue (bool isRegion)
     auto stringResult = isRegion ? env->CallObjectMethod (locale.get(), JavaLocale.getCountry)
                                  : env->CallObjectMethod (locale.get(), JavaLocale.getLanguage);
 
-    return juceString (LocalRef<jstring> ((jstring) stringResult));
+    return yupString (LocalRef<jstring> ((jstring) stringResult));
 }
 
 static String getAndroidOsBuildValue (const char* fieldName)
 {
-    return juceString (LocalRef<jstring> ((jstring) getEnv()->GetStaticObjectField (
+    return yupString (LocalRef<jstring> ((jstring) getEnv()->GetStaticObjectField (
         AndroidBuild, getEnv()->GetStaticFieldID (AndroidBuild, fieldName, "Ljava/lang/String;"))));
 }
 } // namespace AndroidStatsHelpers

@@ -162,12 +162,12 @@ DECLARE_JNI_CLASS_WITH_MIN_SDK (AndroidUriPermission, "android/content/UriPermis
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
-static File juceFile (LocalRef<jobject> obj)
+static File yupFile (LocalRef<jobject> obj)
 {
     auto* env = getEnv();
 
     if (env->IsInstanceOf (obj.get(), JavaFile) != 0)
-        return File (juceString (LocalRef<jstring> ((jstring) env->CallObjectMethod (obj.get(),
+        return File (yupString (LocalRef<jstring> ((jstring) env->CallObjectMethod (obj.get(),
                                                                                      JavaFile.getAbsolutePath))));
 
     return {};
@@ -194,7 +194,7 @@ static File getWellKnownFolder (const char* folderId)
                                                                    AndroidEnvironment.getExternalStoragePublicDirectory,
                                                                    fieldValue.get()));
 
-    return (downloadFolder ? juceFile (downloadFolder) : File());
+    return (downloadFolder ? yupFile (downloadFolder) : File());
 }
 
 static LocalRef<jobject> urlToUri (const URL& url)
@@ -327,7 +327,7 @@ private:
                         LocalRef<jstring> value ((jstring) env->CallObjectMethod (cursor.get(), AndroidCursor.getString, columnIndex));
 
                         if (value)
-                            return juceString (value.get());
+                            return yupString (value.get());
                     }
                 }
 
@@ -356,7 +356,7 @@ private:
 
     static File getPrimaryStorageDirectory()
     {
-        return juceFile (LocalRef<jobject> (getEnv()->CallStaticObjectMethod (AndroidEnvironment, AndroidEnvironment.getExternalStorageDirectory)));
+        return yupFile (LocalRef<jobject> (getEnv()->CallStaticObjectMethod (AndroidEnvironment, AndroidEnvironment.getExternalStorageDirectory)));
     }
 
     static Array<File> getSecondaryStorageDirectories()
@@ -448,7 +448,7 @@ private:
         Array<File> files;
 
         for (int i = 0; i < n; ++i)
-            files.add (juceFile (LocalRef<jobject> (env->GetObjectArrayElement ((jobjectArray) obj.get(),
+            files.add (yupFile (LocalRef<jobject> (env->GetObjectArrayElement ((jobjectArray) obj.get(),
                                                                                 (jsize) i))));
 
         return files;
@@ -483,7 +483,7 @@ private:
                 LocalRef<jstring> value ((jstring) env->CallObjectMethod (cursor.get(), AndroidCursor.getString, columnIndex));
 
                 if (value)
-                    fileName = juceString (value.get());
+                    fileName = yupString (value.get());
             }
         }
 
@@ -696,7 +696,7 @@ private:
     {
         auto* env = getEnv();
 
-        auto methodName = juceString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
+        auto methodName = yupString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
 
         if (methodName == "onMediaScannerConnected")
         {
@@ -741,7 +741,7 @@ static File getDocumentsDirectory()
     if (getAndroidSDKVersion() >= 19)
         return getWellKnownFolder ("DIRECTORY_DOCUMENTS");
 
-    return juceFile (LocalRef<jobject> (env->CallStaticObjectMethod (AndroidEnvironment, AndroidEnvironment.getDataDirectory)));
+    return yupFile (LocalRef<jobject> (env->CallStaticObjectMethod (AndroidEnvironment, AndroidEnvironment.getDataDirectory)));
 }
 
 static File getAppDataDir (bool dataDir)
@@ -751,7 +751,7 @@ static File getAppDataDir (bool dataDir)
     LocalRef<jobject> applicationInfo (env->CallObjectMethod (getAppContext().get(), AndroidContext.getApplicationInfo));
     LocalRef<jobject> jString (env->GetObjectField (applicationInfo.get(), dataDir ? AndroidApplicationInfo.dataDir : AndroidApplicationInfo.publicSourceDir));
 
-    return { juceString ((jstring) jString.get()) };
+    return { yupString ((jstring) jString.get()) };
 }
 
 File File::getSpecialLocation (const SpecialLocationType type)

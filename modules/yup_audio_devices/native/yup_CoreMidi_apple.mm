@@ -526,8 +526,8 @@ static int createUniqueIDForMidiPort(String deviceName, bool isInput)
 {
     String uniqueID;
 
-#ifdef JucePlugin_CFBundleIdentifier
-    uniqueID = YUP_STRINGIFY(JucePlugin_CFBundleIdentifier);
+#ifdef YupPlugin_CFBundleIdentifier
+    uniqueID = YUP_STRINGIFY(YupPlugin_CFBundleIdentifier);
 #else
     auto appBundle = File::getSpecialLocation(File::currentApplicationFile);
     CFUniquePtr<CFStringRef> appBundlePath(appBundle.getFullPathName().toCFString());

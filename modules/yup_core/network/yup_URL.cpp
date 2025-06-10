@@ -714,7 +714,7 @@ private:
         return urlToUse.getLocalFile();
     }
 
-    void updateStaleBookmark (NSURL* nsURL, URL& juceUrl)
+    void updateStaleBookmark (NSURL* nsURL, URL& yupUrl)
     {
         NSError* error = nil;
 
@@ -724,7 +724,7 @@ private:
                                                     error:&error];
 
         if (error == nil)
-            setURLBookmark (juceUrl, (void*) bookmark);
+            setURLBookmark (yupUrl, (void*) bookmark);
         else
             jassertfalse;
     }

@@ -195,19 +195,19 @@ class YUP_API ScopedAutoReleasePool
 
 //==============================================================================
 /* In a Windows DLL build, we'll expose some malloc/free functions that live inside the DLL, and use these for
-   allocating all the objects - that way all juce objects in the DLL and in the host will live in the same heap,
+   allocating all the objects - that way all yup objects in the DLL and in the host will live in the same heap,
    avoiding problems when an object is created in one module and passed across to another where it is deleted.
-   By piggy-backing on the YUP_LEAK_DETECTOR macro, these allocators can be injected into most juce classes.
+   By piggy-backing on the YUP_LEAK_DETECTOR macro, these allocators can be injected into most yup classes.
 */
 #if YUP_MSVC && (defined(YUP_DLL) || defined(YUP_DLL_BUILD)) && !(YUP_DISABLE_DLL_ALLOCATORS || DOXYGEN)
-extern YUP_API void* juceDLL_malloc(size_t);
-extern YUP_API void juceDLL_free(void*);
+extern YUP_API void* yupDLL_malloc(size_t);
+extern YUP_API void yupDLL_free(void*);
 
 #define YUP_LEAK_DETECTOR(OwnerClass)         \
    public:                                     \
     static void* operator new(size_t sz)       \
     {                                          \
-        return yup::juceDLL_malloc(sz);       \
+        return yup::yupDLL_malloc(sz);       \
     }                                          \
     static void* operator new(size_t, void* p) \
     {                                          \
@@ -215,7 +215,7 @@ extern YUP_API void juceDLL_free(void*);
     }                                          \
     static void operator delete(void* p)       \
     {                                          \
-        yup::juceDLL_free(p);                 \
+        yup::yupDLL_free(p);                 \
     }                                          \
     static void operator delete(void*, void*) {}
 #endif

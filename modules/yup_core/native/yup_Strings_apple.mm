@@ -74,7 +74,7 @@ String String::convertToPrecomposedUnicode() const
 #if YUP_IOS
     YUP_AUTORELEASEPOOL
     {
-        return nsStringToJuce([juceStringToNS(*this) precomposedStringWithCanonicalMapping]);
+        return nsStringToYup([yupStringToNS(*this) precomposedStringWithCanonicalMapping]);
     }
 #else
     UnicodeMapping map;

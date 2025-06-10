@@ -44,22 +44,22 @@ namespace yup
 {
 
 //==============================================================================
-inline Range<int> nsRangeToJuce(NSRange range)
+inline Range<int> nsRangeToYup(NSRange range)
 {
     return {(int)range.location, (int)(range.location + range.length)};
 }
 
-inline NSRange juceRangeToNS(Range<int> range)
+inline NSRange yupRangeToNS(Range<int> range)
 {
     return NSMakeRange((NSUInteger)range.getStart(), (NSUInteger)range.getLength());
 }
 
-inline String nsStringToJuce(NSString* s)
+inline String nsStringToYup(NSString* s)
 {
     return CharPointer_UTF8([s UTF8String]);
 }
 
-inline NSString* juceStringToNS(const String& s)
+inline NSString* yupStringToNS(const String& s)
 {
     // This cast helps linters determine nullability
     return (NSString* _Nonnull)[NSString stringWithUTF8String:s.toUTF8()];
@@ -81,7 +81,7 @@ inline NSString* nsEmptyString() noexcept
 
 inline NSURL* createNSURLFromFile(const String& f)
 {
-    return [NSURL fileURLWithPath:juceStringToNS(f)];
+    return [NSURL fileURLWithPath:yupStringToNS(f)];
 }
 
 inline NSURL* createNSURLFromFile(const File& f)
@@ -94,14 +94,14 @@ inline NSArray* createNSArrayFromStringArray(const StringArray& strings)
     auto array = [[NSMutableArray alloc] initWithCapacity:(NSUInteger)strings.size()];
 
     for (const auto& string : strings)
-        [array addObject:juceStringToNS(string)];
+        [array addObject:yupStringToNS(string)];
 
     return [array autorelease];
 }
 
 inline NSData* varToJsonData(const var& varToParse)
 {
-    return [juceStringToNS(JSON::toString(varToParse)) dataUsingEncoding:NSUTF8StringEncoding];
+    return [yupStringToNS(JSON::toString(varToParse)) dataUsingEncoding:NSUTF8StringEncoding];
 }
 
 inline var jsonDataToVar(NSData* jsonData)
@@ -110,7 +110,7 @@ inline var jsonDataToVar(NSData* jsonData)
                                              encoding:NSUTF8StringEncoding];
 
     jassert(jsonString != nullptr);
-    return JSON::parse(nsStringToJuce([jsonString autorelease]));
+    return JSON::parse(nsStringToYup([jsonString autorelease]));
 }
 
 // If for any reason the given var cannot be converted into a valid dictionary
@@ -392,16 +392,16 @@ struct ObjCClass
 
 //==============================================================================
 #ifndef DOXYGEN
-template <class JuceClass>
+template <class YupClass>
 struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
 {
     ObjCLifetimeManagedClass()
         : ObjCClass<NSObject>("ObjCLifetimeManagedClass_")
     {
-        addIvar<JuceClass*>("cppObject");
+        addIvar<YupClass*>("cppObject");
 
         YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
-        addMethod(@selector(initWithJuceObject:), initWithJuceObject);
+        addMethod(@selector(initWithYupObject:), initWithYupObject);
         YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
         addMethod(@selector(dealloc), dealloc);
@@ -409,7 +409,7 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
         registerClass();
     }
 
-    static id initWithJuceObject(id _self, SEL, JuceClass* obj)
+    static id initWithYupObject(id _self, SEL, YupClass* obj)
     {
         NSObject* self = sendSuperclassMessage<NSObject*>(_self, @selector(init));
         object_setInstanceVariable(self, "cppObject", obj);
@@ -419,7 +419,7 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
 
     static void dealloc(id _self, SEL)
     {
-        if (auto* obj = getIvar<JuceClass*>(_self, "cppObject"))
+        if (auto* obj = getIvar<YupClass*>(_self, "cppObject"))
         {
             delete obj;
             object_setInstanceVariable(_self, "cppObject", nullptr);
@@ -436,19 +436,19 @@ ObjCLifetimeManagedClass<Class> ObjCLifetimeManagedClass<Class>::objCLifetimeMan
 #endif
 
 // this will return an NSObject which takes ownership of the YUP instance passed-in
-// This is useful to tie the life-time of a juce instance to the life-time of an NSObject
+// This is useful to tie the life-time of a yup instance to the life-time of an NSObject
 template <typename Class>
-NSObject* createNSObjectFromJuceClass(Class* obj)
+NSObject* createNSObjectFromYupClass(Class* obj)
 {
     YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wobjc-method-access")
-    return [ObjCLifetimeManagedClass<Class>::objCLifetimeManagedClass.createInstance() initWithJuceObject:obj];
+    return [ObjCLifetimeManagedClass<Class>::objCLifetimeManagedClass.createInstance() initWithYupObject:obj];
     YUP_END_IGNORE_WARNINGS_GCC_LIKE
 }
 
 // Get the YUP class instance that was tied to the life-time of an NSObject with the
 // function above
 template <typename Class>
-Class* getJuceClassFromNSObject(NSObject* obj)
+Class* getYupClassFromNSObject(NSObject* obj)
 {
     return obj != nullptr ? getIvar<Class*>(obj, "cppObject") : nullptr;
 }

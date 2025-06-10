@@ -135,7 +135,7 @@ struct AndroidDocumentDetail
 
     static URL uriToUrl (jobject uri)
     {
-        return URL (juceString ((jstring) getEnv()->CallObjectMethod (uri, AndroidUri.toString)));
+        return URL (yupString ((jstring) getEnv()->CallObjectMethod (uri, AndroidUri.toString)));
     }
 
     struct Columns
@@ -330,7 +330,7 @@ AndroidDocumentInfo::AndroidDocumentInfo (Args args)
     , lastModified (args.lastModified.value)
     , sizeInBytes (args.sizeInBytes.value)
     , nativeFlags (args.flags)
-    , juceFlags (flagExists
+    , yupFlags (flagExists
                  | (args.lastModified.valid ? flagValidModified : 0)
                  | (args.sizeInBytes.valid ? flagValidSize : 0)
                  | (args.readPermission ? flagHasReadPermission : 0)
@@ -412,7 +412,7 @@ struct AndroidDocument::Utils
         String getMimeTypeFromExtension (const String& str) const
         {
             const auto javaStr = javaString (str);
-            return juceString ((jstring) getEnv()->CallObjectMethod (map.get(),
+            return yupString ((jstring) getEnv()->CallObjectMethod (map.get(),
                                                                      AndroidMimeTypeMap.getMimeTypeFromExtension,
                                                                      javaStr.get()));
         }
@@ -420,7 +420,7 @@ struct AndroidDocument::Utils
         String getExtensionFromMimeType (const String& str) const
         {
             const auto javaStr = javaString (str);
-            return juceString ((jstring) getEnv()->CallObjectMethod (map.get(),
+            return yupString ((jstring) getEnv()->CallObjectMethod (map.get(),
                                                                      AndroidMimeTypeMap.getExtensionFromMimeType,
                                                                      javaStr.get()));
         }
@@ -515,7 +515,7 @@ struct AndroidDocument::Utils
                         return Detail::Opt { env->CallLongMethod (cursor, AndroidCursor.getLong, column) };
                     };
 
-                    return AndroidDocumentInfo::Args {}.withName (juceString (nameString.get())).withType (juceString (mimeString.get())).withFlags (env->CallIntMethod (cursor, AndroidCursor.getInt, flagsColumnIndex)).withModified (readOpt (modColumnIndex)).withSize (readOpt (sizeColumnIndex));
+                    return AndroidDocumentInfo::Args {}.withName (yupString (nameString.get())).withType (yupString (mimeString.get())).withFlags (env->CallIntMethod (cursor, AndroidCursor.getInt, flagsColumnIndex)).withModified (readOpt (modColumnIndex)).withSize (readOpt (sizeColumnIndex));
                 }
 
                 GlobalRefImpl<jstring> flagsColumn { javaString ("flags") };

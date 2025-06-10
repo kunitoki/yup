@@ -133,7 +133,7 @@ void MessageManager::broadcastMessage (const String&)
 }
 
 //==============================================================================
-void yup_juceEventsAndroidStartApp()
+void yup_yupEventsAndroidStartApp()
 {
 }
 

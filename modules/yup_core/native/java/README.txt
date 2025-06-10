@@ -9,8 +9,8 @@ required for the Java source code you wish to compile.
 2. If you are creating byte-code for new .java files, move the new files into
 the native/javacore/app folder of the module, or create one if it doesn't
 exist. Remember that .java files need to be in nested sub-folders which
-resemble their package, i.e. a Java class com.rmsl.juce.HelloWorld.java should
-be in the module's native/javacore/app/com/rmsl/juce folder.  If you wish to
+resemble their package, i.e. a Java class com.kunitoki.yup.HelloWorld.java should
+be in the module's native/javacore/app/com/kunitoki/yup folder.  If you wish to
 modify existing .java files in the YUP modules then just rename native/java to
 native/javacore.
 
@@ -24,7 +24,7 @@ this way.
 build/intermediates/javac/release_Release/compileRelease_ReleaseJavaWithJavac/classes.
 Inside of that folder, you will find all your Java byte-code compiled classes.
 Remove any classes that you are not interested in (typically you'll find
-Java.class and JuceApp.class which you will probably want to remove).
+Java.class and YupApp.class which you will probably want to remove).
 
 6. Inside of
 build/intermediates/javac/release_Release/compileRelease_ReleaseJavaWithJavac/classes
@@ -39,5 +39,4 @@ execute the following dx command:
     gzip /tmp/JavaDexByteCode.dex
 
 8. The output /tmp/JavaDexByteCode.dex.gz is now the byte code that can be
-included into YUP. You can use the Projucer's BinaryData generator
-functionality to get this into a convenient char array like form.
+included into YUP.

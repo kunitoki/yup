@@ -81,7 +81,7 @@ private:
 };
 
 //==============================================================================
-class JuceWindowIdentifier
+class YupWindowIdentifier
 {
 public:
     static bool isYUPWindow (HWND hwnd) noexcept
@@ -89,9 +89,9 @@ public:
         return GetWindowLongPtr (hwnd, GWLP_USERDATA) == getImprobableWindowNumber();
     }
 
-    static void setAsYUPWindow (HWND hwnd, bool isJuceWindow) noexcept
+    static void setAsYUPWindow (HWND hwnd, bool isYupWindow) noexcept
     {
-        SetWindowLongPtr (hwnd, GWLP_USERDATA, isJuceWindow ? getImprobableWindowNumber() : 0);
+        SetWindowLongPtr (hwnd, GWLP_USERDATA, isYupWindow ? getImprobableWindowNumber() : 0);
     }
 
 private:

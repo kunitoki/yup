@@ -41,7 +41,7 @@ namespace yup
 {
 
 //==============================================================================
-static StringArray jucePermissionToAndroidPermissions (RuntimePermissions::PermissionID permission)
+static StringArray yupPermissionToAndroidPermissions (RuntimePermissions::PermissionID permission)
 {
     const auto externalStorageOrMedia = [] (const auto* newPermission)
     {
@@ -95,7 +95,7 @@ static StringArray jucePermissionToAndroidPermissions (RuntimePermissions::Permi
     return {};
 }
 
-static RuntimePermissions::PermissionID androidPermissionToJucePermission (const String& permission)
+static RuntimePermissions::PermissionID androidPermissionToYupPermission (const String& permission)
 {
     static const std::map<String, RuntimePermissions::PermissionID> map {
         { "android.permission.RECORD_AUDIO", RuntimePermissions::recordAudio },
@@ -167,7 +167,7 @@ struct PermissionsOverlay final : public FragmentOverlay
 
             for (int i = 0; i < n; ++i)
             {
-                auto permission = androidPermissionToJucePermission (permissions[i]);
+                auto permission = androidPermissionToYupPermission (permissions[i]);
                 auto granted = (grantResults.getReference (i) == 0);
 
                 for (auto it = requests.begin(); it != requests.end();)
@@ -199,8 +199,8 @@ struct PermissionsOverlay final : public FragmentOverlay
             {
                 auto& request = requests.front();
 
-                auto permissionsArray = jucePermissionToAndroidPermissions (request.permission);
-                auto jPermissionsArray = juceStringArrayToJava (permissionsArray);
+                auto permissionsArray = yupPermissionToAndroidPermissions (request.permission);
+                auto jPermissionsArray = yupStringArrayToJava (permissionsArray);
 
                 auto requestPermissionsMethodID = env->GetMethodID (AndroidFragment, "requestPermissions", "([Ljava/lang/String;I)V");
 
@@ -230,7 +230,7 @@ struct PermissionsOverlay final : public FragmentOverlay
 //==============================================================================
 void RuntimePermissions::request (PermissionID permission, Callback callback)
 {
-    const auto requestedPermissions = jucePermissionToAndroidPermissions (permission);
+    const auto requestedPermissions = yupPermissionToAndroidPermissions (permission);
 
     const auto allPermissionsInManifest = std::all_of (requestedPermissions.begin(),
                                                        requestedPermissions.end(),
@@ -242,8 +242,7 @@ void RuntimePermissions::request (PermissionID permission, Callback callback)
     if (! allPermissionsInManifest)
     {
         // Error! If you want to be able to request this runtime permission, you
-        // also need to declare it in your app's manifest. You can do so via
-        // the Projucer. Otherwise this can't work.
+        // also need to declare it in your app's manifest.
         jassertfalse;
 
         callback (false);
@@ -288,7 +287,7 @@ bool RuntimePermissions::isGranted (PermissionID permission)
 {
     auto* env = getEnv();
 
-    const auto requestedPermissions = jucePermissionToAndroidPermissions (permission);
+    const auto requestedPermissions = yupPermissionToAndroidPermissions (permission);
 
     return std::all_of (requestedPermissions.begin(), requestedPermissions.end(), [env] (const auto& p)
                         {

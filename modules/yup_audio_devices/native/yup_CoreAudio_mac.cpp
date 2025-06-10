@@ -53,7 +53,7 @@ namespace yup
 
 YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnonnull")
 
-constexpr auto juceAudioObjectPropertyElementMain =
+constexpr auto yupAudioObjectPropertyElementMain =
 #if defined(MAC_OS_VERSION_12_0)
     kAudioObjectPropertyElementMain;
 #else
@@ -260,8 +260,8 @@ struct AsyncRestarter
 struct SystemVol
 {
     explicit SystemVol (AudioObjectPropertySelector selector) noexcept
-        : outputDeviceID (audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, juceAudioObjectPropertyElementMain }).value_or (kAudioObjectUnknown))
-        , addr { selector, kAudioDevicePropertyScopeOutput, juceAudioObjectPropertyElementMain }
+        : outputDeviceID (audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, { kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }).value_or (kAudioObjectUnknown))
+        , addr { selector, kAudioDevicePropertyScopeOutput, yupAudioObjectPropertyElementMain }
     {
     }
 
@@ -292,7 +292,7 @@ private:
 
 YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-constexpr auto juceAudioHardwareServiceDeviceProperty_VirtualMainVolume =
+constexpr auto yupAudioHardwareServiceDeviceProperty_VirtualMainVolume =
 #if defined(MAC_OS_VERSION_12_0)
     kAudioHardwareServiceDeviceProperty_VirtualMainVolume;
 #else
@@ -303,10 +303,10 @@ constexpr auto juceAudioHardwareServiceDeviceProperty_VirtualMainVolume =
 
 float YUP_CALLTYPE SystemAudioVolume::getGain()
 {
-    return SystemVol (juceAudioHardwareServiceDeviceProperty_VirtualMainVolume).getGain();
+    return SystemVol (yupAudioHardwareServiceDeviceProperty_VirtualMainVolume).getGain();
 }
 
-bool YUP_CALLTYPE SystemAudioVolume::setGain (float gain) { return SystemVol (juceAudioHardwareServiceDeviceProperty_VirtualMainVolume).setGain (gain); }
+bool YUP_CALLTYPE SystemAudioVolume::setGain (float gain) { return SystemVol (yupAudioHardwareServiceDeviceProperty_VirtualMainVolume).setGain (gain); }
 
 bool YUP_CALLTYPE SystemAudioVolume::isMuted() { return SystemVol (kAudioDevicePropertyMute).isMuted(); }
 
@@ -404,7 +404,7 @@ struct CoreAudioClasses
             if (auto ranges = audioObjectGetProperties<AudioValueRange> (deviceID,
                                                                          { kAudioDevicePropertyAvailableNominalSampleRates,
                                                                            kAudioObjectPropertyScopeWildcard,
-                                                                           juceAudioObjectPropertyElementMain },
+                                                                           yupAudioObjectPropertyElementMain },
                                                                          err2log());
                 ! ranges.empty())
             {
@@ -436,7 +436,7 @@ struct CoreAudioClasses
         {
             Array<int> newBufferSizes;
 
-            if (auto ranges = audioObjectGetProperties<AudioValueRange> (deviceID, { kAudioDevicePropertyBufferFrameSizeRange, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain }, err2log()); ! ranges.empty())
+            if (auto ranges = audioObjectGetProperties<AudioValueRange> (deviceID, { kAudioDevicePropertyBufferFrameSizeRange, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }, err2log()); ! ranges.empty())
             {
                 newBufferSizes.add ((int) (ranges[0].mMinimum + 15) & ~15);
 
@@ -464,13 +464,13 @@ struct CoreAudioClasses
 
         int getFrameSizeFromDevice() const
         {
-            return static_cast<int> (audioObjectGetProperty<UInt32> (deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain }).value_or (0));
+            return static_cast<int> (audioObjectGetProperty<UInt32> (deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }).value_or (0));
         }
 
         bool isDeviceAlive() const
         {
             return deviceID != 0
-                && audioObjectGetProperty<UInt32> (deviceID, { kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain }, err2log()).value_or (0) != 0;
+                && audioObjectGetProperty<UInt32> (deviceID, { kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }, err2log()).value_or (0) != 0;
         }
 
         bool updateDetailsFromDevice (const BigInteger& activeIns, const BigInteger& activeOuts)
@@ -500,7 +500,7 @@ struct CoreAudioClasses
                 AudioObjectPropertyAddress pa;
                 pa.mSelector = kAudioDevicePropertyIOThreadOSWorkgroup;
                 pa.mScope = kAudioObjectPropertyScopeWildcard;
-                pa.mElement = juceAudioObjectPropertyElementMain;
+                pa.mElement = yupAudioObjectPropertyElementMain;
 
                 if (auto* workgroup = audioObjectGetProperty<os_workgroup_t> (deviceID, pa).value_or (nullptr))
                 {
@@ -578,7 +578,7 @@ struct CoreAudioClasses
         StringArray getSources (bool input)
         {
             StringArray s;
-            auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain });
+            auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
 
             for (auto type : types)
             {
@@ -595,7 +595,7 @@ struct CoreAudioClasses
                 AudioObjectPropertyAddress pa;
                 pa.mSelector = kAudioDevicePropertyDataSourceNameForID;
                 pa.mScope = getScope (input);
-                pa.mElement = juceAudioObjectPropertyElementMain;
+                pa.mElement = yupAudioObjectPropertyElementMain;
 
                 if (OK (AudioObjectGetPropertyData (deviceID, &pa, 0, nullptr, &transSize, &avt)))
                     s.add (buffer);
@@ -608,9 +608,9 @@ struct CoreAudioClasses
         {
             if (deviceID != 0)
             {
-                if (auto currentSourceID = audioObjectGetProperty<OSType> (deviceID, { kAudioDevicePropertyDataSource, getScope (input), juceAudioObjectPropertyElementMain }, err2log()))
+                if (auto currentSourceID = audioObjectGetProperty<OSType> (deviceID, { kAudioDevicePropertyDataSource, getScope (input), yupAudioObjectPropertyElementMain }, err2log()))
                 {
-                    auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain });
+                    auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
 
                     if (auto it = std::find (types.begin(), types.end(), *currentSourceID); it != types.end())
                         return static_cast<int> (std::distance (types.begin(), it));
@@ -624,18 +624,18 @@ struct CoreAudioClasses
         {
             if (deviceID != 0)
             {
-                auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain });
+                auto types = audioObjectGetProperties<OSType> (deviceID, { kAudioDevicePropertyDataSources, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
 
                 if (isPositiveAndBelow (index, static_cast<int> (types.size())))
                 {
-                    audioObjectSetProperty<OSType> (deviceID, { kAudioDevicePropertyDataSource, getScope (input), juceAudioObjectPropertyElementMain }, types[static_cast<std::size_t> (index)], err2log());
+                    audioObjectSetProperty<OSType> (deviceID, { kAudioDevicePropertyDataSource, getScope (input), yupAudioObjectPropertyElementMain }, types[static_cast<std::size_t> (index)], err2log());
                 }
             }
         }
 
         double getNominalSampleRate() const
         {
-            return static_cast<double> (audioObjectGetProperty<Float64> (deviceID, { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, juceAudioObjectPropertyElementMain }, err2log()).value_or (0.0));
+            return static_cast<double> (audioObjectGetProperty<Float64> (deviceID, { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }, err2log()).value_or (0.0));
         }
 
         bool setNominalSampleRate (double newSampleRate) const
@@ -643,7 +643,7 @@ struct CoreAudioClasses
             if (std::abs (getNominalSampleRate() - newSampleRate) < 1.0)
                 return true;
 
-            return audioObjectSetProperty (deviceID, { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, juceAudioObjectPropertyElementMain }, static_cast<Float64> (newSampleRate), err2log());
+            return audioObjectSetProperty (deviceID, { kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }, static_cast<Float64> (newSampleRate), err2log());
         }
 
         //==============================================================================
@@ -665,7 +665,7 @@ struct CoreAudioClasses
                 return "Couldn't change sample rate";
             }
 
-            if (! audioObjectSetProperty (deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal, juceAudioObjectPropertyElementMain }, static_cast<UInt32> (bufferSizeSamples), err2log()))
+            if (! audioObjectSetProperty (deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeGlobal, yupAudioObjectPropertyElementMain }, static_cast<UInt32> (bufferSizeSamples), err2log()))
             {
                 updateDetailsFromDevice (ins, outs);
                 return "Couldn't change buffer size";
@@ -903,7 +903,7 @@ struct CoreAudioClasses
                 Array<VisitorResultType> result;
                 int chanNum = 0;
 
-                if (auto bufList = audioObjectGetProperty<AudioBufferList> (parent.deviceID, { kAudioDevicePropertyStreamConfiguration, getScope (isInput), juceAudioObjectPropertyElementMain }, parent.err2log()))
+                if (auto bufList = audioObjectGetProperty<AudioBufferList> (parent.deviceID, { kAudioDevicePropertyStreamConfiguration, getScope (isInput), yupAudioObjectPropertyElementMain }, parent.err2log()))
                 {
                     const int numStreams = static_cast<int> (bufList->mNumberBuffers);
 
@@ -943,7 +943,7 @@ struct CoreAudioClasses
 
                     if (auto nameNSString = audioObjectGetProperty<NSString*> (parent.deviceID, { kAudioObjectPropertyElementName, getScope (isInput), element }).value_or (nullptr))
                     {
-                        name = nsStringToJuce (nameNSString);
+                        name = nsStringToYup (nameNSString);
                         [nameNSString release];
                     }
 
@@ -958,7 +958,7 @@ struct CoreAudioClasses
 
             static int getBitDepthFromDevice (bool isInput, CoreAudioInternal& parent)
             {
-                return static_cast<int> (audioObjectGetProperty<AudioStreamBasicDescription> (parent.deviceID, { kAudioStreamPropertyPhysicalFormat, getScope (isInput), juceAudioObjectPropertyElementMain }, parent.err2log())
+                return static_cast<int> (audioObjectGetProperty<AudioStreamBasicDescription> (parent.deviceID, { kAudioStreamPropertyPhysicalFormat, getScope (isInput), yupAudioObjectPropertyElementMain }, parent.err2log())
                                              .value_or (AudioStreamBasicDescription {})
                                              .mBitsPerChannel);
             }
@@ -967,16 +967,16 @@ struct CoreAudioClasses
             {
                 const auto scope = getScope (isInput);
 
-                const auto deviceLatency = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertyLatency, scope, juceAudioObjectPropertyElementMain }).value_or (0);
+                const auto deviceLatency = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertyLatency, scope, yupAudioObjectPropertyElementMain }).value_or (0);
 
-                const auto safetyOffset = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertySafetyOffset, scope, juceAudioObjectPropertyElementMain }).value_or (0);
+                const auto safetyOffset = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertySafetyOffset, scope, yupAudioObjectPropertyElementMain }).value_or (0);
 
-                const auto framesInBuffer = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain }).value_or (0);
+                const auto framesInBuffer = audioObjectGetProperty<UInt32> (parent.deviceID, { kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }).value_or (0);
 
                 UInt32 streamLatency = 0;
 
-                if (auto streams = audioObjectGetProperties<AudioStreamID> (parent.deviceID, { kAudioDevicePropertyStreams, scope, juceAudioObjectPropertyElementMain }); ! streams.empty())
-                    streamLatency = audioObjectGetProperty<UInt32> (streams.front(), { kAudioStreamPropertyLatency, scope, juceAudioObjectPropertyElementMain }).value_or (0);
+                if (auto streams = audioObjectGetProperties<AudioStreamID> (parent.deviceID, { kAudioDevicePropertyStreams, scope, yupAudioObjectPropertyElementMain }); ! streams.empty())
+                    streamLatency = audioObjectGetProperty<UInt32> (streams.front(), { kAudioStreamPropertyLatency, scope, yupAudioObjectPropertyElementMain }).value_or (0);
 
                 return static_cast<int> (deviceLatency + safetyOffset + framesInBuffer + streamLatency);
             }
@@ -1239,7 +1239,7 @@ struct CoreAudioClasses
                 if (inputDeviceId == 0)
                     return std::make_unique<CoreAudioInternal> (*this, outputDeviceId, false, true);
 
-                // This used to be just "com.juce.aggregate", but macOS doesn't allow two different instances of an app with
+                // This used to be just "com.yup.aggregate", but macOS doesn't allow two different instances of an app with
                 // the same bundle ID to create the same aggregate device UID, even when it's private.
                 CFStringRef aggregateDeviceUid = Uuid().toString().toCFString();
 
@@ -2229,11 +2229,11 @@ struct CoreAudioClasses
             inputIds.clear();
             outputIds.clear();
 
-            auto audioDevices = audioObjectGetProperties<AudioDeviceID> (kAudioObjectSystemObject, { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain });
+            auto audioDevices = audioObjectGetProperties<AudioDeviceID> (kAudioObjectSystemObject, { kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain });
 
             for (const auto audioDevice : audioDevices)
             {
-                if (const auto optionalName = audioObjectGetProperty<CFStringRef> (audioDevice, { kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain }))
+                if (const auto optionalName = audioObjectGetProperty<CFStringRef> (audioDevice, { kAudioDevicePropertyDeviceNameCFString, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }))
                 {
                     if (const CFUniquePtr<CFStringRef> name { *optionalName })
                     {
@@ -2277,9 +2277,9 @@ struct CoreAudioClasses
             auto selector = forInput ? kAudioHardwarePropertyDefaultInputDevice
                                      : kAudioHardwarePropertyDefaultOutputDevice;
             pa.mScope = kAudioObjectPropertyScopeWildcard;
-            pa.mElement = juceAudioObjectPropertyElementMain;
+            pa.mElement = yupAudioObjectPropertyElementMain;
 
-            if (auto deviceID = audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, { selector, kAudioObjectPropertyScopeWildcard, juceAudioObjectPropertyElementMain }))
+            if (auto deviceID = audioObjectGetProperty<AudioDeviceID> (kAudioObjectSystemObject, { selector, kAudioObjectPropertyScopeWildcard, yupAudioObjectPropertyElementMain }))
             {
                 auto& ids = forInput ? inputIds : outputIds;
 
@@ -2372,7 +2372,7 @@ struct CoreAudioClasses
         {
             int total = 0;
 
-            if (auto bufList = audioObjectGetProperty<AudioBufferList> (deviceID, { kAudioDevicePropertyStreamConfiguration, CoreAudioInternal::getScope (input), juceAudioObjectPropertyElementMain }))
+            if (auto bufList = audioObjectGetProperty<AudioBufferList> (deviceID, { kAudioDevicePropertyStreamConfiguration, CoreAudioInternal::getScope (input), yupAudioObjectPropertyElementMain }))
             {
                 auto numStreams = (int) bufList->mNumberBuffers;
 

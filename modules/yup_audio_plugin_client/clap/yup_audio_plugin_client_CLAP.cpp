@@ -1098,7 +1098,7 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
 
     plugin.init = [] (const char* path) -> bool
     {
-        yup::initialiseJuce_GUI();
+        yup::initialiseYup_GUI();
         yup::initialiseYup_Windowing();
 
         return true;
@@ -1107,7 +1107,7 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
     plugin.deinit = []
     {
         yup::shutdownYup_Windowing();
-        yup::shutdownJuce_GUI();
+        yup::shutdownYup_GUI();
     };
 
     plugin.get_factory = [] (const char* factoryId) -> const void*

@@ -46,7 +46,7 @@ namespace yup
 
     It's not fully standards-compliant, and won't be as fast as the fancy JIT-compiled
     engines that you get in browsers, but this is an extremely compact, low-overhead javascript
-    interpreter, which is integrated with the juce var and DynamicObject classes. If you need
+    interpreter, which is integrated with the yup var and DynamicObject classes. If you need
     a few simple bits of scripting in your app, and want to be able to easily let the JS
     work with native objects defined as DynamicObject subclasses, then this might do the job.
 

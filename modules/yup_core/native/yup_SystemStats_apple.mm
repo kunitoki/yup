@@ -119,11 +119,11 @@ static String getOSXVersion()
                                                            error:&error];
             }
 
-            return [NSDictionary dictionaryWithContentsOfFile:juceStringToNS(systemVersionPlist)];
+            return [NSDictionary dictionaryWithContentsOfFile:yupStringToNS(systemVersionPlist)];
         }();
 
         if (dict != nullptr)
-            return nsStringToJuce([dict objectForKey:nsStringLiteral("ProductVersion")]);
+            return nsStringToYup([dict objectForKey:nsStringLiteral("ProductVersion")]);
 
         jassertfalse;
         return {};
@@ -167,7 +167,7 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 String SystemStats::getOperatingSystemName()
 {
 #if YUP_IOS
-    return "iOS " + nsStringToJuce([[UIDevice currentDevice] systemVersion]);
+    return "iOS " + nsStringToYup([[UIDevice currentDevice] systemVersion]);
 #else
     return "Mac OSX " + getOSXVersion();
 #endif
@@ -176,7 +176,7 @@ String SystemStats::getOperatingSystemName()
 String SystemStats::getOperatingSystemVersionString()
 {
 #if YUP_IOS
-    return nsStringToJuce([[UIDevice currentDevice] systemVersion]);
+    return nsStringToYup([[UIDevice currentDevice] systemVersion]);
 #else
     return getOSXVersion();
 #endif
@@ -186,7 +186,7 @@ String SystemStats::getDeviceDescription()
 {
     if (auto* userInfo = [[NSProcessInfo processInfo] environment])
         if (auto* simDeviceName = [userInfo objectForKey:@"SIMULATOR_MODEL_IDENTIFIER"])
-            return nsStringToJuce(simDeviceName);
+            return nsStringToYup(simDeviceName);
 
 #if YUP_IOS
     const char* name = "hw.machine";
@@ -283,12 +283,12 @@ int SystemStats::getCpuSpeedInMegahertz()
 //==============================================================================
 String SystemStats::getLogonName()
 {
-    return nsStringToJuce(NSUserName());
+    return nsStringToYup(NSUserName());
 }
 
 String SystemStats::getFullUserName()
 {
-    return nsStringToJuce(NSFullUserName());
+    return nsStringToYup(NSFullUserName());
 }
 
 String SystemStats::getComputerName()
@@ -425,7 +425,7 @@ String SystemStats::getUniqueDeviceID()
     {
         if (UIDevice* device = [UIDevice currentDevice])
             if (NSUUID* uuid = [device identifierForVendor])
-                return nsStringToJuce([uuid UUIDString]);
+                return nsStringToYup([uuid UUIDString]);
     }
 #endif
 

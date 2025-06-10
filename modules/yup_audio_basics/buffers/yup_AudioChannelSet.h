@@ -561,7 +561,7 @@ public:
     static AudioChannelSet YUP_CALLTYPE channelSetWithChannels (const Array<ChannelType>&);
 
     //==============================================================================
-    // Conversion between wave and juce channel layout identifiers
+    // Conversion between wave and yup channel layout identifiers
 
     /** Create an AudioChannelSet from a WAVEFORMATEXTENSIBLE channelMask (typically used
         in .wav files). */

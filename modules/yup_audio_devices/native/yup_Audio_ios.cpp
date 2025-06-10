@@ -1017,16 +1017,16 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
         if (audioUnit == nullptr)
             return false;
 
-#if JucePlugin_Enable_IAA
+#if YupPlugin_Enable_IAA
         AudioComponentDescription appDesc;
-        appDesc.componentType = JucePlugin_IAAType;
-        appDesc.componentSubType = JucePlugin_IAASubType;
-        appDesc.componentManufacturer = JucePlugin_ManufacturerCode;
+        appDesc.componentType = YupPlugin_IAAType;
+        appDesc.componentSubType = YupPlugin_IAASubType;
+        appDesc.componentManufacturer = YupPlugin_ManufacturerCode;
         appDesc.componentFlags = 0;
         appDesc.componentFlagsMask = 0;
         OSStatus err = AudioOutputUnitPublish (&appDesc,
-                                               CFSTR (JucePlugin_IAAName),
-                                               JucePlugin_VersionCode,
+                                               CFSTR (YupPlugin_IAAName),
+                                               YupPlugin_VersionCode,
                                                audioUnit);
 
         // This assert will be hit if the Inter-App Audio entitlement has not
@@ -1298,7 +1298,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
                 for (AVAudioSessionPortDescription* port in (isInput ? route.inputs : route.outputs))
                 {
                     for (AVAudioSessionChannelDescription* desc in port.channels)
-                        result.add (nsStringToJuce (desc.channelName));
+                        result.add (nsStringToYup (desc.channelName));
                 }
 
                 // A fallback for the iOS simulator and older iOS versions

@@ -54,20 +54,20 @@ TEST(ObjCHelpers, Range)
     constexpr auto start = 10;
     constexpr auto length = 20;
 
-    const auto juceRange = Range<int>::withStartAndLength(start, length);
+    const auto yupRange = Range<int>::withStartAndLength(start, length);
     const auto nsRange = NSMakeRange(start, length);
 
-    EXPECT_TRUE(nsRangeToJuce(nsRange) == juceRange);
-    EXPECT_TRUE(NSEqualRanges(nsRange, juceRangeToNS(juceRange)));
+    EXPECT_TRUE(nsRangeToYup(nsRange) == yupRange);
+    EXPECT_TRUE(NSEqualRanges(nsRange, yupRangeToNS(yupRange)));
 }
 
 TEST(ObjCHelpers, String)
 {
-    String juceString{"Hello world!"};
+    String yupString{"Hello world!"};
     NSString* nsString{@"Hello world!"};
 
-    EXPECT_TRUE(nsStringToJuce(nsString) == juceString);
-    EXPECT_TRUE([nsString isEqualToString:juceStringToNS(juceString)]);
+    EXPECT_TRUE(nsStringToYup(nsString) == yupString);
+    EXPECT_TRUE([nsString isEqualToString:yupStringToNS(yupString)]);
     EXPECT_TRUE([nsString isEqualToString:nsStringLiteral("Hello world!")]);
 }
 
