@@ -23,138 +23,138 @@ class TextEditorDemo : public yup::Component
 {
 public:
     TextEditorDemo()
-        : Component("TextEditorDemo")
+        : Component ("TextEditorDemo")
     {
         // Create the editors
-        singleLineEditor = std::make_unique<yup::TextEditor>("singleLineEditor");
-        multiLineEditor = std::make_unique<yup::TextEditor>("multiLineEditor");
-        readOnlyEditor = std::make_unique<yup::TextEditor>("readOnlyEditor");
-        focused = std::make_unique<yup::TextEditor>("focused");
+        singleLineEditor = std::make_unique<yup::TextEditor> ("singleLineEditor");
+        multiLineEditor = std::make_unique<yup::TextEditor> ("multiLineEditor");
+        readOnlyEditor = std::make_unique<yup::TextEditor> ("readOnlyEditor");
+        focused = std::make_unique<yup::TextEditor> ("focused");
 
         // Configure the editors
-        singleLineEditor->setText("Single line editor");
-        singleLineEditor->setMultiLine(false);
+        singleLineEditor->setText ("Single line editor");
+        singleLineEditor->setMultiLine (false);
 
-        multiLineEditor->setText("Multi-line editor\nSupports multiple lines\nTry typing here!");
-        multiLineEditor->setMultiLine(true);
+        multiLineEditor->setText ("Multi-line editor\nSupports multiple lines\nTry typing here!");
+        multiLineEditor->setMultiLine (true);
 
-        readOnlyEditor->setText("This is read-only text that cannot be edited");
-        readOnlyEditor->setReadOnly(true);
+        readOnlyEditor->setText ("This is read-only text that cannot be edited");
+        readOnlyEditor->setReadOnly (true);
 
         // Create buttons with componentID as text
-        selectAllButton = std::make_unique<yup::TextButton>("Select All");
+        selectAllButton = std::make_unique<yup::TextButton> ("Select All");
         selectAllButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
                 activeEditor->selectAll();
         };
 
-        copyButton = std::make_unique<yup::TextButton>("Copy");
+        copyButton = std::make_unique<yup::TextButton> ("Copy");
         copyButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
                 activeEditor->copy();
         };
 
-        pasteButton = std::make_unique<yup::TextButton>("Paste");
+        pasteButton = std::make_unique<yup::TextButton> ("Paste");
         pasteButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
                 activeEditor->paste();
         };
 
-        clearButton = std::make_unique<yup::TextButton>("Clear");
+        clearButton = std::make_unique<yup::TextButton> ("Clear");
         clearButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
-                activeEditor->setText("");
+                activeEditor->setText ("");
         };
 
-        focused->setText("");
+        focused->setText ("");
 
         // Create labels
-        titleLabel = std::make_unique<yup::Label>("titleLabel");
-        singleLineLabel = std::make_unique<yup::Label>("singleLineLabel");
-        multiLineLabel = std::make_unique<yup::Label>("multiLineLabel");
-        readOnlyLabel = std::make_unique<yup::Label>("readOnlyLabel");
+        titleLabel = std::make_unique<yup::Label> ("titleLabel");
+        singleLineLabel = std::make_unique<yup::Label> ("singleLineLabel");
+        multiLineLabel = std::make_unique<yup::Label> ("multiLineLabel");
+        readOnlyLabel = std::make_unique<yup::Label> ("readOnlyLabel");
 
-        titleLabel->setText("TextEditor Widget Example");
-        singleLineLabel->setText("Single Line Editor:");
-        multiLineLabel->setText("Multi Line Editor:");
-        readOnlyLabel->setText("Read Only Editor:");
+        titleLabel->setText ("TextEditor Widget Example");
+        singleLineLabel->setText ("Single Line Editor:");
+        multiLineLabel->setText ("Multi Line Editor:");
+        readOnlyLabel->setText ("Read Only Editor:");
 
         // Add all components
-        addAndMakeVisible(*titleLabel);
-        addAndMakeVisible(*singleLineLabel);
-        addAndMakeVisible(*singleLineEditor);
-        addAndMakeVisible(*multiLineLabel);
-        addAndMakeVisible(*multiLineEditor);
-        addAndMakeVisible(*readOnlyLabel);
-        addAndMakeVisible(*readOnlyEditor);
-        addAndMakeVisible(*selectAllButton);
-        addAndMakeVisible(*copyButton);
-        addAndMakeVisible(*pasteButton);
-        addAndMakeVisible(*clearButton);
-        addAndMakeVisible(*focused);
+        addAndMakeVisible (*titleLabel);
+        addAndMakeVisible (*singleLineLabel);
+        addAndMakeVisible (*singleLineEditor);
+        addAndMakeVisible (*multiLineLabel);
+        addAndMakeVisible (*multiLineEditor);
+        addAndMakeVisible (*readOnlyLabel);
+        addAndMakeVisible (*readOnlyEditor);
+        addAndMakeVisible (*selectAllButton);
+        addAndMakeVisible (*copyButton);
+        addAndMakeVisible (*pasteButton);
+        addAndMakeVisible (*clearButton);
+        addAndMakeVisible (*focused);
 
-        setSize({ 800, 600 });
+        setSize ({ 800, 600 });
     }
 
-    void paint(yup::Graphics& g) override
+    void paint (yup::Graphics& g) override
     {
         // Background
-        g.setFillColor(yup::Colors::lightgray);
+        g.setFillColor (yup::Colors::lightgray);
         g.fillAll();
 
         // Header separator
-        g.setStrokeColor(yup::Colors::darkgray);
-        g.setStrokeWidth(2.0f);
-        g.strokeLine(10.0f, 60.0f, getWidth() - 10.0f, 60.0f);
+        g.setStrokeColor (yup::Colors::darkgray);
+        g.setStrokeWidth (2.0f);
+        g.strokeLine (10.0f, 60.0f, getWidth() - 10.0f, 60.0f);
     }
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced(20);
+        auto area = getLocalBounds().reduced (20);
 
         // Title
-        titleLabel->setBounds(area.removeFromTop(40));
+        titleLabel->setBounds (area.removeFromTop (40));
 
-        area.removeFromTop(10); // Spacer
+        area.removeFromTop (10); // Spacer
 
         // Single line editor
-        singleLineLabel->setBounds(area.removeFromTop(25));
-        singleLineEditor->setBounds(area.removeFromTop(30));
+        singleLineLabel->setBounds (area.removeFromTop (25));
+        singleLineEditor->setBounds (area.removeFromTop (30));
 
-        area.removeFromTop(15); // Spacer
+        area.removeFromTop (15); // Spacer
 
         // Multi line editor
-        multiLineLabel->setBounds(area.removeFromTop(25));
-        multiLineEditor->setBounds(area.removeFromTop(120));
+        multiLineLabel->setBounds (area.removeFromTop (25));
+        multiLineEditor->setBounds (area.removeFromTop (120));
 
-        area.removeFromTop(15); // Spacer
+        area.removeFromTop (15); // Spacer
 
         // Read only editor
-        readOnlyLabel->setBounds(area.removeFromTop(25));
-        readOnlyEditor->setBounds(area.removeFromTop(60));
+        readOnlyLabel->setBounds (area.removeFromTop (25));
+        readOnlyEditor->setBounds (area.removeFromTop (60));
 
-        area.removeFromTop(20); // Spacer
+        area.removeFromTop (20); // Spacer
 
         // Buttons
-        auto buttonArea = area.removeFromTop(40);
+        auto buttonArea = area.removeFromTop (40);
         auto buttonWidth = buttonArea.getWidth() / 4 - 10;
 
-        selectAllButton->setBounds(buttonArea.removeFromLeft(buttonWidth));
-        buttonArea.removeFromLeft(10);
-        copyButton->setBounds(buttonArea.removeFromLeft(buttonWidth));
-        buttonArea.removeFromLeft(10);
-        pasteButton->setBounds(buttonArea.removeFromLeft(buttonWidth));
-        buttonArea.removeFromLeft(10);
-        clearButton->setBounds(buttonArea);
+        selectAllButton->setBounds (buttonArea.removeFromLeft (buttonWidth));
+        buttonArea.removeFromLeft (10);
+        copyButton->setBounds (buttonArea.removeFromLeft (buttonWidth));
+        buttonArea.removeFromLeft (10);
+        pasteButton->setBounds (buttonArea.removeFromLeft (buttonWidth));
+        buttonArea.removeFromLeft (10);
+        clearButton->setBounds (buttonArea);
 
-        area.removeFromTop(10); // Spacer
+        area.removeFromTop (10); // Spacer
 
         // Hidden focused editor for testing
-        focused->setBounds(area.removeFromTop(30));
+        focused->setBounds (area.removeFromTop (30));
     }
 
 private:

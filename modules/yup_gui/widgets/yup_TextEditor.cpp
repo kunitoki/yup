@@ -35,7 +35,11 @@ const Identifier TextEditor::Colors::focusedOutlineColorId = "textEditorFocusedO
 
 TextEditor::TextEditor (StringRef componentID)
     : Component (componentID)
-    , caretTimer ([this] { caretVisible = !caretVisible; repaint(); })
+    , caretTimer ([this]
+{
+    caretVisible = ! caretVisible;
+    repaint();
+})
 {
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Text);
@@ -142,7 +146,7 @@ bool TextEditor::hasSelection() const
 
 String TextEditor::getSelectedText() const
 {
-    if (!hasSelection())
+    if (! hasSelection())
         return {};
 
     int start = jmin (selectionStart, selectionEnd);
@@ -152,7 +156,7 @@ String TextEditor::getSelectedText() const
 
 void TextEditor::deleteSelectedText()
 {
-    if (!hasSelection() || readOnly)
+    if (! hasSelection() || readOnly)
         return;
 
     int start = jmin (selectionStart, selectionEnd);
@@ -179,7 +183,7 @@ void TextEditor::insertText (const String& textToInsert)
     deleteSelectedText();
 
     String filteredText = textToInsert;
-    if (!multiLine)
+    if (! multiLine)
     {
         // Remove line breaks for single-line editor
         filteredText = filteredText.replaceCharacters ("\r\n", "  ");
@@ -209,7 +213,7 @@ void TextEditor::copy()
 
 void TextEditor::cut()
 {
-    if (hasSelection() && !readOnly)
+    if (hasSelection() && ! readOnly)
     {
         copy();
         deleteSelectedText();
@@ -218,11 +222,11 @@ void TextEditor::cut()
 
 void TextEditor::paste()
 {
-    if (!readOnly)
+    if (! readOnly)
     {
         String textToInsert = SystemClipboard::getTextFromClipboard();
         if (textToInsert.isNotEmpty())
-            insertText(textToInsert);
+            insertText (textToInsert);
     }
 }
 
@@ -268,8 +272,8 @@ void TextEditor::paint (Graphics& g)
 
     // Draw outline
     auto outlineColor = hasKeyboardFocus()
-        ? findColor (Colors::focusedOutlineColorId).value_or (yup::Colors::blue)
-        : findColor (Colors::outlineColorId).value_or (yup::Colors::gray);
+                          ? findColor (Colors::focusedOutlineColorId).value_or (yup::Colors::blue)
+                          : findColor (Colors::outlineColorId).value_or (yup::Colors::gray);
     g.setStrokeColor (outlineColor);
     g.setStrokeWidth (1.0f);
     g.strokeRoundedRect (bounds, 4.0f);
@@ -284,18 +288,18 @@ void TextEditor::paint (Graphics& g)
         int end = jmax (selectionStart, selectionEnd);
 
         // Get all selection rectangles for proper multiline selection rendering
-        auto selectionRects = styledText.getSelectionRectangles(start, end);
+        auto selectionRects = styledText.getSelectionRectangles (start, end);
         for (const auto& rect : selectionRects)
         {
             // Adjust each rectangle for scroll offset and text bounds
-            auto adjustedRect = rect.translated(textBounds.getTopLeft() - scrollOffset);
-            g.fillRect(adjustedRect);
+            auto adjustedRect = rect.translated (textBounds.getTopLeft() - scrollOffset);
+            g.fillRect (adjustedRect);
         }
     }
 
     // Draw text with scroll offset
     g.setFillColor (outlineColor);
-    auto scrolledTextBounds = textBounds.translated(-scrollOffset.getX(), -scrollOffset.getY());
+    auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
     g.fillFittedText (styledText, scrolledTextBounds);
 
     // Draw caret
@@ -331,7 +335,7 @@ void TextEditor::focusLost()
 
 void TextEditor::mouseDown (const MouseEvent& event)
 {
-    if (!hasKeyboardFocus())
+    if (! hasKeyboardFocus())
         takeKeyboardFocus();
 
     auto position = event.getPosition().to<float>();
@@ -403,14 +407,14 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
         if (ctrlDown)
             moveCaretToStart (shiftDown);
         else
-            moveCaretUp(shiftDown);
+            moveCaretUp (shiftDown);
     }
     else if (key.getKey() == KeyPress::downKey)
     {
         if (ctrlDown)
             moveCaretToEnd (shiftDown);
         else
-            moveCaretDown(shiftDown);
+            moveCaretDown (shiftDown);
     }
     else if (key.getKey() == KeyPress::homeKey)
     {
@@ -478,7 +482,7 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
 
 void TextEditor::textInput (const String& inputText)
 {
-    if (!readOnly && inputText.isNotEmpty())
+    if (! readOnly && inputText.isNotEmpty())
     {
         insertText (inputText);
     }
@@ -525,7 +529,7 @@ void TextEditor::updateCaretPosition()
 void TextEditor::ensureCaretVisible()
 {
     auto textBounds = getTextBounds();
-    auto caretBounds = const_cast<StyledText&>(styledText).getCaretBounds(caretPosition);
+    auto caretBounds = const_cast<StyledText&> (styledText).getCaretBounds (caretPosition);
 
     if (caretBounds.isEmpty())
         return;
@@ -546,35 +550,35 @@ void TextEditor::ensureCaretVisible()
     // Horizontal scrolling
     if (caretBounds.getRight() + horizontalPadding > visibleRight)
     {
-        scrollOffset.setX(caretBounds.getRight() + horizontalPadding - textBounds.getWidth());
+        scrollOffset.setX (caretBounds.getRight() + horizontalPadding - textBounds.getWidth());
         needsRepaint = true;
     }
     else if (caretBounds.getX() - horizontalPadding < visibleLeft)
     {
-        scrollOffset.setX(jmax(0.0f, caretBounds.getX() - horizontalPadding));
+        scrollOffset.setX (jmax (0.0f, caretBounds.getX() - horizontalPadding));
         needsRepaint = true;
     }
 
     // Vertical scrolling
     if (caretBounds.getBottom() + verticalPadding > visibleBottom)
     {
-        scrollOffset.setY(caretBounds.getBottom() + verticalPadding - textBounds.getHeight());
+        scrollOffset.setY (caretBounds.getBottom() + verticalPadding - textBounds.getHeight());
         needsRepaint = true;
     }
     else if (caretBounds.getY() - verticalPadding < visibleTop)
     {
-        scrollOffset.setY(jmax(0.0f, caretBounds.getY() - verticalPadding));
+        scrollOffset.setY (jmax (0.0f, caretBounds.getY() - verticalPadding));
         needsRepaint = true;
     }
 
     // Ensure scroll offset doesn't go negative
-    scrollOffset.setX(jmax(0.0f, scrollOffset.getX()));
-    scrollOffset.setY(jmax(0.0f, scrollOffset.getY()));
+    scrollOffset.setX (jmax (0.0f, scrollOffset.getX()));
+    scrollOffset.setY (jmax (0.0f, scrollOffset.getY()));
 
     // Limit scrolling to the actual text bounds
-    auto textSize = const_cast<StyledText&>(styledText).getComputedTextBounds();
-    scrollOffset.setX(jmin(scrollOffset.getX(), jmax(0.0f, textSize.getWidth() - textBounds.getWidth())));
-    scrollOffset.setY(jmin(scrollOffset.getY(), jmax(0.0f, textSize.getHeight() - textBounds.getHeight())));
+    auto textSize = const_cast<StyledText&> (styledText).getComputedTextBounds();
+    scrollOffset.setX (jmin (scrollOffset.getX(), jmax (0.0f, textSize.getWidth() - textBounds.getWidth())));
+    scrollOffset.setY (jmin (scrollOffset.getY(), jmax (0.0f, textSize.getHeight() - textBounds.getHeight())));
 
     if (needsRepaint)
         repaint();
@@ -603,10 +607,9 @@ Rectangle<float> TextEditor::getCaretBounds() const
     return caretBounds.translated (textBounds.getTopLeft() - scrollOffset);
 }
 
-
 //==============================================================================
 
-void TextEditor::moveCaretUp(bool extendSelection)
+void TextEditor::moveCaretUp (bool extendSelection)
 {
     if (multiLine)
     {
@@ -614,7 +617,7 @@ void TextEditor::moveCaretUp(bool extendSelection)
         auto currentCaretBounds = getCaretBounds();
         if (currentCaretBounds.isEmpty())
         {
-            moveCaretToStart(extendSelection);
+            moveCaretToStart (extendSelection);
             return;
         }
 
@@ -624,32 +627,32 @@ void TextEditor::moveCaretUp(bool extendSelection)
 
         // Convert back to text coordinate space
         auto textBounds = getTextBounds();
-        auto relativeTargetPos = Point<float>(targetX, targetY) - textBounds.getTopLeft() + scrollOffset;
+        auto relativeTargetPos = Point<float> (targetX, targetY) - textBounds.getTopLeft() + scrollOffset;
 
         // Get character index at target position
-        int newPosition = styledText.getGlyphIndexAtPosition(relativeTargetPos);
+        int newPosition = styledText.getGlyphIndexAtPosition (relativeTargetPos);
 
         // Ensure we moved to a different position
         if (newPosition == caretPosition)
         {
             // If we didn't move, try to find the previous line manually
-            newPosition = findPreviousLinePosition(caretPosition);
+            newPosition = findPreviousLinePosition (caretPosition);
         }
 
-        caretPosition = jlimit(0, text.length(), newPosition);
+        caretPosition = jlimit (0, text.length(), newPosition);
 
-        if (!extendSelection)
+        if (! extendSelection)
             selectionStart = selectionEnd = caretPosition;
         else
             selectionEnd = caretPosition;
     }
     else
     {
-        moveCaretToStart(extendSelection);
+        moveCaretToStart (extendSelection);
     }
 }
 
-void TextEditor::moveCaretDown(bool extendSelection)
+void TextEditor::moveCaretDown (bool extendSelection)
 {
     if (multiLine)
     {
@@ -657,7 +660,7 @@ void TextEditor::moveCaretDown(bool extendSelection)
         auto currentCaretBounds = getCaretBounds();
         if (currentCaretBounds.isEmpty())
         {
-            moveCaretToEnd(extendSelection);
+            moveCaretToEnd (extendSelection);
             return;
         }
 
@@ -667,28 +670,28 @@ void TextEditor::moveCaretDown(bool extendSelection)
 
         // Convert back to text coordinate space
         auto textBounds = getTextBounds();
-        auto relativeTargetPos = Point<float>(targetX, targetY) - textBounds.getTopLeft() + scrollOffset;
+        auto relativeTargetPos = Point<float> (targetX, targetY) - textBounds.getTopLeft() + scrollOffset;
 
         // Get character index at target position
-        int newPosition = styledText.getGlyphIndexAtPosition(relativeTargetPos);
+        int newPosition = styledText.getGlyphIndexAtPosition (relativeTargetPos);
 
         // Ensure we moved to a different position
         if (newPosition == caretPosition)
         {
             // If we didn't move, try to find the next line manually
-            newPosition = findNextLinePosition(caretPosition);
+            newPosition = findNextLinePosition (caretPosition);
         }
 
-        caretPosition = jlimit(0, text.length(), newPosition);
+        caretPosition = jlimit (0, text.length(), newPosition);
 
-        if (!extendSelection)
+        if (! extendSelection)
             selectionStart = selectionEnd = caretPosition;
         else
             selectionEnd = caretPosition;
     }
     else
     {
-        moveCaretToEnd(extendSelection);
+        moveCaretToEnd (extendSelection);
     }
 }
 
@@ -698,7 +701,7 @@ void TextEditor::moveCaretLeft (bool extendSelection)
     {
         caretPosition--;
 
-        if (!extendSelection)
+        if (! extendSelection)
             selectionStart = selectionEnd = caretPosition;
         else
             selectionEnd = caretPosition;
@@ -711,7 +714,7 @@ void TextEditor::moveCaretRight (bool extendSelection)
     {
         caretPosition++;
 
-        if (!extendSelection)
+        if (! extendSelection)
             selectionStart = selectionEnd = caretPosition;
         else
             selectionEnd = caretPosition;
@@ -720,10 +723,10 @@ void TextEditor::moveCaretRight (bool extendSelection)
 
 void TextEditor::moveCaretToStartOfLine (bool extendSelection)
 {
-    int newPosition = findLineStart(caretPosition);
+    int newPosition = findLineStart (caretPosition);
     caretPosition = newPosition;
 
-    if (!extendSelection)
+    if (! extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
@@ -731,10 +734,10 @@ void TextEditor::moveCaretToStartOfLine (bool extendSelection)
 
 void TextEditor::moveCaretToEndOfLine (bool extendSelection)
 {
-    int newPosition = findLineEnd(caretPosition);
+    int newPosition = findLineEnd (caretPosition);
     caretPosition = newPosition;
 
-    if (!extendSelection)
+    if (! extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
@@ -744,7 +747,7 @@ void TextEditor::moveCaretToStart (bool extendSelection)
 {
     caretPosition = 0;
 
-    if (!extendSelection)
+    if (! extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
@@ -754,7 +757,7 @@ void TextEditor::moveCaretToEnd (bool extendSelection)
 {
     caretPosition = text.length();
 
-    if (!extendSelection)
+    if (! extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
@@ -826,60 +829,60 @@ void TextEditor::stopCaretBlinking()
 
 Rectangle<float> TextEditor::getTextBounds() const
 {
-    return getLocalBounds().reduced(4.0f);
+    return getLocalBounds().reduced (4.0f);
 }
 
 //==============================================================================
 
-int TextEditor::findLineStart(int position) const
+int TextEditor::findLineStart (int position) const
 {
-    if (!multiLine)
+    if (! multiLine)
         return 0;
 
-    int pos = jlimit(0, text.length(), position);
+    int pos = jlimit (0, text.length(), position);
     while (pos > 0 && text[pos - 1] != '\n')
         pos--;
     return pos;
 }
 
-int TextEditor::findLineEnd(int position) const
+int TextEditor::findLineEnd (int position) const
 {
-    if (!multiLine)
+    if (! multiLine)
         return text.length();
 
-    int pos = jlimit(0, text.length(), position);
+    int pos = jlimit (0, text.length(), position);
     while (pos < text.length() && text[pos] != '\n')
         pos++;
     return pos;
 }
 
-int TextEditor::findPreviousLinePosition(int position) const
+int TextEditor::findPreviousLinePosition (int position) const
 {
-    if (!multiLine)
+    if (! multiLine)
         return 0;
 
-    int currentLineStart = findLineStart(position);
+    int currentLineStart = findLineStart (position);
     if (currentLineStart == 0)
         return 0;
 
     // Find the start of the previous line
     int prevLineEnd = currentLineStart - 1; // Skip the newline
-    int prevLineStart = findLineStart(prevLineEnd);
+    int prevLineStart = findLineStart (prevLineEnd);
 
     // Try to maintain horizontal position
     int currentColumn = position - currentLineStart;
     int prevLineLength = prevLineEnd - prevLineStart;
 
-    return prevLineStart + jmin(currentColumn, prevLineLength);
+    return prevLineStart + jmin (currentColumn, prevLineLength);
 }
 
-int TextEditor::findNextLinePosition(int position) const
+int TextEditor::findNextLinePosition (int position) const
 {
-    if (!multiLine)
+    if (! multiLine)
         return text.length();
 
-    int currentLineStart = findLineStart(position);
-    int currentLineEnd = findLineEnd(position);
+    int currentLineStart = findLineStart (position);
+    int currentLineEnd = findLineEnd (position);
 
     if (currentLineEnd >= text.length())
         return text.length();
@@ -891,72 +894,64 @@ int TextEditor::findNextLinePosition(int position) const
 
     // Try to maintain horizontal position
     int currentColumn = position - currentLineStart;
-    int nextLineEnd = findLineEnd(nextLineStart);
+    int nextLineEnd = findLineEnd (nextLineStart);
     int nextLineLength = nextLineEnd - nextLineStart;
 
-    return nextLineStart + jmin(currentColumn, nextLineLength);
+    return nextLineStart + jmin (currentColumn, nextLineLength);
 }
 
-int TextEditor::findWordStart(int position) const
+int TextEditor::findWordStart (int position) const
 {
-    int pos = jlimit(0, text.length(), position);
+    int pos = jlimit (0, text.length(), position);
 
     // Skip any whitespace backwards
     while (pos > 0 && (text[pos - 1] == ' ' || text[pos - 1] == '\t' || text[pos - 1] == '\n'))
         pos--;
 
     // Find the start of the current word
-    while (pos > 0 && !isWordSeparator(text[pos - 1]))
+    while (pos > 0 && ! isWordSeparator (text[pos - 1]))
         pos--;
 
     return pos;
 }
 
-int TextEditor::findWordEnd(int position) const
+int TextEditor::findWordEnd (int position) const
 {
-    int pos = jlimit(0, text.length(), position);
+    int pos = jlimit (0, text.length(), position);
 
     // Skip any whitespace forward
     while (pos < text.length() && (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n'))
         pos++;
 
     // Find the end of the current word
-    while (pos < text.length() && !isWordSeparator(text[pos]))
+    while (pos < text.length() && ! isWordSeparator (text[pos]))
         pos++;
 
     return pos;
 }
 
-bool TextEditor::isWordSeparator(yup_wchar character) const
+bool TextEditor::isWordSeparator (yup_wchar character) const
 {
-    return character == ' ' || character == '\t' || character == '\n' ||
-           character == '.' || character == ',' || character == ';' || character == ':' ||
-           character == '!' || character == '?' || character == '(' || character == ')' ||
-           character == '[' || character == ']' || character == '{' || character == '}' ||
-           character == '"' || character == '\'' || character == '/' || character == '\\' ||
-           character == '|' || character == '&' || character == '*' || character == '+' ||
-           character == '-' || character == '=' || character == '<' || character == '>' ||
-           character == '@' || character == '#' || character == '$' || character == '%' ||
-           character == '^' || character == '~' || character == '`';
+    return character == ' ' || character == '\t' || character == '\n' || character == '.' || character == ',' || character == ';' || character == ':' || character == '!' || character == '?' || character == '(' || character == ')' || character == '[' || character == ']' || character == '{' || character == '}' || character == '"' || character == '\'' || character == '/' || character == '\\' || character == '|' || character == '&' || character == '*' || character == '+' || character == '-' || character == '=' || character == '<' || character == '>' || character == '@' || character == '#' || character == '$' || character == '%' || character == '^' || character == '~' || character == '`';
 }
 
-void TextEditor::moveCaretToWordStart(bool extendSelection)
+void TextEditor::moveCaretToWordStart (bool extendSelection)
 {
-    int newPosition = findWordStart(caretPosition);
+    int newPosition = findWordStart (caretPosition);
     caretPosition = newPosition;
 
-    if (!extendSelection)
+    if (! extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
 }
 
-void TextEditor::moveCaretToWordEnd(bool extendSelection)
+void TextEditor::moveCaretToWordEnd (bool extendSelection)
 {
-    int newPosition = findWordEnd(caretPosition);
+    int newPosition = findWordEnd (caretPosition);
     caretPosition = newPosition;
 
-    if (!extendSelection)
+    if (! extendSelection)
         selectionStart = selectionEnd = caretPosition;
     else
         selectionEnd = caretPosition;
@@ -973,10 +968,10 @@ void TextEditor::deleteWordBackward()
     }
     else
     {
-        int wordStart = findWordStart(caretPosition);
+        int wordStart = findWordStart (caretPosition);
         if (wordStart < caretPosition)
         {
-            text = text.substring(0, wordStart) + text.substring(caretPosition);
+            text = text.substring (0, wordStart) + text.substring (caretPosition);
             caretPosition = selectionStart = selectionEnd = wordStart;
             needsUpdate = true;
 
@@ -1000,10 +995,10 @@ void TextEditor::deleteWordForward()
     }
     else
     {
-        int wordEnd = findWordEnd(caretPosition);
+        int wordEnd = findWordEnd (caretPosition);
         if (wordEnd > caretPosition)
         {
-            text = text.substring(0, caretPosition) + text.substring(wordEnd);
+            text = text.substring (0, caretPosition) + text.substring (wordEnd);
             needsUpdate = true;
 
             if (onTextChange)

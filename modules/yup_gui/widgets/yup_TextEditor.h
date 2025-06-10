@@ -210,8 +210,8 @@ private:
     void ensureCaretVisible();
     int getGlyphIndexAtPosition (const Point<float>& position) const;
     Rectangle<float> getCaretBounds() const;
-    void moveCaretUp(bool extendSelection = false);
-    void moveCaretDown(bool extendSelection = false);
+    void moveCaretUp (bool extendSelection = false);
+    void moveCaretDown (bool extendSelection = false);
     void moveCaretLeft (bool extendSelection = false);
     void moveCaretRight (bool extendSelection = false);
     void moveCaretToStartOfLine (bool extendSelection = false);
@@ -223,17 +223,17 @@ private:
     void startCaretBlinking();
     void stopCaretBlinking();
     Rectangle<float> getTextBounds() const;
-    int findLineStart(int position) const;
-    int findLineEnd(int position) const;
-    int findPreviousLinePosition(int position) const;
-    int findNextLinePosition(int position) const;
+    int findLineStart (int position) const;
+    int findLineEnd (int position) const;
+    int findPreviousLinePosition (int position) const;
+    int findNextLinePosition (int position) const;
 
     // Word navigation methods
-    int findWordStart(int position) const;
-    int findWordEnd(int position) const;
-    bool isWordSeparator(yup_wchar character) const;
-    void moveCaretToWordStart(bool extendSelection = false);
-    void moveCaretToWordEnd(bool extendSelection = false);
+    int findWordStart (int position) const;
+    int findWordEnd (int position) const;
+    bool isWordSeparator (yup_wchar character) const;
+    void moveCaretToWordStart (bool extendSelection = false);
+    void moveCaretToWordEnd (bool extendSelection = false);
     void deleteWordBackward();
     void deleteWordForward();
 
