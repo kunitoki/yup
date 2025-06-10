@@ -250,12 +250,18 @@ function (yup_audio_plugin_copy_bundle target_name plugin_type)
         return()
     endif()
 
-    _yup_message (STATUS "Generating rule to copy ${plugin_type} plugin ${target_name}")
-
     string (TOUPPER "${plugin_type}" plugin_type_upper)
     set (dependency_target ${target_name}_${plugin_type}_plugin)
     set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
-    set (plugin_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}/${target_file_name}")
+    set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")
+    set (plugin_path "${plugin_target_path}/${target_file_name}")
+
+    if (NOT EXISTS ${plugin_target_path})
+        _yup_message (STATUS "Plugin path ${plugin_target_path} does not exist, skipping copy")
+        return()
+    endif()
+
+    _yup_message (STATUS "Generating rule to copy ${plugin_type} plugin ${target_name}")
 
     if ("${plugin_type}" STREQUAL "clap")
         add_custom_command(TARGET ${dependency_target} POST_BUILD

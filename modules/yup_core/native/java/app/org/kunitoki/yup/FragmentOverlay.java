@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-package com.kunitoki.yup;
+package org.kunitoki.yup;
 
 import android.app.DialogFragment;
 import android.content.Intent;
