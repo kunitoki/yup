@@ -35,6 +35,7 @@ set_property (GLOBAL PROPERTY USE_FOLDERS ON)
 option (YUP_TARGET_ANDROID "Target Android project" OFF)
 option (YUP_TARGET_ANDROID_BUILD_GRADLE "When building for Android, build the gradle infrastructure" OFF)
 option (YUP_ENABLE_PROFILING "Enable the profiling code using Perfetto SDK" OFF)
+option (YUP_BUILD_JAVA_SUPPORT "Build the Java support" OFF)
 option (YUP_BUILD_EXAMPLES "Build the examples" ${PROJECT_IS_TOP_LEVEL})
 option (YUP_BUILD_TESTS "Build the tests" ${PROJECT_IS_TOP_LEVEL})
 

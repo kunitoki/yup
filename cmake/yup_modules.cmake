@@ -530,6 +530,11 @@ function (yup_add_module module_path module_group)
         YUP_MODULE_DEPENDENCIES "${module_dependencies}"
         YUP_MODULE_ARC_ENABLED "${module_arc_enabled}")
 
+    # ==== Add Java support for Android if available (after target properties are set)
+    if (YUP_PLATFORM_ANDROID AND YUP_BUILD_JAVA_SUPPORT)
+        _yup_module_add_java_support (${module_name})
+    endif()
+
 endfunction()
 
 #==============================================================================

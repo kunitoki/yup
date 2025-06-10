@@ -98,7 +98,7 @@ public class YupMidiSupport
 
     static BluetoothAdapter getDefaultBluetoothAdapter (Context ctx)
     {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S_V2)
+        if (Build.VERSION.SDK_INT < 32) // Build.VERSION_CODES.S_V2
             return BluetoothAdapter.getDefaultAdapter();
 
         return ((BluetoothManager) ctx.getSystemService (BLUETOOTH_SERVICE)).getAdapter();

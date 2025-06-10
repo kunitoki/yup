@@ -72,7 +72,7 @@ JNIEnv* getEnv() noexcept
     return nullptr;
 }
 
-static void JNICALL yup_JavainitialiseYUP (JNIEnv* env, jobject /*jclass*/, jobject context)
+static void JNICALL yup_JavaInitialiseYUP (JNIEnv* env, jobject /*jclass*/, jobject context)
 {
     JNIClassBase::initialiseAllClasses (env, context);
     Thread::initialiseYUP (env, context);
@@ -92,7 +92,7 @@ extern "C" jint JNIEXPORT yup_JNI_OnLoad (JavaVM* vm, void*)
 
     if (yupJavaClass != nullptr)
     {
-        JNINativeMethod method { "initialiseYUP", "(Landroid/content/Context;)V", reinterpret_cast<void*> (yup_JavainitialiseYUP) };
+        JNINativeMethod method { "initialiseYUP", "(Landroid/content/Context;)V", reinterpret_cast<void*> (yup_JavaInitialiseYUP) };
 
         auto status = env->RegisterNatives (yupJavaClass, &method, 1);
         jassert (status == 0);
