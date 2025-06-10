@@ -25,7 +25,7 @@ Example Rive animation display ([source code](./examples/render/source/main.cpp)
 [![Coverage](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg)](https://codecov.io/gh/kunitoki/yup)
 
-<img src="https://codecov.io/gh/kunitoki/yup/graphs/tree.svg?token=IO71C3DR1A" width="99%" />
+<img src="https://codecov.io/gh/kunitoki/yup/graphs/tree.svg?token=IO71C3DR1A" />
 
 ## Introduction
 YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
