@@ -40,7 +40,7 @@
 namespace yup
 {
 
-#if JUCE_MAC
+#if YUP_MAC
 
 class ScopedLowPowerModeDisabler::Pimpl
 {
@@ -61,8 +61,8 @@ public:
 private:
     id activity;
 
-    JUCE_DECLARE_NON_COPYABLE (Pimpl)
-    JUCE_DECLARE_NON_MOVEABLE (Pimpl)
+    YUP_DECLARE_NON_COPYABLE (Pimpl)
+    YUP_DECLARE_NON_MOVEABLE (Pimpl)
 };
 
 #else

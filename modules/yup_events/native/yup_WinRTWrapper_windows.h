@@ -48,7 +48,7 @@ public:
 
     bool isInitialised() const noexcept { return initialised; }
 
-    JUCE_DECLARE_SINGLETON (WinRTWrapper, false)
+    YUP_DECLARE_SINGLETON (WinRTWrapper, false)
 
     //==============================================================================
     template <class ComClass>
@@ -97,7 +97,7 @@ public:
     private:
         HSTRING hstr = nullptr;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScopedHString)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScopedHString)
     };
 
     String hStringToString (HSTRING);
@@ -124,7 +124,7 @@ private:
     RoGetActivationFactoryFuncPtr roGetActivationFactory = nullptr;
 
     //==============================================================================
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WinRTWrapper)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WinRTWrapper)
 };
 
 } // namespace yup

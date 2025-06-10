@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -85,4 +85,4 @@ inline constexpr bool isDetectedExact = detail::isDetectedExact<Expected, Op, Ar
 template <class To, template <class...> class Op, class... Args>
 inline constexpr bool isDetectedConvertible = detail::isDetectedConvertible<To, Op, Args...>::value;
 
-} // namespace juce
+} // namespace yup

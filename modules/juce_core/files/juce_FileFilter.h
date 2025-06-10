@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API FileFilter
+class YUP_API FileFilter
 {
 public:
     //==============================================================================
@@ -84,4 +84,4 @@ protected:
     String description;
 };
 
-} // namespace juce
+} // namespace yup

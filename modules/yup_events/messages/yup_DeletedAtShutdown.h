@@ -53,7 +53,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API DeletedAtShutdown
+class YUP_API DeletedAtShutdown
 {
 protected:
     /** Creates a DeletedAtShutdown object. */
@@ -75,7 +75,7 @@ public:
     static void deleteAll();
 
 private:
-    JUCE_DECLARE_NON_COPYABLE (DeletedAtShutdown)
+    YUP_DECLARE_NON_COPYABLE (DeletedAtShutdown)
 };
 
 } // namespace yup

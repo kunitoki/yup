@@ -43,7 +43,7 @@ namespace yup
 MessageManager::MessageManager() noexcept
     : messageThreadId (Thread::getCurrentThreadId())
 {
-    JUCE_VERSION_ID
+    YUP_VERSION_ID
 
     if (YUPApplicationBase::isStandaloneApp())
         Thread::setCurrentThreadName ("JUCE Message Thread");
@@ -105,7 +105,7 @@ void MessageManager::registerEventLoopCallback (std::function<void()> loopCallba
 }
 
 //==============================================================================
-#if ! (JUCE_MAC || JUCE_IOS || JUCE_WASM)
+#if ! (YUP_MAC || YUP_IOS || YUP_WASM)
 // implemented in platform-specific code (juce_Messaging_linux.cpp, juce_Messaging_android.cpp and juce_Messaging_windows.cpp)
 bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages);
 
@@ -120,7 +120,7 @@ public:
             mm->quitMessageReceived = true;
     }
 
-    JUCE_DECLARE_NON_COPYABLE (QuitMessage)
+    YUP_DECLARE_NON_COPYABLE (QuitMessage)
 };
 
 void MessageManager::runDispatchLoop()
@@ -129,14 +129,14 @@ void MessageManager::runDispatchLoop()
 
     while (quitMessageReceived.get() == 0)
     {
-        JUCE_TRY
+        YUP_TRY
         {
             loopCallback();
 
             if (! juce_dispatchNextMessageOnSystemQueue (false))
                 Thread::sleep (1);
         }
-        JUCE_CATCH_EXCEPTION
+        YUP_CATCH_EXCEPTION
     }
 }
 
@@ -146,7 +146,7 @@ void MessageManager::stopDispatchLoop()
     quitMessagePosted = true;
 }
 
-#if JUCE_MODAL_LOOPS_PERMITTED
+#if YUP_MODAL_LOOPS_PERMITTED
 bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
 {
     jassert (isThisTheMessageThread()); // must only be called by the message thread
@@ -155,14 +155,14 @@ bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
 
     while (quitMessageReceived.get() == 0)
     {
-        JUCE_TRY
+        YUP_TRY
         {
             loopCallback();
 
             if (! juce_dispatchNextMessageOnSystemQueue (millisecondsToRunFor >= 0))
                 Thread::sleep (1);
         }
-        JUCE_CATCH_EXCEPTION
+        YUP_CATCH_EXCEPTION
 
         if (millisecondsToRunFor >= 0 && Time::currentTimeMillis() >= endTime)
             break;
@@ -197,7 +197,7 @@ private:
     MessageCallbackFunction* const func;
     void* const parameter;
 
-    JUCE_DECLARE_NON_COPYABLE (AsyncFunctionCallback)
+    YUP_DECLARE_NON_COPYABLE (AsyncFunctionCallback)
 };
 
 void* MessageManager::callFunctionOnMessageThread (MessageCallbackFunction* func, void* parameter)
@@ -274,7 +274,7 @@ void MessageManager::setCurrentThreadAsMessageThread()
 
     if (messageThreadId.get() != thisThread)
     {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         // This is needed on windows to make sure the message window is created by this thread
         doPlatformSpecificShutdown();
         doPlatformSpecificInitialisation();
@@ -351,7 +351,7 @@ private:
 
     const MessageManager::Lock* owner = nullptr;
 
-    JUCE_DECLARE_NON_COPYABLE (BlockingMessage)
+    YUP_DECLARE_NON_COPYABLE (BlockingMessage)
 };
 
 //==============================================================================
@@ -547,17 +547,17 @@ void MessageManagerLock::exitSignalSent()
 }
 
 //==============================================================================
-JUCE_API void JUCE_CALLTYPE initialiseJuce_GUI()
+YUP_API void YUP_CALLTYPE initialiseJuce_GUI()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         MessageManager::getInstance();
     }
 }
 
-JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI()
+YUP_API void YUP_CALLTYPE shutdownJuce_GUI()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         DeletedAtShutdown::deleteAll();
         MessageManager::deleteInstance();

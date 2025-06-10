@@ -22,7 +22,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 class LocalisedStringsTests : public ::testing::Test
 {

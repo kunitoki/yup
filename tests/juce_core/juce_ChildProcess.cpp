@@ -41,20 +41,20 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST (ChildProcessTests, ReadAllProcesOutput)
 {
-#if JUCE_WINDOWS || JUCE_MAC || JUCE_LINUX || JUCE_BSD
-        ChildProcess p;
+#if YUP_WINDOWS || YUP_MAC || YUP_LINUX || YUP_BSD
+    ChildProcess p;
 
-#if JUCE_WINDOWS
-        EXPECT_TRUE (p.start ("tasklist"));
+#if YUP_WINDOWS
+    EXPECT_TRUE (p.start ("tasklist"));
 #else
-        EXPECT_TRUE (p.start ("ls /"));
+    EXPECT_TRUE (p.start ("ls /"));
 #endif
 
-        auto output = p.readAllProcessOutput();
-        EXPECT_TRUE (output.isNotEmpty());
+    auto output = p.readAllProcessOutput();
+    EXPECT_TRUE (output.isNotEmpty());
 #endif
 }

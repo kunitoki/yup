@@ -43,7 +43,7 @@
 
 #include <functional>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {
@@ -53,7 +53,7 @@ struct TestBaseObj : public ReferenceCountedObject
 
     TestBaseObj() = default;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TestBaseObj)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TestBaseObj)
 };
 
 struct TestDerivedObj final : public TestBaseObj
@@ -62,7 +62,7 @@ struct TestDerivedObj final : public TestBaseObj
 
     TestDerivedObj() = default;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TestDerivedObj)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TestDerivedObj)
 };
 
 struct DestructorObj final : public ReferenceCountedObject
@@ -83,7 +83,7 @@ struct DestructorObj final : public ReferenceCountedObject
     ReferenceCountedArray<DestructorObj>& objectArray;
     int data = 374;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DestructorObj)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DestructorObj)
 };
 } // namespace
 

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -61,7 +61,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API JavascriptEngine final
+class YUP_API JavascriptEngine final
 {
 public:
     /** Creates an instance of the engine.
@@ -129,11 +129,11 @@ public:
     const NamedValueSet& getRootObjectProperties() const noexcept;
 
 private:
-    JUCE_PUBLIC_IN_DLL_BUILD (struct RootObject)
+    YUP_PUBLIC_IN_DLL_BUILD (struct RootObject)
     const ReferenceCountedObjectPtr<RootObject> root;
     void prepareTimeout() const noexcept;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JavascriptEngine)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JavascriptEngine)
 };
 
-} // namespace juce
+} // namespace yup

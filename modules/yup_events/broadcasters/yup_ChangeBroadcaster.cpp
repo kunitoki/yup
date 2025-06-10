@@ -53,7 +53,7 @@ void ChangeBroadcaster::addChangeListener (ChangeListener* const listener)
 {
     // Listeners can only be safely added when the event thread is locked
     // You can  use a MessageManagerLock if you need to call this from another thread.
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     changeListeners.add (listener);
     anyListeners = true;
@@ -63,7 +63,7 @@ void ChangeBroadcaster::removeChangeListener (ChangeListener* const listener)
 {
     // Listeners can only be safely removed when the event thread is locked
     // You can  use a MessageManagerLock if you need to call this from another thread.
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     changeListeners.remove (listener);
     anyListeners = changeListeners.size() > 0;
@@ -73,7 +73,7 @@ void ChangeBroadcaster::removeAllChangeListeners()
 {
     // Listeners can only be safely removed when the event thread is locked
     // You can  use a MessageManagerLock if you need to call this from another thread.
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     changeListeners.clear();
     anyListeners = false;
@@ -88,7 +88,7 @@ void ChangeBroadcaster::sendChangeMessage()
 void ChangeBroadcaster::sendSynchronousChangeMessage()
 {
     // This can only be called by the event thread.
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     broadcastCallback.cancelPendingUpdate();
     callListeners();

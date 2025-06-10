@@ -37,12 +37,12 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 void Logger::outputDebugString (const String& text)
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     if (juce_isRunningUnderBrowser())
     {
         EM_ASM ({ console.log (UTF8ToString ($0)); }, text.toRawUTF8());
@@ -56,7 +56,7 @@ void Logger::outputDebugString (const String& text)
 //==============================================================================
 SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     return WebBrowser;
 #else
     return WASM;
@@ -65,7 +65,7 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 
 String SystemStats::getOperatingSystemName()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     char* platform = reinterpret_cast<char*> (EM_ASM_PTR ({
         var str = (typeof navigator !== 'undefined') ? (navigator.platform || "unknown") : "unknown";
         var lengthBytes = lengthBytesUTF8 (str) + 1;
@@ -95,7 +95,7 @@ bool SystemStats::isOperatingSystem64Bit()
 
 String SystemStats::getUniqueDeviceID()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     char* deviceInfo = reinterpret_cast<char*> (EM_ASM_PTR ({
         var info = "";
         if (typeof navigator !== 'undefined')
@@ -122,7 +122,7 @@ String SystemStats::getUniqueDeviceID()
 
 String SystemStats::getDeviceDescription()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     char* userAgent = reinterpret_cast<char*> (EM_ASM_PTR ({
         var str = (typeof navigator !== 'undefined') ? (navigator.userAgent || "unknown") : "unknown";
         var lengthBytes = lengthBytesUTF8 (str) + 1;
@@ -151,7 +151,7 @@ int SystemStats::getCpuSpeedInMegahertz() { return 0; }
 
 int SystemStats::getMemorySizeInMegabytes()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     int memoryMB = EM_ASM_INT ({
         if ((typeof navigator !== 'undefined') && "deviceMemory" in navigator)
             return navigator.deviceMemory * 1024;
@@ -177,7 +177,7 @@ String SystemStats::getComputerName() { return {}; }
 
 String SystemStats::getUserLanguage()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     char* language = reinterpret_cast<char*> (EM_ASM_PTR ({
         var str = (typeof navigator !== 'undefined') ? (navigator.language || "") : "";
         var lengthBytes = lengthBytesUTF8 (str) + 1;
@@ -197,7 +197,7 @@ String SystemStats::getUserLanguage()
 
 String SystemStats::getUserRegion()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     char* locale = reinterpret_cast<char*> (EM_ASM_PTR ({
         var str = "";
         if (typeof Intl !== 'undefined' && Intl.DateTimeFormat)
@@ -230,7 +230,7 @@ String SystemStats::getDisplayLanguage()
 //==============================================================================
 void CPUInformation::initialise() noexcept
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     int hwConcurrency = EM_ASM_INT ({
         if (typeof navigator !== 'undefined' && "hardwareConcurrency" in navigator)
             return navigator.hardwareConcurrency;
@@ -277,9 +277,9 @@ bool Time::setSystemTimeToThisTime() const
     return false;
 }
 
-JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
+YUP_API bool YUP_CALLTYPE juce_isRunningUnderDebugger() noexcept
 {
     return false;
 }
 
-} // namespace juce
+} // namespace yup

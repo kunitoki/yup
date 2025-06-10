@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if JUCE_WINDOWS || DOXYGEN
+#if YUP_WINDOWS || DOXYGEN
 
 /**
     Contains some static helper functions for manipulating the MS Windows registry
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API WindowsRegistry
+class YUP_API WindowsRegistry
 {
 public:
     /** These values can be used to specify whether the 32- or 64-bit registry should be used.
@@ -72,7 +72,7 @@ public:
         The path is a string for the entire path of a value in the registry,
         e.g. "HKEY_CURRENT_USER\Software\foo\bar"
     */
-    static String JUCE_CALLTYPE getValue (const String& regValuePath,
+    static String YUP_CALLTYPE getValue (const String& regValuePath,
                                           const String& defaultValue = String(),
                                           WoW64Mode mode = WoW64_Default);
 
@@ -81,39 +81,39 @@ public:
         e.g. "HKEY_CURRENT_USER\Software\foo\bar"
         @returns a DWORD indicating the type of the key.
     */
-    static uint32 JUCE_CALLTYPE getBinaryValue (const String& regValuePath, MemoryBlock& resultData, WoW64Mode mode = WoW64_Default);
+    static uint32 YUP_CALLTYPE getBinaryValue (const String& regValuePath, MemoryBlock& resultData, WoW64Mode mode = WoW64_Default);
 
     /** Sets a registry value as a string.
         This will take care of creating any groups needed to get to the given registry value.
     */
-    static bool JUCE_CALLTYPE setValue (const String& regValuePath, const String& value, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE setValue (const String& regValuePath, const String& value, WoW64Mode mode = WoW64_Default);
 
     /** Sets a registry value as a DWORD.
         This will take care of creating any groups needed to get to the given registry value.
     */
-    static bool JUCE_CALLTYPE setValue (const String& regValuePath, uint32 value, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE setValue (const String& regValuePath, uint32 value, WoW64Mode mode = WoW64_Default);
 
     /** Sets a registry value as a QWORD.
         This will take care of creating any groups needed to get to the given registry value.
     */
-    static bool JUCE_CALLTYPE setValue (const String& regValuePath, uint64 value, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE setValue (const String& regValuePath, uint64 value, WoW64Mode mode = WoW64_Default);
 
     /** Sets a registry value as a binary block.
         This will take care of creating any groups needed to get to the given registry value.
     */
-    static bool JUCE_CALLTYPE setValue (const String& regValuePath, const MemoryBlock& value, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE setValue (const String& regValuePath, const MemoryBlock& value, WoW64Mode mode = WoW64_Default);
 
     /** Returns true if the given value exists in the registry. */
-    static bool JUCE_CALLTYPE valueExists (const String& regValuePath, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE valueExists (const String& regValuePath, WoW64Mode mode = WoW64_Default);
 
     /** Returns true if the given key exists in the registry. */
-    static bool JUCE_CALLTYPE keyExists (const String& regKeyPath, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE keyExists (const String& regKeyPath, WoW64Mode mode = WoW64_Default);
 
     /** Deletes a registry value. */
-    static bool JUCE_CALLTYPE deleteValue (const String& regValuePath, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE deleteValue (const String& regValuePath, WoW64Mode mode = WoW64_Default);
 
     /** Deletes a registry key (which is registry-talk for 'folder'). */
-    static bool JUCE_CALLTYPE deleteKey (const String& regKeyPath, WoW64Mode mode = WoW64_Default);
+    static bool YUP_CALLTYPE deleteKey (const String& regKeyPath, WoW64Mode mode = WoW64_Default);
 
     /** Creates a file association in the registry.
 
@@ -132,7 +132,7 @@ public:
                                     association in HKEY_CURRENT_USER.
         @param mode                 the WoW64 mode to use for choosing the database
     */
-    static bool JUCE_CALLTYPE registerFileAssociation (const String& fileExtension,
+    static bool YUP_CALLTYPE registerFileAssociation (const String& fileExtension,
                                                        const String& symbolicDescription,
                                                        const String& fullDescription,
                                                        const File& targetExecutable,
@@ -142,9 +142,9 @@ public:
 
 private:
     WindowsRegistry() = delete;
-    JUCE_DECLARE_NON_COPYABLE (WindowsRegistry)
+    YUP_DECLARE_NON_COPYABLE (WindowsRegistry)
 };
 
 #endif
 
-} // namespace juce
+} // namespace yup

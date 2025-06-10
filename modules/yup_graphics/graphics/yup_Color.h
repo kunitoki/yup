@@ -30,7 +30,7 @@ namespace yup
     converting to and from HSL (Hue, Saturation, Luminance), and for performing operations like brightening,
     darkening, and contrasting.
 */
-class JUCE_API Color
+class YUP_API Color
 {
 public:
     //==============================================================================

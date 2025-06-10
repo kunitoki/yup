@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 MemoryBlock::MemoryBlock() noexcept {}
@@ -515,4 +515,4 @@ bool MemoryBlock::fromBase64Encoding (StringRef s)
     }
 }
 
-} // namespace juce
+} // namespace yup

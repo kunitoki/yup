@@ -21,7 +21,7 @@
 
 #import <Foundation/Foundation.h>
 
-namespace juce
+namespace yup
 {
 
 static void printEventFlags(FSEventStreamEventFlags flags)
@@ -90,7 +90,7 @@ static void printEventFlags(FSEventStreamEventFlags flags)
 
     output << ")";
 
-    juce::Logger::getCurrentLogger()->writeToLog(output);
+    yup::Logger::getCurrentLogger()->writeToLog(output);
 }
 
 class Watchdog::Impl final
@@ -234,4 +234,4 @@ class Watchdog::Impl final
     struct FSEventStreamContext context;
 };
 
-} // namespace juce
+} // namespace yup

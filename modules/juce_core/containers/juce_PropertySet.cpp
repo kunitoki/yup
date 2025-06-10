@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 PropertySet::PropertySet (bool ignoreCaseOfKeyNames)
@@ -264,4 +264,4 @@ void PropertySet::propertyChanged()
 {
 }
 
-} // namespace juce
+} // namespace yup

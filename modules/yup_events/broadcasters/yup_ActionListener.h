@@ -48,7 +48,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API ActionListener
+class YUP_API ActionListener
 {
 public:
     /** Destructor. */

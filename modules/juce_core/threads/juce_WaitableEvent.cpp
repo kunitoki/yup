@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 WaitableEvent::WaitableEvent (bool manualReset) noexcept
@@ -89,4 +89,4 @@ void WaitableEvent::reset() const
     triggered = false;
 }
 
-} // namespace juce
+} // namespace yup

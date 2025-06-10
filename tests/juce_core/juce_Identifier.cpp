@@ -25,7 +25,7 @@
 
 #include <unordered_map>
 
-using namespace juce;
+using namespace yup;
 
 TEST (IdentifierTests, DefaultConstructorCreatesNullIdentifier)
 {
@@ -116,9 +116,9 @@ TEST (IdentifierTests, ConversionToCharPointer)
 TEST (Identifier, UseInAssociativeContainers)
 {
     std::unordered_map<Identifier, Identifier> ids;
-    ids[Identifier("test1")] = Identifier("test2");
+    ids[Identifier ("test1")] = Identifier ("test2");
 
-    ASSERT_TRUE(ids.find(Identifier("test1")) != ids.end());
-    EXPECT_EQ(ids.find(Identifier("test1"))->first, Identifier("test1"));
-    EXPECT_EQ(ids.find(Identifier("test1"))->second, Identifier("test2"));
+    ASSERT_TRUE (ids.find (Identifier ("test1")) != ids.end());
+    EXPECT_EQ (ids.find (Identifier ("test1"))->first, Identifier ("test1"));
+    EXPECT_EQ (ids.find (Identifier ("test1"))->second, Identifier ("test2"));
 }

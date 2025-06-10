@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API MemoryOutputStream : public OutputStream
+class YUP_API MemoryOutputStream : public OutputStream
 {
 public:
     //==============================================================================
@@ -143,10 +143,10 @@ private:
     void trimExternalBlockSize();
     char* prepareToWrite (size_t);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryOutputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryOutputStream)
 };
 
 /** Copies all the data that has been written to a MemoryOutputStream into another stream. */
-OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const MemoryOutputStream& streamToRead);
+OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const MemoryOutputStream& streamToRead);
 
-} // namespace juce
+} // namespace yup

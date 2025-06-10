@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 MemoryInputStream::MemoryInputStream (const void* sourceData, size_t sourceDataSize, bool keepCopy)
@@ -125,7 +125,7 @@ void MemoryInputStream::skipNextBytes (int64 numBytesToSkip)
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 class MemoryStreamTests final : public UnitTest
 {
@@ -245,4 +245,4 @@ static MemoryStreamTests memoryInputStreamUnitTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

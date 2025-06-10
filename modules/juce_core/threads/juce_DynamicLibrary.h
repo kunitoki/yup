@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API DynamicLibrary
+class YUP_API DynamicLibrary
 {
 public:
     /** Creates an unopened DynamicLibrary object.
@@ -97,7 +97,7 @@ public:
 private:
     void* handle = nullptr;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DynamicLibrary)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DynamicLibrary)
 };
 
-} // namespace juce
+} // namespace yup

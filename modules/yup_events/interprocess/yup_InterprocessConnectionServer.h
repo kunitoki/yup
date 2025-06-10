@@ -53,7 +53,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API InterprocessConnectionServer : private Thread
+class YUP_API InterprocessConnectionServer : private Thread
 {
 public:
     //==============================================================================
@@ -117,7 +117,7 @@ private:
 
     void run() override;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InterprocessConnectionServer)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InterprocessConnectionServer)
 };
 
 } // namespace yup

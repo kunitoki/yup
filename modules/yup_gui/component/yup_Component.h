@@ -30,7 +30,7 @@ namespace yup
     It provides a common interface for all components, and is used to create and manage GUI components.
     It is a lightweight class that is used to create and manage GUI components.
  */
-class JUCE_API Component
+class YUP_API Component
 {
 public:
     //==============================================================================
@@ -937,7 +937,7 @@ private:
     int counter = 2;
 #endif
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
 };
 
 } // namespace yup

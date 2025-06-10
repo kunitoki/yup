@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API AndroidDocumentInputSource : public InputSource
+class YUP_API AndroidDocumentInputSource : public InputSource
 {
 public:
     //==============================================================================
@@ -95,4 +95,4 @@ private:
     AndroidDocument document;
 };
 
-} // namespace juce
+} // namespace yup

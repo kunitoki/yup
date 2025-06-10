@@ -38,7 +38,7 @@
 */
 
 // clang-format off
-#ifdef JUCE_CORE_H_INCLUDED
+#ifdef YUP_CORE_H_INCLUDED
 /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
@@ -48,10 +48,10 @@
 #endif
 // clang-format on
 
-#define JUCE_CORE_INCLUDE_OBJC_HELPERS 1
-#define JUCE_CORE_INCLUDE_COM_SMART_PTR 1
-#define JUCE_CORE_INCLUDE_NATIVE_HEADERS 1
-#define JUCE_CORE_INCLUDE_JNI_HELPERS 1
+#define YUP_CORE_INCLUDE_OBJC_HELPERS 1
+#define YUP_CORE_INCLUDE_COM_SMART_PTR 1
+#define YUP_CORE_INCLUDE_NATIVE_HEADERS 1
+#define YUP_CORE_INCLUDE_JNI_HELPERS 1
 
 #include "juce_core.h"
 
@@ -62,28 +62,28 @@
 #include <locale>
 #include <thread>
 
-#if ! (JUCE_ANDROID || JUCE_BSD)
+#if ! (YUP_ANDROID || YUP_BSD)
 #include <sys/timeb.h>
 #include <cwctype>
 #endif
 
-#if JUCE_WINDOWS
-#if JUCE_MINGW
+#if YUP_WINDOWS
+#if YUP_MINGW
 #include <ws2spi.h>
 #include <cstdio>
 #include <locale.h>
 #else
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4091)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4091)
 #include <Dbghelp.h>
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
-#if ! JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 #pragma comment(lib, "DbgHelp.lib")
 #endif
 #endif
 
 #else
-#if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
+#if YUP_LINUX || YUP_BSD || YUP_ANDROID
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/errno.h>
@@ -91,7 +91,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include <netinet/in.h>
 #endif
 
-#if JUCE_WASM
+#if YUP_WASM
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -102,12 +102,12 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include <netinet/in.h>
 #endif
 
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
 #include <emscripten.h>
 #include <emscripten/fetch.h>
 #endif
 
-#if JUCE_LINUX || JUCE_BSD
+#if YUP_LINUX || YUP_BSD
 #include <stdio.h>
 #include <limits.h>
 #include <langinfo.h>
@@ -119,7 +119,7 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#if JUCE_USE_CURL
+#if YUP_USE_CURL
 #include <curl/curl.h>
 #endif
 #endif
@@ -133,29 +133,29 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 #include <net/if.h>
 #include <sys/ioctl.h>
 
-#if ! (JUCE_WASM || (JUCE_ANDROID && __ANDROID_API__ < 33))
+#if ! (YUP_WASM || (YUP_ANDROID && __ANDROID_API__ < 33))
 #include <execinfo.h>
 #endif
 
-#if ! (JUCE_WASM || JUCE_MINGW)
+#if ! (YUP_WASM || YUP_MINGW)
 #include <cxxabi.h>
 #endif
 
 extern char** environ;
 #endif
 
-#if JUCE_MAC
+#if YUP_MAC
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <semaphore.h>
 #endif
 
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 #include <xlocale.h>
 #include <mach/mach.h>
 #endif
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
 #include <ifaddrs.h>
 #include <unwind.h>
 #include <android/log.h>
@@ -232,21 +232,21 @@ extern char** environ;
 #include "native/juce_PlatformTimerListener.h"
 
 //==============================================================================
-#if ! JUCE_WINDOWS
+#if ! YUP_WINDOWS
 #include "native/juce_SharedCode_posix.h"
 #include "native/juce_NamedPipe_posix.cpp"
-#if ! JUCE_ANDROID || __ANDROID_API__ >= 24
+#if ! YUP_ANDROID || __ANDROID_API__ >= 24
 #include "native/juce_IPAddress_posix.h"
 #endif
 #endif
 
 //==============================================================================
-#if JUCE_MAC
+#if YUP_MAC
 #include "native/juce_Watchdog_mac.h"
 #endif
 
 //==============================================================================
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 #include "native/juce_Files_apple.mm"
 #include "native/juce_Network_apple.mm"
 #include "native/juce_Strings_apple.mm"
@@ -257,7 +257,7 @@ extern char** environ;
 #include "native/juce_Process_apple.mm"
 
 //==============================================================================
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
 #include "native/juce_Files_windows.cpp"
 #include "native/juce_Network_windows.cpp"
 #include "native/juce_Registry_windows.cpp"
@@ -267,11 +267,11 @@ extern char** environ;
 #include "native/juce_Watchdog_windows.h"
 
 //==============================================================================
-#elif JUCE_LINUX
+#elif YUP_LINUX
 #include "native/juce_CommonFile_linux.cpp"
 #include "native/juce_Files_linux.cpp"
 #include "native/juce_Network_linux.cpp"
-#if JUCE_USE_CURL
+#if YUP_USE_CURL
 #include "native/juce_Network_curl.cpp"
 #endif
 #include "native/juce_SystemStats_linux.cpp"
@@ -280,11 +280,11 @@ extern char** environ;
 #include "native/juce_Watchdog_linux.h"
 
 //==============================================================================
-#elif JUCE_BSD
+#elif YUP_BSD
 #include "native/juce_CommonFile_linux.cpp"
 #include "native/juce_Files_linux.cpp"
 #include "native/juce_Network_linux.cpp"
-#if JUCE_USE_CURL
+#if YUP_USE_CURL
 #include "native/juce_Network_curl.cpp"
 #endif
 #include "native/juce_SharedCode_intel.h"
@@ -293,7 +293,7 @@ extern char** environ;
 #include "native/juce_PlatformTimer_generic.cpp"
 
 //==============================================================================
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
 #include "native/juce_CommonFile_linux.cpp"
 #include "native/juce_JNIHelpers_android.cpp"
 #include "native/juce_Files_android.cpp"
@@ -305,7 +305,7 @@ extern char** environ;
 #include "native/juce_PlatformTimer_generic.cpp"
 
 //==============================================================================
-#elif JUCE_WASM
+#elif YUP_WASM
 #include "native/juce_WebAssemblyHelpers.h"
 #include "native/juce_SystemStats_wasm.cpp"
 #include "native/juce_Files_wasm.cpp"
@@ -321,14 +321,14 @@ extern char** environ;
 #include "threads/juce_WaitableEvent.cpp"
 #include "network/juce_URL.cpp"
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 #include "threads/juce_ChildProcess.cpp"
 #include "network/juce_WebInputStream.cpp"
 #include "streams/juce_URLInputSource.cpp"
 #endif
 
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 #include "maths/juce_MathsFunctions_test.cpp"
 #endif
 
@@ -343,7 +343,7 @@ extern char** environ;
 #include "files/juce_Watchdog.cpp"
 
 //==============================================================================
-namespace juce
+namespace yup
 {
 /*
     As the very long class names here try to explain, the purpose of this code is to cause
@@ -353,7 +353,7 @@ namespace juce
     then each will be generating code with different memory layouts for the classes, and
     you'll get subtle and hard-to-track-down memory corruption bugs!
 */
-#if JUCE_DEBUG
+#if YUP_DEBUG
 this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept
 {
 }
@@ -362,4 +362,4 @@ this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode :
 {
 }
 #endif
-} // namespace juce
+} // namespace yup

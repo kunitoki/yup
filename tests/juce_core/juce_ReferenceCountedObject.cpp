@@ -24,7 +24,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 class TestClass : public ReferenceCountedObject
 {

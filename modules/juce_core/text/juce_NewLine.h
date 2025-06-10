@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API NewLine
+class YUP_API NewLine
 {
 public:
     /** Returns the default new-line sequence that the library uses.
@@ -99,4 +99,4 @@ inline String operator+ (String s1, const NewLine&) { return s1 += NewLine::getD
 
 inline String operator+ (const NewLine&, const char* s2) { return String (NewLine::getDefault()) + s2; }
 
-} // namespace juce
+} // namespace yup

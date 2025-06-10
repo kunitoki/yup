@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 void Logger::outputDebugString (const String& text)
@@ -58,4 +58,4 @@ void Logger::outputDebugString (const String& text)
     }
 }
 
-} // namespace juce
+} // namespace yup

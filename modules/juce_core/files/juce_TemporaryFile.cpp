@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static File createTempFile (const File& parentDirectory, String name, const String& suffix, int optionFlags)
@@ -148,4 +148,4 @@ bool TemporaryFile::deleteTemporaryFile() const
     return false;
 }
 
-} // namespace juce
+} // namespace yup

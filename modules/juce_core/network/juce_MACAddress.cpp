@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 MACAddress::MACAddress() noexcept
@@ -115,4 +115,4 @@ bool MACAddress::operator== (const MACAddress& other) const noexcept { return me
 
 bool MACAddress::operator!= (const MACAddress& other) const noexcept { return ! operator== (other); }
 
-} // namespace juce
+} // namespace yup

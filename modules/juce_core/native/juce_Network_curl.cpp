@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct CURLSymbols
@@ -62,30 +62,30 @@ struct CURLSymbols
     {
         std::unique_ptr<CURLSymbols> symbols (new CURLSymbols);
 
-#if JUCE_LOAD_CURL_SYMBOLS_LAZILY
+#if YUP_LOAD_CURL_SYMBOLS_LAZILY
         const ScopedLock sl (getLibcurlLock());
-#define JUCE_INIT_CURL_SYMBOL(name)               \
+#define YUP_INIT_CURL_SYMBOL(name)               \
 if (! symbols->loadSymbol (symbols->name, #name)) \
 return nullptr;
 #else
-#define JUCE_INIT_CURL_SYMBOL(name) symbols->name = ::name;
+#define YUP_INIT_CURL_SYMBOL(name) symbols->name = ::name;
 #endif
 
-        JUCE_INIT_CURL_SYMBOL (curl_easy_init)
-        JUCE_INIT_CURL_SYMBOL (curl_easy_setopt)
-        JUCE_INIT_CURL_SYMBOL (curl_easy_cleanup)
-        JUCE_INIT_CURL_SYMBOL (curl_easy_getinfo)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_add_handle)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_cleanup)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_fdset)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_info_read)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_init)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_perform)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_remove_handle)
-        JUCE_INIT_CURL_SYMBOL (curl_multi_timeout)
-        JUCE_INIT_CURL_SYMBOL (curl_slist_append)
-        JUCE_INIT_CURL_SYMBOL (curl_slist_free_all)
-        JUCE_INIT_CURL_SYMBOL (curl_version_info)
+        YUP_INIT_CURL_SYMBOL (curl_easy_init)
+        YUP_INIT_CURL_SYMBOL (curl_easy_setopt)
+        YUP_INIT_CURL_SYMBOL (curl_easy_cleanup)
+        YUP_INIT_CURL_SYMBOL (curl_easy_getinfo)
+        YUP_INIT_CURL_SYMBOL (curl_multi_add_handle)
+        YUP_INIT_CURL_SYMBOL (curl_multi_cleanup)
+        YUP_INIT_CURL_SYMBOL (curl_multi_fdset)
+        YUP_INIT_CURL_SYMBOL (curl_multi_info_read)
+        YUP_INIT_CURL_SYMBOL (curl_multi_init)
+        YUP_INIT_CURL_SYMBOL (curl_multi_perform)
+        YUP_INIT_CURL_SYMBOL (curl_multi_remove_handle)
+        YUP_INIT_CURL_SYMBOL (curl_multi_timeout)
+        YUP_INIT_CURL_SYMBOL (curl_slist_append)
+        YUP_INIT_CURL_SYMBOL (curl_slist_free_all)
+        YUP_INIT_CURL_SYMBOL (curl_version_info)
 
         return symbols;
     }
@@ -101,7 +101,7 @@ return nullptr;
 private:
     CURLSymbols() = default;
 
-#if JUCE_LOAD_CURL_SYMBOLS_LAZILY
+#if YUP_LOAD_CURL_SYMBOLS_LAZILY
     static DynamicLibrary& getLibcurl()
     {
         const ScopedLock sl (getLibcurlLock());
@@ -682,7 +682,7 @@ public:
     //==============================================================================
     CriticalSection cleanupLock;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocation, const DownloadTaskOptions& options)
@@ -690,4 +690,4 @@ std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocati
     return URL::DownloadTask::createFallbackDownloader (*this, targetLocation, options);
 }
 
-} // namespace juce
+} // namespace yup

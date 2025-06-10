@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -56,7 +56,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Thread
+class YUP_API Thread
 {
 public:
     //==============================================================================
@@ -101,7 +101,7 @@ public:
         [[nodiscard]] RealtimeOptions withPriority (int newPriority) const
         {
             jassert (isPositiveAndNotGreaterThan (newPriority, 10));
-            return withMember (*this, &RealtimeOptions::priority, juce::jlimit (0, 10, newPriority));
+            return withMember (*this, &RealtimeOptions::priority, yup::jlimit (0, 10, newPriority));
         }
 
         /** Specify the expected amount of processing time required each time the thread wakes up.
@@ -409,7 +409,7 @@ public:
 
     //==============================================================================
     /** Used to receive callbacks for thread exit calls */
-    class JUCE_API Listener
+    class YUP_API Listener
     {
     public:
         virtual ~Listener() = default;
@@ -449,7 +449,7 @@ public:
 
         @see setAffinityMask
     */
-    static void JUCE_CALLTYPE setCurrentThreadAffinityMask (uint32 affinityMask);
+    static void YUP_CALLTYPE setCurrentThreadAffinityMask (uint32 affinityMask);
 
     //==============================================================================
     /** Suspends the execution of the current thread until the specified timeout period
@@ -459,14 +459,14 @@ public:
         be woken up so it should only be used for short periods of time and when other
         methods such as using a WaitableEvent or CriticalSection are not possible.
     */
-    static void JUCE_CALLTYPE sleep (int milliseconds);
+    static void YUP_CALLTYPE sleep (int milliseconds);
 
     /** Yields the current thread's CPU time-slot and allows a new thread to run.
 
         If there are no other threads of equal or higher priority currently running then
         this will return immediately and the current thread will continue to run.
     */
-    static void JUCE_CALLTYPE yield();
+    static void YUP_CALLTYPE yield();
 
     //==============================================================================
     /** Suspends the execution of this thread until either the specified timeout period
@@ -500,14 +500,14 @@ public:
         @returns    a unique identifier that identifies the calling thread.
         @see getThreadId
     */
-    static ThreadID JUCE_CALLTYPE getCurrentThreadId();
+    static ThreadID YUP_CALLTYPE getCurrentThreadId();
 
     /** Finds the thread object that is currently running.
 
         Note that the main UI thread (or other non-JUCE threads) don't have a Thread
         object associated with them, so this will return nullptr.
     */
-    static Thread* JUCE_CALLTYPE getCurrentThread();
+    static Thread* YUP_CALLTYPE getCurrentThread();
 
     /** Returns the ID of this thread.
 
@@ -526,9 +526,9 @@ public:
 
         Different OSes may place different length or content limits on this name.
     */
-    static void JUCE_CALLTYPE setCurrentThreadName (const String& newThreadName);
+    static void YUP_CALLTYPE setCurrentThreadName (const String& newThreadName);
 
-#if JUCE_ANDROID || DOXYGEN
+#if YUP_ANDROID || DOXYGEN
     //==============================================================================
     /** Initialises the JUCE subsystem for projects not created by the Projucer
 
@@ -609,12 +609,12 @@ private:
     std::atomic<bool> shouldExit { false };
     ListenerList<Listener, Array<Listener*, CriticalSection>> listeners;
 
-#if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD || JUCE_WASM
+#if YUP_ANDROID || YUP_LINUX || YUP_BSD || YUP_WASM
     std::atomic<Priority> priority;
 #endif
 
 #ifndef DOXYGEN
-    friend void JUCE_API juce_threadEntryPoint (void*);
+    friend void YUP_API juce_threadEntryPoint (void*);
 #endif
 
     bool startThreadInternal (Priority);
@@ -623,7 +623,7 @@ private:
     void killThread();
     void threadEntryPoint();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Thread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Thread)
 };
 
-} // namespace juce
+} // namespace yup

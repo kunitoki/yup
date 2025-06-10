@@ -37,21 +37,21 @@
   ==============================================================================
 */
 
-#if ! defined(DOXYGEN) && (JUCE_MAC || JUCE_IOS)
+#if ! defined(DOXYGEN) && (YUP_MAC || YUP_IOS)
 // Annoyingly we can only forward-declare a typedef by forward-declaring the
 // aliased type
 #if __has_attribute(objc_bridge)
-#define JUCE_CF_BRIDGED_TYPE(T) __attribute__ ((objc_bridge (T)))
+#define YUP_CF_BRIDGED_TYPE(T) __attribute__ ((objc_bridge (T)))
 #else
-#define JUCE_CF_BRIDGED_TYPE(T)
+#define YUP_CF_BRIDGED_TYPE(T)
 #endif
 
-typedef const struct JUCE_CF_BRIDGED_TYPE (NSString) __CFString* CFStringRef;
+typedef const struct YUP_CF_BRIDGED_TYPE (NSString) __CFString* CFStringRef;
 
-#undef JUCE_CF_BRIDGED_TYPE
+#undef YUP_CF_BRIDGED_TYPE
 #endif
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -66,7 +66,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API String final
+class YUP_API String final
 {
 public:
     //==============================================================================
@@ -180,7 +180,7 @@ public:
 
     /** This is the character encoding type used internally to store the string.
 
-        By setting the value of JUCE_STRING_UTF_TYPE to 8, 16, or 32, you can change the
+        By setting the value of YUP_STRING_UTF_TYPE to 8, 16, or 32, you can change the
         internal storage format of the String class. UTF-8 uses the least space (if your strings
         contain few extended characters), but call operator[] involves iterating the string to find
         the required index. UTF-32 provides instant random access to its characters, but uses 4 bytes
@@ -190,14 +190,14 @@ public:
         It doesn't matter too much which format you pick, because the toUTF8(), toUTF16() and
         toUTF32() methods let you access the string's content in any of the other formats.
     */
-#if (JUCE_STRING_UTF_TYPE == 32)
+#if (YUP_STRING_UTF_TYPE == 32)
     using CharPointerType = CharPointer_UTF32;
-#elif (JUCE_STRING_UTF_TYPE == 16)
+#elif (YUP_STRING_UTF_TYPE == 16)
     using CharPointerType = CharPointer_UTF16;
-#elif (DOXYGEN || JUCE_STRING_UTF_TYPE == 8)
+#elif (DOXYGEN || YUP_STRING_UTF_TYPE == 8)
     using CharPointerType = CharPointer_UTF8;
 #else
-#error "You must set the value of JUCE_STRING_UTF_TYPE to be either 8, 16, or 32!"
+#error "You must set the value of YUP_STRING_UTF_TYPE to be either 8, 16, or 32!"
 #endif
 
     //==============================================================================
@@ -242,7 +242,7 @@ public:
     String& operator+= (char characterToAppend);
     /** Appends a character at the end of this string. */
     String& operator+= (wchar_t characterToAppend);
-#if ! JUCE_NATIVE_WCHAR_IS_UTF32
+#if ! YUP_NATIVE_WCHAR_IS_UTF32
     /** Appends a character at the end of this string. */
     String& operator+= (juce_wchar characterToAppend);
 #endif
@@ -962,17 +962,17 @@ public:
 
         // BEST
         for (auto c : str)
-            JUCE_DBG (c);
+            YUP_DBG (c);
 
         // GOOD
         for (auto ptr = str.begin(), end = str.end(); ptr != end; ++ptr)
-            JUCE_DBG (*ptr);
+            YUP_DBG (*ptr);
 
-        std::for_each (str.begin(), str.end(), [] (juce_wchar c) { JUCE_DBG (c); });
+        std::for_each (str.begin(), str.end(), [] (juce_wchar c) { YUP_DBG (c); });
 
         // BAD
         for (auto ptr = str.begin(); ptr != str.end(); ++ptr)
-            JUCE_DBG (*ptr);
+            YUP_DBG (*ptr);
         @endcode
     */
     CharPointerType end() const { return begin().findTerminatingNull(); }
@@ -1337,7 +1337,7 @@ public:
     void swapWith (String& other) noexcept;
 
     //==============================================================================
-#if JUCE_MAC || JUCE_IOS || DOXYGEN
+#if YUP_MAC || YUP_IOS || DOXYGEN
     /** OSX ONLY - Creates a String from an OSX CFString. */
     static String fromCFString (CFStringRef cfString);
 
@@ -1393,114 +1393,114 @@ private:
 
 //==============================================================================
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (const char* string1, const String& string2);
+YUP_API String YUP_CALLTYPE operator+ (const char* string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (const wchar_t* string1, const String& string2);
+YUP_API String YUP_CALLTYPE operator+ (const wchar_t* string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (char string1, const String& string2);
+YUP_API String YUP_CALLTYPE operator+ (char string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (wchar_t string1, const String& string2);
-#if ! JUCE_NATIVE_WCHAR_IS_UTF32
+YUP_API String YUP_CALLTYPE operator+ (wchar_t string1, const String& string2);
+#if ! YUP_NATIVE_WCHAR_IS_UTF32
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (juce_wchar string1, const String& string2);
+YUP_API String YUP_CALLTYPE operator+ (juce_wchar string1, const String& string2);
 #endif
 
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, const String& string2);
+YUP_API String YUP_CALLTYPE operator+ (String string1, const String& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, const char* string2);
+YUP_API String YUP_CALLTYPE operator+ (String string1, const char* string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, const wchar_t* string2);
+YUP_API String YUP_CALLTYPE operator+ (String string1, const wchar_t* string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, const std::string& string2);
+YUP_API String YUP_CALLTYPE operator+ (String string1, const std::string& string2);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, char characterToAppend);
+YUP_API String YUP_CALLTYPE operator+ (String string1, char characterToAppend);
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, wchar_t characterToAppend);
-#if ! JUCE_NATIVE_WCHAR_IS_UTF32
+YUP_API String YUP_CALLTYPE operator+ (String string1, wchar_t characterToAppend);
+#if ! YUP_NATIVE_WCHAR_IS_UTF32
 /** Concatenates two strings. */
-JUCE_API String JUCE_CALLTYPE operator+ (String string1, juce_wchar characterToAppend);
+YUP_API String YUP_CALLTYPE operator+ (String string1, juce_wchar characterToAppend);
 #endif
 
 //==============================================================================
 /** Appends a character at the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, char characterToAppend);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, char characterToAppend);
 /** Appends a character at the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, wchar_t characterToAppend);
-#if ! JUCE_NATIVE_WCHAR_IS_UTF32
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, wchar_t characterToAppend);
+#if ! YUP_NATIVE_WCHAR_IS_UTF32
 /** Appends a character at the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, juce_wchar characterToAppend);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, juce_wchar characterToAppend);
 #endif
 
 /** Appends a string to the end of the first one. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const char* string2);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const char* string2);
 /** Appends a string to the end of the first one. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const wchar_t* string2);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const wchar_t* string2);
 /** Appends a string to the end of the first one. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const String& string2);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const String& string2);
 /** Appends a string to the end of the first one. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, StringRef string2);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, StringRef string2);
 /** Appends a string to the end of the first one. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const std::string& string2);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const std::string& string2);
 
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, uint8 number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, uint8 number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, short number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, short number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, int number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, int number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, long number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, long number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, unsigned long number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, unsigned long number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, int64 number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, int64 number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, uint64 number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, uint64 number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, float number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, float number);
 /** Appends a decimal number to the end of a string. */
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, double number);
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, double number);
 
 #ifndef DOXYGEN
 // Automatically creating a String from a bool opens up lots of nasty type conversion edge cases.
 // If you want a String representation of a bool you can cast the bool to an int first.
-String& JUCE_CALLTYPE operator<< (String&, bool) = delete;
+String& YUP_CALLTYPE operator<< (String&, bool) = delete;
 #endif
 
 //==============================================================================
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, const String& string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, const String& string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, const char* string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, const char* string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, const wchar_t* string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, const wchar_t* string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, CharPointer_UTF8 string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, CharPointer_UTF8 string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, CharPointer_UTF16 string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, CharPointer_UTF16 string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, CharPointer_UTF32 string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, CharPointer_UTF32 string2) noexcept;
 
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, const String& string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, const String& string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, const char* string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, const char* string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, const wchar_t* string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, const wchar_t* string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, CharPointer_UTF8 string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, CharPointer_UTF8 string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, CharPointer_UTF16 string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, CharPointer_UTF16 string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, CharPointer_UTF32 string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, CharPointer_UTF32 string2) noexcept;
 
 //==============================================================================
 /** This operator allows you to write a juce String directly to std output streams.
     This is handy for writing strings to std::cout, std::cerr, etc.
 */
 template <class traits>
-std::basic_ostream<char, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream<char, traits>& stream, const String& stringToWrite)
+std::basic_ostream<char, traits>& YUP_CALLTYPE operator<< (std::basic_ostream<char, traits>& stream, const String& stringToWrite)
 {
     return stream << stringToWrite.toRawUTF8();
 }
@@ -1509,26 +1509,26 @@ std::basic_ostream<char, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream<c
     This is handy for writing strings to std::wcout, std::wcerr, etc.
 */
 template <class traits>
-std::basic_ostream<wchar_t, traits>& JUCE_CALLTYPE operator<< (std::basic_ostream<wchar_t, traits>& stream, const String& stringToWrite)
+std::basic_ostream<wchar_t, traits>& YUP_CALLTYPE operator<< (std::basic_ostream<wchar_t, traits>& stream, const String& stringToWrite)
 {
     return stream << stringToWrite.toWideCharPointer();
 }
 
 /** Writes a string to an OutputStream as UTF8. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const String& stringToWrite);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const String& stringToWrite);
 
 /** Writes a string to an OutputStream as UTF8. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, StringRef stringToWrite);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, StringRef stringToWrite);
 
-} // namespace juce
+} // namespace yup
 
 #ifndef DOXYGEN
 namespace std
 {
 template <>
-struct hash<juce::String>
+struct hash<yup::String>
 {
-    size_t operator() (const juce::String& s) const noexcept { return s.hash(); }
+    size_t operator() (const yup::String& s) const noexcept { return s.hash(); }
 };
 } // namespace std
 #endif

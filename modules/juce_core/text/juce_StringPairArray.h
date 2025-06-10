@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API StringPairArray
+class YUP_API StringPairArray
 {
 public:
     //==============================================================================
@@ -180,7 +180,7 @@ private:
     StringArray keys, values;
     bool ignoreCase;
 
-    JUCE_LEAK_DETECTOR (StringPairArray)
+    YUP_LEAK_DETECTOR (StringPairArray)
 };
 
-} // namespace juce
+} // namespace yup

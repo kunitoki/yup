@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class PlatformTimer final : private Thread
@@ -129,7 +129,7 @@ private:
 
         void run()
         {
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
             tryToUpgradeCurrentThreadToRealtime (Thread::RealtimeOptions {}.withPeriodMs (intervalMs));
 #endif
 
@@ -154,16 +154,16 @@ private:
         double nextEventTime = Time::getMillisecondCounterHiRes() + intervalMs;
         WaitableEvent stop { true };
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Timer)
-        JUCE_DECLARE_NON_MOVEABLE (Timer)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Timer)
+        YUP_DECLARE_NON_MOVEABLE (Timer)
     };
 
     PlatformTimerListener& listener;
     mutable std::mutex runCopyMutex;
     std::shared_ptr<Timer> timer;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlatformTimer)
-    JUCE_DECLARE_NON_MOVEABLE (PlatformTimer)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlatformTimer)
+    YUP_DECLARE_NON_MOVEABLE (PlatformTimer)
 };
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -118,8 +118,8 @@ private:
     std::atomic<bool> shouldCancelCallbacks { false };
     PlatformTimer timer { *this };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Impl)
-    JUCE_DECLARE_NON_MOVEABLE (Impl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Impl)
+    YUP_DECLARE_NON_MOVEABLE (Impl)
 };
 
 //==============================================================================
@@ -156,4 +156,4 @@ bool HighResolutionTimer::isTimerRunning() const noexcept
     return impl->isTimerRunning();
 }
 
-} // namespace juce
+} // namespace yup

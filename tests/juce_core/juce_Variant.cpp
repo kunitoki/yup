@@ -28,7 +28,7 @@
 #include <string>
 #include <sstream>
 
-using namespace juce;
+using namespace yup;
 
 class VariantTests : public ::testing::Test
 {

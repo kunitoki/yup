@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API FileSearchPath
+class YUP_API FileSearchPath
 {
 public:
     //==============================================================================
@@ -196,7 +196,7 @@ private:
 
     void init (const String&);
 
-    JUCE_LEAK_DETECTOR (FileSearchPath)
+    YUP_LEAK_DETECTOR (FileSearchPath)
 };
 
-} // namespace juce
+} // namespace yup

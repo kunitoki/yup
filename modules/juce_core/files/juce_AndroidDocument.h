@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -249,7 +249,7 @@ private:
       other apps, and that will be persistent after uninstalling and reinstalling your app.
 
     Note that you probably do *not* need this class if your app only needs to access files in its
-    own internal sandbox. juce::File instances should work as expected in that case.
+    own internal sandbox. yup::File instances should work as expected in that case.
 
     AndroidDocument is a bit like the DocumentFile class from the androidx extension library,
     in that it represents a single document, and is implemented using DocumentsContract functions.
@@ -492,4 +492,4 @@ private:
     std::shared_ptr<Pimpl> pimpl;
 };
 
-} // namespace juce
+} // namespace yup

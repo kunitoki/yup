@@ -39,9 +39,9 @@
 
 #include <gtest/gtest.h>
 
-#include <juce_audio_basics/juce_audio_basics.h>
+#include <yup_audio_basics/yup_audio_basics.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST (MidiBufferTests, Clear)
 {

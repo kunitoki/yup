@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Random final
+class YUP_API Random final
 {
 public:
     //==============================================================================
@@ -149,11 +149,11 @@ private:
     //==============================================================================
     int64 seed;
 
-#if JUCE_ASSERTIONS_ENABLED_OR_LOGGED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
     bool isSystemRandom = false;
 #endif
 
-    JUCE_LEAK_DETECTOR (Random)
+    YUP_LEAK_DETECTOR (Random)
 };
 
-} // namespace juce
+} // namespace yup

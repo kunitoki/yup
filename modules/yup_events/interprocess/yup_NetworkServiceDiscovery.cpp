@@ -40,7 +40,7 @@
 namespace yup
 {
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
 extern void acquireMulticastLock();
 extern void releaseMulticastLock();
 #endif
@@ -107,7 +107,7 @@ NetworkServiceDiscovery::AvailableServiceList::AvailableServiceList (const Strin
     : Thread ("Discovery_listen")
     , serviceTypeUID (serviceType)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     acquireMulticastLock();
 #endif
 
@@ -120,7 +120,7 @@ NetworkServiceDiscovery::AvailableServiceList::~AvailableServiceList()
     socket.shutdown();
     stopThread (2000);
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
     releaseMulticastLock();
 #endif
 }

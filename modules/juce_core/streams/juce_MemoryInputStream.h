@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API MemoryInputStream : public InputStream
+class YUP_API MemoryInputStream : public InputStream
 {
 public:
     //==============================================================================
@@ -108,7 +108,7 @@ private:
     size_t dataSize, position = 0;
     MemoryBlock internalCopy;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryInputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryInputStream)
 };
 
-} // namespace juce
+} // namespace yup

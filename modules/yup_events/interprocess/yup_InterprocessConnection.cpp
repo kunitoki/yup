@@ -51,7 +51,7 @@ struct InterprocessConnection::ConnectionThread final : public Thread
     void run() override { owner.runThread(); }
 
     InterprocessConnection& owner;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionThread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionThread)
 };
 
 class SafeActionImpl
@@ -295,7 +295,7 @@ struct ConnectionStateMessage final : public MessageManager::MessageBase
     std::shared_ptr<SafeActionImpl> safeAction;
     bool connectionMade;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionStateMessage)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ConnectionStateMessage)
 };
 
 void InterprocessConnection::connectionMadeInt()

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -104,7 +104,7 @@ private:
     ValueType& value;
     const ValueType originalValue;
 
-    JUCE_DECLARE_NON_COPYABLE (ScopedValueSetter)
+    YUP_DECLARE_NON_COPYABLE (ScopedValueSetter)
 };
 
-} // namespace juce
+} // namespace yup

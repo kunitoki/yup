@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -127,7 +127,7 @@ String SystemStats::getDeviceManufacturer()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-#if JUCE_64BIT
+#if YUP_64BIT
     return true;
 #else
     return false;
@@ -284,4 +284,4 @@ bool Time::setSystemTimeToThisTime() const
     return false;
 }
 
-} // namespace juce
+} // namespace yup

@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -34,7 +34,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API TimeoutDetector
+class YUP_API TimeoutDetector
 {
 public:
     //==============================================================================
@@ -66,4 +66,4 @@ private:
     int64 timeoutTicks = 0;
 };
 
-} // namespace juce
+} // namespace yup

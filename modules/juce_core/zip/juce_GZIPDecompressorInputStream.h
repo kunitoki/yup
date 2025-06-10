@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API GZIPDecompressorInputStream : public InputStream
+class YUP_API GZIPDecompressorInputStream : public InputStream
 {
 public:
     enum Format
@@ -109,7 +109,7 @@ private:
     class GZIPDecompressHelper;
     std::unique_ptr<GZIPDecompressHelper> helper;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GZIPDecompressorInputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (GZIPDecompressorInputStream)
 };
 
-} // namespace juce
+} // namespace yup

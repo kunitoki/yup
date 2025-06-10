@@ -43,7 +43,7 @@
 
 #include <random>
 
-using namespace juce;
+using namespace yup;
 
 class TextDiffTests : public ::testing::Test
 {

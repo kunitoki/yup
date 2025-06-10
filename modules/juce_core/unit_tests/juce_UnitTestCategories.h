@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce::UnitTestCategories
+namespace yup::UnitTestCategories
 {
 
 static const String analytics { "Analytics" };
@@ -67,4 +67,4 @@ static const String time { "Time" };
 static const String values { "Values" };
 static const String xml { "XML" };
 
-} // namespace juce::UnitTestCategories
+} // namespace yup::UnitTestCategories

@@ -37,23 +37,23 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4127 4389 4018)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4127 4389 4018)
 
 #ifndef AI_NUMERICSERV // (missing in older Mac SDKs)
 #define AI_NUMERICSERV 0x1000
 #endif
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
 using juce_socklen_t = int;
 using juce_recvsend_size_t = int;
 using SocketHandle = SOCKET;
 static const SocketHandle invalidSocket = INVALID_SOCKET;
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
 using juce_socklen_t = socklen_t;
 using juce_recvsend_size_t = size_t;
 using SocketHandle = int;
@@ -70,7 +70,7 @@ namespace SocketHelpers
 {
 static void initSockets()
 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     static bool socketsStarted = false;
 
     if (! socketsStarted)
@@ -144,7 +144,7 @@ static void closeSocket (std::atomic<int>& handle,
     const auto h = (SocketHandle) handle.load();
     handle = -1;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     if (h != invalidSocket || connected)
         closesocket (h);
 
@@ -175,7 +175,7 @@ static void closeSocket (std::atomic<int>& handle,
                 // a chance to process before close is called. On Mac OS X shutdown
                 // does not unblock a select call, so using a lock here will dead-lock
                 // both threads.
-#if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
+#if YUP_LINUX || YUP_BSD || YUP_ANDROID
             CriticalSection::ScopedLockType lock (readLock);
             ::close (h);
 #else
@@ -230,7 +230,7 @@ static String getConnectedAddress (SocketHandle handle) noexcept
 
 static bool setSocketBlockingState (SocketHandle handle, bool shouldBlock) noexcept
 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     u_long nonBlocking = shouldBlock ? 0 : (u_long) 1;
     return ioctlsocket (handle, (long) FIONBIO, &nonBlocking) == 0;
 #else
@@ -248,7 +248,7 @@ static bool setSocketBlockingState (SocketHandle handle, bool shouldBlock) noexc
 #endif
 }
 
-#if ! JUCE_WINDOWS
+#if ! YUP_WINDOWS
 static bool getSocketBlockingState (SocketHandle handle)
 {
     return (fcntl (handle, F_GETFL, 0) & O_NONBLOCK) == 0;
@@ -264,7 +264,7 @@ static int readSocket (SocketHandle handle,
                        String* senderIP = nullptr,
                        int* senderPort = nullptr) noexcept
 {
-#if ! JUCE_WINDOWS
+#if ! YUP_WINDOWS
     if (blockUntilSpecifiedAmountHasArrived != getSocketBlockingState (handle))
 #endif
         setSocketBlockingState (handle, blockUntilSpecifiedAmountHasArrived);
@@ -343,7 +343,7 @@ static int waitForReadiness (std::atomic<int>& handle, CriticalSection& readLock
 
     auto h = handle.load();
 
-#if JUCE_WINDOWS || JUCE_MINGW
+#if YUP_WINDOWS || YUP_MINGW
     struct timeval timeout;
     struct timeval* timeoutp;
 
@@ -433,7 +433,7 @@ static bool connectSocket (std::atomic<int>& handle,
 
                 if (! success)
                 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
                     if (result == SOCKET_ERROR && WSAGetLastError() == WSAEWOULDBLOCK)
 #else
                     if (errno == EINPROGRESS)
@@ -452,7 +452,7 @@ static bool connectSocket (std::atomic<int>& handle,
                     break;
                 }
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
                 closesocket (newHandle);
 #else
                 ::close (newHandle);
@@ -617,7 +617,7 @@ bool StreamingSocket::createListener (int newPortNumber, const String& localHost
     if (handle < 0)
         return false;
 
-#if ! JUCE_WINDOWS // on windows, adding this option produces behaviour different to posix
+#if ! YUP_WINDOWS // on windows, adding this option produces behaviour different to posix
     SocketHelpers::makeReusable (handle);
 #endif
 
@@ -811,10 +811,10 @@ bool DatagramSocket::setMulticastLoopbackEnabled (bool enable)
 
 bool DatagramSocket::setEnablePortReuse ([[maybe_unused]] bool enabled)
 {
-#if ! JUCE_ANDROID
+#if ! YUP_ANDROID
     if (handle >= 0)
         return SocketHelpers::setOption ((SocketHandle) handle.load(),
-#if JUCE_WINDOWS || JUCE_LINUX || JUCE_BSD
+#if YUP_WINDOWS || YUP_LINUX || YUP_BSD
                                          SO_REUSEADDR, // port re-use is implied by addr re-use on these platforms
 #else
                                          SO_REUSEPORT,
@@ -825,11 +825,11 @@ bool DatagramSocket::setEnablePortReuse ([[maybe_unused]] bool enabled)
     return false;
 }
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 struct SocketTests final : public UnitTest
 {
@@ -896,4 +896,4 @@ static SocketTests socketTests;
 #endif
 #endif
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef DOXYGEN
@@ -69,7 +69,7 @@ namespace juce
     @tags{Core}
     @see RangedDirectoryIterator
 */
-class JUCE_API DirectoryIterator final
+class YUP_API DirectoryIterator final
 {
 public:
     //==============================================================================
@@ -191,7 +191,7 @@ private:
         class Pimpl;
         std::unique_ptr<Pimpl> pimpl;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NativeIterator)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NativeIterator)
     };
 
     StringArray wildCards;
@@ -211,9 +211,9 @@ private:
     static StringArray parseWildcards (const String& pattern);
     static bool fileMatches (const StringArray& wildCards, const String& filename);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DirectoryIterator)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DirectoryIterator)
 };
 
 #endif
 
-} // namespace juce
+} // namespace yup

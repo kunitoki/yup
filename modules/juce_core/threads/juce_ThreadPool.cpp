@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct ThreadPool::ThreadPoolThread final : public Thread
@@ -61,7 +61,7 @@ struct ThreadPool::ThreadPoolThread final : public Thread
 
     ThreadPool& pool;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadPoolThread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadPoolThread)
 };
 
 //==============================================================================
@@ -454,4 +454,4 @@ void ThreadPool::addToDeleteList (OwnedArray<ThreadPoolJob>& deletionList, Threa
         deletionList.add (job);
 }
 
-} // namespace juce
+} // namespace yup

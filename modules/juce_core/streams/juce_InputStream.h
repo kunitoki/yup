@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API InputStream
+class YUP_API InputStream
 {
 public:
     /** Destructor. */
@@ -274,7 +274,7 @@ protected:
     InputStream() = default;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InputStream)
 };
 
-} // namespace juce
+} // namespace yup

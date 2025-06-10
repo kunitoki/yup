@@ -28,7 +28,7 @@ namespace yup
     This class defines the lifecycle and behavior of the application using the JUCE framework, handling
     events such as application start and quit, as well as managing application instances.
  */
-class JUCE_API YUPApplication : public YUPApplicationBase
+class YUP_API YUPApplication : public YUPApplicationBase
 {
 public:
     //==============================================================================
@@ -96,7 +96,7 @@ public:
                              int lineNumber) override;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YUPApplication)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YUPApplication)
 };
 
 /** These are called automatically by the YUPApplication class but must be called by plugins. */

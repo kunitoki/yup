@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                     \
@@ -824,7 +824,7 @@ bool File::moveToTrash() const
     return false;
 }
 
-JUCE_API bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String&)
+YUP_API bool YUP_CALLTYPE Process::openDocument (const String& fileName, const String&)
 {
     URL targetURL (fileName);
     auto* env = getEnv();
@@ -836,7 +836,7 @@ JUCE_API bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const
     return true;
 }
 
-JUCE_API bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String& parameters, const StringPairArray&)
+YUP_API bool YUP_CALLTYPE Process::openDocument (const String& fileName, const String& parameters, const StringPairArray&)
 {
     return openDocument (fileName, parameters);
 }
@@ -891,4 +891,4 @@ void FileOutputStream::flushInternal()
     }
 }
 
-} // namespace juce
+} // namespace yup

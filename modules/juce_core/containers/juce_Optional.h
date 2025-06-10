@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 using Nullopt = std::nullopt_t;
@@ -45,10 +45,10 @@ constexpr auto nullopt = std::nullopt;
 
 // Without this, our tests can emit "unreachable code" warnings during
 // link time code generation.
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4702)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4702)
 
 #ifndef DOXYGEN
-#define JUCE_OPTIONAL_OPERATORS X (==) X (!=) X (<) X (<=) X (>) X (>=)
+#define YUP_OPTIONAL_OPERATORS X (==) X (!=) X (<) X (<=) X (>) X (>=)
 #endif
 
 /**
@@ -59,7 +59,7 @@ JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4702)
     This is intended to stand-in for std::optional while JUCE's minimum
     supported language standard is lower than C++17. When the minimum language
     standard moves to C++17, this class will probably be deprecated, in much
-    the same way that juce::ScopedPointer was deprecated in favour of
+    the same way that yup::ScopedPointer was deprecated in favour of
     std::unique_ptr after C++11.
 
     This isn't really intended to be used by JUCE clients. Instead, it's to be
@@ -182,7 +182,7 @@ friend bool operator op (const Optional<T>&, const U&);           \
 template <typename T, typename U>                                 \
 friend bool operator op (const T&, const Optional<U>&);
 
-    JUCE_OPTIONAL_OPERATORS
+    YUP_OPTIONAL_OPERATORS
 
 #undef X
 
@@ -193,7 +193,7 @@ private:
     std::optional<Value> opt;
 };
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 template <typename Value>
 Optional<std::decay_t<Value>> makeOptional (Value&& v)
@@ -229,10 +229,10 @@ bool operator op (const T& lhs, const Optional<U>& rhs)           \
 return lhs op rhs.opt;                                            \
 }
 
-JUCE_OPTIONAL_OPERATORS
+YUP_OPTIONAL_OPERATORS
 
 #undef X
-#undef JUCE_OPTIONAL_OPERATORS
+#undef YUP_OPTIONAL_OPERATORS
 #endif
 
-} // namespace juce
+} // namespace yup

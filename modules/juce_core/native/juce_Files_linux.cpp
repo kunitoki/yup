@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 enum
@@ -164,7 +164,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
             if (juce_argv != nullptr && juce_argc > 0)
                 return File (String (CharPointer_UTF8 (juce_argv[0])));
             // Falls through
-            JUCE_FALLTHROUGH
+            YUP_FALLTHROUGH
 
         case currentExecutableFile:
         case currentApplicationFile:
@@ -175,7 +175,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
 
         case hostApplicationPath:
         {
-#if JUCE_BSD
+#if YUP_BSD
             return juce_getExecutableFile();
 #else
             const File f ("/proc/self/exe");
@@ -289,4 +289,4 @@ void File::revealToUser() const
         getParentDirectory().startAsProcess();
 }
 
-} // namespace juce
+} // namespace yup

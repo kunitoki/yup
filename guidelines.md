@@ -220,7 +220,7 @@ public:
 private:
     int memberVar;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YupStyleClass)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YupStyleClass)
 };
 ```
 
@@ -306,17 +306,17 @@ TEST(ClassNameTests, StaticMethodBehavesCorrectly)
 
 ### Platform-specific code:
 ```cpp
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     // Windows implementation
-#elif JUCE_MAC
+#elif YUP_MAC
     // macOS implementation
-#elif JUCE_IOS
+#elif YUP_IOS
     // iOS implementation
-#elif JUCE_LINUX
+#elif YUP_LINUX
     // Linux implementation
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
     // Android implementation
-#elif JUCE_WASM
+#elif YUP_WASM
     // WebAssembly implementation
 #endif
 ```

@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce {
+namespace yup {
 namespace {
 
 std::chrono::steady_clock::time_point juce_getTimeSinceStartupFallback() noexcept
@@ -30,7 +30,7 @@ std::chrono::steady_clock::time_point juce_getTimeSinceStartupFallback() noexcep
 
 bool juce_isRunningUnderBrowser()
 {
-#if JUCE_EMSCRIPTEN
+#if YUP_EMSCRIPTEN
     static bool hasBrowserWindowObject = []
     {
         return EM_ASM_INT({
@@ -45,4 +45,4 @@ bool juce_isRunningUnderBrowser()
 }
 
 } // namespace
-} // namespace juce
+} // namespace yup

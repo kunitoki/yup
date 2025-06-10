@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 namespace
@@ -53,9 +53,9 @@ int findHighestSetBit (uint32 n) noexcept
 {
     jassert (n != 0); // (the built-in functions may not work for n = 0)
 
-#if JUCE_GCC || JUCE_CLANG
+#if YUP_GCC || YUP_CLANG
     return 31 - __builtin_clz (n);
-#elif JUCE_MSVC
+#elif YUP_MSVC
     unsigned long highest;
     _BitScanReverse (&highest, n);
     return (int) highest;
@@ -392,7 +392,7 @@ void BigInteger::negate() noexcept
     negative = (! negative) && ! isZero();
 }
 
-#if JUCE_MSVC && ! defined(__INTEL_COMPILER)
+#if YUP_MSVC && ! defined(__INTEL_COMPILER)
 #pragma intrinsic(_BitScanReverse)
 #endif
 
@@ -1192,7 +1192,7 @@ void BigInteger::inverseModulo (const BigInteger& modulus)
 }
 
 //==============================================================================
-OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const BigInteger& value)
+OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const BigInteger& value)
 {
     return stream << value.toString (10);
 }
@@ -1393,4 +1393,4 @@ uint32 readLittleEndianBitsInBuffer (const void* buffer, uint32 startBit, uint32
     return result;
 }
 
-} // namespace juce
+} // namespace yup

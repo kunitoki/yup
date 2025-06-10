@@ -44,7 +44,7 @@
 #include <algorithm>
 #include <type_traits>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {

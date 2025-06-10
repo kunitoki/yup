@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef INVALID_FILE_ATTRIBUTES
@@ -48,8 +48,8 @@ namespace juce
 namespace WindowsFileHelpers
 {
 //==============================================================================
-#if JUCE_WINDOWS
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnested-anon-types")
+#if YUP_WINDOWS
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnested-anon-types")
 
 typedef struct _REPARSE_DATA_BUFFER
 {
@@ -85,11 +85,11 @@ typedef struct _REPARSE_DATA_BUFFER
     } DUMMYUNIONNAME;
 } *PREPARSE_DATA_BUFFER, REPARSE_DATA_BUFFER;
 
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 //==============================================================================
-juce::String toLongPath (const juce::String& path)
+yup::String toLongPath (const yup::String& path)
 {
     return L"\\\\?\\" + path;
 }
@@ -284,14 +284,14 @@ static bool hasFileAccess (const File& file, DWORD accessType)
 } // namespace WindowsFileHelpers
 
 //==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES
+#if YUP_ALLOW_STATIC_NULL_VARIABLES
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 const juce_wchar File::separator = '\\';
 const StringRef File::separatorString ("\\");
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+YUP_END_IGNORE_DEPRECATION_WARNINGS
 
 #endif
 
@@ -792,7 +792,7 @@ bool File::isOnRemovableDrive() const
 }
 
 //==============================================================================
-File JUCE_CALLTYPE File::getSpecialLocation (const SpecialLocationType type)
+File YUP_CALLTYPE File::getSpecialLocation (const SpecialLocationType type)
 {
     int csidlType = 0;
 
@@ -966,7 +966,7 @@ static String readWindowsLnkFile (File lnkFile, bool wantsAbsolutePath)
 
 static String readWindowsShortcutOrLink (const File& shortcut, bool wantsAbsolutePath)
 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     using namespace WindowsFileHelpers;
 
     if (! wantsAbsolutePath)
@@ -1175,7 +1175,7 @@ private:
     const String directoryWithWildCard;
     HANDLE handle;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 DirectoryIterator::NativeIterator::NativeIterator (const File& directory, const String& wildCardIn)
@@ -1199,14 +1199,14 @@ bool DirectoryIterator::NativeIterator::next (String& filenameFound,
 }
 
 //==============================================================================
-bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String& parameters)
+bool YUP_CALLTYPE Process::openDocument (const String& fileName, const String& parameters)
 {
     HINSTANCE hInstance = ShellExecute (nullptr, nullptr, fileName.toWideCharPointer(), parameters.toWideCharPointer(), nullptr, SW_SHOWDEFAULT);
 
     return hInstance > (HINSTANCE) 32;
 }
 
-bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String& parameters, const StringPairArray& environment)
+bool YUP_CALLTYPE Process::openDocument (const String& fileName, const String& parameters, const StringPairArray& environment)
 {
     auto oldEnvironment = SystemStats::getEnvironmentVariables();
     bool result = false;
@@ -1238,9 +1238,9 @@ bool JUCE_CALLTYPE Process::openDocument (const String& fileName, const String& 
 void File::revealToUser() const
 {
     DynamicLibrary dll ("Shell32.dll");
-    JUCE_LOAD_WINAPI_FUNCTION (dll, ILCreateFromPathW, ilCreateFromPathW, ITEMIDLIST*, (LPCWSTR))
-    JUCE_LOAD_WINAPI_FUNCTION (dll, ILFree, ilFree, void, (ITEMIDLIST*) )
-    JUCE_LOAD_WINAPI_FUNCTION (dll, SHOpenFolderAndSelectItems, shOpenFolderAndSelectItems, HRESULT, (ITEMIDLIST*, UINT, void*, DWORD))
+    YUP_LOAD_WINAPI_FUNCTION (dll, ILCreateFromPathW, ilCreateFromPathW, ITEMIDLIST*, (LPCWSTR))
+    YUP_LOAD_WINAPI_FUNCTION (dll, ILFree, ilFree, void, (ITEMIDLIST*) )
+    YUP_LOAD_WINAPI_FUNCTION (dll, SHOpenFolderAndSelectItems, shOpenFolderAndSelectItems, HRESULT, (ITEMIDLIST*, UINT, void*, DWORD))
 
     if (ilCreateFromPathW != nullptr && shOpenFolderAndSelectItems != nullptr && ilFree != nullptr)
     {
@@ -1468,7 +1468,7 @@ private:
         return false;
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 void NamedPipe::close()
@@ -1519,4 +1519,4 @@ int NamedPipe::write (const void* sourceBuffer, int numBytesToWrite, int timeOut
     return pimpl != nullptr ? pimpl->write (sourceBuffer, numBytesToWrite, timeOutMilliseconds) : -1;
 }
 
-} // namespace juce
+} // namespace yup

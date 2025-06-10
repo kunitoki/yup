@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /*
@@ -48,7 +48,7 @@ namespace juce
 //==============================================================================
 bool File::copyInternal(const File& dest) const
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         NSFileManager* fm = [NSFileManager defaultManager];
 
@@ -84,8 +84,8 @@ static bool isFileOnDriveType(const File& f, const char* const* types)
 
 static bool isHiddenFile(const String& path)
 {
-#if JUCE_MAC
-    JUCE_AUTORELEASEPOOL
+#if YUP_MAC
+    YUP_AUTORELEASEPOOL
     {
         NSNumber* hidden = nil;
         NSError* err = nil;
@@ -97,7 +97,7 @@ static bool isHiddenFile(const String& path)
 #endif
 }
 
-#if JUCE_IOS
+#if YUP_IOS
 static String getIOSSystemLocation(NSSearchPathDirectory type)
 {
     return nsStringToJuce([NSSearchPathForDirectoriesInDomains(type, NSUserDomainMask, YES)
@@ -128,13 +128,13 @@ static bool launchExecutable(const String& pathAndArguments, const Array<char*>*
 
 bool openDocument(const String& fileName, const String& parameters, const Array<char*>* environment = nullptr)
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         NSString* fileNameAsNS(juceStringToNS(fileName));
         NSURL* filenameAsURL = File::createFileWithoutCheckingPath(fileName).exists() ? [NSURL fileURLWithPath:fileNameAsNS]
                                                                                       : [NSURL URLWithString:fileNameAsNS];
 
-#if JUCE_IOS
+#if YUP_IOS
         ignoreUnused(parameters);
 
         if (@available(iOS 10.0, *))
@@ -146,9 +146,9 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
             return true;
         }
 
-        JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+        YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
         return [[UIApplication sharedApplication] openURL:filenameAsURL];
-        JUCE_END_IGNORE_DEPRECATION_WARNINGS
+        YUP_END_IGNORE_DEPRECATION_WARNINGS
 
 #else
         auto workspace = [NSWorkspace sharedWorkspace];
@@ -200,7 +200,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
                 }
 #endif
 
-                JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+                YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
                 NSMutableDictionary* dict = [[NSMutableDictionary new] autorelease];
 
@@ -221,7 +221,7 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
                                            configuration:dict
                                                    error:nil];
 
-                JUCE_END_IGNORE_DEPRECATION_WARNINGS
+                YUP_END_IGNORE_DEPRECATION_WARNINGS
             }
         }
 
@@ -231,9 +231,9 @@ bool openDocument(const String& fileName, const String& parameters, const Array<
         {
             // NB: the length check here is because of strange failures involving long filenames,
             // probably due to filesystem name length limitations..
-            JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+            YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
             return (fileName.length() < 1024 && [workspace openFile:fileNameAsNS]) || [workspace openURL:filenameAsURL];
-            JUCE_END_IGNORE_DEPRECATION_WARNINGS
+            YUP_END_IGNORE_DEPRECATION_WARNINGS
         }
 
         if (File(fileName).exists())
@@ -261,10 +261,10 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
-#if JUCE_IOS
+#if YUP_IOS
     return false; // xxx is this possible?
 #else
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         BOOL removable = false;
 
@@ -292,7 +292,7 @@ int juce_argc = 0;
 
 File File::getSpecialLocation(const SpecialLocationType type)
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         String resultPath;
 
@@ -302,7 +302,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 resultPath = nsStringToJuce(NSHomeDirectory());
                 break;
 
-#if JUCE_IOS
+#if YUP_IOS
             case userDocumentsDirectory:
                 resultPath = MacFileHelpers::getIOSSystemLocation(NSDocumentDirectory);
                 break;
@@ -359,7 +359,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 if (juce_argv != nullptr && juce_argc > 0)
                     return File::getCurrentWorkingDirectory().getChildFile(String(CharPointer_UTF8(juce_argv[0])));
                 // deliberate fall-through...
-                JUCE_FALLTHROUGH
+                YUP_FALLTHROUGH
 
             case currentExecutableFile:
                 return juce_getExecutableFile();
@@ -369,7 +369,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
                 const File exe(juce_getExecutableFile());
                 const File parent(exe.getParentDirectory());
 
-#if JUCE_IOS
+#if YUP_IOS
                 return parent;
 #else
                 return parent.getFullPathName().endsWithIgnoreCase("Contents/MacOS")
@@ -403,7 +403,7 @@ File File::getSpecialLocation(const SpecialLocationType type)
 //==============================================================================
 String File::getVersion() const
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         if (NSBundle* bundle = [NSBundle bundleWithPath:juceStringToNS(getFullPathName())])
             if (NSDictionary* info = [bundle infoDictionary])
@@ -439,7 +439,7 @@ bool File::moveToTrash() const
     if (!exists())
         return true;
 
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         if (@available(macOS 10.8, iOS 11.0, *))
         {
@@ -449,7 +449,7 @@ bool File::moveToTrash() const
                                                             error:&error];
         }
 
-#if JUCE_IOS
+#if YUP_IOS
         return deleteFile();
 #else
         [[NSWorkspace sharedWorkspace] recycleURLs:[NSArray arrayWithObject:createNSURLFromFile(*this)]
@@ -479,7 +479,7 @@ class DirectoryIterator::NativeIterator::Pimpl
         : parentDir(File::addTrailingSeparator(directory.getFullPathName())),
           wildCard(wildcard)
     {
-        JUCE_AUTORELEASEPOOL
+        YUP_AUTORELEASEPOOL
         {
             enumerator = [[[NSFileManager defaultManager] enumeratorAtPath:juceStringToNS(directory.getFullPathName())] retain];
         }
@@ -498,7 +498,7 @@ class DirectoryIterator::NativeIterator::Pimpl
               Time* const creationTime,
               bool* const isReadOnly)
     {
-        JUCE_AUTORELEASEPOOL
+        YUP_AUTORELEASEPOOL
         {
             const char* wildcardUTF8 = nullptr;
 
@@ -536,7 +536,7 @@ class DirectoryIterator::NativeIterator::Pimpl
     String parentDir, wildCard;
     NSDirectoryEnumerator* enumerator = nil;
 
-    JUCE_DECLARE_NON_COPYABLE(Pimpl)
+    YUP_DECLARE_NON_COPYABLE(Pimpl)
 };
 
 DirectoryIterator::NativeIterator::NativeIterator(const File& directory, const String& wildcard)
@@ -560,12 +560,12 @@ bool DirectoryIterator::NativeIterator::next(String& filenameFound,
 }
 
 //==============================================================================
-bool JUCE_CALLTYPE Process::openDocument(const String& fileName, const String& parameters)
+bool YUP_CALLTYPE Process::openDocument(const String& fileName, const String& parameters)
 {
     return MacFileHelpers::openDocument(fileName, parameters);
 }
 
-bool JUCE_CALLTYPE Process::openDocument(const String& fileName, const String& parameters, const StringPairArray& environment)
+bool YUP_CALLTYPE Process::openDocument(const String& fileName, const String& parameters, const StringPairArray& environment)
 {
     StringArray envValues;
 
@@ -585,7 +585,7 @@ bool JUCE_CALLTYPE Process::openDocument(const String& fileName, const String& p
 
 void File::revealToUser() const
 {
-#if !JUCE_IOS
+#if !YUP_IOS
     if (exists())
         [[NSWorkspace sharedWorkspace] selectFile:juceStringToNS(getFullPathName()) inFileViewerRootedAtPath:nsEmptyString()];
     else if (getParentDirectory().exists())
@@ -596,7 +596,7 @@ void File::revealToUser() const
 //==============================================================================
 OSType File::getMacOSType() const
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         NSDictionary* fileDict = [[NSFileManager defaultManager] attributesOfItemAtPath:juceStringToNS(getFullPathName()) error:nil];
         return [fileDict fileHFSTypeCode];
@@ -605,17 +605,17 @@ OSType File::getMacOSType() const
 
 bool File::isBundle() const
 {
-#if JUCE_IOS
+#if YUP_IOS
     return false; // xxx can't find a sensible way to do this without trying to open the bundle..
 #else
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         return [[NSWorkspace sharedWorkspace] isFilePackageAtPath:juceStringToNS(getFullPathName())];
     }
 #endif
 }
 
-#if JUCE_MAC
+#if YUP_MAC
 void File::addToDock() const
 {
     // check that it's not already there...
@@ -637,4 +637,4 @@ File File::getContainerForSecurityApplicationGroupIdentifier(const String& appGr
     return File();
 }
 
-} // namespace juce
+} // namespace yup

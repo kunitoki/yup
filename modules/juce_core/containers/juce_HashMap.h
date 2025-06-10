@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -106,12 +106,12 @@ struct DefaultHashFunctions
     hash.set (1, "item1");
     hash.set (2, "item2");
 
-    JUCE_DBG (hash [1]); // prints "item1"
-    JUCE_DBG (hash [2]); // prints "item2"
+    YUP_DBG (hash [1]); // prints "item1"
+    YUP_DBG (hash [2]); // prints "item2"
 
     // This iterates the map, printing all of its key -> value pairs..
     for (HashMap<int, String>::Iterator i (hash); i.next();)
-        JUCE_DBG (i.getKey() << " -> " << i.getValue());
+        YUP_DBG (i.getKey() << " -> " << i.getValue());
     @endcode
 
     @tparam HashFunctionType The class of hash function, which must be copy-constructible.
@@ -449,7 +449,7 @@ private:
         ValueType value;
         HashEntry* nextEntry;
 
-        JUCE_DECLARE_NON_COPYABLE (HashEntry)
+        YUP_DECLARE_NON_COPYABLE (HashEntry)
     };
 
 public:
@@ -464,7 +464,7 @@ public:
 
         while (i.next())
         {
-            JUCE_DBG (i.getKey() << " -> " << i.getValue());
+            YUP_DBG (i.getKey() << " -> " << i.getValue());
         }
         @endcode
 
@@ -556,7 +556,7 @@ public:
         // using the copy constructor is ok, but you cannot assign iterators
         Iterator& operator= (const Iterator&) = delete;
 
-        JUCE_LEAK_DETECTOR (Iterator)
+        YUP_LEAK_DETECTOR (Iterator)
     };
 
     /** Returns a start iterator for the values in this tree. */
@@ -606,7 +606,7 @@ private:
 
     inline HashEntry* getSlot (KeyType key) const noexcept { return hashSlots.getUnchecked (generateHashFor (key, getNumSlots())); }
 
-    JUCE_LEAK_DETECTOR (HashMap)
+    YUP_LEAK_DETECTOR (HashMap)
 };
 
-} // namespace juce
+} // namespace yup

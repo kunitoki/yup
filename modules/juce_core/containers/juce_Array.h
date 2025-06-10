@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -1165,4 +1165,4 @@ void Array<ElementType, TypeOfCriticalSectionToUse, minimumAllocatedSize>::sort 
     sortArray (comparator, values.begin(), 0, size() - 1, retainOrderOfEquivalentItems);
 }
 
-} // namespace juce
+} // namespace yup

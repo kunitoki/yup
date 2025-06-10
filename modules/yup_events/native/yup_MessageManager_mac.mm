@@ -55,12 +55,12 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         // clang-format off
         addMethod(@selector(applicationWillFinishLaunching:), [](id self, SEL, NSNotification*)
         {
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wundeclared-selector")
             [[NSAppleEventManager sharedAppleEventManager] setEventHandler: self
                                                                andSelector: @selector (getUrl:withReplyEvent:)
                                                              forEventClass: kInternetEventClass
                                                                 andEventID: kAEGetURL];
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
         });
 
         addMethod(@selector(applicationDidFinishLaunching:), [](id self, SEL, NSNotification*)
@@ -137,7 +137,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
             focusChanged();
         });
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(getUrl:withReplyEvent:), [](id /*self*/, SEL, NSAppleEventDescriptor* event, NSAppleEventDescriptor*)
         {
             if (auto* app = YUPApplicationBase::getInstance())
@@ -163,9 +163,9 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
 
         // (used as a way of running a dummy thread)
         addMethod(@selector(dummyMethod), [](id /*self*/, SEL) {});
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-#if JUCE_PUSH_NOTIFICATIONS
+#if YUP_PUSH_NOTIFICATIONS
         //==============================================================================
         addIvar<NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>*>("pushNotificationsDelegate");
 
@@ -173,25 +173,25 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
         {
             if (notification.userInfo != nil)
             {
-                JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+                YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
                 // NSUserNotification is deprecated from macOS 11, but there doesn't seem to be a
                 // replacement for NSApplicationLaunchUserNotificationKey returning a non-deprecated type
                 NSUserNotification* userNotification = notification.userInfo[NSApplicationLaunchUserNotificationKey];
-                JUCE_END_IGNORE_DEPRECATION_WARNINGS
+                YUP_END_IGNORE_DEPRECATION_WARNINGS
 
-                JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnullable-to-nonnull-conversion")
+                YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wnullable-to-nonnull-conversion")
                 if (userNotification != nil && userNotification.userInfo != nil)
                     [self application: [NSApplication sharedApplication] didReceiveRemoteNotification: userNotification.userInfo];
-                JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+                YUP_END_IGNORE_WARNINGS_GCC_LIKE
             }
         });
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(setPushNotificationsDelegate:), [](id self, SEL, NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>* delegate)
         {
             object_setInstanceVariable(self, "pushNotificationsDelegate", delegate);
         });
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
         addMethod(@selector(application:didRegisterForRemoteNotificationsWithDeviceToken:), [](id self, SEL, NSApplication* application, NSData* deviceToken)
         {
@@ -271,7 +271,7 @@ struct AppDelegateClass final : public ObjCClass<NSObject>
     }
 
     //==============================================================================
-#if JUCE_PUSH_NOTIFICATIONS
+#if YUP_PUSH_NOTIFICATIONS
     static NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>* getPushNotificationsDelegate(id self)
     {
         return getIvar<NSObject<NSApplicationDelegate, NSUserNotificationCenterDelegate>*>(self, "pushNotificationsDelegate");
@@ -293,7 +293,7 @@ struct AppDelegate
 
         NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         [center addObserver:delegate
                    selector:@selector(mainMenuTrackingBegan:)
                        name:NSMenuDidBeginTrackingNotification
@@ -302,19 +302,19 @@ struct AppDelegate
                    selector:@selector(mainMenuTrackingEnded:)
                        name:NSMenuDidEndTrackingNotification
                      object:nil];
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
         if (YUPApplicationBase::isStandaloneApp())
         {
             [NSApp setDelegate:delegate];
 
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
             [[NSDistributedNotificationCenter defaultCenter] addObserver:delegate
                                                                 selector:@selector(broadcastMessageCallback:)
                                                                     name:getBroadcastEventName()
                                                                   object:nil
                                                       suspensionBehavior:NSNotificationSuspensionBehaviorDeliverImmediately];
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
         }
         else
         {
@@ -365,7 +365,7 @@ struct AppDelegate
 void initialiseNSApplication();
 void initialiseNSApplication()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         [NSApplication sharedApplication];
     }
@@ -373,9 +373,9 @@ void initialiseNSApplication()
 
 static void runNSApplication()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
-#if JUCE_CATCH_UNHANDLED_EXCEPTIONS
+#if YUP_CATCH_UNHANDLED_EXCEPTIONS
         @try
         {
             [NSApp run];
@@ -403,7 +403,7 @@ static bool runNSApplicationSlice(int millisecondsToRunFor, Atomic<int>& quitMes
 
     while (quitMessagePosted.get() == 0)
     {
-        JUCE_AUTORELEASEPOOL
+        YUP_AUTORELEASEPOOL
         {
             auto msRemaining = endTime - Time::currentTimeMillis();
             if (msRemaining <= 0)
@@ -465,7 +465,7 @@ void MessageManager::stopDispatchLoop()
     }
 }
 
-#if JUCE_MODAL_LOOPS_PERMITTED
+#if YUP_MODAL_LOOPS_PERMITTED
 bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 {
     jassert(millisecondsToRunFor >= 0);
@@ -507,7 +507,7 @@ void MessageManager::broadcastMessage(const String& message)
 }
 
 //==============================================================================
-#if JUCE_MAC
+#if YUP_MAC
 struct MountedVolumeListChangeDetector::Pimpl
 {
     Pimpl(MountedVolumeListChangeDetector& d)
@@ -519,10 +519,10 @@ struct MountedVolumeListChangeDetector::Pimpl
 
         NSNotificationCenter* nc = [[NSWorkspace sharedWorkspace] notificationCenter];
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         [nc addObserver:delegate selector:@selector(changed:) name:NSWorkspaceDidMountNotification object:nil];
         [nc addObserver:delegate selector:@selector(changed:) name:NSWorkspaceDidUnmountNotification object:nil];
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
     }
 
     ~Pimpl()
@@ -542,9 +542,9 @@ struct MountedVolumeListChangeDetector::Pimpl
         {
             addIvar<Pimpl*>("owner");
 
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
             addMethod(@selector(changed:), changed);
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
             addProtocol(@protocol(NSTextInput));
             registerClass();

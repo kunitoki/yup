@@ -23,7 +23,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST (JavascriptEngineTests, ExecuteValidCode)
 {
@@ -110,12 +110,12 @@ TEST (JavascriptEngineTests, RegisterNativeObject)
 
     DynamicObject::Ptr testObject = new TestObject();
     testObject->setMethod ("add", [] (const var::NativeFunctionArgs& args) -> var
-                           {
-                               if (args.numArguments != 2)
-                                   return 0;
+    {
+        if (args.numArguments != 2)
+            return 0;
 
-                               return static_cast<int> (args.arguments[0]) + static_cast<int> (args.arguments[1]);
-                           });
+        return static_cast<int> (args.arguments[0]) + static_cast<int> (args.arguments[1]);
+    });
 
     engine.registerNativeObject ("testObject", testObject.get());
 
@@ -134,7 +134,7 @@ TEST (JavascriptEngineTests, MaximumExecutionTime)
     EXPECT_FALSE (result.wasOk());
 }
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 TEST (JavascriptEngineTests, StopExecution)
 {
     JavascriptEngine engine;
@@ -143,10 +143,10 @@ TEST (JavascriptEngineTests, StopExecution)
     WaitableEvent startEvent;
 
     auto executionThread = std::thread ([&]
-                                        {
-                                            startEvent.wait();
-                                            engine.execute ("while (true) {}");
-                                        });
+    {
+        startEvent.wait();
+        engine.execute ("while (true) {}");
+    });
 
     startEvent.signal();
     std::this_thread::sleep_for (std::chrono::milliseconds (100));

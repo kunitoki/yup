@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -164,12 +164,12 @@ private:
         ObjectHolder* next;
         Type object;
 
-        JUCE_DECLARE_NON_COPYABLE (ObjectHolder)
+        YUP_DECLARE_NON_COPYABLE (ObjectHolder)
     };
 
     mutable Atomic<ObjectHolder*> first;
 
-    JUCE_DECLARE_NON_COPYABLE (ThreadLocalValue)
+    YUP_DECLARE_NON_COPYABLE (ThreadLocalValue)
 };
 
-} // namespace juce
+} // namespace yup

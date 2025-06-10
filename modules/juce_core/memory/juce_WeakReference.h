@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -74,7 +74,7 @@ namespace juce
         friend class WeakReference<MyObject>;
     };
 
-    OR: just use the handy JUCE_DECLARE_WEAK_REFERENCEABLE macro to do all this for you.
+    OR: just use the handy YUP_DECLARE_WEAK_REFERENCEABLE macro to do all this for you.
 
     // Here's an example of using a pointer..
 
@@ -174,7 +174,7 @@ public:
     private:
         ObjectType* owner;
 
-        JUCE_DECLARE_NON_COPYABLE (SharedPointer)
+        YUP_DECLARE_NON_COPYABLE (SharedPointer)
     };
 
     using SharedRef = ReferenceCountedObjectPtr<SharedPointer>;
@@ -234,7 +234,7 @@ public:
     private:
         SharedRef sharedPointer;
 
-        JUCE_DECLARE_NON_COPYABLE (Master)
+        YUP_DECLARE_NON_COPYABLE (Master)
     };
 
 private:
@@ -263,18 +263,18 @@ private:
          ~MyObject();
 
      private:
-         JUCE_DECLARE_WEAK_REFERENCEABLE (MyObject)
+         YUP_DECLARE_WEAK_REFERENCEABLE (MyObject)
      };
      @endcode
 
      @see WeakReference, WeakReference::Master
 */
-#define JUCE_DECLARE_WEAK_REFERENCEABLE(Class)                   \
-struct WeakRefMaster : public juce::WeakReference<Class>::Master \
+#define YUP_DECLARE_WEAK_REFERENCEABLE(Class)                   \
+struct WeakRefMaster : public yup::WeakReference<Class>::Master \
 {                                                                \
 ~WeakRefMaster() { this->clear(); }                              \
 };                                                               \
 WeakRefMaster masterReference;                                   \
-friend class juce::WeakReference<Class>;
+friend class yup::WeakReference<Class>;
 
-} // namespace juce
+} // namespace yup

@@ -43,7 +43,7 @@ namespace yup
 //==============================================================================
 void runNSApplication()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                  beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
@@ -70,10 +70,10 @@ void MessageManager::stopDispatchLoop()
     exit(0); // iOS apps get no mercy..
 }
 
-#if JUCE_MODAL_LOOPS_PERMITTED
+#if YUP_MODAL_LOOPS_PERMITTED
 bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         jassert(isThisTheMessageThread()); // must only be called by the message thread
 
@@ -82,7 +82,7 @@ bool MessageManager::runDispatchLoopUntil(int millisecondsToRunFor)
 
         while (quitMessagePosted.get() == 0)
         {
-            JUCE_AUTORELEASEPOOL
+            YUP_AUTORELEASEPOOL
             {
                 [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                          beforeDate:endDate];

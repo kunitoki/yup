@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 DynamicObject::DynamicObject()
@@ -162,4 +162,4 @@ void DynamicObject::writeAsJSON (OutputStream& out, const JSON::FormatOptions& f
     out << '}';
 }
 
-} // namespace juce
+} // namespace yup

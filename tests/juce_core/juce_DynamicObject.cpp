@@ -26,7 +26,7 @@
 #include <memory>
 #include <sstream>
 
-using namespace juce;
+using namespace yup;
 
 class DynamicObjectTests : public ::testing::Test
 {

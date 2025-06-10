@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API ZipFile
+class YUP_API ZipFile
 {
 public:
     /** Creates a ZipFile to read a specific file. */
@@ -230,7 +230,7 @@ public:
         Create a ZipFile::Builder object, and call its addFile() method to add some files,
         then you can write it to a stream with write().
     */
-    class JUCE_API Builder
+    class YUP_API Builder
     {
     public:
         /** Creates an empty builder object. */
@@ -274,7 +274,7 @@ public:
         struct Item;
         OwnedArray<Item> items;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Builder)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Builder)
     };
 
 private:
@@ -288,7 +288,7 @@ private:
     std::unique_ptr<InputStream> streamToDelete;
     std::unique_ptr<InputSource> inputSource;
 
-#if JUCE_DEBUG
+#if YUP_DEBUG
     struct OpenStreamCounter
     {
         OpenStreamCounter() = default;
@@ -302,7 +302,7 @@ private:
 
     void init();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZipFile)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZipFile)
 };
 
-} // namespace juce
+} // namespace yup

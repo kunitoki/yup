@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,12 +46,12 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API SystemStats final
+class YUP_API SystemStats final
 {
 public:
     //==============================================================================
     /** Returns the current version of JUCE,
-        See also the JUCE_VERSION, JUCE_MAJOR_VERSION and JUCE_MINOR_VERSION macros.
+        See also the YUP_VERSION, YUP_MAJOR_VERSION and YUP_MINOR_VERSION macros.
     */
     static String getJUCEVersion();
 
@@ -309,15 +309,15 @@ public:
     */
     static bool isRunningInAppExtensionSandbox() noexcept;
 
-#if JUCE_MAC
+#if YUP_MAC
     static bool isAppSandboxEnabled();
 #endif
 
 private:
     SystemStats() = delete; // uses only static methods
-    JUCE_DECLARE_NON_COPYABLE (SystemStats)
+    YUP_DECLARE_NON_COPYABLE (SystemStats)
 };
 
-JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (SystemStats::MachineIdFlags)
+YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (SystemStats::MachineIdFlags)
 
-} // namespace juce
+} // namespace yup

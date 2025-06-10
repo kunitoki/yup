@@ -26,7 +26,7 @@
 #include <vector>
 #include <algorithm>
 
-using namespace juce;
+using namespace yup;
 
 struct IntComparator
 {

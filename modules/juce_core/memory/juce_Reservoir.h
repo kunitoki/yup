@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -113,4 +113,4 @@ struct Reservoir
     }
 };
 
-} // namespace juce
+} // namespace yup

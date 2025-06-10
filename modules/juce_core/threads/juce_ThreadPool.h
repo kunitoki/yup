@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class ThreadPool;
@@ -58,7 +58,7 @@ class ThreadPool;
 
     @tags{Core}
 */
-class JUCE_API ThreadPoolJob
+class YUP_API ThreadPoolJob
 {
 public:
     //==============================================================================
@@ -153,7 +153,7 @@ private:
     std::atomic<bool> shouldStop { false }, isActive { false }, shouldBeDeleted { false };
     ListenerList<Thread::Listener, Array<Thread::Listener*, CriticalSection>> listeners;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadPoolJob)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadPoolJob)
 };
 
 //==============================================================================
@@ -212,7 +212,7 @@ struct ThreadPoolOptions
 
     @tags{Core}
 */
-class JUCE_API ThreadPool
+class YUP_API ThreadPool
 {
 public:
     using Options = ThreadPoolOptions;
@@ -264,7 +264,7 @@ public:
         for some kind of operation.
         @see ThreadPool::removeAllJobs
     */
-    class JUCE_API JobSelector
+    class YUP_API JobSelector
     {
     public:
         virtual ~JobSelector() = default;
@@ -405,7 +405,7 @@ private:
     // whether the jobs should be deleted - see the new method for details.
     void removeAllJobs (bool, int, bool);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadPool)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ThreadPool)
 };
 
-} // namespace juce
+} // namespace yup

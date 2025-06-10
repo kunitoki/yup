@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 
 NamedPipe::NamedPipe()
 {
@@ -85,7 +85,7 @@ String NamedPipe::getName() const
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 class NamedPipeTests final : public UnitTest
 {
@@ -290,4 +290,4 @@ static NamedPipeTests namedPipeTests;
 #endif
 #endif
 
-} // namespace juce
+} // namespace yup

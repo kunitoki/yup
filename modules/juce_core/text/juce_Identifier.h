@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Identifier final
+class YUP_API Identifier final
 {
 public:
     /** Creates a null identifier. */
@@ -152,16 +152,16 @@ private:
     String name;
 };
 
-} // namespace juce
+} // namespace yup
 
 #ifndef DOXYGEN
 namespace std
 {
 
 template <>
-struct hash<juce::Identifier>
+struct hash<yup::Identifier>
 {
-    size_t operator() (const juce::Identifier& identifier) const noexcept
+    size_t operator() (const yup::Identifier& identifier) const noexcept
     {
         return static_cast<size_t> (*reinterpret_cast<uintptr_t*> (identifier.getCharPointer().getAddress()));
     }

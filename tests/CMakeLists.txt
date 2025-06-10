@@ -52,8 +52,8 @@ set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
     juce_core
-    juce_audio_basics
-    juce_audio_devices
+    yup_audio_basics
+    yup_audio_devices
     yup_events
     yup_graphics)
 
@@ -63,7 +63,7 @@ yup_standalone_app (
     TARGET_IDE_GROUP "Tests"
     TARGET_CONSOLE ON
     DEFINITIONS
-        JUCE_USE_CURL=0
+        YUP_USE_CURL=0
     MODULES
         ${target_modules}
         GTest::gtest_main

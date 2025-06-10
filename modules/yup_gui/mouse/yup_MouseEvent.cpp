@@ -41,7 +41,7 @@ MouseEvent::MouseEvent (Buttons newButtons,
                         KeyModifiers newModifiers,
                         const Point<float>& newPosition,
                         const Point<float>& lastMouseDownPosition,
-                        juce::Time lastMouseDownTime,
+                        yup::Time lastMouseDownTime,
                         Component* sourceComponent) noexcept
     : buttons (newButtons)
     , modifiers (newModifiers)
@@ -129,12 +129,12 @@ MouseEvent MouseEvent::withLastMouseDownPosition (const Point<float>& newPositio
     return { buttons, modifiers, position, newPosition, lastMouseDownTime, sourceComponent };
 }
 
-juce::Time MouseEvent::getLastMouseDownTime() const noexcept
+yup::Time MouseEvent::getLastMouseDownTime() const noexcept
 {
     return lastMouseDownTime;
 }
 
-MouseEvent MouseEvent::withLastMouseDownTime (juce::Time newTime) const noexcept
+MouseEvent MouseEvent::withLastMouseDownTime (yup::Time newTime) const noexcept
 {
     return { buttons, modifiers, position, lastMouseDownPosition, newTime, sourceComponent };
 }

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class PlatformTimer final
@@ -80,8 +80,8 @@ private:
     UINT timerId { 0 };
     int intervalMs { 0 };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlatformTimer)
-    JUCE_DECLARE_NON_MOVEABLE (PlatformTimer)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PlatformTimer)
+    YUP_DECLARE_NON_MOVEABLE (PlatformTimer)
 };
 
-} // namespace juce
+} // namespace yup

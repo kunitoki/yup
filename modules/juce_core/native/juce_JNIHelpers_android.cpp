@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -720,4 +720,4 @@ String audioManagerGetProperty (const String& property)
     return {};
 }
 
-} // namespace juce
+} // namespace yup

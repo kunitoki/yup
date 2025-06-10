@@ -37,17 +37,17 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
 /**
-    Used by the JUCE_DECLARE_SINGLETON macros to manage a static pointer
+    Used by the YUP_DECLARE_SINGLETON macros to manage a static pointer
     to a singleton instance.
 
-    You generally won't use this directly, but see the macros JUCE_DECLARE_SINGLETON,
-    JUCE_DECLARE_SINGLETON_SINGLETHREADED, JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL,
-    and JUCE_IMPLEMENT_SINGLETON for how it is intended to be used.
+    You generally won't use this directly, but see the macros YUP_DECLARE_SINGLETON,
+    YUP_DECLARE_SINGLETON_SINGLETHREADED, YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL,
+    and YUP_IMPLEMENT_SINGLETON for how it is intended to be used.
 
     @tags{Core}
 */
@@ -144,10 +144,10 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
 /**
     Macro to generate the appropriate methods and boilerplate for a singleton class.
 
-    To use this, add the line JUCE_DECLARE_SINGLETON (MyClass, doNotRecreateAfterDeletion)
+    To use this, add the line YUP_DECLARE_SINGLETON (MyClass, doNotRecreateAfterDeletion)
     to the class's definition.
 
-    Then put a macro JUCE_IMPLEMENT_SINGLETON (MyClass) along with the class's
+    Then put a macro YUP_IMPLEMENT_SINGLETON (MyClass) along with the class's
     implementation code.
 
     It's also a very good idea to also add the call clearSingletonInstance() in your class's
@@ -170,11 +170,11 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
                 clearSingletonInstance();
             }
 
-            JUCE_DECLARE_SINGLETON (MySingleton, false)
+            YUP_DECLARE_SINGLETON (MySingleton, false)
         };
 
         // ..and this goes in a suitable .cpp file:
-        JUCE_IMPLEMENT_SINGLETON (MySingleton)
+        YUP_IMPLEMENT_SINGLETON (MySingleton)
 
 
         // example of usage:
@@ -192,28 +192,28 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
     objects being accidentally re-created during your app's shutdown code.
 
     If you know that your object will only be created and deleted by a single thread, you
-    can use the slightly more efficient JUCE_DECLARE_SINGLETON_SINGLETHREADED macro instead
+    can use the slightly more efficient YUP_DECLARE_SINGLETON_SINGLETHREADED macro instead
     of this one.
 
-    @see JUCE_IMPLEMENT_SINGLETON, JUCE_DECLARE_SINGLETON_SINGLETHREADED
+    @see YUP_IMPLEMENT_SINGLETON, YUP_DECLARE_SINGLETON_SINGLETHREADED
 */
-#define JUCE_DECLARE_SINGLETON(Classname, doNotRecreateAfterDeletion)                                       \
+#define YUP_DECLARE_SINGLETON(Classname, doNotRecreateAfterDeletion)                                       \
                                                                                                             \
-static juce::SingletonHolder<Classname, juce::CriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
-friend juce::SingletonHolder<Classname, juce::CriticalSection, doNotRecreateAfterDeletion>;                 \
+static yup::SingletonHolder<Classname, yup::CriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
+friend yup::SingletonHolder<Classname, yup::CriticalSection, doNotRecreateAfterDeletion>;                 \
                                                                                                             \
-static Classname* JUCE_CALLTYPE getInstance() { return singletonHolder.get(); }                             \
-static Classname* JUCE_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; }  \
-static void JUCE_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                   \
+static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.get(); }                             \
+static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; }  \
+static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                   \
 void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
 
 //==============================================================================
-/** This is a counterpart to the JUCE_DECLARE_SINGLETON macros.
+/** This is a counterpart to the YUP_DECLARE_SINGLETON macros.
 
-    After adding the JUCE_DECLARE_SINGLETON to the class definition, this macro has
+    After adding the YUP_DECLARE_SINGLETON to the class definition, this macro has
     to be used in the cpp file.
 */
-#define JUCE_IMPLEMENT_SINGLETON(Classname) \
+#define YUP_IMPLEMENT_SINGLETON(Classname) \
                                             \
 decltype (Classname::singletonHolder) Classname::singletonHolder;
 
@@ -221,7 +221,7 @@ decltype (Classname::singletonHolder) Classname::singletonHolder;
 /**
     Macro to declare member variables and methods for a singleton class.
 
-    This is exactly the same as JUCE_DECLARE_SINGLETON, but doesn't use a critical
+    This is exactly the same as YUP_DECLARE_SINGLETON, but doesn't use a critical
     section to make access to it thread-safe. If you know that your object will
     only ever be created or deleted by a single thread, then this is a
     more efficient version to use.
@@ -231,56 +231,56 @@ decltype (Classname::singletonHolder) Classname::singletonHolder;
     object, getInstance() will refuse to create another one. This can be useful to stop
     objects being accidentally re-created during your app's shutdown code.
 
-    See the documentation for JUCE_DECLARE_SINGLETON for more information about
-    how to use it. Just like JUCE_DECLARE_SINGLETON you need to also have a
-    corresponding JUCE_IMPLEMENT_SINGLETON statement somewhere in your code.
+    See the documentation for YUP_DECLARE_SINGLETON for more information about
+    how to use it. Just like YUP_DECLARE_SINGLETON you need to also have a
+    corresponding YUP_IMPLEMENT_SINGLETON statement somewhere in your code.
 
-    @see JUCE_IMPLEMENT_SINGLETON, JUCE_DECLARE_SINGLETON, JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL
+    @see YUP_IMPLEMENT_SINGLETON, YUP_DECLARE_SINGLETON, YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL
 */
-#define JUCE_DECLARE_SINGLETON_SINGLETHREADED(Classname, doNotRecreateAfterDeletion)                             \
+#define YUP_DECLARE_SINGLETON_SINGLETHREADED(Classname, doNotRecreateAfterDeletion)                             \
                                                                                                                  \
-static juce::SingletonHolder<Classname, juce::DummyCriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
+static yup::SingletonHolder<Classname, yup::DummyCriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
 friend decltype (singletonHolder);                                                                               \
                                                                                                                  \
-static Classname* JUCE_CALLTYPE getInstance() { return singletonHolder.get(); }                                  \
-static Classname* JUCE_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; }       \
-static void JUCE_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                        \
+static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.get(); }                                  \
+static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; }       \
+static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                        \
 void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
 
 //==============================================================================
 /**
     Macro to declare member variables and methods for a singleton class.
 
-    This is like JUCE_DECLARE_SINGLETON_SINGLETHREADED, but doesn't do any checking
+    This is like YUP_DECLARE_SINGLETON_SINGLETHREADED, but doesn't do any checking
     for recursion or repeated instantiation. It's intended for use as a lightweight
     version of a singleton, where you're using it in very straightforward
     circumstances and don't need the extra checking.
 
-    See the documentation for JUCE_DECLARE_SINGLETON for more information about
-    how to use it. Just like JUCE_DECLARE_SINGLETON you need to also have a
-    corresponding JUCE_IMPLEMENT_SINGLETON statement somewhere in your code.
+    See the documentation for YUP_DECLARE_SINGLETON for more information about
+    how to use it. Just like YUP_DECLARE_SINGLETON you need to also have a
+    corresponding YUP_IMPLEMENT_SINGLETON statement somewhere in your code.
 
-    @see JUCE_IMPLEMENT_SINGLETON, JUCE_DECLARE_SINGLETON
+    @see YUP_IMPLEMENT_SINGLETON, YUP_DECLARE_SINGLETON
 */
-#define JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL(Classname)                                           \
+#define YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL(Classname)                                           \
                                                                                                            \
-static juce::SingletonHolder<Classname, juce::DummyCriticalSection, false> singletonHolder;                \
+static yup::SingletonHolder<Classname, yup::DummyCriticalSection, false> singletonHolder;                \
 friend decltype (singletonHolder);                                                                         \
                                                                                                            \
-static Classname* JUCE_CALLTYPE getInstance() { return singletonHolder.getWithoutChecking(); }             \
-static Classname* JUCE_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; } \
-static void JUCE_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                  \
+static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.getWithoutChecking(); }             \
+static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; } \
+static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                  \
 void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
 
 //==============================================================================
 #ifndef DOXYGEN
 // These are ancient macros, and have now been updated with new names to match the JUCE style guide,
 // so please update your code to use the newer versions!
-#define juce_DeclareSingleton(Classname, doNotRecreate) JUCE_DECLARE_SINGLETON (Classname, doNotRecreate)
-#define juce_DeclareSingleton_SingleThreaded(Classname, doNotRecreate) JUCE_DECLARE_SINGLETON_SINGLETHREADED (Classname, doNotRecreate)
-#define juce_DeclareSingleton_SingleThreaded_Minimal(Classname) JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (Classname)
-#define juce_ImplementSingleton(Classname) JUCE_IMPLEMENT_SINGLETON (Classname)
-#define juce_ImplementSingleton_SingleThreaded(Classname) JUCE_IMPLEMENT_SINGLETON (Classname)
+#define juce_DeclareSingleton(Classname, doNotRecreate) YUP_DECLARE_SINGLETON (Classname, doNotRecreate)
+#define juce_DeclareSingleton_SingleThreaded(Classname, doNotRecreate) YUP_DECLARE_SINGLETON_SINGLETHREADED (Classname, doNotRecreate)
+#define juce_DeclareSingleton_SingleThreaded_Minimal(Classname) YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (Classname)
+#define juce_ImplementSingleton(Classname) YUP_IMPLEMENT_SINGLETON (Classname)
+#define juce_ImplementSingleton_SingleThreaded(Classname) YUP_IMPLEMENT_SINGLETON (Classname)
 #endif
 
-} // namespace juce
+} // namespace yup

@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
 
 juce_wchar CharacterFunctions::toUpperCase (const juce_wchar character) noexcept
 {
@@ -54,7 +54,7 @@ juce_wchar CharacterFunctions::toLowerCase (const juce_wchar character) noexcept
 
 bool CharacterFunctions::isUpperCase (const juce_wchar character) noexcept
 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     return iswupper ((wint_t) character) != 0;
 #else
     return toLowerCase (character) != character;
@@ -63,14 +63,14 @@ bool CharacterFunctions::isUpperCase (const juce_wchar character) noexcept
 
 bool CharacterFunctions::isLowerCase (const juce_wchar character) noexcept
 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     return iswlower ((wint_t) character) != 0;
 #else
     return toUpperCase (character) != character;
 #endif
 }
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 //==============================================================================
 bool CharacterFunctions::isWhitespace (const char character) noexcept
@@ -188,4 +188,4 @@ juce_wchar CharacterFunctions::getUnicodeCharFromWindows1252Codepage (const uint
     return (juce_wchar) lookup[c - 0x80];
 }
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class Expression::Term : public SingleThreadedReferenceCountedObject
@@ -97,7 +97,7 @@ public:
     }
 
 private:
-    JUCE_DECLARE_NON_COPYABLE (Term)
+    YUP_DECLARE_NON_COPYABLE (Term)
 };
 
 //==============================================================================
@@ -121,7 +121,7 @@ struct Expression::Helpers
         EvaluationError (const String& desc)
             : description (desc)
         {
-            JUCE_DBG ("Expression::EvaluationError: " + description);
+            YUP_DBG ("Expression::EvaluationError: " + description);
         }
 
         String description;
@@ -426,7 +426,7 @@ struct Expression::Helpers
             const int recursionCount;
 
         private:
-            JUCE_DECLARE_NON_COPYABLE (EvaluationVisitor)
+            YUP_DECLARE_NON_COPYABLE (EvaluationVisitor)
         };
 
         class SymbolVisitingVisitor final : public Scope::Visitor
@@ -446,7 +446,7 @@ struct Expression::Helpers
             SymbolVisitor& visitor;
             const int recursionCount;
 
-            JUCE_DECLARE_NON_COPYABLE (SymbolVisitingVisitor)
+            YUP_DECLARE_NON_COPYABLE (SymbolVisitingVisitor)
         };
 
         class SymbolRenamingVisitor final : public Scope::Visitor
@@ -468,12 +468,12 @@ struct Expression::Helpers
             const String newName;
             const int recursionCount;
 
-            JUCE_DECLARE_NON_COPYABLE (SymbolRenamingVisitor)
+            YUP_DECLARE_NON_COPYABLE (SymbolRenamingVisitor)
         };
 
         SymbolTerm* getSymbol() const { return static_cast<SymbolTerm*> (left.get()); }
 
-        JUCE_DECLARE_NON_COPYABLE (DotOperator)
+        YUP_DECLARE_NON_COPYABLE (DotOperator)
     };
 
     //==============================================================================
@@ -555,7 +555,7 @@ struct Expression::Helpers
         }
 
     private:
-        JUCE_DECLARE_NON_COPYABLE (Add)
+        YUP_DECLARE_NON_COPYABLE (Add)
     };
 
     //==============================================================================
@@ -591,7 +591,7 @@ struct Expression::Helpers
         }
 
     private:
-        JUCE_DECLARE_NON_COPYABLE (Subtract)
+        YUP_DECLARE_NON_COPYABLE (Subtract)
     };
 
     //==============================================================================
@@ -621,7 +621,7 @@ struct Expression::Helpers
             return {};
         }
 
-        JUCE_DECLARE_NON_COPYABLE (Multiply)
+        YUP_DECLARE_NON_COPYABLE (Multiply)
     };
 
     //==============================================================================
@@ -656,7 +656,7 @@ struct Expression::Helpers
             return *new Divide (*left->clone(), *newDest);
         }
 
-        JUCE_DECLARE_NON_COPYABLE (Divide)
+        YUP_DECLARE_NON_COPYABLE (Divide)
     };
 
     //==============================================================================
@@ -745,7 +745,7 @@ struct Expression::Helpers
     private:
         const Symbol& symbol;
 
-        JUCE_DECLARE_NON_COPYABLE (SymbolCheckVisitor)
+        YUP_DECLARE_NON_COPYABLE (SymbolCheckVisitor)
     };
 
     //==============================================================================
@@ -762,7 +762,7 @@ struct Expression::Helpers
     private:
         Array<Symbol>& list;
 
-        JUCE_DECLARE_NON_COPYABLE (SymbolListVisitor)
+        YUP_DECLARE_NON_COPYABLE (SymbolListVisitor)
     };
 
     //==============================================================================
@@ -1036,7 +1036,7 @@ struct Expression::Helpers
             return e;
         }
 
-        JUCE_DECLARE_NON_COPYABLE (Parser)
+        YUP_DECLARE_NON_COPYABLE (Parser)
     };
 };
 
@@ -1308,4 +1308,4 @@ String Expression::Scope::getScopeUID() const
     return {};
 }
 
-} // namespace juce
+} // namespace yup

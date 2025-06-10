@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ namespace juce
     be added to your classes, you should only use this object temporarily when you are
     debugging and remove it when finished.
 
-    To use it, use the JUCE_HEAVYWEIGHT_LEAK_DETECTOR macro as a simple way to put
+    To use it, use the YUP_HEAVYWEIGHT_LEAK_DETECTOR macro as a simple way to put
     one in your class declaration.
 
     @tags{Core}
@@ -80,8 +80,8 @@ private:
         {
             if (map.size() > 0)
             {
-                JUCE_DBG ("*** Leaked objects detected: " << map.size() << " instance(s) of class " << getLeakedObjectClassName());
-                JUCE_DBG (getFormattedBacktracesString());
+                YUP_DBG ("*** Leaked objects detected: " << map.size() << " instance(s) of class " << getLeakedObjectClassName());
+                YUP_DBG (getFormattedBacktracesString());
 
                 /** If you hit this, then you've leaked one or more objects of the type specified by
                     the 'OwnerClass' template parameter - the name and stack trace of its creation should
@@ -127,11 +127,11 @@ private:
 };
 
 //==============================================================================
-#if DOXYGEN || ! defined(JUCE_HEAVYWEIGHT_LEAK_DETECTOR)
-#if (DOXYGEN || JUCE_CHECK_MEMORY_LEAKS)
+#if DOXYGEN || ! defined(YUP_HEAVYWEIGHT_LEAK_DETECTOR)
+#if (DOXYGEN || YUP_CHECK_MEMORY_LEAKS)
     /** This macro lets you embed a heavyweight leak-detecting object inside a class.
 
-      To use it, simply declare a JUCE_HEAVYWEIGHT_LEAK_DETECTOR (YourClassName) inside a private section
+      To use it, simply declare a YUP_HEAVYWEIGHT_LEAK_DETECTOR (YourClassName) inside a private section
       of the class declaration. E.g.
 
       @code
@@ -142,22 +142,22 @@ private:
           void blahBlah();
 
       private:
-          JUCE_HEAVYWEIGHT_LEAK_DETECTOR (MyClass)
+          YUP_HEAVYWEIGHT_LEAK_DETECTOR (MyClass)
       };
       @endcode
 
       NB: you should only use this when you really need to track down a tricky memory leak, and
       should never leave one of these inside a class!
 
-      @see HeavyweightLeakedObjectDetector, JUCE_LEAK_DETECTOR, LeakedObjectDetector
+      @see HeavyweightLeakedObjectDetector, YUP_LEAK_DETECTOR, LeakedObjectDetector
   */
-#define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                                 \
-    friend class juce::HeavyweightLeakedObjectDetector<OwnerClass>;                \
+#define YUP_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)                                 \
+    friend class yup::HeavyweightLeakedObjectDetector<OwnerClass>;                \
     static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
-    juce::HeavyweightLeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
+    yup::HeavyweightLeakedObjectDetector<OwnerClass> YUP_JOIN_MACRO (leakDetector, __LINE__);
 #else
-#define JUCE_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)
+#define YUP_HEAVYWEIGHT_LEAK_DETECTOR(OwnerClass)
 #endif
 #endif
 
-} // namespace juce
+} // namespace yup

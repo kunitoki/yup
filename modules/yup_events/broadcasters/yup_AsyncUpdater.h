@@ -52,7 +52,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API AsyncUpdater
+class YUP_API AsyncUpdater
 {
 public:
     //==============================================================================
@@ -121,7 +121,7 @@ private:
     friend class ReferenceCountedObjectPtr<AsyncUpdaterMessage>;
     ReferenceCountedObjectPtr<AsyncUpdaterMessage> activeMessage;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AsyncUpdater)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AsyncUpdater)
 };
 
 } // namespace yup

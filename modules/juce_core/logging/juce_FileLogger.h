@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API FileLogger : public Logger
+class YUP_API FileLogger : public Logger
 {
 public:
     //==============================================================================
@@ -144,7 +144,7 @@ private:
     File logFile;
     CriticalSection logLock;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileLogger)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileLogger)
 };
 
-} // namespace juce
+} // namespace yup

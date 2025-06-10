@@ -65,7 +65,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API Timer
+class YUP_API Timer
 {
 protected:
     //==============================================================================
@@ -134,13 +134,13 @@ public:
 
     //==============================================================================
     /** Invokes a lambda after a given number of milliseconds. */
-    static void JUCE_CALLTYPE callAfterDelay (int milliseconds, std::function<void()> functionToCall);
+    static void YUP_CALLTYPE callAfterDelay (int milliseconds, std::function<void()> functionToCall);
 
     //==============================================================================
     /** For internal use only: invokes any timers that need callbacks.
         Don't call this unless you really know what you're doing!
     */
-    static void JUCE_CALLTYPE callPendingTimersSynchronously();
+    static void YUP_CALLTYPE callPendingTimersSynchronously();
 
 private:
     class TimerThread;

@@ -37,11 +37,11 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 /**
     Describes the attributes of a file or folder.
@@ -200,6 +200,6 @@ inline RangedDirectoryIterator begin (const RangedDirectoryIterator& it) { retur
 */
 inline RangedDirectoryIterator end (const RangedDirectoryIterator&) { return {}; }
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+YUP_END_IGNORE_DEPRECATION_WARNINGS
 
-} // namespace juce
+} // namespace yup

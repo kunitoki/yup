@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef DOXYGEN
@@ -169,4 +169,4 @@ struct Atomic final
     std::atomic<Type> value;
 };
 
-} // namespace juce
+} // namespace yup

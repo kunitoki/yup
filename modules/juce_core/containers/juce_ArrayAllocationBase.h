@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -132,7 +132,7 @@ public:
     int numAllocated = 0;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE (ArrayAllocationBase)
+    YUP_DECLARE_NON_COPYABLE (ArrayAllocationBase)
 };
 
-} // namespace juce
+} // namespace yup

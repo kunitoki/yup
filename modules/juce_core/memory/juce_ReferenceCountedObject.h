@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -79,7 +79,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API ReferenceCountedObject
+class YUP_API ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -169,7 +169,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API SingleThreadedReferenceCountedObject
+class YUP_API SingleThreadedReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -443,7 +443,7 @@ public:
     /** Compares two ReferenceCountedObjectPtrs. */
     bool operator!= (const ReferenceCountedObjectPtr& other) const noexcept { return referencedObject != other.get(); }
 
-#if JUCE_STRICT_REFCOUNTEDPOINTER
+#if YUP_STRICT_REFCOUNTEDPOINTER
     /** Checks whether this pointer is null */
     explicit operator bool() const noexcept { return referencedObject != nullptr; }
 
@@ -451,7 +451,7 @@ public:
     /** Returns the object that this pointer references.
         The pointer returned may be null, of course.
         Note that this methods allows the compiler to be very lenient with what it allows you to do
-        with the pointer, it's safer to disable this by setting JUCE_STRICT_REFCOUNTEDPOINTER=1, which
+        with the pointer, it's safer to disable this by setting YUP_STRICT_REFCOUNTEDPOINTER=1, which
         increased type safety and can prevent some common slip-ups.
     */
     operator ReferencedType*() const noexcept { return referencedObject; }
@@ -489,4 +489,4 @@ bool operator!= (const Type* object1, const ReferenceCountedObjectPtr<Type>& obj
     return object1 != object2.get();
 }
 
-} // namespace juce
+} // namespace yup

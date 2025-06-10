@@ -37,24 +37,24 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
-#if JUCE_WINDOWS && ! defined(DOXYGEN)
-#define JUCE_NATIVE_WCHAR_IS_UTF8 0
-#define JUCE_NATIVE_WCHAR_IS_UTF16 1
-#define JUCE_NATIVE_WCHAR_IS_UTF32 0
+#if YUP_WINDOWS && ! defined(DOXYGEN)
+#define YUP_NATIVE_WCHAR_IS_UTF8 0
+#define YUP_NATIVE_WCHAR_IS_UTF16 1
+#define YUP_NATIVE_WCHAR_IS_UTF32 0
 #else
 /** This macro will be set to 1 if the compiler's native wchar_t is an 8-bit type. */
-#define JUCE_NATIVE_WCHAR_IS_UTF8 0
+#define YUP_NATIVE_WCHAR_IS_UTF8 0
 /** This macro will be set to 1 if the compiler's native wchar_t is a 16-bit type. */
-#define JUCE_NATIVE_WCHAR_IS_UTF16 0
+#define YUP_NATIVE_WCHAR_IS_UTF16 0
 /** This macro will be set to 1 if the compiler's native wchar_t is a 32-bit type. */
-#define JUCE_NATIVE_WCHAR_IS_UTF32 1
+#define YUP_NATIVE_WCHAR_IS_UTF32 1
 #endif
 
-#if JUCE_NATIVE_WCHAR_IS_UTF32 || DOXYGEN
+#if YUP_NATIVE_WCHAR_IS_UTF32 || DOXYGEN
 /** A platform-independent 32-bit unicode character type. */
 using juce_wchar = wchar_t;
 #else
@@ -63,18 +63,18 @@ using juce_wchar = uint32;
 
 #ifndef DOXYGEN
 /** This macro is deprecated, but preserved for compatibility with old code. */
-#define JUCE_T(stringLiteral) (L##stringLiteral)
+#define YUP_T(stringLiteral) (L##stringLiteral)
 #endif
 
-#if JUCE_DEFINE_T_MACRO
+#if YUP_DEFINE_T_MACRO
 /** The 'T' macro is an alternative for using the "L" prefix in front of a string literal.
 
      This macro is deprecated, but available for compatibility with old code if you set
-     JUCE_DEFINE_T_MACRO = 1. The fastest, most portable and best way to write your string
+     YUP_DEFINE_T_MACRO = 1. The fastest, most portable and best way to write your string
      literals is as standard char strings, using escaped utf-8 character sequences for extended
      characters, rather than trying to store them as wide-char strings.
  */
-#define T(stringLiteral) JUCE_T (stringLiteral)
+#define T(stringLiteral) YUP_T (stringLiteral)
 #endif
 
 #ifndef DOXYGEN
@@ -139,7 +139,7 @@ struct make_unsigned<long long>
 
     @tags{Core}
 */
-class JUCE_API CharacterFunctions
+class YUP_API CharacterFunctions
 {
 public:
     //==============================================================================
@@ -200,7 +200,7 @@ public:
         constexpr auto inf = std::numeric_limits<double>::infinity();
 
         bool isNegative = false;
-#if ! JUCE_MINGW
+#if ! YUP_MINGW
         constexpr const int maxSignificantDigits = 17 + 1;             // An additional digit for rounding
         constexpr const int bufferSize = maxSignificantDigits + 7 + 1; // -.E-XXX and a trailing null-terminator
         char buffer[(size_t) bufferSize] = {};
@@ -216,10 +216,10 @@ public:
         {
             case '-':
                 isNegative = true;
-#if ! JUCE_MINGW
+#if ! YUP_MINGW
                 *writePtr++ = '-';
 #endif
-                JUCE_FALLTHROUGH
+                YUP_FALLTHROUGH
             case '+':
                 c = *++text;
                 break;
@@ -259,7 +259,7 @@ public:
                 break;
         }
 
-#if JUCE_MINGW
+#if YUP_MINGW
         // MinGW does not have access to the locale functions required for strtold, so we parse the doubles
         // ourselves. There are some edge cases where the least significant digit will be wrong!
         double result[3] = { 0 }, accumulator[2] = { 0 };
@@ -349,7 +349,7 @@ public:
             {
                 case '-':
                     negativeExponent = true;
-                    JUCE_FALLTHROUGH
+                    YUP_FALLTHROUGH
                 case '+':
                     ++text;
             }
@@ -367,7 +367,7 @@ public:
 
         return isNegative ? -r : r;
 
-#else // ! JUCE_MINGW
+#else // ! YUP_MINGW
 
         int numSigFigs = 0, extraExponent = 0;
         bool decimalPointFound = false, leadingZeros = false;
@@ -446,7 +446,7 @@ public:
             {
                 case '-':
                     parsedExponentIsPositive = false;
-                    JUCE_FALLTHROUGH
+                    YUP_FALLTHROUGH
                 case '+':
                     ++text;
                     break;
@@ -491,19 +491,19 @@ public:
             writeExponentDigits (extraExponent, writePtr);
         }
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         static _locale_t locale = _create_locale (LC_ALL, "C");
         return _strtod_l (&buffer[0], nullptr, locale);
 #else
         static locale_t locale = newlocale (LC_ALL_MASK, "C", nullptr);
-#if JUCE_ANDROID
+#if YUP_ANDROID
         return (double) strtold_l (&buffer[0], nullptr, locale);
 #else
         return strtod_l (&buffer[0], nullptr, locale);
 #endif
 #endif
 
-#endif // JUCE_MINGW
+#endif // YUP_MINGW
     }
 
     /** Parses a character string, to read a floating-point value. */
@@ -909,4 +909,4 @@ private:
     static double mulexp10 (double value, int exponent) noexcept;
 };
 
-} // namespace juce
+} // namespace yup

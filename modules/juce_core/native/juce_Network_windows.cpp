@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef INTERNET_FLAG_NEED_FILE
@@ -458,7 +458,7 @@ private:
         closeConnection();
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 //==============================================================================
@@ -467,7 +467,7 @@ struct GetAdaptersAddressesHelper
     bool callGetAdaptersAddresses()
     {
         DynamicLibrary dll ("iphlpapi.dll");
-        JUCE_LOAD_WINAPI_FUNCTION (dll, GetAdaptersAddresses, getAdaptersAddresses, DWORD, (ULONG, ULONG, PVOID, PIP_ADAPTER_ADDRESSES, PULONG))
+        YUP_LOAD_WINAPI_FUNCTION (dll, GetAdaptersAddresses, getAdaptersAddresses, DWORD, (ULONG, ULONG, PVOID, PIP_ADAPTER_ADDRESSES, PULONG))
 
         if (getAdaptersAddresses == nullptr)
             return false;
@@ -509,7 +509,7 @@ static void getViaGetAdaptersAddresses (Array<MACAddress>& result)
 static void getViaNetBios (Array<MACAddress>& result)
 {
     DynamicLibrary dll ("netapi32.dll");
-    JUCE_LOAD_WINAPI_FUNCTION (dll, Netbios, NetbiosCall, UCHAR, (PNCB))
+    YUP_LOAD_WINAPI_FUNCTION (dll, Netbios, NetbiosCall, UCHAR, (PNCB))
 
     if (NetbiosCall != nullptr)
     {
@@ -556,7 +556,7 @@ static void getViaNetBios (Array<MACAddress>& result)
 
 static void split (const sockaddr_in6* sa_in6, int off, uint8* split)
 {
-#if JUCE_MINGW
+#if YUP_MINGW
     split[0] = sa_in6->sin6_addr._S6_un._S6_u8[off + 1];
     split[1] = sa_in6->sin6_addr._S6_un._S6_u8[off];
 #else
@@ -630,13 +630,13 @@ IPAddress IPAddress::getInterfaceBroadcastAddress (const IPAddress&)
 }
 
 //==============================================================================
-bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& targetEmailAddress,
+bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& targetEmailAddress,
                                                       const String& emailSubject,
                                                       const String& bodyText,
                                                       const StringArray& filesToAttach)
 {
     DynamicLibrary dll ("MAPI32.dll");
-    JUCE_LOAD_WINAPI_FUNCTION (dll, MAPISendMail, mapiSendMail, ULONG, (LHANDLE, ULONG, lpMapiMessage, ::FLAGS, ULONG))
+    YUP_LOAD_WINAPI_FUNCTION (dll, MAPISendMail, mapiSendMail, ULONG, (LHANDLE, ULONG, lpMapiMessage, ::FLAGS, ULONG))
 
     if (mapiSendMail == nullptr)
         return false;
@@ -674,4 +674,4 @@ std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocati
     return URL::DownloadTask::createFallbackDownloader (*this, targetLocation, options);
 }
 
-} // namespace juce
+} // namespace yup

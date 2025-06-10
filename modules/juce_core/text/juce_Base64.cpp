@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 bool Base64::convertToBase64 (OutputStream& base64Result, const void* sourceData, size_t sourceDataSize)
@@ -146,4 +146,4 @@ String Base64::toBase64 (const String& text)
     return toBase64 (text.toRawUTF8(), strlen (text.toRawUTF8()));
 }
 
-} // namespace juce
+} // namespace yup

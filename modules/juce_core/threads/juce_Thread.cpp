@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 //==============================================================================
 Thread::Thread (const String& name, size_t stackSize)
@@ -73,7 +73,7 @@ struct CurrentThreadHolder final : public ReferenceCountedObject
     using Ptr = ReferenceCountedObjectPtr<CurrentThreadHolder>;
     ThreadLocalValue<Thread*> value;
 
-    JUCE_DECLARE_NON_COPYABLE (CurrentThreadHolder)
+    YUP_DECLARE_NON_COPYABLE (CurrentThreadHolder)
 };
 
 static char currentThreadHolderLock[sizeof (SpinLock)]; // (statically initialised to zeros).
@@ -133,7 +133,7 @@ void Thread::threadEntryPoint()
 }
 
 // used to wrap the incoming call from the platform-specific code
-void JUCE_API juce_threadEntryPoint (void* userData)
+void YUP_API juce_threadEntryPoint (void* userData)
 {
     static_cast<Thread*> (userData)->threadEntryPoint();
 }
@@ -147,7 +147,7 @@ bool Thread::startThreadInternal (Priority threadPriority)
     // has any options but we need to set this here to satisfy
     // later queries, otherwise we get inconsistent results across
     // platforms.
-#if JUCE_ANDROID || JUCE_LINUX || JUCE_BSD
+#if YUP_ANDROID || YUP_LINUX || YUP_BSD
     priority = threadPriority;
 #endif
 
@@ -200,7 +200,7 @@ bool Thread::isThreadRunning() const
     return threadHandle != nullptr;
 }
 
-Thread* JUCE_CALLTYPE Thread::getCurrentThread()
+Thread* YUP_CALLTYPE Thread::getCurrentThread()
 {
     return getCurrentThreadHolder()->value.get();
 }
@@ -333,7 +333,7 @@ struct LambdaThread final : public Thread
 
     std::function<void()> fn;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LambdaThread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LambdaThread)
 };
 
 bool Thread::launch (std::function<void()> functionToRun)
@@ -370,9 +370,9 @@ void SpinLock::enter() const noexcept
 }
 
 //==============================================================================
-bool JUCE_CALLTYPE Process::isRunningUnderDebugger() noexcept
+bool YUP_CALLTYPE Process::isRunningUnderDebugger() noexcept
 {
     return juce_isRunningUnderDebugger();
 }
 
-} // namespace juce
+} // namespace yup

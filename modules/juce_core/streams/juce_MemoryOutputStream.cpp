@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 MemoryOutputStream::MemoryOutputStream (const size_t initialSize)
@@ -215,7 +215,7 @@ String MemoryOutputStream::toString() const
     return String::createStringFromData (getData(), (int) getDataSize());
 }
 
-OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const MemoryOutputStream& streamToRead)
+OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const MemoryOutputStream& streamToRead)
 {
     auto dataSize = streamToRead.getDataSize();
 
@@ -225,4 +225,4 @@ OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const MemoryOutput
     return stream;
 }
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API DynamicObject : public ReferenceCountedObject
+class YUP_API DynamicObject : public ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -141,7 +141,7 @@ private:
     //==============================================================================
     NamedValueSet properties;
 
-    JUCE_LEAK_DETECTOR (DynamicObject)
+    YUP_LEAK_DETECTOR (DynamicObject)
 };
 
-} // namespace juce
+} // namespace yup

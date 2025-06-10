@@ -52,7 +52,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API LockingAsyncUpdater final
+class YUP_API LockingAsyncUpdater final
 {
 public:
     //==============================================================================
@@ -124,7 +124,7 @@ private:
     class Impl;
     ReferenceCountedObjectPtr<Impl> impl;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LockingAsyncUpdater)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LockingAsyncUpdater)
 };
 
 } // namespace yup

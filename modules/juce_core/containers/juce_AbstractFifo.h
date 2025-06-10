@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -86,7 +86,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API AbstractFifo
+class YUP_API AbstractFifo
 {
 public:
     //==============================================================================
@@ -322,7 +322,7 @@ private:
     int bufferSize;
     Atomic<int> validStart, validEnd;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbstractFifo)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AbstractFifo)
 };
 
 template <>
@@ -349,4 +349,4 @@ inline void AbstractFifo::ScopedReadWrite<AbstractFifo::ReadOrWrite::write>::pre
     f.prepareToWrite (num, startIndex1, blockSize1, startIndex2, blockSize2);
 }
 
-} // namespace juce
+} // namespace yup

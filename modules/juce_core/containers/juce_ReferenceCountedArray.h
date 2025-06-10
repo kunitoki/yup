@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -920,4 +920,4 @@ void ReferenceCountedArray<ObjectClass, TypeOfCriticalSectionToUse>::sort (
     sortArray (comparator, values.begin(), 0, values.size() - 1, retainOrderOfEquivalentItems);
 }
 
-} // namespace juce
+} // namespace yup

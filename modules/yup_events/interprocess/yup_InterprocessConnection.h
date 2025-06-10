@@ -66,7 +66,7 @@ class MemoryBlock;
 
     @tags{Events}
 */
-class JUCE_API InterprocessConnection
+class YUP_API InterprocessConnection
 {
 public:
     //==============================================================================
@@ -239,7 +239,7 @@ private:
     void runThread();
     int writeData (void*, int);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InterprocessConnection)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InterprocessConnection)
 };
 
 } // namespace yup

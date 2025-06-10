@@ -40,7 +40,7 @@
 namespace yup
 {
 
-#if JUCE_MAC || JUCE_WINDOWS || DOXYGEN
+#if YUP_MAC || YUP_WINDOWS || DOXYGEN
 
 //==============================================================================
 /**
@@ -54,7 +54,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API MountedVolumeListChangeDetector
+class YUP_API MountedVolumeListChangeDetector
 {
 public:
     MountedVolumeListChangeDetector();
@@ -64,10 +64,10 @@ public:
     virtual void mountedVolumeListChanged() = 0;
 
 private:
-    JUCE_PUBLIC_IN_DLL_BUILD (struct Pimpl)
+    YUP_PUBLIC_IN_DLL_BUILD (struct Pimpl)
     std::unique_ptr<Pimpl> pimpl;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MountedVolumeListChangeDetector)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MountedVolumeListChangeDetector)
 };
 
 #endif

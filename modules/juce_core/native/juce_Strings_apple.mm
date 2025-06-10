@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 String String::fromCFString(CFStringRef cfString)
@@ -71,8 +71,8 @@ CFStringRef String::toCFString() const
 
 String String::convertToPrecomposedUnicode() const
 {
-#if JUCE_IOS
-    JUCE_AUTORELEASEPOOL
+#if YUP_IOS
+    YUP_AUTORELEASEPOOL
     {
         return nsStringToJuce([juceStringToNS(*this) precomposedStringWithCanonicalMapping]);
     }
@@ -119,4 +119,4 @@ String String::convertToPrecomposedUnicode() const
 #endif
 }
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 Random::Random()
@@ -96,7 +96,7 @@ Random& Random::getSystemRandom() noexcept
     thread_local Random sysRand = []
     {
         Random random;
-#if JUCE_ASSERTIONS_ENABLED_OR_LOGGED
+#if YUP_ASSERTIONS_ENABLED_OR_LOGGED
         random.isSystemRandom = true;
 #endif
         return random;
@@ -200,4 +200,4 @@ void Random::fillBitsRandomly (BigInteger& arrayToChange, int startBit, int numB
         arrayToChange.setBit (startBit + numBits, nextBool());
 }
 
-} // namespace juce
+} // namespace yup

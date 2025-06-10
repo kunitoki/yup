@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -96,7 +96,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API XmlElement
+class YUP_API XmlElement
 {
 public:
     //==============================================================================
@@ -798,7 +798,7 @@ private:
     // UTF-16, cast it to a String and use the other constructor.
     XmlElement (const wchar_t*) = delete;
 
-    JUCE_LEAK_DETECTOR (XmlElement)
+    YUP_LEAK_DETECTOR (XmlElement)
 };
 
 //==============================================================================
@@ -857,4 +857,4 @@ private:
 
 #endif
 
-} // namespace juce
+} // namespace yup

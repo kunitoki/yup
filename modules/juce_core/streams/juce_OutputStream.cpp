@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if JUCE_DEBUG
+#if YUP_DEBUG
 
 //==============================================================================
 struct DanglingStreamChecker
@@ -76,7 +76,7 @@ static DanglingStreamChecker danglingStreamChecker;
 OutputStream::OutputStream()
     : newLineString (NewLine::getDefault())
 {
-#if JUCE_DEBUG
+#if YUP_DEBUG
     if (! DanglingStreamChecker::hasBeenDestroyed)
         danglingStreamChecker.activeStreams.add (this);
 #endif
@@ -84,7 +84,7 @@ OutputStream::OutputStream()
 
 OutputStream::~OutputStream()
 {
-#if JUCE_DEBUG
+#if YUP_DEBUG
     if (! DanglingStreamChecker::hasBeenDestroyed)
         danglingStreamChecker.activeStreams.removeFirstMatchingValue (this);
 #endif
@@ -221,7 +221,7 @@ bool OutputStream::writeString (const String& text)
 {
     auto numBytes = text.getNumBytesAsUTF8() + 1;
 
-#if (JUCE_STRING_UTF_TYPE == 8)
+#if (YUP_STRING_UTF_TYPE == 8)
     return write (text.toRawUTF8(), numBytes);
 #else
     // (This avoids using toUTF8() to prevent the memory bloat that it would leave behind
@@ -370,36 +370,36 @@ static void writeIntToStream (OutputStream& stream, IntegerType number)
     stream.write (start, (size_t) (end - start - 1));
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const int number)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const int number)
 {
     writeIntToStream (stream, number);
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const int64 number)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const int64 number)
 {
     writeIntToStream (stream, number);
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const double number)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const double number)
 {
     return stream << String (number);
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const char character)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const char character)
 {
     stream.writeByte (character);
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const char* const text)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const char* const text)
 {
     stream.write (text, strlen (text));
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const MemoryBlock& data)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const MemoryBlock& data)
 {
     if (! data.isEmpty())
         stream.write (data.getData(), data.getSize());
@@ -407,7 +407,7 @@ JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const Mem
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const File& fileToRead)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const File& fileToRead)
 {
     FileInputStream in (fileToRead);
 
@@ -417,15 +417,15 @@ JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const Fil
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, InputStream& streamToRead)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, InputStream& streamToRead)
 {
     stream.writeFromInputStream (streamToRead, -1);
     return stream;
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const NewLine&)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const NewLine&)
 {
     return stream << stream.getNewLineString();
 }
 
-} // namespace juce
+} // namespace yup

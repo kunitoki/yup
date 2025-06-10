@@ -37,12 +37,12 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 // clang-format off
 
-#define JUCE_JS_OPERATORS(X) \
+#define YUP_JS_OPERATORS(X) \
     X(semicolon,     ";")        X(dot,          ".")       X(comma,        ",") \
     X(openParen,     "(")        X(closeParen,   ")")       X(openBrace,    "{")    X(closeBrace, "}") \
     X(openBracket,   "[")        X(closeBracket, "]")       X(colon,        ":")    X(question,   "?") \
@@ -57,7 +57,7 @@ namespace juce
     X(leftShiftEquals,    "<<=") X(lessThanOrEqual,  "<=")  X(leftShift,    "<<")   X(lessThan,   "<") \
     X(rightShiftUnsigned, ">>>") X(rightShiftEquals, ">>=") X(rightShift,   ">>")   X(greaterThanOrEqual, ">=")  X(greaterThan,  ">")
 
-#define JUCE_JS_KEYWORDS(X) \
+#define YUP_JS_KEYWORDS(X) \
     X(var,      "var")      X(if_,     "if")     X(else_,  "else")   X(do_,       "do")       X(null_,     "null") \
     X(while_,   "while")    X(for_,    "for")    X(break_, "break")  X(continue_, "continue") X(undefined, "undefined") \
     X(function, "function") X(return_, "return") X(true_,  "true")   X(false_,    "false")    X(new_,      "new") \
@@ -67,15 +67,15 @@ namespace juce
 
 namespace TokenTypes
 {
-#define JUCE_DECLARE_JS_TOKEN(name, str) static const char* const name = str;
-JUCE_JS_KEYWORDS (JUCE_DECLARE_JS_TOKEN)
-JUCE_JS_OPERATORS (JUCE_DECLARE_JS_TOKEN)
-JUCE_DECLARE_JS_TOKEN (eof, "$eof")
-JUCE_DECLARE_JS_TOKEN (literal, "$literal")
-JUCE_DECLARE_JS_TOKEN (identifier, "$identifier")
+#define YUP_DECLARE_JS_TOKEN(name, str) static const char* const name = str;
+YUP_JS_KEYWORDS (YUP_DECLARE_JS_TOKEN)
+YUP_JS_OPERATORS (YUP_DECLARE_JS_TOKEN)
+YUP_DECLARE_JS_TOKEN (eof, "$eof")
+YUP_DECLARE_JS_TOKEN (literal, "$literal")
+YUP_DECLARE_JS_TOKEN (identifier, "$identifier")
 } // namespace TokenTypes
 
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4702)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4702)
 
 //==============================================================================
 struct JavascriptEngine::RootObject final : public DynamicObject
@@ -290,7 +290,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
                 location.throwError (root->timeout == Time() ? "Interrupted" : "Execution timed-out");
         }
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scope)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Scope)
     };
 
     //==============================================================================
@@ -314,7 +314,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
         virtual ResultCode perform (const Scope&, var*) const { return ok; }
 
         CodeLocation location;
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Statement)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Statement)
     };
 
     struct Expression : public Statement
@@ -1099,9 +1099,9 @@ struct JavascriptEngine::RootObject final : public DynamicObject
                 a.add (values.getUnchecked (i)->getResult (s));
 
             // std::move() needed here for older compilers
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wredundant-move")
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wredundant-move")
             return std::move (a);
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
         }
 
         OwnedArray<Expression> values;
@@ -1208,10 +1208,10 @@ struct JavascriptEngine::RootObject final : public DynamicObject
                 }
 
                 auto len = (size_t) (end - p);
-#define JUCE_JS_COMPARE_KEYWORD(name, str)                             \
+#define YUP_JS_COMPARE_KEYWORD(name, str)                             \
     if (len == sizeof (str) - 1 && matchToken (TokenTypes::name, len)) \
         return TokenTypes::name;
-                JUCE_JS_KEYWORDS (JUCE_JS_COMPARE_KEYWORD)
+                YUP_JS_KEYWORDS (YUP_JS_COMPARE_KEYWORD)
 
                 currentValue = String (p, end);
                 p = end;
@@ -1229,10 +1229,10 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             if (parseStringLiteral (*p) || (*p == '.' && parseFloatLiteral()))
                 return TokenTypes::literal;
 
-#define JUCE_JS_COMPARE_OPERATOR(name, str)              \
+#define YUP_JS_COMPARE_OPERATOR(name, str)              \
     if (matchToken (TokenTypes::name, sizeof (str) - 1)) \
         return TokenTypes::name;
-            JUCE_JS_OPERATORS (JUCE_JS_COMPARE_OPERATOR)
+            YUP_JS_OPERATORS (YUP_JS_COMPARE_OPERATOR)
 
             if (! p.isEmpty())
                 location.throwError ("Unexpected character '" + String::charToString (*p) + "' in source");
@@ -2023,7 +2023,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
             return e.release();
         }
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ExpressionTreeBuilder)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ExpressionTreeBuilder)
     };
 
     //==============================================================================
@@ -2054,7 +2054,7 @@ struct JavascriptEngine::RootObject final : public DynamicObject
 
         static var dump ([[maybe_unused]] Args a)
         {
-            JUCE_DBG (JSON::toString (a.thisObject));
+            YUP_DBG (JSON::toString (a.thisObject));
             return var::undefined();
         }
 
@@ -2147,9 +2147,9 @@ struct JavascriptEngine::RootObject final : public DynamicObject
                     array->insert (start++, get (a, i));
 
                 // std::move() needed here for older compilers
-                JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wredundant-move")
+                YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wredundant-move")
                 return std::move (itemsRemoved);
-                JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+                YUP_END_IGNORE_WARNINGS_GCC_LIKE
             }
 
             return var::undefined();
@@ -2568,6 +2568,6 @@ const NamedValueSet& JavascriptEngine::getRootObjectProperties() const noexcept
     return root->getProperties();
 }
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
-} // namespace juce
+} // namespace yup

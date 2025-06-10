@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 enum
@@ -128,7 +128,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
 
         case currentExecutableFile:
         case currentApplicationFile:
-           #if ! JUCE_STANDALONE_APPLICATION
+           #if ! YUP_STANDALONE_APPLICATION
             return juce_getExecutableFile();
            #endif
             // deliberate fall-through if this is not a shared-library
@@ -236,4 +236,4 @@ bool Process::openDocument (const String& fileName, const String& parameters, co
     return openDocument (fileName, parameters);
 }
 
-} // namespace juce
+} // namespace yup

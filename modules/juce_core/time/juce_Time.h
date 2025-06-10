@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Time
+class YUP_API Time
 {
 public:
     //==============================================================================
@@ -105,7 +105,7 @@ public:
 
         @see currentTimeMillis
     */
-    static Time JUCE_CALLTYPE getCurrentTime() noexcept;
+    static Time YUP_CALLTYPE getCurrentTime() noexcept;
 
     /** Returns the time as a number of milliseconds.
         @returns    the number of milliseconds this Time object represents, since
@@ -393,26 +393,26 @@ private:
 
 //==============================================================================
 /** Adds a RelativeTime to a Time. */
-JUCE_API Time operator+ (Time time, RelativeTime delta) noexcept;
+YUP_API Time operator+ (Time time, RelativeTime delta) noexcept;
 /** Adds a RelativeTime to a Time. */
-JUCE_API Time operator+ (RelativeTime delta, Time time) noexcept;
+YUP_API Time operator+ (RelativeTime delta, Time time) noexcept;
 
 /** Subtracts a RelativeTime from a Time. */
-JUCE_API Time operator- (Time time, RelativeTime delta) noexcept;
+YUP_API Time operator- (Time time, RelativeTime delta) noexcept;
 /** Returns the relative time difference between two times. */
-JUCE_API RelativeTime operator- (Time time1, Time time2) noexcept;
+YUP_API RelativeTime operator- (Time time1, Time time2) noexcept;
 
 /** Compares two Time objects. */
-JUCE_API bool operator== (Time time1, Time time2) noexcept;
+YUP_API bool operator== (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator!= (Time time1, Time time2) noexcept;
+YUP_API bool operator!= (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator<(Time time1, Time time2) noexcept;
+YUP_API bool operator<(Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator<= (Time time1, Time time2) noexcept;
+YUP_API bool operator<= (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator> (Time time1, Time time2) noexcept;
+YUP_API bool operator> (Time time1, Time time2) noexcept;
 /** Compares two Time objects. */
-JUCE_API bool operator>= (Time time1, Time time2) noexcept;
+YUP_API bool operator>= (Time time1, Time time2) noexcept;
 
-} // namespace juce
+} // namespace yup

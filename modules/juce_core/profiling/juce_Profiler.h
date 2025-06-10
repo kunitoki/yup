@@ -19,13 +19,13 @@
   ==============================================================================
 */
 
-#if JUCE_ENABLE_PROFILING
+#if YUP_ENABLE_PROFILING
 
 PERFETTO_DEFINE_CATEGORIES (
     perfetto::Category ("yup")
-        JUCE_PROFILING_CATEGORIES);
+        YUP_PROFILING_CATEGORIES);
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -37,7 +37,7 @@ namespace juce
 
     @tags{Profiling}
 */
-class JUCE_API Profiler
+class YUP_API Profiler
 {
 public:
     ~Profiler();
@@ -94,7 +94,7 @@ public:
     static constexpr auto compileTimePrettierFunction (F funcName);
 
     /** Singleton declaration for the Profiler class. */
-    JUCE_DECLARE_SINGLETON (Profiler, false)
+    YUP_DECLARE_SINGLETON (Profiler, false)
 
 protected:
     Profiler();
@@ -103,7 +103,7 @@ protected:
     File outputFolder;
     int fileDescriptor;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Profiler);
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Profiler);
 };
 
 template <typename F>
@@ -151,7 +151,7 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 
     return result;
 }
-} // namespace juce
+} // namespace yup
 
 // clang-format off
 /**
@@ -160,19 +160,19 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
    This macro is used to start a profiling session using the JUCE Profiler.
    It passes the provided arguments to the `startTracing` function of the `Profiler` singleton.
 
-   @param ... Arguments to be passed to `juce::Profiler::startTracing`.
+   @param ... Arguments to be passed to `yup::Profiler::startTracing`.
 */
-#define YUP_PROFILE_START(...) ::juce::Profiler::getInstance()->startTracing (__VA_ARGS__)
+#define YUP_PROFILE_START(...) ::yup::Profiler::getInstance()->startTracing (__VA_ARGS__)
 
 /** Stops the profiling/tracing session.
 
     This macro stops the current profiling session using the JUCE Profiler.
     It calls the `stopTracing` function of the `Profiler` singleton.
 */
-#define YUP_PROFILE_STOP(...) ::juce::Profiler::getInstance()->stopTracing()
+#define YUP_PROFILE_STOP(...) ::yup::Profiler::getInstance()->stopTracing()
 
 /** Define the output folder of the traces. */
-#define YUP_PROFILE_SET_OUTPUT_FOLDER(path) ::juce::Profiler::getInstance()->setOutputFolder (path)
+#define YUP_PROFILE_SET_OUTPUT_FOLDER(path) ::yup::Profiler::getInstance()->setOutputFolder (path)
 
 #if ! YUP_PROFILE_DISABLE_TRACE
 /** Records a profiling trace event.
@@ -185,8 +185,8 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
     @param ... Optional additional arguments for the trace event.
 */
 #define YUP_PROFILE_TRACE(category, ...)                                                                                                                        \
-    constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
-    TRACE_EVENT (category, ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
+    constexpr auto YUP_JOIN_MACRO (juce_pfn_, __LINE__) = ::yup::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
+    TRACE_EVENT (category, ::perfetto::StaticString (YUP_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
 
 #define YUP_PROFILE_NAMED_TRACE(category, name, ...)                                                                                                            \
     TRACE_EVENT (category, ::perfetto::StaticString (#name), ##__VA_ARGS__)
@@ -198,8 +198,8 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
     @param ... Optional additional arguments for the trace event.
 */
 #define YUP_PROFILE_INTERNAL_TRACE(...)                                                                                                                         \
-    constexpr auto JUCE_JOIN_MACRO (juce_pfn_, __LINE__) = ::juce::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
-    TRACE_EVENT ("yup", ::perfetto::StaticString (JUCE_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
+    constexpr auto YUP_JOIN_MACRO (juce_pfn_, __LINE__) = ::yup::Profiler::compileTimePrettierFunction ([] { return PERFETTO_DEBUG_FUNCTION_IDENTIFIER(); }); \
+    TRACE_EVENT ("yup", ::perfetto::StaticString (YUP_JOIN_MACRO (juce_pfn_, __LINE__).data()), ##__VA_ARGS__)
 
 #define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)                                                                                                             \
     TRACE_EVENT ("yup", ::perfetto::StaticString (#name), ##__VA_ARGS__)

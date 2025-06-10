@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -77,7 +77,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API XmlDocument
+class YUP_API XmlDocument
 {
 public:
     //==============================================================================
@@ -187,7 +187,7 @@ private:
     String expandExternalEntity (const String&);
     String getParameterEntity (const String&);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (XmlDocument)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (XmlDocument)
 };
 
 //==============================================================================
@@ -219,4 +219,4 @@ std::unique_ptr<XmlElement> parseXMLIfTagMatches (const String& textToParse, Str
 */
 std::unique_ptr<XmlElement> parseXMLIfTagMatches (const File& fileToParse, StringRef requiredTag);
 
-} // namespace juce
+} // namespace yup

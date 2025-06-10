@@ -56,7 +56,7 @@ class MessageListener;
 
     @tags{Events}
 */
-class JUCE_API Message : public MessageManager::MessageBase
+class YUP_API Message : public MessageManager::MessageBase
 {
 public:
     //==============================================================================
@@ -74,7 +74,7 @@ private:
 
     // Avoid the leak-detector because for plugins, the host can unload our DLL with undelivered
     // messages still in the system event queue. These aren't harmful, but can cause annoying assertions.
-    JUCE_DECLARE_NON_COPYABLE (Message)
+    YUP_DECLARE_NON_COPYABLE (Message)
 };
 
 } // namespace yup

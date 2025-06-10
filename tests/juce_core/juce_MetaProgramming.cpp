@@ -25,14 +25,15 @@
 
 #include <string>
 
-using namespace juce;
+using namespace yup;
 
-namespace {
+namespace
+{
 
 struct HaveIt
 {
-    bool existingMethod(int, float);
-    bool existingMethod2(int, float, int);
+    bool existingMethod (int, float);
+    bool existingMethod2 (int, float, int);
 
     std::string field;
 };
@@ -43,13 +44,13 @@ struct DontHaveIt
 };
 
 template <class T>
-using hasExistingMethod = decltype(&T::existingMethod);
+using hasExistingMethod = decltype (&T::existingMethod);
 
 template <class T>
-using hasExistingMethod2 = decltype(&T::existingMethod2);
+using hasExistingMethod2 = decltype (&T::existingMethod2);
 
 template <class T>
-using hasField = decltype(T::field);
+using hasField = decltype (T::field);
 
 } // namespace
 
@@ -68,9 +69,9 @@ TEST (MetaProgrammingTests, IsDetected)
 
 TEST (MetaProgrammingTests, IsDetectedExact)
 {
-    static_assert (isDetectedExact<decltype(&HaveIt::existingMethod), hasExistingMethod, HaveIt>);
-    static_assert (! isDetectedExact<decltype(&HaveIt::existingMethod), hasExistingMethod2, HaveIt>);
-    static_assert (! isDetectedExact<decltype(&HaveIt::existingMethod), hasExistingMethod, DontHaveIt>);
+    static_assert (isDetectedExact<decltype (&HaveIt::existingMethod), hasExistingMethod, HaveIt>);
+    static_assert (! isDetectedExact<decltype (&HaveIt::existingMethod), hasExistingMethod2, HaveIt>);
+    static_assert (! isDetectedExact<decltype (&HaveIt::existingMethod), hasExistingMethod, DontHaveIt>);
 }
 
 TEST (MetaProgrammingTests, IsDetectedConvertible)
@@ -83,12 +84,12 @@ TEST (MetaProgrammingTests, IsDetectedConvertible)
 
 TEST (MetaProgrammingTests, DetectedType)
 {
-    static_assert (std::is_same_v<detectedType<hasExistingMethod, HaveIt>, decltype(&HaveIt::existingMethod)>);
+    static_assert (std::is_same_v<detectedType<hasExistingMethod, HaveIt>, decltype (&HaveIt::existingMethod)>);
     static_assert (std::is_same_v<detectedType<hasExistingMethod, DontHaveIt>, yup::NoneSuch>);
 }
 
 TEST (MetaProgrammingTests, DetectedOr)
 {
-    static_assert (std::is_same_v<detectedOr<int, hasExistingMethod, HaveIt>, decltype(&HaveIt::existingMethod)>);
+    static_assert (std::is_same_v<detectedOr<int, hasExistingMethod, HaveIt>, decltype (&HaveIt::existingMethod)>);
     static_assert (std::is_same_v<detectedOr<int, hasExistingMethod, DontHaveIt>, int>);
 }

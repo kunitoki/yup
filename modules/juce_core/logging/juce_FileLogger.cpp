@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 FileLogger::FileLogger (const File& file,
@@ -66,7 +66,7 @@ FileLogger::~FileLogger() {}
 void FileLogger::logMessage (const String& message)
 {
     const ScopedLock sl (logLock);
-    JUCE_DBG (message);
+    YUP_DBG (message);
     FileOutputStream out (logFile, 256);
     out << message << newLine;
 }
@@ -118,9 +118,9 @@ void FileLogger::trimFileSize (const File& file, int64 maxFileSizeBytes)
 //==============================================================================
 File FileLogger::getSystemLogFileFolder()
 {
-#if JUCE_MAC
+#if YUP_MAC
     return File ("~/Library/Logs");
-#elif JUCE_LINUX
+#elif YUP_LINUX
     const char* state = ::getenv ("XDG_STATE_HOME");
     if (state == nullptr)
         state = ::getenv ("XDG_DATA_HOME");
@@ -150,4 +150,4 @@ FileLogger* FileLogger::createDateStampedLogger (const String& logFileSubDirecto
                            0);
 }
 
-} // namespace juce
+} // namespace yup

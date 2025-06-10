@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API MACAddress final
+class YUP_API MACAddress final
 {
 public:
     //==============================================================================
@@ -102,4 +102,4 @@ private:
     uint8 address[6];
 };
 
-} // namespace juce
+} // namespace yup

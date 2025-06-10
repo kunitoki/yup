@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 StringArray DirectoryIterator::parseWildcards (const String& pattern)
@@ -63,7 +63,7 @@ bool DirectoryIterator::next()
     return next (nullptr, nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 bool DirectoryIterator::next (bool* isDirResult, bool* isHiddenResult, int64* fileSize, Time* modTime, Time* creationTime, bool* isReadOnly)
 {
@@ -147,7 +147,7 @@ bool DirectoryIterator::next (bool* isDirResult, bool* isHiddenResult, int64* fi
     }
 }
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+YUP_END_IGNORE_DEPRECATION_WARNINGS
 
 const File& DirectoryIterator::getFile() const
 {
@@ -174,4 +174,4 @@ float DirectoryIterator::getEstimatedProgress() const
     return jlimit (0.0f, 1.0f, detailedIndex / (float) totalNumFiles);
 }
 
-} // namespace juce
+} // namespace yup

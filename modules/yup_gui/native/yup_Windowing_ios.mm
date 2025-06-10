@@ -39,7 +39,7 @@
 
 - (void)applicationDidFinishLaunching:(UIApplication* __unused)application
 {
-    if (auto* app = juce::YUPApplicationBase::createInstance())
+    if (auto* app = yup::YUPApplicationBase::createInstance())
     {
         if (!app->initialiseApp())
             exit(app->shutdownApp());
@@ -52,18 +52,18 @@
 
 - (void)applicationWillTerminate:(UIApplication* __unused)application
 {
-    juce::YUPApplicationBase::appWillTerminateByForce();
+    yup::YUPApplicationBase::appWillTerminateByForce();
 }
 
 - (void)applicationDidEnterBackground:(UIApplication* __unused)application
 {
-    if (auto* app = juce::YUPApplicationBase::getInstance())
+    if (auto* app = yup::YUPApplicationBase::getInstance())
         app->suspended();
 }
 
 - (void)applicationWillEnterForeground:(UIApplication* __unused)application
 {
-    if (auto* app = juce::YUPApplicationBase::getInstance())
+    if (auto* app = yup::YUPApplicationBase::getInstance())
         app->resumed();
 }
 
@@ -77,7 +77,7 @@
 
 @end
 
-namespace juce
+namespace yup
 {
 
 int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
@@ -88,4 +88,4 @@ int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
     return UIApplicationMain(argc, const_cast<char**>(argv), nil, NSStringFromClass(delegateClass));
 }
 
-} // namespace juce
+} // namespace yup

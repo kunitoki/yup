@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API NamedPipe final
+class YUP_API NamedPipe final
 {
 public:
     //==============================================================================
@@ -104,14 +104,14 @@ public:
 
 private:
     //==============================================================================
-    JUCE_PUBLIC_IN_DLL_BUILD (class Pimpl)
+    YUP_PUBLIC_IN_DLL_BUILD (class Pimpl)
     std::unique_ptr<Pimpl> pimpl;
     String currentPipeName;
     ReadWriteLock lock;
 
     bool openInternal (const String& pipeName, bool createPipe, bool mustNotExist);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NamedPipe)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (NamedPipe)
 };
 
-} // namespace juce
+} // namespace yup

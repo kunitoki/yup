@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -559,4 +559,4 @@ struct MathsFunctionsTests
 
 static MathsFunctionsTests mathsFunctionsTests;
 
-} // namespace juce
+} // namespace yup

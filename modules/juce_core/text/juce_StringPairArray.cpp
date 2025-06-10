@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 StringPairArray::StringPairArray (bool shouldIgnoreCase)
@@ -238,4 +238,4 @@ void StringPairArray::addUnorderedMap (const std::unordered_map<String, String>&
 
 void StringPairArray::addMap (const std::map<String, String>& toAdd) { addMapImpl (toAdd); }
 
-} // namespace juce
+} // namespace yup

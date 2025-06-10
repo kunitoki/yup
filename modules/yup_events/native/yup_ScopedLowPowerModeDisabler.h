@@ -59,8 +59,8 @@ private:
     class Pimpl;
     std::unique_ptr<Pimpl> pimpl;
 
-    JUCE_DECLARE_NON_COPYABLE (ScopedLowPowerModeDisabler)
-    JUCE_DECLARE_NON_MOVEABLE (ScopedLowPowerModeDisabler)
+    YUP_DECLARE_NON_COPYABLE (ScopedLowPowerModeDisabler)
+    YUP_DECLARE_NON_MOVEABLE (ScopedLowPowerModeDisabler)
 };
 
 } // namespace yup

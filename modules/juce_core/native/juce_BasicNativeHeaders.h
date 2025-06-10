@@ -42,9 +42,9 @@
 #undef T
 
 //==============================================================================
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 
-#if JUCE_IOS
+#if YUP_IOS
 #define Component CarbonDummyCompName
 #import <Foundation/Foundation.h>
 #undef Component
@@ -81,8 +81,8 @@
 #include <poll.h>
 
 //==============================================================================
-#elif JUCE_WINDOWS
-#if JUCE_MSVC
+#elif YUP_WINDOWS
+#if YUP_MSVC
 #ifndef _CPPRTTI
 #error "You're compiling without RTTI enabled! This is needed for a lot of JUCE classes, please update your compiler settings!"
 #endif
@@ -133,7 +133,7 @@
 #endif
 #include <security.h>
 
-#if JUCE_MINGW
+#if YUP_MINGW
 #include <basetyps.h>
 #include <sys/time.h>
 #ifndef alloca
@@ -150,12 +150,12 @@
 
 #undef PACKED
 
-#if JUCE_MSVC
+#if YUP_MSVC
 #pragma warning(pop)
 #pragma warning(4 : 4511 4512 4100)
 #endif
 
-#if ! JUCE_MINGW && ! JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#if ! YUP_MINGW && ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 #pragma comment(lib, "kernel32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "wininet.lib")
@@ -190,12 +190,12 @@
     returnType: the return type
     params: list of params (bracketed)
  */
-#define JUCE_LOAD_WINAPI_FUNCTION(dll, functionName, localFunctionName, returnType, params) \
+#define YUP_LOAD_WINAPI_FUNCTION(dll, functionName, localFunctionName, returnType, params) \
     typedef returnType (WINAPI* type##localFunctionName) params;                            \
     type##localFunctionName localFunctionName = (type##localFunctionName) dll.getFunction (#functionName);
 
 //==============================================================================
-#elif JUCE_LINUX
+#elif YUP_LINUX
 #include <arpa/inet.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -229,7 +229,7 @@
 #include <poll.h>
 
 //==============================================================================
-#elif JUCE_BSD
+#elif YUP_BSD
 #include <arpa/inet.h>
 #include <dirent.h>
 #include <dlfcn.h>
@@ -263,7 +263,7 @@
 #include <poll.h>
 
 //==============================================================================
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
 #include <jni.h>
 #include <pthread.h>
 #include <sched.h>

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API RelativeTime
+class YUP_API RelativeTime
 {
 public:
     //==============================================================================
@@ -180,22 +180,22 @@ private:
 
 //==============================================================================
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator== (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator!= (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator> (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API bool YUP_CALLTYPE operator> (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator<(RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API bool YUP_CALLTYPE operator<(RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator>= (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API bool YUP_CALLTYPE operator>= (RelativeTime t1, RelativeTime t2) noexcept;
 /** Compares two RelativeTimes. */
-JUCE_API bool JUCE_CALLTYPE operator<= (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API bool YUP_CALLTYPE operator<= (RelativeTime t1, RelativeTime t2) noexcept;
 
 //==============================================================================
 /** Adds two RelativeTimes together. */
-JUCE_API RelativeTime JUCE_CALLTYPE operator+ (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API RelativeTime YUP_CALLTYPE operator+ (RelativeTime t1, RelativeTime t2) noexcept;
 /** Subtracts two RelativeTimes. */
-JUCE_API RelativeTime JUCE_CALLTYPE operator- (RelativeTime t1, RelativeTime t2) noexcept;
+YUP_API RelativeTime YUP_CALLTYPE operator- (RelativeTime t1, RelativeTime t2) noexcept;
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -56,7 +56,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API CriticalSection
+class YUP_API CriticalSection
 {
 public:
     //==============================================================================
@@ -116,11 +116,11 @@ public:
 
 private:
     //==============================================================================
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     // To avoid including windows.h in the public JUCE headers, we'll just allocate
     // a block of memory here that's big enough to be used internally as a windows
     // CRITICAL_SECTION structure.
-#if JUCE_64BIT
+#if YUP_64BIT
     std::aligned_storage_t<44, 8> lock;
 #else
     std::aligned_storage_t<24, 8> lock;
@@ -129,7 +129,7 @@ private:
     mutable pthread_mutex_t lock;
 #endif
 
-    JUCE_DECLARE_NON_COPYABLE (CriticalSection)
+    YUP_DECLARE_NON_COPYABLE (CriticalSection)
 };
 
 //==============================================================================
@@ -144,7 +144,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API DummyCriticalSection
+class YUP_API DummyCriticalSection
 {
 public:
     inline DummyCriticalSection() = default;
@@ -167,7 +167,7 @@ public:
     using ScopedUnlockType = ScopedLockType;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE (DummyCriticalSection)
+    YUP_DECLARE_NON_COPYABLE (DummyCriticalSection)
 };
 
 //==============================================================================
@@ -275,4 +275,4 @@ using ScopedUnlock = CriticalSection::ScopedUnlockType;
 */
 using ScopedTryLock = CriticalSection::ScopedTryLockType;
 
-} // namespace juce
+} // namespace yup

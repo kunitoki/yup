@@ -25,11 +25,11 @@
 
 #include <string_view>
 
-using namespace juce;
+using namespace yup;
 
 TEST (PlatformDefsTests, Stringify)
 {
-    constexpr auto x = std::string_view (JUCE_STRINGIFY (abcdf));
+    constexpr auto x = std::string_view (YUP_STRINGIFY (abcdf));
 
     static_assert (x == "abcdf");
 }
@@ -38,7 +38,7 @@ TEST (PlatformDefsTests, IsConstantEvaluated)
 {
     constexpr auto x = []
     {
-        if (juce::isConstantEvaluated())
+        if (yup::isConstantEvaluated())
             return 1;
         else
             return 2;

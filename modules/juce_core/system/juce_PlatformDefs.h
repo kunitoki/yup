@@ -39,57 +39,57 @@
 
 #pragma once
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
 /** This file defines miscellaneous macros for debugging, assertions, etc. */
 
 //==============================================================================
-#ifdef JUCE_FORCE_DEBUG
-#undef JUCE_DEBUG
+#ifdef YUP_FORCE_DEBUG
+#undef YUP_DEBUG
 
-#if JUCE_FORCE_DEBUG
-#define JUCE_DEBUG 1
+#if YUP_FORCE_DEBUG
+#define YUP_DEBUG 1
 #endif
 #endif
 
 /** This macro defines the C calling convention used as the standard for JUCE calls. */
-#if JUCE_WINDOWS
-#define JUCE_CALLTYPE __stdcall
-#define JUCE_CDECL __cdecl
+#if YUP_WINDOWS
+#define YUP_CALLTYPE __stdcall
+#define YUP_CDECL __cdecl
 #else
-#define JUCE_CALLTYPE
-#define JUCE_CDECL
+#define YUP_CALLTYPE
+#define YUP_CDECL
 #endif
 
 //==============================================================================
 #ifndef DOXYGEN
-#define JUCE_JOIN_MACRO_HELPER(a, b) a##b
-#define JUCE_STRINGIFY_MACRO_HELPER(a) #a
+#define YUP_JOIN_MACRO_HELPER(a, b) a##b
+#define YUP_STRINGIFY_MACRO_HELPER(a) #a
 #endif
 
 /** A good old-fashioned C macro concatenation helper.
     This combines two items (which may themselves be macros) into a single string,
     avoiding the pitfalls of the ## macro operator. */
-#define JUCE_JOIN_MACRO(item1, item2) JUCE_JOIN_MACRO_HELPER (item1, item2)
+#define YUP_JOIN_MACRO(item1, item2) YUP_JOIN_MACRO_HELPER (item1, item2)
 
 /** A handy C macro for stringifying any symbol, rather than just a macro parameter. */
-#define JUCE_STRINGIFY(item) JUCE_STRINGIFY_MACRO_HELPER (item)
+#define YUP_STRINGIFY(item) YUP_STRINGIFY_MACRO_HELPER (item)
 
 //==============================================================================
 // Debugging and assertion macros
-#ifndef JUCE_LOG_CURRENT_ASSERTION
-#if JUCE_LOG_ASSERTIONS || JUCE_DEBUG
-#define JUCE_LOG_CURRENT_ASSERTION juce::logAssertion (JUCE_JOIN_MACRO (L, __FILE__), __LINE__);
+#ifndef YUP_LOG_CURRENT_ASSERTION
+#if YUP_LOG_ASSERTIONS || YUP_DEBUG
+#define YUP_LOG_CURRENT_ASSERTION yup::logAssertion (YUP_JOIN_MACRO (L, __FILE__), __LINE__);
 #else
-#define JUCE_LOG_CURRENT_ASSERTION
+#define YUP_LOG_CURRENT_ASSERTION
 #endif
 #endif
 
 //==============================================================================
 // clang-format off
-#if JUCE_IOS || JUCE_LINUX || JUCE_BSD
+#if YUP_IOS || YUP_LINUX || YUP_BSD
 /** This will try to break into the debugger if the app is currently being debugged.
 
     If called by an app that's not being debugged, the behaviour isn't defined - it may
@@ -97,99 +97,99 @@ namespace juce
 
     @see jassert()
 */
-#define JUCE_BREAK_IN_DEBUGGER ::kill (0, SIGTRAP);
-#elif JUCE_WASM
-#define JUCE_BREAK_IN_DEBUGGER
-#elif JUCE_MSVC
+#define YUP_BREAK_IN_DEBUGGER ::kill (0, SIGTRAP);
+#elif YUP_WASM
+#define YUP_BREAK_IN_DEBUGGER
+#elif YUP_MSVC
 #ifndef __INTEL_COMPILER
 #pragma intrinsic(__debugbreak)
 #endif
-#define JUCE_BREAK_IN_DEBUGGER __debugbreak();
-#elif JUCE_INTEL && (JUCE_GCC || JUCE_CLANG || JUCE_MAC)
-#if JUCE_NO_INLINE_ASM
-#define JUCE_BREAK_IN_DEBUGGER
+#define YUP_BREAK_IN_DEBUGGER __debugbreak();
+#elif YUP_INTEL && (YUP_GCC || YUP_CLANG || YUP_MAC)
+#if YUP_NO_INLINE_ASM
+#define YUP_BREAK_IN_DEBUGGER
 #else
-#define JUCE_BREAK_IN_DEBUGGER asm ("int $3");
+#define YUP_BREAK_IN_DEBUGGER asm ("int $3");
 #endif
-#elif JUCE_ARM && JUCE_MAC
-#define JUCE_BREAK_IN_DEBUGGER __builtin_debugtrap();
-#elif JUCE_ANDROID
-#define JUCE_BREAK_IN_DEBUGGER __builtin_trap();
+#elif YUP_ARM && YUP_MAC
+#define YUP_BREAK_IN_DEBUGGER __builtin_debugtrap();
+#elif YUP_ANDROID
+#define YUP_BREAK_IN_DEBUGGER __builtin_trap();
 #else
-#define JUCE_BREAK_IN_DEBUGGER __asm int 3;
+#define YUP_BREAK_IN_DEBUGGER __asm int 3;
 #endif
 // clang-format on
 
-#if JUCE_CLANG && defined(__has_feature) && ! defined(JUCE_ANALYZER_NORETURN)
+#if YUP_CLANG && defined(__has_feature) && ! defined(YUP_ANALYZER_NORETURN)
 #if __has_feature(attribute_analyzer_noreturn)
 inline void __attribute__ ((analyzer_noreturn)) juce_assert_noreturn()
 {
 }
 
-#define JUCE_ANALYZER_NORETURN juce::juce_assert_noreturn();
+#define YUP_ANALYZER_NORETURN yup::juce_assert_noreturn();
 #endif
 #endif
 
-#ifndef JUCE_ANALYZER_NORETURN
-#define JUCE_ANALYZER_NORETURN
+#ifndef YUP_ANALYZER_NORETURN
+#define YUP_ANALYZER_NORETURN
 #endif
 
 /** Used to silence Wimplicit-fallthrough on Clang and GCC where available
     as there are a few places in the codebase where we need to do this
     deliberately and want to ignore the warning. */
-#if JUCE_CLANG
+#if YUP_CLANG
 #if __has_cpp_attribute(clang::fallthrough)
-#define JUCE_FALLTHROUGH [[clang::fallthrough]];
+#define YUP_FALLTHROUGH [[clang::fallthrough]];
 #else
-#define JUCE_FALLTHROUGH
+#define YUP_FALLTHROUGH
 #endif
-#elif JUCE_GCC
+#elif YUP_GCC
 #if __GNUC__ >= 7
-#define JUCE_FALLTHROUGH [[gnu::fallthrough]];
+#define YUP_FALLTHROUGH [[gnu::fallthrough]];
 #else
-#define JUCE_FALLTHROUGH
+#define YUP_FALLTHROUGH
 #endif
 #else
-#define JUCE_FALLTHROUGH
+#define YUP_FALLTHROUGH
 #endif
 
 //==============================================================================
 #if defined(__has_feature)
-#define JUCE_HAS_FEATURE(feature) __has_feature (feature)
+#define YUP_HAS_FEATURE(feature) __has_feature (feature)
 #else
-#define JUCE_HAS_FEATURE(feature) 0
+#define YUP_HAS_FEATURE(feature) 0
 #endif
 
 #if defined(__has_attribute)
-#define JUCE_HAS_ATTRIBUTE(attribute) __has_attribute (attribute)
+#define YUP_HAS_ATTRIBUTE(attribute) __has_attribute (attribute)
 #else
-#define JUCE_HAS_ATTRIBUTE(attribute) 0
+#define YUP_HAS_ATTRIBUTE(attribute) 0
 #endif
 
 #if defined(__has_builtin)
-#define JUCE_HAS_BUILTIN(builtin) __has_builtin (builtin)
+#define YUP_HAS_BUILTIN(builtin) __has_builtin (builtin)
 #else
-#define JUCE_HAS_BUILTIN(builtin) 0
+#define YUP_HAS_BUILTIN(builtin) 0
 #endif
 
 //==============================================================================
 #if __cpp_lib_is_constant_evaluated >= 201811L
-#define JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED 1
+#define YUP_STL_FEATURE_IS_CONSTANT_EVALUATED 1
 #else
-#define JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED 0
+#define YUP_STL_FEATURE_IS_CONSTANT_EVALUATED 0
 #endif
 
-#if defined(JUCE_MSVC) || JUCE_HAS_BUILTIN(__builtin_is_constant_evaluated)
-#define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 1
+#if defined(YUP_MSVC) || YUP_HAS_BUILTIN(__builtin_is_constant_evaluated)
+#define YUP_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 1
 #else
-#define JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 0
+#define YUP_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED 0
 #endif
 
 constexpr bool isConstantEvaluated() noexcept
 {
-#if JUCE_STL_FEATURE_IS_CONSTANT_EVALUATED
+#if YUP_STL_FEATURE_IS_CONSTANT_EVALUATED
     return std::is_constant_evaluated();
-#elif JUCE_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
+#elif YUP_FEATURE_BUILTIN_IS_CONSTANT_EVALUATED
     return __builtin_is_constant_evaluated();
 #else
     return false;
@@ -198,8 +198,8 @@ constexpr bool isConstantEvaluated() noexcept
 
 //==============================================================================
 // clang-format off
-#if JUCE_MSVC && ! defined(DOXYGEN)
-#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
+#if YUP_MSVC && ! defined(DOXYGEN)
+#define YUP_BLOCK_WITH_FORCED_SEMICOLON(x) \
     __pragma (warning (push))               \
     __pragma (warning (disable : 4127))     \
     __pragma (warning (disable : 4390))     \
@@ -209,23 +209,23 @@ constexpr bool isConstantEvaluated() noexcept
 /** This is the good old C++ trick for creating a macro that forces the user to put
     a semicolon after it when they use it.
 */
-#define JUCE_BLOCK_WITH_FORCED_SEMICOLON(x) \
+#define YUP_BLOCK_WITH_FORCED_SEMICOLON(x) \
     do { x } while (false)
 #endif
 // clang-format on
 
 //==============================================================================
 // clang-format off
-#if (JUCE_DEBUG && ! JUCE_DISABLE_ASSERTIONS) || DOXYGEN
+#if (YUP_DEBUG && ! YUP_DISABLE_ASSERTIONS) || DOXYGEN
 /** Assertion are enabled in debug unless explicitly disabled. */
-#define JUCE_ASSERTIONS_ENABLED 1
+#define YUP_ASSERTIONS_ENABLED 1
 
 /** Writes a string to the standard error stream.
 
     Note that as well as a single string, you can use this to write multiple items as a stream, e.g.
 
     @code
-        JUCE_DBG ("foo = " << foo << "bar = " << bar);
+        YUP_DBG ("foo = " << foo << "bar = " << bar);
     @endcode
 
     The macro is only enabled in a debug build, so be careful not to use it with expressions
@@ -233,29 +233,29 @@ constexpr bool isConstantEvaluated() noexcept
 
     @see Logger::outputDebugString
 */
-#define JUCE_DBG(textToWrite) JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    juce::String tempDbgBuf;                                    \
+#define YUP_DBG(textToWrite) YUP_BLOCK_WITH_FORCED_SEMICOLON (\
+    yup::String tempDbgBuf;                                    \
     tempDbgBuf << textToWrite;                                  \
-    juce::Logger::outputDebugString (tempDbgBuf);)
+    yup::Logger::outputDebugString (tempDbgBuf);)
 
 //==============================================================================
 /** This will always cause an assertion failure.
-    It is only compiled in a debug build, (unless JUCE_LOG_ASSERTIONS is enabled for your build).
+    It is only compiled in a debug build, (unless YUP_LOG_ASSERTIONS is enabled for your build).
 
     @see jassert
 */
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (\
-    if (! juce::isConstantEvaluated())                 \
+#define jassertfalse YUP_BLOCK_WITH_FORCED_SEMICOLON (\
+    if (! yup::isConstantEvaluated())                 \
     {                                                  \
-        JUCE_LOG_CURRENT_ASSERTION;                    \
-        if (juce::juce_isRunningUnderDebugger())       \
-            { JUCE_BREAK_IN_DEBUGGER }                 \
+        YUP_LOG_CURRENT_ASSERTION;                    \
+        if (yup::juce_isRunningUnderDebugger())       \
+            { YUP_BREAK_IN_DEBUGGER }                 \
         else                                           \
-            { JUCE_ANALYZER_NORETURN }                 \
+            { YUP_ANALYZER_NORETURN }                 \
     }                                                  \
     else                                               \
     {                                                  \
-        JUCE_ANALYZER_NORETURN                         \
+        YUP_ANALYZER_NORETURN                         \
     })
 
 //==============================================================================
@@ -267,34 +267,34 @@ constexpr bool isConstantEvaluated() noexcept
 
     @see jassertfalse
 */
-#define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
+#define jassert(expression) YUP_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 
 /** Platform-independent assertion macro which suppresses ignored-variable
     warnings in all build modes. You should probably use a plain jassert()
     and `[[maybe_unused]]` by default.
 */
-#define jassertquiet(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
+#define jassertquiet(expression) YUP_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 
 #else
 //==============================================================================
 /** If debugging is disabled, these dummy debug and assertion macros are used. */
-#define JUCE_ASSERTIONS_ENABLED 0
+#define YUP_ASSERTIONS_ENABLED 0
 
-#define JUCE_DBG(textToWrite)
-#define jassertfalse JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! juce::isConstantEvaluated()) JUCE_LOG_CURRENT_ASSERTION;)
+#define YUP_DBG(textToWrite)
+#define jassertfalse YUP_BLOCK_WITH_FORCED_SEMICOLON (if (! yup::isConstantEvaluated()) YUP_LOG_CURRENT_ASSERTION;)
 
-#if JUCE_LOG_ASSERTIONS
-#define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
-#define jassertquiet(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
+#if YUP_LOG_ASSERTIONS
+#define jassert(expression) YUP_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
+#define jassertquiet(expression) YUP_BLOCK_WITH_FORCED_SEMICOLON (if (! (expression)) jassertfalse;)
 #else
-#define jassert(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (;)
-#define jassertquiet(expression) JUCE_BLOCK_WITH_FORCED_SEMICOLON (if (false) (void) (expression);)
+#define jassert(expression) YUP_BLOCK_WITH_FORCED_SEMICOLON (;)
+#define jassertquiet(expression) YUP_BLOCK_WITH_FORCED_SEMICOLON (if (false) (void) (expression);)
 #endif
 
 #endif
 // clang-format on
 
-#define JUCE_ASSERTIONS_ENABLED_OR_LOGGED JUCE_ASSERTIONS_ENABLED || JUCE_LOG_ASSERTIONS
+#define YUP_ASSERTIONS_ENABLED_OR_LOGGED YUP_ASSERTIONS_ENABLED || YUP_LOG_ASSERTIONS
 
 //==============================================================================
 /** This is a shorthand macro for deleting a class's copy constructor and copy assignment operator.
@@ -320,36 +320,36 @@ constexpr bool isConstantEvaluated() noexcept
             etc..
 
         private:
-            JUCE_DECLARE_NON_COPYABLE (MyClass)
+            YUP_DECLARE_NON_COPYABLE (MyClass)
         };
     @endcode
 */
-#define JUCE_DECLARE_NON_COPYABLE(className) \
+#define YUP_DECLARE_NON_COPYABLE(className) \
     className (const className&) = delete;   \
     className& operator= (const className&) = delete;
 
 /** This is a shorthand macro for deleting a class's move constructor and
     move assignment operator. */
-#define JUCE_DECLARE_NON_MOVEABLE(className) \
+#define YUP_DECLARE_NON_MOVEABLE(className) \
     className (className&&) = delete;        \
     className& operator= (className&&) = delete;
 
-/** This is a shorthand way of writing both a JUCE_DECLARE_NON_COPYABLE and
-    JUCE_LEAK_DETECTOR macro for a class. */
-#define JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(className) \
-    JUCE_DECLARE_NON_COPYABLE (className)                       \
-    JUCE_LEAK_DETECTOR (className)
+/** This is a shorthand way of writing both a YUP_DECLARE_NON_COPYABLE and
+    YUP_LEAK_DETECTOR macro for a class. */
+#define YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(className) \
+    YUP_DECLARE_NON_COPYABLE (className)                       \
+    YUP_LEAK_DETECTOR (className)
 
 /** This macro can be added to class definitions to disable the use of new/delete to
     allocate the object on the heap, forcing it to only be used as a stack or member variable. */
-#define JUCE_PREVENT_HEAP_ALLOCATION             \
+#define YUP_PREVENT_HEAP_ALLOCATION             \
 private:                                         \
     static void* operator new (size_t) = delete; \
     static void operator delete (void*) = delete;
 
 //==============================================================================
-#if JUCE_MSVC && ! defined(DOXYGEN)
-#define JUCE_COMPILER_WARNING(msg) __pragma (message (__FILE__ "(" JUCE_STRINGIFY (__LINE__) ") : Warning: " msg))
+#if YUP_MSVC && ! defined(DOXYGEN)
+#define YUP_COMPILER_WARNING(msg) __pragma (message (__FILE__ "(" YUP_STRINGIFY (__LINE__) ") : Warning: " msg))
 #else
 /** This macro allows you to emit a custom compiler warning message.
 
@@ -359,11 +359,11 @@ private:                                         \
     GCC and Clang provide the \#warning directive, but MSVC doesn't, so this macro
     is a cross-compiler way to get the same functionality as \#warning.
 */
-#define JUCE_COMPILER_WARNING(msg) _Pragma (JUCE_STRINGIFY (message (msg)))
+#define YUP_COMPILER_WARNING(msg) _Pragma (YUP_STRINGIFY (message (msg)))
 #endif
 
 //==============================================================================
-#if JUCE_DEBUG || DOXYGEN
+#if YUP_DEBUG || DOXYGEN
 /** A platform-independent way of forcing an inline function.
 
     Use the syntax:
@@ -374,44 +374,44 @@ private:                                         \
 */
 #define forcedinline inline
 #else
-#if JUCE_MSVC
+#if YUP_MSVC
 #define forcedinline __forceinline
 #else
 #define forcedinline inline __attribute__ ((always_inline))
 #endif
 #endif
 
-#if JUCE_MSVC || DOXYGEN
+#if YUP_MSVC || DOXYGEN
 /** This can be placed before a stack or member variable declaration to tell the compiler
     to align it to the specified number of bytes. */
-#define JUCE_ALIGN(bytes) __declspec (align (bytes))
+#define YUP_ALIGN(bytes) __declspec (align (bytes))
 #else
-#define JUCE_ALIGN(bytes) __attribute__ ((aligned (bytes)))
+#define YUP_ALIGN(bytes) __attribute__ ((aligned (bytes)))
 #endif
 
 //==============================================================================
-#if JUCE_ANDROID && ! defined(DOXYGEN)
-#define JUCE_MODAL_LOOPS_PERMITTED 0
-#elif ! defined(JUCE_MODAL_LOOPS_PERMITTED)
+#if YUP_ANDROID && ! defined(DOXYGEN)
+#define YUP_MODAL_LOOPS_PERMITTED 0
+#elif ! defined(YUP_MODAL_LOOPS_PERMITTED)
 /** Some operating environments don't provide a modal loop mechanism, so this flag can be
     used to disable any functions that try to run a modal loop. */
-#define JUCE_MODAL_LOOPS_PERMITTED 0
+#define YUP_MODAL_LOOPS_PERMITTED 0
 #endif
 
 //==============================================================================
-#if JUCE_GCC || JUCE_CLANG
-#define JUCE_PACKED __attribute__ ((packed))
+#if YUP_GCC || YUP_CLANG
+#define YUP_PACKED __attribute__ ((packed))
 #elif ! defined(DOXYGEN)
-#define JUCE_PACKED
+#define YUP_PACKED
 #endif
 
 //==============================================================================
-#if JUCE_GCC || DOXYGEN
+#if YUP_GCC || DOXYGEN
 /** This can be appended to a function declaration to tell gcc to disable associative
     math optimisations which break some floating point algorithms. */
-#define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS __attribute__ ((__optimize__ ("no-associative-math")))
+#define YUP_NO_ASSOCIATIVE_MATH_OPTIMISATIONS __attribute__ ((__optimize__ ("no-associative-math")))
 #else
-#define JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS
+#define YUP_NO_ASSOCIATIVE_MATH_OPTIMISATIONS
 #endif
 
-} // namespace juce
+} // namespace yup

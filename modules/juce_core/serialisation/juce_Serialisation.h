@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -85,7 +85,7 @@ struct SerialisationTraits
     /*  Intentionally left blank. */
 };
 
-#define JUCE_COMPARISON_OPS X (==) X (!=) X (<) X (<=) X (>) X (>=)
+#define YUP_COMPARISON_OPS X (==) X (!=) X (<) X (<=) X (>) X (>=)
 
 /**
     Combines an object with a name.
@@ -106,7 +106,7 @@ struct Named
 {
 #define X(op) \
 auto operator op (const Named& other) const { return value op other.value; }
-    JUCE_COMPARISON_OPS
+    YUP_COMPARISON_OPS
 #undef X
 
     std::string_view name; ///< A name that corresponds to the value
@@ -145,7 +145,7 @@ struct SerialisationSize
 {
 #define X(op) \
 auto operator op (const SerialisationSize& other) const { return size op other.size; }
-    JUCE_COMPARISON_OPS
+    YUP_COMPARISON_OPS
 #undef X
 
     T& size;
@@ -165,7 +165,7 @@ constexpr auto serialisationSize (const T& t) -> std::enable_if_t<std::is_integr
     return { t };
 }
 
-#undef JUCE_COMPARISON_OPS
+#undef YUP_COMPARISON_OPS
 
 //==============================================================================
 /*
@@ -626,4 +626,4 @@ auto doLoad (Archive& archive, T& t)
 
 #endif
 
-} // namespace juce
+} // namespace yup

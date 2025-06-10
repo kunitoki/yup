@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 float DirectoryEntry::getEstimatedProgress() const
 {
@@ -89,6 +89,6 @@ void RangedDirectoryIterator::increment()
         iterator = nullptr;
 }
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+YUP_END_IGNORE_DEPRECATION_WARNINGS
 
-} // namespace juce
+} // namespace yup

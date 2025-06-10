@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef DOXYGEN
@@ -266,4 +266,4 @@ bool operator== (std::nullptr_t, const FixedSizeFunction<len, T>& fn)
     return ! (fn != nullptr);
 }
 
-} // namespace juce
+} // namespace yup

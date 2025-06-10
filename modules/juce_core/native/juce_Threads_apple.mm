@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /*
@@ -45,7 +45,7 @@ namespace juce
     live in juce_posix_SharedCode.h!
 */
 
-#if JUCE_IOS
+#if YUP_IOS
 bool isIOSAppActive = true;
 #endif
 
@@ -173,7 +173,7 @@ bool Thread::createNativeThread(Priority priority)
 
         data.started.set_value (true);
 
-        JUCE_AUTORELEASEPOOL
+        YUP_AUTORELEASEPOOL
         {
             juce_threadEntryPoint (&thread);
         }
@@ -220,7 +220,7 @@ bool Thread::setPriority(Priority priority)
     if (@available(macOS 10.10, *))
         return pthread_set_qos_class_self_np(getNativeQOS(priority), 0) == 0;
 
-#if JUCE_ARM
+#if YUP_ARM
     // M1 platforms should never reach this code!!!!!!
     jassertfalse;
 #endif
@@ -234,45 +234,45 @@ bool Thread::setPriority(Priority priority)
 }
 
 //==============================================================================
-JUCE_API bool JUCE_CALLTYPE Process::isForegroundProcess()
+YUP_API bool YUP_CALLTYPE Process::isForegroundProcess()
 {
     if (SystemStats::isRunningInAppExtensionSandbox())
         return true;
 
-#if JUCE_MAC
+#if YUP_MAC
     return [NSApp isActive];
 #else
     return isIOSAppActive;
 #endif
 }
 
-JUCE_API void JUCE_CALLTYPE Process::makeForegroundProcess()
+YUP_API void YUP_CALLTYPE Process::makeForegroundProcess()
 {
-#if JUCE_MAC
+#if YUP_MAC
     if (!SystemStats::isRunningInAppExtensionSandbox())
         [NSApp activateIgnoringOtherApps:YES];
 #endif
 }
 
-JUCE_API void JUCE_CALLTYPE Process::hide()
+YUP_API void YUP_CALLTYPE Process::hide()
 {
     if (!SystemStats::isRunningInAppExtensionSandbox())
     {
-#if JUCE_MAC
+#if YUP_MAC
         [NSApp hide:nil];
-#elif JUCE_IOS
+#elif YUP_IOS
         [[UIApplication sharedApplication] performSelector:@selector(suspend)];
 #endif
     }
 }
 
-JUCE_API void JUCE_CALLTYPE Process::raisePrivilege() {}
-JUCE_API void JUCE_CALLTYPE Process::lowerPrivilege() {}
+YUP_API void YUP_CALLTYPE Process::raisePrivilege() {}
+YUP_API void YUP_CALLTYPE Process::lowerPrivilege() {}
 
-JUCE_API void JUCE_CALLTYPE Process::setPriority(ProcessPriority) {}
+YUP_API void YUP_CALLTYPE Process::setPriority(ProcessPriority) {}
 
 //==============================================================================
-JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
+YUP_API bool YUP_CALLTYPE juce_isRunningUnderDebugger() noexcept
 {
     struct kinfo_proc info;
     int m[] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
@@ -281,4 +281,4 @@ JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
     return (info.kp_proc.p_flag & P_TRACED) != 0;
 }
 
-} // namespace juce
+} // namespace yup

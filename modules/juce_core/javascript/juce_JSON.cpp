@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct JSONParser
@@ -60,7 +60,7 @@ struct JSONParser
         Result getResult() const { return Result::fail (getDescription()); }
     };
 
-    [[noreturn]] void throwError (juce::String message, String::CharPointerType location)
+    [[noreturn]] void throwError (yup::String message, String::CharPointerType location)
     {
         ErrorException e;
         e.message = std::move (message);
@@ -644,4 +644,4 @@ Result JSON::parseQuotedString (String::CharPointerType& t, var& result)
     return Result::ok();
 }
 
-} // namespace juce
+} // namespace yup

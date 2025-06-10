@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 ChildProcess::ChildProcess() {}
@@ -97,4 +97,4 @@ String ChildProcess::readAllProcessOutput()
     return result.toString();
 }
 
-} // namespace juce
+} // namespace yup

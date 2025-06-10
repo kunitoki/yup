@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -188,7 +188,7 @@ private:
     SharedResourcePointer& operator= (const SharedResourcePointer&) = delete;
     SharedResourcePointer& operator= (SharedResourcePointer&&) noexcept = delete;
 
-    JUCE_LEAK_DETECTOR (SharedResourcePointer)
+    YUP_LEAK_DETECTOR (SharedResourcePointer)
 };
 
-} // namespace juce
+} // namespace yup

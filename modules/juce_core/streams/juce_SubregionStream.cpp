@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 SubregionStream::SubregionStream (InputStream* sourceStream,
@@ -98,7 +98,7 @@ bool SubregionStream::isExhausted()
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 struct SubregionInputStreamTests final : public UnitTest
 {
@@ -175,4 +175,4 @@ static SubregionInputStreamTests subregionInputStreamTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

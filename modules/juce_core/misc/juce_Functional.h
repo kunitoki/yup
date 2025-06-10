@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef DOXYGEN
@@ -70,12 +70,12 @@ struct NullCheckedInvocation
     {
         if constexpr (detail::equalityComparableToNullptr<Callable>)
         {
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Waddress")
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Waddress")
 
             if (fn != nullptr)
                 fn (std::forward<Args> (args)...);
 
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
         }
         else
         {
@@ -123,4 +123,4 @@ static constexpr auto toFnPtr (Functor functor)
     return detail::toFnPtr (functor, &Functor::operator());
 }
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -144,4 +144,4 @@ bool FileOutputStream::writeRepeatedByte (uint8 byte, size_t numBytes)
     return OutputStream::writeRepeatedByte (byte, numBytes);
 }
 
-} // namespace juce
+} // namespace yup

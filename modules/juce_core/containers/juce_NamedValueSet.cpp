@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 NamedValueSet::NamedValue::NamedValue() noexcept {}
@@ -340,4 +340,4 @@ void NamedValueSet::copyToXmlAttributes (XmlElement& xml) const
     }
 }
 
-} // namespace juce
+} // namespace yup

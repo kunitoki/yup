@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API URLInputSource : public InputSource
+class YUP_API URLInputSource : public InputSource
 {
 public:
     //==============================================================================
@@ -72,7 +72,7 @@ private:
     //==============================================================================
     const URL u;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (URLInputSource)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (URLInputSource)
 };
 
-} // namespace juce
+} // namespace yup

@@ -30,7 +30,7 @@ namespace yup
 
     @see Component::setMouseCursor, Component::getMouseCursor
 */
-class JUCE_API MouseCursor
+class YUP_API MouseCursor
 {
 public:
     /** The set of available standard system mouse cursors.

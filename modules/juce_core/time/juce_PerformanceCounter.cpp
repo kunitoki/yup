@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static void appendToFile (const File& f, const String& s)
@@ -152,4 +152,4 @@ PerformanceCounter::Statistics PerformanceCounter::getStatisticsAndReset()
     return s;
 }
 
-} // namespace juce
+} // namespace yup

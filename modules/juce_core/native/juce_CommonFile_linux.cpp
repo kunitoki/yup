@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 bool File::copyInternal (const File& dest) const
@@ -145,7 +145,7 @@ private:
     String parentDir, wildCard;
     DIR* dir;
 
-    JUCE_DECLARE_NON_COPYABLE (Pimpl)
+    YUP_DECLARE_NON_COPYABLE (Pimpl)
 };
 
 DirectoryIterator::NativeIterator::NativeIterator (const File& directory, const String& wildCardStr)
@@ -166,4 +166,4 @@ bool DirectoryIterator::NativeIterator::next (String& filenameFound,
     return pimpl->next (filenameFound, isDir, isHidden, fileSize, modTime, creationTime, isReadOnly);
 }
 
-} // namespace juce
+} // namespace yup

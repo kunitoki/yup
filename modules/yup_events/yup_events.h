@@ -51,7 +51,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       yup_core
+    dependencies:       juce_core
 
   END_YUP_MODULE_DECLARATION
 
@@ -64,15 +64,15 @@
 #include <juce_core/juce_core.h>
 
 //==============================================================================
-/** Config: JUCE_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
+/** Config: YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
     Will execute your application's suspend method on an iOS background task, giving
     you extra time to save your applications state.
 */
-#ifndef JUCE_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
-#define JUCE_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK 0
+#ifndef YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK
+#define YUP_EXECUTE_APP_SUSPEND_ON_BACKGROUND_TASK 0
 #endif
 
-#if JUCE_WINDOWS && JUCE_EVENTS_INCLUDE_WINRT_WRAPPER
+#if YUP_WINDOWS && YUP_EVENTS_INCLUDE_WINRT_WRAPPER
 // If this header file is missing then you are probably attempting to use WinRT
 // functionality without the WinRT libraries installed on your system. Try installing
 // the latest Windows Standalone SDK and maybe also adding the path to the WinRT
@@ -107,15 +107,15 @@
 #include "interprocess/yup_NetworkServiceDiscovery.h"
 #include "native/yup_ScopedLowPowerModeDisabler.h"
 
-#if JUCE_LINUX || JUCE_BSD
+#if YUP_LINUX || YUP_BSD
 #include "native/yup_EventLoop_linux.h"
 #endif
 
-#if JUCE_WINDOWS
-#if JUCE_EVENTS_INCLUDE_WIN32_MESSAGE_WINDOW
+#if YUP_WINDOWS
+#if YUP_EVENTS_INCLUDE_WIN32_MESSAGE_WINDOW
 #include "native/yup_HiddenMessageWindow_windows.h"
 #endif
-#if JUCE_EVENTS_INCLUDE_WINRT_WRAPPER
+#if YUP_EVENTS_INCLUDE_WINRT_WRAPPER
 #include "native/yup_WinRTWrapper_windows.h"
 #endif
 #endif

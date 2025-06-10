@@ -37,18 +37,18 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 namespace TimeHelpers
 {
 static std::tm millisToLocal (int64 millis) noexcept
 {
-#if JUCE_WINDOWS && JUCE_MINGW
+#if YUP_WINDOWS && YUP_MINGW
     auto now = (time_t) (millis / 1000);
     return *localtime (&now);
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
     std::tm result;
     millis /= 1000;
 
@@ -70,11 +70,11 @@ static std::tm millisToLocal (int64 millis) noexcept
 
 static std::tm millisToUTC (int64 millis) noexcept
 {
-#if JUCE_WINDOWS && JUCE_MINGW
+#if YUP_WINDOWS && YUP_MINGW
     auto now = (time_t) (millis / 1000);
     return *gmtime (&now);
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
     std::tm result;
     millis /= 1000;
 
@@ -110,15 +110,15 @@ static int extendedModulo (const int64 value, const int modulo) noexcept
 
 static String formatString (const String& format, const std::tm* const tm)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     using StringType = CharPointer_UTF8;
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
     using StringType = CharPointer_UTF16;
 #else
     using StringType = CharPointer_UTF32;
 #endif
 
-#ifdef JUCE_MSVC
+#ifdef YUP_MSVC
     if (tm->tm_year < -1900 || tm->tm_year > 8099)
         return {}; // Visual Studio's library can only handle 0 -> 9999 AD
 #endif
@@ -128,9 +128,9 @@ static String formatString (const String& format, const std::tm* const tm)
         HeapBlock<StringType::CharType> buffer (bufferSize);
 
         auto numChars =
-#if JUCE_ANDROID
+#if YUP_ANDROID
             strftime (buffer, bufferSize - 1, format.toUTF8(), tm);
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
             wcsftime (buffer, bufferSize - 1, format.toWideCharPointer(), tm);
 #else
             wcsftime (buffer, bufferSize - 1, format.toUTF32(), tm);
@@ -235,7 +235,7 @@ Time::Time (int year, int month, int day, int hours, int minutes, int seconds, i
 //==============================================================================
 int64 Time::currentTimeMillis() noexcept
 {
-#if JUCE_WINDOWS && ! JUCE_MINGW
+#if YUP_WINDOWS && ! YUP_MINGW
     struct _timeb t;
     _ftime_s (&t);
     return ((int64) t.time) * 1000 + t.millitm;
@@ -246,7 +246,7 @@ int64 Time::currentTimeMillis() noexcept
 #endif
 }
 
-Time JUCE_CALLTYPE Time::getCurrentTime() noexcept
+Time YUP_CALLTYPE Time::getCurrentTime() noexcept
 {
     return Time (currentTimeMillis());
 }
@@ -405,7 +405,7 @@ String Time::getTimeZone() const
 {
     String zone[2];
 
-#if JUCE_WINDOWS && (JUCE_MSVC || JUCE_CLANG)
+#if YUP_WINDOWS && (YUP_MSVC || YUP_CLANG)
     _tzset();
 
     for (int i = 0; i < 2; ++i)
@@ -663,4 +663,4 @@ Time Time::getCompilationDate()
                  timeTokens[1].getIntValue());
 }
 
-} // namespace juce
+} // namespace yup

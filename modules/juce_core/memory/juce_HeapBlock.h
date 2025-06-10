@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if ! (DOXYGEN || JUCE_EXCEPTIONS_DISABLED)
+#if ! (DOXYGEN || YUP_EXCEPTIONS_DISABLED)
 namespace HeapBlockHelper
 {
 template <bool shouldThrow>
@@ -361,7 +361,7 @@ private:
 
         auto* memory = static_cast<ElementType*> (f());
 
-#if JUCE_EXCEPTIONS_DISABLED
+#if YUP_EXCEPTIONS_DISABLED
         jassert (memory != nullptr); // without exceptions, you'll need to find a better way to handle this failure case.
 #else
         HeapBlockHelper::ThrowOnFail<throwOnFailure>::checkPointer (memory);
@@ -400,10 +400,10 @@ private:
     //==============================================================================
     ElementType* data = nullptr;
 
-#if ! (defined(JUCE_DLL) || defined(JUCE_DLL_BUILD))
-    JUCE_DECLARE_NON_COPYABLE (HeapBlock)
-    JUCE_PREVENT_HEAP_ALLOCATION // Creating a 'new HeapBlock' would be missing the point!
+#if ! (defined(YUP_DLL) || defined(YUP_DLL_BUILD))
+    YUP_DECLARE_NON_COPYABLE (HeapBlock)
+    YUP_PREVENT_HEAP_ALLOCATION // Creating a 'new HeapBlock' would be missing the point!
 #endif
 };
 
-} // namespace juce
+} // namespace yup

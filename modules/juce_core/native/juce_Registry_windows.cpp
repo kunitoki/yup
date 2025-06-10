@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct RegistryKeyWrapper
@@ -169,50 +169,50 @@ struct RegistryKeyWrapper
     const wchar_t* wideCharValueName = nullptr;
     String valueName;
 
-    JUCE_DECLARE_NON_COPYABLE (RegistryKeyWrapper)
+    YUP_DECLARE_NON_COPYABLE (RegistryKeyWrapper)
 };
 
-uint32 JUCE_CALLTYPE WindowsRegistry::getBinaryValue (const String& regValuePath, MemoryBlock& result, WoW64Mode mode)
+uint32 YUP_CALLTYPE WindowsRegistry::getBinaryValue (const String& regValuePath, MemoryBlock& result, WoW64Mode mode)
 {
     return RegistryKeyWrapper::getBinaryValue (regValuePath, result, (DWORD) mode);
 }
 
-String JUCE_CALLTYPE WindowsRegistry::getValue (const String& regValuePath, const String& defaultValue, WoW64Mode mode)
+String YUP_CALLTYPE WindowsRegistry::getValue (const String& regValuePath, const String& defaultValue, WoW64Mode mode)
 {
     return RegistryKeyWrapper::getValue (regValuePath, defaultValue, (DWORD) mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const String& value, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const String& value, WoW64Mode mode)
 {
     return RegistryKeyWrapper::setValue (regValuePath, REG_SZ, value.toWideCharPointer(), CharPointer_UTF16::getBytesRequiredFor (value.getCharPointer()), mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const uint32 value, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const uint32 value, WoW64Mode mode)
 {
     return RegistryKeyWrapper::setValue (regValuePath, REG_DWORD, &value, sizeof (value), (DWORD) mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const uint64 value, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const uint64 value, WoW64Mode mode)
 {
     return RegistryKeyWrapper::setValue (regValuePath, REG_QWORD, &value, sizeof (value), (DWORD) mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const MemoryBlock& value, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::setValue (const String& regValuePath, const MemoryBlock& value, WoW64Mode mode)
 {
     return RegistryKeyWrapper::setValue (regValuePath, REG_BINARY, value.getData(), value.getSize(), (DWORD) mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::valueExists (const String& regValuePath, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::valueExists (const String& regValuePath, WoW64Mode mode)
 {
     return RegistryKeyWrapper::valueExists (regValuePath, (DWORD) mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::keyExists (const String& regKeyPath, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::keyExists (const String& regKeyPath, WoW64Mode mode)
 {
     return RegistryKeyWrapper::keyExists (regKeyPath, (DWORD) mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::deleteValue (const String& regValuePath, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::deleteValue (const String& regValuePath, WoW64Mode mode)
 {
     const RegistryKeyWrapper key (regValuePath, true, (DWORD) mode);
 
@@ -226,7 +226,7 @@ static bool deleteKeyNonRecursive (const String& regKeyPath, WindowsRegistry::Wo
     return key.key != nullptr && RegDeleteKey (key.key, key.wideCharValueName) == ERROR_SUCCESS;
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::deleteKey (const String& regKeyPath, WoW64Mode mode)
+bool YUP_CALLTYPE WindowsRegistry::deleteKey (const String& regKeyPath, WoW64Mode mode)
 {
     if (deleteKeyNonRecursive (regKeyPath, mode))
         return true;
@@ -244,7 +244,7 @@ bool JUCE_CALLTYPE WindowsRegistry::deleteKey (const String& regKeyPath, WoW64Mo
     return deleteKeyNonRecursive (regKeyPath, mode);
 }
 
-bool JUCE_CALLTYPE WindowsRegistry::registerFileAssociation (const String& fileExtension,
+bool YUP_CALLTYPE WindowsRegistry::registerFileAssociation (const String& fileExtension,
                                                              const String& symbolicDescription,
                                                              const String& fullDescription,
                                                              const File& targetExecutable,
@@ -264,4 +264,4 @@ bool JUCE_CALLTYPE WindowsRegistry::registerFileAssociation (const String& fileE
                          targetExecutable.getFullPathName() + "," + String (iconResourceNumber)));
 }
 
-} // namespace juce
+} // namespace yup

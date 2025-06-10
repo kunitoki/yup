@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 namespace
@@ -53,7 +53,7 @@ inline bool operator== (const InterfaceInfo& lhs, const InterfaceInfo& rhs)
         && lhs.broadcastAddress == rhs.broadcastAddress;
 }
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 static IPAddress makeAddress (const sockaddr_in6* addr_in)
 {
     if (addr_in == nullptr)
@@ -115,7 +115,7 @@ Array<InterfaceInfo> getAllInterfaceInfo()
 {
     Array<InterfaceInfo> interfaces;
 
-#if JUCE_WASM
+#if YUP_WASM
     // TODO
 #else
     struct ifaddrs* ifaddr = nullptr;
@@ -154,4 +154,4 @@ IPAddress IPAddress::getInterfaceBroadcastAddress (const IPAddress& interfaceAdd
     return {};
 }
 
-} // namespace juce
+} // namespace yup

@@ -77,7 +77,7 @@ public class JuceHTTPStream
                                                         StringBuffer responseHeaders, int numRedirectsToFollow,
                                                         String httpRequestCmd)
     {
-        // timeout parameter of zero for HttpUrlConnection is a blocking connect (negative value for juce::URL)
+        // timeout parameter of zero for HttpUrlConnection is a blocking connect (negative value for yup::URL)
         if (timeOutMs < 0)
             timeOutMs = 0;
         else if (timeOutMs == 0)

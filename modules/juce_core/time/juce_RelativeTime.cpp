@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 RelativeTime::RelativeTime (const double secs) noexcept
@@ -109,27 +109,27 @@ RelativeTime RelativeTime::operator-= (double secs) noexcept
     return *this;
 }
 
-JUCE_API RelativeTime JUCE_CALLTYPE operator+ (RelativeTime t1, RelativeTime t2) noexcept { return t1 += t2; }
+YUP_API RelativeTime YUP_CALLTYPE operator+ (RelativeTime t1, RelativeTime t2) noexcept { return t1 += t2; }
 
-JUCE_API RelativeTime JUCE_CALLTYPE operator- (RelativeTime t1, RelativeTime t2) noexcept { return t1 -= t2; }
+YUP_API RelativeTime YUP_CALLTYPE operator- (RelativeTime t1, RelativeTime t2) noexcept { return t1 -= t2; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (RelativeTime t1, RelativeTime t2) noexcept
+YUP_API bool YUP_CALLTYPE operator== (RelativeTime t1, RelativeTime t2) noexcept
 {
     return exactlyEqual (t1.inSeconds(), t2.inSeconds());
 }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (RelativeTime t1, RelativeTime t2) noexcept
+YUP_API bool YUP_CALLTYPE operator!= (RelativeTime t1, RelativeTime t2) noexcept
 {
     return ! (t1 == t2);
 }
 
-JUCE_API bool JUCE_CALLTYPE operator> (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() > t2.inSeconds(); }
+YUP_API bool YUP_CALLTYPE operator> (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() > t2.inSeconds(); }
 
-JUCE_API bool JUCE_CALLTYPE operator<(RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() < t2.inSeconds(); }
+YUP_API bool YUP_CALLTYPE operator<(RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() < t2.inSeconds(); }
 
-JUCE_API bool JUCE_CALLTYPE operator>= (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() >= t2.inSeconds(); }
+YUP_API bool YUP_CALLTYPE operator>= (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() >= t2.inSeconds(); }
 
-JUCE_API bool JUCE_CALLTYPE operator<= (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() <= t2.inSeconds(); }
+YUP_API bool YUP_CALLTYPE operator<= (RelativeTime t1, RelativeTime t2) noexcept { return t1.inSeconds() <= t2.inSeconds(); }
 
 //==============================================================================
 static String translateTimeField (int n, const char* singular, const char* plural)
@@ -233,4 +233,4 @@ String RelativeTime::getDescription (const String& returnValueForZeroTime) const
     return fields.joinIntoString (" ");
 }
 
-} // namespace juce
+} // namespace yup

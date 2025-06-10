@@ -199,8 +199,8 @@ function (_yup_module_setup_target module_name
 
     target_compile_definitions (${module_name} INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        JUCE_MODULE_AVAILABLE_${module_name}=1
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YUP_MODULE_AVAILABLE_${module_name}=1
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         ${module_defines})
 
     target_include_directories (${module_name} INTERFACE
@@ -552,11 +552,11 @@ function (_yup_add_default_modules modules_path)
 
     # Original juce modules
     yup_add_module (${modules_path}/modules/juce_core ${modules_group})
-    yup_add_module (${modules_path}/modules/juce_audio_basics ${modules_group})
-    yup_add_module (${modules_path}/modules/juce_audio_devices ${modules_group})
 
     # Yup modules
     yup_add_module (${modules_path}/modules/yup_events ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
     yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})

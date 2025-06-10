@@ -60,6 +60,6 @@ void ChildProcessManager::checkProcesses()
         timer.stopTimer();
 }
 
-JUCE_IMPLEMENT_SINGLETON (ChildProcessManager)
+YUP_IMPLEMENT_SINGLETON (ChildProcessManager)
 
 } // namespace yup

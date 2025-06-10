@@ -44,7 +44,7 @@
 #include <map>
 #include <memory>
 
-using namespace juce;
+using namespace yup;
 
 TEST (XmlElementTests, FloatFormatting)
 {

@@ -42,7 +42,7 @@ namespace yup
 
 extern HWND juce_messageWindowHandle;
 
-#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+#if YUP_MODULE_AVAILABLE_juce_gui_extra
 LRESULT juce_offerEventToActiveXControl (::MSG&);
 #endif
 
@@ -65,7 +65,7 @@ public:
         clearSingletonInstance();
     }
 
-    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+    YUP_DECLARE_SINGLETON (InternalMessageQueue, false)
 
     //==============================================================================
     void broadcastMessage (const String& message)
@@ -119,7 +119,7 @@ public:
 
         if (GetMessage (&m, nullptr, 0, 0) >= 0)
         {
-#if JUCE_MODULE_AVAILABLE_juce_gui_extra
+#if YUP_MODULE_AVAILABLE_juce_gui_extra
             if (juce_offerEventToActiveXControl (m) != S_FALSE)
                 return true;
 #endif
@@ -197,11 +197,11 @@ private:
 
     static void dispatchMessage (MessageManager::MessageBase* message)
     {
-        JUCE_TRY
+        YUP_TRY
         {
             message->messageCallback();
         }
-        JUCE_CATCH_EXCEPTION
+        YUP_CATCH_EXCEPTION
 
         message->decReferenceCount();
     }
@@ -262,10 +262,10 @@ private:
     std::atomic_bool loopCallbackRecursiveCheck = false;
 
     //==============================================================================
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InternalMessageQueue)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InternalMessageQueue)
 };
 
-JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
+YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
 const TCHAR InternalMessageQueue::messageWindowName[] = _T("JUCEWindow");
 

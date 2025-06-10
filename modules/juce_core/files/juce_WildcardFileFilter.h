@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API WildcardFileFilter : public FileFilter
+class YUP_API WildcardFileFilter : public FileFilter
 {
 public:
     //==============================================================================
@@ -87,7 +87,7 @@ private:
     //==============================================================================
     StringArray fileWildcards, directoryWildcards;
 
-    JUCE_LEAK_DETECTOR (WildcardFileFilter)
+    YUP_LEAK_DETECTOR (WildcardFileFilter)
 };
 
-} // namespace juce
+} // namespace yup

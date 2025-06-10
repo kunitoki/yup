@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -55,7 +55,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API SpinLock
+class YUP_API SpinLock
 {
 public:
     inline SpinLock() = default;
@@ -99,7 +99,7 @@ private:
     //==============================================================================
     mutable Atomic<int> lock;
 
-    JUCE_DECLARE_NON_COPYABLE (SpinLock)
+    YUP_DECLARE_NON_COPYABLE (SpinLock)
 };
 
-} // namespace juce
+} // namespace yup

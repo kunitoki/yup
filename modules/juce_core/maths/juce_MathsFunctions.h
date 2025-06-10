@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -61,7 +61,7 @@ using int32 = signed int;
 /** A platform-independent 32-bit unsigned integer type. */
 using uint32 = unsigned int;
 
-#if JUCE_MSVC
+#if YUP_MSVC
 /** A platform-independent 64-bit integer type. */
 using int64 = __int64;
 /** A platform-independent 64-bit unsigned integer type. */
@@ -82,12 +82,12 @@ using uint64 = unsigned long long;
 #define literal64bit(longLiteral) (longLiteral##LL)
 #endif
 
-#if JUCE_64BIT
+#if YUP_64BIT
 /** A signed integer type that's guaranteed to be large enough to hold a pointer without truncating it. */
 using pointer_sized_int = int64;
 /** An unsigned integer type that's guaranteed to be large enough to hold a pointer without truncating it. */
 using pointer_sized_uint = uint64;
-#elif JUCE_MSVC
+#elif YUP_MSVC
 /** A signed integer type that's guaranteed to be large enough to hold a pointer without truncating it. */
 using pointer_sized_int = _W64 int;
 /** An unsigned integer type that's guaranteed to be large enough to hold a pointer without truncating it. */
@@ -99,7 +99,7 @@ using pointer_sized_int = int;
 using pointer_sized_uint = unsigned int;
 #endif
 
-#if JUCE_WINDOWS && ! JUCE_MINGW
+#if YUP_WINDOWS && ! YUP_MINGW
 using ssize_t = pointer_sized_int;
 #endif
 
@@ -132,7 +132,7 @@ constexpr int numElementsInArray (Type (&)[N]) noexcept
 template <typename Type>
 Type juce_hypot (Type a, Type b) noexcept
 {
-#if JUCE_MSVC
+#if YUP_MSVC
     return static_cast<Type> (_hypot (a, b));
 #else
     return static_cast<Type> (hypot (a, b));
@@ -143,7 +143,7 @@ Type juce_hypot (Type a, Type b) noexcept
 template <>
 inline float juce_hypot (float a, float b) noexcept
 {
-#if JUCE_MSVC
+#if YUP_MSVC
     return _hypotf (a, b);
 #else
     return hypotf (a, b);
@@ -234,9 +234,9 @@ bool juce_isfinite (NumericType value) noexcept
 template <typename Type>
 constexpr bool exactlyEqual (Type a, Type b)
 {
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wfloat-equal")
     return a == b;
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 }
 
 /** A class encapsulating both relative and absolute tolerances for use in floating-point comparisons.
@@ -615,7 +615,7 @@ constexpr bool isWithin (Type a, Type b, Type tolerance) noexcept
 }
 
 //==============================================================================
-#if JUCE_MSVC
+#if YUP_MSVC
 #pragma optimize("t", off)
 #ifndef __INTEL_COMPILER
 #pragma float_control(precise, on, push)
@@ -647,7 +647,7 @@ int roundToInt (const FloatType value) noexcept
 
     n.asDouble = ((double) value) + 6755399441055744.0;
 
-#if JUCE_BIG_ENDIAN
+#if YUP_BIG_ENDIAN
     return n.asInt[1];
 #else
     return n.asInt[0];
@@ -659,7 +659,7 @@ inline int roundToInt (int value) noexcept
     return value;
 }
 
-#if JUCE_MSVC
+#if YUP_MSVC
 #ifndef __INTEL_COMPILER
 #pragma float_control(pop)
 #endif
@@ -793,18 +793,18 @@ void writeLittleEndianBitsInBuffer (void* targetBuffer, uint32 startBit, uint32 
 uint32 readLittleEndianBitsInBuffer (const void* sourceBuffer, uint32 startBit, uint32 numBits) noexcept;
 
 //==============================================================================
-#if JUCE_INTEL || DOXYGEN
+#if YUP_INTEL || DOXYGEN
 /** This macro can be applied to a float variable to check whether it contains a denormalised
      value, and to normalise it if necessary.
      On CPUs that aren't vulnerable to denormalisation problems, this will have no effect.
  */
-#define JUCE_UNDENORMALISE(x) \
+#define YUP_UNDENORMALISE(x) \
     {                         \
         (x) += 0.1f;          \
         (x) -= 0.1f;          \
     }
 #else
-#define JUCE_UNDENORMALISE(x)
+#define YUP_UNDENORMALISE(x)
 #endif
 
 //==============================================================================
@@ -976,4 +976,4 @@ constexpr auto toUnderlyingType (T t) -> std::enable_if_t<std::is_enum_v<T>, std
     return static_cast<std::underlying_type_t<T>> (t);
 }
 
-} // namespace juce
+} // namespace yup

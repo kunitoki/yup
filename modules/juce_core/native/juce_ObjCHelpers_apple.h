@@ -40,7 +40,7 @@
 /* This file contains a few helper functions that are used internally but which
    need to be kept away from the public headers because they use obj-C symbols.
 */
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -146,7 +146,7 @@ inline var nsDictionaryToVar(const NSDictionary* dictionary)
     return jsonDataToVar(jsonObjectToData(dictionary));
 }
 
-#if JUCE_MAC
+#if YUP_MAC
 template <typename RectangleType>
 NSRect makeNSRect(const RectangleType& r) noexcept
 {
@@ -157,11 +157,11 @@ NSRect makeNSRect(const RectangleType& r) noexcept
 }
 #endif
 
-#if JUCE_INTEL
+#if YUP_INTEL
 template <typename T>
 struct NeedsStret
 {
-#if JUCE_32BIT
+#if YUP_32BIT
     static constexpr auto value = sizeof(T) > 8;
 #else
     static constexpr auto value = sizeof(T) > 16;
@@ -384,10 +384,10 @@ struct ObjCClass
    private:
     static String getRandomisedName(const char* root)
     {
-        return root + String::toHexString(juce::Random::getSystemRandom().nextInt64());
+        return root + String::toHexString(yup::Random::getSystemRandom().nextInt64());
     }
 
-    JUCE_DECLARE_NON_COPYABLE(ObjCClass)
+    YUP_DECLARE_NON_COPYABLE(ObjCClass)
 };
 
 //==============================================================================
@@ -400,9 +400,9 @@ struct ObjCLifetimeManagedClass : public ObjCClass<NSObject>
     {
         addIvar<JuceClass*>("cppObject");
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wundeclared-selector")
         addMethod(@selector(initWithJuceObject:), initWithJuceObject);
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
         addMethod(@selector(dealloc), dealloc);
 
@@ -440,9 +440,9 @@ ObjCLifetimeManagedClass<Class> ObjCLifetimeManagedClass<Class>::objCLifetimeMan
 template <typename Class>
 NSObject* createNSObjectFromJuceClass(Class* obj)
 {
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wobjc-method-access")
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wobjc-method-access")
     return [ObjCLifetimeManagedClass<Class>::objCLifetimeManagedClass.createInstance() initWithJuceObject:obj];
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 }
 
 // Get the JUCE class instance that was tied to the life-time of an NSObject with the
@@ -596,4 +596,4 @@ class ScopedNotificationCenterObserver
     Class klass = nullptr;
 };
 
-} // namespace juce
+} // namespace yup

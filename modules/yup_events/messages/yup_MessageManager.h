@@ -57,7 +57,7 @@ using MessageCallbackFunction = void*(void* userData);
 
     @tags{Events}
 */
-class JUCE_API MessageManager final
+class YUP_API MessageManager final
 {
 public:
     //==============================================================================
@@ -94,7 +94,7 @@ public:
     /** Returns true if the stopDispatchLoop() method has been called. */
     bool hasStopMessageBeenSent() const noexcept { return quitMessagePosted.get() != 0; }
 
-#if JUCE_MODAL_LOOPS_PERMITTED
+#if YUP_MODAL_LOOPS_PERMITTED
     /** Synchronously dispatches messages until a given time has elapsed.
 
         Returns false if a quit message has been posted by a call to stopDispatchLoop(),
@@ -197,7 +197,7 @@ public:
         You shouldn't need to use this directly - see the CallbackMessage or Message
         classes instead.
     */
-    class JUCE_API MessageBase : public ReferenceCountedObject
+    class YUP_API MessageBase : public ReferenceCountedObject
     {
     public:
         MessageBase() = default;
@@ -208,14 +208,14 @@ public:
 
         using Ptr = ReferenceCountedObjectPtr<MessageBase>;
 
-        JUCE_DECLARE_NON_COPYABLE (MessageBase)
+        YUP_DECLARE_NON_COPYABLE (MessageBase)
     };
 
     //==============================================================================
     /** A lock you can use to lock the message manager. You can use this class with
         the RAII-based ScopedLock classes.
     */
-    class JUCE_API Lock
+    class YUP_API Lock
     {
     public:
         /**
@@ -364,7 +364,7 @@ private:
     static void doPlatformSpecificInitialisation();
     static void doPlatformSpecificShutdown();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MessageManager)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MessageManager)
 };
 
 //==============================================================================
@@ -404,7 +404,7 @@ private:
 
     @tags{Events}
 */
-class JUCE_API MessageManagerLock : private Thread::Listener
+class YUP_API MessageManagerLock : private Thread::Listener
 {
 public:
     //==============================================================================
@@ -482,7 +482,7 @@ private:
     bool attemptLock (Thread*, ThreadPoolJob*);
     void exitSignalSent() override;
 
-    JUCE_DECLARE_NON_COPYABLE (MessageManagerLock)
+    YUP_DECLARE_NON_COPYABLE (MessageManagerLock)
 };
 
 //==============================================================================
@@ -491,7 +491,7 @@ private:
     It will also fail if you try to use the function before the message manager has been
     created, which could happen if you accidentally invoke it during a static constructor.
 */
-#define JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED \
+#define YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED \
     jassert (yup::MessageManager::existsAndIsLockedByCurrentThread());
 
 /** This macro is used to catch unsafe use of functions which expect to only be called
@@ -499,13 +499,13 @@ private:
     It will also fail if you try to use the function before the message manager has been
     created, which could happen if you accidentally invoke it during a static constructor.
 */
-#define JUCE_ASSERT_MESSAGE_THREAD \
+#define YUP_ASSERT_MESSAGE_THREAD \
     jassert (yup::MessageManager::existsAndIsCurrentThread());
 
 /** This macro is used to catch unsafe use of functions which expect to not be called
     outside the lifetime of the MessageManager.
 */
-#define JUCE_ASSERT_MESSAGE_MANAGER_EXISTS \
+#define YUP_ASSERT_MESSAGE_MANAGER_EXISTS \
     jassert (yup::MessageManager::getInstanceWithoutCreating() != nullptr);
 
 } // namespace yup

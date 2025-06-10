@@ -59,28 +59,28 @@ public:
     }
 
 private:
-    juce::Random r;
-    juce::Array<KeyType> keys;
+    yup::Random r;
+    yup::Array<KeyType> keys;
 
-    static KeyType generateRandomKey (juce::Random& rnd);
+    static KeyType generateRandomKey (yup::Random& rnd);
 };
 
 template <>
-int RandomKeys<int>::generateRandomKey (juce::Random& rnd)
+int RandomKeys<int>::generateRandomKey (yup::Random& rnd)
 {
     return rnd.nextInt();
 }
 
 template <>
-void* RandomKeys<void*>::generateRandomKey (juce::Random& rnd)
+void* RandomKeys<void*>::generateRandomKey (yup::Random& rnd)
 {
     return reinterpret_cast<void*> (static_cast<uintptr_t> (rnd.nextInt64()));
 }
 
 template <>
-juce::String RandomKeys<juce::String>::generateRandomKey (juce::Random& rnd)
+yup::String RandomKeys<yup::String>::generateRandomKey (yup::Random& rnd)
 {
-    juce::String str;
+    yup::String str;
     int len = rnd.nextInt (8) + 1;
     for (int i = 0; i < len; ++i)
         str += static_cast<char> (rnd.nextInt (95) + 32);
@@ -96,7 +96,7 @@ struct AssociativeMap
         ValueType value;
     };
 
-    juce::Array<KeyValuePair> pairs;
+    yup::Array<KeyValuePair> pairs;
 
     ValueType* find (KeyType key)
     {
@@ -118,10 +118,10 @@ struct AssociativeMap
 };
 
 template <class KeyType, class ValueType>
-void fillWithRandomValues (juce::HashMap<KeyType, int>& hashMap, AssociativeMap<KeyType, ValueType>& groundTruth)
+void fillWithRandomValues (yup::HashMap<KeyType, int>& hashMap, AssociativeMap<KeyType, ValueType>& groundTruth)
 {
     RandomKeys<KeyType> keyOracle (300, 3827829);
-    juce::Random valueOracle (48735);
+    yup::Random valueOracle (48735);
 
     for (int i = 0; i < 10000; ++i)
     {
@@ -145,15 +145,15 @@ protected:
         threeMap.set (3, "three");
     }
 
-    juce::HashMap<int, int> hashMap;
+    yup::HashMap<int, int> hashMap;
     AssociativeMap<int, int> groundTruth;
 
-    juce::HashMap<int, std::string> threeMap;
+    yup::HashMap<int, std::string> threeMap;
 };
 
 TEST_F (HashMapTests, BasicOperations)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "one");
     map.set (2, "two");
 
@@ -164,13 +164,13 @@ TEST_F (HashMapTests, BasicOperations)
 
 TEST_F (HashMapTests, NonExistingKey)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     EXPECT_EQ (map[999], ""); // Default string is empty
 }
 
 TEST_F (HashMapTests, ContainsKey)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "one");
 
     EXPECT_TRUE (map.contains (1));
@@ -179,7 +179,7 @@ TEST_F (HashMapTests, ContainsKey)
 
 TEST_F (HashMapTests, ContainsValue)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "unique");
     map.set (2, "unique");
 
@@ -189,7 +189,7 @@ TEST_F (HashMapTests, ContainsValue)
 
 TEST_F (HashMapTests, RemoveKey)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "one");
     map.set (2, "two");
     map.remove (1);
@@ -201,7 +201,7 @@ TEST_F (HashMapTests, RemoveKey)
 
 TEST_F (HashMapTests, RemoveValue)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "value");
     map.set (2, "value");
     map.removeValue ("value");
@@ -213,7 +213,7 @@ TEST_F (HashMapTests, RemoveValue)
 
 TEST_F (HashMapTests, Clear)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "one");
     map.set (2, "two");
     map.clear();
@@ -223,13 +223,13 @@ TEST_F (HashMapTests, Clear)
 
 TEST_F (HashMapTests, Iterator)
 {
-    juce::HashMap<int, std::string> map;
+    yup::HashMap<int, std::string> map;
     map.set (1, "one");
     map.set (2, "two");
     map.set (3, "three");
 
     std::vector<int> keys;
-    for (juce::HashMap<int, std::string>::Iterator it (map); it.next();)
+    for (yup::HashMap<int, std::string>::Iterator it (map); it.next();)
     {
         keys.push_back (it.getKey());
         std::string value = it.getValue();
@@ -249,7 +249,7 @@ TEST_F (HashMapTests, GetReferenceAddsNonExistingKey)
 
 TEST_F (HashMapTests, CopyConstruction)
 {
-    juce::HashMap<int, std::string> copiedMap (threeMap);
+    yup::HashMap<int, std::string> copiedMap (threeMap);
     EXPECT_EQ (copiedMap[1], "one");
     EXPECT_EQ (copiedMap[2], "two");
     EXPECT_EQ (copiedMap[3], "three");
@@ -257,7 +257,7 @@ TEST_F (HashMapTests, CopyConstruction)
 
 TEST_F (HashMapTests, Assignment)
 {
-    juce::HashMap<int, std::string> assignedMap;
+    yup::HashMap<int, std::string> assignedMap;
     assignedMap = threeMap;
     EXPECT_EQ (assignedMap[1], "one");
     EXPECT_EQ (assignedMap[2], "two");
@@ -282,7 +282,7 @@ TEST_F (HashMapTests, RemapTable)
 
 TEST_F (HashMapTests, SwapMaps)
 {
-    juce::HashMap<int, std::string> otherMap;
+    yup::HashMap<int, std::string> otherMap;
     otherMap.set (10, "ten");
     threeMap.swapWith (otherMap);
 
@@ -293,7 +293,7 @@ TEST_F (HashMapTests, SwapMaps)
 
 TEST_F (HashMapTests, IteratorValidityAcrossModifications)
 {
-    juce::HashMap<int, std::string>::Iterator it (threeMap);
+    yup::HashMap<int, std::string>::Iterator it (threeMap);
     it.next();                // move to first element
     threeMap.set (4, "four"); // Modify map after iterator creation
 
@@ -332,7 +332,7 @@ TEST_F (HashMapTests, NonDefaultHashFunction)
         }
     };
 
-    juce::HashMap<int, std::string, BadHashFunction> badHashMap;
+    yup::HashMap<int, std::string, BadHashFunction> badHashMap;
     badHashMap.set (1, "one");
     badHashMap.set (6, "six"); // This should collide with '1' in the hash table
 
@@ -356,7 +356,7 @@ TEST_F (HashMapTests, AccessTest)
 TEST_F (HashMapTests, RemoveTest)
 {
     auto n = groundTruth.size();
-    juce::Random r (3827387);
+    yup::Random r (3827387);
 
     for (int i = 0; i < 100; ++i)
     {
@@ -383,7 +383,7 @@ TEST_F (HashMapTests, PersistentMemoryLocationOfValues)
 
     AssociativeMap<int, AddressAndValue> addresses;
     RandomKeys<int> keyOracle (300, 3827829);
-    juce::Random valueOracle (48735);
+    yup::Random valueOracle (48735);
 
     for (int i = 0; i < 1000; ++i)
     {

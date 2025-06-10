@@ -39,9 +39,9 @@
 
 #include <gtest/gtest.h>
 
-#include <juce_audio_devices/juce_audio_devices.h>
+#include <yup_audio_devices/yup_audio_devices.h>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {

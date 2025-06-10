@@ -37,12 +37,12 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 void MACAddress::findAllAddresses (Array<MACAddress>& result)
 {
-#if JUCE_BSD
+#if YUP_BSD
     struct ifaddrs* addrs = nullptr;
 
     if (getifaddrs (&addrs) != -1)
@@ -93,7 +93,7 @@ void MACAddress::findAllAddresses (Array<MACAddress>& result)
 #endif
 }
 
-bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmailAddress */,
+bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmailAddress */,
                                                       const String& /* emailSubject */,
                                                       const String& /* bodyText */,
                                                       const StringArray& /* filesToAttach */)
@@ -103,7 +103,7 @@ bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEma
 }
 
 //==============================================================================
-#if ! JUCE_USE_CURL
+#if ! YUP_USE_CURL
 class WebInputStream::Pimpl
 {
 public:
@@ -404,7 +404,7 @@ private:
         setsockopt (socketHandle, SOL_SOCKET, SO_RCVBUF, (char*) &receiveBufferSize, sizeof (receiveBufferSize));
         setsockopt (socketHandle, SOL_SOCKET, SO_KEEPALIVE, nullptr, 0);
 
-#if JUCE_MAC
+#if YUP_MAC
         setsockopt (socketHandle, SOL_SOCKET, SO_NOSIGPIPE, 0, 0);
 #endif
 
@@ -530,7 +530,7 @@ private:
         else
             writeHost (header, httpRequestCmd, originalURL, proxyName, proxyPort);
 
-        writeValueIfNotPresent (header, userHeaders, "User-Agent:", "JUCE/" JUCE_STRINGIFY (JUCE_MAJOR_VERSION) "." JUCE_STRINGIFY (JUCE_MINOR_VERSION) "." JUCE_STRINGIFY (JUCE_BUILDNUMBER));
+        writeValueIfNotPresent (header, userHeaders, "User-Agent:", "JUCE/" YUP_STRINGIFY (YUP_MAJOR_VERSION) "." YUP_STRINGIFY (YUP_MINOR_VERSION) "." YUP_STRINGIFY (YUP_BUILDNUMBER));
         writeValueIfNotPresent (header, userHeaders, "Connection:", "close");
 
         const auto postDataSize = postData.getSize();
@@ -621,7 +621,7 @@ private:
         return {};
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocation, const DownloadTaskOptions& options)
@@ -630,4 +630,4 @@ std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocati
 }
 #endif
 
-} // namespace juce
+} // namespace yup

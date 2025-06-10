@@ -22,7 +22,7 @@
 namespace yup
 {
 
-class JUCE_API Component;
+class YUP_API Component;
 
 //==============================================================================
 /** Contains information about a mouse event.
@@ -37,7 +37,7 @@ class JUCE_API Component;
     @see Component::mouseMove, Component::mouseEnter, Component::mouseExit,
          Component::mouseDown, Component::mouseUp, Component::mouseDrag
 */
-class JUCE_API MouseEvent
+class YUP_API MouseEvent
 {
 public:
     //==============================================================================
@@ -199,7 +199,7 @@ public:
 
         @returns    the time of the last mouse-down event
     */
-    juce::Time getLastMouseDownTime() const noexcept;
+    yup::Time getLastMouseDownTime() const noexcept;
 
     /** Creates a copy of this event with a different last mouse-down time.
 
@@ -207,7 +207,7 @@ public:
 
         @returns        a new MouseEvent object
     */
-    MouseEvent withLastMouseDownTime (juce::Time newTime) const noexcept;
+    MouseEvent withLastMouseDownTime (yup::Time newTime) const noexcept;
 
     //==============================================================================
     /** Returns the component that this event applies to.
@@ -246,14 +246,14 @@ private:
                 KeyModifiers newModifiers,
                 const Point<float>& newPosition,
                 const Point<float>& lastMouseDownPosition,
-                juce::Time lastMouseDownTime,
+                yup::Time lastMouseDownTime,
                 Component* sourceComponent) noexcept;
 
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;
     Point<float> lastMouseDownPosition;
-    juce::Time lastMouseDownTime;
+    yup::Time lastMouseDownTime;
     Component* sourceComponent = nullptr;
 };
 

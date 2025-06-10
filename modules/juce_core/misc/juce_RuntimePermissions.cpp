@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if ! JUCE_ANDROID // We currently don't request runtime permissions on any other platform  \
+#if ! YUP_ANDROID // We currently don't request runtime permissions on any other platform  \
                    // than Android, so this file contains a dummy implementation for those. \
                    // This may change in the future.
 
@@ -55,4 +55,4 @@ bool RuntimePermissions::isGranted (PermissionID) { return true; }
 
 #endif
 
-} // namespace juce
+} // namespace yup

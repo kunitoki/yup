@@ -31,7 +31,7 @@ struct verboseLog;
 struct noErrorLog;
 } // namespace Detail
 
-using LogOption = juce::FlagSet<juce::uint32, Detail::verboseLog, Detail::noErrorLog>;
+using LogOption = yup::FlagSet<yup::uint32, Detail::verboseLog, Detail::noErrorLog>;
 static inline constexpr LogOption defaultLog = LogOption();
 static inline constexpr LogOption verboseLog = LogOption::declareValue<Detail::verboseLog>();
 static inline constexpr LogOption noErrorLog = LogOption::declareValue<Detail::noErrorLog>();
@@ -67,12 +67,12 @@ TEST (FlagSetTests, Default_Constructed_From_Values)
 
 TEST (FlagSetTests, To_String)
 {
-    EXPECT_EQ (juce::String ("00"), defaultLog.toString());
-    EXPECT_EQ (juce::String ("10"), verboseLog.toString());
-    EXPECT_EQ (juce::String ("01"), noErrorLog.toString());
+    EXPECT_EQ (yup::String ("00"), defaultLog.toString());
+    EXPECT_EQ (yup::String ("10"), verboseLog.toString());
+    EXPECT_EQ (yup::String ("01"), noErrorLog.toString());
 
     LogOption option = verboseLog | noErrorLog;
-    EXPECT_EQ (juce::String ("11"), option.toString());
+    EXPECT_EQ (yup::String ("11"), option.toString());
 }
 
 TEST (FlagSetTests, From_String)

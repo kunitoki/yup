@@ -59,7 +59,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API MultiTimer
+class YUP_API MultiTimer
 {
 protected:
     //==============================================================================

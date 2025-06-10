@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -63,7 +63,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API PerformanceCounter
+class YUP_API PerformanceCounter
 {
 public:
     //==============================================================================
@@ -132,7 +132,7 @@ private:
     int64 runsPerPrint, startTime;
     File outputFile;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PerformanceCounter)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PerformanceCounter)
 };
 
 //==============================================================================
@@ -156,7 +156,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API ScopedTimeMeasurement
+class YUP_API ScopedTimeMeasurement
 {
 public:
     ScopedTimeMeasurement (double& resultInSeconds) noexcept
@@ -175,7 +175,7 @@ private:
     int64 startTimeTicks = Time::getHighResolutionTicks();
     double& result;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScopedTimeMeasurement)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ScopedTimeMeasurement)
 };
 
-} // namespace juce
+} // namespace yup

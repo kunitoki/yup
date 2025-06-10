@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Process
+class YUP_API Process
 {
 public:
     //==============================================================================
@@ -67,7 +67,7 @@ public:
         @param priority     the process priority, where
                             0=low, 1=normal, 2=high, 3=realtime
     */
-    static void JUCE_CALLTYPE setPriority (ProcessPriority priority);
+    static void YUP_CALLTYPE setPriority (ProcessPriority priority);
 
     /** Kills the current process immediately.
 
@@ -77,21 +77,21 @@ public:
 
         @see YUPApplicationBase::quit
     */
-    static void JUCE_CALLTYPE terminate();
+    static void YUP_CALLTYPE terminate();
 
     //==============================================================================
     /** Returns true if this application process is the one that the user is
         currently using.
     */
-    static bool JUCE_CALLTYPE isForegroundProcess();
+    static bool YUP_CALLTYPE isForegroundProcess();
 
     /** Attempts to make the current process the active one.
         (This is not possible on some platforms).
     */
-    static void JUCE_CALLTYPE makeForegroundProcess();
+    static void YUP_CALLTYPE makeForegroundProcess();
 
     /** Hides the application (on an OS that supports this, e.g. OSX, iOS, Android) */
-    static void JUCE_CALLTYPE hide();
+    static void YUP_CALLTYPE hide();
 
     //==============================================================================
     /** Raises the current process's privilege level.
@@ -99,36 +99,36 @@ public:
         Does nothing if this isn't supported by the current OS, or if process
         privilege level is fixed.
     */
-    static void JUCE_CALLTYPE raisePrivilege();
+    static void YUP_CALLTYPE raisePrivilege();
 
     /** Lowers the current process's privilege level.
 
         Does nothing if this isn't supported by the current OS, or if process
         privilege level is fixed.
     */
-    static void JUCE_CALLTYPE lowerPrivilege();
+    static void YUP_CALLTYPE lowerPrivilege();
 
     //==============================================================================
     /** Returns true if this process is being hosted by a debugger. */
-    static bool JUCE_CALLTYPE isRunningUnderDebugger() noexcept;
+    static bool YUP_CALLTYPE isRunningUnderDebugger() noexcept;
 
     //==============================================================================
     /** Tries to launch the OS's default reader application for a given file or URL. */
-    static bool JUCE_CALLTYPE openDocument (const String& documentURL, const String& parameters);
+    static bool YUP_CALLTYPE openDocument (const String& documentURL, const String& parameters);
 
     /** Tries to launch the OS's default reader application for a given file or URL, using an explicit environment. */
-    static bool JUCE_CALLTYPE openDocument (const String& documentURL,
+    static bool YUP_CALLTYPE openDocument (const String& documentURL,
                                             const String& parameters,
                                             const StringPairArray& environment);
 
     /** Tries to launch the OS's default email application to let the user create a message. */
-    static bool JUCE_CALLTYPE openEmailWithAttachments (const String& targetEmailAddress,
+    static bool YUP_CALLTYPE openEmailWithAttachments (const String& targetEmailAddress,
                                                         const String& emailSubject,
                                                         const String& bodyText,
                                                         const StringArray& filesToAttach);
 
     //==============================================================================
-#if JUCE_WINDOWS || DOXYGEN
+#if YUP_WINDOWS || DOXYGEN
     /** WINDOWS ONLY - This returns the HINSTANCE of the current module.
 
         The return type is a void* to avoid being dependent on windows.h - just cast
@@ -142,7 +142,7 @@ public:
         to provide the correct module handle in your DllMain() function, because
         the system relies on the correct instance handle when opening windows.
     */
-    static void* JUCE_CALLTYPE getCurrentModuleInstanceHandle() noexcept;
+    static void* YUP_CALLTYPE getCurrentModuleInstanceHandle() noexcept;
 
     /** WINDOWS ONLY - Sets a new module handle to be used by the library.
 
@@ -151,17 +151,17 @@ public:
 
         @see getCurrentModuleInstanceHandle()
     */
-    static void JUCE_CALLTYPE setCurrentModuleInstanceHandle (void* newHandle) noexcept;
+    static void YUP_CALLTYPE setCurrentModuleInstanceHandle (void* newHandle) noexcept;
 #endif
 
     //==============================================================================
-#if JUCE_MAC || DOXYGEN
+#if YUP_MAC || DOXYGEN
     /** OSX ONLY - Shows or hides the OSX dock icon for this app. */
     static void setDockIconVisible (bool isVisible);
 #endif
 
     //==============================================================================
-#if JUCE_MAC || JUCE_LINUX || JUCE_BSD || DOXYGEN
+#if YUP_MAC || YUP_LINUX || YUP_BSD || DOXYGEN
     /** UNIX ONLY - Attempts to use setrlimit to change the maximum number of file
         handles that the app can open. Pass 0 or less as the parameter to mean
         'infinite'. Returns true if it succeeds.
@@ -171,7 +171,7 @@ public:
 
 private:
     Process();
-    JUCE_DECLARE_NON_COPYABLE (Process)
+    YUP_DECLARE_NON_COPYABLE (Process)
 };
 
-} // namespace juce
+} // namespace yup

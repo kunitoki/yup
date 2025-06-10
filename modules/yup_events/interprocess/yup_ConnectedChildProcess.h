@@ -59,7 +59,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API ChildProcessWorker
+class YUP_API ChildProcessWorker
 {
 public:
     /** Creates a non-connected worker process.
@@ -121,7 +121,7 @@ private:
     struct Connection;
     std::unique_ptr<Connection> connection;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessWorker)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessWorker)
 };
 
 //==============================================================================
@@ -143,7 +143,7 @@ private:
 
     @tags{Events}
 */
-class JUCE_API ChildProcessCoordinator
+class YUP_API ChildProcessCoordinator
 {
 public:
     /** Creates an uninitialised coordinator process object.
@@ -208,7 +208,7 @@ private:
     struct Connection;
     std::unique_ptr<Connection> connection;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessCoordinator)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessCoordinator)
 };
 
 } // namespace yup

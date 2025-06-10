@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static bool isValidXmlNameStartCharacter (juce_wchar character) noexcept
@@ -267,7 +267,7 @@ static void escapeIllegalXmlChars (OutputStream& outputStream, const String& tex
                         outputStream << (char) character;
                         break;
                     }
-                    JUCE_FALLTHROUGH
+                    YUP_FALLTHROUGH
                 default:
                     outputStream << "&#" << ((int) character) << ';';
                     break;
@@ -976,4 +976,4 @@ void XmlElement::deleteAllTextElements() noexcept
     }
 }
 
-} // namespace juce
+} // namespace yup

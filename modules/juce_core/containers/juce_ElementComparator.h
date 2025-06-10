@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 #ifndef DOXYGEN
@@ -215,4 +215,4 @@ public:
     }
 };
 
-} // namespace juce
+} // namespace yup

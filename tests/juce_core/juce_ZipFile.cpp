@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 class ZipFileTests : public ::testing::Test
 {
@@ -99,7 +99,7 @@ TEST_F (ZipFileTests, ZipFileSlipTest)
 {
     const std::map<String, bool> testCases = {
         { "a", true },
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         { "C:/b", false },
 #else
         { "/b", false },

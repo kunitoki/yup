@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API BufferedInputStream : public InputStream
+class YUP_API BufferedInputStream : public InputStream
 {
 public:
     //==============================================================================
@@ -99,7 +99,7 @@ private:
     HeapBlock<char> buffer;
     bool ensureBuffered();
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferedInputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (BufferedInputStream)
 };
 
-} // namespace juce
+} // namespace yup

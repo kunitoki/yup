@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API MemoryMappedFile
+class YUP_API MemoryMappedFile
 {
 public:
     /** The read/write flags used when opening a memory mapped file. */
@@ -118,7 +118,7 @@ private:
     void* address = nullptr;
     Range<int64> range;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     void* fileHandle = nullptr;
 #else
     int fileHandle = 0;
@@ -126,7 +126,7 @@ private:
 
     void openInternal (const File&, AccessMode, bool);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryMappedFile)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MemoryMappedFile)
 };
 
-} // namespace juce
+} // namespace yup

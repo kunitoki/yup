@@ -54,11 +54,11 @@ public:
         {
             while (auto msg = popNextMessage (fd))
             {
-                JUCE_TRY
+                YUP_TRY
                 {
                     msg->messageCallback();
                 }
-                JUCE_CATCH_EXCEPTION
+                YUP_CATCH_EXCEPTION
             }
         });
     }
@@ -90,7 +90,7 @@ public:
     }
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+    YUP_DECLARE_SINGLETON (InternalMessageQueue, false)
 
 private:
     CriticalSection lock;
@@ -121,7 +121,7 @@ private:
     }
 };
 
-JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
+YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
 //==============================================================================
 /*
@@ -249,7 +249,7 @@ public:
     void removeListener (LinuxEventLoopInternal::Listener& listener) { listeners.remove (&listener); }
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (InternalRunLoop, false)
+    YUP_DECLARE_SINGLETON (InternalRunLoop, false)
 
 private:
     using SharedCallback = std::shared_ptr<std::function<void()>>;
@@ -304,7 +304,7 @@ private:
     ListenerList<LinuxEventLoopInternal::Listener> listeners;
 };
 
-JUCE_IMPLEMENT_SINGLETON (InternalRunLoop)
+YUP_IMPLEMENT_SINGLETON (InternalRunLoop)
 
 //==============================================================================
 namespace LinuxErrorHandling

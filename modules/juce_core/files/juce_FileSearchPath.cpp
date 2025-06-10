@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 FileSearchPath::FileSearchPath (const String& path)
@@ -207,7 +207,7 @@ bool FileSearchPath::isFileInPath (const File& fileToCheck,
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 class FileSearchPathTests final : public UnitTest
 {
@@ -221,7 +221,7 @@ public:
     {
         beginTest ("removeRedundantPaths");
         {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
             const String prefix = "C:";
 #else
             const String prefix = "";
@@ -258,4 +258,4 @@ static FileSearchPathTests fileSearchPathTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

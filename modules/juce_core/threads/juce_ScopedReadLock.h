@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -65,7 +65,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API ScopedReadLock
+class YUP_API ScopedReadLock
 {
 public:
     //==============================================================================
@@ -98,7 +98,7 @@ private:
     //==============================================================================
     const ReadWriteLock& lock_;
 
-    JUCE_DECLARE_NON_COPYABLE (ScopedReadLock)
+    YUP_DECLARE_NON_COPYABLE (ScopedReadLock)
 };
 
 //==============================================================================
@@ -136,7 +136,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API ScopedTryReadLock
+class YUP_API ScopedTryReadLock
 {
 public:
     //==============================================================================
@@ -193,7 +193,7 @@ private:
     ReadWriteLock& lock;
     bool lockWasSuccessful;
 
-    JUCE_DECLARE_NON_COPYABLE (ScopedTryReadLock)
+    YUP_DECLARE_NON_COPYABLE (ScopedTryReadLock)
 };
 
-} // namespace juce
+} // namespace yup

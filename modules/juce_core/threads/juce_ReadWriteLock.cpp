@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 ReadWriteLock::ReadWriteLock() noexcept
@@ -161,4 +161,4 @@ void ReadWriteLock::exitWrite() const noexcept
     }
 }
 
-} // namespace juce
+} // namespace yup

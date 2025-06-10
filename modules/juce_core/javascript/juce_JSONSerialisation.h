@@ -37,11 +37,11 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
-    Options that control conversion from arbitrary types to juce::var.
+    Options that control conversion from arbitrary types to yup::var.
 
     @see ToVar
 
@@ -83,7 +83,7 @@ private:
 
     In short, the constant 'marshallingVersion', and either the single function 'serialise()', or
     the function pair 'load()' and 'save()' must be defined for the type. These may be defined
-    as public members of the type T itself, or as public members of juce::SerialisationTraits<T>,
+    as public members of the type T itself, or as public members of yup::SerialisationTraits<T>,
     which is a specialisation of the SerialisationTraits template struct for the type T.
 
     @see FromVar
@@ -265,7 +265,7 @@ private:
 
     In short, the constant 'marshallingVersion', and either the single function 'serialise()', or
     the function pair 'load()' and 'save()' must be defined for the type. These may be defined
-    as public members of the type T itself, or as public members of juce::SerialisationTraits<T>,
+    as public members of the type T itself, or as public members of yup::SerialisationTraits<T>,
     which is a specialisation of the SerialisationTraits template struct for the type T.
 
     @see ToVar
@@ -485,7 +485,7 @@ private:
 
     In short, the constant 'marshallingVersion', and either the single function 'serialise()', or
     the function pair 'load()' and 'save()' must be defined for the type. These may be defined
-    as public members of the type T itself, or as public members of juce::SerialisationTraits<T>,
+    as public members of the type T itself, or as public members of yup::SerialisationTraits<T>,
     which is a specialisation of the SerialisationTraits template struct for the type T.
 
     @see ToVar, FromVar
@@ -526,7 +526,7 @@ struct VariantConverter<String>
     a custom VariantConverter that duplicates that implementation, you can instead write:
     @code
     template <>
-    struct juce::VariantConverter<MyType> : public juce::StrictVariantConverter<MyType> {};
+    struct yup::VariantConverter<MyType> : public yup::StrictVariantConverter<MyType> {};
     @endcode
 
     @tags{Core}
@@ -551,4 +551,4 @@ struct StrictVariantConverter
     }
 };
 
-} // namespace juce
+} // namespace yup

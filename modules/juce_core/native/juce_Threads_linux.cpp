@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /*
@@ -86,7 +86,7 @@ bool Thread::setPriority (Priority newPriority)
 }
 
 //==============================================================================
-JUCE_API void JUCE_CALLTYPE Process::setPriority (ProcessPriority) {}
+YUP_API void YUP_CALLTYPE Process::setPriority (ProcessPriority) {}
 
 static bool swapUserAndEffectiveUser()
 {
@@ -95,16 +95,16 @@ static bool swapUserAndEffectiveUser()
     return result1 == 0 && result2 == 0;
 }
 
-JUCE_API void JUCE_CALLTYPE Process::raisePrivilege()
+YUP_API void YUP_CALLTYPE Process::raisePrivilege()
 {
     if (geteuid() != 0 && getuid() == 0)
         swapUserAndEffectiveUser();
 }
 
-JUCE_API void JUCE_CALLTYPE Process::lowerPrivilege()
+YUP_API void YUP_CALLTYPE Process::lowerPrivilege()
 {
     if (geteuid() == 0 && getuid() != 0)
         swapUserAndEffectiveUser();
 }
 
-} // namespace juce
+} // namespace yup

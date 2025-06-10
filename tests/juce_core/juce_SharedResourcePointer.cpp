@@ -43,7 +43,7 @@
 
 #include <optional>
 
-using namespace juce;
+using namespace yup;
 
 class SharedResourcePointerTests : public ::testing::Test
 {

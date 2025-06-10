@@ -37,9 +37,9 @@
   ==============================================================================
 */
 
-#if JUCE_ENABLE_ALLOCATION_HOOKS
+#if YUP_ENABLE_ALLOCATION_HOOKS
 
-namespace juce
+namespace yup
 {
 
 static AllocationHooks& getAllocationHooksForThread()
@@ -56,45 +56,45 @@ void notifyAllocationHooksForThread()
                                                      });
 }
 
-} // namespace juce
+} // namespace yup
 
 void* operator new (size_t s)
 {
-    juce::notifyAllocationHooksForThread();
+    yup::notifyAllocationHooksForThread();
     return std::malloc (s);
 }
 
 void* operator new[] (size_t s)
 {
-    juce::notifyAllocationHooksForThread();
+    yup::notifyAllocationHooksForThread();
     return std::malloc (s);
 }
 
 void operator delete (void* p) noexcept
 {
-    juce::notifyAllocationHooksForThread();
+    yup::notifyAllocationHooksForThread();
     std::free (p);
 }
 
 void operator delete[] (void* p) noexcept
 {
-    juce::notifyAllocationHooksForThread();
+    yup::notifyAllocationHooksForThread();
     std::free (p);
 }
 
 void operator delete (void* p, size_t) noexcept
 {
-    juce::notifyAllocationHooksForThread();
+    yup::notifyAllocationHooksForThread();
     std::free (p);
 }
 
 void operator delete[] (void* p, size_t) noexcept
 {
-    juce::notifyAllocationHooksForThread();
+    yup::notifyAllocationHooksForThread();
     std::free (p);
 }
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -112,6 +112,6 @@ UnitTestAllocationChecker::~UnitTestAllocationChecker() noexcept
 
 void UnitTestAllocationChecker::newOrDeleteCalled() noexcept { ++calls; }
 
-} // namespace juce
+} // namespace yup
 
 #endif

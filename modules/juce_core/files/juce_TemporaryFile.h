@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -78,7 +78,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API TemporaryFile
+class YUP_API TemporaryFile
 {
 public:
     //==============================================================================
@@ -197,7 +197,7 @@ private:
     //==============================================================================
     const File temporaryFile, targetFile;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TemporaryFile)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TemporaryFile)
 };
 
-} // namespace juce
+} // namespace yup

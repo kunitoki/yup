@@ -19,11 +19,11 @@
   ==============================================================================
 */
 
-#if JUCE_ENABLE_PROFILING
+#if YUP_ENABLE_PROFILING
 
 PERFETTO_TRACK_EVENT_STATIC_STORAGE();
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -39,14 +39,14 @@ constexpr bool stringsEqual (const std::array<char, sizeResult>& result, const c
 
 // clang-format off
 static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "int main"; }), "main"));
-static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void AudioProcessor::processBlock(juce::AudioBuffer<float> &, juce::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const"; }), "AudioProcessor::processBlock"));
+static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void AudioProcessor::processBlock(yup::AudioBuffer<float> &, yup::MidiBuffer &)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const"; }), "AudioProcessor::processBlock"));
 static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void __cdecl AudioProcessor::processBlock::<lambda_1>::operator"; }), "AudioProcessor::processBlock"));
 static_assert (stringsEqual (Profiler::compileTimePrettierFunction ([] { return "void __fastcall AudioProcessor::processBlock::<lambda_1>::operator"; }), "AudioProcessor::processBlock"));
 // clang-format on
 
 //==============================================================================
 
-JUCE_IMPLEMENT_SINGLETON (Profiler)
+YUP_IMPLEMENT_SINGLETON (Profiler)
 
 //==============================================================================
 
@@ -83,8 +83,8 @@ void Profiler::startTracing (uint32 sizeInKilobytes)
 
     String fileName;
     fileName
-        << JUCE_PROFILING_FILE_PREFIX
-#if JUCE_DEBUG
+        << YUP_PROFILING_FILE_PREFIX
+#if YUP_DEBUG
         << "-DEBUG-"
 #else
         << "-RELEASE-"
@@ -134,6 +134,6 @@ void Profiler::setOutputFolder (const File& newOutputFolder)
     outputFolder = newOutputFolder;
 }
 
-} // namespace juce
+} // namespace yup
 
 #endif

@@ -19,10 +19,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if JUCE_LINUX || JUCE_WINDOWS || JUCE_MAC
+#if YUP_LINUX || YUP_WINDOWS || YUP_MAC
 std::shared_ptr<Watchdog> Watchdog::createInstance (std::chrono::milliseconds timeout)
 {
     return std::shared_ptr<Watchdog> (new Watchdog (timeout));
@@ -114,4 +114,4 @@ std::vector<File> Watchdog::getAllWatchedFolders() const
 
 #endif
 
-} // namespace juce
+} // namespace yup

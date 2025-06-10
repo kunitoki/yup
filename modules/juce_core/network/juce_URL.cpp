@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct FallbackDownloadTask final : public URL::DownloadTask
@@ -119,7 +119,7 @@ struct FallbackDownloadTask final : public URL::DownloadTask
     HeapBlock<char> buffer;
     URL::DownloadTask::Listener* const listener;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FallbackDownloadTask)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FallbackDownloadTask)
 };
 
 void URL::DownloadTaskListener::progress (DownloadTask*, int64, int64) {}
@@ -165,7 +165,7 @@ URL::URL (File localFile)
     if (localFile == File())
         return;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     bool isUncPath = localFile.getFullPathName().startsWith ("\\\\");
 #endif
 
@@ -177,7 +177,7 @@ URL::URL (File localFile)
 
     url = addEscapeChars (localFile.getFileName(), false) + url;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     if (isUncPath)
     {
         url = url.fromFirstOccurrenceOf ("/", false, false);
@@ -398,7 +398,7 @@ String URL::getScheme() const
     return url.substring (0, URLHelpers::findEndOfScheme (url) - 1);
 }
 
-#if ! JUCE_ANDROID
+#if ! YUP_ANDROID
 bool URL::isLocalFile() const
 {
     return getScheme() == "file";
@@ -430,7 +430,7 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
 
     auto path = removeEscapeChars (fileURL.getDomainInternal (true)).replace ("+", "%2B");
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     bool isUncPath = (! fileURL.url.startsWith ("file:///"));
 #else
     path = File::getSeparatorString() + path;
@@ -441,7 +441,7 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
     for (auto urlElement : urlElements)
         path += File::getSeparatorString() + removeEscapeChars (urlElement.replace ("+", "%2B"));
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     if (isUncPath)
         path = "\\\\" + path;
 #endif
@@ -604,7 +604,7 @@ String URL::getDomainInternal (bool ignorePort) const
     return url.substring (start, end);
 }
 
-#if JUCE_IOS
+#if YUP_IOS
 URL::Bookmark::Bookmark (void* bookmarkToUse)
     : data (bookmarkToUse)
 {
@@ -783,7 +783,7 @@ std::unique_ptr<InputStream> URL::createInputStream (const InputStreamOptions& o
 {
     if (isLocalFile())
     {
-#if JUCE_IOS
+#if YUP_IOS
         // We may need to refresh the embedded bookmark.
         return std::make_unique<iOSFileStreamWrapper<FileInputStream>> (const_cast<URL&> (*this));
 #else
@@ -851,21 +851,21 @@ std::unique_ptr<InputStream> URL::createInputStream (const InputStreamOptions& o
         return nullptr;
 
     // std::move() needed here for older compilers
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wredundant-move")
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wredundant-move")
     return std::move (webInputStream);
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 }
 
 std::unique_ptr<OutputStream> URL::createOutputStream() const
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     if (auto stream = AndroidDocument::fromDocument (*this).createOutputStream())
         return stream;
 #endif
 
     if (isLocalFile())
     {
-#if JUCE_IOS
+#if YUP_IOS
         // We may need to refresh the embedded bookmark.
         return std::make_unique<iOSFileStreamWrapper<FileOutputStream>> (const_cast<URL&> (*this));
 #else
@@ -1046,4 +1046,4 @@ bool URL::launchInDefaultBrowser() const
     return Process::openDocument (u, {});
 }
 
-} // namespace juce
+} // namespace yup

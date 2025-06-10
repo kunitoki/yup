@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API PropertySet
+class YUP_API PropertySet
 {
 public:
     //==============================================================================
@@ -222,7 +222,7 @@ private:
     CriticalSection lock;
     bool ignoreCaseOfKeys;
 
-    JUCE_LEAK_DETECTOR (PropertySet)
+    YUP_LEAK_DETECTOR (PropertySet)
 };
 
-} // namespace juce
+} // namespace yup

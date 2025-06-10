@@ -33,7 +33,7 @@ namespace yup
     or combined with other transformations to execute complex changes in the geometry
     of graphics and other spatial data.
 */
-class JUCE_API AffineTransform
+class YUP_API AffineTransform
 {
 public:
     //==============================================================================

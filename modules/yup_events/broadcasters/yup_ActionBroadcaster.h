@@ -50,7 +50,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API ActionBroadcaster
+class YUP_API ActionBroadcaster
 {
 public:
     //==============================================================================
@@ -88,8 +88,8 @@ private:
     SortedSet<ActionListener*> actionListeners;
     CriticalSection actionListenerLock;
 
-    JUCE_DECLARE_WEAK_REFERENCEABLE (ActionBroadcaster)
-    JUCE_DECLARE_NON_COPYABLE (ActionBroadcaster)
+    YUP_DECLARE_WEAK_REFERENCEABLE (ActionBroadcaster)
+    YUP_DECLARE_NON_COPYABLE (ActionBroadcaster)
 };
 
 } // namespace yup

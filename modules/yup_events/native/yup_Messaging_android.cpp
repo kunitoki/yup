@@ -95,14 +95,14 @@ public:
     }
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+    YUP_DECLARE_SINGLETON (InternalMessageQueue, false)
 
 private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> queue;
 };
 
-JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
+YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
 //==============================================================================
 bool juce_dispatchNextMessageOnSystemQueue (bool returnIfNoPendingMessages)

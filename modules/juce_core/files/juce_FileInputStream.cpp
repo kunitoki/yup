@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 int64 juce_fileSetPosition (void* handle, int64 pos);
@@ -95,7 +95,7 @@ bool FileInputStream::setPosition (int64 pos)
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 struct FileInputStreamTests final : public UnitTest
 {
@@ -191,4 +191,4 @@ static FileInputStreamTests fileInputStreamTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

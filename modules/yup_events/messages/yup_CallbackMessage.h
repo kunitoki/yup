@@ -62,7 +62,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API CallbackMessage : public MessageManager::MessageBase
+class YUP_API CallbackMessage : public MessageManager::MessageBase
 {
 public:
     //==============================================================================
@@ -85,7 +85,7 @@ public:
 private:
     // Avoid the leak-detector because for plugins, the host can unload our DLL with undelivered
     // messages still in the system event queue. These aren't harmful, but can cause annoying assertions.
-    JUCE_DECLARE_NON_COPYABLE (CallbackMessage)
+    YUP_DECLARE_NON_COPYABLE (CallbackMessage)
 };
 
 } // namespace yup

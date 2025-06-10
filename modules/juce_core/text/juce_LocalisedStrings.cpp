@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 LocalisedStrings::LocalisedStrings (const String& fileContents, bool ignoreCase)
@@ -86,7 +86,7 @@ String LocalisedStrings::translate (const String& text, const String& resultIfNo
 
 namespace
 {
-#if JUCE_CHECK_MEMORY_LEAKS
+#if YUP_CHECK_MEMORY_LEAKS
 // By using this object to force a LocalisedStrings object to be created
 // before the currentMappings object, we can force the static order-of-destruction to
 // delete the currentMappings object first, which avoids a bogus leak warning.
@@ -204,17 +204,17 @@ LocalisedStrings* LocalisedStrings::getCurrentMappings()
     return currentMappings.get();
 }
 
-String LocalisedStrings::translateWithCurrentMappings (const String& text) { return juce::translate (text); }
+String LocalisedStrings::translateWithCurrentMappings (const String& text) { return yup::translate (text); }
 
-String LocalisedStrings::translateWithCurrentMappings (const char* text) { return juce::translate (text); }
+String LocalisedStrings::translateWithCurrentMappings (const char* text) { return yup::translate (text); }
 
-JUCE_API String translate (const String& text) { return juce::translate (text, text); }
+YUP_API String translate (const String& text) { return yup::translate (text, text); }
 
-JUCE_API String translate (const char* text) { return juce::translate (String (text)); }
+YUP_API String translate (const char* text) { return yup::translate (String (text)); }
 
-JUCE_API String translate (CharPointer_UTF8 text) { return juce::translate (String (text)); }
+YUP_API String translate (CharPointer_UTF8 text) { return yup::translate (String (text)); }
 
-JUCE_API String translate (const String& text, const String& resultIfNotFound)
+YUP_API String translate (const String& text, const String& resultIfNotFound)
 {
     const SpinLock::ScopedLockType sl (currentMappingsLock);
 
@@ -224,4 +224,4 @@ JUCE_API String translate (const String& text, const String& resultIfNotFound)
     return resultIfNotFound;
 }
 
-} // namespace juce
+} // namespace yup

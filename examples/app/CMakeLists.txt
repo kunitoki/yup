@@ -41,8 +41,8 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     MODULES
         juce_core
-        juce_audio_basics
-        juce_audio_devices
+        yup_audio_basics
+        yup_audio_devices
         yup_events
         yup_graphics
         yup_gui

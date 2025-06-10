@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API InterProcessLock
+class YUP_API InterProcessLock
 {
 public:
     //==============================================================================
@@ -125,7 +125,7 @@ public:
         InterProcessLock& ipLock;
         bool lockWasSuccessful;
 
-        JUCE_DECLARE_NON_COPYABLE (ScopedLockType)
+        YUP_DECLARE_NON_COPYABLE (ScopedLockType)
     };
 
 private:
@@ -136,7 +136,7 @@ private:
     CriticalSection lock;
     String name;
 
-    JUCE_DECLARE_NON_COPYABLE (InterProcessLock)
+    YUP_DECLARE_NON_COPYABLE (InterProcessLock)
 };
 
-} // namespace juce
+} // namespace yup

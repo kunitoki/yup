@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {
@@ -52,7 +52,7 @@ enum class TestEnum
     other = 1 << 2
 };
 
-JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (TestEnum)
+YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (TestEnum)
 } // namespace
 
 TEST (ScopedEnumBitwiseOperatorsTests, BitwiseOrOperator)

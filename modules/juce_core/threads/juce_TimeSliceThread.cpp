@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 TimeSliceThread::TimeSliceThread (const String& name)
@@ -209,4 +209,4 @@ void TimeSliceThread::run()
     }
 }
 
-} // namespace juce
+} // namespace yup

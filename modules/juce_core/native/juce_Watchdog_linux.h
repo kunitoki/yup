@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class Watchdog::Impl final
@@ -239,4 +239,4 @@ private:
     int fd = -1;
 };
 
-} // namespace juce
+} // namespace yup

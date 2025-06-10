@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 static String operator"" _S (const char* chars, size_t)
 {
@@ -284,12 +284,12 @@ TEST_F (StringPairArrayTests, AddMapHasEquivalentBehaviourToAddArray)
 
     auto withAddArray = initial;
     withAddArray.addArray ([]
-                           {
-                               StringPairArray toAdd;
-                               toAdd.set ("ZZZ", "ZZZ");
-                               toAdd.set ("ddd", "ddd");
-                               return toAdd;
-                           }());
+    {
+        StringPairArray toAdd;
+        toAdd.set ("ZZZ", "ZZZ");
+        toAdd.set ("ddd", "ddd");
+        return toAdd;
+    }());
 
     EXPECT_EQ (withAddMap, withAddArray);
 }

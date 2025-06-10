@@ -37,20 +37,20 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
 
 NewLine newLine;
 
-#if defined(JUCE_STRINGS_ARE_UNICODE) && ! JUCE_STRINGS_ARE_UNICODE
-#error "JUCE_STRINGS_ARE_UNICODE is deprecated! All strings are now unicode by default."
+#if defined(YUP_STRINGS_ARE_UNICODE) && ! YUP_STRINGS_ARE_UNICODE
+#error "YUP_STRINGS_ARE_UNICODE is deprecated! All strings are now unicode by default."
 #endif
 
-#if JUCE_NATIVE_WCHAR_IS_UTF8
+#if YUP_NATIVE_WCHAR_IS_UTF8
 using CharPointer_wchar_t = CharPointer_UTF8;
-#elif JUCE_NATIVE_WCHAR_IS_UTF16
+#elif YUP_NATIVE_WCHAR_IS_UTF16
 using CharPointer_wchar_t = CharPointer_UTF16;
 #else
 using CharPointer_wchar_t = CharPointer_UTF32;
@@ -235,12 +235,12 @@ private:
     void compileTimeChecks()
     {
         // Let me know if any of these assertions fail on your system!
-#if JUCE_NATIVE_WCHAR_IS_UTF8
-        static_assert (sizeof (wchar_t) == 1, "JUCE_NATIVE_WCHAR_IS_* macro has incorrect value");
-#elif JUCE_NATIVE_WCHAR_IS_UTF16
-        static_assert (sizeof (wchar_t) == 2, "JUCE_NATIVE_WCHAR_IS_* macro has incorrect value");
-#elif JUCE_NATIVE_WCHAR_IS_UTF32
-        static_assert (sizeof (wchar_t) == 4, "JUCE_NATIVE_WCHAR_IS_* macro has incorrect value");
+#if YUP_NATIVE_WCHAR_IS_UTF8
+        static_assert (sizeof (wchar_t) == 1, "YUP_NATIVE_WCHAR_IS_* macro has incorrect value");
+#elif YUP_NATIVE_WCHAR_IS_UTF16
+        static_assert (sizeof (wchar_t) == 2, "YUP_NATIVE_WCHAR_IS_* macro has incorrect value");
+#elif YUP_NATIVE_WCHAR_IS_UTF32
+        static_assert (sizeof (wchar_t) == 4, "YUP_NATIVE_WCHAR_IS_* macro has incorrect value");
 #else
 #error "native wchar_t size is unknown"
 #endif
@@ -687,41 +687,41 @@ int64 String::hashCode64() const noexcept { return (int64) HashGenerator<uint64>
 size_t String::hash() const noexcept { return HashGenerator<size_t>::calculate (text); }
 
 //==============================================================================
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const String& s2) noexcept { return s1.compare (s2) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, const String& s2) noexcept { return s1.compare (s2) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, const String& s2) noexcept { return s1.compare (s2) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, const String& s2) noexcept { return s1.compare (s2) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const char* s2) noexcept { return s1.compare (s2) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, const char* s2) noexcept { return s1.compare (s2) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, const char* s2) noexcept { return s1.compare (s2) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, const char* s2) noexcept { return s1.compare (s2) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const wchar_t* s2) noexcept { return s1.compare (s2) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, const wchar_t* s2) noexcept { return s1.compare (s2) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, const wchar_t* s2) noexcept { return s1.compare (s2) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, const wchar_t* s2) noexcept { return s1.compare (s2) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator< (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) < 0; }
+YUP_API bool YUP_CALLTYPE operator< (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) < 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator<= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) <= 0; }
+YUP_API bool YUP_CALLTYPE operator<= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) <= 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator> (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) > 0; }
+YUP_API bool YUP_CALLTYPE operator> (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) > 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator>= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) >= 0; }
+YUP_API bool YUP_CALLTYPE operator>= (const String& s1, StringRef s2) noexcept { return s1.getCharPointer().compare (s2.text) >= 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const CharPointer_UTF8 s2) noexcept { return s1.getCharPointer().compare (s2) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, const CharPointer_UTF8 s2) noexcept { return s1.getCharPointer().compare (s2) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, const CharPointer_UTF8 s2) noexcept { return s1.getCharPointer().compare (s2) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, const CharPointer_UTF8 s2) noexcept { return s1.getCharPointer().compare (s2) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const CharPointer_UTF16 s2) noexcept { return s1.getCharPointer().compare (s2) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, const CharPointer_UTF16 s2) noexcept { return s1.getCharPointer().compare (s2) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, const CharPointer_UTF16 s2) noexcept { return s1.getCharPointer().compare (s2) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, const CharPointer_UTF16 s2) noexcept { return s1.getCharPointer().compare (s2) != 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const CharPointer_UTF32 s2) noexcept { return s1.getCharPointer().compare (s2) == 0; }
+YUP_API bool YUP_CALLTYPE operator== (const String& s1, const CharPointer_UTF32 s2) noexcept { return s1.getCharPointer().compare (s2) == 0; }
 
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& s1, const CharPointer_UTF32 s2) noexcept { return s1.getCharPointer().compare (s2) != 0; }
+YUP_API bool YUP_CALLTYPE operator!= (const String& s1, const CharPointer_UTF32 s2) noexcept { return s1.getCharPointer().compare (s2) != 0; }
 
 bool String::equalsIgnoreCase (const wchar_t* const t) const noexcept
 {
@@ -946,7 +946,7 @@ String& String::operator+= (wchar_t ch)
     return operator+= (asString);
 }
 
-#if ! JUCE_NATIVE_WCHAR_IS_UTF32
+#if ! YUP_NATIVE_WCHAR_IS_UTF32
 String& String::operator+= (juce_wchar ch)
 {
     const juce_wchar asString[] = { ch, 0 };
@@ -964,7 +964,7 @@ inline String& operationAddAssign (String& str, const T number)
     auto* end = buffer + numElementsInArray (buffer);
     auto* start = NumberToStringConverters::numberToString (end, number);
 
-#if JUCE_STRING_UTF_TYPE == 8
+#if YUP_STRING_UTF_TYPE == 8
     str.appendCharPointer (String::CharPointerType (start), String::CharPointerType (end));
 #else
     str.appendCharPointer (CharPointer_ASCII (start), CharPointer_ASCII (end));
@@ -983,90 +983,90 @@ String& String::operator+= (const int64 number) { return StringHelpers::operatio
 String& String::operator+= (const uint64 number) { return StringHelpers::operationAddAssign<uint64> (*this, number); }
 
 //==============================================================================
-JUCE_API String JUCE_CALLTYPE operator+ (const char* s1, const String& s2)
+YUP_API String YUP_CALLTYPE operator+ (const char* s1, const String& s2)
 {
     String s (s1);
     return s += s2;
 }
 
-JUCE_API String JUCE_CALLTYPE operator+ (const wchar_t* s1, const String& s2)
+YUP_API String YUP_CALLTYPE operator+ (const wchar_t* s1, const String& s2)
 {
     String s (s1);
     return s += s2;
 }
 
-JUCE_API String JUCE_CALLTYPE operator+ (char s1, const String& s2) { return String::charToString ((juce_wchar) (uint8) s1) + s2; }
+YUP_API String YUP_CALLTYPE operator+ (char s1, const String& s2) { return String::charToString ((juce_wchar) (uint8) s1) + s2; }
 
-JUCE_API String JUCE_CALLTYPE operator+ (wchar_t s1, const String& s2) { return String::charToString (s1) + s2; }
+YUP_API String YUP_CALLTYPE operator+ (wchar_t s1, const String& s2) { return String::charToString (s1) + s2; }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, const String& s2) { return s1 += s2; }
+YUP_API String YUP_CALLTYPE operator+ (String s1, const String& s2) { return s1 += s2; }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, const char* s2) { return s1 += s2; }
+YUP_API String YUP_CALLTYPE operator+ (String s1, const char* s2) { return s1 += s2; }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, const wchar_t* s2) { return s1 += s2; }
+YUP_API String YUP_CALLTYPE operator+ (String s1, const wchar_t* s2) { return s1 += s2; }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, const std::string& s2) { return s1 += s2.c_str(); }
+YUP_API String YUP_CALLTYPE operator+ (String s1, const std::string& s2) { return s1 += s2.c_str(); }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, char s2) { return s1 += s2; }
+YUP_API String YUP_CALLTYPE operator+ (String s1, char s2) { return s1 += s2; }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, wchar_t s2) { return s1 += s2; }
+YUP_API String YUP_CALLTYPE operator+ (String s1, wchar_t s2) { return s1 += s2; }
 
-#if ! JUCE_NATIVE_WCHAR_IS_UTF32
-JUCE_API String JUCE_CALLTYPE operator+ (juce_wchar s1, const String& s2)
+#if ! YUP_NATIVE_WCHAR_IS_UTF32
+YUP_API String YUP_CALLTYPE operator+ (juce_wchar s1, const String& s2)
 {
     return String::charToString (s1) + s2;
 }
 
-JUCE_API String JUCE_CALLTYPE operator+ (String s1, juce_wchar s2) { return s1 += s2; }
+YUP_API String YUP_CALLTYPE operator+ (String s1, juce_wchar s2) { return s1 += s2; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, juce_wchar s2) { return s1 += s2; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, juce_wchar s2) { return s1 += s2; }
 #endif
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, char s2)
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, char s2)
 {
     return s1 += s2;
 }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, wchar_t s2) { return s1 += s2; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, wchar_t s2) { return s1 += s2; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, const char* s2) { return s1 += s2; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, const char* s2) { return s1 += s2; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, const wchar_t* s2) { return s1 += s2; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, const wchar_t* s2) { return s1 += s2; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, const String& s2) { return s1 += s2; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, const String& s2) { return s1 += s2; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, StringRef s2) { return s1 += s2; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, StringRef s2) { return s1 += s2; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, const std::string& s2) { return s1 += s2.c_str(); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, const std::string& s2) { return s1 += s2.c_str(); }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, uint8 number) { return s1 += (int) number; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, uint8 number) { return s1 += (int) number; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, short number) { return s1 += (int) number; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, short number) { return s1 += (int) number; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, int number) { return s1 += number; }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, int number) { return s1 += number; }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, long number) { return s1 += String (number); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, long number) { return s1 += String (number); }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, unsigned long number) { return s1 += String (number); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, unsigned long number) { return s1 += String (number); }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, int64 number) { return s1 += String (number); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, int64 number) { return s1 += String (number); }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, uint64 number) { return s1 += String (number); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, uint64 number) { return s1 += String (number); }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, float number) { return s1 += String (number); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, float number) { return s1 += String (number); }
 
-JUCE_API String& JUCE_CALLTYPE operator<< (String& s1, double number) { return s1 += String (number); }
+YUP_API String& YUP_CALLTYPE operator<< (String& s1, double number) { return s1 += String (number); }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const String& text)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const String& text)
 {
     return operator<< (stream, StringRef (text));
 }
 
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, StringRef text)
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, StringRef text)
 {
     auto numBytes = CharPointer_UTF8::getBytesRequiredFor (text.text);
 
-#if (JUCE_STRING_UTF_TYPE == 8)
+#if (YUP_STRING_UTF_TYPE == 8)
     stream.write (text.text.getAddress(), numBytes);
 #else
     // (This avoids using toUTF8() to prevent the memory bloat that it would leave behind
@@ -2056,9 +2056,9 @@ String String::formattedRaw (const char* pf, ...)
         va_list args;
         va_start (args, pf);
 
-        JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+        YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
         HeapBlock<char> temp (bufferSize);
         int num = (int) vsnprintf (temp.get(), bufferSize - 1, pf, args);
         if (num >= static_cast<int> (bufferSize))
@@ -2067,7 +2067,7 @@ String String::formattedRaw (const char* pf, ...)
         String wideCharVersion (pf);
         HeapBlock<wchar_t> temp (bufferSize);
         const int num = (int)
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
             _vsnwprintf
 #else
             vswprintf
@@ -2075,7 +2075,7 @@ String String::formattedRaw (const char* pf, ...)
             (temp.get(), bufferSize - 1, wideCharVersion.toWideCharPointer(), args);
 #endif
 
-        JUCE_END_IGNORE_DEPRECATION_WARNINGS
+        YUP_END_IGNORE_DEPRECATION_WARNINGS
 
         va_end (args);
 
@@ -2270,7 +2270,7 @@ struct StringEncodingConverter
         void* const newSpace = addBytesToPointer (text.getAddress(), (int) endOffset);
         const CharPointerType_Dest extraSpace (static_cast<DestChar*> (newSpace));
 
-#if JUCE_DEBUG // (This just avoids spurious warnings from valgrind about the uninitialised bytes at the end of the buffer..)
+#if YUP_DEBUG // (This just avoids spurious warnings from valgrind about the uninitialised bytes at the end of the buffer..)
         auto bytesToClear = (size_t) jmin ((int) extraBytesNeeded, 4);
         zeromem (addBytesToPointer (newSpace, extraBytesNeeded - bytesToClear), bytesToClear);
 #endif
@@ -2372,7 +2372,7 @@ String String::fromUTF8 (const char* const buffer, int bufferSizeBytes)
     return {};
 }
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 //==============================================================================
 StringRef::StringRef() noexcept
@@ -2381,20 +2381,20 @@ StringRef::StringRef() noexcept
 }
 
 StringRef::StringRef (const char* stringLiteral) noexcept
-#if JUCE_STRING_UTF_TYPE != 8
+#if YUP_STRING_UTF_TYPE != 8
     : text (nullptr)
     , stringCopy (stringLiteral)
 #else
     : text (stringLiteral)
 #endif
 {
-#if JUCE_STRING_UTF_TYPE != 8
+#if YUP_STRING_UTF_TYPE != 8
     text = stringCopy.getCharPointer();
 #endif
 
     jassert (stringLiteral != nullptr); // This must be a valid string literal, not a null pointer!!
 
-#if JUCE_NATIVE_WCHAR_IS_UTF8
+#if YUP_NATIVE_WCHAR_IS_UTF8
     /*  If you get an assertion here, then you're trying to create a string from 8-bit data
         that contains values greater than 127. These can NOT be correctly converted to unicode
         because there's no way for the String class to know what encoding was used to
@@ -2554,4 +2554,4 @@ String serialiseDouble (double input, int maxDecimalPlaces = 0)
     return reduceLengthOfFloatString (String (input, numberOfDecimalPlaces));
 }
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -70,7 +70,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Result
+class YUP_API Result
 {
 public:
     //==============================================================================
@@ -130,4 +130,4 @@ private:
     operator void*() const;
 };
 
-} // namespace juce
+} // namespace yup

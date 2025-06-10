@@ -20,7 +20,7 @@
 */
 
 #include <juce_core/juce_core.h>
-#include <juce_audio_devices/juce_audio_devices.h>
+#include <yup_audio_devices/yup_audio_devices.h>
 #include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
@@ -47,7 +47,7 @@ public:
     {
         setTitle ("main");
 
-#if JUCE_WASM
+#if YUP_WASM
         auto baseFilePath = yup::File ("/data");
 #else
         auto baseFilePath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
@@ -218,9 +218,9 @@ struct Application : yup::YUPApplication
 
         window = std::make_unique<CustomWindow>();
 
-#if JUCE_IOS
+#if YUP_IOS
         window->centreWithSize ({ 320, 480 });
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
         window->centreWithSize ({ 1080, 2400 });
         // window->setFullScreen(true);
 #else

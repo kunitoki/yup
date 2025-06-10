@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct PlatformTimerListener
@@ -46,4 +46,4 @@ struct PlatformTimerListener
     virtual void onTimerExpired() = 0;
 };
 
-} // namespace juce
+} // namespace yup

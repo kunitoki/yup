@@ -45,7 +45,7 @@
 #include <memory>
 #include <stdexcept>
 
-using namespace juce;
+using namespace yup;
 
 struct ConstructCounts
 {
@@ -139,9 +139,9 @@ TEST (FixedSizeFunctionTests, CallableConstructor)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn ([&]
-                                      {
-                                          ++called;
-                                      });
+    {
+        ++called;
+    });
     EXPECT_TRUE (fn);
     fn();
     EXPECT_EQ (called, 1);
@@ -151,9 +151,9 @@ TEST (FixedSizeFunctionTests, MoveConstructor)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn1 ([&]
-                                       {
-                                           ++called;
-                                       });
+    {
+        ++called;
+    });
     FixedSizeFunction<64, void()> fn2 (std::move (fn1));
     EXPECT_TRUE (fn2);
     fn2();
@@ -164,9 +164,9 @@ TEST (FixedSizeFunctionTests, MoveAssignment)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn1 ([&]
-                                       {
-                                           ++called;
-                                       });
+    {
+        ++called;
+    });
     FixedSizeFunction<64, void()> fn2;
     fn2 = std::move (fn1);
     EXPECT_TRUE (fn2);
@@ -178,9 +178,9 @@ TEST (FixedSizeFunctionTests, CallOperator)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn ([&]
-                                      {
-                                          ++called;
-                                      });
+    {
+        ++called;
+    });
     fn();
     EXPECT_EQ (called, 1);
 }
@@ -194,9 +194,9 @@ TEST (FixedSizeFunctionTests, ThrowOnCallEmpty)
 TEST (FixedSizeFunctionTests, CallableWithArguments)
 {
     FixedSizeFunction<64, int (int, int)> fn ([] (int a, int b)
-                                              {
-                                                  return a + b;
-                                              });
+    {
+        return a + b;
+    });
     EXPECT_EQ (fn (2, 3), 5);
 }
 
@@ -216,9 +216,9 @@ TEST (FixedSizeFunctionTests, ClearFunction)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn ([&]
-                                      {
-                                          ++called;
-                                      });
+    {
+        ++called;
+    });
     fn = nullptr;
     EXPECT_FALSE (fn);
     EXPECT_THROW (fn(), std::bad_function_call);
@@ -228,9 +228,9 @@ TEST (FixedSizeFunctionTests, DifferentSizes)
 {
     int called = 0;
     FixedSizeFunction<128, void()> fn1 ([&]
-                                        {
-                                            ++called;
-                                        });
+    {
+        ++called;
+    });
     FixedSizeFunction<256, void()> fn2 (std::move (fn1));
     EXPECT_TRUE (fn2);
     fn2();
@@ -241,9 +241,9 @@ TEST (FixedSizeFunctionTests, NullAssignment)
 {
     int called = 0;
     FixedSizeFunction<64, void()> fn ([&]
-                                      {
-                                          ++called;
-                                      });
+    {
+        ++called;
+    });
     fn = nullptr;
     EXPECT_FALSE (fn);
     EXPECT_THROW (fn(), std::bad_function_call);
@@ -475,7 +475,7 @@ TEST (FixedSizeFunctionTests, FunctionsCanSinkMoveOnlyParameters)
 
     EXPECT_EQ (value, fnA (std::move (ptr)));
 
-    using FnB = FixedSizeFunction<64, void (std::unique_ptr<int> &&)>;
+    using FnB = FixedSizeFunction<64, void (std::unique_ptr<int>&&)>;
 
     FnB fnB = [&value] (std::unique_ptr<int>&& p)
     {

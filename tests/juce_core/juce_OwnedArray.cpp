@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 struct OwnedArrayTests : public ::testing::Test
 {
@@ -50,14 +50,14 @@ struct OwnedArrayTests : public ::testing::Test
         Base() = default;
         virtual ~Base() = default;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Base)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Base)
     };
 
     struct Derived final : public Base
     {
         Derived() = default;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Derived)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Derived)
     };
 
     struct DestructorObj
@@ -79,7 +79,7 @@ struct OwnedArrayTests : public ::testing::Test
         OwnedArray<DestructorObj>& objectArray;
         int data = 956;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DestructorObj)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DestructorObj)
     };
 
     void testDestruction (DestructorObj* self, const OwnedArray<DestructorObj>& objectArray)

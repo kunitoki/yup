@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if ! DOXYGEN && (JUCE_MAC || JUCE_IOS)
+#if ! DOXYGEN && (YUP_MAC || YUP_IOS)
 using OSType = unsigned int;
 #endif
 
@@ -58,7 +58,7 @@ using OSType = unsigned int;
 
     @tags{Core}
 */
-class JUCE_API File final
+class YUP_API File final
 {
 public:
     //==============================================================================
@@ -972,7 +972,7 @@ public:
         /** In a plugin, this will return the path of the host executable. */
         hostApplicationPath,
 
-#if JUCE_WINDOWS || DOXYGEN
+#if YUP_WINDOWS || DOXYGEN
         /** On a Windows machine, returns the location of the Windows/System32 folder. */
         windowsSystemDirectory,
 #endif
@@ -983,7 +983,7 @@ public:
         */
         globalApplicationsDirectory,
 
-#if JUCE_WINDOWS || DOXYGEN
+#if YUP_WINDOWS || DOXYGEN
         /** On a Windows machine, returns the directory in which 32 bit applications
             normally get installed. On a 64 bit machine this would be something like
             "C:\Program Files (x86)", whereas for 32 bit machines this would match
@@ -1003,7 +1003,7 @@ public:
 
         @see SpecialLocationType
     */
-    static File JUCE_CALLTYPE getSpecialLocation (const SpecialLocationType type);
+    static File YUP_CALLTYPE getSpecialLocation (const SpecialLocationType type);
 
     //==============================================================================
     /** Returns a temporary file in the system's temp directory.
@@ -1102,7 +1102,7 @@ public:
         is a native path of the current OS and can be a relative, absolute or special path. */
     String getNativeLinkedTarget() const;
 
-#if JUCE_WINDOWS || DOXYGEN
+#if YUP_WINDOWS || DOXYGEN
     /** Windows ONLY - Creates a win32 .LNK shortcut file that links to this file. */
     bool createShortcut (const String& description, const File& linkFileToCreate) const;
 
@@ -1113,7 +1113,7 @@ public:
 #endif
 
     //==============================================================================
-#if JUCE_MAC || JUCE_IOS || DOXYGEN
+#if YUP_MAC || YUP_IOS || DOXYGEN
     /** OSX ONLY - Finds the OSType of a file from the its resources. */
     OSType getMacOSType() const;
 
@@ -1121,12 +1121,12 @@ public:
     bool isBundle() const;
 #endif
 
-#if JUCE_MAC || DOXYGEN
+#if YUP_MAC || DOXYGEN
     /** OSX ONLY - Adds this file to the OSX dock */
     void addToDock() const;
 #endif
 
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
     /** Returns the path to the container shared by all apps with the provided app group ID.
 
         You *must* pass one of the app group IDs listed in your app's entitlements file.
@@ -1179,4 +1179,4 @@ private:
     bool setFileExecutableInternal (bool) const;
 };
 
-} // namespace juce
+} // namespace yup

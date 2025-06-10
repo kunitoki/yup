@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 var JSONUtils::makeObject (const std::map<Identifier, var>& source)
@@ -162,4 +162,4 @@ bool JSONUtils::deepEqual (const var& a, const var& b)
     return a == b;
 }
 
-} // namespace juce
+} // namespace yup

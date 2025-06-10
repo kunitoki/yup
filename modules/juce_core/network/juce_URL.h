@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class WebInputStream;
@@ -51,7 +51,7 @@ class WebInputStream;
 
     @tags{Core}
 */
-class JUCE_API URL
+class YUP_API URL
 {
 public:
     //==============================================================================
@@ -351,7 +351,7 @@ public:
         }
         @endcode
     */
-    class JUCE_API InputStreamOptions
+    class YUP_API InputStreamOptions
     {
     public:
         /** Constructor.
@@ -468,7 +468,7 @@ public:
     class DownloadTask;
 
     /** Used to receive callbacks for download progress. */
-    struct JUCE_API DownloadTaskListener
+    struct YUP_API DownloadTaskListener
     {
         virtual ~DownloadTaskListener() = default;
 
@@ -527,7 +527,7 @@ public:
 
         Returned by downloadToFile() to allow querying and controlling the download task.
     */
-    class JUCE_API DownloadTask
+    class YUP_API DownloadTask
     {
     public:
         using Listener = DownloadTaskListener;
@@ -576,13 +576,13 @@ public:
         static std::unique_ptr<DownloadTask> createFallbackDownloader (const URL&, const File&, const DownloadTaskOptions&);
 
     public:
-#if JUCE_IOS
+#if YUP_IOS
         /** internal **/
         static void juce_iosURLSessionNotify (const String&);
 #endif
 
     private:
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DownloadTask)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DownloadTask)
     };
 
     /** Download the URL to a file.
@@ -690,7 +690,7 @@ public:
 
 private:
     //==============================================================================
-#if JUCE_IOS
+#if YUP_IOS
     struct Bookmark : public ReferenceCountedObject
     {
         using Ptr = ReferenceCountedObjectPtr<Bookmark>;
@@ -715,7 +715,7 @@ private:
         File file;
         std::unique_ptr<MemoryBlock> data;
 
-        JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Upload)
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Upload)
     };
 
     //==============================================================================
@@ -741,7 +741,7 @@ private:
     ReferenceCountedArray<Upload> filesToUpload;
 
     //==============================================================================
-    JUCE_LEAK_DETECTOR (URL)
+    YUP_LEAK_DETECTOR (URL)
 };
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -175,7 +175,7 @@ public:
     /** Returns the number of characters in this string. */
     size_t length() const noexcept
     {
-#if JUCE_NATIVE_WCHAR_IS_UTF32 && ! JUCE_ANDROID
+#if YUP_NATIVE_WCHAR_IS_UTF32 && ! YUP_ANDROID
         return wcslen (data);
 #else
         size_t n = 0;
@@ -275,7 +275,7 @@ public:
         return CharacterFunctions::compare (*this, other);
     }
 
-#if JUCE_NATIVE_WCHAR_IS_UTF32 && ! JUCE_ANDROID
+#if YUP_NATIVE_WCHAR_IS_UTF32 && ! YUP_ANDROID
     /** Compares this string with another one. */
     int compare (CharPointer_UTF32 other) const noexcept
     {
@@ -401,4 +401,4 @@ private:
     CharType* data;
 };
 
-} // namespace juce
+} // namespace yup

@@ -48,7 +48,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API ChangeBroadcaster
+class YUP_API ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -119,7 +119,7 @@ private:
 
     void callListeners();
 
-    JUCE_DECLARE_NON_COPYABLE (ChangeBroadcaster)
+    YUP_DECLARE_NON_COPYABLE (ChangeBroadcaster)
 };
 
 } // namespace yup

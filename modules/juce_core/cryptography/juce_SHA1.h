@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -32,7 +32,7 @@ namespace juce
     You can retrieve the hash as a raw 32-byte block, or as a 64-digit hex string.
     @see MD5, SHA256
 */
-class JUCE_API SHA1
+class YUP_API SHA1
 {
 public:
     //==============================================================================
@@ -95,7 +95,7 @@ private:
     uint8 result[20];
     void process (const void*, size_t);
 
-    JUCE_LEAK_DETECTOR (SHA1)
+    YUP_LEAK_DETECTOR (SHA1)
 };
 
-} // namespace juce
+} // namespace yup

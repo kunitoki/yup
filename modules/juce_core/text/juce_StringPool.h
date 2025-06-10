@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -53,7 +53,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API StringPool
+class YUP_API StringPool
 {
 public:
     //==============================================================================
@@ -98,7 +98,7 @@ private:
 
     void garbageCollectIfNeeded();
 
-    JUCE_DECLARE_NON_COPYABLE (StringPool)
+    YUP_DECLARE_NON_COPYABLE (StringPool)
 };
 
-} // namespace juce
+} // namespace yup

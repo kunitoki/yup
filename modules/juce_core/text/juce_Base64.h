@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-struct JUCE_API Base64
+struct YUP_API Base64
 {
     /** Converts a binary block of data into a base-64 string.
         This will write the resulting string data to the given stream.
@@ -67,4 +67,4 @@ struct JUCE_API Base64
     static String toBase64 (const String& textToEncode);
 };
 
-} // namespace juce
+} // namespace yup

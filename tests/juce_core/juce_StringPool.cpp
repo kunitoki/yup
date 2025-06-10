@@ -26,7 +26,7 @@
 #include <string>
 #include <string_view>
 
-using namespace juce;
+using namespace yup;
 
 class StringPoolTests : public ::testing::Test
 {

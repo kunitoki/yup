@@ -46,7 +46,7 @@ class HiddenMessageWindow
 public:
     HiddenMessageWindow (const TCHAR* const messageWindowName, WNDPROC wndProc)
     {
-        String className ("JUCE_");
+        String className ("YUP_");
         className << String::toHexString (Time::getHighResolutionTicks());
 
         HMODULE moduleHandle = (HMODULE) Process::getCurrentModuleInstanceHandle();

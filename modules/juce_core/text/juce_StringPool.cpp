@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static const int minNumberOfStringsForGarbageCollection = 300;
@@ -188,4 +188,4 @@ StringPool& StringPool::getGlobalPool() noexcept
     return pool;
 }
 
-} // namespace juce
+} // namespace yup

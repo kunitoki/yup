@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce::detail
+namespace yup::detail
 {
 
 template <typename... Ts>
@@ -84,4 +84,4 @@ private:
     ListenerList<Callback> listeners;
 };
 
-} // namespace juce::detail
+} // namespace yup::detail

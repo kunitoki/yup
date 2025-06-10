@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -85,7 +85,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API LocalisedStrings
+class YUP_API LocalisedStrings
 {
 public:
     //==============================================================================
@@ -211,7 +211,7 @@ private:
 
     void loadFromText (const String&, bool ignoreCase);
 
-    JUCE_LEAK_DETECTOR (LocalisedStrings)
+    YUP_LEAK_DETECTOR (LocalisedStrings)
 };
 
 //==============================================================================
@@ -222,7 +222,7 @@ private:
      instead, and avoid using macros.
      @see translate(), LocalisedStrings
  */
-#define TRANS(stringLiteral) juce::translate (stringLiteral)
+#define TRANS(stringLiteral) yup::translate (stringLiteral)
 #endif
 
 /** A dummy version of the TRANS macro, used to indicate a string literal that should be
@@ -237,21 +237,21 @@ private:
 /** Uses the LocalisedStrings class to translate the given string literal.
     @see LocalisedStrings
 */
-JUCE_API String translate (const String& stringLiteral);
+YUP_API String translate (const String& stringLiteral);
 
 /** Uses the LocalisedStrings class to translate the given string literal.
     @see LocalisedStrings
 */
-JUCE_API String translate (const char* stringLiteral);
+YUP_API String translate (const char* stringLiteral);
 
 /** Uses the LocalisedStrings class to translate the given string literal.
     @see LocalisedStrings
 */
-JUCE_API String translate (CharPointer_UTF8 stringLiteral);
+YUP_API String translate (CharPointer_UTF8 stringLiteral);
 
 /** Uses the LocalisedStrings class to translate the given string literal.
     @see LocalisedStrings
 */
-JUCE_API String translate (const String& stringLiteral, const String& resultIfNotFound);
+YUP_API String translate (const String& stringLiteral, const String& resultIfNotFound);
 
-} // namespace juce
+} // namespace yup

@@ -36,10 +36,10 @@
 
   ==============================================================================
 */
-namespace juce
+namespace yup
 {
 
-#if JUCE_MAC
+#if YUP_MAC
 void Process::setDockIconVisible(bool isVisible)
 {
     ProcessSerialNumber psn{0, kCurrentProcess};
@@ -50,4 +50,4 @@ void Process::setDockIconVisible(bool isVisible)
 }
 #endif
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 inline uint16 readUnalignedLittleEndianShort (const void* buffer)
@@ -167,7 +167,7 @@ struct ZipFile::ZipInputStream final : public InputStream
         }
         else
         {
-#if JUCE_DEBUG
+#if YUP_DEBUG
             zf.streamCounter.numOpenStreams++;
 #endif
         }
@@ -186,7 +186,7 @@ struct ZipFile::ZipInputStream final : public InputStream
 
     ~ZipInputStream() override
     {
-#if JUCE_DEBUG
+#if YUP_DEBUG
         if (inputStream != nullptr && inputStream == file.inputStream)
             file.streamCounter.numOpenStreams--;
 #endif
@@ -249,7 +249,7 @@ private:
     InputStream* inputStream;
     std::unique_ptr<InputStream> streamToDelete;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZipInputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ZipInputStream)
 };
 
 //==============================================================================
@@ -285,7 +285,7 @@ ZipFile::~ZipFile()
     entries.clear();
 }
 
-#if JUCE_DEBUG
+#if YUP_DEBUG
 ZipFile::OpenStreamCounter::~OpenStreamCounter()
 {
     /* If you hit this assertion, it means you've created a stream to read one of the items in the
@@ -443,7 +443,7 @@ Result ZipFile::uncompressEntry (int index, const File& targetDirectory, Overwri
 {
     auto* zei = entries.getUnchecked (index);
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     auto entryPath = zei->entry.filename;
 #else
     auto entryPath = zei->entry.filename.replaceCharacter ('\\', '/');
@@ -629,7 +629,7 @@ private:
         target.writeShort (0); // extra field length
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Item)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Item)
 };
 
 //==============================================================================
@@ -685,4 +685,4 @@ bool ZipFile::Builder::writeToStream (OutputStream& target, double* const progre
     return true;
 }
 
-} // namespace juce
+} // namespace yup

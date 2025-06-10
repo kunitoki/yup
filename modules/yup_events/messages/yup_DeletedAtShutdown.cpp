@@ -62,7 +62,7 @@ DeletedAtShutdown::~DeletedAtShutdown()
 
 // Disable unreachable code warning, in case the compiler manages to figure out that
 // you have no classes of DeletedAtShutdown that could throw an exception in their destructor.
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4702)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4702)
 
 void DeletedAtShutdown::deleteAll()
 {
@@ -77,7 +77,7 @@ void DeletedAtShutdown::deleteAll()
 
     for (int i = localCopy.size(); --i >= 0;)
     {
-        JUCE_TRY
+        YUP_TRY
         {
             auto* deletee = localCopy.getUnchecked (i);
 
@@ -91,7 +91,7 @@ void DeletedAtShutdown::deleteAll()
 
             delete deletee;
         }
-        JUCE_CATCH_EXCEPTION
+        YUP_CATCH_EXCEPTION
     }
 
     // if this fails, then it's likely that some new DeletedAtShutdown objects were
@@ -101,6 +101,6 @@ void DeletedAtShutdown::deleteAll()
     getDeletedAtShutdownObjects().clear(); // just to make sure the array doesn't have any memory still allocated
 }
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 } // namespace yup

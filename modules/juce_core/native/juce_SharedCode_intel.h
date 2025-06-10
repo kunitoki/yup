@@ -37,16 +37,16 @@
   ==============================================================================
 */
 
-#if JUCE_INTEL && ! JUCE_NO_INLINE_ASM
+#if YUP_INTEL && ! YUP_NO_INLINE_ASM
 
-namespace juce::SystemStatsHelpers
+namespace yup::SystemStatsHelpers
 {
 
 static void doCPUID (uint32& a, uint32& b, uint32& c, uint32& d, uint32 type)
 {
     uint32 la = a, lb = b, lc = c, ld = d;
 
-#if JUCE_32BIT && defined(__pic__)
+#if YUP_32BIT && defined(__pic__)
     asm("mov %%ebx, %%edi\n"
         "cpuid\n"
         "xchg %%edi, %%ebx\n"
@@ -118,6 +118,6 @@ static void getCPUInfo (bool& hasMMX,
     hasAVX512VPOPCNTDQ = (c & (1u << 14)) != 0;
 }
 
-} // namespace juce::SystemStatsHelpers
+} // namespace yup::SystemStatsHelpers
 
 #endif

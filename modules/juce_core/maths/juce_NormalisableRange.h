@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -279,4 +279,4 @@ private:
     ValueRemapFunction convertFrom0To1Function, convertTo0To1Function, snapToLegalValueFunction;
 };
 
-} // namespace juce
+} // namespace yup

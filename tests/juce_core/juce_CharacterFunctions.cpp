@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 #define QUOTE(x) #x
 #define STR(value) QUOTE (value)
@@ -407,7 +407,7 @@ template <typename CharPointerType>
 SeparatorStrings CharacterFunctionsTests<CharPointerType>::separators = CharacterFunctionsTests<CharPointerType>::initSeparators();
 
 // Register tests for all character pointer types
-using CharacterPointerTypes = ::testing::Types<juce::CharPointer_ASCII, juce::CharPointer_UTF8, juce::CharPointer_UTF16, juce::CharPointer_UTF32>;
+using CharacterPointerTypes = ::testing::Types<yup::CharPointer_ASCII, yup::CharPointer_UTF8, yup::CharPointer_UTF16, yup::CharPointer_UTF32>;
 TYPED_TEST_SUITE (CharacterFunctionsTests, CharacterPointerTypes);
 
 TYPED_TEST (CharacterFunctionsTests, ReadDoubleValue)

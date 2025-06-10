@@ -48,36 +48,36 @@
 #endif
 // clang-format on
 
-#define JUCE_CORE_INCLUDE_OBJC_HELPERS 1
-#define JUCE_CORE_INCLUDE_JNI_HELPERS 1
-#define JUCE_CORE_INCLUDE_NATIVE_HEADERS 1
-#define JUCE_CORE_INCLUDE_COM_SMART_PTR 1
-#define JUCE_EVENTS_INCLUDE_WIN32_MESSAGE_WINDOW 1
+#define YUP_CORE_INCLUDE_OBJC_HELPERS 1
+#define YUP_CORE_INCLUDE_JNI_HELPERS 1
+#define YUP_CORE_INCLUDE_NATIVE_HEADERS 1
+#define YUP_CORE_INCLUDE_COM_SMART_PTR 1
+#define YUP_EVENTS_INCLUDE_WIN32_MESSAGE_WINDOW 1
 
-#if JUCE_USE_WINRT_MIDI
-#define JUCE_EVENTS_INCLUDE_WINRT_WRAPPER 1
+#if YUP_USE_WINRT_MIDI
+#define YUP_EVENTS_INCLUDE_WINRT_WRAPPER 1
 #endif
 
 #include "yup_events.h"
 
 //==============================================================================
-#if JUCE_MAC
+#if YUP_MAC
 #import <IOKit/IOKitLib.h>
 #import <IOKit/IOCFPlugIn.h>
 #import <IOKit/hid/IOHIDLib.h>
 #import <IOKit/hid/IOHIDKeys.h>
 #import <IOKit/pwr_mgt/IOPMLib.h>
 
-#elif JUCE_LINUX || JUCE_BSD
+#elif YUP_LINUX || YUP_BSD
 #include <unistd.h>
 
-#elif JUCE_EMSCRIPTEN
+#elif YUP_EMSCRIPTEN
 #include <emscripten.h>
 
 #include <deque>
 #include <mutex>
 
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
 #include <jni.h>
 
 #include <SDL2/SDL_system.h>
@@ -103,29 +103,29 @@
 #include "native/yup_ScopedLowPowerModeDisabler.cpp"
 
 //==============================================================================
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 #include "native/yup_MessageQueue_apple.h"
-#if JUCE_MAC
+#if YUP_MAC
 #include "native/yup_MessageManager_mac.mm"
 #else
 #include "native/yup_MessageManager_ios.mm"
 #endif
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
 #include "native/yup_RunningInUnity.h"
 #include "native/yup_Messaging_windows.cpp"
-#if JUCE_EVENTS_INCLUDE_WINRT_WRAPPER
+#if YUP_EVENTS_INCLUDE_WINRT_WRAPPER
 #include "native/yup_WinRTWrapper_windows.cpp"
 #endif
 
-#elif JUCE_LINUX || JUCE_BSD
+#elif YUP_LINUX || YUP_BSD
 #include "native/yup_EventLoopInternal_linux.h"
 #include "native/yup_Messaging_linux.cpp"
 
-#elif JUCE_WASM && JUCE_EMSCRIPTEN
+#elif YUP_WASM && YUP_EMSCRIPTEN
 #include "native/yup_Messaging_emscripten.cpp"
 
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
 #include "native/yup_Messaging_android.cpp"
 
 #endif

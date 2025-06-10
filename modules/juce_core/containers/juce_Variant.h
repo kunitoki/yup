@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -55,14 +55,14 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API var
+class YUP_API var
 {
 public:
     //==============================================================================
     /** This structure is passed to a NativeFunction callback, and contains invocation
         details about the function's arguments and context.
     */
-    struct JUCE_API NativeFunctionArgs
+    struct YUP_API NativeFunctionArgs
     {
         NativeFunctionArgs (const var& thisObject, const var* args, int numArgs) noexcept;
 
@@ -341,20 +341,20 @@ private:
 };
 
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator== (const var&, const var&);
+YUP_API bool operator== (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator!= (const var&, const var&);
+YUP_API bool operator!= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator< (const var&, const var&);
+YUP_API bool operator< (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator<= (const var&, const var&);
+YUP_API bool operator<= (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator> (const var&, const var&);
+YUP_API bool operator> (const var&, const var&);
 /** Compares the values of two var objects, using the var::equals() comparison. */
-JUCE_API bool operator>= (const var&, const var&);
+YUP_API bool operator>= (const var&, const var&);
 
-JUCE_API bool operator== (const var&, const String&);
-JUCE_API bool operator!= (const var&, const String&);
-JUCE_API bool operator== (const var&, const char*);
-JUCE_API bool operator!= (const var&, const char*);
-} // namespace juce
+YUP_API bool operator== (const var&, const String&);
+YUP_API bool operator!= (const var&, const String&);
+YUP_API bool operator== (const var&, const char*);
+YUP_API bool operator!= (const var&, const char*);
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,12 +48,12 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API NamedValueSet
+class YUP_API NamedValueSet
 {
 public:
     //==============================================================================
     /** Structure for a named var object */
-    struct JUCE_API NamedValue
+    struct YUP_API NamedValue
     {
         NamedValue() noexcept;
         ~NamedValue() noexcept;
@@ -200,4 +200,4 @@ private:
     Array<NamedValue> values;
 };
 
-} // namespace juce
+} // namespace yup

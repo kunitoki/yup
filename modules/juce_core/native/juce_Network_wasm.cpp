@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 void MACAddress::findAllAddresses (Array<MACAddress>& result)
@@ -27,7 +27,7 @@ void MACAddress::findAllAddresses (Array<MACAddress>& result)
     result.clearQuick();
 }
 
-bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmailAddress */,
+bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEmailAddress */,
                                                       const String& /* emailSubject */,
                                                       const String& /* bodyText */,
                                                       const StringArray& /* filesToAttach */)
@@ -37,7 +37,7 @@ bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& /* targetEma
 }
 
 //==============================================================================
-#if JUCE_EMSCRIPTEN && ! JUCE_USE_CURL
+#if YUP_EMSCRIPTEN && ! YUP_USE_CURL
 class WebInputStream::Pimpl
 {
 public:
@@ -302,7 +302,7 @@ private:
         }
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocation, const DownloadTaskOptions& options)
@@ -311,4 +311,4 @@ std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocati
 }
 #endif
 
-} // namespace juce
+} // namespace yup

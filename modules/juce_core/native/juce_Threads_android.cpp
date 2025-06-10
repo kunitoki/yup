@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /*
@@ -283,7 +283,7 @@ private:
 };
 
 //==============================================================================
-#if JUCE_MODULE_AVAILABLE_juce_events && JUCE_ANDROID
+#if YUP_MODULE_AVAILABLE_juce_events && YUP_ANDROID
 void juce_juceEventsAndroidStartApp();
 #endif
 
@@ -317,7 +317,7 @@ void Thread::initialiseJUCE (void* jniEnv, void* context)
         androidApkContext = env->NewGlobalRef (static_cast<jobject> (context));
         JuceActivityWatcher::getInstance();
 
-#if JUCE_MODULE_AVAILABLE_juce_events && JUCE_ANDROID
+#if YUP_MODULE_AVAILABLE_juce_events && YUP_ANDROID
         juce_juceEventsAndroidStartApp();
 #endif
     }
@@ -360,11 +360,11 @@ LocalRef<jobject> getMainActivity() noexcept
 
 //==============================================================================
 using RealtimeThreadFactory = pthread_t (*) (void* (*entry) (void*), void* userPtr);
-// This is defined in the juce_audio_devices module, with different definitions depending on
+// This is defined in the yup_audio_devices module, with different definitions depending on
 // whether OpenSL/Oboe are enabled.
 RealtimeThreadFactory getAndroidRealtimeThreadFactory();
 
-#if ! JUCE_MODULE_AVAILABLE_juce_audio_devices
+#if ! YUP_MODULE_AVAILABLE_yup_audio_devices
 RealtimeThreadFactory getAndroidRealtimeThreadFactory()
 {
     return nullptr;
@@ -450,9 +450,9 @@ bool Thread::setPriority (Priority priorityIn)
 }
 
 //==============================================================================
-JUCE_API void JUCE_CALLTYPE Process::setPriority (ProcessPriority) {}
+YUP_API void YUP_CALLTYPE Process::setPriority (ProcessPriority) {}
 
-JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
+YUP_API bool YUP_CALLTYPE juce_isRunningUnderDebugger() noexcept
 {
     StringArray lines;
     File ("/proc/self/status").readLines (lines);
@@ -464,8 +464,8 @@ JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
     return false;
 }
 
-JUCE_API void JUCE_CALLTYPE Process::raisePrivilege() {}
+YUP_API void YUP_CALLTYPE Process::raisePrivilege() {}
 
-JUCE_API void JUCE_CALLTYPE Process::lowerPrivilege() {}
+YUP_API void YUP_CALLTYPE Process::lowerPrivilege() {}
 
-} // namespace juce
+} // namespace yup

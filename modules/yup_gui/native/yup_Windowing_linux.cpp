@@ -43,7 +43,7 @@ public:
 
     void (*XReparentWindow) (Display*, Window, Window, int, int) = nullptr;
 
-    JUCE_DECLARE_SINGLETON (X11Functions, false)
+    YUP_DECLARE_SINGLETON (X11Functions, false)
 
 private:
     template <typename F>
@@ -55,7 +55,7 @@ private:
         function = reinterpret_cast<std::remove_reference_t<F>> (dlsym (libraryHandle, functionName));
         if (function == nullptr)
         {
-            JUCE_DBG ("Failed to load " << functionName);
+            YUP_DBG ("Failed to load " << functionName);
 
             dlclose (libraryHandle);
             libraryHandle = nullptr;
@@ -78,7 +78,7 @@ private:
         libraryHandle = dlopen ("libX11.so", RTLD_GLOBAL | RTLD_LAZY);
         if (libraryHandle == nullptr)
         {
-            JUCE_DBG ("Failed to load libX11.so");
+            YUP_DBG ("Failed to load libX11.so");
             return;
         }
 
@@ -89,7 +89,7 @@ private:
     void* libraryHandle = nullptr;
 };
 
-JUCE_IMPLEMENT_SINGLETON (X11Functions)
+YUP_IMPLEMENT_SINGLETON (X11Functions)
 
 //==============================================================================
 

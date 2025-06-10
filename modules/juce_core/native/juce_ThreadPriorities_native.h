@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 struct ThreadPriorities
@@ -48,7 +48,7 @@ struct ThreadPriorities
         int native;
     };
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
     enum AndroidThreadPriority
     {
         THREAD_PRIORITY_AUDIO = -16,
@@ -63,7 +63,7 @@ struct ThreadPriorities
 
     inline static constexpr Entry table[]
     {
-#if JUCE_ANDROID
+#if YUP_ANDROID
         { Thread::Priority::highest, AndroidThreadPriority::THREAD_PRIORITY_AUDIO },
             { Thread::Priority::high, AndroidThreadPriority::THREAD_PRIORITY_FOREGROUND },
             { Thread::Priority::normal, AndroidThreadPriority::THREAD_PRIORITY_DEFAULT },
@@ -71,7 +71,7 @@ struct ThreadPriorities
             { Thread::Priority::background, AndroidThreadPriority::THREAD_PRIORITY_BACKGROUND },
 #endif
 
-#if JUCE_LINUX || JUCE_BSD || JUCE_WASM
+#if YUP_LINUX || YUP_BSD || YUP_WASM
             { Thread::Priority::highest, 0 },
             { Thread::Priority::high, 0 },
             { Thread::Priority::normal, 0 },
@@ -79,7 +79,7 @@ struct ThreadPriorities
             { Thread::Priority::background, 0 },
 #endif
 
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
             { Thread::Priority::highest, 4 },
             { Thread::Priority::high, 3 },
             { Thread::Priority::normal, 2 },
@@ -87,7 +87,7 @@ struct ThreadPriorities
             { Thread::Priority::background, 0 },
 #endif
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
             { Thread::Priority::highest, THREAD_PRIORITY_TIME_CRITICAL },
             { Thread::Priority::high, THREAD_PRIORITY_HIGHEST },
             { Thread::Priority::normal, THREAD_PRIORITY_NORMAL },
@@ -126,4 +126,4 @@ struct ThreadPriorities
     }
 };
 
-} // namespace juce
+} // namespace yup

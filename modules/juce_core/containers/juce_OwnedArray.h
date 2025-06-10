@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -829,7 +829,7 @@ private:
     template <class OtherObjectClass, class OtherCriticalSection>
     friend class OwnedArray;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OwnedArray)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OwnedArray)
 };
 
 //==============================================================================
@@ -885,4 +885,4 @@ void OwnedArray<ObjectClass, TypeOfCriticalSectionToUse>::sort (
         sortArray (comparator, values.begin(), 0, size() - 1, retainOrderOfEquivalentItems);
 }
 
-} // namespace juce
+} // namespace yup

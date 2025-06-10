@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 Result::Result() noexcept {}
@@ -97,4 +97,4 @@ bool Result::failed() const noexcept { return errorMessage.isNotEmpty(); }
 
 bool Result::operator!() const noexcept { return errorMessage.isNotEmpty(); }
 
-} // namespace juce
+} // namespace yup

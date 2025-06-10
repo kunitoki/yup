@@ -93,6 +93,6 @@ String WinRTWrapper::hStringToString (HSTRING hstr)
     return {};
 }
 
-JUCE_IMPLEMENT_SINGLETON (WinRTWrapper)
+YUP_IMPLEMENT_SINGLETON (WinRTWrapper)
 
 } // namespace yup

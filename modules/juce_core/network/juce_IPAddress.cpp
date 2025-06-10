@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /** Union used to split a 16-bit unsigned integer into 2 8-bit unsigned integers or vice-versa */
@@ -403,7 +403,7 @@ Array<IPAddress> IPAddress::getAllAddresses (bool includeIPv6)
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 struct IPAddressTests final : public UnitTest
 {
@@ -492,4 +492,4 @@ static IPAddressTests iPAddressTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

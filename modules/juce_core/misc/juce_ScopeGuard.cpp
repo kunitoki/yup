@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 ErasedScopeGuard::ErasedScopeGuard (std::function<void()> d)
@@ -73,4 +73,4 @@ void ErasedScopeGuard::release()
     detach = nullptr;
 }
 
-} // namespace juce
+} // namespace yup

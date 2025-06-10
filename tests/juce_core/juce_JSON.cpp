@@ -43,7 +43,7 @@
 
 #include <map>
 
-using namespace juce;
+using namespace yup;
 
 class JSONTests : public ::testing::Test
 {

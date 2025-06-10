@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 FileInputSource::FileInputSource (const File& f, bool useFileTimeInHash)
@@ -70,4 +70,4 @@ int64 FileInputSource::hashCode() const
     return h;
 }
 
-} // namespace juce
+} // namespace yup

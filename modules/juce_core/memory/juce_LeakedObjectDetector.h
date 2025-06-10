@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -49,7 +49,7 @@ namespace juce
     active, so that when the app is shutdown and the static destructors are called,
     it can check whether there are any left-over instances that may have been leaked.
 
-    To use it, use the JUCE_LEAK_DETECTOR macro as a simple way to put one in your
+    To use it, use the YUP_LEAK_DETECTOR macro as a simple way to put one in your
     class declaration. Have a look through the juce codebase for examples, it's used
     in most of the classes.
 
@@ -70,7 +70,7 @@ public:
     {
         if (--(getCounter().numObjects) < 0)
         {
-            JUCE_DBG ("*** Dangling pointer deletion! Class: " << getLeakedObjectClassName());
+            YUP_DBG ("*** Dangling pointer deletion! Class: " << getLeakedObjectClassName());
 
             /** If you hit this, then you've managed to delete more instances of this class than you've
                 created.. That indicates that you're deleting some dangling pointers.
@@ -98,7 +98,7 @@ private:
         {
             if (numObjects.value > 0)
             {
-                JUCE_DBG ("*** Leaked objects detected: " << numObjects.value << " instance(s) of class " << getLeakedObjectClassName());
+                YUP_DBG ("*** Leaked objects detected: " << numObjects.value << " instance(s) of class " << getLeakedObjectClassName());
 
                 /** If you hit this, then you've leaked one or more objects of the type specified by
                     the 'OwnerClass' template parameter - the name should have been printed by the line above.
@@ -127,11 +127,11 @@ private:
 };
 
 //==============================================================================
-#if DOXYGEN || ! defined(JUCE_LEAK_DETECTOR)
-#if (DOXYGEN || JUCE_CHECK_MEMORY_LEAKS)
+#if DOXYGEN || ! defined(YUP_LEAK_DETECTOR)
+#if (DOXYGEN || YUP_CHECK_MEMORY_LEAKS)
     /** This macro lets you embed a leak-detecting object inside a class.
 
-      To use it, simply declare a JUCE_LEAK_DETECTOR (YourClassName) inside a private section
+      To use it, simply declare a YUP_LEAK_DETECTOR (YourClassName) inside a private section
       of the class declaration. E.g.
 
       @code
@@ -142,19 +142,19 @@ private:
           void blahBlah();
 
       private:
-          JUCE_LEAK_DETECTOR (MyClass)
+          YUP_LEAK_DETECTOR (MyClass)
       };
       @endcode
 
-      @see JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR, LeakedObjectDetector
+      @see YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR, LeakedObjectDetector
   */
-#define JUCE_LEAK_DETECTOR(OwnerClass)                                             \
-    friend class juce::LeakedObjectDetector<OwnerClass>;                           \
+#define YUP_LEAK_DETECTOR(OwnerClass)                                             \
+    friend class yup::LeakedObjectDetector<OwnerClass>;                           \
     static const char* getLeakedObjectClassName() noexcept { return #OwnerClass; } \
-    juce::LeakedObjectDetector<OwnerClass> JUCE_JOIN_MACRO (leakDetector, __LINE__);
+    yup::LeakedObjectDetector<OwnerClass> YUP_JOIN_MACRO (leakDetector, __LINE__);
 #else
-#define JUCE_LEAK_DETECTOR(OwnerClass)
+#define YUP_LEAK_DETECTOR(OwnerClass)
 #endif
 #endif
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API ByteOrder
+class YUP_API ByteOrder
 {
 public:
     //==============================================================================
@@ -79,7 +79,7 @@ public:
     template <typename Type>
     static Type swapIfBigEndian (Type value) noexcept
     {
-#if JUCE_LITTLE_ENDIAN
+#if YUP_LITTLE_ENDIAN
         return value;
 #else
         return swap (value);
@@ -90,7 +90,7 @@ public:
     template <typename Type>
     static Type swapIfLittleEndian (Type value) noexcept
     {
-#if JUCE_LITTLE_ENDIAN
+#if YUP_LITTLE_ENDIAN
         return swap (value);
 #else
         return value;
@@ -143,7 +143,7 @@ public:
     /** Returns true if the current CPU is big-endian. */
     constexpr static bool isBigEndian() noexcept
     {
-#if JUCE_LITTLE_ENDIAN
+#if YUP_LITTLE_ENDIAN
         return false;
 #else
         return true;
@@ -189,22 +189,22 @@ inline double ByteOrder::swap (double v) noexcept
     return n.asFloat;
 }
 
-#if JUCE_MSVC && ! defined(__INTEL_COMPILER)
+#if YUP_MSVC && ! defined(__INTEL_COMPILER)
 #pragma intrinsic(_byteswap_ulong)
 #endif
 
 inline uint32 ByteOrder::swap (uint32 n) noexcept
 {
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
     return OSSwapInt32 (n);
-#elif (JUCE_GCC || JUCE_CLANG) && JUCE_INTEL && ! JUCE_NO_INLINE_ASM
+#elif (YUP_GCC || YUP_CLANG) && YUP_INTEL && ! YUP_NO_INLINE_ASM
     asm("bswap %%eax"
         : "=a"(n)
         : "a"(n));
     return n;
-#elif JUCE_MSVC
+#elif YUP_MSVC
     return _byteswap_ulong (n);
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
     return bswap_32 (n);
 #else
     return (n << 24) | (n >> 24) | ((n & 0xff00) << 8) | ((n & 0xff0000) >> 8);
@@ -213,9 +213,9 @@ inline uint32 ByteOrder::swap (uint32 n) noexcept
 
 inline uint64 ByteOrder::swap (uint64 value) noexcept
 {
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
     return OSSwapInt64 (value);
-#elif JUCE_MSVC
+#elif YUP_MSVC
     return _byteswap_uint64 (value);
 #else
     return (((uint64) swap ((uint32) value)) << 32) | swap ((uint32) (value >> 32));
@@ -269,4 +269,4 @@ inline void ByteOrder::bigEndian24BitToChars (int32 value, void* destBytes) noex
     static_cast<uint8*> (destBytes)[2] = (uint8) value;
 }
 
-} // namespace juce
+} // namespace yup

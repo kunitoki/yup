@@ -41,7 +41,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {
@@ -122,7 +122,7 @@ TEST (AtomicTests, Misc)
     AtomicTester<long>::testInteger();
     AtomicTester<int*>::testInteger();
     AtomicTester<float>::testFloat();
-#if ! JUCE_64BIT_ATOMICS_UNAVAILABLE // 64-bit intrinsics aren't available on some old platforms
+#if ! YUP_64BIT_ATOMICS_UNAVAILABLE // 64-bit intrinsics aren't available on some old platforms
     AtomicTester<int64>::testInteger();
     AtomicTester<uint64>::testInteger();
     AtomicTester<double>::testFloat();

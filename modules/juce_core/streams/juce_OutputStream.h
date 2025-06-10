@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API OutputStream
+class YUP_API OutputStream
 {
 protected:
     //==============================================================================
@@ -251,33 +251,33 @@ private:
     //==============================================================================
     String newLineString;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OutputStream)
 };
 
 //==============================================================================
 /** Writes a number to a stream as 8-bit characters in the default system encoding. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, int number);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, int number);
 
 /** Writes a number to a stream as 8-bit characters in the default system encoding. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, int64 number);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, int64 number);
 
 /** Writes a number to a stream as 8-bit characters in the default system encoding. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, double number);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, double number);
 
 /** Writes a character to a stream. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, char character);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, char character);
 
 /** Writes a null-terminated text string to a stream. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const char* text);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const char* text);
 
 /** Writes a block of data from a MemoryBlock to a stream. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const MemoryBlock& data);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const MemoryBlock& data);
 
 /** Writes the contents of a file to a stream. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const File& fileToRead);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const File& fileToRead);
 
 /** Writes the complete contents of an input stream to an output stream. */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, InputStream& streamToRead);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, InputStream& streamToRead);
 
 /** Writes a new-line to a stream.
     You can use the predefined symbol 'newLine' to invoke this, e.g.
@@ -286,6 +286,6 @@ JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, InputStre
     @endcode
     @see OutputStream::setNewLineString
 */
-JUCE_API OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const NewLine&);
+YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const NewLine&);
 
-} // namespace juce
+} // namespace yup

@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API TextButton : public Button
+class YUP_API TextButton : public Button
 {
 public:
     //==============================================================================

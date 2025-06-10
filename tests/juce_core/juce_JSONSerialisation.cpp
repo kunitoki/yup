@@ -47,7 +47,7 @@
 #include <map>
 #include <utility>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {
@@ -73,7 +73,7 @@ struct TypeWithExternalUnifiedSerialisation
 
 } // namespace
 
-namespace juce
+namespace yup
 {
 template <>
 struct SerialisationTraits<TypeWithExternalUnifiedSerialisation>
@@ -93,7 +93,7 @@ struct SerialisationTraits<TypeWithExternalUnifiedSerialisation>
 // Now that the serialiser trait is visible, it should be detected
 static_assert (detail::serialisationKind<TypeWithExternalUnifiedSerialisation> == detail::SerialisationKind::external);
 
-} // namespace juce
+} // namespace yup
 
 namespace
 {
@@ -149,7 +149,7 @@ struct TypeWithExternalSplitSerialisation
 
 } // namespace
 
-namespace juce
+namespace yup
 {
 
 template <>
@@ -187,7 +187,7 @@ struct SerialisationTraits<TypeWithExternalSplitSerialisation>
 // Now that the serialiser trait is visible, it should be detected
 static_assert (detail::serialisationKind<TypeWithExternalSplitSerialisation> == detail::SerialisationKind::external);
 
-} // namespace juce
+} // namespace yup
 
 namespace
 {

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /*  This is mainly used to pass implementation information from AndroidDocument to
@@ -49,7 +49,7 @@ namespace juce
 */
 struct AndroidDocument::NativeInfo
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     GlobalRef uri;
 #endif
 };
@@ -75,7 +75,7 @@ struct AndroidDocumentDetail
 
     static constexpr auto dirMime = "vnd.android.document/directory";
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
     /*
         A very basic type that acts a bit like an iterator, in that it can be incremented, and read-from.
 
@@ -249,14 +249,14 @@ struct AndroidDocumentDetail
 
     struct DirectoryIteratorEngine
     {
-        JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+        YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
         DirectoryIteratorEngine (const File& dir, bool recursive)
             : iterator (dir, recursive, "*", File::findFilesAndDirectories)
         {
         }
 
-        JUCE_END_IGNORE_DEPRECATION_WARNINGS
+        YUP_END_IGNORE_DEPRECATION_WARNINGS
 
         auto read() const { return AndroidDocument::fromFile (iterator.getFile()); }
 
@@ -399,7 +399,7 @@ struct AndroidDocument::Utils
 
     ~Utils() = delete; // This stuct is a single-file namespace
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
     template <typename>
     struct VersionTag
     {
@@ -782,21 +782,21 @@ struct AndroidDocument::Utils
 //==============================================================================
 void AndroidDocumentPermission::takePersistentReadWriteAccess ([[maybe_unused]] const URL& url)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     AndroidDocumentDetail::setPermissions (url, ContentResolver19.takePersistableUriPermission);
 #endif
 }
 
 void AndroidDocumentPermission::releasePersistentReadWriteAccess ([[maybe_unused]] const URL& url)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     AndroidDocumentDetail::setPermissions (url, ContentResolver19.releasePersistableUriPermission);
 #endif
 }
 
 std::vector<AndroidDocumentPermission> AndroidDocumentPermission::getPersistedPermissions()
 {
-#if ! JUCE_ANDROID
+#if ! YUP_ANDROID
     return {};
 #else
     if (getAndroidSDKVersion() < 19)
@@ -834,7 +834,7 @@ AndroidDocument::AndroidDocument() = default;
 
 AndroidDocument AndroidDocument::fromFile (const File& filePath)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     const LocalRef<jobject> info { getEnv()->CallObjectMethod (getAppContext(), AndroidContext.getApplicationInfo) };
     const auto targetSdkVersion = getEnv()->GetIntField (info.get(), AndroidApplicationInfo.targetSdkVersion);
 
@@ -850,7 +850,7 @@ AndroidDocument AndroidDocument::fromFile (const File& filePath)
 
 AndroidDocument AndroidDocument::fromDocument ([[maybe_unused]] const URL& documentUrl)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     if (getAndroidSDKVersion() < 19)
     {
         // This function is unsupported on this platform.
@@ -876,7 +876,7 @@ AndroidDocument AndroidDocument::fromDocument ([[maybe_unused]] const URL& docum
 
 AndroidDocument AndroidDocument::fromTree ([[maybe_unused]] const URL& treeUrl)
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     if (getAndroidSDKVersion() < 21)
     {
         // This function is unsupported on this platform.
@@ -1072,7 +1072,7 @@ AndroidDocumentIterator AndroidDocumentIterator::makeNonRecursive (const Android
 
     using Detail = AndroidDocumentDetail;
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
     if (21 <= getAndroidSDKVersion())
     {
         if (auto uri = dir.getNativeInfo().uri)
@@ -1090,7 +1090,7 @@ AndroidDocumentIterator AndroidDocumentIterator::makeRecursive (const AndroidDoc
 
     using Detail = AndroidDocumentDetail;
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
     if (21 <= getAndroidSDKVersion())
     {
         if (auto uri = dir.getNativeInfo().uri)
@@ -1115,4 +1115,4 @@ AndroidDocumentIterator& AndroidDocumentIterator::operator++()
     return *this;
 }
 
-} // namespace juce
+} // namespace yup

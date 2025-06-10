@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 HWND juce_messageWindowHandle = nullptr; // (this is used by other parts of the codebase)
@@ -143,19 +143,19 @@ void Thread::killThread()
 {
     if (threadHandle != nullptr)
     {
-#if JUCE_DEBUG
+#if YUP_DEBUG
         OutputDebugStringA ("** Warning - Forced thread termination **\n");
 #endif
 
-        JUCE_BEGIN_IGNORE_WARNINGS_MSVC (6258)
+        YUP_BEGIN_IGNORE_WARNINGS_MSVC (6258)
         TerminateThread (threadHandle, 0);
-        JUCE_END_IGNORE_WARNINGS_MSVC
+        YUP_END_IGNORE_WARNINGS_MSVC
     }
 }
 
-void JUCE_CALLTYPE Thread::setCurrentThreadName ([[maybe_unused]] const String& name)
+void YUP_CALLTYPE Thread::setCurrentThreadName ([[maybe_unused]] const String& name)
 {
-#if JUCE_DEBUG && JUCE_MSVC
+#if YUP_DEBUG && YUP_MSVC
     struct
     {
         DWORD dwType;
@@ -181,12 +181,12 @@ void JUCE_CALLTYPE Thread::setCurrentThreadName ([[maybe_unused]] const String& 
 #endif
 }
 
-Thread::ThreadID JUCE_CALLTYPE Thread::getCurrentThreadId()
+Thread::ThreadID YUP_CALLTYPE Thread::getCurrentThreadId()
 {
     return (ThreadID) (pointer_sized_int) GetCurrentThreadId();
 }
 
-void JUCE_CALLTYPE Thread::setCurrentThreadAffinityMask (const uint32 affinityMask)
+void YUP_CALLTYPE Thread::setCurrentThreadAffinityMask (const uint32 affinityMask)
 {
     SetThreadAffinityMask (GetCurrentThread(), affinityMask);
 }
@@ -196,7 +196,7 @@ struct SleepEvent
 {
     SleepEvent() noexcept
         : handle (CreateEvent (nullptr, FALSE, FALSE,
-#if JUCE_DEBUG
+#if YUP_DEBUG
                                _T ("JUCE Sleep Event")))
 #else
                                nullptr))
@@ -215,7 +215,7 @@ struct SleepEvent
 
 static SleepEvent sleepEvent;
 
-void JUCE_CALLTYPE Thread::sleep (const int millisecs)
+void YUP_CALLTYPE Thread::sleep (const int millisecs)
 {
     jassert (millisecs >= 0);
 
@@ -269,7 +269,7 @@ void juce_repeatLastProcessPriority()
     }
 }
 
-void JUCE_CALLTYPE Process::setPriority (ProcessPriority newPriority)
+void YUP_CALLTYPE Process::setPriority (ProcessPriority newPriority)
 {
     if (lastProcessPriority != (int) newPriority)
     {
@@ -278,14 +278,14 @@ void JUCE_CALLTYPE Process::setPriority (ProcessPriority newPriority)
     }
 }
 
-JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
+YUP_API bool YUP_CALLTYPE juce_isRunningUnderDebugger() noexcept
 {
     return IsDebuggerPresent() != FALSE;
 }
 
 static void* currentModuleHandle = nullptr;
 
-void* JUCE_CALLTYPE Process::getCurrentModuleInstanceHandle() noexcept
+void* YUP_CALLTYPE Process::getCurrentModuleInstanceHandle() noexcept
 {
     if (currentModuleHandle == nullptr)
     {
@@ -300,18 +300,18 @@ void* JUCE_CALLTYPE Process::getCurrentModuleInstanceHandle() noexcept
     return currentModuleHandle;
 }
 
-void JUCE_CALLTYPE Process::setCurrentModuleInstanceHandle (void* const newHandle) noexcept
+void YUP_CALLTYPE Process::setCurrentModuleInstanceHandle (void* const newHandle) noexcept
 {
     currentModuleHandle = newHandle;
 }
 
-void JUCE_CALLTYPE Process::raisePrivilege() {}
+void YUP_CALLTYPE Process::raisePrivilege() {}
 
-void JUCE_CALLTYPE Process::lowerPrivilege() {}
+void YUP_CALLTYPE Process::lowerPrivilege() {}
 
-void JUCE_CALLTYPE Process::terminate()
+void YUP_CALLTYPE Process::terminate()
 {
-#if JUCE_MSVC && JUCE_CHECK_MEMORY_LEAKS
+#if YUP_MSVC && YUP_CHECK_MEMORY_LEAKS
     _CrtDumpMemoryLeaks();
 #endif
 
@@ -580,7 +580,7 @@ private:
     HANDLE readPipe = nullptr, writePipe = nullptr;
     PROCESS_INFORMATION processInfo;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ActiveProcess)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ActiveProcess)
 };
 
 bool ChildProcess::start (const String& command, int streamFlags)
@@ -641,4 +641,4 @@ bool ChildProcess::start (const StringArray& args, const StringPairArray& enviro
     return start (escaped.trim(), environment, streamFlags);
 }
 
-} // namespace juce
+} // namespace yup

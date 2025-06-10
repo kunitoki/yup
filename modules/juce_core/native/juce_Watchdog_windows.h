@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class Watchdog::Impl final
@@ -185,4 +185,4 @@ private:
     HANDLE folderHandle;
 };
 
-} // namespace juce
+} // namespace yup

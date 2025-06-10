@@ -48,7 +48,7 @@ class Timer::TimerThread final : private Thread
 public:
     using LockType = CriticalSection; // (mysteriously, using a SpinLock here causes problems on some XP machines..)
 
-    JUCE_DECLARE_SINGLETON (TimerThread, true)
+    YUP_DECLARE_SINGLETON (TimerThread, true)
 
     TimerThread()
         : Thread ("JUCE Timer")
@@ -112,7 +112,7 @@ public:
         auto now = Time::getMillisecondCounter();
         auto timeout = now + maxTimeoutMilliseconds;
 
-#if JUCE_EMSCRIPTEN && ! defined(__EMSCRIPTEN_PTHREADS__)
+#if YUP_EMSCRIPTEN && !defined(__EMSCRIPTEN_PTHREADS__)
         auto elapsed = (int) (now >= lastCallTime ? (now - lastCallTime)
                                                   : (std::numeric_limits<uint32>::max() - (lastCallTime - now)));
         lastCallTime = now;
@@ -140,11 +140,11 @@ public:
 
             const LockType::ScopedUnlockType ul (lock);
 
-            JUCE_TRY
+            YUP_TRY
             {
                 timer->timerCallback();
             }
-            JUCE_CATCH_EXCEPTION
+            YUP_CATCH_EXCEPTION
 
             // avoid getting stuck in a loop if a timer callback repeatedly takes too long
             if (Time::getMillisecondCounter() > timeout)
@@ -169,9 +169,9 @@ public:
         // Trying to add a timer that's already here - shouldn't get to this point,
         // so if you get this assertion, let me know!
         jassert (std::none_of (timers.begin(), timers.end(), [t] (TimerCountdown i)
-        {
-            return i.timer == t;
-        }));
+                               {
+                                   return i.timer == t;
+                               }));
 
         auto pos = timers.size();
 
@@ -319,10 +319,10 @@ private:
             t.countdownMs -= numMillisecsElapsed;
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimerThread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimerThread)
 };
 
-JUCE_IMPLEMENT_SINGLETON (Timer::TimerThread)
+YUP_IMPLEMENT_SINGLETON (Timer::TimerThread)
 
 //==============================================================================
 Timer::Timer() noexcept {}
@@ -346,7 +346,7 @@ void Timer::startTimer (int interval) noexcept
 {
     // If you're calling this before (or after) the MessageManager is
     // running, then you're not going to get any timer callbacks!
-    JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
+    YUP_ASSERT_MESSAGE_MANAGER_EXISTS
 
     if (auto* instance = TimerThread::getInstance())
     {
@@ -379,7 +379,7 @@ void Timer::stopTimer() noexcept
     }
 }
 
-void JUCE_CALLTYPE Timer::callPendingTimersSynchronously()
+void YUP_CALLTYPE Timer::callPendingTimersSynchronously()
 {
     if (auto* instance = TimerThread::getInstanceWithoutCreating())
         instance->callTimersSynchronously();
@@ -407,10 +407,10 @@ struct LambdaInvoker final : private Timer
 
     std::function<void()> function;
 
-    JUCE_DECLARE_NON_COPYABLE (LambdaInvoker)
+    YUP_DECLARE_NON_COPYABLE (LambdaInvoker)
 };
 
-void JUCE_CALLTYPE Timer::callAfterDelay (int milliseconds, std::function<void()> f)
+void YUP_CALLTYPE Timer::callAfterDelay (int milliseconds, std::function<void()> f)
 {
     new LambdaInvoker (milliseconds, std::move (f));
 }

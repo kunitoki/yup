@@ -23,7 +23,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST (SortedSetTests, DefaultConstructor)
 {
@@ -361,7 +361,7 @@ TEST (SortedSetTests, InconsistentStateHandling)
     }
 
     // Attempt to remove elements in a random order
-    juce::Random random;
+    yup::Random random;
     for (int i = 0; i < 100; ++i)
     {
         int index = random.nextInt ({ 0, set.size() });

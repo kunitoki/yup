@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -56,7 +56,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API HighResolutionTimer
+class YUP_API HighResolutionTimer
 {
 protected:
     /** Creates a HighResolutionTimer.
@@ -125,7 +125,7 @@ private:
     class Impl;
     std::unique_ptr<Impl> impl;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HighResolutionTimer)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (HighResolutionTimer)
 };
 
-} // namespace juce
+} // namespace yup

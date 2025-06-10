@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4512)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4512)
 
 //==============================================================================
 /**
@@ -500,6 +500,6 @@ private:
     Array<ElementType, TypeOfCriticalSectionToUse> data;
 };
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
-} // namespace juce
+} // namespace yup

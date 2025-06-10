@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 WebInputStream::WebInputStream (const URL& url, const bool usePost)
@@ -162,4 +162,4 @@ bool WebInputStream::Listener::postDataSendProgress ([[maybe_unused]] WebInputSt
     return true;
 }
 
-} // namespace juce
+} // namespace yup

@@ -52,7 +52,7 @@ namespace yup
 
     @see shutdownJuce_GUI()
 */
-JUCE_API void JUCE_CALLTYPE initialiseJuce_GUI();
+YUP_API void YUP_CALLTYPE initialiseJuce_GUI();
 
 /** Clears up any static data being used by JUCE's GUI classes.
 
@@ -62,7 +62,7 @@ JUCE_API void JUCE_CALLTYPE initialiseJuce_GUI();
 
     @see initialiseJuce_GUI()
 */
-JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI();
+YUP_API void YUP_CALLTYPE shutdownJuce_GUI();
 
 //==============================================================================
 /** A utility object that helps you initialise and shutdown JUCE correctly
@@ -82,7 +82,7 @@ JUCE_API void JUCE_CALLTYPE shutdownJuce_GUI();
 
     @tags{Events}
 */
-class JUCE_API ScopedJuceInitialiser_GUI final
+class YUP_API ScopedJuceInitialiser_GUI final
 {
    public:
     /** The constructor simply calls initialiseJuce_GUI(). */
@@ -91,8 +91,8 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     /** The destructor simply calls shutdownJuce_GUI(). */
     ~ScopedJuceInitialiser_GUI();
 
-    JUCE_DECLARE_NON_COPYABLE(ScopedJuceInitialiser_GUI)
-    JUCE_DECLARE_NON_MOVEABLE(ScopedJuceInitialiser_GUI)
+    YUP_DECLARE_NON_COPYABLE(ScopedJuceInitialiser_GUI)
+    YUP_DECLARE_NON_MOVEABLE(ScopedJuceInitialiser_GUI)
 };
 
 //==============================================================================
@@ -105,25 +105,25 @@ class JUCE_API ScopedJuceInitialiser_GUI final
 #if DOXYGEN
 #define START_YUP_APPLICATION(AppClass)
 #else
-#if JUCE_WINDOWS && !defined(_CONSOLE)
-#define JUCE_MAIN_FUNCTION                                                      \
-    JUCE_BEGIN_IGNORE_WARNINGS_MSVC(28251)                                      \
+#if YUP_WINDOWS && !defined(_CONSOLE)
+#define YUP_MAIN_FUNCTION                                                      \
+    YUP_BEGIN_IGNORE_WARNINGS_MSVC(28251)                                      \
     int __stdcall WinMain(struct HINSTANCE__*, struct HINSTANCE__*, char*, int) \
-        JUCE_END_IGNORE_WARNINGS_MSVC
-#define JUCE_MAIN_FUNCTION_ARGS
-#elif JUCE_ANDROID && JUCE_MODULE_AVAILABLE_yup_gui
-#define JUCE_MAIN_FUNCTION extern "C" int SDL_main(int argc, char* argv[])
-#define JUCE_MAIN_FUNCTION_ARGS argc, (const char**)argv
+        YUP_END_IGNORE_WARNINGS_MSVC
+#define YUP_MAIN_FUNCTION_ARGS
+#elif YUP_ANDROID && YUP_MODULE_AVAILABLE_yup_gui
+#define YUP_MAIN_FUNCTION extern "C" int SDL_main(int argc, char* argv[])
+#define YUP_MAIN_FUNCTION_ARGS argc, (const char**)argv
 #else
-#define JUCE_MAIN_FUNCTION int main(int argc, char* argv[])
-#define JUCE_MAIN_FUNCTION_ARGS argc, (const char**)argv
+#define YUP_MAIN_FUNCTION int main(int argc, char* argv[])
+#define YUP_MAIN_FUNCTION_ARGS argc, (const char**)argv
 #endif
 
-#if JUCE_IOS
+#if YUP_IOS
 
-#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)                \
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
-    yup::YUPApplicationBase* juce_CreateApplication()           \
+#define YUP_CREATE_APPLICATION_DEFINE(AppClass)                \
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
+    yup::YUPApplicationBase* juce_CreateApplication()         \
     {                                                           \
         return new AppClass();                                  \
     }                                                           \
@@ -131,11 +131,11 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     {                                                           \
         return nullptr;                                         \
     }                                                           \
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-#define JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")                 \
-    yup::YUPApplicationBase* juce_CreateApplication()                           \
+#define YUP_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass) \
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")                 \
+    yup::YUPApplicationBase* juce_CreateApplication()                         \
     {                                                                           \
         return new AppClass();                                                  \
     }                                                                           \
@@ -143,55 +143,55 @@ class JUCE_API ScopedJuceInitialiser_GUI final
     {                                                                           \
         return [DelegateClass class];                                           \
     }                                                                           \
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-#define JUCE_MAIN_FUNCTION_DEFINITION                                                  \
-    JUCE_MAIN_FUNCTION                                                                 \
-    {                                                                                  \
+#define YUP_MAIN_FUNCTION_DEFINITION                                                    \
+    YUP_MAIN_FUNCTION                                                                   \
+    {                                                                                    \
         yup::YUPApplicationBase::createInstance = &juce_CreateApplication;             \
         yup::YUPApplicationBase::iOSCustomDelegate = juce_GetIOSCustomDelegateClass(); \
-        return yup::YUPApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);                 \
+        return yup::YUPApplicationBase::main(YUP_MAIN_FUNCTION_ARGS);                 \
     }
 
 #else
 
-#define JUCE_CREATE_APPLICATION_DEFINE(AppClass)       \
+#define YUP_CREATE_APPLICATION_DEFINE(AppClass)         \
     yup::YUPApplicationBase* juce_CreateApplication(); \
     yup::YUPApplicationBase* juce_CreateApplication()  \
-    {                                                  \
-        return new AppClass();                         \
+    {                                                    \
+        return new AppClass();                           \
     }
 
-#define JUCE_MAIN_FUNCTION_DEFINITION                                      \
-    JUCE_MAIN_FUNCTION                                                     \
-    {                                                                      \
+#define YUP_MAIN_FUNCTION_DEFINITION                                        \
+    YUP_MAIN_FUNCTION                                                       \
+    {                                                                        \
         yup::YUPApplicationBase::createInstance = &juce_CreateApplication; \
-        return yup::YUPApplicationBase::main(JUCE_MAIN_FUNCTION_ARGS);     \
+        return yup::YUPApplicationBase::main(YUP_MAIN_FUNCTION_ARGS);     \
     }
 
 #endif
 
 #if JucePlugin_Build_Standalone
-#if JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP
-#define START_YUP_APPLICATION(AppClass) JUCE_CREATE_APPLICATION_DEFINE(AppClass)
-#if JUCE_IOS
-#define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)
+#if YUP_USE_CUSTOM_PLUGIN_STANDALONE_APP
+#define START_YUP_APPLICATION(AppClass) YUP_CREATE_APPLICATION_DEFINE(AppClass)
+#if YUP_IOS
+#define START_YUP_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) YUP_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)
 #endif
 #else
-#define START_YUP_APPLICATION(AppClass) static_assert(false, "You are trying to use START_YUP_APPLICATION in an audio plug-in. Define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
-#if JUCE_IOS
-#define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) static_assert(false, "You are trying to use START_YUP_APPLICATION in an audio plug-in. Define JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
+#define START_YUP_APPLICATION(AppClass) static_assert(false, "You are trying to use START_YUP_APPLICATION in an audio plug-in. Define YUP_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
+#if YUP_IOS
+#define START_YUP_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) static_assert(false, "You are trying to use START_YUP_APPLICATION in an audio plug-in. Define YUP_USE_CUSTOM_PLUGIN_STANDALONE_APP=1 if you want to use a custom standalone target app.");
 #endif
 #endif
 #else
 
-#define START_YUP_APPLICATION(AppClass)                         \
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
-    JUCE_CREATE_APPLICATION_DEFINE(AppClass)                    \
-    JUCE_MAIN_FUNCTION_DEFINITION                               \
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+#define START_YUP_APPLICATION(AppClass)                        \
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes") \
+    YUP_CREATE_APPLICATION_DEFINE(AppClass)                    \
+    YUP_MAIN_FUNCTION_DEFINITION                               \
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-#if JUCE_IOS
+#if YUP_IOS
 /**
    You can instruct JUCE to use a custom iOS app delegate class instead of JUCE's default
    app delegate. For JUCE to work you must pass all messages to JUCE's internal app delegate.
@@ -232,9 +232,9 @@ class JUCE_API ScopedJuceInitialiser_GUI final
    }
    @end
 */
-#define START_JUCE_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) \
-    JUCE_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)  \
-    JUCE_MAIN_FUNCTION_DEFINITION
+#define START_YUP_APPLICATION_WITH_CUSTOM_DELEGATE(AppClass, DelegateClass) \
+    YUP_CREATE_APPLICATION_DEFINE_CUSTOM_DELEGATE(AppClass, DelegateClass)  \
+    YUP_MAIN_FUNCTION_DEFINITION
 #endif
 #endif
 #endif

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API WebInputStream : public InputStream
+class YUP_API WebInputStream : public InputStream
 {
 public:
     /** Creates a new WebInputStream which can be used to read from a URL.
@@ -110,7 +110,7 @@ public:
         Pass one of these into the connect() method and its postDataSendProgress()
         method will be called periodically with updates on POST data upload progress.
     */
-    class JUCE_API Listener
+    class YUP_API Listener
     {
     public:
         /** Destructor. */
@@ -244,7 +244,7 @@ private:
     std::unique_ptr<Pimpl> pimpl;
     bool hasCalledConnect = false;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebInputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebInputStream)
 };
 
-} // namespace juce
+} // namespace yup

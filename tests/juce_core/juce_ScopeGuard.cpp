@@ -23,7 +23,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST (ScopeGuardTests, ScopeGuardCallsFunctionAtScopeEnd)
 {
@@ -31,9 +31,9 @@ TEST (ScopeGuardTests, ScopeGuardCallsFunctionAtScopeEnd)
 
     {
         ScopeGuard guard { [&]
-                           {
-                               flag = true;
-                           } };
+        {
+            flag = true;
+        } };
         EXPECT_FALSE (flag);
     }
 
@@ -47,9 +47,9 @@ TEST (ScopeGuardTests, ScopeGuardHandlesExceptions)
     auto throwingFunction = [&]()
     {
         ScopeGuard guard { [&]
-                           {
-                               flag = true;
-                           } };
+        {
+            flag = true;
+        } };
         throw std::runtime_error ("Test exception");
     };
 
@@ -64,9 +64,9 @@ TEST (ScopeGuardTests, ScopeGuardExecutesOnMultipleReturns)
     auto functionWithMultipleReturns = [&] (bool condition) -> bool
     {
         ScopeGuard guard { [&]
-                           {
-                               flag = true;
-                           } };
+        {
+            flag = true;
+        } };
         if (condition)
             return true;
         return false;
@@ -85,9 +85,9 @@ TEST (ErasedScopeGuardTests, CallsCallbackOnDestruction)
     bool flag = false;
     {
         ErasedScopeGuard guard ([&]
-                                {
-                                    flag = true;
-                                });
+        {
+            flag = true;
+        });
         EXPECT_FALSE (flag);
     }
     EXPECT_TRUE (flag);
@@ -98,9 +98,9 @@ TEST (ErasedScopeGuardTests, CallbackNotCalledAfterRelease)
     bool flag = false;
     {
         ErasedScopeGuard guard ([&]
-                                {
-                                    flag = true;
-                                });
+        {
+            flag = true;
+        });
         guard.release();
         EXPECT_FALSE (flag);
     }
@@ -112,9 +112,9 @@ TEST (ErasedScopeGuardTests, CallbackCalledAfterReset)
     bool flag = false;
     {
         ErasedScopeGuard guard ([&]
-                                {
-                                    flag = true;
-                                });
+        {
+            flag = true;
+        });
         guard.reset();
         EXPECT_TRUE (flag);
     }
@@ -125,9 +125,9 @@ TEST (ErasedScopeGuardTests, CallbackNotCalledAfterMove)
     bool flag = false;
     {
         ErasedScopeGuard guard1 ([&]
-                                 {
-                                     flag = true;
-                                 });
+        {
+            flag = true;
+        });
         ErasedScopeGuard guard2 (std::move (guard1));
         EXPECT_FALSE (flag);
     }
@@ -141,13 +141,13 @@ TEST (ErasedScopeGuardTests, CallbackCalledAfterMoveAssignment)
 
     {
         ErasedScopeGuard guard1 ([&]
-                                 {
-                                     flag1 = true;
-                                 });
+        {
+            flag1 = true;
+        });
         ErasedScopeGuard guard2 ([&]
-                                 {
-                                     flag2 = true;
-                                 });
+        {
+            flag2 = true;
+        });
 
         guard2 = std::move (guard1);
 

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 String SystemStats::getJUCEVersion()
@@ -54,19 +54,19 @@ String SystemStats::getJUCEVersion()
     static_assert (sizeof (int64) == 8, "Basic sanity test failed: please report!");
     static_assert (sizeof (uint64) == 8, "Basic sanity test failed: please report!");
 
-    return "JUCE v" JUCE_STRINGIFY (JUCE_MAJOR_VERSION) "." JUCE_STRINGIFY (JUCE_MINOR_VERSION) "." JUCE_STRINGIFY (JUCE_BUILDNUMBER);
+    return "JUCE v" YUP_STRINGIFY (YUP_MAJOR_VERSION) "." YUP_STRINGIFY (YUP_MINOR_VERSION) "." YUP_STRINGIFY (YUP_BUILDNUMBER);
 }
 
-#if JUCE_ANDROID && ! defined(JUCE_DISABLE_JUCE_VERSION_PRINTING)
-#define JUCE_DISABLE_JUCE_VERSION_PRINTING 1
+#if YUP_ANDROID && ! defined(YUP_DISABLE_YUP_VERSION_PRINTING)
+#define YUP_DISABLE_YUP_VERSION_PRINTING 1
 #endif
 
-#if JUCE_DEBUG && ! JUCE_DISABLE_JUCE_VERSION_PRINTING
+#if YUP_DEBUG && ! YUP_DISABLE_YUP_VERSION_PRINTING
 struct JuceVersionPrinter
 {
     JuceVersionPrinter()
     {
-        JUCE_DBG (SystemStats::getJUCEVersion());
+        YUP_DBG (SystemStats::getJUCEVersion());
     }
 };
 
@@ -85,7 +85,7 @@ StringArray SystemStats::getMachineIdentifiers (MachineIdFlags flags)
 
     auto fileSystemProvider = [] (StringArray& arr)
     {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         File f (File::getSpecialLocation (File::windowsSystemDirectory));
 #else
         File f ("~");
@@ -96,7 +96,7 @@ StringArray SystemStats::getMachineIdentifiers (MachineIdFlags flags)
 
     auto legacyIdProvider = [] ([[maybe_unused]] StringArray& arr)
     {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         arr.add (getLegacyUniqueDeviceID());
 #endif
     };
@@ -214,7 +214,7 @@ uint64 SystemStats::getCompileUniqueId()
 }
 
 //==============================================================================
-#if JUCE_ANDROID
+#if YUP_ANDROID
 struct BacktraceState
 {
     BacktraceState (void** current, void** end)
@@ -247,10 +247,10 @@ String SystemStats::getStackBacktrace()
 {
     String result;
 
-#if JUCE_MINGW || (JUCE_WASM && ! JUCE_EMSCRIPTEN)
+#if YUP_MINGW || (YUP_WASM && ! YUP_EMSCRIPTEN)
     jassertfalse; // sorry, not implemented yet!
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
     HANDLE process = GetCurrentProcess();
     SymInitialize (process, nullptr, TRUE);
 
@@ -281,7 +281,7 @@ String SystemStats::getStackBacktrace()
         }
     }
 
-#elif JUCE_EMSCRIPTEN
+#elif YUP_EMSCRIPTEN
     std::string temporaryStack;
     temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8) (stackTrace()); }));
     EM_ASM_ARGS ({ (stringToUTF8 || Module.stringToUTF8) (stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
@@ -290,7 +290,7 @@ String SystemStats::getStackBacktrace()
 #else
     void* stack[128];
 
-#if JUCE_ANDROID && __ANDROID_API__ < 33
+#if YUP_ANDROID && __ANDROID_API__ < 33
     BacktraceState state (stack, stack + numElementsInArray (stack));
     _Unwind_Backtrace (unwindCallback, &state);
 
@@ -304,9 +304,9 @@ String SystemStats::getStackBacktrace()
             std::unique_ptr<char, decltype (::free)*> demangled (abi::__cxa_demangle (info.dli_sname, nullptr, 0, &status), ::free);
 
             result
-                << juce::String (i).paddedRight (' ', 3)
-                << " " << juce::File (juce::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
-                << " 0x" << juce::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
+                << yup::String (i).paddedRight (' ', 3)
+                << " " << yup::File (yup::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
+                << " 0x" << yup::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
                 << " " << demangled.get()
                 << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
         }
@@ -327,9 +327,9 @@ String SystemStats::getStackBacktrace()
             if (status == 0)
             {
                 result
-                    << juce::String (i).paddedRight (' ', 3)
-                    << " " << juce::File (juce::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
-                    << " 0x" << juce::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
+                    << yup::String (i).paddedRight (' ', 3)
+                    << " " << yup::File (yup::String (info.dli_fname)).getFileName().paddedRight (' ', 35)
+                    << " 0x" << yup::String::toHexString ((size_t) stack[i]).paddedLeft ('0', sizeof (void*) * 2)
                     << " " << demangled.get()
                     << " + " << ((char*) stack[i] - (char*) info.dli_saddr) << newLine;
                 continue;
@@ -347,7 +347,7 @@ String SystemStats::getStackBacktrace()
 //==============================================================================
 static SystemStats::CrashHandlerFunction globalCrashHandler = nullptr;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
 static LONG WINAPI handleCrash (LPEXCEPTION_POINTERS ep)
 {
     globalCrashHandler (ep);
@@ -358,7 +358,7 @@ static void handleCrash (int signum)
 {
     globalCrashHandler ((void*) (pointer_sized_int) signum);
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
     ::kill (getpid(), SIGKILL);
 #endif
 }
@@ -371,10 +371,10 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
     jassert (handler != nullptr); // This must be a valid function.
     globalCrashHandler = handler;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     SetUnhandledExceptionFilter (handleCrash);
 
-#elif JUCE_WASM
+#elif YUP_WASM
     // TODO
 
 #else
@@ -391,12 +391,12 @@ void SystemStats::setApplicationCrashHandler (CrashHandlerFunction handler)
 
 bool SystemStats::isRunningInAppExtensionSandbox() noexcept
 {
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
     static bool isRunningInAppSandbox = [&]
     {
         File bundle = File::getSpecialLocation (File::invokedExecutableFile).getParentDirectory();
 
-#if JUCE_MAC
+#if YUP_MAC
         bundle = bundle.getParentDirectory().getParentDirectory();
 #endif
 
@@ -412,4 +412,4 @@ bool SystemStats::isRunningInAppExtensionSandbox() noexcept
 #endif
 }
 
-} // namespace juce
+} // namespace yup

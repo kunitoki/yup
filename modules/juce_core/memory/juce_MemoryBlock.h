@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API MemoryBlock
+class YUP_API MemoryBlock
 {
 public:
     //==============================================================================
@@ -310,7 +310,7 @@ private:
     HeapBlockType data;
     size_t size = 0;
 
-    JUCE_LEAK_DETECTOR (MemoryBlock)
+    YUP_LEAK_DETECTOR (MemoryBlock)
 };
 
-} // namespace juce
+} // namespace yup

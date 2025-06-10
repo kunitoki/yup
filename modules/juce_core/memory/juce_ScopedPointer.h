@@ -39,7 +39,7 @@
 
 #ifndef DOXYGEN
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ class [[deprecated]] ScopedPointer
 {
 public:
     //==============================================================================
-    JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+    YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
     inline ScopedPointer() {}
 
@@ -162,16 +162,16 @@ private:
 
     const ScopedPointer* getAddress() const noexcept { return this; } // Used internally to avoid the & operator
 
-#if ! JUCE_MSVC // (MSVC can't deal with multiple copy constructors)
+#if ! YUP_MSVC // (MSVC can't deal with multiple copy constructors)
     ScopedPointer (const ScopedPointer&) = delete;
     ScopedPointer& operator= (const ScopedPointer&) = delete;
 #endif
 
-    JUCE_END_IGNORE_DEPRECATION_WARNINGS
+    YUP_END_IGNORE_DEPRECATION_WARNINGS
 };
 
 //==============================================================================
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 template <typename ObjectType1, typename ObjectType2>
 bool operator== (ObjectType1* pointer1, const ScopedPointer<ObjectType2>& pointer2) noexcept
@@ -242,8 +242,8 @@ void deleteAndZero (ScopedPointer<Type>&)
                    "Attempt to call deleteAndZero() on a ScopedPointer");
 }
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+YUP_END_IGNORE_DEPRECATION_WARNINGS
 
-} // namespace juce
+} // namespace yup
 
 #endif

@@ -39,9 +39,9 @@
 
 #include <gtest/gtest.h>
 
-#include <juce_audio_basics/juce_audio_basics.h>
+#include <yup_audio_basics/yup_audio_basics.h>
 
-using namespace juce;
+using namespace yup;
 
 class FloatVectorOperationsTests : public ::testing::Test
 {
@@ -57,7 +57,7 @@ protected:
             HeapBlock<ValueType> buffer1 (num + 16), buffer2 (num + 16);
             HeapBlock<int> buffer3 (num + 16, true);
 
-#if JUCE_ARM
+#if YUP_ARM
             ValueType* const data1 = buffer1;
             ValueType* const data2 = buffer2;
             int* const int1 = buffer3;
@@ -76,11 +76,11 @@ protected:
             Range<ValueType> minMax2 (Range<ValueType>::findMinAndMax (data1, num));
             EXPECT_TRUE (minMax1 == minMax2);
 
-            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMinimum (data1, num), juce::findMinimum (data1, num)));
-            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMaximum (data1, num), juce::findMaximum (data1, num)));
+            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMinimum (data1, num), yup::findMinimum (data1, num)));
+            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMaximum (data1, num), yup::findMaximum (data1, num)));
 
-            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMinimum (data2, num), juce::findMinimum (data2, num)));
-            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMaximum (data2, num), juce::findMaximum (data2, num)));
+            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMinimum (data2, num), yup::findMinimum (data2, num)));
+            EXPECT_TRUE (valuesMatch (FloatVectorOperations::findMaximum (data2, num), yup::findMaximum (data2, num)));
 
             FloatVectorOperations::clear (data1, num);
             EXPECT_TRUE (areAllValuesEqual (data1, num, 0));

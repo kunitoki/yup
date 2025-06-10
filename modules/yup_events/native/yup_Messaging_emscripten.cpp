@@ -91,14 +91,14 @@ public:
     }
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (InternalMessageQueue, false)
+    YUP_DECLARE_SINGLETON (InternalMessageQueue, false)
 
 private:
     CriticalSection lock;
     ReferenceCountedArray<MessageManager::MessageBase> eventQueue;
 };
 
-JUCE_IMPLEMENT_SINGLETON (InternalMessageQueue)
+YUP_IMPLEMENT_SINGLETON (InternalMessageQueue)
 
 //==============================================================================
 void MessageManager::doPlatformSpecificInitialisation()
@@ -148,7 +148,7 @@ void MessageManager::stopDispatchLoop()
     emscripten_cancel_main_loop();
 }
 
-#if JUCE_MODAL_LOOPS_PERMITTED
+#if YUP_MODAL_LOOPS_PERMITTED
 bool MessageManager::runDispatchLoopUntil (int millisecondsToRunFor)
 {
     Logger::outputDebugString ("*** Modal loops are not possible in Emscripten!! Exiting...");

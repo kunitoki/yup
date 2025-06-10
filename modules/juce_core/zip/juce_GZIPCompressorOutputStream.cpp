@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class GZIPCompressorOutputStream::GZIPCompressorHelper
@@ -107,7 +107,7 @@ private:
             {
                 case Z_STREAM_END:
                     finished = true;
-                    JUCE_FALLTHROUGH
+                    YUP_FALLTHROUGH
                 case Z_OK:
                 {
                     data += dataSize - stream.avail_in;
@@ -124,7 +124,7 @@ private:
         return false;
     }
 
-    JUCE_DECLARE_NON_COPYABLE (GZIPCompressorHelper)
+    YUP_DECLARE_NON_COPYABLE (GZIPCompressorHelper)
 };
 
 //==============================================================================
@@ -169,4 +169,4 @@ bool GZIPCompressorOutputStream::setPosition (int64 /*newPosition*/)
     return false;
 }
 
-} // namespace juce
+} // namespace yup

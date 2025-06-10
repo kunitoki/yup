@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static int calcBufferStreamBufferSize (int requestedSize, InputStream* source) noexcept
@@ -202,7 +202,7 @@ String BufferedInputStream::readString()
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 struct BufferedInputStreamTests final : public UnitTest
 {
@@ -339,4 +339,4 @@ static BufferedInputStreamTests bufferedInputStreamTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

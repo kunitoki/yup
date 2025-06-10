@@ -41,13 +41,13 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
-namespace juce
+namespace yup
 {
 extern String reduceLengthOfFloatString (const String& input);
 extern String serialiseDouble (double input, int maxDecimalPlaces = 0);
-} // namespace juce
+} // namespace yup
 
 class StringTests : public ::testing::Test
 {

@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };
 
 class MyApplication : public yup::YUPApplication
@@ -113,7 +113,7 @@ yup_standalone_app (
     TARGET_CXX_STANDARD 17
     INITIAL_MEMORY 268435456  # 256MB initial memory
     MODULES
-        juce_audio_devices
+        yup_audio_devices
         yup_gui
         libpng
         libwebp)
@@ -156,7 +156,7 @@ yup_add_embedded_binary_resources (
 yup_standalone_app (
     # ...
     MODULES
-        juce_audio_devices
+        yup_audio_devices
         yup_gui
         libpng
         libwebp

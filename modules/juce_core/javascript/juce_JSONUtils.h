@@ -37,11 +37,11 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
-    A mini namespace to hold utility functions for working with juce::vars.
+    A mini namespace to hold utility functions for working with yup::vars.
 
     @tags{Core}
 */
@@ -81,4 +81,4 @@ struct JSONUtils
     static bool deepEqual (const var& a, const var& b);
 };
 
-} // namespace juce
+} // namespace yup

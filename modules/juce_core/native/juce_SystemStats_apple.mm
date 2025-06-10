@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 ScopedAutoReleasePool::ScopedAutoReleasePool()
@@ -63,7 +63,7 @@ void Logger::outputDebugString(const String& text)
 //==============================================================================
 void CPUInformation::initialise() noexcept
 {
-#if JUCE_INTEL && !JUCE_NO_INLINE_ASM
+#if YUP_INTEL && !YUP_NO_INLINE_ASM
     SystemStatsHelpers::getCPUInfo(hasMMX,
                                    hasSSE,
                                    hasSSE2,
@@ -86,7 +86,7 @@ void CPUInformation::initialise() noexcept
                                    hasAVX512VL,
                                    hasAVX512VBMI,
                                    hasAVX512VPOPCNTDQ);
-#elif JUCE_ARM && __ARM_ARCH > 7
+#elif YUP_ARM && __ARM_ARCH > 7
     hasNeon = true;
 #endif
 
@@ -103,10 +103,10 @@ void CPUInformation::initialise() noexcept
 }
 
 //==============================================================================
-#if !JUCE_IOS
+#if !YUP_IOS
 static String getOSXVersion()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         const auto* dict = []
         {
@@ -133,7 +133,7 @@ static String getOSXVersion()
 
 SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 {
-#if JUCE_IOS
+#if YUP_IOS
     return iOS;
 #else
     StringArray parts;
@@ -166,7 +166,7 @@ SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 
 String SystemStats::getOperatingSystemName()
 {
-#if JUCE_IOS
+#if YUP_IOS
     return "iOS " + nsStringToJuce([[UIDevice currentDevice] systemVersion]);
 #else
     return "Mac OSX " + getOSXVersion();
@@ -175,7 +175,7 @@ String SystemStats::getOperatingSystemName()
 
 String SystemStats::getOperatingSystemVersionString()
 {
-#if JUCE_IOS
+#if YUP_IOS
     return nsStringToJuce([[UIDevice currentDevice] systemVersion]);
 #else
     return getOSXVersion();
@@ -188,7 +188,7 @@ String SystemStats::getDeviceDescription()
         if (auto* simDeviceName = [userInfo objectForKey:@"SIMULATOR_MODEL_IDENTIFIER"])
             return nsStringToJuce(simDeviceName);
 
-#if JUCE_IOS
+#if YUP_IOS
     const char* name = "hw.machine";
 #else
     const char* name = "hw.model";
@@ -214,7 +214,7 @@ String SystemStats::getDeviceManufacturer()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-#if JUCE_IOS
+#if YUP_IOS
     return false;
 #else
     return true;
@@ -232,7 +232,7 @@ int SystemStats::getMemorySizeInMegabytes()
 
 String SystemStats::getCpuVendor()
 {
-#if JUCE_INTEL && !JUCE_NO_INLINE_ASM
+#if YUP_INTEL && !YUP_NO_INLINE_ASM
     uint32 dummy = 0;
     uint32 vendor[4] = {0};
 
@@ -257,7 +257,7 @@ String SystemStats::getCpuModel()
 
 int SystemStats::getCpuSpeedInMegahertz()
 {
-#ifdef JUCE_INTEL
+#ifdef YUP_INTEL
     uint64 speedHz = 0;
     size_t optSize = sizeof(speedHz);
     int mib[] = {CTL_HW, HW_CPU_FREQ};
@@ -406,7 +406,7 @@ int SystemStats::getPageSize()
 
 String SystemStats::getUniqueDeviceID()
 {
-#if JUCE_MAC
+#if YUP_MAC
     constexpr mach_port_t port = 0;
 
     const auto dict = IOServiceMatching("IOPlatformExpertDevice");
@@ -420,8 +420,8 @@ String SystemStats::getUniqueDeviceID()
             if (CFGetTypeID(uuidTypeRef.get()) == CFStringGetTypeID())
                 return String::fromCFString((CFStringRef)uuidTypeRef.get()).removeCharacters("-");
     }
-#elif JUCE_IOS
-    JUCE_AUTORELEASEPOOL
+#elif YUP_IOS
+    YUP_AUTORELEASEPOOL
     {
         if (UIDevice* device = [UIDevice currentDevice])
             if (NSUUID* uuid = [device identifierForVendor])
@@ -432,7 +432,7 @@ String SystemStats::getUniqueDeviceID()
     return "";
 }
 
-#if JUCE_MAC
+#if YUP_MAC
 bool SystemStats::isAppSandboxEnabled()
 {
     static const auto result = [&]
@@ -466,4 +466,4 @@ bool SystemStats::isAppSandboxEnabled()
 }
 #endif
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 XmlDocument::XmlDocument (const String& text)
@@ -119,7 +119,7 @@ static bool isIdentifierChar (juce_wchar c) noexcept
         for (int i = 0; i < 8; ++i)
             s << "0x" << String::toHexString ((int) n[i]) << ", ";
 
-        JUCE_DBG (s);
+        YUP_DBG (s);
     }*/
 
 static String::CharPointerType findEndOfToken (String::CharPointerType p) noexcept
@@ -142,7 +142,7 @@ std::unique_ptr<XmlElement> XmlDocument::getDocumentElement (const bool onlyRead
             MemoryOutputStream data;
             data.writeFromInputStream (*in, onlyReadOuterDocumentElement ? 8192 : -1);
 
-#if JUCE_STRING_UTF_TYPE == 8
+#if YUP_STRING_UTF_TYPE == 8
             if (data.getDataSize() > 2)
             {
                 data.writeByte (0);
@@ -260,7 +260,7 @@ bool XmlDocument::parseHeader()
         if (headerEnd.isEmpty())
             return false;
 
-#if JUCE_DEBUG
+#if YUP_DEBUG
         auto encoding = String (input, headerEnd)
                             .fromFirstOccurrenceOf ("encoding", false, true)
                             .fromFirstOccurrenceOf ("=", false, false)
@@ -931,4 +931,4 @@ String XmlDocument::getParameterEntity (const String& entity)
     return entity;
 }
 
-} // namespace juce
+} // namespace yup

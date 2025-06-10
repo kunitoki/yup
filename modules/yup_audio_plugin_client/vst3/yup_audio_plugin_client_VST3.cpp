@@ -325,15 +325,15 @@ public:
 
     tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
     {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         if (std::string_view (type) == kPlatformTypeHWND)
             return kResultTrue;
-#elif JUCE_MAC
+#elif YUP_MAC
         if (std::string_view (type) == kPlatformTypeNSView)
             return kResultTrue;
         else if (std::string_view (type) == kPlatformTypeHIView)
             return kResultFalse;
-#elif JUCE_LINUX
+#elif YUP_LINUX
         if (std::string_view (type) == kPlatformTypeX11EmbedWindowID)
             return kResultTrue;
 #endif

@@ -66,7 +66,7 @@
 */
 
 #pragma once
-#define JUCE_CORE_H_INCLUDED
+#define YUP_CORE_H_INCLUDED
 
 //==============================================================================
 #ifdef _MSC_VER
@@ -81,17 +81,17 @@
 #include "system/juce_TargetPlatform.h"
 
 //==============================================================================
-/** Config: JUCE_FORCE_DEBUG
+/** Config: YUP_FORCE_DEBUG
 
-    Normally, JUCE_DEBUG is set to 1 or 0 based on compiler and project settings,
+    Normally, YUP_DEBUG is set to 1 or 0 based on compiler and project settings,
     but if you define this value, you can override this to force it to be true or false.
 */
-#ifndef JUCE_FORCE_DEBUG
-//#define JUCE_FORCE_DEBUG 0
+#ifndef YUP_FORCE_DEBUG
+//#define YUP_FORCE_DEBUG 0
 #endif
 
 //==============================================================================
-/** Config: JUCE_LOG_ASSERTIONS
+/** Config: YUP_LOG_ASSERTIONS
 
     If this flag is enabled, the jassert and jassertfalse macros will always use Logger::writeToLog()
     to write a message when an assertion happens.
@@ -102,128 +102,128 @@
 
     @see jassert, jassertfalse, Logger
 */
-#ifndef JUCE_LOG_ASSERTIONS
-#if JUCE_ANDROID
-#define JUCE_LOG_ASSERTIONS 1
+#ifndef YUP_LOG_ASSERTIONS
+#if YUP_ANDROID
+#define YUP_LOG_ASSERTIONS 1
 #else
-#define JUCE_LOG_ASSERTIONS 0
+#define YUP_LOG_ASSERTIONS 0
 #endif
 #endif
 
 //==============================================================================
-/** Config: JUCE_CHECK_MEMORY_LEAKS
+/** Config: YUP_CHECK_MEMORY_LEAKS
 
     Enables a memory-leak check for certain objects when the app terminates. See the LeakedObjectDetector
-    class and the JUCE_LEAK_DETECTOR macro for more details about enabling leak checking for specific classes.
+    class and the YUP_LEAK_DETECTOR macro for more details about enabling leak checking for specific classes.
 */
-#if JUCE_DEBUG && ! defined(JUCE_CHECK_MEMORY_LEAKS)
-#define JUCE_CHECK_MEMORY_LEAKS 1
+#if YUP_DEBUG && ! defined(YUP_CHECK_MEMORY_LEAKS)
+#define YUP_CHECK_MEMORY_LEAKS 1
 #endif
 
 //==============================================================================
-/** Config: JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+/** Config: YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 
     In a Windows build, this can be used to stop the required system libs being
     automatically added to the link stage.
 */
-#ifndef JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
-#define JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES 0
+#ifndef YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#define YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES 0
 #endif
 
-/** Config: JUCE_USE_CURL
+/** Config: YUP_USE_CURL
     Enables http/https support via libcurl (Linux only). Enabling this will add an additional
     run-time dynamic dependency to libcurl.
 
     If you disable this then https/ssl support will not be available on Linux.
 */
-#ifndef JUCE_USE_CURL
-#define JUCE_USE_CURL 1
+#ifndef YUP_USE_CURL
+#define YUP_USE_CURL 1
 #endif
 
-/** Config: JUCE_LOAD_CURL_SYMBOLS_LAZILY
+/** Config: YUP_LOAD_CURL_SYMBOLS_LAZILY
     If enabled, JUCE will load libcurl lazily when required (for example, when WebInputStream
     is used). Enabling this flag may also help with library dependency errors as linking
     libcurl at compile-time may instruct the linker to hard depend on a specific version
     of libcurl. It's also useful if you want to limit the amount of JUCE dependencies and
     you are not using WebInputStream or the URL classes.
 */
-#ifndef JUCE_LOAD_CURL_SYMBOLS_LAZILY
-#define JUCE_LOAD_CURL_SYMBOLS_LAZILY 1
+#ifndef YUP_LOAD_CURL_SYMBOLS_LAZILY
+#define YUP_LOAD_CURL_SYMBOLS_LAZILY 1
 #endif
 
-/** Config: JUCE_CATCH_UNHANDLED_EXCEPTIONS
+/** Config: YUP_CATCH_UNHANDLED_EXCEPTIONS
     If enabled, this will add some exception-catching code to forward unhandled exceptions
     to your YUPApplicationBase::unhandledException() callback.
 */
-#ifndef JUCE_CATCH_UNHANDLED_EXCEPTIONS
-#define JUCE_CATCH_UNHANDLED_EXCEPTIONS 0
+#ifndef YUP_CATCH_UNHANDLED_EXCEPTIONS
+#define YUP_CATCH_UNHANDLED_EXCEPTIONS 0
 #endif
 
-/** Config: JUCE_ALLOW_STATIC_NULL_VARIABLES
+/** Config: YUP_ALLOW_STATIC_NULL_VARIABLES
     If disabled, this will turn off dangerous static globals like String::empty, var::null, etc
     which can cause nasty order-of-initialisation problems if they are referenced during static
     constructor code.
 */
-#ifndef JUCE_ALLOW_STATIC_NULL_VARIABLES
-#define JUCE_ALLOW_STATIC_NULL_VARIABLES 0
+#ifndef YUP_ALLOW_STATIC_NULL_VARIABLES
+#define YUP_ALLOW_STATIC_NULL_VARIABLES 0
 #endif
 
-/** Config: JUCE_STRICT_REFCOUNTEDPOINTER
+/** Config: YUP_STRICT_REFCOUNTEDPOINTER
     If enabled, this will make the ReferenceCountedObjectPtr class stricter about allowing
     itself to be cast directly to a raw pointer. By default this is disabled, for compatibility
     with old code, but if possible, you should always enable it to improve code safety!
 */
-#ifndef JUCE_STRICT_REFCOUNTEDPOINTER
-#define JUCE_STRICT_REFCOUNTEDPOINTER 0
+#ifndef YUP_STRICT_REFCOUNTEDPOINTER
+#define YUP_STRICT_REFCOUNTEDPOINTER 0
 #endif
 
-/** Config: JUCE_ENABLE_ALLOCATION_HOOKS
+/** Config: YUP_ENABLE_ALLOCATION_HOOKS
     If enabled, this will add global allocation functions with built-in assertions, which may
     help when debugging allocations in unit tests.
 */
-#ifndef JUCE_ENABLE_ALLOCATION_HOOKS
-#define JUCE_ENABLE_ALLOCATION_HOOKS 0
+#ifndef YUP_ENABLE_ALLOCATION_HOOKS
+#define YUP_ENABLE_ALLOCATION_HOOKS 0
 #endif
 
-/** Config: JUCE_PROFILING_CATEGORIES
+/** Config: YUP_PROFILING_CATEGORIES
     If enabled, this will add global profiling categories to the profiler. The "yup" category should
     always be defined, only additional categories should be provided (note the first comma).
     Format of the categories is like:
     ```
-        #define JUCE_PROFILING_CATEGORIES \
+        #define YUP_PROFILING_CATEGORIES \
             , perfetto::Category ("custom1") \
             , perfetto::Category ("custom2")
     ```
 */
-#ifndef JUCE_PROFILING_CATEGORIES
-#define JUCE_PROFILING_CATEGORIES
+#ifndef YUP_PROFILING_CATEGORIES
+#define YUP_PROFILING_CATEGORIES
 #endif
 
-/** Config: JUCE_PROFILING_FILE_PREFIX
+/** Config: YUP_PROFILING_FILE_PREFIX
     If provided, it will be used as prefix for profilation files generated. By default it will use "yup-profile".
 */
-#ifndef JUCE_PROFILING_FILE_PREFIX
-#define JUCE_PROFILING_FILE_PREFIX "yup-profile"
+#ifndef YUP_PROFILING_FILE_PREFIX
+#define YUP_PROFILING_FILE_PREFIX "yup-profile"
 #endif
 
-#ifndef JUCE_STRING_UTF_TYPE
-#define JUCE_STRING_UTF_TYPE 8
+#ifndef YUP_STRING_UTF_TYPE
+#define YUP_STRING_UTF_TYPE 8
 #endif
 
 //==============================================================================
 //==============================================================================
 
-#if JUCE_CORE_INCLUDE_NATIVE_HEADERS
+#if YUP_CORE_INCLUDE_NATIVE_HEADERS
 #include "native/juce_BasicNativeHeaders.h"
 #endif
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
 #undef small
 #endif
 
 #include "system/juce_StandardHeader.h"
 
-namespace juce
+namespace yup
 {
 class StringRef;
 class MemoryBlock;
@@ -235,10 +235,10 @@ class FileInputStream;
 class FileOutputStream;
 class XmlElement;
 
-extern JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept;
-extern JUCE_API void JUCE_CALLTYPE logAssertion (const char* file, int line) noexcept;
-extern JUCE_API void JUCE_CALLTYPE logAssertion (const wchar_t* file, int line) noexcept;
-} // namespace juce
+extern YUP_API bool YUP_CALLTYPE juce_isRunningUnderDebugger() noexcept;
+extern YUP_API void YUP_CALLTYPE logAssertion (const char* file, int line) noexcept;
+extern YUP_API void YUP_CALLTYPE logAssertion (const wchar_t* file, int line) noexcept;
+} // namespace yup
 
 #include "misc/juce_EnumHelpers.h"
 #include "memory/juce_Memory.h"
@@ -247,14 +247,14 @@ extern JUCE_API void JUCE_CALLTYPE logAssertion (const wchar_t* file, int line) 
 #include "memory/juce_Atomic.h"
 #include "text/juce_CharacterFunctions.h"
 
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4996)
 
 #include "text/juce_CharPointer_UTF8.h"
 #include "text/juce_CharPointer_UTF16.h"
 #include "text/juce_CharPointer_UTF32.h"
 #include "text/juce_CharPointer_ASCII.h"
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 #include "misc/juce_MetaProgramming.h"
 #include "text/juce_String.h"
@@ -384,34 +384,34 @@ JUCE_END_IGNORE_WARNINGS_MSVC
 
 #include "detail/juce_CallbackListenerList.h"
 
-#if JUCE_CORE_INCLUDE_OBJC_HELPERS && (JUCE_MAC || JUCE_IOS)
+#if YUP_CORE_INCLUDE_OBJC_HELPERS && (YUP_MAC || YUP_IOS)
 #include "native/juce_CFHelpers_apple.h"
 #include "native/juce_ObjCHelpers_apple.h"
 #endif
 
-#if JUCE_CORE_INCLUDE_COM_SMART_PTR && JUCE_WINDOWS
+#if YUP_CORE_INCLUDE_COM_SMART_PTR && YUP_WINDOWS
 #include "native/juce_ComSmartPtr_windows.h"
 #endif
 
-#if JUCE_CORE_INCLUDE_JNI_HELPERS && JUCE_ANDROID
+#if YUP_CORE_INCLUDE_JNI_HELPERS && YUP_ANDROID
 #include <jni.h>
 #include "native/juce_JNIHelpers_android.h"
 #endif
 
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 #include "unit_tests/juce_UnitTestCategories.h"
 #endif
 
-#if JUCE_ENABLE_PROFILING
-JUCE_BEGIN_IGNORE_WARNINGS_MSVC (4267)
+#if YUP_ENABLE_PROFILING
+YUP_BEGIN_IGNORE_WARNINGS_MSVC (4267)
 #include <perfetto.h>
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 #endif
 
 #include "profiling/juce_Profiler.h"
 
 #ifndef DOXYGEN
-namespace juce
+namespace yup
 {
 /*
     As the very long class names here try to explain, the purpose of this code is to cause
@@ -421,32 +421,27 @@ namespace juce
     without that, then each will be generating code with different class layouts, and you'll
     get subtle and hard-to-track-down memory corruption!
  */
-#if JUCE_DEBUG
-struct JUCE_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode
+#if YUP_DEBUG
+struct YUP_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode
 {
     this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept;
 };
 
 static this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode compileUnitMismatchSentinel;
 #else
-struct JUCE_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode
+struct YUP_API this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode
 {
     this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode() noexcept;
 };
 
 static this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode compileUnitMismatchSentinel;
 #endif
-} // namespace juce
+} // namespace yup
 #endif
 
-JUCE_END_IGNORE_WARNINGS_MSVC
+YUP_END_IGNORE_WARNINGS_MSVC
 
 // In DLL builds, need to disable this warnings for other modules
-#if defined(JUCE_DLL_BUILD) || defined(JUCE_DLL)
-JUCE_IGNORE_MSVC (4251)
+#if defined(YUP_DLL_BUILD) || defined(YUP_DLL)
+YUP_IGNORE_MSVC (4251)
 #endif
-
-namespace yup
-{
-using namespace ::juce;
-} // namespace yup

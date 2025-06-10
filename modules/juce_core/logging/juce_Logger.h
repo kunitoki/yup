@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -54,7 +54,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Logger
+class YUP_API Logger
 {
 public:
     //==============================================================================
@@ -68,10 +68,10 @@ public:
         the caller must make sure that it is not deleted while still being used.
         A null pointer can be passed-in to reset the system to the default logger.
     */
-    static void JUCE_CALLTYPE setCurrentLogger (Logger* newLogger) noexcept;
+    static void YUP_CALLTYPE setCurrentLogger (Logger* newLogger) noexcept;
 
     /** Returns the current logger, or nullptr if no custom logger has been set. */
-    static Logger* JUCE_CALLTYPE getCurrentLogger() noexcept;
+    static Logger* YUP_CALLTYPE getCurrentLogger() noexcept;
 
     /** Writes a string to the current logger.
 
@@ -80,15 +80,15 @@ public:
 
         @see logMessage
     */
-    static void JUCE_CALLTYPE writeToLog (const String& message);
+    static void YUP_CALLTYPE writeToLog (const String& message);
 
     //==============================================================================
     /** Writes a message to the standard error stream.
 
-        This can be called directly, or by using the `JUCE_DBG()` macro in
+        This can be called directly, or by using the `YUP_DBG()` macro in
         `juce_PlatformDefs.h` (which will avoid calling the method in non-debug builds).
     */
-    static void JUCE_CALLTYPE outputDebugString (const String& text);
+    static void YUP_CALLTYPE outputDebugString (const String& text);
 
 protected:
     //==============================================================================
@@ -103,4 +103,4 @@ private:
     static Logger* currentLogger;
 };
 
-} // namespace juce
+} // namespace yup

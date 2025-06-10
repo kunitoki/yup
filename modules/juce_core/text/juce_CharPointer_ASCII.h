@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -287,9 +287,9 @@ public:
 
     int compareIgnoreCase (const CharPointer_ASCII other) const
     {
-#if JUCE_MINGW || (JUCE_WINDOWS && JUCE_CLANG)
+#if YUP_MINGW || (YUP_WINDOWS && YUP_CLANG)
         return CharacterFunctions::compareIgnoreCase (*this, other);
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
         return stricmp (data, other.data);
 #else
         return strcasecmp (data, other.data);
@@ -363,9 +363,9 @@ public:
     /** Parses this string as a 64-bit integer. */
     int64 getIntValue64() const noexcept
     {
-#if JUCE_LINUX || JUCE_BSD || JUCE_ANDROID || JUCE_MINGW
+#if YUP_LINUX || YUP_BSD || YUP_ANDROID || YUP_MINGW
         return atoll (data);
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
         return _atoi64 (data);
 #else
         return CharacterFunctions::getIntValue<int64, CharPointer_ASCII> (*this);
@@ -405,4 +405,4 @@ private:
     CharType* data;
 };
 
-} // namespace juce
+} // namespace yup

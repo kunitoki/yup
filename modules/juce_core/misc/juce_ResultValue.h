@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -55,7 +55,7 @@ namespace juce
     @tags{Core}
 */
 template <class T>
-class JUCE_API ResultValue
+class YUP_API ResultValue
 {
 public:
     //==============================================================================
@@ -184,4 +184,4 @@ private:
     operator void*() const;
 };
 
-} // namespace juce
+} // namespace yup

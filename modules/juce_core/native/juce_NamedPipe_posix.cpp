@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 
 class NamedPipe::Pimpl
 {
@@ -256,7 +256,7 @@ private:
         poll (&pfd, 1, timeoutMsecs);
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 void NamedPipe::close()
@@ -281,7 +281,7 @@ void NamedPipe::close()
 
 bool NamedPipe::openInternal (const String& pipeName, bool createPipe, bool mustNotExist)
 {
-#if JUCE_IOS
+#if YUP_IOS
     pimpl.reset (new Pimpl (File::getSpecialLocation (File::tempDirectory)
                                 .getChildFile (File::createLegalFileName (pipeName))
                                 .getFullPathName(),
@@ -324,4 +324,4 @@ int NamedPipe::write (const void* sourceBuffer, int numBytesToWrite, int timeOut
 
 #endif
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 Identifier::Identifier() noexcept {}
@@ -102,4 +102,4 @@ bool Identifier::isValidIdentifier (const String& possibleIdentifier) noexcept
         && possibleIdentifier.containsOnly ("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:#@$%");
 }
 
-} // namespace juce
+} // namespace yup

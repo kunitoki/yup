@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API SubregionStream : public InputStream
+class YUP_API SubregionStream : public InputStream
 {
 public:
     //==============================================================================
@@ -93,7 +93,7 @@ private:
     OptionalScopedPointer<InputStream> source;
     const int64 startPositionInSourceStream, lengthOfSourceStream;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SubregionStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SubregionStream)
 };
 
-} // namespace juce
+} // namespace yup

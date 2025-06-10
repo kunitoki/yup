@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -296,4 +296,4 @@ bool RuntimePermissions::isGranted (PermissionID permission)
                         });
 }
 
-} // namespace juce
+} // namespace yup

@@ -30,7 +30,7 @@ namespace yup
 
     @see Desktop
 */
-class JUCE_API Screen : public ReferenceCountedObject
+class YUP_API Screen : public ReferenceCountedObject
 {
 public:
     //==============================================================================

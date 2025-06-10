@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -80,7 +80,7 @@ public:
             {
                 case Z_STREAM_END:
                     finished = true;
-                    JUCE_FALLTHROUGH
+                    YUP_FALLTHROUGH
                 case Z_OK:
                     data += dataSize - stream.avail_in;
                     dataSize = (z_uInt) stream.avail_in;
@@ -95,7 +95,7 @@ public:
                 case Z_DATA_ERROR:
                 case Z_MEM_ERROR:
                     error = true;
-                    JUCE_FALLTHROUGH
+                    YUP_FALLTHROUGH
                 default:
                     break;
             }
@@ -134,7 +134,7 @@ private:
     uint8* data = nullptr;
     size_t dataSize = 0;
 
-    JUCE_DECLARE_NON_COPYABLE (GZIPDecompressHelper)
+    YUP_DECLARE_NON_COPYABLE (GZIPDecompressHelper)
 };
 
 //==============================================================================
@@ -246,4 +246,4 @@ bool GZIPDecompressorInputStream::setPosition (int64 newPos)
     return true;
 }
 
-} // namespace juce
+} // namespace yup

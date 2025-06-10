@@ -19,10 +19,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if JUCE_LINUX || JUCE_WINDOWS || JUCE_MAC
+#if YUP_LINUX || YUP_WINDOWS || YUP_MAC
 
 /**
     Watches a folder in the file system for changes.
@@ -126,4 +126,4 @@ private:
 
 #endif
 
-} // namespace juce
+} // namespace yup

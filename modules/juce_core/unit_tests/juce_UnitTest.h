@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class UnitTestRunner;
@@ -82,7 +82,7 @@ class UnitTestRunner;
 
     @tags{Core}
 */
-class JUCE_API UnitTest
+class YUP_API UnitTest
 {
 public:
     //==============================================================================
@@ -318,7 +318,7 @@ private:
     const String name, category;
     UnitTestRunner* runner = nullptr;
 
-    JUCE_DECLARE_NON_COPYABLE (UnitTest)
+    YUP_DECLARE_NON_COPYABLE (UnitTest)
 };
 
 //==============================================================================
@@ -335,7 +335,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API UnitTestRunner
+class YUP_API UnitTestRunner
 {
 public:
     //==============================================================================
@@ -460,7 +460,7 @@ private:
     void addPass();
     void addFail (const String& failureMessage);
 
-    JUCE_DECLARE_NON_COPYABLE (UnitTestRunner)
+    YUP_DECLARE_NON_COPYABLE (UnitTestRunner)
 };
 
-} // namespace juce
+} // namespace yup

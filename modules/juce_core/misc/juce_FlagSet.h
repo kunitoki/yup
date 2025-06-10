@@ -21,7 +21,7 @@
 
 #include <algorithm>
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -235,7 +235,7 @@ public:
     //==============================================================================
     /** Converts the flag bits to a string representation.
 
-        Constructs a binary string representation of the flags, where each bit is represented by '1' or '0'. 
+        Constructs a binary string representation of the flags, where each bit is represented by '1' or '0'.
 
         @return A string representing the binary state of the flags.
     */
@@ -293,4 +293,4 @@ private:
     T flags = T (0);
 };
 
-} // namespace juce
+} // namespace yup

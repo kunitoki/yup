@@ -23,7 +23,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 static String operator"" _S (const char* chars, size_t)
 {

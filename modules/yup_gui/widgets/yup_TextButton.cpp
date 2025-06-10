@@ -59,13 +59,14 @@ void TextButton::resized()
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
     auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+    auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
     styledText.setMaxSize (labelBounds.getSize());
     styledText.setHorizontalAlign (StyledText::center);
     styledText.setVerticalAlign (StyledText::middle);
 
     styledText.clear();
-    styledText.appendText (getComponentID(), ApplicationTheme::getGlobalTheme()->getDefaultFont(), 32.0f);
+    styledText.appendText (getComponentID(), nullptr, font, 32.0f);
     styledText.update();
 }
 

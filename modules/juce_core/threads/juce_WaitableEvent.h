@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API WaitableEvent
+class YUP_API WaitableEvent
 {
 public:
     //==============================================================================
@@ -110,7 +110,7 @@ private:
     mutable std::condition_variable condition;
     mutable std::atomic<bool> triggered { false };
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaitableEvent)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WaitableEvent)
 };
 
-} // namespace juce
+} // namespace yup

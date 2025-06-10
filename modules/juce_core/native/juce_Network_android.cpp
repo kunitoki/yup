@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -95,15 +95,15 @@ static jobject getMulticastLock()
 
         return GlobalRef (LocalRef<jobject> (env->CallObjectMethod (wifiManager.get(),
                                                                     AndroidWifiManager.createMulticastLock,
-                                                                    javaString ("JUCE_MulticastLock").get())));
+                                                                    javaString ("YUP_MulticastLock").get())));
     }();
 
     return multicastLock.get();
 }
 
-JUCE_API void JUCE_CALLTYPE acquireMulticastLock();
+YUP_API void YUP_CALLTYPE acquireMulticastLock();
 
-JUCE_API void JUCE_CALLTYPE acquireMulticastLock()
+YUP_API void YUP_CALLTYPE acquireMulticastLock()
 {
     auto multicastLock = getMulticastLock();
 
@@ -111,9 +111,9 @@ JUCE_API void JUCE_CALLTYPE acquireMulticastLock()
         getEnv()->CallVoidMethod (multicastLock, AndroidMulticastLock.acquire);
 }
 
-JUCE_API void JUCE_CALLTYPE releaseMulticastLock();
+YUP_API void YUP_CALLTYPE releaseMulticastLock();
 
-JUCE_API void JUCE_CALLTYPE releaseMulticastLock()
+YUP_API void YUP_CALLTYPE releaseMulticastLock()
 {
     auto multicastLock = getMulticastLock();
 
@@ -127,7 +127,7 @@ void MACAddress::findAllAddresses (Array<MACAddress>& /*result*/)
     // TODO
 }
 
-JUCE_API bool JUCE_CALLTYPE Process::openEmailWithAttachments (const String& /*targetEmailAddress*/,
+YUP_API bool YUP_CALLTYPE Process::openEmailWithAttachments (const String& /*targetEmailAddress*/,
                                                                const String& /*emailSubject*/,
                                                                const String& /*bodyText*/,
                                                                const StringArray& /*filesToAttach*/)
@@ -421,7 +421,7 @@ private:
     int readPosition = 0;
 
     GlobalRef stream;
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Pimpl)
 };
 
 std::unique_ptr<URL::DownloadTask> URL::downloadToFile (const File& targetLocation, const DownloadTaskOptions& options)
@@ -521,4 +521,4 @@ IPAddress IPAddress::getInterfaceBroadcastAddress (const IPAddress& address)
 
 #endif
 
-} // namespace juce
+} // namespace yup

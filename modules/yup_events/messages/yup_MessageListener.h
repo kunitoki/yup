@@ -48,7 +48,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API MessageListener
+class YUP_API MessageListener
 {
 public:
     //==============================================================================

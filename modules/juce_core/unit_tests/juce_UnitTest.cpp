@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 UnitTest::UnitTest (const String& nm, const String& ctg)
@@ -177,7 +177,7 @@ void UnitTestRunner::runTests (const Array<UnitTest*>& tests, int64 randomSeed)
         if (shouldAbortTests())
             break;
 
-#if JUCE_EXCEPTIONS_DISABLED
+#if YUP_EXCEPTIONS_DISABLED
         t->performTest (this);
 #else
         try
@@ -306,4 +306,4 @@ void UnitTestRunner::addFail (const String& failureMessage)
     }
 }
 
-} // namespace juce
+} // namespace yup

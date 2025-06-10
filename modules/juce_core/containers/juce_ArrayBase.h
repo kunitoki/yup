@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -602,7 +602,7 @@ private:
     template <class OtherElementType, class OtherCriticalSection>
     friend class ArrayBase;
 
-    JUCE_DECLARE_NON_COPYABLE (ArrayBase)
+    YUP_DECLARE_NON_COPYABLE (ArrayBase)
 };
 
-} // namespace juce
+} // namespace yup

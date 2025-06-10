@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 URLInputSource::URLInputSource (const URL& url)
@@ -76,4 +76,4 @@ int64 URLInputSource::hashCode() const
     return u.toString (true).hashCode64();
 }
 
-} // namespace juce
+} // namespace yup

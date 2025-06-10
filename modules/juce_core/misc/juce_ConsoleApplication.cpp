@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static File resolveFilename (const String& name)
@@ -456,4 +456,4 @@ void ConsoleApplication::printCommandDetails (const ArgumentList& args, const Co
                   << command.longDescription << std::endl;
 }
 
-} // namespace juce
+} // namespace yup

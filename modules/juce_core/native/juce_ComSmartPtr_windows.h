@@ -37,10 +37,10 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
-#if (JUCE_MINGW && JUCE_32BIT) || (! defined(_MSC_VER) && ! defined(__uuidof))
+#if (YUP_MINGW && YUP_32BIT) || (! defined(_MSC_VER) && ! defined(__uuidof))
 #ifdef __uuidof
 #undef __uuidof
 #endif
@@ -63,29 +63,29 @@ struct UUIDGetter<::IUnknown>
     static CLSID get() { return { 0, 0, 0, { 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 } }; }
 };
 
-#define JUCE_DECLARE_UUID_GETTER(name, uuid)                 \
+#define YUP_DECLARE_UUID_GETTER(name, uuid)                 \
     template <>                                              \
     struct UUIDGetter<name>                                  \
     {                                                        \
         static CLSID get() { return uuidFromString (uuid); } \
     };
 
-#define JUCE_COMCLASS(name, guid)         \
+#define YUP_COMCLASS(name, guid)         \
     struct name;                          \
-    JUCE_DECLARE_UUID_GETTER (name, guid) \
+    YUP_DECLARE_UUID_GETTER (name, guid) \
     struct name
 
 #else
-#define JUCE_DECLARE_UUID_GETTER(name, uuid)
-#define JUCE_COMCLASS(name, guid) struct DECLSPEC_UUID (guid) name
+#define YUP_DECLARE_UUID_GETTER(name, uuid)
+#define YUP_COMCLASS(name, guid) struct DECLSPEC_UUID (guid) name
 #endif
 
-#define JUCE_IUNKNOWNCLASS(name, guid) JUCE_COMCLASS (name, guid) \
+#define YUP_IUNKNOWNCLASS(name, guid) YUP_COMCLASS (name, guid) \
     : public IUnknown
-#define JUCE_COMRESULT HRESULT STDMETHODCALLTYPE
-#define JUCE_COMCALL virtual HRESULT STDMETHODCALLTYPE
+#define YUP_COMRESULT HRESULT STDMETHODCALLTYPE
+#define YUP_COMCALL virtual HRESULT STDMETHODCALLTYPE
 
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wlanguage-extension-token")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wlanguage-extension-token")
 
 inline GUID uuidFromString (const char* s) noexcept
 {
@@ -274,7 +274,7 @@ public:
 protected:
     ULONG refCount = 1;
 
-    JUCE_COMRESULT QueryInterface (REFIID refId, void** result) override
+    YUP_COMRESULT QueryInterface (REFIID refId, void** result) override
     {
         if (refId == __uuidof (IUnknown))
             return castToType<First> (result);
@@ -284,7 +284,7 @@ protected:
     }
 
     template <class Type>
-    JUCE_COMRESULT castToType (void** result)
+    YUP_COMRESULT castToType (void** result)
     {
         this->AddRef();
         *result = dynamic_cast<Type*> (this);
@@ -303,7 +303,7 @@ class ComBaseClassHelper : public ComBaseClassHelperBase<ComClasses...>
 public:
     ComBaseClassHelper() = default;
 
-    JUCE_COMRESULT QueryInterface (REFIID refId, void** result) override
+    YUP_COMRESULT QueryInterface (REFIID refId, void** result) override
     {
         const std::tuple<IID, void*> bases[] {
             std::make_tuple (__uuidof (ComClasses),
@@ -324,6 +324,6 @@ public:
     }
 };
 
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
-} // namespace juce
+} // namespace yup

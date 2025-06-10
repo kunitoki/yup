@@ -55,7 +55,7 @@ enum
     defaultTimeoutMs = 8000
 };
 
-static bool isMessageType (const MemoryBlock& mb, const char* messageType) noexcept
+static bool isMessageType (const yup::MemoryBlock& mb, const char* messageType) noexcept
 {
     return mb.matches (messageType, (size_t) specialMessageSize);
 }
@@ -110,7 +110,7 @@ private:
         }
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessPingThread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcessPingThread)
 };
 
 //==============================================================================
@@ -152,7 +152,7 @@ private:
 
     ChildProcessCoordinator& owner;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Connection)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Connection)
 };
 
 //==============================================================================
@@ -276,7 +276,7 @@ private:
         owner.handleMessageFromCoordinator (m);
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Connection)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Connection)
 };
 
 //==============================================================================

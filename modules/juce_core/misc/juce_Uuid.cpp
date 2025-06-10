@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 Uuid::Uuid()
@@ -247,4 +247,4 @@ const Uuid Uuid::namespaceUrl = Uuid ("6ba7b811-9dad-11d1-80b4-00c04fd430c8");
 const Uuid Uuid::namespaceIsoOid = Uuid ("6ba7b812-9dad-11d1-80b4-00c04fd430c8");
 const Uuid Uuid::namespaceX500Dn = Uuid ("6ba7b814-9dad-11d1-80b4-00c04fd430c8");
 
-} // namespace juce
+} // namespace yup

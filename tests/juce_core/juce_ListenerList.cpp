@@ -42,7 +42,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 namespace
 {
@@ -172,7 +172,7 @@ public:
 
     static int callbackCount;
 
-    JUCE_DECLARE_WEAK_REFERENCEABLE (WeakListenerType);
+    YUP_DECLARE_WEAK_REFERENCEABLE (WeakListenerType);
 };
 
 int WeakListenerType::callbackCount = 0;

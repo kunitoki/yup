@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -78,7 +78,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API RuntimePermissions
+class YUP_API RuntimePermissions
 {
 public:
     //==============================================================================
@@ -160,4 +160,4 @@ public:
     static bool isGranted (PermissionID permission);
 };
 
-} // namespace juce
+} // namespace yup

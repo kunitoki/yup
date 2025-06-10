@@ -64,19 +64,19 @@ private:
     const String message;
     ActionListener* const listener;
 
-    JUCE_DECLARE_NON_COPYABLE (ActionMessage)
+    YUP_DECLARE_NON_COPYABLE (ActionMessage)
 };
 
 //==============================================================================
 ActionBroadcaster::ActionBroadcaster() {
     // are you trying to create this object before or after yup has been initialised??
-    JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
+    YUP_ASSERT_MESSAGE_MANAGER_EXISTS
 }
 
 ActionBroadcaster::~ActionBroadcaster()
 {
     // all event-based objects must be deleted BEFORE yup is shut down!
-    JUCE_ASSERT_MESSAGE_MANAGER_EXISTS
+    YUP_ASSERT_MESSAGE_MANAGER_EXISTS
 }
 
 void ActionBroadcaster::addActionListener (ActionListener* const listener)

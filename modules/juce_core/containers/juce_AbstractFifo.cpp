@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 AbstractFifo::AbstractFifo (int capacity) noexcept
@@ -181,4 +181,4 @@ AbstractFifo::ScopedRead AbstractFifo::read (int numToRead) noexcept { return { 
 
 AbstractFifo::ScopedWrite AbstractFifo::write (int numToWrite) noexcept { return { *this, numToWrite }; }
 
-} // namespace juce
+} // namespace yup

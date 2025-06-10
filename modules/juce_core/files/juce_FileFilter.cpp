@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 FileFilter::FileFilter (const String& filterDescription)
@@ -54,4 +54,4 @@ const String& FileFilter::getDescription() const noexcept
     return description;
 }
 
-} // namespace juce
+} // namespace yup

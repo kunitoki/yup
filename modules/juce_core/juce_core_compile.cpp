@@ -23,7 +23,7 @@
 #include <cstdint>
 #include <limits>
 
-namespace juce
+namespace yup
 {
 
 namespace
@@ -96,4 +96,4 @@ const char* juce_compilationDate = __DATE__;
 const char* juce_compilationTime = __TIME__;
 uint64_t juce_compilationUniqueId = constexprRandomImplementation (__FILE__, __LINE__);
 
-} // namespace juce
+} // namespace yup

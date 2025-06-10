@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 namespace
@@ -782,4 +782,4 @@ StringArray MimeTypeTable::getFileExtensionsForMimeType (const String& mimeType)
 
 } // namespace detail
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 CriticalSection::CriticalSection() noexcept
@@ -45,7 +45,7 @@ CriticalSection::CriticalSection() noexcept
     pthread_mutexattr_t atts;
     pthread_mutexattr_init (&atts);
     pthread_mutexattr_settype (&atts, PTHREAD_MUTEX_RECURSIVE);
-#if ! JUCE_ANDROID
+#if ! YUP_ANDROID
     pthread_mutexattr_setprotocol (&atts, PTHREAD_PRIO_INHERIT);
 #endif
     pthread_mutex_init (&lock, &atts);
@@ -92,7 +92,7 @@ StringPairArray SystemStats::getEnvironmentVariables()
 }
 
 //==============================================================================
-void JUCE_CALLTYPE Thread::sleep (int millisecs)
+void YUP_CALLTYPE Thread::sleep (int millisecs)
 {
     struct timespec time;
     time.tv_sec = millisecs / 1000;
@@ -103,16 +103,16 @@ void JUCE_CALLTYPE Thread::sleep (int millisecs)
         time = remaining;
 }
 
-void JUCE_CALLTYPE Process::terminate()
+void YUP_CALLTYPE Process::terminate()
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     _exit (EXIT_FAILURE);
 #else
     std::_Exit (EXIT_FAILURE);
 #endif
 }
 
-#if JUCE_MAC || JUCE_LINUX || JUCE_BSD
+#if YUP_MAC || YUP_LINUX || YUP_BSD
 bool Process::setMaxNumberOfFileHandles (int newMaxNumber) noexcept
 {
     rlimit lim;
@@ -134,17 +134,17 @@ struct MaxNumFileHandlesInitialiser
 {
     MaxNumFileHandlesInitialiser() noexcept
     {
-#ifndef JUCE_PREFERRED_MAX_FILE_HANDLES
+#ifndef YUP_PREFERRED_MAX_FILE_HANDLES
         enum
         {
-            JUCE_PREFERRED_MAX_FILE_HANDLES = 8192
+            YUP_PREFERRED_MAX_FILE_HANDLES = 8192
         };
 #endif
 
         // Try to give our app a decent number of file handles by default
         if (! Process::setMaxNumberOfFileHandles (0))
         {
-            for (int num = JUCE_PREFERRED_MAX_FILE_HANDLES; num > 256; num -= 1024)
+            for (int num = YUP_PREFERRED_MAX_FILE_HANDLES; num > 256; num -= 1024)
                 if (Process::setMaxNumberOfFileHandles (num))
                     break;
         }
@@ -155,14 +155,14 @@ static MaxNumFileHandlesInitialiser maxNumFileHandlesInitialiser;
 #endif
 
 //==============================================================================
-#if JUCE_ALLOW_STATIC_NULL_VARIABLES
+#if YUP_ALLOW_STATIC_NULL_VARIABLES
 
-JUCE_BEGIN_IGNORE_DEPRECATION_WARNINGS
+YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
 const juce_wchar File::separator = '/';
 const StringRef File::separatorString ("/");
 
-JUCE_END_IGNORE_DEPRECATION_WARNINGS
+YUP_END_IGNORE_DEPRECATION_WARNINGS
 
 #endif
 
@@ -201,10 +201,10 @@ bool File::setAsCurrentWorkingDirectory() const
 // The unix siginterrupt function is deprecated - this does the same job.
 int juce_siginterrupt ([[maybe_unused]] int sig, [[maybe_unused]] int flag)
 {
-#if JUCE_WASM
+#if YUP_WASM
     return 0;
 #else
-#if JUCE_ANDROID
+#if YUP_ANDROID
     using juce_sigactionflags_type = unsigned long;
 #else
     using juce_sigactionflags_type = int;
@@ -225,21 +225,21 @@ int juce_siginterrupt ([[maybe_unused]] int sig, [[maybe_unused]] int flag)
 //==============================================================================
 namespace
 {
-#if JUCE_LINUX || (JUCE_IOS && (! TARGET_OS_MACCATALYST) && (! __DARWIN_ONLY_64_BIT_INO_T)) // (this iOS stuff is to avoid a simulator bug)
+#if YUP_LINUX || (YUP_IOS && (! TARGET_OS_MACCATALYST) && (! __DARWIN_ONLY_64_BIT_INO_T)) // (this iOS stuff is to avoid a simulator bug)
 using juce_statStruct = struct stat64;
-#define JUCE_STAT stat64
+#define YUP_STAT stat64
 #else
 using juce_statStruct = struct stat;
-#define JUCE_STAT stat
+#define YUP_STAT stat
 #endif
 
 bool juce_stat (const String& fileName, juce_statStruct& info)
 {
     return fileName.isNotEmpty()
-        && JUCE_STAT (fileName.toUTF8(), &info) == 0;
+        && YUP_STAT (fileName.toUTF8(), &info) == 0;
 }
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
 // if this file doesn't exist, find a parent of it that does..
 bool juce_doStatFS (File f, struct statfs& result)
 {
@@ -254,7 +254,7 @@ bool juce_doStatFS (File f, struct statfs& result)
     return statfs (f.getFullPathName().toUTF8(), &result) == 0;
 }
 
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 static int64 getCreationTime (const juce_statStruct& s) noexcept
 {
     return (int64) s.st_birthtime;
@@ -336,7 +336,7 @@ uint64 File::getFileIdentifier() const
 
 static bool hasEffectiveRootFilePermissions()
 {
-#if JUCE_LINUX || JUCE_BSD
+#if YUP_LINUX || YUP_BSD
     return geteuid() == 0;
 #else
     return false;
@@ -400,14 +400,14 @@ void File::getFileTimesInternal (int64& modificationTime, int64& accessTime, int
 
     if (juce_stat (fullPath, info))
     {
-#if JUCE_MAC || (JUCE_IOS && __DARWIN_ONLY_64_BIT_INO_T)
+#if YUP_MAC || (YUP_IOS && __DARWIN_ONLY_64_BIT_INO_T)
         modificationTime = (int64) info.st_mtimespec.tv_sec * 1000 + info.st_mtimespec.tv_nsec / 1000000;
         accessTime = (int64) info.st_atimespec.tv_sec * 1000 + info.st_atimespec.tv_nsec / 1000000;
         creationTime = (int64) info.st_birthtimespec.tv_sec * 1000 + info.st_birthtimespec.tv_nsec / 1000000;
 #else
         modificationTime = (int64) info.st_mtime * 1000;
         accessTime = (int64) info.st_atime * 1000;
-#if JUCE_IOS
+#if YUP_IOS
         creationTime = (int64) info.st_birthtime * 1000;
 #else
         creationTime = (int64) info.st_ctime * 1000;
@@ -418,12 +418,12 @@ void File::getFileTimesInternal (int64& modificationTime, int64& accessTime, int
 
 bool File::setFileTimesInternal (int64 modificationTime, int64 accessTime, int64 /*creationTime*/) const
 {
-#if ! JUCE_WASM
+#if ! YUP_WASM
     juce_statStruct info;
 
     if ((modificationTime != 0 || accessTime != 0) && juce_stat (fullPath, info))
     {
-#if JUCE_MAC || (JUCE_IOS && __DARWIN_ONLY_64_BIT_INO_T)
+#if YUP_MAC || (YUP_IOS && __DARWIN_ONLY_64_BIT_INO_T)
         struct timeval times[2];
 
         bool setModificationTime = (modificationTime != 0);
@@ -471,7 +471,7 @@ bool File::deleteFile() const
 
 bool File::moveInternal (const File& dest) const
 {
-#if ! JUCE_WASM
+#if ! YUP_WASM
     if (rename (fullPath.toUTF8(), dest.getFullPathName().toUTF8()) == 0)
         return true;
 #endif
@@ -644,7 +644,7 @@ ssize_t FileOutputStream::writeInternal (const void* data, size_t numBytes)
     return (ssize_t) result;
 }
 
-#ifndef JUCE_ANDROID
+#ifndef YUP_ANDROID
 void FileOutputStream::flushInternal()
 {
     if (fileHandle != nullptr && fsync (getFD (fileHandle)) == -1)
@@ -671,7 +671,7 @@ String SystemStats::getEnvironmentVariable (const String& name, const String& de
 }
 
 //==============================================================================
-#if ! JUCE_WASM
+#if ! YUP_WASM
 void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exclusive)
 {
     jassert (mode == readOnly || mode == readWrite);
@@ -761,7 +761,7 @@ int64 File::getVolumeTotalSize() const
 
 String File::getVolumeLabel() const
 {
-#if JUCE_MAC
+#if YUP_MAC
     struct VolAttrBuf
     {
         u_int32_t length;
@@ -802,7 +802,7 @@ int File::getVolumeSerialNumber() const
 #endif
 
 //==============================================================================
-#if ! JUCE_IOS
+#if ! YUP_IOS
 void juce_runSystemCommand (const String&);
 
 void juce_runSystemCommand (const String& command)
@@ -827,7 +827,7 @@ String juce_getOutputFromCommand (const String& command)
 #endif
 
 //==============================================================================
-#if JUCE_IOS
+#if YUP_IOS
 class InterProcessLock::Pimpl
 {
 public:
@@ -843,7 +843,7 @@ class InterProcessLock::Pimpl
 public:
     Pimpl (const String& lockName, int timeOutMillisecs)
     {
-#if JUCE_MAC
+#if YUP_MAC
         if (! createLockFile (File ("~/Library/Caches/com.juce.locks").getChildFile (lockName), timeOutMillisecs))
             // Fallback if the user's home folder is on a network drive with no ability to lock..
             createLockFile (File ("/tmp/com.juce.locks").getChildFile (lockName), timeOutMillisecs);
@@ -1009,7 +1009,7 @@ public:
         {
             if (isRealtime)
             {
-#if ! JUCE_WASM
+#if ! YUP_WASM
                 const auto min = jmax (0, sched_get_priority_min (SCHED_RR));
                 const auto max = jmax (1, sched_get_priority_max (SCHED_RR));
 #else
@@ -1022,7 +1022,7 @@ public:
 
 // We only use this helper if we're on an old macos/ios platform that might
 // still respect legacy pthread priorities for SCHED_OTHER.
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
             const auto min = jmax (0, sched_get_priority_min (SCHED_OTHER));
             const auto max = jmax (0, sched_get_priority_max (SCHED_OTHER));
 
@@ -1052,9 +1052,9 @@ public:
             return 0;
         }();
 
-#if JUCE_MAC || JUCE_IOS || JUCE_BSD
+#if YUP_MAC || YUP_IOS || YUP_BSD
         const auto scheduler = SCHED_OTHER;
-#elif JUCE_LINUX
+#elif YUP_LINUX
         const auto backgroundSched = prio == Thread::Priority::background ? SCHED_IDLE
                                                                           : SCHED_OTHER;
         const auto scheduler = isRealtime ? SCHED_RR : backgroundSched;
@@ -1067,7 +1067,7 @@ public:
 
     void apply ([[maybe_unused]] PosixThreadAttribute& attr) const
     {
-#if JUCE_LINUX || JUCE_BSD
+#if YUP_LINUX || YUP_BSD
         const struct sched_param param {
             getPriority()
         };
@@ -1102,7 +1102,7 @@ static void* makeThreadHandle (PosixThreadAttribute& attr, void* userData, void*
     if (status != 0)
         return nullptr;
 
-    //#if !JUCE_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
+    //#if !YUP_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
     pthread_detach (handle);
     //#endif
 
@@ -1115,17 +1115,17 @@ void Thread::closeThreadHandle()
     threadHandle = nullptr;
 }
 
-void JUCE_CALLTYPE Thread::setCurrentThreadName (const String& name)
+void YUP_CALLTYPE Thread::setCurrentThreadName (const String& name)
 {
-#if JUCE_IOS || JUCE_MAC
-    JUCE_AUTORELEASEPOOL
+#if YUP_IOS || YUP_MAC
+    YUP_AUTORELEASEPOOL
     {
         [[NSThread currentThread] setName:juceStringToNS (name)];
     }
-#elif JUCE_LINUX || JUCE_BSD || JUCE_ANDROID
-#if (JUCE_BSD                                                        \
-     || (JUCE_LINUX && (__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2012) \
-     || (JUCE_ANDROID && __ANDROID_API__ >= 9))
+#elif YUP_LINUX || YUP_BSD || YUP_ANDROID
+#if (YUP_BSD                                                        \
+     || (YUP_LINUX && (__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2012) \
+     || (YUP_ANDROID && __ANDROID_API__ >= 9))
     if (pthread_setname_np (pthread_self(), name.toRawUTF8()) == ERANGE)
         pthread_setname_np (pthread_self(), name.substring (0, 15).toRawUTF8());
 #else
@@ -1134,12 +1134,12 @@ void JUCE_CALLTYPE Thread::setCurrentThreadName (const String& name)
 #endif
 }
 
-Thread::ThreadID JUCE_CALLTYPE Thread::getCurrentThreadId()
+Thread::ThreadID YUP_CALLTYPE Thread::getCurrentThreadId()
 {
     return (ThreadID) pthread_self();
 }
 
-void JUCE_CALLTYPE Thread::yield()
+void YUP_CALLTYPE Thread::yield()
 {
     sched_yield();
 }
@@ -1149,11 +1149,11 @@ void JUCE_CALLTYPE Thread::yield()
    calls (the API for these has changed about quite a bit in various Linux
    versions, and a lot of distros seem to ship with obsolete versions)
 */
-#if (! JUCE_WASM) && defined(CPU_ISSET) && ! defined(SUPPORT_AFFINITIES)
+#if (! YUP_WASM) && defined(CPU_ISSET) && ! defined(SUPPORT_AFFINITIES)
 #define SUPPORT_AFFINITIES 1
 #endif
 
-void JUCE_CALLTYPE Thread::setCurrentThreadAffinityMask ([[maybe_unused]] uint32 affinityMask)
+void YUP_CALLTYPE Thread::setCurrentThreadAffinityMask ([[maybe_unused]] uint32 affinityMask)
 {
 #if SUPPORT_AFFINITIES
     cpu_set_t affinity;
@@ -1165,15 +1165,15 @@ void JUCE_CALLTYPE Thread::setCurrentThreadAffinityMask ([[maybe_unused]] uint32
         {
             // GCC 12 on FreeBSD complains about CPU_SET irrespective of
             // the type of the first argument
-            JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wsign-conversion")
+            YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wsign-conversion")
             CPU_SET ((size_t) i, &affinity);
-            JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+            YUP_END_IGNORE_WARNINGS_GCC_LIKE
         }
     }
 
-#if (! JUCE_ANDROID) && ((! (JUCE_LINUX || JUCE_BSD)) || ((__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2004))
+#if (! YUP_ANDROID) && ((! (YUP_LINUX || YUP_BSD)) || ((__GLIBC__ * 1000 + __GLIBC_MINOR__) >= 2004))
     pthread_setaffinity_np (pthread_self(), sizeof (cpu_set_t), &affinity);
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
     sched_setaffinity (gettid(), sizeof (cpu_set_t), &affinity);
 #else
     // NB: this call isn't really correct because it sets the affinity of the process,
@@ -1192,7 +1192,7 @@ void JUCE_CALLTYPE Thread::setCurrentThreadAffinityMask ([[maybe_unused]] uint32
 }
 
 //==============================================================================
-#if ! JUCE_WASM
+#if ! YUP_WASM
 bool DynamicLibrary::open (const String& name)
 {
     close();
@@ -1215,7 +1215,7 @@ void* DynamicLibrary::getFunction (const String& functionName) noexcept
 }
 
 //==============================================================================
-#if JUCE_LINUX || JUCE_ANDROID
+#if YUP_LINUX || YUP_ANDROID
 static String readPosixConfigFileValue (const char* file, const char* key)
 {
     StringArray lines;
@@ -1423,7 +1423,7 @@ public:
     int pipeHandle = 0;
     int exitCode = -1;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ActiveProcess)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ActiveProcess)
 };
 
 bool ChildProcess::start (const String& command, int streamFlags)
@@ -1463,4 +1463,4 @@ bool ChildProcess::start (const StringArray& args, const StringPairArray& enviro
 }
 #endif
 
-} // namespace juce
+} // namespace yup

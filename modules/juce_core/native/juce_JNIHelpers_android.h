@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -322,7 +322,7 @@ private:
     void release (JNIEnv*);
     void tryLoadingClassWithClassLoader (JNIEnv* env, jobject classLoader);
 
-    JUCE_DECLARE_NON_COPYABLE (JNIClassBase)
+    YUP_DECLARE_NON_COPYABLE (JNIClassBase)
 };
 
 //==============================================================================
@@ -489,7 +489,7 @@ STATICMETHOD (dumpReferenceTables, "dumpReferenceTables", "()V")
 DECLARE_JNI_CLASS (AndroidDebug, "android/os/Debug")
 #undef JNI_CLASS_MEMBERS
 
-#define JUCE_LOG_JNI_REFERENCES_TABLE getEnv()->CallStaticVoidMethod (AndroidDebug, AndroidDebug.dumpReferenceTables);
+#define YUP_LOG_JNI_REFERENCES_TABLE getEnv()->CallStaticVoidMethod (AndroidDebug, AndroidDebug.dumpReferenceTables);
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
 METHOD (getRotation, "getRotation", "()I")                                    \
@@ -997,7 +997,7 @@ inline bool jniCheckHasExceptionOccurredAndClear()
     auto* env = getEnv();
 
     const auto result = env->ExceptionCheck();
-#if JUCE_DEBUG
+#if YUP_DEBUG
     env->ExceptionDescribe();
 #endif
     env->ExceptionClear();
@@ -1221,7 +1221,7 @@ namespace detail
 
 template <auto Fn, typename Result, typename Class, typename... Args>
 inline constexpr auto generatedCallbackImpl =
-    juce::toFnPtr (JNICALL[](JNIEnv* env, jobject, jlong host, Args... args)->Result {
+    yup::toFnPtr (JNICALL[](JNIEnv* env, jobject, jlong host, Args... args)->Result {
         if (auto* object = reinterpret_cast<Class*> (host))
             return Fn (env, *object, args...);
 
@@ -1247,4 +1247,4 @@ constexpr auto generateCallbackImpl (Result (*) (JNIEnv*, const Class&, Args...)
 template <auto Fn>
 inline constexpr auto generatedCallback = detail::generateCallbackImpl<Fn> (Fn);
 
-} // namespace juce
+} // namespace yup

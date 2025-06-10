@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -87,7 +87,7 @@ private:
     std::atomic<State> state { State::uninitialised };
     std::function<void()> func = nullptr;
 
-    JUCE_DECLARE_NON_COPYABLE (ThreadValueInitialiser)
+    YUP_DECLARE_NON_COPYABLE (ThreadValueInitialiser)
 };
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -180,4 +180,4 @@ Span (const std::array<T, N>&) -> Span<const T, N>;
 template <typename Range>
 Span (Range&& r) -> Span<std::remove_pointer_t<decltype (std::data (r))>>;
 
-} // namespace juce
+} // namespace yup

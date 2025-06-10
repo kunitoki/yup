@@ -39,7 +39,7 @@
 
 #pragma once
 
-namespace juce::detail
+namespace yup::detail
 {
 
 struct MimeTypeTable
@@ -51,4 +51,4 @@ struct MimeTypeTable
     static StringArray getFileExtensionsForMimeType (const String& mimeType);
 };
 
-} // namespace juce::detail
+} // namespace yup::detail

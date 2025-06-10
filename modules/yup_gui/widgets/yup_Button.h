@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API Button : public Component
+class YUP_API Button : public Component
 {
 public:
     //==============================================================================

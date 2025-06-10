@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class TimeSliceThread;
@@ -56,7 +56,7 @@ class TimeSliceThread;
 
     @tags{Core}
 */
-class JUCE_API TimeSliceClient
+class YUP_API TimeSliceClient
 {
 public:
     /** Destructor. */
@@ -93,7 +93,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API TimeSliceThread : public Thread
+class YUP_API TimeSliceThread : public Thread
 {
 public:
     //==============================================================================
@@ -161,7 +161,7 @@ private:
 
     TimeSliceClient* getNextClient (int index) const;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimeSliceThread)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TimeSliceThread)
 };
 
-} // namespace juce
+} // namespace yup

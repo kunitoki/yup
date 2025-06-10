@@ -56,7 +56,7 @@ struct MultiTimerCallback final : public Timer
     MultiTimer& owner;
     const int timerID;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultiTimerCallback)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultiTimerCallback)
 };
 
 //==============================================================================

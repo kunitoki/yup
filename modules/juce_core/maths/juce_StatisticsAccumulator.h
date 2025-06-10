@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -143,7 +143,7 @@ private:
 
         operator FloatType() const noexcept { return sum; }
 
-        void JUCE_NO_ASSOCIATIVE_MATH_OPTIMISATIONS operator+= (FloatType value) noexcept
+        void YUP_NO_ASSOCIATIVE_MATH_OPTIMISATIONS operator+= (FloatType value) noexcept
         {
             FloatType correctedValue = value - error;
             FloatType newSum = sum + correctedValue;
@@ -161,4 +161,4 @@ private:
         maximum { -std::numeric_limits<FloatType>::infinity() };
 };
 
-} // namespace juce
+} // namespace yup

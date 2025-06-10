@@ -41,9 +41,10 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
-namespace {
+namespace
+{
 
 constexpr int maximumTimeoutMs { 30'000 };
 
@@ -71,19 +72,19 @@ TEST (HighResolutionTimerTests, StartStopTimer)
     WaitableEvent timerFiredTwice;
 
     TestTimer timer { [&, callbackCount = 0]() mutable
-                    {
-                        switch (++callbackCount)
-                        {
-                            case 1:
-                                timerFiredOnce.signal();
-                                return;
-                            case 2:
-                                timerFiredTwice.signal();
-                                return;
-                            default:
-                                return;
-                        }
-                    } };
+    {
+        switch (++callbackCount)
+        {
+            case 1:
+                timerFiredOnce.signal();
+                return;
+            case 2:
+                timerFiredTwice.signal();
+                return;
+            default:
+                return;
+        }
+    } };
 
     EXPECT_TRUE (! timer.isTimerRunning());
     EXPECT_TRUE (timer.getTimerInterval() == 0);
@@ -112,9 +113,9 @@ TEST (HighResolutionTimerTests, StartStopTimerWithInterval)
     };
 
     TestTimer timer { [&]
-                    {
-                        timerCallback (timer);
-                    } };
+    {
+        timerCallback (timer);
+    } };
     timer.startTimer (1);
     EXPECT_TRUE (stoppedTimer.wait (maximumTimeoutMs));
 }
@@ -126,27 +127,27 @@ TEST (HighResolutionTimerTests, RestartTimerFromTimerCallback)
     WaitableEvent timerFiredAfterRestart;
 
     TestTimer timer { [&, callbackCount = 0]() mutable
-                    {
-                        switch (++callbackCount)
-                        {
-                            case 1:
-                                EXPECT_TRUE (restartTimer.wait (maximumTimeoutMs));
-                                EXPECT_TRUE (timer.getTimerInterval() == 1);
+    {
+        switch (++callbackCount)
+        {
+            case 1:
+                EXPECT_TRUE (restartTimer.wait (maximumTimeoutMs));
+                EXPECT_TRUE (timer.getTimerInterval() == 1);
 
-                                timer.startTimer (2);
-                                EXPECT_TRUE (timer.getTimerInterval() == 2);
-                                timerRestarted.signal();
-                                return;
+                timer.startTimer (2);
+                EXPECT_TRUE (timer.getTimerInterval() == 2);
+                timerRestarted.signal();
+                return;
 
-                            case 2:
-                                EXPECT_TRUE (timer.getTimerInterval() == 2);
-                                timerFiredAfterRestart.signal();
-                                return;
+            case 2:
+                EXPECT_TRUE (timer.getTimerInterval() == 2);
+                timerFiredAfterRestart.signal();
+                return;
 
-                            default:
-                                return;
-                        }
-                    } };
+            default:
+                return;
+        }
+    } };
 
     timer.startTimer (1);
     EXPECT_TRUE (timer.getTimerInterval() == 1);
@@ -168,20 +169,20 @@ TEST (HighResolutionTimerTests, StopTimerFromTimerCallback)
     std::atomic<bool> timerCallbackFinished { false };
 
     TestTimer timer { [&, callbackCount = 0]() mutable
-                    {
-                        switch (++callbackCount)
-                        {
-                            case 1:
-                                timerCallbackStarted.signal();
-                                EXPECT_TRUE (stoppingTimer.wait (maximumTimeoutMs));
-                                Thread::sleep (10);
-                                timerCallbackFinished = true;
-                                return;
+    {
+        switch (++callbackCount)
+        {
+            case 1:
+                timerCallbackStarted.signal();
+                EXPECT_TRUE (stoppingTimer.wait (maximumTimeoutMs));
+                Thread::sleep (10);
+                timerCallbackFinished = true;
+                return;
 
-                            default:
-                                return;
-                        }
-                    } };
+            default:
+                return;
+        }
+    } };
 
     timer.startTimer (1);
     EXPECT_TRUE (timerCallbackStarted.wait (maximumTimeoutMs));
@@ -198,13 +199,13 @@ TEST (HighResolutionTimerTests, StopTimerFromTimerCallbackFirst)
     std::atomic<bool> timerCallbackFinished { false };
 
     TestTimer timer { [&]()
-                    {
-                        timer.stopTimer();
-                        stoppedFromInsideTimerCallback.signal();
-                        EXPECT_TRUE (stoppingFromOutsideTimerCallback.wait (maximumTimeoutMs));
-                        Thread::sleep (10);
-                        timerCallbackFinished = true;
-                    } };
+    {
+        timer.stopTimer();
+        stoppedFromInsideTimerCallback.signal();
+        EXPECT_TRUE (stoppingFromOutsideTimerCallback.wait (maximumTimeoutMs));
+        Thread::sleep (10);
+        timerCallbackFinished = true;
+    } };
 
     timer.startTimer (1);
     EXPECT_TRUE (stoppedFromInsideTimerCallback.wait (maximumTimeoutMs));
@@ -222,27 +223,27 @@ TEST (HighResolutionTimerTests, AdjustTimerIntervalFromOutsideTimerCallback)
     std::atomic<int> lastCallbackCount { 0 };
 
     TestTimer timer { [&, callbackCount = 0]() mutable
-                    {
-                        switch (++callbackCount)
-                        {
-                            case 1:
-                                EXPECT_TRUE (timer.getTimerInterval() == 1);
-                                timerCallbackStarted.signal();
-                                Thread::sleep (10);
-                                lastCallbackCount = 1;
-                                return;
+    {
+        switch (++callbackCount)
+        {
+            case 1:
+                EXPECT_TRUE (timer.getTimerInterval() == 1);
+                timerCallbackStarted.signal();
+                Thread::sleep (10);
+                lastCallbackCount = 1;
+                return;
 
-                            case 2:
-                                EXPECT_TRUE (timerRestarted.wait (maximumTimeoutMs));
-                                EXPECT_TRUE (timer.getTimerInterval() == 2);
-                                lastCallbackCount = 2;
-                                timerFiredAfterRestart.signal();
-                                return;
+            case 2:
+                EXPECT_TRUE (timerRestarted.wait (maximumTimeoutMs));
+                EXPECT_TRUE (timer.getTimerInterval() == 2);
+                lastCallbackCount = 2;
+                timerFiredAfterRestart.signal();
+                return;
 
-                            default:
-                                return;
-                        }
-                    } };
+            default:
+                return;
+        }
+    } };
 
     timer.startTimer (1);
     EXPECT_TRUE (timerCallbackStarted.wait (maximumTimeoutMs));
@@ -263,22 +264,22 @@ TEST (HighResolutionTimerTests, TimerCanBeRestartedExternallyAfterBeingStoppedIn
     WaitableEvent timerFiredAfterRestart;
 
     TestTimer timer { [&, callbackCount = 0]() mutable
-                    {
-                        switch (++callbackCount)
-                        {
-                            case 1:
-                                timer.stopTimer();
-                                timerStopped.signal();
-                                return;
+    {
+        switch (++callbackCount)
+        {
+            case 1:
+                timer.stopTimer();
+                timerStopped.signal();
+                return;
 
-                            case 2:
-                                timerFiredAfterRestart.signal();
-                                return;
+            case 2:
+                timerFiredAfterRestart.signal();
+                return;
 
-                            default:
-                                return;
-                        }
-                    } };
+            default:
+                return;
+        }
+    } };
 
     EXPECT_TRUE (! timer.isTimerRunning());
     timer.startTimer (1);
@@ -298,11 +299,11 @@ TEST (HighResolutionTimerTests, CallsToStartTimerAndGetTimerIntervalSucceedWhile
     WaitableEvent unblockTimer;
 
     TestTimer timer { [&]
-                    {
-                        timerBlocked.signal();
-                        unblockTimer.wait();
-                        timer.stopTimer();
-                    } };
+    {
+        timerBlocked.signal();
+        unblockTimer.wait();
+        timer.stopTimer();
+    } };
 
     timer.startTimer (1);
     timerBlocked.wait();

@@ -41,7 +41,7 @@
 /**
     Macro to enable bitwise operations for scoped enums (enum struct/class).
 
-    To use this, add the line JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (MyEnum)
+    To use this, add the line YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (MyEnum)
     after your enum declaration at file scope level.
 
     e.g. @code
@@ -53,7 +53,7 @@
         three   = 1 << 2
     };
 
-    JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (MyEnum)
+    YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS (MyEnum)
 
     MyEnum e = MyEnum::one | MyEnum::two;
 
@@ -66,9 +66,9 @@
 
     @endcode
 */
-#define JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(EnumType)  \
+#define YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS(EnumType)  \
 static_assert (std::is_enum_v<EnumType>,                      \
-               "JUCE_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS "  \
+               "YUP_DECLARE_SCOPED_ENUM_BITWISE_OPERATORS "  \
                "should only be used with enum types");        \
 constexpr auto operator& (EnumType a, EnumType b)             \
 {                                                             \
@@ -96,7 +96,7 @@ a = (a & b);                                                  \
 return a;                                                     \
 }
 
-namespace juce
+namespace yup
 {
 
 template <typename EnumType, std::enable_if_t<std::is_enum_v<EnumType>, int> = 0>
@@ -116,4 +116,4 @@ constexpr EnumType withBitValueCleared (EnumType enumValue, EnumType valueToRemo
 {
     return enumValue & ~valueToRemove;
 }
-} // namespace juce
+} // namespace yup

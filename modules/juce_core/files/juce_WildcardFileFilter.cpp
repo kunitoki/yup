@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 static void parseWildcard (const String& pattern, StringArray& result)
@@ -88,4 +88,4 @@ bool WildcardFileFilter::isDirectorySuitable (const File& file) const
     return matchWildcard (file, directoryWildcards);
 }
 
-} // namespace juce
+} // namespace yup

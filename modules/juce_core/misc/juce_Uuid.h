@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Uuid
+class YUP_API Uuid
 {
 public:
     //==============================================================================
@@ -156,7 +156,7 @@ public:
         this function to make a RFC 4122 version 5 compliant Uuid if you
         concatenate a Uuid defining a 'namespace' wih the 'name' (the data
         you are using) as follows.
- 
+
         @code
         String test ("www.example.org");
 
@@ -224,18 +224,18 @@ private:
     String getHexRegion (int, int) const;
     int compare (Uuid) const noexcept;
 
-    JUCE_LEAK_DETECTOR (Uuid)
+    YUP_LEAK_DETECTOR (Uuid)
 };
 
-} // namespace juce
+} // namespace yup
 
 #ifndef DOXYGEN
 namespace std
 {
 template <>
-struct hash<juce::Uuid>
+struct hash<yup::Uuid>
 {
-    size_t operator() (const juce::Uuid& u) const noexcept { return (size_t) u.hash(); }
+    size_t operator() (const yup::Uuid& u) const noexcept { return (size_t) u.hash(); }
 };
 } // namespace std
 #endif

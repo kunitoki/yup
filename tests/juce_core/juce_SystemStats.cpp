@@ -23,7 +23,7 @@
 
 #include <juce_core/juce_core.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST (SystemStats, JUCEVersion)
 {
@@ -35,19 +35,19 @@ TEST (SystemStats, OperatingSystemType)
 {
     auto systemType = SystemStats::getOperatingSystemType();
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::Windows);
-#elif JUCE_MAC
+#elif YUP_MAC
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::MacOSX);
-#elif JUCE_LINUX
+#elif YUP_LINUX
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::Linux);
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::Android);
-#elif JUCE_IOS
+#elif YUP_IOS
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::iOS);
-#elif JUCE_EMSCRIPTEN
+#elif YUP_EMSCRIPTEN
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::WebBrowser);
-#elif JUCE_WASM
+#elif YUP_WASM
     EXPECT_TRUE (systemType & SystemStats::OperatingSystemType::WASM);
 #else
     ignoreUnused (systemType);
@@ -80,8 +80,8 @@ TEST (SystemStatsTests, GetEnvironmentVariable)
 
 TEST (SystemStatsTests, DISABLED_SetAndRemoveEnvironmentVariable)
 {
-    String varName = "JUCE_TEST_ENV_VAR";
-    String varValue = "JUCE_TEST_VALUE";
+    String varName = "YUP_TEST_ENV_VAR";
+    String varValue = "YUP_TEST_VALUE";
 
     bool setResult = SystemStats::setEnvironmentVariable (varName, varValue);
     EXPECT_TRUE (setResult);
@@ -134,7 +134,7 @@ TEST (SystemStatsTests, DISABLED_DeviceInfo)
     String deviceDescription = SystemStats::getDeviceDescription();
     EXPECT_TRUE (deviceDescription.isNotEmpty());
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
     String deviceManufacturer = SystemStats::getDeviceManufacturer();
     EXPECT_TRUE (deviceManufacturer.isNotEmpty());
 #endif
@@ -163,7 +163,7 @@ TEST (SystemStatsTests, DISABLED_CpuInfo)
     int numPhysicalCpus = SystemStats::getNumPhysicalCpus();
     EXPECT_GT (numPhysicalCpus, 0);
 
-#if ! JUCE_WASM
+#if ! YUP_WASM
     int cpuSpeed = SystemStats::getCpuSpeedInMegahertz();
     EXPECT_GT (cpuSpeed, 0);
 
@@ -191,7 +191,7 @@ TEST (SystemStatsTests, CpuFeatures)
 
 TEST (SystemStatsTests, MemoryInfo)
 {
-#if ! JUCE_WASM
+#if ! YUP_WASM
     int memorySize = SystemStats::getMemorySizeInMegabytes();
     EXPECT_GT (memorySize, 0);
 #endif
@@ -202,7 +202,7 @@ TEST (SystemStatsTests, MemoryInfo)
 
 TEST (SystemStatsTests, GetStackBacktrace)
 {
-#if ! JUCE_WASM
+#if ! YUP_WASM
     String backtrace = SystemStats::getStackBacktrace();
     EXPECT_TRUE (backtrace.isNotEmpty());
 #endif
@@ -226,7 +226,7 @@ TEST (SystemStatsTests, IsRunningInAppExtensionSandbox)
     EXPECT_TRUE (isSandboxed == true || isSandboxed == false);
 }
 
-#if JUCE_MAC
+#if YUP_MAC
 TEST (SystemStatsTests, IsAppSandboxEnabled)
 {
     bool isSandboxEnabled = SystemStats::isAppSandboxEnabled();

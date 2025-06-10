@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API SocketOptions
+class YUP_API SocketOptions
 {
 public:
     /** The provided size will be used to configure the socket's SO_RCVBUF property. Increasing the
@@ -95,7 +95,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API StreamingSocket final
+class YUP_API StreamingSocket final
 {
 public:
     using Options = SocketOptions;
@@ -263,7 +263,7 @@ private:
 
     StreamingSocket (const String& hostname, int portNumber, int handle, const SocketOptions& options);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StreamingSocket)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StreamingSocket)
 };
 
 //==============================================================================
@@ -277,7 +277,7 @@ private:
 
     @tags{Core}
 */
-class JUCE_API DatagramSocket final
+class YUP_API DatagramSocket final
 {
 public:
     using Options = SocketOptions;
@@ -462,7 +462,7 @@ private:
     void* lastServerAddress = nullptr;
     mutable CriticalSection readLock;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DatagramSocket)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DatagramSocket)
 };
 
-} // namespace juce
+} // namespace yup

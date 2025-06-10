@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 Logger::Logger() {}
@@ -63,30 +63,30 @@ void Logger::writeToLog (const String& message)
         outputDebugString (message);
 }
 
-#if JUCE_LOG_ASSERTIONS || JUCE_DEBUG
-void JUCE_API JUCE_CALLTYPE logAssertion (const char* const filename, const int lineNum) noexcept
+#if YUP_LOG_ASSERTIONS || YUP_DEBUG
+void YUP_API YUP_CALLTYPE logAssertion (const char* const filename, const int lineNum) noexcept
 {
     String m ("JUCE Assertion failure in ");
     m << File::createFileWithoutCheckingPath (CharPointer_UTF8 (filename)).getFileName() << ':' << lineNum;
 
-#if JUCE_LOG_ASSERTIONS
+#if YUP_LOG_ASSERTIONS
     Logger::writeToLog (m);
 #else
-    JUCE_DBG (m);
+    YUP_DBG (m);
 #endif
 }
 
-void JUCE_API JUCE_CALLTYPE logAssertion (const wchar_t* const filename, const int lineNum) noexcept
+void YUP_API YUP_CALLTYPE logAssertion (const wchar_t* const filename, const int lineNum) noexcept
 {
     String m ("JUCE Assertion failure in ");
     m << File::createFileWithoutCheckingPath (filename).getFileName() << ':' << lineNum;
 
-#if JUCE_LOG_ASSERTIONS
+#if YUP_LOG_ASSERTIONS
     Logger::writeToLog (m);
 #else
-    JUCE_DBG (m);
+    YUP_DBG (m);
 #endif
 }
 #endif
 
-} // namespace juce
+} // namespace yup

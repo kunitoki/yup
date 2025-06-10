@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 void Logger::outputDebugString (const String& text)
@@ -46,18 +46,18 @@ void Logger::outputDebugString (const String& text)
 }
 
 //==============================================================================
-#ifdef JUCE_DLL_BUILD
-JUCE_API void* juceDLL_malloc (size_t sz)
+#ifdef YUP_DLL_BUILD
+YUP_API void* juceDLL_malloc (size_t sz)
 {
     return std::malloc (sz);
 }
 
-JUCE_API void juceDLL_free (void* block) { std::free (block); }
+YUP_API void juceDLL_free (void* block) { std::free (block); }
 #endif
 
 static int findNumberOfPhysicalCores() noexcept
 {
-#if JUCE_MINGW
+#if YUP_MINGW
     // Not implemented in MinGW
     jassertfalse;
 
@@ -88,17 +88,17 @@ static int findNumberOfPhysicalCores() noexcept
         return info.Relationship == RelationProcessorCore;
     });
 
-#endif // JUCE_MINGW
+#endif // YUP_MINGW
 }
 
 //==============================================================================
-#if JUCE_INTEL
-#if JUCE_MSVC && ! defined(__INTEL_COMPILER)
+#if YUP_INTEL
+#if YUP_MSVC && ! defined(__INTEL_COMPILER)
 #pragma intrinsic(__cpuid)
 #pragma intrinsic(__rdtsc)
 #endif
 
-#if JUCE_MINGW || JUCE_CLANG
+#if YUP_MINGW || YUP_CLANG
 static void callCPUID (int result[4], uint32 type)
 {
     uint32 la = (uint32) result[0], lb = (uint32) result[1],
@@ -109,7 +109,7 @@ static void callCPUID (int result[4], uint32 type)
          "xchg %%esi, %%ebx"
          : "=a"(la), "=S"(lb), "=c"(lc), "=d"(ld)
          : "a"(type)
-#if JUCE_64BIT
+#if YUP_64BIT
                ,
            "b"(lb),
            "c"(lc),
@@ -182,9 +182,9 @@ void CPUInformation::initialise() noexcept
     hasSSE41 = (info[2] & (1 << 19)) != 0;
     hasSSE42 = (info[2] & (1 << 20)) != 0;
 
-    JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wshift-sign-overflow")
+    YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wshift-sign-overflow")
     has3DNow = (info[1] & (1 << 31)) != 0;
-    JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+    YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
     callCPUID (info, 0x80000001);
     hasFMA4 = (info[2] & (1 << 16)) != 0;
@@ -211,7 +211,7 @@ void CPUInformation::initialise() noexcept
     if (numPhysicalCPUs <= 0)
         numPhysicalCPUs = numLogicalCPUs;
 }
-#elif JUCE_ARM
+#elif YUP_ARM
 String SystemStats::getCpuVendor()
 {
     static const auto cpuVendor = []
@@ -255,7 +255,7 @@ void CPUInformation::initialise() noexcept
 #error Unknown CPU architecture type
 #endif
 
-#if JUCE_MSVC && JUCE_CHECK_MEMORY_LEAKS
+#if YUP_MSVC && YUP_CHECK_MEMORY_LEAKS
 struct DebugFlagsInitialiser
 {
     DebugFlagsInitialiser()
@@ -268,7 +268,7 @@ static DebugFlagsInitialiser debugFlagsInitialiser;
 #endif
 
 //==============================================================================
-#if JUCE_MINGW
+#if YUP_MINGW
 static uint64 getWindowsVersion()
 {
     auto filename = _T ("kernel32.dll");
@@ -329,7 +329,7 @@ String SystemStats::getOperatingSystemVersionString()
 
 SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 {
-#if JUCE_MINGW
+#if YUP_MINGW
     const auto v = getWindowsVersion();
     const auto major = (v >> 48) & 0xffff;
     const auto minor = (v >> 32) & 0xffff;
@@ -413,7 +413,7 @@ String SystemStats::getDeviceManufacturer()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-#if JUCE_64BIT
+#if YUP_64BIT
     return true;
 #else
     typedef BOOL (WINAPI * LPFN_ISWOW64PROCESS) (HANDLE, PBOOL);
@@ -481,12 +481,12 @@ public:
         // app less demanding on the CPU.
         // For more info, see win32 documentation about the timeBeginPeriod
         // function.
-#ifndef JUCE_WIN32_TIMER_PERIOD
-#define JUCE_WIN32_TIMER_PERIOD 1
+#ifndef YUP_WIN32_TIMER_PERIOD
+#define YUP_WIN32_TIMER_PERIOD 1
 #endif
 
-#if JUCE_WIN32_TIMER_PERIOD > 0
-        [[maybe_unused]] auto res = timeBeginPeriod (JUCE_WIN32_TIMER_PERIOD);
+#if YUP_WIN32_TIMER_PERIOD > 0
+        [[maybe_unused]] auto res = timeBeginPeriod (YUP_WIN32_TIMER_PERIOD);
         jassert (res == TIMERR_NOERROR);
 #endif
 
@@ -523,11 +523,11 @@ double Time::getMillisecondCounterHiRes() noexcept { return hiResCounterHandler.
 //==============================================================================
 static int64 juce_getClockCycleCounter() noexcept
 {
-#if JUCE_MSVC
-#if JUCE_INTEL
+#if YUP_MSVC
+#if YUP_INTEL
     // MS intrinsics version...
     return (int64) __rdtsc();
-#elif JUCE_ARM
+#elif YUP_ARM
 #if defined(_M_ARM)
     return __rdpmccntr64();
 #elif defined(_M_ARM64)
@@ -536,8 +536,8 @@ static int64 juce_getClockCycleCounter() noexcept
 #error Unknown arm architecture
 #endif
 #endif
-#elif JUCE_GCC || JUCE_CLANG
-#if JUCE_INTEL
+#elif YUP_GCC || YUP_CLANG
+#if YUP_INTEL
     // GNU inline asm version...
     unsigned int hi = 0, lo = 0;
 
@@ -553,7 +553,7 @@ static int64 juce_getClockCycleCounter() noexcept
         : "cc", "eax", "ebx", "ecx", "edx", "memory");
 
     return (int64) ((((uint64) hi) << 32) | lo);
-#elif JUCE_ARM
+#elif YUP_ARM
     int64 retval;
 
     __asm__ __volatile__ ("mrs %0, cntvct_el0"
@@ -664,7 +664,7 @@ String SystemStats::getUserRegion() { return getLocaleValue (LOCALE_USER_DEFAULT
 String SystemStats::getDisplayLanguage()
 {
     DynamicLibrary dll ("kernel32.dll");
-    JUCE_LOAD_WINAPI_FUNCTION (dll,
+    YUP_LOAD_WINAPI_FUNCTION (dll,
                                GetUserPreferredUILanguages,
                                getUserPreferredUILanguages,
                                BOOL,
@@ -960,4 +960,4 @@ StringPairArray SystemStats::getEnvironmentVariables()
     return environmentVariables;
 }
 
-} // namespace juce
+} // namespace yup

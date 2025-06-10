@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 enum VariantStreamMarkers
@@ -1246,4 +1246,4 @@ var::NativeFunctionArgs::NativeFunctionArgs (const var& t, const var* args, int 
 {
 }
 
-} // namespace juce
+} // namespace yup

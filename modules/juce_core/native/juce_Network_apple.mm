@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 void MACAddress::findAllAddresses(Array<MACAddress>& result)
@@ -78,17 +78,17 @@ void MACAddress::findAllAddresses(Array<MACAddress>& result)
 }
 
 //==============================================================================
-bool JUCE_CALLTYPE Process::openEmailWithAttachments([[maybe_unused]] const String& targetEmailAddress,
+bool YUP_CALLTYPE Process::openEmailWithAttachments([[maybe_unused]] const String& targetEmailAddress,
                                                      [[maybe_unused]] const String& emailSubject,
                                                      [[maybe_unused]] const String& bodyText,
                                                      [[maybe_unused]] const StringArray& filesToAttach)
 {
-#if JUCE_IOS
+#if YUP_IOS
     // xxx probably need to use MFMailComposeViewController
     jassertfalse;
     return false;
 #else
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         String script;
         script << "tell application \"Mail\"\r\n"
@@ -166,14 +166,14 @@ class URLConnectionStateBase : public Thread
     bool hasBeenCancelled = false;
 
    private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(URLConnectionStateBase)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(URLConnectionStateBase)
 };
 
-#if JUCE_MAC
+#if YUP_MAC
 // This version is only used for backwards-compatibility with older OSX targets,
 // so we'll turn off deprecation warnings. This code will be removed at some point
 // in the future.
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wdeprecated")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wdeprecated")
 class URLConnectionStatePreYosemite final : public URLConnectionStateBase
 {
    public:
@@ -301,7 +301,7 @@ class URLConnectionStatePreYosemite final : public URLConnectionStateBase
 
     void didFailWithError([[maybe_unused]] NSError* error)
     {
-        JUCE_DBG(nsStringToJuce([error description]));
+        YUP_DBG(nsStringToJuce([error description]));
 
         nsUrlErrorCode = [error code];
         hasFailed = true;
@@ -342,7 +342,7 @@ class URLConnectionStatePreYosemite final : public URLConnectionStateBase
 
         while (!threadShouldExit())
         {
-            JUCE_AUTORELEASEPOOL
+            YUP_AUTORELEASEPOOL
             {
                 [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
             }
@@ -406,9 +406,9 @@ class URLConnectionStatePreYosemite final : public URLConnectionStateBase
 
     NSURLConnection* connection = nil;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(URLConnectionStatePreYosemite)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(URLConnectionStatePreYosemite)
 };
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 #endif
 
 //==============================================================================
@@ -552,9 +552,9 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
         if (isBeingDeleted)
             return;
 
-#if JUCE_DEBUG
+#if YUP_DEBUG
         if (error != nullptr)
-            JUCE_DBG(nsStringToJuce([error description]));
+            YUP_DBG(nsStringToJuce([error description]));
 #endif
 
         hasFailed = (error != nullptr);
@@ -623,7 +623,7 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
     struct DelegateClass final : public ObjCClass<NSObject>
     {
         DelegateClass()
-            : ObjCClass<NSObject>("JUCE_URLDelegate_")
+            : ObjCClass<NSObject>("YUP_URLDelegate_")
         {
             addIvar<URLConnectionState*>("state");
 
@@ -685,11 +685,11 @@ class API_AVAILABLE(macos(10.9)) URLConnectionState final : public URLConnection
     NSURLSessionTask* task = nil;
     bool isBeingDeleted = false;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(URLConnectionState)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(URLConnectionState)
 };
 
 //==============================================================================
-#if JUCE_IOS
+#if YUP_IOS
 struct BackgroundDownloadTask final : public URL::DownloadTask
 {
     BackgroundDownloadTask(const URL& urlToUse,
@@ -710,9 +710,9 @@ struct BackgroundDownloadTask final : public URL::DownloadTask
 
         jassert(nsUrl != nullptr);
 
-        JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wnullable-to-nonnull-conversion")
+        YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wnullable-to-nonnull-conversion")
         NSMutableURLRequest* request = [[NSMutableURLRequest alloc] initWithURL:nsUrl];
-        JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+        YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
         if (options.usePost)
             [request setHTTPMethod:@"POST"];
@@ -898,7 +898,7 @@ struct BackgroundDownloadTask final : public URL::DownloadTask
     struct DelegateClass final : public ObjCClass<NSObject<NSURLSessionDelegate>>
     {
         DelegateClass()
-            : ObjCClass<NSObject<NSURLSessionDelegate>>("JUCE_URLDelegate_")
+            : ObjCClass<NSObject<NSURLSessionDelegate>>("YUP_URLDelegate_")
         {
             addIvar<BackgroundDownloadTask*>("state");
 
@@ -1072,7 +1072,7 @@ class WebInputStream::Pimpl
         if (finished || isError())
             return 0;
 
-        JUCE_AUTORELEASEPOOL
+        YUP_AUTORELEASEPOOL
         {
             const int bytesRead = connection->read(static_cast<char*>(buffer), bytesToRead);
             position += bytesRead;
@@ -1174,7 +1174,7 @@ class WebInputStream::Pimpl
 
                     if (@available(macOS 10.10, *))
                         connection = std::make_unique<URLConnectionState>(req, numRedirectsToFollow);
-#if JUCE_MAC
+#if YUP_MAC
                     else
                         connection = std::make_unique<URLConnectionStatePreYosemite>(req, numRedirectsToFollow);
 #endif
@@ -1183,7 +1183,7 @@ class WebInputStream::Pimpl
         }
     }
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Pimpl)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Pimpl)
 };
 
-} // namespace juce
+} // namespace yup

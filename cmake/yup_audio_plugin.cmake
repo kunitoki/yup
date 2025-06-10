@@ -68,8 +68,8 @@ function (yup_audio_plugin)
 
     target_compile_definitions (${target_name}_shared INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        JUCE_MODAL_LOOPS_PERMITTED=1
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YUP_MODAL_LOOPS_PERMITTED=1
         ${additional_definitions}
         ${YUP_ARG_DEFINITIONS})
 
@@ -116,7 +116,7 @@ function (yup_audio_plugin)
 
         target_compile_definitions (${target_name}_clap_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_CLAP=1
-            JUCE_STANDALONE_APPLICATION=0)
+            YUP_STANDALONE_APPLICATION=0)
 
         target_link_libraries (${target_name}_clap_plugin PRIVATE
             ${target_name}_shared
@@ -172,7 +172,7 @@ function (yup_audio_plugin)
 
         target_compile_definitions (${target_name}_vst3_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_VST3=1
-            JUCE_STANDALONE_APPLICATION=0)
+            YUP_STANDALONE_APPLICATION=0)
 
         target_link_libraries (${target_name}_vst3_plugin PRIVATE
             ${target_name}_shared
@@ -235,7 +235,7 @@ function (yup_audio_plugin)
                 ${target_name}_shared
                 ${target_name}_standalone
                 yup_audio_plugin_client
-                juce_audio_devices
+                yup_audio_devices
                 ${additional_libraries}
                 ${YUP_ARG_MODULES})
     endif()

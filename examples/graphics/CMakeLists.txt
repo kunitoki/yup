@@ -54,7 +54,7 @@ yup_standalone_app (
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/data/RobotoFlex-VariableFont.ttf@data/RobotoFlex-VariableFont.ttf"
     MODULES
-        juce_audio_devices
+        yup_audio_devices
         yup_gui
         yup_audio_processors
         libpng

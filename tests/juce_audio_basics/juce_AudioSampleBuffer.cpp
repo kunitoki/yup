@@ -21,14 +21,14 @@
 
 #include <gtest/gtest.h>
 
-#include <juce_audio_basics/juce_audio_basics.h>
+#include <yup_audio_basics/yup_audio_basics.h>
 
 #include <cmath>
 #include <algorithm>
 #include <vector>
 #include <cstring>
 
-using namespace juce;
+using namespace yup;
 
 template <class T>
 class AudioBufferTests : public ::testing::Test

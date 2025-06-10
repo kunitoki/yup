@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 namespace detail
@@ -449,4 +449,4 @@ template <typename Range, typename Index = detail::withAdlSize::AdlSignedSize<Ra
                       EnumerateIterator { end (range), startingValue });
 }
 
-} // namespace juce
+} // namespace yup

@@ -37,9 +37,9 @@
   ==============================================================================
 */
 
-#if JUCE_ENABLE_ALLOCATION_HOOKS
+#if YUP_ENABLE_ALLOCATION_HOOKS
 
-namespace juce
+namespace yup
 {
 
 class AllocationHooks
@@ -86,6 +86,6 @@ private:
     size_t calls = 0;
 };
 
-} // namespace juce
+} // namespace yup
 
 #endif

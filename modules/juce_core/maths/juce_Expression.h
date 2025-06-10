@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -57,7 +57,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API Expression
+class YUP_API Expression
 {
 public:
     //==============================================================================
@@ -122,7 +122,7 @@ public:
     /** When evaluating an Expression object, this class is used to resolve symbols and
         perform functions that the expression uses.
     */
-    class JUCE_API Scope
+    class YUP_API Scope
     {
     public:
         Scope();
@@ -266,4 +266,4 @@ private:
     explicit Expression (Term*);
 };
 
-} // namespace juce
+} // namespace yup

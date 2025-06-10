@@ -47,7 +47,7 @@
 
 #include <juce_core/native/juce_ObjCHelpers_apple.h>
 
-using namespace juce;
+using namespace yup;
 
 TEST(ObjCHelpers, Range)
 {

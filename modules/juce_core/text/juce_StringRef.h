@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -75,7 +75,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API StringRef final
+class YUP_API StringRef final
 {
 public:
     /** Creates a StringRef from a raw string literal.
@@ -155,7 +155,7 @@ public:
     /** The text that is referenced. */
     String::CharPointerType text;
 
-#if JUCE_STRING_UTF_TYPE != 8 && ! defined(DOXYGEN)
+#if YUP_STRING_UTF_TYPE != 8 && ! defined(DOXYGEN)
     // Sorry, non-UTF8 people, you're unable to take advantage of StringRef, because
     // you've chosen a character encoding that doesn't match C++ string literals.
     String stringCopy;
@@ -164,17 +164,17 @@ public:
 
 //==============================================================================
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator== (const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator== (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator!= (const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator!= (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator<(const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator<(const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator<= (const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator<= (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator> (const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator> (const String& string1, StringRef string2) noexcept;
 /** Case-sensitive comparison of two strings. */
-JUCE_API bool JUCE_CALLTYPE operator>= (const String& string1, StringRef string2) noexcept;
+YUP_API bool YUP_CALLTYPE operator>= (const String& string1, StringRef string2) noexcept;
 
 inline String operator+ (String s1, StringRef s2) { return s1 += String (s2.text); }
 
@@ -184,4 +184,4 @@ inline String operator+ (const char* s1, StringRef s2) { return String (s1) + St
 
 inline String operator+ (StringRef s1, const char* s2) { return String (s1.text) + String (s2); }
 
-} // namespace juce
+} // namespace yup

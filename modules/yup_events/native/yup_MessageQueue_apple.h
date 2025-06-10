@@ -46,7 +46,7 @@ class InternalMessageQueue
 public:
     InternalMessageQueue()
     {
-#if JUCE_IOS
+#if YUP_IOS
         runLoop = CFRunLoopGetCurrent();
 #else
         runLoop = CFRunLoopGetMain();
@@ -94,13 +94,13 @@ private:
         if (nextMessage == nullptr)
             return false;
 
-        JUCE_AUTORELEASEPOOL
+        YUP_AUTORELEASEPOOL
         {
-            JUCE_TRY
+            YUP_TRY
             {
                 nextMessage->messageCallback();
             }
-            JUCE_CATCH_EXCEPTION
+            YUP_CATCH_EXCEPTION
         }
 
         return true;

@@ -43,7 +43,7 @@ namespace yup
 YUPApplicationBase::CreateInstanceFunction YUPApplicationBase::createInstance = nullptr;
 YUPApplicationBase* YUPApplicationBase::appInstance = nullptr;
 
-#if JUCE_IOS
+#if YUP_IOS
 void* YUPApplicationBase::iOSCustomDelegate = nullptr;
 #endif
 
@@ -67,7 +67,7 @@ void YUPApplicationBase::setApplicationReturnValue (const int newReturnValue) no
 // This is called on the Mac and iOS where the OS doesn't allow the stack to unwind on shutdown..
 void YUPApplicationBase::appWillTerminateByForce()
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         {
             const std::unique_ptr<YUPApplicationBase> app (appInstance);
@@ -103,11 +103,11 @@ void YUPApplicationBase::sendUnhandledException (const std::exception* const e,
 }
 
 //==============================================================================
-#if ! (JUCE_IOS || JUCE_ANDROID || JUCE_EMSCRIPTEN)
-#define JUCE_HANDLE_MULTIPLE_INSTANCES 1
+#if ! (YUP_IOS || YUP_ANDROID || YUP_EMSCRIPTEN)
+#define YUP_HANDLE_MULTIPLE_INSTANCES 1
 #endif
 
-#if JUCE_HANDLE_MULTIPLE_INSTANCES
+#if YUP_HANDLE_MULTIPLE_INSTANCES
 struct YUPApplicationBase::MultipleInstanceHandler final : public ActionListener
 {
     MultipleInstanceHandler (const String& appName)
@@ -144,7 +144,7 @@ struct YUPApplicationBase::MultipleInstanceHandler final : public ActionListener
 private:
     InterProcessLock appLock;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultipleInstanceHandler)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultipleInstanceHandler)
 };
 
 bool YUPApplicationBase::sendCommandLineToPreexistingInstance()
@@ -162,9 +162,9 @@ struct YUPApplicationBase::MultipleInstanceHandler
 #endif
 
 //==============================================================================
-#if JUCE_WINDOWS && ! defined(_CONSOLE)
+#if YUP_WINDOWS && ! defined(_CONSOLE)
 
-String JUCE_CALLTYPE YUPApplicationBase::getCommandLineParameters()
+String YUP_CALLTYPE YUPApplicationBase::getCommandLineParameters()
 {
     return CharacterFunctions::findEndOfToken (CharPointer_UTF16 (GetCommandLineW()),
                                                CharPointer_UTF16 (L" "),
@@ -172,7 +172,7 @@ String JUCE_CALLTYPE YUPApplicationBase::getCommandLineParameters()
         .findEndOfWhitespace();
 }
 
-StringArray JUCE_CALLTYPE YUPApplicationBase::getCommandLineParameterArray()
+StringArray YUP_CALLTYPE YUPApplicationBase::getCommandLineParameterArray()
 {
     StringArray s;
     int argc = 0;
@@ -188,15 +188,15 @@ StringArray JUCE_CALLTYPE YUPApplicationBase::getCommandLineParameterArray()
 
 #else
 
-#if JUCE_IOS && JUCE_MODULE_AVAILABLE_yup_gui
+#if YUP_IOS && YUP_MODULE_AVAILABLE_yup_gui
 extern int juce_iOSMain (int argc, const char* argv[], void* classPtr);
 #endif
 
-#if JUCE_MAC
+#if YUP_MAC
 extern void initialiseNSApplication();
 #endif
 
-#if JUCE_WINDOWS || JUCE_ANDROID
+#if YUP_WINDOWS || YUP_ANDROID
 const char* const* juce_argv = nullptr;
 int juce_argc = 0;
 #else
@@ -231,16 +231,16 @@ StringArray YUPApplicationBase::getCommandLineParameterArray()
 
 int YUPApplicationBase::main (int argc, const char* argv[])
 {
-    JUCE_AUTORELEASEPOOL
+    YUP_AUTORELEASEPOOL
     {
         juce_argc = argc;
         juce_argv = argv;
 
-#if JUCE_MAC
+#if YUP_MAC
         initialiseNSApplication();
 #endif
 
-#if JUCE_IOS && JUCE_MODULE_AVAILABLE_yup_gui
+#if YUP_IOS && YUP_MODULE_AVAILABLE_yup_gui
         return juce_iOSMain (argc, argv, iOSCustomDelegate);
 #else
 
@@ -252,13 +252,13 @@ int YUPApplicationBase::main (int argc, const char* argv[])
 #endif
 
 //==============================================================================
-#if JUCE_ANDROID
+#if YUP_ANDROID
 extern "C" jint JNIEXPORT juce_JNI_OnLoad (JavaVM* vm, void*);
 #endif
 
 int YUPApplicationBase::main()
 {
-#if JUCE_ANDROID
+#if YUP_ANDROID
     auto env = (JNIEnv*) SDL_AndroidGetJNIEnv();
     auto clazz = (jobject) SDL_AndroidGetActivity();
     JavaVM* vm = nullptr;
@@ -281,12 +281,12 @@ int YUPApplicationBase::main()
     if (! app->initialiseApp())
         return app->shutdownApp();
 
-    JUCE_TRY
+    YUP_TRY
     {
         // loop until a quit message is received..
         MessageManager::getInstance()->runDispatchLoop();
     }
-    JUCE_CATCH_EXCEPTION
+    YUP_CATCH_EXCEPTION
 
     return app->shutdownApp();
 }
@@ -294,15 +294,15 @@ int YUPApplicationBase::main()
 //==============================================================================
 bool YUPApplicationBase::initialiseApp()
 {
-#if JUCE_HANDLE_MULTIPLE_INSTANCES
+#if YUP_HANDLE_MULTIPLE_INSTANCES
     if ((! moreThanOneInstanceAllowed()) && sendCommandLineToPreexistingInstance())
     {
-        JUCE_DBG ("Another instance is running - quitting...");
+        YUP_DBG ("Another instance is running - quitting...");
         return false;
     }
 #endif
 
-#if JUCE_WINDOWS && (! defined(_CONSOLE)) && (! JUCE_MINGW)
+#if YUP_WINDOWS && (! defined(_CONSOLE)) && (! YUP_MINGW)
     if (isStandaloneApp() && AttachConsole (ATTACH_PARENT_PROCESS) != 0)
     {
         // if we've launched a GUI app from cmd.exe or PowerShell, we need this to enable printf etc.
@@ -327,7 +327,7 @@ bool YUPApplicationBase::initialiseApp()
     if (MessageManager::getInstance()->hasStopMessageBeenSent())
         return false;
 
-#if JUCE_HANDLE_MULTIPLE_INSTANCES
+#if YUP_HANDLE_MULTIPLE_INSTANCES
     if (auto* mih = multipleInstanceHandler.get())
         MessageManager::getInstance()->registerBroadcastListener (mih);
 #endif
@@ -339,17 +339,17 @@ int YUPApplicationBase::shutdownApp()
 {
     jassert (YUPApplicationBase::getInstance() == this);
 
-#if JUCE_HANDLE_MULTIPLE_INSTANCES
+#if YUP_HANDLE_MULTIPLE_INSTANCES
     if (auto* mih = multipleInstanceHandler.get())
         MessageManager::getInstance()->deregisterBroadcastListener (mih);
 #endif
 
-    JUCE_TRY
+    YUP_TRY
     {
         // give the app a chance to clean up..
         shutdown();
     }
-    JUCE_CATCH_EXCEPTION
+    YUP_CATCH_EXCEPTION
 
     multipleInstanceHandler.reset();
     return getApplicationReturnValue();

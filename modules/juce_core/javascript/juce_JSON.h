@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API JSON
+class YUP_API JSON
 {
 public:
     //==============================================================================
@@ -206,4 +206,4 @@ private:
     JSON() = delete; // This class can't be instantiated - just use its static methods.
 };
 
-} // namespace juce
+} // namespace yup

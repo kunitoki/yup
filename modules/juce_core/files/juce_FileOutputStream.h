@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API FileOutputStream : public OutputStream
+class YUP_API FileOutputStream : public OutputStream
 {
 public:
     //==============================================================================
@@ -136,7 +136,7 @@ private:
     int64 setPositionInternal (int64);
     ssize_t writeInternal (const void*, size_t);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileOutputStream)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileOutputStream)
 };
 
-} // namespace juce
+} // namespace yup

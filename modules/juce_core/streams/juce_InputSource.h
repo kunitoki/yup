@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API InputSource
+class YUP_API InputSource
 {
 public:
     //==============================================================================
@@ -82,7 +82,7 @@ public:
 
 private:
     //==============================================================================
-    JUCE_LEAK_DETECTOR (InputSource)
+    YUP_LEAK_DETECTOR (InputSource)
 };
 
-} // namespace juce
+} // namespace yup

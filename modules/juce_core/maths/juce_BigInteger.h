@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -52,7 +52,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API BigInteger
+class YUP_API BigInteger
 {
 public:
     //==============================================================================
@@ -352,10 +352,10 @@ private:
     void shiftLeft (int bits, int startBit);
     void shiftRight (int bits, int startBit);
 
-    JUCE_LEAK_DETECTOR (BigInteger)
+    YUP_LEAK_DETECTOR (BigInteger)
 };
 
 /** Writes a BigInteger to an OutputStream as a UTF8 decimal string. */
-OutputStream& JUCE_CALLTYPE operator<< (OutputStream& stream, const BigInteger& value);
+OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, const BigInteger& value);
 
-} // namespace juce
+} // namespace yup

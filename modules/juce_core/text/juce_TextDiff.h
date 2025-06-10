@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /**
@@ -50,7 +50,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API TextDiff
+class YUP_API TextDiff
 {
 public:
     /** Creates a set of diffs for converting the original string into the target. */
@@ -88,4 +88,4 @@ public:
     Array<Change> changes;
 };
 
-} // namespace juce
+} // namespace yup

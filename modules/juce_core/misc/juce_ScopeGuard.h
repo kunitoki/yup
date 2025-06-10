@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 /** An easy way to ensure that a function is called at the end of the current
@@ -129,10 +129,10 @@ public:
     */
     void release();
 
-    JUCE_DECLARE_NON_COPYABLE (ErasedScopeGuard)
+    YUP_DECLARE_NON_COPYABLE (ErasedScopeGuard)
 
 private:
     std::function<void()> detach;
 };
 
-} // namespace juce
+} // namespace yup

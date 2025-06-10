@@ -98,7 +98,7 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API YUPApplicationBase
+class YUP_API YUPApplicationBase
 {
 protected:
     //==============================================================================
@@ -255,12 +255,12 @@ public:
     /** Returns the application's command line parameters as a set of strings.
         @see getCommandLineParameters
     */
-    static StringArray JUCE_CALLTYPE getCommandLineParameterArray();
+    static StringArray YUP_CALLTYPE getCommandLineParameterArray();
 
     /** Returns the application's command line parameters as a single string.
         @see getCommandLineParameterArray
     */
-    static String JUCE_CALLTYPE getCommandLineParameters();
+    static String YUP_CALLTYPE getCommandLineParameters();
 
     //==============================================================================
     /** Sets the value that should be returned as the application's exit code when the
@@ -301,13 +301,13 @@ public:
     using CreateInstanceFunction = YUPApplicationBase* (*) ();
     static CreateInstanceFunction createInstance;
 
-#if JUCE_IOS
+#if YUP_IOS
     static void* iOSCustomDelegate;
 #endif
 
     virtual bool initialiseApp();
     int shutdownApp();
-    static void JUCE_CALLTYPE sendUnhandledException (const std::exception*, const char* sourceFile, int lineNumber);
+    static void YUP_CALLTYPE sendUnhandledException (const std::exception*, const char* sourceFile, int lineNumber);
     bool sendCommandLineToPreexistingInstance();
 #endif
 
@@ -320,29 +320,29 @@ private:
     struct MultipleInstanceHandler;
     std::unique_ptr<MultipleInstanceHandler> multipleInstanceHandler;
 
-    JUCE_DECLARE_NON_COPYABLE (YUPApplicationBase)
+    YUP_DECLARE_NON_COPYABLE (YUPApplicationBase)
 };
 
 //==============================================================================
-#if JUCE_CATCH_UNHANDLED_EXCEPTIONS || DOXYGEN
+#if YUP_CATCH_UNHANDLED_EXCEPTIONS || DOXYGEN
 
-/** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
+/** The YUP_TRY/YUP_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
      the YUPApplicationBase::sendUnhandledException() method.
-     This functionality can be enabled with the JUCE_CATCH_UNHANDLED_EXCEPTIONS macro.
+     This functionality can be enabled with the YUP_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
-#define JUCE_TRY try
+#define YUP_TRY try
 
-/** The JUCE_TRY/JUCE_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
+/** The YUP_TRY/YUP_CATCH_EXCEPTION wrappers can be used to pass any uncaught exceptions to
      the YUPApplicationBase::sendUnhandledException() method.
-     This functionality can be enabled with the JUCE_CATCH_UNHANDLED_EXCEPTIONS macro.
+     This functionality can be enabled with the YUP_CATCH_UNHANDLED_EXCEPTIONS macro.
  */
-#define JUCE_CATCH_EXCEPTION                                                                                      \
+#define YUP_CATCH_EXCEPTION                                                                                        \
     catch (const std::exception& e) { yup::YUPApplicationBase::sendUnhandledException (&e, __FILE__, __LINE__); } \
     catch (...) { yup::YUPApplicationBase::sendUnhandledException (nullptr, __FILE__, __LINE__); }
 
 #else
-#define JUCE_TRY
-#define JUCE_CATCH_EXCEPTION
+#define YUP_TRY
+#define YUP_CATCH_EXCEPTION
 #endif
 
 } // namespace yup

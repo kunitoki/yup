@@ -58,11 +58,11 @@ namespace yup
 
     @tags{Events}
 */
-class JUCE_API ChildProcessManager final : private DeletedAtShutdown
+class YUP_API ChildProcessManager final : private DeletedAtShutdown
 {
 public:
 #ifndef DOXYGEN
-    JUCE_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (ChildProcessManager)
+    YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (ChildProcessManager)
 #endif
 
     /** Creates a new ChildProcess and starts it with the provided arguments.

@@ -37,14 +37,14 @@
   ==============================================================================
 */
 
-#if JUCE_BELA
+#if YUP_BELA
 extern "C" int cobalt_thread_mode();
 #endif
 
-namespace juce
+namespace yup
 {
 
-#if ! JUCE_BSD
+#if ! YUP_BSD
 static String getCpuInfo (const char* key)
 {
     return readPosixConfigFileValue ("/proc/cpuinfo", key);
@@ -83,7 +83,7 @@ String SystemStats::getOperatingSystemVersionString()
 
 bool SystemStats::isOperatingSystem64Bit()
 {
-#if JUCE_64BIT
+#if YUP_64BIT
     return true;
 #else
     //xxx not sure how to find this out?..
@@ -94,7 +94,7 @@ bool SystemStats::isOperatingSystem64Bit()
 //==============================================================================
 String SystemStats::getDeviceDescription()
 {
-#if JUCE_BSD
+#if YUP_BSD
     int mib[] = {
         CTL_HW,
         HW_MACHINE
@@ -120,7 +120,7 @@ String SystemStats::getDeviceManufacturer()
 
 String SystemStats::getCpuVendor()
 {
-#if JUCE_BSD
+#if YUP_BSD
     return {};
 #else
     auto v = getCpuInfo ("vendor_id");
@@ -134,7 +134,7 @@ String SystemStats::getCpuVendor()
 
 String SystemStats::getCpuModel()
 {
-#if JUCE_BSD
+#if YUP_BSD
     int mib[] = {
         CTL_HW,
         HW_MODEL
@@ -155,7 +155,7 @@ String SystemStats::getCpuModel()
 
 int SystemStats::getCpuSpeedInMegahertz()
 {
-#if JUCE_BSD
+#if YUP_BSD
     int32 clockRate = 0;
     auto clockRateSize = sizeof (clockRate);
     auto result = sysctlbyname ("hw.clockrate", &clockRate, &clockRateSize, nullptr, 0);
@@ -167,7 +167,7 @@ int SystemStats::getCpuSpeedInMegahertz()
 
 int SystemStats::getMemorySizeInMegabytes()
 {
-#if JUCE_BSD
+#if YUP_BSD
     int mib[] = {
         CTL_HW,
         HW_PHYSMEM
@@ -220,7 +220,7 @@ String SystemStats::getComputerName()
 
 String SystemStats::getUserLanguage()
 {
-#if JUCE_BSD
+#if YUP_BSD
     if (auto langEnv = getenv ("LANG"))
         return String::fromUTF8 (langEnv).upToLastOccurrenceOf (".UTF-8", false, true);
 
@@ -232,7 +232,7 @@ String SystemStats::getUserLanguage()
 
 String SystemStats::getUserRegion()
 {
-#if JUCE_BSD
+#if YUP_BSD
     return {};
 #else
     return getLocaleValue (_NL_ADDRESS_COUNTRY_AB2);
@@ -253,8 +253,8 @@ String SystemStats::getDisplayLanguage()
 //==============================================================================
 void CPUInformation::initialise() noexcept
 {
-#if JUCE_BSD
-#if JUCE_INTEL && ! JUCE_NO_INLINE_ASM
+#if YUP_BSD
+#if YUP_INTEL && ! YUP_NO_INLINE_ASM
     SystemStatsHelpers::getCPUInfo (hasMMX,
                                     hasSSE,
                                     hasSSE2,
@@ -394,7 +394,7 @@ int64 Time::getHighResolutionTicks() noexcept
 {
     timespec t;
 
-#if JUCE_BELA
+#if YUP_BELA
     if (cobalt_thread_mode() == 0x200 /*XNRELAX*/)
         clock_gettime (CLOCK_MONOTONIC, &t);
     else
@@ -425,9 +425,9 @@ bool Time::setSystemTimeToThisTime() const
     return settimeofday (&t, nullptr) == 0;
 }
 
-JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
+YUP_API bool YUP_CALLTYPE juce_isRunningUnderDebugger() noexcept
 {
-#if JUCE_BSD
+#if YUP_BSD
     int mib[] = {
         CTL_KERN,
         KERN_PROC,
@@ -443,4 +443,4 @@ JUCE_API bool JUCE_CALLTYPE juce_isRunningUnderDebugger() noexcept
 #endif
 }
 
-} // namespace juce
+} // namespace yup

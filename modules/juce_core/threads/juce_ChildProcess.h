@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -49,7 +49,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API ChildProcess
+class YUP_API ChildProcess
 {
 public:
     //==============================================================================
@@ -129,7 +129,7 @@ private:
     class ActiveProcess;
     std::unique_ptr<ActiveProcess> activeProcess;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcess)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ChildProcess)
 };
 
-} // namespace juce
+} // namespace yup

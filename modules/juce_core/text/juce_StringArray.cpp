@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 StringArray::StringArray() noexcept
@@ -499,4 +499,4 @@ void StringArray::minimiseStorageOverheads()
     strings.minimiseStorageOverheads();
 }
 
-} // namespace juce
+} // namespace yup

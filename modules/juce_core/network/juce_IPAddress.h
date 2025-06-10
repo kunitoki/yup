@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -46,7 +46,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API IPAddress final
+class YUP_API IPAddress final
 {
 public:
     //==============================================================================
@@ -155,4 +155,4 @@ public:
     static IPAddress getInterfaceBroadcastAddress (const IPAddress& interfaceAddress);
 };
 
-} // namespace juce
+} // namespace yup

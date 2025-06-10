@@ -59,8 +59,8 @@ yup_standalone_app (
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"
     MODULES
         juce_core
-        juce_audio_basics
-        juce_audio_devices
+        yup_audio_basics
+        yup_audio_devices
         yup_events
         yup_graphics
         yup_gui

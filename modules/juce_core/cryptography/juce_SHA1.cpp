@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 class SHA1Processor
@@ -157,7 +157,7 @@ private:
         s[4] = 0xc3d2e1f0u;
     }
 
-    JUCE_DECLARE_NON_COPYABLE (SHA1Processor)
+    YUP_DECLARE_NON_COPYABLE (SHA1Processor)
 };
 
 //==============================================================================
@@ -232,4 +232,4 @@ bool SHA1::operator== (const SHA1& other) const noexcept { return std::memcmp (r
 
 bool SHA1::operator!= (const SHA1& other) const noexcept { return ! operator== (other); }
 
-} // namespace juce
+} // namespace yup

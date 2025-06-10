@@ -42,8 +42,8 @@ yup_standalone_app (
     TARGET_CONSOLE ON
     MODULES
         juce_core
-        juce_audio_basics
-        juce_audio_devices
+        yup_audio_basics
+        yup_audio_devices
         yup_events)
 
 # ==== Prepare sources

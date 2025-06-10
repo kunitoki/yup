@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -48,7 +48,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API FileInputSource : public InputSource
+class YUP_API FileInputSource : public InputSource
 {
 public:
     //==============================================================================
@@ -71,7 +71,7 @@ private:
     const File file;
     bool useFileTimeInHashGeneration;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileInputSource)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileInputSource)
 };
 
-} // namespace juce
+} // namespace yup

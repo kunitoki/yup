@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -51,7 +51,7 @@ namespace juce
 class CharPointer_UTF16 final
 {
 public:
-#if JUCE_NATIVE_WCHAR_IS_UTF16
+#if YUP_NATIVE_WCHAR_IS_UTF16
     using CharType = wchar_t;
 #else
     using CharType = int16;
@@ -366,7 +366,7 @@ public:
         return CharacterFunctions::compareIgnoreCaseUpTo (*this, other, maxChars);
     }
 
-#if JUCE_MSVC && ! defined(DOXYGEN)
+#if YUP_MSVC && ! defined(DOXYGEN)
     int compareIgnoreCase (CharPointer_UTF16 other) const noexcept
     {
         return _wcsicmp (data, other.data);
@@ -431,7 +431,7 @@ public:
     /** Parses this string as a 32-bit integer. */
     int getIntValue32() const noexcept
     {
-#if JUCE_MSVC
+#if YUP_MSVC
         return _wtoi (data);
 #else
         return CharacterFunctions::getIntValue<int, CharPointer_UTF16> (*this);
@@ -441,7 +441,7 @@ public:
     /** Parses this string as a 64-bit integer. */
     int64 getIntValue64() const noexcept
     {
-#if JUCE_MSVC
+#if YUP_MSVC
         return _wtoi64 (data);
 #else
         return CharacterFunctions::getIntValue<int64, CharPointer_UTF16> (*this);
@@ -514,13 +514,13 @@ public:
     */
     static bool isByteOrderMarkBigEndian (const void* possibleByteOrder) noexcept
     {
-        JUCE_BEGIN_IGNORE_WARNINGS_MSVC (28182)
+        YUP_BEGIN_IGNORE_WARNINGS_MSVC (28182)
         jassert (possibleByteOrder != nullptr);
         auto c = static_cast<const uint8*> (possibleByteOrder);
 
         return c[0] == (uint8) byteOrderMarkBE1
             && c[1] == (uint8) byteOrderMarkBE2;
-        JUCE_END_IGNORE_WARNINGS_MSVC
+        YUP_END_IGNORE_WARNINGS_MSVC
     }
 
     /** Returns true if the first pair of bytes in this pointer are the UTF16 byte-order mark (little endian).
@@ -528,13 +528,13 @@ public:
     */
     static bool isByteOrderMarkLittleEndian (const void* possibleByteOrder) noexcept
     {
-        JUCE_BEGIN_IGNORE_WARNINGS_MSVC (28182)
+        YUP_BEGIN_IGNORE_WARNINGS_MSVC (28182)
         jassert (possibleByteOrder != nullptr);
         auto c = static_cast<const uint8*> (possibleByteOrder);
 
         return c[0] == (uint8) byteOrderMarkLE1
             && c[1] == (uint8) byteOrderMarkLE2;
-        JUCE_END_IGNORE_WARNINGS_MSVC
+        YUP_END_IGNORE_WARNINGS_MSVC
     }
 
 private:
@@ -551,4 +551,4 @@ private:
     }
 };
 
-} // namespace juce
+} // namespace yup

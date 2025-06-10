@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -98,7 +98,7 @@ private:
     //==============================================================================
     const LockType& lock_;
 
-    JUCE_DECLARE_NON_COPYABLE (GenericScopedLock)
+    YUP_DECLARE_NON_COPYABLE (GenericScopedLock)
 };
 
 //==============================================================================
@@ -175,7 +175,7 @@ private:
     //==============================================================================
     const LockType& lock_;
 
-    JUCE_DECLARE_NON_COPYABLE (GenericScopedUnlock)
+    YUP_DECLARE_NON_COPYABLE (GenericScopedUnlock)
 };
 
 //==============================================================================
@@ -271,7 +271,7 @@ private:
     const LockType& lock_;
     mutable bool lockWasSuccessful;
 
-    JUCE_DECLARE_NON_COPYABLE (GenericScopedTryLock)
+    YUP_DECLARE_NON_COPYABLE (GenericScopedTryLock)
 };
 
-} // namespace juce
+} // namespace yup

@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 File::File (const String& fullPathName)
@@ -85,7 +85,7 @@ static String removeEllipsis (const String& path)
 {
     // This will quickly find both /../ and /./ at the expense of a minor
     // false-positive performance hit when path elements end in a dot.
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     if (path.contains (".\\"))
 #else
     if (path.contains ("./"))
@@ -149,7 +149,7 @@ String File::parseAbsolutePath (const String& p)
     if (p.isEmpty())
         return {};
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     // Windows..
     auto path = normaliseSeparators (removeEllipsis (p.replaceCharacter ('/', '\\')));
 
@@ -211,7 +211,7 @@ String File::parseAbsolutePath (const String& p)
     }
     else if (! path.startsWithChar (getSeparatorChar()))
     {
-#if JUCE_DEBUG || JUCE_LOG_ASSERTIONS
+#if YUP_DEBUG || YUP_LOG_ASSERTIONS
         if (! (path.startsWith ("./") || path.startsWith ("../")))
         {
             /*  When you supply a raw string to the File object constructor, it must be an absolute path.
@@ -223,7 +223,7 @@ String File::parseAbsolutePath (const String& p)
             */
             jassertfalse;
 
-#if JUCE_LOG_ASSERTIONS
+#if YUP_LOG_ASSERTIONS
             Logger::writeToLog ("Illegal absolute path: " + path);
 #endif
         }
@@ -246,7 +246,7 @@ String File::addTrailingSeparator (const String& path)
 }
 
 //==============================================================================
-#if JUCE_LINUX || JUCE_BSD
+#if YUP_LINUX || YUP_BSD
 #define NAMES_ARE_CASE_SENSITIVE 1
 #endif
 
@@ -432,7 +432,7 @@ bool File::isAbsolutePath (StringRef path)
     auto firstChar = *(path.text);
 
     return firstChar == getSeparatorChar()
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         || (firstChar != 0 && path.text[1] == ':');
 #else
         || firstChar == '~';
@@ -446,7 +446,7 @@ File File::getChildFile (StringRef relativePath) const
     if (isAbsolutePath (r))
         return File (String (r));
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     if (r.indexOf ((juce_wchar) '/') >= 0)
         return getChildFile (String (r).replaceCharacter ('/', '\\'));
 #endif
@@ -1009,7 +1009,7 @@ String File::getRelativePathFrom (const File& dir) const
     if (numUpDirectoriesNeeded == 0)
         return thisPathAfterCommon;
 
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     auto s = String::repeatedString ("..\\", numUpDirectoriesNeeded);
 #else
     auto s = String::repeatedString ("../", numUpDirectoriesNeeded);
@@ -1049,7 +1049,7 @@ bool File::createSymbolicLink (const File& linkFileToCreate,
             linkFileToCreate.deleteFile();
     }
 
-#if JUCE_MAC || JUCE_LINUX || JUCE_BSD
+#if YUP_MAC || YUP_LINUX || YUP_BSD
     // one common reason for getting an error here is that the file already exists
     if (symlink (nativePathOfTarget.toRawUTF8(), linkFileToCreate.getFullPathName().toRawUTF8()) == -1)
     {
@@ -1058,7 +1058,7 @@ bool File::createSymbolicLink (const File& linkFileToCreate,
     }
 
     return true;
-#elif JUCE_MSVC
+#elif YUP_MSVC
     File targetFile (linkFileToCreate.getSiblingFile (nativePathOfTarget));
 
     return CreateSymbolicLink (linkFileToCreate.getFullPathName().toWideCharPointer(),
@@ -1076,7 +1076,7 @@ bool File::createSymbolicLink (const File& linkFileToCreate, bool overwriteExist
     return createSymbolicLink (linkFileToCreate, getFullPathName(), overwriteExisting);
 }
 
-#if ! JUCE_WINDOWS
+#if ! YUP_WINDOWS
 File File::getLinkedTarget() const
 {
     if (isSymbolicLink())
@@ -1101,7 +1101,7 @@ MemoryMappedFile::MemoryMappedFile (const File& file, const Range<int64>& fileRa
 
 //==============================================================================
 //==============================================================================
-#if JUCE_UNIT_TESTS
+#if YUP_UNIT_TESTS
 
 class FileTests final : public UnitTest
 {
@@ -1121,7 +1121,7 @@ public:
         expect (! File().exists());
         expect (! File().existsAsFile());
         expect (! File().isDirectory());
-#if ! JUCE_WINDOWS
+#if ! YUP_WINDOWS
         expect (File ("/").isDirectory());
 #endif
         expect (home.isDirectory());
@@ -1351,4 +1351,4 @@ static FileTests fileUnitTests;
 
 #endif
 
-} // namespace juce
+} // namespace yup

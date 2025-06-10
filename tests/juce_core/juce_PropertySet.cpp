@@ -26,7 +26,7 @@
 class PropertySetTests : public ::testing::Test
 {
 protected:
-    juce::PropertySet propertySet;
+    yup::PropertySet propertySet;
 
     void SetUp() override
     {
@@ -35,7 +35,7 @@ protected:
         propertySet.setValue ("doubleKey", 45.67);
         propertySet.setValue ("boolKey", true);
 
-        auto xml = std::make_unique<juce::XmlElement> ("root");
+        auto xml = std::make_unique<yup::XmlElement> ("root");
         xml->setAttribute ("attribute", "value");
         propertySet.setValue ("xmlKey", xml.get());
     }
@@ -51,7 +51,7 @@ TEST_F (PropertySetTests, GetValue)
 
 TEST_F (PropertySetTests, GetFallbackValue)
 {
-    juce::PropertySet fallbackPropertySet;
+    yup::PropertySet fallbackPropertySet;
     fallbackPropertySet.setValue ("fallbackKey", "fallbackValue");
     propertySet.setFallbackPropertySet (&fallbackPropertySet);
 
@@ -94,10 +94,10 @@ TEST_F (PropertySetTests, RemoveAndClearValues)
 
 TEST_F (PropertySetTests, CopyAndAssignment)
 {
-    juce::PropertySet anotherPropertySet (propertySet);
+    yup::PropertySet anotherPropertySet (propertySet);
     EXPECT_EQ (anotherPropertySet.getValue ("stringKey"), "stringValue");
 
-    juce::PropertySet yetAnotherPropertySet;
+    yup::PropertySet yetAnotherPropertySet;
     yetAnotherPropertySet = propertySet;
     EXPECT_EQ (yetAnotherPropertySet.getValue ("stringKey"), "stringValue");
 }
@@ -108,7 +108,7 @@ TEST_F (PropertySetTests, CreateAndRestoreXml)
     ASSERT_TRUE (xml != nullptr);
     EXPECT_TRUE (xml->hasTagName ("Properties"));
 
-    juce::PropertySet restoredSet;
+    yup::PropertySet restoredSet;
     restoredSet.restoreFromXml (*xml);
     EXPECT_EQ (restoredSet.getValue ("stringKey"), "stringValue");
 }

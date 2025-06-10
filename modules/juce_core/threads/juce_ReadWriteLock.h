@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-namespace juce
+namespace yup
 {
 
 //==============================================================================
@@ -61,7 +61,7 @@ namespace juce
 
     @tags{Core}
 */
-class JUCE_API ReadWriteLock
+class YUP_API ReadWriteLock
 {
 public:
     //==============================================================================
@@ -156,7 +156,7 @@ private:
 
     bool tryEnterWriteInternal (Thread::ThreadID) const noexcept;
 
-    JUCE_DECLARE_NON_COPYABLE (ReadWriteLock)
+    YUP_DECLARE_NON_COPYABLE (ReadWriteLock)
 };
 
-} // namespace juce
+} // namespace yup
