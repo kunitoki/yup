@@ -70,7 +70,7 @@
 #include <yup_events/yup_events.h>
 #include <yup_audio_basics/yup_audio_basics.h>
 
-#if YUP_MODULE_AVAILABLE_yup_graphics
+#if 0 && YUP_MODULE_AVAILABLE_yup_graphics
 #include <yup_graphics/yup_graphics.h>
 #endif
 

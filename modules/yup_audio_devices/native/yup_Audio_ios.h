@@ -89,7 +89,7 @@ public:
 
     //==============================================================================
     bool isInterAppAudioConnected() const;
-#if YUP_MODULE_AVAILABLE_yup_graphics
+#if 0 && YUP_MODULE_AVAILABLE_yup_graphics
     Image getIcon (int size);
 #endif
     void switchApplication();

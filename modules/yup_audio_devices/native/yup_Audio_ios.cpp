@@ -732,7 +732,7 @@ struct iOSAudioIODevice::Pimpl final : public AsyncUpdater
     };
 
     //==============================================================================
-#if YUP_MODULE_AVAILABLE_yup_graphics
+#if 0 && YUP_MODULE_AVAILABLE_yup_graphics
     YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
 
     Image getIcon (int size)
@@ -1489,7 +1489,7 @@ void iOSAudioIODevice::setMidiMessageCollector (MidiMessageCollector* collector)
 AudioPlayHead* iOSAudioIODevice::getAudioPlayHead() const { return &pimpl->playhead; }
 
 bool iOSAudioIODevice::isInterAppAudioConnected() const { return pimpl->interAppAudioConnected; }
-#if YUP_MODULE_AVAILABLE_yup_graphics
+#if 0 && YUP_MODULE_AVAILABLE_yup_graphics
 Image iOSAudioIODevice::getIcon (int size)
 {
     return pimpl->getIcon (size);
