@@ -213,6 +213,11 @@ function (_yup_module_setup_target module_name
     target_link_libraries (${module_name} INTERFACE
         ${module_dependencies})
 
+    # Add coverage support if enabled
+    if (YUP_ENABLE_COVERAGE)
+        _yup_setup_coverage_flags (${module_name})
+    endif()
+
     #add_library("yup::${module_name}" ALIAS ${module_name})
 
 endfunction()

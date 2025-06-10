@@ -220,5 +220,6 @@ constexpr auto Profiler::compileTimePrettierFunction (F func)
 #define YUP_PROFILE_NAMED_TRACE(category, name, ...)
 #define YUP_PROFILE_INTERNAL_TRACE(...)
 #define YUP_PROFILE_NAMED_INTERNAL_TRACE(name, ...)
+#define YUP_PROFILE_SET_OUTPUT_FOLDER(path)
 
 #endif
