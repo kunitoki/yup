@@ -313,9 +313,9 @@ function (_yup_setup_coverage_targets modules_list)
 
             add_custom_target (coverage_${module_name}
                 COMMAND ${CMAKE_COMMAND} -E echo "Generating coverage for ${module_name}"
-                COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR} --capture --output-file ${module_coverage_dir}/coverage.info --ignore-errors mismatch,gcov,source
-                COMMAND ${LCOV_PATH} --extract ${module_coverage_dir}/coverage.info "*/modules/${module_name}/*" --output-file ${module_coverage_dir}/coverage_filtered.info --ignore-errors mismatch,gcov,source
-                COMMAND ${LCOV_PATH} --remove ${module_coverage_dir}/coverage_filtered.info "*/thirdparty/*" "*/build/*" "*/tests/*" --output-file ${module_coverage_dir}/coverage_final.info --ignore-errors mismatch,gcov,source
+                COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR} --capture --output-file ${module_coverage_dir}/coverage.info --ignore-errors mismatch,gcov,source,negative
+                COMMAND ${LCOV_PATH} --extract ${module_coverage_dir}/coverage.info "*/modules/${module_name}/*" --output-file ${module_coverage_dir}/coverage_filtered.info --ignore-errors mismatch,gcov,source,negative
+                COMMAND ${LCOV_PATH} --remove ${module_coverage_dir}/coverage_filtered.info "*/thirdparty/*" "*/build/*" "*/tests/*" --output-file ${module_coverage_dir}/coverage_final.info --ignore-errors mismatch,gcov,source,negative
                 WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
                 DEPENDS yup_tests
                 COMMENT "Processing coverage data for ${module_name}")
@@ -331,8 +331,8 @@ function (_yup_setup_coverage_targets modules_list)
         # Combined coverage target
         add_custom_target (coverage_all
             COMMAND ${CMAKE_COMMAND} -E echo "Generating combined coverage report"
-            COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR} --capture --output-file ${CMAKE_BINARY_DIR}/coverage/coverage.info --ignore-errors mismatch,gcov,source
-            COMMAND ${LCOV_PATH} --remove ${CMAKE_BINARY_DIR}/coverage/coverage.info "*/thirdparty/*" "*/build/*" "*/tests/*" "*/examples/*" --output-file ${CMAKE_BINARY_DIR}/coverage/coverage_final.info --ignore-errors mismatch,gcov,source
+            COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR} --capture --output-file ${CMAKE_BINARY_DIR}/coverage/coverage.info --ignore-errors mismatch,gcov,source,negative
+            COMMAND ${LCOV_PATH} --remove ${CMAKE_BINARY_DIR}/coverage/coverage.info "*/thirdparty/*" "*/build/*" "*/tests/*" "*/examples/*" --output-file ${CMAKE_BINARY_DIR}/coverage/coverage_final.info --ignore-errors mismatch,gcov,source,negative
             WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
             DEPENDS yup_tests
             COMMENT "Processing combined coverage data")
