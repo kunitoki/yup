@@ -1239,7 +1239,7 @@ struct CoreAudioClasses
                 if (inputDeviceId == 0)
                     return std::make_unique<CoreAudioInternal> (*this, outputDeviceId, false, true);
 
-                // This used to be just "com.yup.aggregate", but macOS doesn't allow two different instances of an app with
+                // This used to be just "org.yup.aggregate", but macOS doesn't allow two different instances of an app with
                 // the same bundle ID to create the same aggregate device UID, even when it's private.
                 CFStringRef aggregateDeviceUid = Uuid().toString().toCFString();
 

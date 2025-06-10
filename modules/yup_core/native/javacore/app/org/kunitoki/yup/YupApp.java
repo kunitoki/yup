@@ -37,9 +37,9 @@
   ==============================================================================
 */
 
-package com.kunitoki.yup;
+package org.kunitoki.yup;
 
-import com.kunitoki.yup.Java;
+import org.kunitoki.yup.Java;
 
 import android.app.Application;
 

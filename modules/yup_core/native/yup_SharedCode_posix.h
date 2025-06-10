@@ -844,9 +844,9 @@ public:
     Pimpl (const String& lockName, int timeOutMillisecs)
     {
 #if YUP_MAC
-        if (! createLockFile (File ("~/Library/Caches/com.yup.locks").getChildFile (lockName), timeOutMillisecs))
+        if (! createLockFile (File ("~/Library/Caches/org.yup.locks").getChildFile (lockName), timeOutMillisecs))
             // Fallback if the user's home folder is on a network drive with no ability to lock..
-            createLockFile (File ("/tmp/com.yup.locks").getChildFile (lockName), timeOutMillisecs);
+            createLockFile (File ("/tmp/org.yup.locks").getChildFile (lockName), timeOutMillisecs);
 
 #else
         File tempFolder ("/var/tmp");

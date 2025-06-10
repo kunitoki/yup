@@ -37,7 +37,7 @@
   ==============================================================================
 */
 
-package com.kunitoki.yup;
+package org.kunitoki.yup;
 
 import java.lang.Runnable;
 import java.io.*;

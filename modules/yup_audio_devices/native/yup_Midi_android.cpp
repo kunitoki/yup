@@ -41,7 +41,7 @@ namespace yup
 {
 
 //==============================================================================
-// This byte-code is generated from native/java/com/kunitoki/yup/YupMidiSupport.java with min sdk version 23
+// This byte-code is generated from native/java/org/kunitoki/yup/YupMidiSupport.java with min sdk version 23
 // See yup_core/native/java/README.txt on how to generate this byte-code.
 
 // clang-format off
@@ -803,10 +803,10 @@ constexpr unsigned char javaMidiByteCode[]
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                            \
     METHOD (getYupAndroidMidiInputDeviceNameAndIDs, "getYupAndroidMidiInputDeviceNameAndIDs", "()[Ljava/lang/String;")   \
     METHOD (getYupAndroidMidiOutputDeviceNameAndIDs, "getYupAndroidMidiOutputDeviceNameAndIDs", "()[Ljava/lang/String;") \
-    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")     \
-    METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lcom/kunitoki/yup/YupMidiSupport$YupMidiPort;")
+    METHOD (openMidiInputPortWithID, "openMidiInputPortWithID", "(IJ)Lorg/kunitoki/yup/YupMidiSupport$YupMidiPort;")     \
+    METHOD (openMidiOutputPortWithID, "openMidiOutputPortWithID", "(I)Lorg/kunitoki/yup/YupMidiSupport$YupMidiPort;")
 
-DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/kunitoki/yup/YupMidiSupport$MidiDeviceManager", 23)
+DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "org/kunitoki/yup/YupMidiSupport$MidiDeviceManager", 23)
 #undef JNI_CLASS_MEMBERS
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
@@ -816,7 +816,7 @@ DECLARE_JNI_CLASS_WITH_MIN_SDK (MidiDeviceManager, "com/kunitoki/yup/YupMidiSupp
     METHOD (sendMidi, "sendMidi", "([BII)V")                                  \
     METHOD (getName, "getName", "()Ljava/lang/String;")
 
-DECLARE_JNI_CLASS_WITH_MIN_SDK (YupMidiPort, "com/kunitoki/yup/YupMidiSupport$YupMidiPort", 23)
+DECLARE_JNI_CLASS_WITH_MIN_SDK (YupMidiPort, "org/kunitoki/yup/YupMidiSupport$YupMidiPort", 23)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -938,7 +938,7 @@ private:
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
     CALLBACK (generatedCallback<&MidiInput::Pimpl::handleReceive>, "handleReceive", "(J[BIIJ)V")
 
-DECLARE_JNI_CLASS_WITH_MIN_SDK (YupMidiInputPort, "com/kunitoki/yup/YupMidiSupport$YupMidiInputPort", 23)
+DECLARE_JNI_CLASS_WITH_MIN_SDK (YupMidiInputPort, "org/kunitoki/yup/YupMidiSupport$YupMidiInputPort", 23)
 #undef JNI_CLASS_MEMBERS
 
 //==============================================================================
@@ -1008,10 +1008,10 @@ private:
 
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK)                                                                                   \
     CALLBACK (handleDevicesChanged, "handleDevicesChanged", "()V")                                                                                              \
-    STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lcom/kunitoki/yup/YupMidiSupport$MidiDeviceManager;") \
-    STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lcom/kunitoki/yup/YupMidiSupport$BluetoothMidiManager;")
+    STATICMETHOD (getAndroidMidiDeviceManager, "getAndroidMidiDeviceManager", "(Landroid/content/Context;)Lorg/kunitoki/yup/YupMidiSupport$MidiDeviceManager;") \
+    STATICMETHOD (getAndroidBluetoothManager, "getAndroidBluetoothManager", "(Landroid/content/Context;)Lorg/kunitoki/yup/YupMidiSupport$BluetoothMidiManager;")
 
-    DECLARE_JNI_CLASS_WITH_BYTECODE (YupMidiSupport, "com/kunitoki/yup/YupMidiSupport", 23, javaMidiByteCode)
+    DECLARE_JNI_CLASS_WITH_BYTECODE (YupMidiSupport, "org/kunitoki/yup/YupMidiSupport", 23, javaMidiByteCode)
 #undef JNI_CLASS_MEMBERS
 
     GlobalRef deviceManager { LocalRef<jobject> (getEnv()->CallStaticObjectMethod (YupMidiSupport,

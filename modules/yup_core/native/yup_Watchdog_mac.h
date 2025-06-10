@@ -109,7 +109,7 @@ class Watchdog::Impl final
         context.release = nil;
         context.copyDescription = nil;
 
-        dispatch_queue_t queue = dispatch_queue_create("com.yup.watchdog", DISPATCH_QUEUE_SERIAL);
+        dispatch_queue_t queue = dispatch_queue_create("org.yup.watchdog", DISPATCH_QUEUE_SERIAL);
 
         stream = FSEventStreamCreate(
             kCFAllocatorDefault, callback, &context, reinterpret_cast<CFArrayRef>(paths),

@@ -538,14 +538,14 @@ public:
         following java method:
 
         @code
-        com.kunitoki.yup.Java.initialiseYUP (myContext);
+        org.kunitoki.yup.Java.initialiseYUP (myContext);
         @endcode
 
         If you need to call this from another type of project then you need to add
         the following java file to your project:
 
         @code
-        package com.kunitoki.yup;
+        package org.kunitoki.yup;
 
         public class Java
         {

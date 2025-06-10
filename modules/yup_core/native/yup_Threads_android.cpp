@@ -88,7 +88,7 @@ extern "C" jint JNIEXPORT yup_JNI_OnLoad (JavaVM* vm, void*)
     auto* env = getEnv();
 
     // register the initialisation function
-    auto yupJavaClass = env->FindClass ("com/kunitoki/yup/Java");
+    auto yupJavaClass = env->FindClass ("org/kunitoki/yup/Java");
 
     if (yupJavaClass != nullptr)
     {
@@ -99,7 +99,7 @@ extern "C" jint JNIEXPORT yup_JNI_OnLoad (JavaVM* vm, void*)
     }
     else
     {
-        // com.kunitoki.yup.Java class not found. Apparently this project is a library. That's ok, the user will have to
+        // org.kunitoki.yup.Java class not found. Apparently this project is a library. That's ok, the user will have to
         // call Thread::initialiseYUP manually
         env->ExceptionClear();
     }
