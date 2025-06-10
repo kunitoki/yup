@@ -28,7 +28,7 @@ namespace yup
     This class is designed to represent a key press in a platform-independent manner, storing details about the key code,
     any modifier keys that were active (like Shift, Ctrl, etc.), and the Unicode character for key presses that generate text.
 */
-class JUCE_API KeyPress
+class YUP_API KeyPress
 {
 public:
     //==============================================================================

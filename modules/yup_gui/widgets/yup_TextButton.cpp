@@ -33,13 +33,13 @@ TextButton::TextButton (StringRef componentID)
 
 void TextButton::paintButton (Graphics& g)
 {
-    if (auto style = ApplicationTheme::findComponentStyle (*this))
-        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+    //if (auto style = ApplicationTheme::findComponentStyle (*this))
+    //    style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 
-    /*
     g.setFillColor (isButtonDown() ? Color (0xffff0000) : Color (0xffffffff));
     g.fillAll();
 
+    /*
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
 
     auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
@@ -56,10 +56,10 @@ void TextButton::paintButton (Graphics& g)
 
 void TextButton::resized()
 {
-    /*
     auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
     auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+    auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
     styledText.setMaxSize (labelBounds.getSize());
     styledText.setHorizontalAlign (StyledText::center);
@@ -68,7 +68,6 @@ void TextButton::resized()
     styledText.clear();
     styledText.appendText (getComponentID(), ApplicationTheme::getGlobalTheme()->getDefaultFont(), 32.0f);
     styledText.update();
-    */
 }
 
 } // namespace yup

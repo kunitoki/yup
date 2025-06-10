@@ -49,24 +49,24 @@
 
 //==============================================================================
 
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 
-#if JUCE_MAC
+#if YUP_MAC
 #import <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
 
 #include "native/yup_Windowing_mac.mm"
 #endif
 
-#if JUCE_IOS
+#if YUP_IOS
 #include "native/yup_Windowing_ios.mm"
 #endif
 
 //==============================================================================
 
-#elif JUCE_LINUX
+#elif YUP_LINUX
 #include <X11/Xlib.h>
 #include <dlfcn.h>
 
@@ -78,16 +78,16 @@
 
 //==============================================================================
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
 #include "native/yup_Windowing_windows.cpp"
 
 //==============================================================================
 
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
 
 //==============================================================================
 
-#elif JUCE_EMSCRIPTEN
+#elif YUP_EMSCRIPTEN
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 

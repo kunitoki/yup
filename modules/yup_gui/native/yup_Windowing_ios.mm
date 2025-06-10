@@ -39,7 +39,7 @@
 
 - (void)applicationDidFinishLaunching:(UIApplication* __unused)application
 {
-    if (auto* app = juce::JUCEApplicationBase::createInstance())
+    if (auto* app = yup::YUPApplicationBase::createInstance())
     {
         if (!app->initialiseApp())
             exit(app->shutdownApp());
@@ -52,18 +52,18 @@
 
 - (void)applicationWillTerminate:(UIApplication* __unused)application
 {
-    juce::JUCEApplicationBase::appWillTerminateByForce();
+    yup::YUPApplicationBase::appWillTerminateByForce();
 }
 
 - (void)applicationDidEnterBackground:(UIApplication* __unused)application
 {
-    if (auto* app = juce::JUCEApplicationBase::getInstance())
+    if (auto* app = yup::YUPApplicationBase::getInstance())
         app->suspended();
 }
 
 - (void)applicationWillEnterForeground:(UIApplication* __unused)application
 {
-    if (auto* app = juce::JUCEApplicationBase::getInstance())
+    if (auto* app = yup::YUPApplicationBase::getInstance())
         app->resumed();
 }
 
@@ -77,15 +77,15 @@
 
 @end
 
-namespace juce
+namespace yup
 {
 
-int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
-int juce_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
+int yup_iOSMain(int argc, const char* argv[], void* customDelegatePtr);
+int yup_iOSMain(int argc, const char* argv[], void* customDelegatePtr)
 {
     Class delegateClass = (customDelegatePtr != nullptr ? reinterpret_cast<Class>(customDelegatePtr) : [YupApplicationDelegate class]);
 
     return UIApplicationMain(argc, const_cast<char**>(argv), nil, NSStringFromClass(delegateClass));
 }
 
-} // namespace juce
+} // namespace yup

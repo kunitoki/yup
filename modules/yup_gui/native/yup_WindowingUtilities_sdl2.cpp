@@ -227,19 +227,19 @@ void* getNativeWindowHandle (SDL_Window* window)
     SDL_VERSION (&wmInfo.version);
     if (SDL_GetWindowWMInfo (window, &wmInfo))
     {
-#if JUCE_MAC
+#if YUP_MAC
         return (__bridge void*) wmInfo.info.cocoa.window; // NSWindow*
 
-#elif JUCE_IOS
+#elif YUP_IOS
         return (__bridge void*) wmInfo.info.uikit.window; // UIWindow*
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
         return wmInfo.info.win.window; // HWND
 
-#elif JUCE_LINUX
+#elif YUP_LINUX
         return reinterpret_cast<void*> (wmInfo.info.x11.window); // X11 Window
 
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
         return reinterpret_cast<void*> (wmInfo.info.android.window); // ANativeWindow*
 
 #endif
@@ -250,7 +250,7 @@ void* getNativeWindowHandle (SDL_Window* window)
 
 //==============================================================================
 
-#if JUCE_LINUX
+#if YUP_LINUX
 void* getNativeDisplayHandle (SDL_Window* window)
 {
     if (window == nullptr)
@@ -267,7 +267,7 @@ void* getNativeDisplayHandle (SDL_Window* window)
 
 //==============================================================================
 
-#if ! JUCE_WINDOWS && ! JUCE_MAC && ! JUCE_LINUX
+#if ! YUP_WINDOWS && ! YUP_MAC && ! YUP_LINUX
 Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 {
     return {};
@@ -278,7 +278,7 @@ Rectangle<int> getNativeWindowPosition (void* nativeWindow)
 
 void setNativeParent (void* nativeWindow, SDL_Window* window)
 {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     HWND hpar = reinterpret_cast<HWND> (nativeWindow);
     HWND hwnd = reinterpret_cast<HWND> (getNativeWindowHandle (window));
     SetParent (hwnd, hpar);
@@ -290,12 +290,12 @@ void setNativeParent (void* nativeWindow, SDL_Window* window)
 
     SetWindowPos (hwnd, nullptr, 0, 0, 0, 0, SWP_NOZORDER | SWP_NOSIZE | SWP_NOACTIVATE);
 
-#elif JUCE_MAC
+#elif YUP_MAC
     NSWindow* parentWindow = [reinterpret_cast<NSView*> (nativeWindow) window];
     NSWindow* currentWindow = reinterpret_cast<NSWindow*> (getNativeWindowHandle (window));
     [parentWindow addChildWindow:currentWindow ordered:NSWindowAbove];
 
-#elif JUCE_LINUX
+#elif YUP_LINUX
     if (! X11Functions::getInstance()->isX11Available())
         return;
 
@@ -321,21 +321,21 @@ GraphicsContext::Api getGraphicsContextApi (const std::optional<GraphicsContext:
 {
     GraphicsContext::Api desiredApi;
 
-#if JUCE_MAC || JUCE_IOS
+#if YUP_MAC || YUP_IOS
 #if YUP_RIVE_USE_METAL
     desiredApi = forceContextApi.value_or (GraphicsContext::Metal);
 #elif YUP_RIVE_USE_OPENGL
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 #endif
 
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
 #if YUP_RIVE_USE_D3D
     desiredApi = forceContextApi.value_or (GraphicsContext::Direct3D);
 #elif YUP_RIVE_USE_OPENGL
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 #endif
 
-#elif JUCE_LINUX
+#elif YUP_LINUX
     desiredApi = forceContextApi.value_or (GraphicsContext::OpenGL);
 
 #else
@@ -366,7 +366,7 @@ Uint32 setContextWindowHints (GraphicsContext::Api desiredApi)
 
     if (desiredApi == GraphicsContext::OpenGL)
     {
-#if defined(ANGLE) || defined(JUCE_ANDROID) || defined(JUCE_EMSCRIPTEN)
+#if defined(ANGLE) || defined(YUP_ANDROID) || defined(YUP_EMSCRIPTEN)
         SDL_SetHint (SDL_HINT_RENDER_DRIVER, "opengles2");
 
         SDL_GL_SetAttribute (SDL_GL_CONTEXT_MAJOR_VERSION, 3);

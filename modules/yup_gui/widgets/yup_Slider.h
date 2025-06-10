@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-class JUCE_API Slider : public Component
+class YUP_API Slider : public Component
 {
 public:
     //==============================================================================

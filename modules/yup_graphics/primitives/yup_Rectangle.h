@@ -31,7 +31,7 @@ namespace yup
     scaling, intersection checks, and transformations among others.
 */
 template <class ValueType>
-class JUCE_API Rectangle
+class YUP_API Rectangle
 {
 public:
     //==============================================================================
@@ -1595,7 +1595,7 @@ private:
     @return A reference to the modified stream.
 */
 template <class ValueType>
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Rectangle<ValueType>& r)
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Rectangle<ValueType>& r)
 {
     auto [x, y, w, h] = r;
 

@@ -31,7 +31,7 @@ namespace yup
 
     @see Component, StyledText
 */
-class JUCE_API Label : public Component
+class YUP_API Label : public Component
 {
 public:
     //==============================================================================
@@ -95,8 +95,8 @@ public:
 
     struct Colors
     {
-      static const Identifier fillColorId;
-      static const Identifier strokeColorId;
+        static const Identifier fillColorId;
+        static const Identifier strokeColorId;
     };
 
     //==============================================================================
@@ -116,7 +116,7 @@ private:
     std::optional<Font> font;
     bool needsUpdate = true;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
 };
 
 } // namespace yup

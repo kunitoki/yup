@@ -41,10 +41,10 @@ yup_standalone_app (
     TARGET_APP_NAMESPACE "org.yup"
     TARGET_CONSOLE ON
     MODULES
-        juce_core
-        juce_events
-        juce_audio_basics
-        juce_audio_devices)
+        yup_core
+        yup_audio_basics
+        yup_audio_devices
+        yup_events)
 
 # ==== Prepare sources
 if (NOT YUP_TARGET_ANDROID)

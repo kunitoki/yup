@@ -33,7 +33,7 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_core rive rive_renderer
+    dependencies:       yup_core rive rive_renderer
     appleFrameworks:    Metal
     searchpaths:        native
     enableARC:          1
@@ -46,18 +46,18 @@
 #pragma once
 #define YUP_GRAPHICS_H_INCLUDED
 
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 
 #include <rive_renderer/rive_renderer.h>
 #include <rive_decoders/rive_decoders.h>
 
 //==============================================================================
 
-JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
+YUP_BEGIN_IGNORE_WARNINGS_GCC_LIKE ("-Wattributes", "-Wdeprecated-declarations")
 #include <rive/rive.h>
 #include <rive/text/raw_text.hpp>
 #include <rive/text/utf.hpp>
-JUCE_END_IGNORE_WARNINGS_GCC_LIKE
+YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 

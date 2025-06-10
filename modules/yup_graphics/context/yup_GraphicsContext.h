@@ -31,7 +31,7 @@ class LowLevelRenderContext;
     across different graphics APIs like OpenGL, Direct3D, Metal, and Dawn. It offers a standardized interface for operations
     common to all graphics APIs.
 */
-class JUCE_API GraphicsContext
+class YUP_API GraphicsContext
 {
 public:
     //==============================================================================

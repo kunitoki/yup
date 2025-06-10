@@ -34,7 +34,7 @@ namespace yup
     @tparam ValueType The type of the width and height (typically numeric).
 */
 template <class ValueType>
-class JUCE_API Size
+class YUP_API Size
 {
 public:
     //==============================================================================
@@ -587,7 +587,7 @@ private:
     @return A reference to the updated String object containing the formatted dimensions.
 */
 template <class ValueType>
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Size<ValueType>& s)
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Size<ValueType>& s)
 {
     auto [w, h] = s;
 

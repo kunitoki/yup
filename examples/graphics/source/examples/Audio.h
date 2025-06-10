@@ -20,7 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
-#include <juce_audio_devices/juce_audio_devices.h>
+#include <yup_audio_devices/yup_audio_devices.h>
 
 #include <memory>
 #include <cmath> // For sine wave generation
@@ -49,9 +49,9 @@ public:
     void setFrequency (double newFrequency, bool immediate = false)
     {
         if (immediate)
-            frequency.setCurrentAndTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+            frequency.setCurrentAndTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
         else
-            frequency.setTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+            frequency.setTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
     }
 
     void setAmplitude (float newAmplitude)
@@ -69,8 +69,8 @@ public:
         auto sample = std::sin (currentAngle) * amplitude.getNextValue();
 
         currentAngle += frequency.getNextValue();
-        if (currentAngle >= juce::MathConstants<double>::twoPi)
-            currentAngle -= juce::MathConstants<double>::twoPi;
+        if (currentAngle >= yup::MathConstants<double>::twoPi)
+            currentAngle -= yup::MathConstants<double>::twoPi;
 
         return static_cast<float> (sample);
     }
@@ -177,7 +177,7 @@ public:
         button->onClick = [this]
         {
             for (int i = 0; i < sliders.size(); ++i)
-                sliders[i]->setValue (juce::Random::getSystemRandom().nextFloat());
+                sliders[i]->setValue (yup::Random::getSystemRandom().nextFloat());
         };
         addAndMakeVisible (*button);
 

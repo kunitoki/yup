@@ -29,7 +29,7 @@ namespace yup
     access to multiple screens connected to the system. It allows querying and management
     of different screen properties through the `Screen` objects.
 */
-class JUCE_API Desktop
+class YUP_API Desktop
 {
 public:
     //==============================================================================
@@ -118,7 +118,7 @@ public:
     void handleScreenOrientationChanged (int screenIndex);
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (Desktop, false)
+    YUP_DECLARE_SINGLETON (Desktop, false)
 
 private:
     friend class YUPApplication;
@@ -128,7 +128,7 @@ private:
     Screen::Array screens;
     std::optional<MouseCursor> currentMouseCursor;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };
 
 } // namespace yup

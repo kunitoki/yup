@@ -28,7 +28,7 @@ namespace yup
     This class encapsulates the state of modifier keys during keyboard interactions, providing methods to check if specific
     modifiers are active and manipulate the modifier state.
 */
-class JUCE_API KeyModifiers
+class YUP_API KeyModifiers
 {
 public:
     //==============================================================================

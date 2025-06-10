@@ -169,6 +169,8 @@ modules/yup_module_name/
 ```
 Avoid going deeply nested into modules. Prefer a single subdirectory whenever possible for YUP modules (might be ok for thirdparties as we don't control the upstream structure).
 
+**Headers and Implementation files are designed to be included through the main module header/implementation, so linter errors are expected when parsing the files in isolation.**
+
 ### Test Structure
 ```
 tests/module_name/
@@ -218,7 +220,7 @@ public:
 private:
     int memberVar;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YupStyleClass)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YupStyleClass)
 };
 ```
 
@@ -304,17 +306,17 @@ TEST(ClassNameTests, StaticMethodBehavesCorrectly)
 
 ### Platform-specific code:
 ```cpp
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
     // Windows implementation
-#elif JUCE_MAC
+#elif YUP_MAC
     // macOS implementation
-#elif JUCE_IOS
+#elif YUP_IOS
     // iOS implementation
-#elif JUCE_LINUX
+#elif YUP_LINUX
     // Linux implementation
-#elif JUCE_ANDROID
+#elif YUP_ANDROID
     // Android implementation
-#elif JUCE_WASM
+#elif YUP_WASM
     // WebAssembly implementation
 #endif
 ```

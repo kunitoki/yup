@@ -43,11 +43,11 @@
 
 #pragma once
 
-#if JUCE_MODULE_AVAILABLE_libpng
+#if YUP_MODULE_AVAILABLE_libpng
 #define RIVE_PNG 1
 #endif
 
-#if JUCE_MODULE_AVAILABLE_libwebp
+#if YUP_MODULE_AVAILABLE_libwebp
 #define RIVE_WEBP 1
 #endif
 
