@@ -24,6 +24,7 @@ Example Rive animation display ([source code](./examples/render/source/main.cpp)
 
 [![Coverage](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
 [![codecov](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg)](https://codecov.io/gh/kunitoki/yup)
+
 [![codecov](https://codecov.io/gh/kunitoki/yup/graphs/tree.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 
 ## Introduction
