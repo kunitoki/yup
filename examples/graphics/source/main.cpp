@@ -75,7 +75,7 @@ public:
         */
 
         // Add the demos
-        int demo = 1;
+        int demo = 4;
 
         if (demo == 0)
         {
@@ -103,7 +103,7 @@ public:
 
         if (demo == 4)
         {
-            components.add (std::make_unique<yup::TextEditorDemo>());
+            components.add (std::make_unique<TextEditorDemo>());
             addAndMakeVisible (components.getLast());
         }
 

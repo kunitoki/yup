@@ -927,7 +927,7 @@ int TextEditor::findWordEnd(int position) const
     return pos;
 }
 
-bool TextEditor::isWordSeparator(juce_wchar character) const
+bool TextEditor::isWordSeparator(yup_wchar character) const
 {
     return character == ' ' || character == '\t' || character == '\n' ||
            character == '.' || character == ',' || character == ';' || character == ':' ||

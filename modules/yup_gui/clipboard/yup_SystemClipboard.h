@@ -22,8 +22,7 @@
 namespace yup
 {
 
-
-class JUCE_API SystemClipboard
+class YUP_API SystemClipboard
 {
 public:
     /** Copies the given text to the system clipboard. */

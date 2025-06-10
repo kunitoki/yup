@@ -19,20 +19,17 @@
   ==============================================================================
 */
 
-namespace yup
-{
-
-class TextEditorDemo : public Component
+class TextEditorDemo : public yup::Component
 {
 public:
     TextEditorDemo()
         : Component("TextEditorDemo")
     {
         // Create the editors
-        singleLineEditor = std::make_unique<TextEditor>("singleLineEditor");
-        multiLineEditor = std::make_unique<TextEditor>("multiLineEditor");
-        readOnlyEditor = std::make_unique<TextEditor>("readOnlyEditor");
-        focused = std::make_unique<TextEditor>("focused");
+        singleLineEditor = std::make_unique<yup::TextEditor>("singleLineEditor");
+        multiLineEditor = std::make_unique<yup::TextEditor>("multiLineEditor");
+        readOnlyEditor = std::make_unique<yup::TextEditor>("readOnlyEditor");
+        focused = std::make_unique<yup::TextEditor>("focused");
 
         // Configure the editors
         singleLineEditor->setText("Single line editor");
@@ -45,28 +42,28 @@ public:
         readOnlyEditor->setReadOnly(true);
 
         // Create buttons with componentID as text
-        selectAllButton = std::make_unique<TextButton>("Select All");
+        selectAllButton = std::make_unique<yup::TextButton>("Select All");
         selectAllButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
                 activeEditor->selectAll();
         };
 
-        copyButton = std::make_unique<TextButton>("Copy");
+        copyButton = std::make_unique<yup::TextButton>("Copy");
         copyButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
                 activeEditor->copy();
         };
 
-        pasteButton = std::make_unique<TextButton>("Paste");
+        pasteButton = std::make_unique<yup::TextButton>("Paste");
         pasteButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
                 activeEditor->paste();
         };
 
-        clearButton = std::make_unique<TextButton>("Clear");
+        clearButton = std::make_unique<yup::TextButton>("Clear");
         clearButton->onClick = [this]()
         {
             if (auto* activeEditor = getActiveEditor())
@@ -76,10 +73,10 @@ public:
         focused->setText("");
 
         // Create labels
-        titleLabel = std::make_unique<Label>("titleLabel");
-        singleLineLabel = std::make_unique<Label>("singleLineLabel");
-        multiLineLabel = std::make_unique<Label>("multiLineLabel");
-        readOnlyLabel = std::make_unique<Label>("readOnlyLabel");
+        titleLabel = std::make_unique<yup::Label>("titleLabel");
+        singleLineLabel = std::make_unique<yup::Label>("singleLineLabel");
+        multiLineLabel = std::make_unique<yup::Label>("multiLineLabel");
+        readOnlyLabel = std::make_unique<yup::Label>("readOnlyLabel");
 
         titleLabel->setText("TextEditor Widget Example");
         singleLineLabel->setText("Single Line Editor:");
@@ -103,7 +100,7 @@ public:
         setSize({ 800, 600 });
     }
 
-    void paint(Graphics& g) override
+    void paint(yup::Graphics& g) override
     {
         // Background
         g.setFillColor(yup::Colors::lightgray);
@@ -161,7 +158,7 @@ public:
     }
 
 private:
-    TextEditor* getActiveEditor()
+    yup::TextEditor* getActiveEditor()
     {
         if (singleLineEditor->hasKeyboardFocus())
             return singleLineEditor.get();
@@ -175,20 +172,18 @@ private:
         return nullptr;
     }
 
-    std::unique_ptr<TextEditor> singleLineEditor;
-    std::unique_ptr<TextEditor> multiLineEditor;
-    std::unique_ptr<TextEditor> readOnlyEditor;
-    std::unique_ptr<TextEditor> focused;
+    std::unique_ptr<yup::TextEditor> singleLineEditor;
+    std::unique_ptr<yup::TextEditor> multiLineEditor;
+    std::unique_ptr<yup::TextEditor> readOnlyEditor;
+    std::unique_ptr<yup::TextEditor> focused;
 
-    std::unique_ptr<TextButton> selectAllButton;
-    std::unique_ptr<TextButton> copyButton;
-    std::unique_ptr<TextButton> pasteButton;
-    std::unique_ptr<TextButton> clearButton;
+    std::unique_ptr<yup::TextButton> selectAllButton;
+    std::unique_ptr<yup::TextButton> copyButton;
+    std::unique_ptr<yup::TextButton> pasteButton;
+    std::unique_ptr<yup::TextButton> clearButton;
 
-    std::unique_ptr<Label> titleLabel;
-    std::unique_ptr<Label> singleLineLabel;
-    std::unique_ptr<Label> multiLineLabel;
-    std::unique_ptr<Label> readOnlyLabel;
+    std::unique_ptr<yup::Label> titleLabel;
+    std::unique_ptr<yup::Label> singleLineLabel;
+    std::unique_ptr<yup::Label> multiLineLabel;
+    std::unique_ptr<yup::Label> readOnlyLabel;
 };
-
-} // namespace yup

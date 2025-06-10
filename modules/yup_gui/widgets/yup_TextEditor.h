@@ -43,7 +43,7 @@ namespace yup
 
     @see Component, StyledText
 */
-class JUCE_API TextEditor : public Component
+class YUP_API TextEditor : public Component
 {
 public:
     //==============================================================================
@@ -231,7 +231,7 @@ private:
     // Word navigation methods
     int findWordStart(int position) const;
     int findWordEnd(int position) const;
-    bool isWordSeparator(juce_wchar character) const;
+    bool isWordSeparator(yup_wchar character) const;
     void moveCaretToWordStart(bool extendSelection = false);
     void moveCaretToWordEnd(bool extendSelection = false);
     void deleteWordBackward();
@@ -256,7 +256,7 @@ private:
 
     TimedCallback caretTimer;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TextEditor)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TextEditor)
 };
 
 } // namespace yup
