@@ -54,7 +54,7 @@ enum class BlendMode : uint8
     drawing context. It utilizes an underlying GraphicsContext and Renderer for
     actual drawing operations.
 */
-class JUCE_API Graphics
+class YUP_API Graphics
 {
 public:
     //==============================================================================
@@ -63,7 +63,7 @@ public:
         This class allows Graphics states to be saved and restored, which is useful for complex rendering tasks where
         temporary changes to the state are made and later reverted.
     */
-    class JUCE_API SavedState
+    class YUP_API SavedState
     {
     public:
         /** Constructs a SavedState linked to a specific Graphics object.

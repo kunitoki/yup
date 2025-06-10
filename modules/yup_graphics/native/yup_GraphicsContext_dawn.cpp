@@ -274,7 +274,7 @@ private:
     wgpu::Buffer m_pixelReadBuff;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructDawnGraphicsContext (GraphicsContext::Options options)
+std::unique_ptr<GraphicsContext> yup_constructDawnGraphicsContext (GraphicsContext::Options options)
 {
     return std::make_unique<LowLevelRenderContextDawnPLS> (options);
 }

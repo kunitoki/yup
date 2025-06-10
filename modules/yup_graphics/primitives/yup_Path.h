@@ -35,7 +35,7 @@ namespace yup
     allowing for efficient modifications and rendering. The Path can be used for drawing operations,
     hit testing, and bounding box calculations.
 */
-class JUCE_API Path
+class YUP_API Path
 {
 public:
     //==============================================================================

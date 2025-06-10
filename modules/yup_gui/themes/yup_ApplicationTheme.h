@@ -32,7 +32,7 @@ namespace yup
 
     @tags{UI}
 */
-class JUCE_API ApplicationTheme final : public ReferenceCountedObject
+class YUP_API ApplicationTheme final : public ReferenceCountedObject
 {
 public:
     /** Typedef for a reference-counted pointer to an ApplicationTheme object. */
@@ -151,7 +151,7 @@ private:
     std::unordered_map<Identifier, Color> defaultColors;
     Font defaultFont;
 
-    JUCE_LEAK_DETECTOR (ApplicationTheme)
+    YUP_LEAK_DETECTOR (ApplicationTheme)
 };
 
 } // namespace yup

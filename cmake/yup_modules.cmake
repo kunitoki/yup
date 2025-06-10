@@ -28,9 +28,9 @@ function (_yup_module_parse_config module_header output_module_configs output_mo
     file (STRINGS ${module_header} module_header_lines)
     while (module_header_lines)
         list (POP_FRONT module_header_lines line)
-        if (line MATCHES "^.*BEGIN_JUCE_MODULE_DECLARATION.*")
+        if (line MATCHES "^.*BEGIN_YUP_MODULE_DECLARATION.*")
             set (begin_decl ON)
-        elseif (line MATCHES "^.*END_JUCE_MODULE_DECLARATION.*")
+        elseif (line MATCHES "^.*END_YUP_MODULE_DECLARATION.*")
             if (NOT begin_decl)
                 _yup_message (FATAL_ERROR "Invalid module declaration")
             endif()
@@ -199,8 +199,8 @@ function (_yup_module_setup_target module_name
 
     target_compile_definitions (${module_name} INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        JUCE_MODULE_AVAILABLE_${module_name}=1
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YUP_MODULE_AVAILABLE_${module_name}=1
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
         ${module_defines})
 
     target_include_directories (${module_name} INTERFACE
@@ -530,14 +530,18 @@ function (yup_add_module module_path module_group)
         YUP_MODULE_DEPENDENCIES "${module_dependencies}"
         YUP_MODULE_ARC_ENABLED "${module_arc_enabled}")
 
+    # ==== Add Java support for Android if available (after target properties are set)
+    if (YUP_PLATFORM_ANDROID AND YUP_BUILD_JAVA_SUPPORT)
+        _yup_module_add_java_support (${module_name})
+    endif()
+
 endfunction()
 
 #==============================================================================
 
 function (_yup_add_default_modules modules_path)
+    # Thirdparty modules
     set (thirdparty_group "Thirdparty")
-    set (modules_group "Modules")
-
     yup_add_module (${modules_path}/thirdparty/zlib ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/glad ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/harfbuzz ${thirdparty_group})
@@ -550,13 +554,12 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/thirdparty/rive_renderer ${thirdparty_group})
     yup_add_module (${modules_path}/thirdparty/oboe_library ${thirdparty_group})
 
-    # Original juce modules
-    yup_add_module (${modules_path}/modules/juce_core ${modules_group})
-    yup_add_module (${modules_path}/modules/juce_events ${modules_group})
-    yup_add_module (${modules_path}/modules/juce_audio_basics ${modules_group})
-    yup_add_module (${modules_path}/modules/juce_audio_devices ${modules_group})
-
-    # New yup modules
+    # Yup modules
+    set (modules_group "Modules")
+    yup_add_module (${modules_path}/modules/yup_core ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_events ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
+    yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
     yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
     yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})

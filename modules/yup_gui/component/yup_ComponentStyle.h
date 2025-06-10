@@ -29,7 +29,7 @@ class ApplicationTheme;
 /**
     The ComponentStyle class is the base class for all components styles.
  */
-class JUCE_API ComponentStyle : public ReferenceCountedObject
+class YUP_API ComponentStyle : public ReferenceCountedObject
 {
 public:
     //==============================================================================

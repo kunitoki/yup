@@ -21,7 +21,7 @@
 
 #include "../yup_audio_plugin_client.h"
 
-#include <juce_audio_devices/juce_audio_devices.h>
+#include <yup_audio_devices/yup_audio_devices.h>
 
 #if ! defined(YUP_AUDIO_PLUGIN_ENABLE_STANDALONE)
 #error "YUP_AUDIO_PLUGIN_ENABLE_STANDALONE must be defined"
@@ -165,4 +165,4 @@ private:
 
 } // namespace yup
 
-START_JUCE_APPLICATION (yup::AudioProcessorApplication)
+START_YUP_APPLICATION (yup::AudioProcessorApplication)

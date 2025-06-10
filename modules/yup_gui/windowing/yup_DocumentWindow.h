@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 
-class JUCE_API DocumentWindow : public Component
+class YUP_API DocumentWindow : public Component
 {
 public:
     //==============================================================================
@@ -45,7 +45,7 @@ public:
 private:
     Color backgroundColor;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DocumentWindow)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DocumentWindow)
 };
 
 } // namespace yup

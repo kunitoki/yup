@@ -536,7 +536,7 @@ bool Component::isOnDesktop() const
 
 void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (options.onDesktop)
         removeFromDesktop();
@@ -558,7 +558,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
 void Component::removeFromDesktop()
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (! options.onDesktop)
         return;

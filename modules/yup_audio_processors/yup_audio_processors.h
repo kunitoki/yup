@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 yup_audio_processors
     vendor:             yup
@@ -33,10 +33,10 @@
     license:            ISC
     minimumCppStandard: 17
 
-    dependencies:       juce_audio_basics yup_gui
+    dependencies:       yup_audio_basics yup_gui
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */
@@ -44,8 +44,7 @@
 #pragma once
 #define YUP_AUDIO_PROCESSORS_H_INCLUDED
 
-#include <juce_audio_basics/juce_audio_basics.h>
-
+#include <yup_audio_basics/yup_audio_basics.h>
 #include <yup_gui/yup_gui.h>
 
 //==============================================================================

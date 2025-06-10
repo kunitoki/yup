@@ -26,7 +26,7 @@ namespace yup
 
 namespace
 {
-int hexCharToInt (juce_wchar c) noexcept
+int hexCharToInt (yup_wchar c) noexcept
 {
     return CharacterFunctions::getHexDigitValue (c);
 }
