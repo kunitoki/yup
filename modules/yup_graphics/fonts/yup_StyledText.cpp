@@ -307,6 +307,9 @@ void StyledText::update()
     ellipsisRun = {};
 
     const auto& runs = styledTexts.runs();
+    if (runs[0].font == nullptr)
+        return;
+
     shape = runs[0].font->shapeText (styledTexts.unichars(), runs);
     lines = rive::Text::BreakLines (shape,
                                     maxSize.getWidth(), // -1.0f
