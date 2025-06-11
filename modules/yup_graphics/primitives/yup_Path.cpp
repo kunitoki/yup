@@ -204,30 +204,22 @@ Path& Path::addRoundedRectangle (float x, float y, float width, float height, fl
     lineTo (x + width - radiusTopRight, y);
 
     // Top-right corner
-    cubicTo (x + width - radiusTopRight + radiusTopRight * kappa, y,
-             x + width, y + radiusTopRight - radiusTopRight * kappa,
-             x + width, y + radiusTopRight);
+    cubicTo (x + width - radiusTopRight + radiusTopRight * kappa, y, x + width, y + radiusTopRight - radiusTopRight * kappa, x + width, y + radiusTopRight);
 
     lineTo (x + width, y + height - radiusBottomRight);
 
     // Bottom-right corner
-    cubicTo (x + width, y + height - radiusBottomRight + radiusBottomRight * kappa,
-             x + width - radiusBottomRight + radiusBottomRight * kappa, y + height,
-             x + width - radiusBottomRight, y + height);
+    cubicTo (x + width, y + height - radiusBottomRight + radiusBottomRight * kappa, x + width - radiusBottomRight + radiusBottomRight * kappa, y + height, x + width - radiusBottomRight, y + height);
 
     lineTo (x + radiusBottomLeft, y + height);
 
     // Bottom-left corner
-    cubicTo (x + radiusBottomLeft - radiusBottomLeft * kappa, y + height,
-             x, y + height - radiusBottomLeft + radiusBottomLeft * kappa,
-             x, y + height - radiusBottomLeft);
+    cubicTo (x + radiusBottomLeft - radiusBottomLeft * kappa, y + height, x, y + height - radiusBottomLeft + radiusBottomLeft * kappa, x, y + height - radiusBottomLeft);
 
     lineTo (x, y + radiusTopLeft);
 
     // Top-left corner
-    cubicTo (x, y + radiusTopLeft - radiusTopLeft * kappa,
-             x + radiusTopLeft - radiusTopLeft * kappa, y,
-             x + radiusTopLeft, y);
+    cubicTo (x, y + radiusTopLeft - radiusTopLeft * kappa, x + radiusTopLeft - radiusTopLeft * kappa, y, x + radiusTopLeft, y);
 
     return *this;
 }

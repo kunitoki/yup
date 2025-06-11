@@ -247,7 +247,7 @@ std::optional<Font> TextEditor::getFont() const
 
 void TextEditor::setFont (Font newFont)
 {
-    if (!font || *font != newFont)
+    if (! font || *font != newFont)
     {
         font = newFont;
         needsUpdate = true;
@@ -274,7 +274,7 @@ std::optional<float> TextEditor::getFontSize() const
 
 void TextEditor::setFontSize (float newFontSize)
 {
-    if (!fontSize || !approximatelyEqual (*fontSize, newFontSize))
+    if (! fontSize || ! approximatelyEqual (*fontSize, newFontSize))
     {
         fontSize = newFontSize;
         needsUpdate = true;

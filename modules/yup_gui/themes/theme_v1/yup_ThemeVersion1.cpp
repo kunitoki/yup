@@ -198,8 +198,8 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     // Draw modern outline
     Color outlineColor = b.hasKeyboardFocus()
-        ? b.findColor (TextButton::Colors::outlineFocusedColorId).value_or (Colors::blue)
-        : b.findColor (TextButton::Colors::outlineColorId).value_or (Colors::gray);
+                           ? b.findColor (TextButton::Colors::outlineFocusedColorId).value_or (Colors::blue)
+                           : b.findColor (TextButton::Colors::outlineColorId).value_or (Colors::gray);
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;

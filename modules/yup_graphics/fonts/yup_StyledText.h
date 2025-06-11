@@ -175,7 +175,6 @@ public:
     */
     Rectangle<float> getCaretBounds (int characterIndex) const;
 
-
     /** Returns all selection rectangles for multiline selections.
 
         @param startIndex   The start character index

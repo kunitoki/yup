@@ -994,9 +994,9 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     auto bounds = getBoundsRelativeToTopLevelComponent();
 
     auto boundsToRedraw = bounds
-        .intersection (repaintArea)
-        .roundToInt()
-        .to<float>();
+                              .intersection (repaintArea)
+                              .roundToInt()
+                              .to<float>();
 
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;

@@ -31,6 +31,7 @@ public:
 
     //==============================================================================
     bool isButtonOver() const { return isButtonCurrentlyOver; }
+
     bool isButtonDown() const { return isButtonCurrentlyDown; }
 
     //==============================================================================
