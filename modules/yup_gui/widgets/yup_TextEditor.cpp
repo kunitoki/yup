@@ -35,11 +35,7 @@ const Identifier TextEditor::Colors::focusedOutlineColorId = "textEditorFocusedO
 
 TextEditor::TextEditor (StringRef componentID)
     : Component (componentID)
-    , caretTimer ([this]
-{
-    caretVisible = ! caretVisible;
-    repaint();
-})
+    , caretTimer (bindFront (&TextEditor::blinkCaret, this))
 {
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Text);
@@ -71,6 +67,37 @@ void TextEditor::setText (String newText, NotificationType notification)
                 onTextChange();
         }
     }
+}
+
+//==============================================================================
+
+void TextEditor::insertText (const String& textToInsert, NotificationType notification)
+{
+    if (readOnly)
+        return;
+
+    deleteSelectedText();
+
+    String filteredText = textToInsert;
+    if (! multiLine)
+    {
+        // Remove line breaks for single-line editor
+        filteredText = filteredText.replaceCharacters ("\r\n", "  ");
+    }
+
+    text = text.substring (0, caretPosition) + filteredText + text.substring (caretPosition);
+    caretPosition += filteredText.length();
+    selectionStart = selectionEnd = caretPosition;
+    needsUpdate = true;
+
+    if (notification == sendNotification)
+    {
+        if (onTextChange)
+            onTextChange();
+    }
+
+    updateCaretPosition();
+    repaint();
 }
 
 //==============================================================================
@@ -154,7 +181,7 @@ String TextEditor::getSelectedText() const
     return text.substring (start, end);
 }
 
-void TextEditor::deleteSelectedText()
+void TextEditor::deleteSelectedText (NotificationType notification)
 {
     if (! hasSelection() || readOnly)
         return;
@@ -166,39 +193,22 @@ void TextEditor::deleteSelectedText()
     caretPosition = selectionStart = selectionEnd = start;
     needsUpdate = true;
 
-    if (onTextChange)
-        onTextChange();
+    if (notification == sendNotification)
+    {
+        if (onTextChange)
+            onTextChange();
+    }
 
     updateCaretPosition();
     repaint();
 }
 
-//==============================================================================
-
-void TextEditor::insertText (const String& textToInsert)
+std::vector<Rectangle<float>> TextEditor::getSelectedTextAreas() const
 {
-    if (readOnly)
-        return;
+    const int start = jmin (selectionStart, selectionEnd);
+    const int end = jmax (selectionStart, selectionEnd);
 
-    deleteSelectedText();
-
-    String filteredText = textToInsert;
-    if (! multiLine)
-    {
-        // Remove line breaks for single-line editor
-        filteredText = filteredText.replaceCharacters ("\r\n", "  ");
-    }
-
-    text = text.substring (0, caretPosition) + filteredText + text.substring (caretPosition);
-    caretPosition += filteredText.length();
-    selectionStart = selectionEnd = caretPosition;
-    needsUpdate = true;
-
-    if (onTextChange)
-        onTextChange();
-
-    updateCaretPosition();
-    repaint();
+    return const_cast<StyledText&> (styledText).getSelectionRectangles (start, end);
 }
 
 //==============================================================================
@@ -206,9 +216,7 @@ void TextEditor::insertText (const String& textToInsert)
 void TextEditor::copy()
 {
     if (hasSelection())
-    {
         SystemClipboard::copyTextToClipboard (getSelectedText());
-    }
 }
 
 void TextEditor::cut()
@@ -255,61 +263,10 @@ void TextEditor::resetFont()
 
 void TextEditor::paint (Graphics& g)
 {
-    auto bounds = getLocalBounds();
-    auto textBounds = getTextBounds();
+    updateStyledTextIfNeeded();
 
-    // Update styled text if needed
-    if (needsUpdate)
-    {
-        updateStyledText();
-        needsUpdate = false;
-    }
-
-    // Draw background
-    auto backgroundColor = findColor (Colors::backgroundColorId).value_or (yup::Colors::white);
-    g.setFillColor (backgroundColor);
-    g.fillRoundedRect (bounds, 4.0f);
-
-    // Draw outline
-    auto outlineColor = hasKeyboardFocus()
-                          ? findColor (Colors::focusedOutlineColorId).value_or (yup::Colors::blue)
-                          : findColor (Colors::outlineColorId).value_or (yup::Colors::gray);
-    g.setStrokeColor (outlineColor);
-    g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (bounds, 4.0f);
-
-    // Draw selection background
-    if (hasSelection())
-    {
-        auto selectionColor = findColor (Colors::selectionColorId).value_or (yup::Colors::lightblue.withAlpha (0.6f));
-        g.setFillColor (selectionColor);
-
-        int start = jmin (selectionStart, selectionEnd);
-        int end = jmax (selectionStart, selectionEnd);
-
-        // Get all selection rectangles for proper multiline selection rendering
-        auto selectionRects = styledText.getSelectionRectangles (start, end);
-        for (const auto& rect : selectionRects)
-        {
-            // Adjust each rectangle for scroll offset and text bounds
-            auto adjustedRect = rect.translated (textBounds.getTopLeft() - scrollOffset);
-            g.fillRect (adjustedRect);
-        }
-    }
-
-    // Draw text with scroll offset
-    g.setFillColor (outlineColor);
-    auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
-    g.fillFittedText (styledText, scrolledTextBounds);
-
-    // Draw caret
-    if (hasKeyboardFocus() && caretVisible)
-    {
-        auto caretColor = findColor (Colors::caretColorId).value_or (yup::Colors::black);
-        g.setFillColor (caretColor);
-        auto caretBounds = getCaretBounds();
-        g.fillRect (caretBounds);
-    }
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 void TextEditor::resized()
@@ -362,16 +319,17 @@ void TextEditor::mouseDown (const MouseEvent& event)
 
 void TextEditor::mouseDrag (const MouseEvent& event)
 {
-    if (isDragging)
-    {
-        auto position = event.getPosition().to<float>();
-        int newCaretPos = getGlyphIndexAtPosition (position);
+    if (! isDragging)
+        return;
 
-        selectionEnd = newCaretPos;
-        caretPosition = newCaretPos;
-        updateCaretPosition();
-        repaint();
-    }
+    auto position = event.getPosition().to<float>();
+    int newCaretPos = getGlyphIndexAtPosition (position);
+
+    selectionEnd = newCaretPos;
+    caretPosition = newCaretPos;
+
+    updateCaretPosition();
+    repaint();
 }
 
 //==============================================================================
@@ -490,33 +448,36 @@ void TextEditor::keyDown (const KeyPress& key, const Point<float>& position)
 void TextEditor::textInput (const String& inputText)
 {
     if (! readOnly && inputText.isNotEmpty())
-    {
         insertText (inputText);
-    }
 }
 
 //==============================================================================
 
-void TextEditor::updateStyledText()
+void TextEditor::updateStyledTextIfNeeded()
 {
-    styledText.clear();
+    if (! needsUpdate)
+        return;
+
+    auto modifier = styledText.startUpdate();
+    modifier.clear();
 
     if (text.isNotEmpty())
     {
         auto textColor = findColor (Colors::textColorId).value_or (yup::Colors::black);
         auto currentFont = font.value_or (ApplicationTheme::getGlobalTheme()->getDefaultFont());
 
-        styledText.setMaxSize (getTextBounds().getSize());
-        styledText.setHorizontalAlign (StyledText::left);
-        styledText.setVerticalAlign (StyledText::top);
-        styledText.setWrap (multiLine ? StyledText::wrap : StyledText::noWrap);
-        styledText.setOverflow (StyledText::visible);
+        modifier.setMaxSize (getTextBounds().getSize());
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.setVerticalAlign (StyledText::top);
+        modifier.setWrap (multiLine ? StyledText::wrap : StyledText::noWrap);
+        modifier.setOverflow (StyledText::visible);
 
         // Calculate font size based on text editor height (with some padding)
         float fontSize = 14.0f; // jmax(10.0f, jmin(24.0f, getTextBounds().getHeight() * 0.6f));
-        styledText.appendText (text, currentFont, fontSize);
-        styledText.update();
+        modifier.appendText (text, currentFont, fontSize);
     }
+
+    needsUpdate = false;
 }
 
 //==============================================================================
@@ -525,9 +486,8 @@ void TextEditor::updateCaretPosition()
 {
     caretVisible = true;
     if (hasKeyboardFocus())
-    {
         startCaretBlinking();
-    }
+
     ensureCaretVisible();
 }
 
@@ -535,8 +495,10 @@ void TextEditor::updateCaretPosition()
 
 void TextEditor::ensureCaretVisible()
 {
+    updateStyledTextIfNeeded();
+
     auto textBounds = getTextBounds();
-    auto caretBounds = const_cast<StyledText&> (styledText).getCaretBounds (caretPosition);
+    auto caretBounds = styledText.getCaretBounds (caretPosition);
 
     if (caretBounds.isEmpty())
         return;
@@ -583,12 +545,21 @@ void TextEditor::ensureCaretVisible()
     scrollOffset.setY (jmax (0.0f, scrollOffset.getY()));
 
     // Limit scrolling to the actual text bounds
-    auto textSize = const_cast<StyledText&> (styledText).getComputedTextBounds();
+    auto textSize = styledText.getComputedTextBounds();
     scrollOffset.setX (jmin (scrollOffset.getX(), jmax (0.0f, textSize.getWidth() - textBounds.getWidth())));
     scrollOffset.setY (jmin (scrollOffset.getY(), jmax (0.0f, textSize.getHeight() - textBounds.getHeight())));
 
     if (needsRepaint)
         repaint();
+}
+
+//==============================================================================
+
+void TextEditor::blinkCaret()
+{
+    caretVisible = ! caretVisible;
+
+    repaint();
 }
 
 //==============================================================================
@@ -620,6 +591,8 @@ void TextEditor::moveCaretUp (bool extendSelection)
 {
     if (multiLine)
     {
+        updateStyledTextIfNeeded();
+
         // Get current caret bounds to maintain horizontal position
         auto currentCaretBounds = getCaretBounds();
         if (currentCaretBounds.isEmpty())
@@ -663,6 +636,8 @@ void TextEditor::moveCaretDown (bool extendSelection)
 {
     if (multiLine)
     {
+        updateStyledTextIfNeeded();
+
         // Get current caret bounds to maintain horizontal position
         auto currentCaretBounds = getCaretBounds();
         if (currentCaretBounds.isEmpty())

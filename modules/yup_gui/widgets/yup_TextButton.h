@@ -30,11 +30,32 @@ public:
     TextButton (StringRef componentID);
 
     //==============================================================================
-    void paintButton (Graphics& g) override;
 
+    String getButtonText() const { return buttonText; }
+
+    void setButtonText (StringRef newButtonText);
+
+    //==============================================================================
+    /** Color identifiers used by the text editor. */
+    struct Colors
+    {
+        static const Identifier backgroundColorId;
+        static const Identifier backgroundHoverColorId;
+        static const Identifier textColorId;
+        static const Identifier outlineColorId;
+        static const Identifier focusedOutlineColorId;
+    };
+
+    //==============================================================================
+    /** @internal */
+    void paintButton (Graphics& g) override;
+    /** @internal */
     void resized() override;
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
+    String buttonText;
     StyledText styledText;
 };
 

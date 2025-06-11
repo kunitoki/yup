@@ -65,6 +65,13 @@ public:
     void setText (String newText, NotificationType notification = sendNotification);
 
     //==============================================================================
+    /** Inserts text at the current caret position.
+
+        @param textToInsert     The text to insert
+    */
+    void insertText (const String& textToInsert, NotificationType notification = sendNotification);
+
+    //==============================================================================
     /** Returns whether this editor supports multiple lines.
 
         @returns True if multiline editing is enabled
@@ -103,6 +110,9 @@ public:
     */
     void setCaretPosition (int newPosition);
 
+    /** */
+    bool isCaretVisible() const noexcept { return caretVisible; }
+
     //==============================================================================
     /** Gets the current selection range.
 
@@ -122,6 +132,9 @@ public:
     /** Returns true if any text is currently selected. */
     bool hasSelection() const;
 
+    /** Returns the selection rectangles, usable for knowing where the selection is. */
+    std::vector<Rectangle<float>> getSelectedTextAreas() const;
+
     //==============================================================================
     /** Returns the currently selected text.
 
@@ -130,13 +143,7 @@ public:
     String getSelectedText() const;
 
     /** Deletes the currently selected text. */
-    void deleteSelectedText();
-
-    /** Inserts text at the current caret position.
-
-        @param textToInsert     The text to insert
-    */
-    void insertText (const String& textToInsert);
+    void deleteSelectedText (NotificationType notification = sendNotification);
 
     //==============================================================================
     /** Copies the selected text to the clipboard. */
@@ -147,6 +154,13 @@ public:
 
     /** Pastes text from the clipboard at the current caret position. */
     void paste();
+
+    //==============================================================================
+    /** Sets a callback function to be called when the text changes.
+
+        @param callback     The function to call when text changes
+    */
+    std::function<void()> onTextChange;
 
     //==============================================================================
     /** Returns the current font.
@@ -165,11 +179,14 @@ public:
     void resetFont();
 
     //==============================================================================
-    /** Sets a callback function to be called when the text changes.
+    /** */
+    Rectangle<float> getTextBounds() const;
 
-        @param callback     The function to call when text changes
-    */
-    std::function<void()> onTextChange;
+    /** */
+    Rectangle<float> getCaretBounds() const;
+
+    /** Get the scroll offset. */
+    Point<float> getScrollOffset() const noexcept { return scrollOffset; }
 
     //==============================================================================
     /** Color identifiers used by the text editor. */
@@ -204,14 +221,16 @@ public:
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void textInput (const String& text) override;
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     //==============================================================================
-    void updateStyledText();
+    void updateStyledTextIfNeeded();
     void updateCaretPosition();
     void ensureCaretVisible();
+    void blinkCaret();
     int getGlyphIndexAtPosition (const Point<float>& position) const;
-    Rectangle<float> getCaretBounds() const;
     void moveCaretUp (bool extendSelection = false);
     void moveCaretDown (bool extendSelection = false);
     void moveCaretLeft (bool extendSelection = false);
@@ -224,7 +243,6 @@ private:
     void handleDelete();
     void startCaretBlinking();
     void stopCaretBlinking();
-    Rectangle<float> getTextBounds() const;
     int findLineStart (int position) const;
     int findLineEnd (int position) const;
     int findPreviousLinePosition (int position) const;

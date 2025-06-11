@@ -91,8 +91,8 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
     g.setStrokeWidth (s.proportionOfWidth (0.03f));
     g.strokePath (foregroundLine);
 
-    const auto& font = theme.getDefaultFont();
     /*
+    const auto& font = theme.getDefaultFont();
     StyledText text;
     text.appendText (font, s.proportionOfHeight (0.1f), s.proportionOfHeight (0.1f), String (s.getValue(), 3).toRawUTF8());
     text.layout (s.getLocalBounds().reduced (5).removeFromBottom (s.proportionOfWidth (0.1f)), StyledText::center);
@@ -109,24 +109,73 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
     }
 }
 
+void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEditor& t)
+{
+    auto bounds = t.getLocalBounds();
+    auto textBounds = t.getTextBounds();
+    auto scrollOffset = t.getScrollOffset();
+
+    // Draw background
+    auto backgroundColor = t.findColor (TextEditor::Colors::backgroundColorId).value_or (Colors::white);
+    g.setFillColor (backgroundColor);
+    g.fillRoundedRect (bounds, 4.0f);
+
+    // Draw outline
+    auto outlineColor = t.hasKeyboardFocus()
+                          ? t.findColor (TextEditor::Colors::focusedOutlineColorId).value_or (Colors::blue)
+                          : t.findColor (TextEditor::Colors::outlineColorId).value_or (Colors::darkgray);
+    g.setStrokeColor (outlineColor);
+    g.setStrokeWidth (1.0f);
+    g.strokeRoundedRect (bounds, 4.0f);
+
+    // Draw selection background
+    if (t.hasSelection())
+    {
+        auto selectionColor = t.findColor (TextEditor::Colors::selectionColorId).value_or (Colors::lightblue.withAlpha (0.6f));
+        g.setFillColor (selectionColor);
+
+        // Get all selection rectangles for proper multiline selection rendering
+        auto selectionRects = t.getSelectedTextAreas();
+        for (const auto& rect : selectionRects)
+        {
+            // Adjust each rectangle for scroll offset and text bounds
+            auto adjustedRect = rect.translated (textBounds.getTopLeft() - scrollOffset);
+            g.fillRect (adjustedRect);
+        }
+    }
+
+    // Draw text with scroll offset
+    auto textColor = t.findColor (TextEditor::Colors::textColorId).value_or (Colors::darkgray);
+    g.setFillColor (textColor);
+
+    auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
+    g.fillFittedText (t.getStyledText(), scrolledTextBounds);
+
+    // Draw caret
+    if (t.hasKeyboardFocus() && t.isCaretVisible())
+    {
+        auto caretColor = t.findColor (TextEditor::Colors::caretColorId).value_or (yup::Colors::black);
+        g.setFillColor (caretColor);
+
+        auto caretBounds = t.getCaretBounds();
+        g.fillRect (caretBounds);
+    }
+}
+
 //==============================================================================
 
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
     const auto& font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
     auto bounds = b.getLocalBounds().reduced (b.proportionOfWidth (0.01f));
-    const auto center = bounds.getCenter();
 
     Path backgroundPath;
-    backgroundPath.addRoundedRectangle (bounds.reduced (b.proportionOfWidth (0.045f)), 10.0f, 10.0f, 10.0f, 10.0f);
+    backgroundPath.addRoundedRectangle (bounds.reduced (b.proportionOfWidth (0.045f)), 6.0f, 6.0f, 6.0f, 6.0f);
     g.setFillColor (b.isButtonDown() ? Color (0xff000000) : Color (0xffffffff));
     g.fillPath (backgroundPath);
 
-    StyledText text;
-    text.appendText (b.getComponentID(), nullptr, font, bounds.getHeight() * 0.5f, bounds.getHeight() * 0.5f);
-
     g.setStrokeColor (b.isButtonDown() ? Color (0xffffffff) : Color (0xff000000));
-    g.strokeFittedText (text, {});
+    g.strokeFittedText (b.getStyledText(), {});
 }
 
 //==============================================================================
@@ -164,6 +213,7 @@ ApplicationTheme::Ptr createThemeVersion1()
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
+    theme->setComponentStyle<TextEditor> (ComponentStyle::createStyle<TextEditor> (paintTextEditor));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
     theme->setColor (Label::Colors::fillColorId, Colors::white);

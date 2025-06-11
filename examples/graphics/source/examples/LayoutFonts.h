@@ -113,16 +113,16 @@ private:
         {
             bounds = newBounds;
 
-            styledText.setMaxSize (newBounds.getSize());
-            styledText.setHorizontalAlign (hAlign);
-            styledText.setVerticalAlign (vAlign);
-            styledText.setParagraphSpacing (0.0f);
-            styledText.setOverflow (overflow);
-            styledText.setWrap (wrap);
+            auto modifier = styledText.startUpdate();
+            modifier.setMaxSize (newBounds.getSize());
+            modifier.setHorizontalAlign (hAlign);
+            modifier.setVerticalAlign (vAlign);
+            modifier.setParagraphSpacing (0.0f);
+            modifier.setOverflow (overflow);
+            modifier.setWrap (wrap);
 
-            styledText.clear();
-            styledText.appendText (text, nullptr, font.getFont(), fontSize);
-            styledText.update();
+            modifier.clear();
+            modifier.appendText (text, nullptr, font.getFont(), fontSize);
         }
     };
 

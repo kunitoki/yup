@@ -123,4 +123,34 @@ static constexpr auto toFnPtr (Functor functor)
     return detail::toFnPtr (functor, &Functor::operator());
 }
 
+template <typename T, typename... Args>
+static auto tuplePrepend (T&& t, Args&&...args)
+{
+    return std::tuple_cat (std::forward<T> (t), std::forward_as_tuple (args...));
+}
+
+template <typename T, typename... Args>
+static auto tupleAppend (T&& t, Args&&...args)
+{
+    return std::tuple_cat (std::forward_as_tuple (args...), std::forward<T> (t));
+}
+
+template <typename F, typename... FrontArgs>
+static decltype(auto) bindFront (F&& f, FrontArgs&&... frontArgs)
+{
+    return [f = std::forward<F>(f), frontArgs = std::make_tuple (std::forward<FrontArgs>(frontArgs)...)] (auto&&...backArgs)
+    {
+        return std::apply (f, tuplePrepend (frontArgs, std::forward<decltype (backArgs)> (backArgs)...));
+    };
+}
+
+template <typename F, typename... BackArgs>
+static decltype(auto) bindBack (F&& f, BackArgs&&... backArgs)
+{
+    return [f = std::forward<F>(f), backArgs = std::make_tuple (std::forward<BackArgs>(backArgs)...)] (auto&&... frontArgs)
+    {
+        return std::apply (f, tupleAppend (backArgs, std::forward<decltype (frontArgs)> (frontArgs)...));
+    };
+}
+
 } // namespace yup

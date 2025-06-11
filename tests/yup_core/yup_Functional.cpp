@@ -260,3 +260,45 @@ TEST_F (FunctionalTest, DisableIfSameOrDerivedConcept)
     // but we can at least verify the type traits work
     SUCCEED();
 }
+
+TEST_F (FunctionalTest, BindFront)
+{
+    struct X
+    {
+        int test (int x) { return x; }
+    } x;
+
+    auto func1 = [] (int a, bool b, float c)
+    {
+        return a;
+    };
+
+    auto bindFunc1 = bindFront (func1, 42);
+    auto result1 = bindFunc1 (true, 1.0f);
+    EXPECT_EQ (result1, 42);
+
+    auto bindFunc2 = bindFront (&X::test, &x, 42);
+    auto result2 = bindFunc2();
+    EXPECT_EQ (result2, 42);
+}
+
+TEST_F (FunctionalTest, BindBack)
+{
+    struct X
+    {
+        int test (int x) { return x; }
+    } x;
+
+    auto func1 = [] (bool a, float b, int c)
+    {
+        return c;
+    };
+
+    auto bindFunc1 = bindBack (func1, 42);
+    auto result1 = bindFunc1 (true, 1.0f);
+    EXPECT_EQ (result1, 42);
+
+    auto bindFunc2 = bindBack (&X::test, &x, 42);
+    auto result2 = bindFunc2();
+    EXPECT_EQ (result2, 42);
+}

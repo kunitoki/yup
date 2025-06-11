@@ -24,32 +24,38 @@ namespace yup
 
 //==============================================================================
 
+const Identifier TextButton::Colors::backgroundColorId = "textButtonBackground";
+const Identifier TextButton::Colors::backgroundHoverColorId = "textButtonBackgroundOver";
+const Identifier TextButton::Colors::textColorId = "textButtonText";
+const Identifier TextButton::Colors::outlineColorId = "textButtonOutline";
+const Identifier TextButton::Colors::focusedOutlineColorId = "textButtonFocusedOutline";
+
+//==============================================================================
+
 TextButton::TextButton (StringRef componentID)
     : Button (componentID)
+    , buttonText (componentID)
 {
+}
+
+//==============================================================================
+
+void TextButton::setButtonText (StringRef newButtonText)
+{
+    if (buttonText != newButtonText)
+    {
+        buttonText = newButtonText;
+
+        resized();
+    }
 }
 
 //==============================================================================
 
 void TextButton::paintButton (Graphics& g)
 {
-    //if (auto style = ApplicationTheme::findComponentStyle (*this))
-    //    style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
-
-    g.setFillColor (isButtonDown() ? Color (0xffff0000) : Color (0xffffffff));
-    g.fillAll();
-
-    /*
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
-
-    auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
-    g.setFillColor (isButtonDown() ? Color (0xff000000) : Color (0xffffffff));
-    g.fillRoundedRect (rectBounds, 4.0f);
-
-    auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
-    g.setFillColor (isButtonDown() ? Color (0xffffffff) : Color (0xff000000));
-    g.fillFittedText (styledText, labelBounds);
-    */
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 //==============================================================================
@@ -61,13 +67,12 @@ void TextButton::resized()
     auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-    styledText.setMaxSize (labelBounds.getSize());
-    styledText.setHorizontalAlign (StyledText::center);
-    styledText.setVerticalAlign (StyledText::middle);
-
-    styledText.clear();
-    styledText.appendText (getComponentID(), ApplicationTheme::getGlobalTheme()->getDefaultFont(), 32.0f);
-    styledText.update();
+    auto modifier = styledText.startUpdate();
+    modifier.setMaxSize (labelBounds.getSize());
+    modifier.setHorizontalAlign (StyledText::center);
+    modifier.setVerticalAlign (StyledText::middle);
+    modifier.clear();
+    modifier.appendText (getComponentID(), font, 32.0f);
 }
 
 } // namespace yup

@@ -24,6 +24,9 @@ namespace yup
 
 //==============================================================================
 
+namespace
+{
+
 rive::TextAlign toTextAlign (StyledText::HorizontalAlign align) noexcept
 {
     if (align == StyledText::left || align == StyledText::justified)
@@ -49,6 +52,74 @@ rive::TextWrap toTextWrap (StyledText::TextWrap wrap) noexcept
     return rive::TextWrap::noWrap;
 }
 
+} // namespace
+
+//==============================================================================
+
+StyledText::TextModifier::TextModifier (StyledText& styledText)
+    : styledText (styledText)
+{
+}
+
+StyledText::TextModifier::~TextModifier()
+{
+    styledText.update();
+}
+
+void StyledText::TextModifier::clear()
+{
+    styledText.clear();
+}
+
+void StyledText::TextModifier::appendText (StringRef text,
+                                           const Font& font,
+                                           float fontSize,
+                                           float lineHeight,
+                                           float letterSpacing)
+{
+    styledText.appendText (text, nullptr, font, fontSize, lineHeight, letterSpacing);
+}
+
+void StyledText::TextModifier::appendText (StringRef text,
+                                           rive::rcp<rive::RenderPaint> paint,
+                                           const Font& font,
+                                           float fontSize,
+                                           float lineHeight,
+                                           float letterSpacing)
+{
+    styledText.appendText (text, paint, font, fontSize, lineHeight, letterSpacing);
+}
+
+void StyledText::TextModifier::setOverflow (StyledText::TextOverflow value)
+{
+    styledText.setOverflow (value);
+}
+
+void StyledText::TextModifier::setHorizontalAlign (StyledText::HorizontalAlign value)
+{
+    styledText.setHorizontalAlign (value);
+}
+
+void StyledText::TextModifier::setVerticalAlign (StyledText::VerticalAlign value)
+{
+    styledText.setVerticalAlign (value);
+}
+
+void StyledText::TextModifier::setMaxSize (const Size<float>& value)
+{
+    styledText.setMaxSize (value);
+}
+
+void StyledText::TextModifier::setParagraphSpacing (float value)
+{
+    styledText.setParagraphSpacing (value);
+}
+
+void StyledText::TextModifier::setWrap (StyledText::TextWrap value)
+{
+    styledText.setWrap (value);
+}
+
 //==============================================================================
 
 StyledText::StyledText()
@@ -62,6 +133,18 @@ bool StyledText::isEmpty() const
     return styledTexts.empty();
 }
 
+bool StyledText::needsUpdate() const
+{
+    return isDirty;
+}
+
+//==============================================================================
+
+StyledText::TextModifier StyledText::startUpdate()
+{
+    return { *this };
+}
+
 //==============================================================================
 
 void StyledText::clear()
@@ -69,7 +152,7 @@ void StyledText::clear()
     styledTexts.clear();
     styles.clear();
 
-    isDirty = true;
+    update();
 }
 
 //==============================================================================
@@ -169,15 +252,6 @@ void StyledText::setWrap (TextWrap value)
 }
 
 //==============================================================================
-
-void StyledText::appendText (StringRef text,
-                             const Font& font,
-                             float fontSize,
-                             float lineHeight,
-                             float letterSpacing)
-{
-    appendText (text, nullptr, font, fontSize, lineHeight, letterSpacing);
-}
 
 void StyledText::appendText (StringRef text,
                              rive::rcp<rive::RenderPaint> paint,
@@ -387,11 +461,10 @@ void StyledText::update()
 
 //==============================================================================
 
-int StyledText::getGlyphIndexAtPosition (const Point<float>& position)
+int StyledText::getGlyphIndexAtPosition (const Point<float>& position) const
 {
-    update();
-
-    if (orderedLines.empty())
+    jassert (! isDirty);
+    if (isDirty || orderedLines.empty())
         return 0;
 
     float clickX = position.getX();
@@ -515,11 +588,10 @@ int StyledText::getGlyphIndexAtPosition (const Point<float>& position)
 
 //==============================================================================
 
-Rectangle<float> StyledText::getCaretBounds (int characterIndex)
+Rectangle<float> StyledText::getCaretBounds (int characterIndex) const
 {
-    update();
-
-    if (orderedLines.empty())
+    jassert (! isDirty);
+    if (isDirty || orderedLines.empty())
         return {};
 
     // Handle bounds checking
@@ -635,13 +707,12 @@ Rectangle<float> StyledText::getCaretBounds (int characterIndex)
 
 //==============================================================================
 
-std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex, int endIndex)
+std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex, int endIndex) const
 {
-    update();
-
     std::vector<Rectangle<float>> rectangles;
 
-    if (orderedLines.empty() || startIndex < 0 || endIndex < 0 || startIndex >= endIndex)
+    jassert (! isDirty);
+    if (isDirty || orderedLines.empty() || startIndex < 0 || endIndex < 0 || startIndex >= endIndex)
         return rectangles;
 
     rectangles.reserve (orderedLines.size());
@@ -708,17 +779,19 @@ std::vector<Rectangle<float>> StyledText::getSelectionRectangles (int startIndex
 
 //==============================================================================
 
-Rectangle<float> StyledText::getComputedTextBounds()
+Rectangle<float> StyledText::getComputedTextBounds() const
 {
-    update();
+    jassert (! isDirty);
     return bounds;
 }
 
 //==============================================================================
 
-Point<float> StyledText::getOffset (const Rectangle<float>& area)
+Point<float> StyledText::getOffset (const Rectangle<float>& area) const
 {
-    update();
+    jassert (! isDirty);
+    if (isDirty)
+        return {};
 
     Point<float> result { 0.0f, 0.0f };
 
@@ -737,15 +810,15 @@ Point<float> StyledText::getOffset (const Rectangle<float>& area)
 
 //==============================================================================
 
-const std::vector<rive::OrderedLine>& StyledText::getOrderedLines()
+const std::vector<rive::OrderedLine>& StyledText::getOrderedLines() const
 {
-    update();
+    jassert (! isDirty);
     return orderedLines;
 }
 
-const std::vector<StyledText::RenderStyle*>& StyledText::getRenderStyles()
+const std::vector<StyledText::RenderStyle*>& StyledText::getRenderStyles() const
 {
-    update();
+    jassert (! isDirty);
     return renderStyles;
 }
 
@@ -753,9 +826,8 @@ const std::vector<StyledText::RenderStyle*>& StyledText::getRenderStyles()
 
 bool StyledText::isValidCharacterIndex (int characterIndex) const
 {
-    const_cast<StyledText*>(this)->update();
-
-    if (characterIndex < 0)
+    jassert (! isDirty);
+    if (isDirty || characterIndex < 0)
         return false;
 
     if (glyphLookup.size() == 0)
