@@ -75,14 +75,14 @@ void TextButton::resized()
     modifier.setWrap (StyledText::noWrap);
     modifier.setOverflow (StyledText::ellipsis);
     modifier.clear();
-    modifier.appendText (buttonText, font, textBounds.getHeight() * 0.5f);
+    modifier.appendText (buttonText, font, getHeight() * 0.35f);
 }
 
 //==============================================================================
 
 Rectangle<float> TextButton::getTextBounds() const
 {
-    return getLocalBounds().reduced (proportionOfWidth (0.045f));
+    return getLocalBounds().reduced (proportionOfWidth (0.04f));
 }
 
 } // namespace yup
