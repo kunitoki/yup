@@ -25,10 +25,11 @@ namespace yup
 //==============================================================================
 
 const Identifier TextButton::Colors::backgroundColorId = "textButtonBackground";
-const Identifier TextButton::Colors::backgroundHoverColorId = "textButtonBackgroundOver";
+const Identifier TextButton::Colors::backgroundPressedColorId = "textButtonBackgroundPressed";
 const Identifier TextButton::Colors::textColorId = "textButtonText";
+const Identifier TextButton::Colors::textPressedColorId = "textButtonTextPressed";
 const Identifier TextButton::Colors::outlineColorId = "textButtonOutline";
-const Identifier TextButton::Colors::focusedOutlineColorId = "textButtonFocusedOutline";
+const Identifier TextButton::Colors::outlineFocusedColorId = "textButtonOutlineFocused";
 
 //==============================================================================
 
@@ -36,6 +37,8 @@ TextButton::TextButton (StringRef componentID)
     : Button (componentID)
     , buttonText (componentID)
 {
+    setWantsKeyboardFocus (true);
+    setMouseCursor (MouseCursor::Hand);
 }
 
 //==============================================================================
@@ -62,17 +65,24 @@ void TextButton::paintButton (Graphics& g)
 
 void TextButton::resized()
 {
-    auto bounds = getLocalBounds().reduced (proportionOfWidth (0.01f));
-    auto rectBounds = bounds.reduced (proportionOfWidth (0.045f));
-    auto labelBounds = rectBounds.reduced (10.0f, 10.0f);
+    auto textBounds = getTextBounds();
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
     auto modifier = styledText.startUpdate();
-    modifier.setMaxSize (labelBounds.getSize());
+    modifier.setMaxSize (textBounds.getSize());
     modifier.setHorizontalAlign (StyledText::center);
     modifier.setVerticalAlign (StyledText::middle);
+    modifier.setWrap (StyledText::noWrap);
+    modifier.setOverflow (StyledText::ellipsis);
     modifier.clear();
-    modifier.appendText (getComponentID(), font, 32.0f);
+    modifier.appendText (buttonText, font, textBounds.getHeight() * 0.5f);
+}
+
+//==============================================================================
+
+Rectangle<float> TextButton::getTextBounds() const
+{
+    return getLocalBounds().reduced (proportionOfWidth (0.045f));
 }
 
 } // namespace yup

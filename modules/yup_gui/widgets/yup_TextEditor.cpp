@@ -247,16 +247,51 @@ std::optional<Font> TextEditor::getFont() const
 
 void TextEditor::setFont (Font newFont)
 {
-    font = newFont;
-    needsUpdate = true;
-    repaint();
+    if (!font || *font != newFont)
+    {
+        font = newFont;
+        needsUpdate = true;
+
+        repaint();
+    }
 }
 
 void TextEditor::resetFont()
 {
-    font.reset();
-    needsUpdate = true;
-    repaint();
+    if (font)
+    {
+        font.reset();
+        needsUpdate = true;
+
+        repaint();
+    }
+}
+
+std::optional<float> TextEditor::getFontSize() const
+{
+    return fontSize;
+}
+
+void TextEditor::setFontSize (float newFontSize)
+{
+    if (!fontSize || !approximatelyEqual (*fontSize, newFontSize))
+    {
+        fontSize = newFontSize;
+        needsUpdate = true;
+
+        repaint();
+    }
+}
+
+void TextEditor::resetFontSize()
+{
+    if (fontSize)
+    {
+        fontSize.reset();
+        needsUpdate = true;
+
+        repaint();
+    }
 }
 
 //==============================================================================
@@ -469,12 +504,10 @@ void TextEditor::updateStyledTextIfNeeded()
         modifier.setMaxSize (getTextBounds().getSize());
         modifier.setHorizontalAlign (StyledText::left);
         modifier.setVerticalAlign (StyledText::top);
-        modifier.setWrap (multiLine ? StyledText::wrap : StyledText::noWrap);
+        modifier.setWrap (/*multiLine ? StyledText::wrap :*/ StyledText::noWrap);
         modifier.setOverflow (StyledText::visible);
 
-        // Calculate font size based on text editor height (with some padding)
-        float fontSize = 14.0f; // jmax(10.0f, jmin(24.0f, getTextBounds().getHeight() * 0.6f));
-        modifier.appendText (text, currentFont, fontSize);
+        modifier.appendText (text, currentFont, fontSize.value_or (14.0f));
     }
 
     needsUpdate = false;

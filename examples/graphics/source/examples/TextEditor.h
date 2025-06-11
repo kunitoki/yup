@@ -123,19 +123,19 @@ public:
 
         // Single line editor
         singleLineLabel->setBounds (area.removeFromTop (25));
-        singleLineEditor->setBounds (area.removeFromTop (30));
+        singleLineEditor->setBounds (area.removeFromTop (26));
 
         area.removeFromTop (15); // Spacer
 
         // Multi line editor
         multiLineLabel->setBounds (area.removeFromTop (25));
-        multiLineEditor->setBounds (area.removeFromTop (120));
+        multiLineEditor->setBounds (area.removeFromTop (26 * 5));
 
         area.removeFromTop (15); // Spacer
 
         // Read only editor
         readOnlyLabel->setBounds (area.removeFromTop (25));
-        readOnlyEditor->setBounds (area.removeFromTop (60));
+        readOnlyEditor->setBounds (area.removeFromTop (26));
 
         area.removeFromTop (20); // Spacer
 
@@ -154,7 +154,7 @@ public:
         area.removeFromTop (10); // Spacer
 
         // Hidden focused editor for testing
-        focused->setBounds (area.removeFromTop (30));
+        focused->setBounds (area.removeFromTop (26));
     }
 
 private:

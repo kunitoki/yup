@@ -30,8 +30,8 @@ public:
     Button (StringRef componentID);
 
     //==============================================================================
+    bool isButtonOver() const { return isButtonCurrentlyOver; }
     bool isButtonDown() const { return isButtonCurrentlyDown; }
-    bool isButtonOver() const { return isButtonCurrentlyDown; }
 
     //==============================================================================
     virtual void paintButton (Graphics& g) = 0;

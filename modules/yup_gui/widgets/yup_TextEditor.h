@@ -178,6 +178,15 @@ public:
     /** Reset the font to the theme one. */
     void resetFont();
 
+    /** */
+    std::optional<float> getFontSize() const;
+
+    /** */
+    void setFontSize (float newFontSize);
+
+    /** */
+    void resetFontSize();
+
     //==============================================================================
     /** */
     Rectangle<float> getTextBounds() const;
@@ -261,6 +270,7 @@ private:
     String text;
     StyledText styledText;
     std::optional<Font> font;
+    std::optional<float> fontSize;
 
     int caretPosition = 0;
     int selectionStart = 0;

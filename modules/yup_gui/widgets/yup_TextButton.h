@@ -40,11 +40,14 @@ public:
     struct Colors
     {
         static const Identifier backgroundColorId;
-        static const Identifier backgroundHoverColorId;
+        static const Identifier backgroundPressedColorId;
         static const Identifier textColorId;
+        static const Identifier textPressedColorId;
         static const Identifier outlineColorId;
-        static const Identifier focusedOutlineColorId;
+        static const Identifier outlineFocusedColorId;
     };
+
+    Rectangle<float> getTextBounds() const;
 
     //==============================================================================
     /** @internal */

@@ -473,6 +473,8 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
+    jassert (! options.isRepainting); // You are likely repainting from paint !
+
     if (getBounds().isEmpty())
         return;
 
@@ -482,6 +484,8 @@ void Component::repaint()
 
 void Component::repaint (const Rectangle<float>& rect)
 {
+    jassert (! options.isRepainting); // You are likely repainting from paint !
+
     if (rect.isEmpty())
         return;
 
@@ -998,6 +1002,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (opacity <= 0.0f)
         return;
 
+    options.isRepainting = true;
+
     {
         const auto globalState = g.saveState();
 
@@ -1019,6 +1025,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         paintOverChildren (g);
     }
+
+    options.isRepainting = false;
 
 #if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
     g.setFillColor (debugColor);

@@ -118,15 +118,15 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw background
     auto backgroundColor = t.findColor (TextEditor::Colors::backgroundColorId).value_or (Colors::white);
     g.setFillColor (backgroundColor);
-    g.fillRoundedRect (bounds, 4.0f);
+    g.fillRoundedRect (bounds, 6.0f);
 
     // Draw outline
     auto outlineColor = t.hasKeyboardFocus()
                           ? t.findColor (TextEditor::Colors::focusedOutlineColorId).value_or (Colors::blue)
-                          : t.findColor (TextEditor::Colors::outlineColorId).value_or (Colors::darkgray);
+                          : t.findColor (TextEditor::Colors::outlineColorId).value_or (Colors::gray);
     g.setStrokeColor (outlineColor);
     g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (bounds, 4.0f);
+    g.strokeRoundedRect (bounds.reduced (0.5f), 6.0f);
 
     // Draw selection background
     if (t.hasSelection())
@@ -145,7 +145,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     }
 
     // Draw text with scroll offset
-    auto textColor = t.findColor (TextEditor::Colors::textColorId).value_or (Colors::darkgray);
+    auto textColor = t.findColor (TextEditor::Colors::textColorId).value_or (Colors::gray);
     g.setFillColor (textColor);
 
     auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
@@ -166,16 +166,46 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
 
 void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButton& b)
 {
-    const auto& font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
-    auto bounds = b.getLocalBounds().reduced (b.proportionOfWidth (0.01f));
+    auto bounds = b.getLocalBounds();
+    constexpr auto cornerRadius = 6.0f;
 
-    Path backgroundPath;
-    backgroundPath.addRoundedRectangle (bounds.reduced (b.proportionOfWidth (0.045f)), 6.0f, 6.0f, 6.0f, 6.0f);
-    g.setFillColor (b.isButtonDown() ? Color (0xff000000) : Color (0xffffffff));
-    g.fillPath (backgroundPath);
+    Color backgroundColor, textColor;
 
-    g.setStrokeColor (b.isButtonDown() ? Color (0xffffffff) : Color (0xff000000));
-    g.strokeFittedText (b.getStyledText(), {});
+    if (b.isButtonDown())
+    {
+        backgroundColor = b.findColor (TextButton::Colors::backgroundPressedColorId).value_or (Color (0xffe8e8e8));
+        textColor = b.findColor (TextButton::Colors::textPressedColorId).value_or (Color (0xff2c2c2c));
+    }
+    else
+    {
+        backgroundColor = b.findColor (TextButton::Colors::backgroundColorId).value_or (Color (0xfff8f8f8));
+        textColor = b.findColor (TextButton::Colors::textColorId).value_or (Color (0xff1a1a1a));
+    }
+
+    if (b.isButtonOver())
+    {
+        backgroundColor = backgroundColor.brighter (0.2f);
+        textColor = textColor.brighter (0.2f);
+    }
+
+    // Draw background with flat color (no gradient for modern flat design)
+    g.setFillColor (backgroundColor);
+    g.fillRoundedRect (bounds, cornerRadius);
+
+    // Draw modern outline
+    Color outlineColor = b.hasKeyboardFocus()
+        ? b.findColor (TextButton::Colors::outlineFocusedColorId).value_or (Color (0xff0066cc))
+        : b.findColor (TextButton::Colors::outlineColorId).value_or (Color (0xff4d9fff));
+    g.setStrokeColor (outlineColor);
+
+    float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;
+    g.setStrokeWidth (strokeWidth);
+
+    g.strokeRoundedRect (bounds.reduced (strokeWidth * 0.5f), cornerRadius);
+
+    // Draw text
+    g.setFillColor (textColor);
+    g.fillFittedText (b.getStyledText(), b.getTextBounds());
 }
 
 //==============================================================================

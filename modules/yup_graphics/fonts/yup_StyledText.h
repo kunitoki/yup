@@ -134,7 +134,7 @@ public:
 
     //==============================================================================
 
-    const std::vector<rive::OrderedLine>& getOrderedLines() const;
+    Span<const rive::OrderedLine> getOrderedLines() const;
 
     //==============================================================================
 
@@ -155,7 +155,7 @@ public:
         bool isEmpty;
     };
 
-    const std::vector<RenderStyle*>& getRenderStyles() const;
+    Span<const RenderStyle* const> getRenderStyles() const;
 
     //==============================================================================
 

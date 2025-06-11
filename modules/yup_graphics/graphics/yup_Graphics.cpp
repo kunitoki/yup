@@ -657,13 +657,11 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
     const auto& options = currentRenderOptions();
 
     auto offset = text.getOffset (rect);
-    if (text.getMaxSize().getWidth() > 0.0f) // Non negative max size in text layout will adjust X axis alignment
-        offset = offset.withX (0.0f);
 
     renderer.save();
 
     rive::RawPath path;
-    path.addRect ({ rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom() });
+    path.addRect (rect.toAABB());
     path.transformInPlace (options.getFixedTransform().toMat2D());
     auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
     renderer.clipPath (renderPath.get());

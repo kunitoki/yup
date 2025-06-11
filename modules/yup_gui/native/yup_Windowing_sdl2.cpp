@@ -353,12 +353,18 @@ float SDL2ComponentNative::getOpacity() const
 void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
     if (lastComponentFocused != nullptr)
+    {
         lastComponentFocused->focusLost();
+        lastComponentFocused->repaint();
+    }
 
     lastComponentFocused = comp;
 
     if (lastComponentFocused)
+    {
         lastComponentFocused->focusGained();
+        lastComponentFocused->repaint();
+    }
 
     if (window != nullptr)
     {
