@@ -22,8 +22,6 @@
 namespace yup
 {
 
-class LowLevelRenderContext;
-
 //==============================================================================
 /** Encapsulates a graphics context that abstracts rendering operations across various APIs.
 
