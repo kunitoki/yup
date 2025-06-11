@@ -42,6 +42,7 @@ public:
     /** Enumerates supported graphics APIs. */
     enum Api
     {
+        Headless, ///< Specifies the use of a headless context for rendering.
         OpenGL,   ///< Specifies the use of OpenGL for rendering.
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.

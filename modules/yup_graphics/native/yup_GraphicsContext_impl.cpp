@@ -26,6 +26,9 @@ std::unique_ptr<GraphicsContext> GraphicsContext::createContext (Api graphicsApi
 {
     switch (graphicsApi)
     {
+        case Api::Headless:
+            return yup_constructHeadlessGraphicsContext (options);
+
 #if YUP_RIVE_USE_METAL && (YUP_MAC || YUP_IOS)
         case Api::Metal:
             return yup_constructMetalGraphicsContext (options);
