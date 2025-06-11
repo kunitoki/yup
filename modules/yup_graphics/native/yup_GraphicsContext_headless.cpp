@@ -34,15 +34,23 @@ public:
 class NoOpRenderPaint : public rive::RenderPaint
 {
 public:
-    void color(unsigned int) override {}
-    void style(rive::RenderPaintStyle) override {}
-    void thickness(float) override {}
-    void join(rive::StrokeJoin) override {}
-    void cap(rive::StrokeCap) override {}
-    void blendMode(rive::BlendMode) override {}
-    void shader(rive::rcp<rive::RenderShader>) override {}
+    void color (unsigned int) override {}
+
+    void style (rive::RenderPaintStyle) override {}
+
+    void thickness (float) override {}
+
+    void join (rive::StrokeJoin) override {}
+
+    void cap (rive::StrokeCap) override {}
+
+    void blendMode (rive::BlendMode) override {}
+
+    void shader (rive::rcp<rive::RenderShader>) override {}
+
     void invalidateStroke() override {}
-    void feather(float) override {}
+
+    void feather (float) override {}
 };
 
 //==============================================================================
@@ -52,14 +60,21 @@ class NoOpRenderPath : public rive::RenderPath
 public:
     void rewind() override {}
 
-    void fillRule(rive::FillRule) override {}
-    void addPath(rive::CommandPath*, const rive::Mat2D&) override {}
-    void addRenderPath(rive::RenderPath*, const rive::Mat2D&) override {}
-    void moveTo(float, float) override {}
-    void lineTo(float, float) override {}
-    void cubicTo(float, float, float, float, float, float) override {}
+    void fillRule (rive::FillRule) override {}
+
+    void addPath (rive::CommandPath*, const rive::Mat2D&) override {}
+
+    void addRenderPath (rive::RenderPath*, const rive::Mat2D&) override {}
+
+    void moveTo (float, float) override {}
+
+    void lineTo (float, float) override {}
+
+    void cubicTo (float, float, float, float, float, float) override {}
+
     void close() override {}
-    void addRawPath(const rive::RawPath&) override {}
+
+    void addRawPath (const rive::RawPath&) override {}
 };
 
 //==============================================================================
@@ -69,7 +84,7 @@ class NoOpFactory : public rive::Factory
 public:
     NoOpFactory() = default;
 
-    rive::rcp<rive::RenderBuffer> makeRenderBuffer(
+    rive::rcp<rive::RenderBuffer> makeRenderBuffer (
         rive::RenderBufferType,
         rive::RenderBufferFlags,
         size_t) override
@@ -77,7 +92,7 @@ public:
         return nullptr;
     }
 
-    rive::rcp<rive::RenderShader> makeLinearGradient(
+    rive::rcp<rive::RenderShader> makeLinearGradient (
         float sx,
         float sy,
         float ex,
@@ -89,7 +104,7 @@ public:
         return nullptr;
     }
 
-    rive::rcp<rive::RenderShader> makeRadialGradient(
+    rive::rcp<rive::RenderShader> makeRadialGradient (
         float cx,
         float cy,
         float radius,
@@ -100,7 +115,7 @@ public:
         return nullptr;
     }
 
-    rive::rcp<rive::RenderPath> makeRenderPath(rive::RawPath&, rive::FillRule) override
+    rive::rcp<rive::RenderPath> makeRenderPath (rive::RawPath&, rive::FillRule) override
     {
         return rive::make_rcp<NoOpRenderPath>();
     }
@@ -115,7 +130,7 @@ public:
         return rive::make_rcp<NoOpRenderPaint>();
     }
 
-    rive::rcp<rive::RenderImage> decodeImage(rive::Span<const uint8_t>) override
+    rive::rcp<rive::RenderImage> decodeImage (rive::Span<const uint8_t>) override
     {
         return nullptr;
     }
@@ -129,20 +144,26 @@ public:
     NoOpRenderer() = default;
 
     void save() override {}
+
     void restore() override {}
-    void transform(const rive::Mat2D&) override {}
-    void drawPath(rive::RenderPath*, rive::RenderPaint*) override {}
-    void clipPath(rive::RenderPath*) override {}
-    void drawImage(const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
-    void drawImageMesh(const rive::RenderImage*,
-                       rive::ImageSampler,
-                       rive::rcp<rive::RenderBuffer>,
-                       rive::rcp<rive::RenderBuffer>,
-                       rive::rcp<rive::RenderBuffer>,
-                       uint32_t vertexCount,
-                       uint32_t indexCount,
-                       rive::BlendMode,
-                       float) override {}
+
+    void transform (const rive::Mat2D&) override {}
+
+    void drawPath (rive::RenderPath*, rive::RenderPaint*) override {}
+
+    void clipPath (rive::RenderPath*) override {}
+
+    void drawImage (const rive::RenderImage*, rive::ImageSampler, rive::BlendMode, float) override {}
+
+    void drawImageMesh (const rive::RenderImage*,
+                        rive::ImageSampler,
+                        rive::rcp<rive::RenderBuffer>,
+                        rive::rcp<rive::RenderBuffer>,
+                        rive::rcp<rive::RenderBuffer>,
+                        uint32_t vertexCount,
+                        uint32_t indexCount,
+                        rive::BlendMode,
+                        float) override {}
 };
 
 //==============================================================================
@@ -174,7 +195,7 @@ public:
 
     std::unique_ptr<rive::Renderer> makeRenderer (int, int) override
     {
-        return std::make_unique<NoOpRenderer> ();
+        return std::make_unique<NoOpRenderer>();
     }
 
     void onSizeChanged (void*, int, int, uint32_t) override
@@ -197,7 +218,7 @@ private:
 
 std::unique_ptr<GraphicsContext> yup_constructHeadlessGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
-    return std::make_unique<NoOpGraphicsContext> ();
+    return std::make_unique<NoOpGraphicsContext>();
 }
 
 } // namespace yup
