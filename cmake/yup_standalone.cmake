@@ -145,9 +145,6 @@ function (yup_standalone_app)
     elseif (YUP_PLATFORM_EMSCRIPTEN)
         if (NOT "${target_console}")
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
-
-            list (APPEND additional_options -sUSE_SDL=2)
-            list (APPEND additional_link_options -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2)
         endif()
 
         _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/shell.html")

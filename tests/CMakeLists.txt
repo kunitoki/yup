@@ -51,11 +51,11 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
-    yup_core
-    yup_audio_basics
-    yup_audio_devices
-    yup_events
-    yup_graphics)
+    yup::yup_core
+    yup::yup_audio_basics
+    yup::yup_audio_devices
+    yup::yup_events
+    yup::yup_graphics)
 
 yup_standalone_app (
     TARGET_NAME ${target_name}

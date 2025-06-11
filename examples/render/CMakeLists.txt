@@ -58,13 +58,13 @@ yup_standalone_app (
     PRELOAD_FILES
         "${CMAKE_CURRENT_LIST_DIR}/${rive_file}@data/artboard.riv"
     MODULES
-        yup_core
-        yup_audio_basics
-        yup_audio_devices
-        yup_events
-        yup_graphics
-        yup_gui
-        yup_audio_processors
+        yup::yup_core
+        yup::yup_audio_basics
+        yup::yup_audio_devices
+        yup::yup_events
+        yup::yup_graphics
+        yup::yup_gui
+        yup::yup_audio_processors
         libpng
         libwebp
         ${link_libraries})
