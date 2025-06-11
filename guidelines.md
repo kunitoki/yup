@@ -295,6 +295,7 @@ TEST(ClassNameTests, StaticMethodBehavesCorrectly)
 3. **Use descriptive test names** (e.g., `ReturnsNullForInvalidInput`)
 4. **Group related tests** in test fixtures
 5. **Keep tests independent** and deterministic
+6. **Never Use C or C++ macros (like M_PI)** use yup alternatives
 
 ### When suggesting refactoring:
 1. **Maintain existing API contracts**

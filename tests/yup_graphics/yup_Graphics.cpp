@@ -210,7 +210,9 @@ TEST_F (GraphicsTest, Transform_Operations_Identity)
 TEST_F (GraphicsTest, Transform_Operations_Rotation)
 {
     // Test rotation
-    float angle = M_PI / 4.0f; // 45 degrees
+    constexpr float pi = 3.14159265358979323846f;
+    constexpr float angle = pi / 4.0f; // 45 degrees
+
     auto rotation = AffineTransform::rotation (angle);
     graphics->setTransform (rotation);
     auto retrievedTransform = graphics->getTransform();
