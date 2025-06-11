@@ -171,8 +171,7 @@ function (_yup_module_setup_target module_name
                                    module_link_options
                                    module_frameworks
                                    module_dependencies
-                                   module_arc_enabled
-                                   make_yup_alias)
+                                   module_arc_enabled)
     if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
     endif()
@@ -219,10 +218,6 @@ function (_yup_module_setup_target module_name
     # Add coverage support if enabled
     if (YUP_ENABLE_COVERAGE)
         _yup_setup_coverage_flags (${module_name})
-    endif()
-
-    if (make_yup_alias)
-        add_library("yup::${module_name}" ALIAS ${module_name})
     endif()
 endfunction()
 
@@ -303,8 +298,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
-                              "${module_arc_enabled}"
-                              TRUE)
+                              "${module_arc_enabled}")
 
     _yup_glob_recurse ("${module_path}/${plugin_type}/*" all_module_files)
     target_sources (${custom_target_name} PRIVATE ${all_module_files})
@@ -329,12 +323,6 @@ function (yup_add_module module_path module_group)
     set (module_header "${module_path}/${module_name}.h")
     if (NOT EXISTS ${module_header})
         _yup_message (FATAL_ERROR "Module header ${module_header} in module ${module_path} not found")
-    endif()
-
-    set (make_yup_alias FALSE)
-    string (TOLOWER "${module_name}" module_name_lower)
-    if (module_name_lower MATCHES "^yup_")
-        set (make_yup_alias TRUE)
     endif()
 
     # ==== Add module as library
@@ -545,8 +533,7 @@ function (yup_add_module module_path module_group)
                               "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
-                              "${module_arc_enabled}"
-                              "${make_yup_alias}")
+                              "${module_arc_enabled}")
 
     #set (${module_name}_Configs "${module_user_configs}")
     #set (${module_name}_Configs ${${module_name}_Configs} PARENT_SCOPE)
@@ -600,11 +587,26 @@ function (_yup_add_default_modules modules_path)
     # Yup modules
     set (modules_group "Modules")
     yup_add_module (${modules_path}/modules/yup_core ${modules_group})
+    add_library (yup::yup_core ALIAS yup_core)
+
     yup_add_module (${modules_path}/modules/yup_events ${modules_group})
+    add_library (yup::yup_events ALIAS yup_events)
+
     yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
+    add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
+
     yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
+    add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
+
     yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
+    add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
+
     yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
+    add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
+
     yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
+    add_library (yup::yup_graphics ALIAS yup_graphics)
+
     yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
+    add_library (yup::yup_gui ALIAS yup_gui)
 endfunction()
