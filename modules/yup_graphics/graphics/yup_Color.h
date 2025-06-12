@@ -571,8 +571,8 @@ public:
         const float gf = getGreenFloat();
         const float bf = getBlueFloat();
 
-        const float max = jmax(rf, gf, bf);
-        const float min = jmin(rf, gf, bf);
+        const float max = jmax (rf, gf, bf);
+        const float min = jmin (rf, gf, bf);
         const float delta = max - min;
 
         float h = 0.0f;
@@ -582,7 +582,7 @@ public:
         if (delta != 0.0f)
         {
             if (max == rf)
-                h = fmodf((gf - bf) / delta + (gf < bf ? 6.0f : 0.0f), 6.0f);
+                h = fmodf ((gf - bf) / delta + (gf < bf ? 6.0f : 0.0f), 6.0f);
             else if (max == gf)
                 h = (bf - rf) / delta + 2.0f;
             else if (max == bf)
@@ -591,7 +591,7 @@ public:
             h /= 6.0f;
         }
 
-        return std::make_tuple(h, s, v);
+        return std::make_tuple (h, s, v);
     }
 
     /** Constructs a color from HSV values.
@@ -606,33 +606,57 @@ public:
 
         @return A Color object corresponding to the given HSV values.
     */
-    constexpr static Color fromHSV(float h, float s, float v, float a = 1.0f) noexcept
+    constexpr static Color fromHSV (float h, float s, float v, float a = 1.0f) noexcept
     {
         float r = 0.0f, g = 0.0f, b = 0.0f;
 
-        h = modulo(h, 1.0f); // ensure h is in [0,1]
+        h = modulo (h, 1.0f); // ensure h is in [0,1]
         const float hh = h * 6.0f;
-        const int i = static_cast<int>(hh);
-        const float f = hh - static_cast<float>(i);
+        const int i = static_cast<int> (hh);
+        const float f = hh - static_cast<float> (i);
         const float p = v * (1.0f - s);
         const float q = v * (1.0f - f * s);
         const float t = v * (1.0f - (1.0f - f) * s);
 
         switch (i % 6)
         {
-            case 0: r = v; g = t; b = p; break;
-            case 1: r = q; g = v; b = p; break;
-            case 2: r = p; g = v; b = t; break;
-            case 3: r = p; g = q; b = v; break;
-            case 4: r = t; g = p; b = v; break;
-            case 5: r = v; g = p; b = q; break;
+            case 0:
+                r = v;
+                g = t;
+                b = p;
+                break;
+            case 1:
+                r = q;
+                g = v;
+                b = p;
+                break;
+            case 2:
+                r = p;
+                g = v;
+                b = t;
+                break;
+            case 3:
+                r = p;
+                g = q;
+                b = v;
+                break;
+            case 4:
+                r = t;
+                g = p;
+                b = v;
+                break;
+            case 5:
+                r = v;
+                g = p;
+                b = q;
+                break;
         }
 
         return {
-            static_cast<uint8>(r * 255),
-            static_cast<uint8>(g * 255),
-            static_cast<uint8>(b * 255),
-            static_cast<uint8>(a * 255)
+            static_cast<uint8> (r * 255),
+            static_cast<uint8> (g * 255),
+            static_cast<uint8> (b * 255),
+            static_cast<uint8> (a * 255)
         };
     }
 

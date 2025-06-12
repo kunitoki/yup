@@ -445,7 +445,14 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     }
 
     // Determine which side the arrow should be on based on tip position relative to rectangle
-    enum ArrowSide { Left, Right, Top, Bottom } arrowSide;
+    enum ArrowSide
+    {
+        Left,
+        Right,
+        Top,
+        Bottom
+    } arrowSide;
+
     Point<float> arrowBase1, arrowBase2;
 
     // Get rectangle center for direction calculation
@@ -456,7 +463,7 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     float deltaY = arrowTipPosition.getY() - rectCenter.getY();
 
     // Determine primary direction - use the larger absolute offset
-    if (std::abs(deltaX) > std::abs(deltaY))
+    if (std::abs (deltaX) > std::abs (deltaY))
     {
         // Horizontal direction is dominant
         if (deltaX < 0)
@@ -540,9 +547,7 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     // Top-right corner
     if (cornerSize > 0.0f)
     {
-        cubicTo (x + width - cornerSize + cornerSize * kappa, y,
-                 x + width, y + cornerSize - cornerSize * kappa,
-                 x + width, y + cornerSize);
+        cubicTo (x + width - cornerSize + cornerSize * kappa, y, x + width, y + cornerSize - cornerSize * kappa, x + width, y + cornerSize);
     }
 
     // Right edge (top to bottom)
@@ -561,9 +566,7 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     // Bottom-right corner
     if (cornerSize > 0.0f)
     {
-        cubicTo (x + width, y + height - cornerSize + cornerSize * kappa,
-                 x + width - cornerSize + cornerSize * kappa, y + height,
-                 x + width - cornerSize, y + height);
+        cubicTo (x + width, y + height - cornerSize + cornerSize * kappa, x + width - cornerSize + cornerSize * kappa, y + height, x + width - cornerSize, y + height);
     }
 
     // Bottom edge (right to left)
@@ -582,9 +585,7 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     // Bottom-left corner
     if (cornerSize > 0.0f)
     {
-        cubicTo (x + cornerSize - cornerSize * kappa, y + height,
-                 x, y + height - cornerSize + cornerSize * kappa,
-                 x, y + height - cornerSize);
+        cubicTo (x + cornerSize - cornerSize * kappa, y + height, x, y + height - cornerSize + cornerSize * kappa, x, y + height - cornerSize);
     }
 
     // Left edge (bottom to top)
@@ -603,9 +604,7 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     // Top-left corner
     if (cornerSize > 0.0f)
     {
-        cubicTo (x, y + cornerSize - cornerSize * kappa,
-                 x + cornerSize - cornerSize * kappa, y,
-                 x + cornerSize, y);
+        cubicTo (x, y + cornerSize - cornerSize * kappa, x + cornerSize - cornerSize * kappa, y, x + cornerSize, y);
     }
 
     // Close the path
@@ -696,7 +695,7 @@ void Path::scaleToFit (float x, float y, float width, float height, bool preserv
     float translateY = y - currentBounds.getY() * scaleY;
 
     // Apply the transformation
-    AffineTransform transform = AffineTransform::scaling (scaleX, scaleY) .translated (translateX, translateY);
+    AffineTransform transform = AffineTransform::scaling (scaleX, scaleY).translated (translateX, translateY);
 
     *this = transformed (transform);
 }
@@ -1460,9 +1459,9 @@ Path Path::createStrokePolygon (float strokeWidth) const
     Point<float> lastMovePoint (0.0f, 0.0f);
 
     std::vector<Point<float>> leftSide;
-    leftSide.reserve(points.size());
+    leftSide.reserve (points.size());
     std::vector<Point<float>> rightSide;
-    rightSide.reserve(points.size());
+    rightSide.reserve (points.size());
 
     for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
     {
@@ -1735,7 +1734,7 @@ Path Path::withRoundedCorners (float cornerRadius) const
     bool hasPreviousPoint = false;
 
     std::vector<Point<float>> pathPoints;
-    pathPoints.reserve(points.size());
+    pathPoints.reserve (points.size());
 
     for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
     {

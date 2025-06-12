@@ -43,40 +43,30 @@ public:
         */
 
         auto bounds = getLocalBounds().to<float>().reduced (10, 20);
-        auto sectionHeight = bounds.getHeight() / 6.0f;  // 6 rows instead of 4
-        auto sectionWidth = bounds.getWidth() / 2.0f;    // 2 columns instead of 3
+        auto sectionHeight = bounds.getHeight() / 6.0f; // 6 rows instead of 4
+        auto sectionWidth = bounds.getWidth() / 2.0f;   // 2 columns instead of 3
 
         // Row 1: Basic Operations and Basic Shapes
-        drawBasicPathOperations (g, yup::Rectangle<float> (bounds.getX(), bounds.getY(),
-                                                          sectionWidth, sectionHeight));
-        drawBasicShapes (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY(),
-                                                  sectionWidth, sectionHeight));
+        drawBasicPathOperations (g, yup::Rectangle<float> (bounds.getX(), bounds.getY(), sectionWidth, sectionHeight));
+        drawBasicShapes (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY(), sectionWidth, sectionHeight));
 
         // Row 2: Complex Shapes and Arcs & Curves
-        drawComplexShapes (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight,
-                                                     sectionWidth, sectionHeight));
-        drawArcsAndCurves (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY() + sectionHeight,
-                                                     sectionWidth, sectionHeight));
+        drawComplexShapes (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight, sectionWidth, sectionHeight));
+        drawArcsAndCurves (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY() + sectionHeight, sectionWidth, sectionHeight));
 
         // Row 3: Transformations and Advanced Features
-        drawPathTransformations (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 2,
-                                                          sectionWidth, sectionHeight));
-        drawAdvancedFeatures (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY() + sectionHeight * 2,
-                                                       sectionWidth, sectionHeight));
+        drawPathTransformations (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 2, sectionWidth, sectionHeight));
+        drawAdvancedFeatures (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY() + sectionHeight * 2, sectionWidth, sectionHeight));
 
         // Row 4: Path Utilities and SVG Path Data
-        drawPathUtilities (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 3,
-                                                    sectionWidth, sectionHeight));
-        drawSVGPathData (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY() + sectionHeight * 3,
-                                                  sectionWidth, sectionHeight));
+        drawPathUtilities (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 3, sectionWidth, sectionHeight));
+        drawSVGPathData (g, yup::Rectangle<float> (bounds.getX() + sectionWidth, bounds.getY() + sectionHeight * 3, sectionWidth, sectionHeight));
 
         // Row 5: Creative Examples (full width)
-        drawCreativeExamples (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 4,
-                                                       bounds.getWidth(), sectionHeight));
+        drawCreativeExamples (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 4, bounds.getWidth(), sectionHeight));
 
         // Row 6: Interactive Demo (full width)
-        drawInteractiveDemo (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 5,
-                                                      bounds.getWidth(), sectionHeight));
+        drawInteractiveDemo (g, yup::Rectangle<float> (bounds.getX(), bounds.getY() + sectionHeight * 5, bounds.getWidth(), sectionHeight));
     }
 
 private:
@@ -92,7 +82,7 @@ private:
         }
 
         g.setFillColor (yup::Colors::white);
-        g.fillFittedText(text, area.removeFromTop (16));
+        g.fillFittedText (text, area.removeFromTop (16));
     }
 
     void drawBasicPathOperations (yup::Graphics& g, yup::Rectangle<float> area)
@@ -210,7 +200,7 @@ private:
         // Speech Bubble - smaller
         yup::Path bubblePath;
         yup::Rectangle<float> bodyArea (x - 15, y + 30, 50, 25);
-        yup::Rectangle<float> maxArea = bodyArea.enlarged(10);
+        yup::Rectangle<float> maxArea = bodyArea.enlarged (10);
         yup::Point<float> tipPosition (x + 45, y + 65);
         bubblePath.addBubble (bodyArea, maxArea, tipPosition, 5, 8);
         g.setFillColor (yup::Color (220, 240, 255));
@@ -244,8 +234,7 @@ private:
 
         // Centered Arc with rotation
         yup::Path centeredArcPath;
-        centeredArcPath.addCenteredArc (yup::Point<float> (x + 70, y + 20), 18, 12,
-                                       yup::MathConstants<float>::pi / 4, 0, yup::MathConstants<float>::pi, true);
+        centeredArcPath.addCenteredArc (yup::Point<float> (x + 70, y + 20), 18, 12, yup::MathConstants<float>::pi / 4, 0, yup::MathConstants<float>::pi, true);
         g.setStrokeColor (yup::Color (150, 255, 150));
         g.setStrokeWidth (2.0f);
         g.strokePath (centeredArcPath);
