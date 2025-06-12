@@ -408,6 +408,51 @@ public:
     /** Returns the bounding box of this path. */
     Rectangle<float> getBoundingBox() const;
 
+    /** Returns the bounding box of this path.
+
+        @return The bounding rectangle that contains all points in this path.
+    */
+    Rectangle<float> getBounds() const;
+
+    /** Returns the bounding box of this path after applying a transformation.
+
+        @param transform The transformation to apply before calculating the bounds.
+        @return The bounding rectangle that contains all transformed points in this path.
+    */
+    Rectangle<float> getBoundsTransformed (const AffineTransform& transform) const;
+
+    //==============================================================================
+    /** Gets a point at a specific position along the path.
+
+        This method returns a point located at the specified normalized distance along the path.
+        The distance parameter should be between 0.0 (start of path) and 1.0 (end of path).
+
+        @param distance The normalized distance along the path (0.0 to 1.0).
+        @return The point at the specified distance along the path.
+    */
+    Point<float> getPointAlongPath (float distance) const;
+
+    /** Converts the path to a stroke polygon with specified width.
+
+        This method generates a closed polygon that represents the stroke of this path
+        with the given stroke width. The resulting path can be filled to achieve the
+        appearance of a stroked path.
+
+        @param strokeWidth The width of the stroke.
+        @return A new Path representing the stroke as a closed polygon.
+    */
+    Path createStrokePolygon (float strokeWidth) const;
+
+    /** Creates a new path with rounded corners applied to this path.
+
+        This method generates a new path where sharp corners are replaced with
+        rounded corners of the specified radius.
+
+        @param cornerRadius The radius of the rounded corners.
+        @return A new Path with rounded corners applied.
+    */
+    static Path createPathWithRoundedCorners (const Path& originalPath, float cornerRadius);
+
     //==============================================================================
     // TODO - doxygen
     bool parsePathData (const String& pathData);

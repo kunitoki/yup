@@ -123,42 +123,33 @@ public:
         for (std::size_t i = 1; i < renderData.size(); ++i)
             path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
-        // Outermost glow layer
-        g.setStrokeColor (lineColor.withAlpha (0.1f));
-        g.setStrokeWidth (12.0f);
-        g.setStrokeCap (yup::StrokeCap::Round);
-        g.setStrokeJoin (yup::StrokeJoin::Round);
-        g.strokePath (path);
+        filledPath = path.createStrokePolygon(4.0f);
 
-        // Second glow layer
-        g.setStrokeColor (lineColor.withAlpha (0.2f));
-        g.setStrokeWidth (8.0f);
-        g.strokePath (path);
+        g.setFillColor (lineColor);
+        g.setFeather (8.0f);
+        g.fillPath (filledPath);
 
-        // Third glow layer
-        g.setStrokeColor (lineColor.withAlpha (0.4f));
-        g.setStrokeWidth (5.0f);
-        g.strokePath (path);
+        g.setFillColor (lineColor.brighter (0.2f));
+        g.setFeather (4.0f);
+        g.fillPath (filledPath);
 
-        // Main stroke
         g.setStrokeColor (lineColor.withAlpha (0.8f));
-        g.setStrokeWidth (2.5f);
+        g.setStrokeWidth (2.0f);
         g.strokePath (path);
 
-        // Bright center line
         g.setStrokeColor (lineColor.brighter (0.3f));
         g.setStrokeWidth (1.0f);
         g.strokePath (path);
 
-        // Ultra-bright core
         g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
-        g.setStrokeWidth (0.3f);
+        g.setStrokeWidth (0.5f);
         g.strokePath (path);
     }
 
 private:
     std::vector<float> renderData;
     yup::Path path;
+    yup::Path filledPath;
 };
 
 //==============================================================================
