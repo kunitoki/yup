@@ -33,6 +33,7 @@ public:
     }
 
     void* onMap() override { return nullptr; }
+
     void onUnmap() override {}
 };
 
