@@ -369,6 +369,123 @@ Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diame
 }
 
 //==============================================================================
+void Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
+{
+    if (numberOfSides < 3 || radius <= 0.0f)
+        return;
+
+    reserveSpace (size() + numberOfSides + 1);
+
+    const float angleIncrement = MathConstants<float>::twoPi / numberOfSides;
+
+    // Start with the first vertex
+    float angle = startAngle;
+    float x = centre.getX() + radius * std::cos (angle);
+    float y = centre.getY() + radius * std::sin (angle);
+
+    moveTo (x, y);
+
+    // Add remaining vertices
+    for (int i = 1; i < numberOfSides; ++i)
+    {
+        angle += angleIncrement;
+        x = centre.getX() + radius * std::cos (angle);
+        y = centre.getY() + radius * std::sin (angle);
+        lineTo (x, y);
+    }
+
+    close();
+}
+
+//==============================================================================
+void Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
+{
+    if (numberOfPoints < 3 || innerRadius <= 0.0f || outerRadius <= 0.0f)
+        return;
+
+    reserveSpace (size() + numberOfPoints * 2 + 1);
+
+    const float angleIncrement = MathConstants<float>::twoPi / (numberOfPoints * 2);
+
+    // Start with the first outer vertex
+    float angle = startAngle;
+    float x = centre.getX() + outerRadius * std::cos (angle);
+    float y = centre.getY() + outerRadius * std::sin (angle);
+
+    moveTo (x, y);
+
+    // Alternate between inner and outer vertices
+    for (int i = 1; i < numberOfPoints * 2; ++i)
+    {
+        angle += angleIncrement;
+        float currentRadius = (i % 2 == 0) ? outerRadius : innerRadius;
+        x = centre.getX() + currentRadius * std::cos (angle);
+        y = centre.getY() + currentRadius * std::sin (angle);
+        lineTo (x, y);
+    }
+
+    close();
+}
+
+//==============================================================================
+void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
+{
+    if (bodyArea.isEmpty() || maximumArea.isEmpty() || arrowBaseWidth <= 0.0f)
+        return;
+
+    // Clamp corner size to reasonable bounds
+    cornerSize = jmin (cornerSize, bodyArea.getWidth() * 0.5f, bodyArea.getHeight() * 0.5f);
+
+    // Determine which side of the body the arrow should be on
+    Point<float> bodyCenter = bodyArea.getCenter();
+
+    // Calculate which edge the arrow should attach to
+    float leftDist = std::abs (arrowTipPosition.getX() - bodyArea.getX());
+    float rightDist = std::abs (arrowTipPosition.getX() - bodyArea.getRight());
+    float topDist = std::abs (arrowTipPosition.getY() - bodyArea.getY());
+    float bottomDist = std::abs (arrowTipPosition.getY() - bodyArea.getBottom());
+
+    float minDist = jmin (leftDist, rightDist, topDist, bottomDist);
+
+    // Start with the main body (rounded rectangle)
+    addRoundedRectangle (bodyArea, cornerSize);
+
+    // Add arrow based on closest edge
+    Point<float> arrowBase1, arrowBase2;
+
+    if (minDist == leftDist) // Arrow on left side
+    {
+        float arrowY = jlimit (bodyArea.getY() + cornerSize, bodyArea.getBottom() - cornerSize, arrowTipPosition.getY());
+        arrowBase1 = Point<float> (bodyArea.getX(), arrowY - arrowBaseWidth * 0.5f);
+        arrowBase2 = Point<float> (bodyArea.getX(), arrowY + arrowBaseWidth * 0.5f);
+    }
+    else if (minDist == rightDist) // Arrow on right side
+    {
+        float arrowY = jlimit (bodyArea.getY() + cornerSize, bodyArea.getBottom() - cornerSize, arrowTipPosition.getY());
+        arrowBase1 = Point<float> (bodyArea.getRight(), arrowY - arrowBaseWidth * 0.5f);
+        arrowBase2 = Point<float> (bodyArea.getRight(), arrowY + arrowBaseWidth * 0.5f);
+    }
+    else if (minDist == topDist) // Arrow on top side
+    {
+        float arrowX = jlimit (bodyArea.getX() + cornerSize, bodyArea.getRight() - cornerSize, arrowTipPosition.getX());
+        arrowBase1 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getY());
+        arrowBase2 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getY());
+    }
+    else // Arrow on bottom side
+    {
+        float arrowX = jlimit (bodyArea.getX() + cornerSize, bodyArea.getRight() - cornerSize, arrowTipPosition.getX());
+        arrowBase1 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getBottom());
+        arrowBase2 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getBottom());
+    }
+
+    // Add the arrow triangle
+    moveTo (arrowBase1);
+    lineTo (arrowTipPosition);
+    lineTo (arrowBase2);
+    close();
+}
+
+//==============================================================================
 Path& Path::appendPath (const Path& other)
 {
     path->addRenderPath (other.getRenderPath(), rive::Mat2D());
@@ -394,6 +511,12 @@ void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransf
 }
 
 //==============================================================================
+void Path::swapWithPath (Path& other) noexcept
+{
+    path.swap (other.path);
+}
+
+//==============================================================================
 Path& Path::transform (const AffineTransform& t)
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
@@ -410,12 +533,48 @@ Path Path::transformed (const AffineTransform& t) const
 }
 
 //==============================================================================
-Rectangle<float> Path::getBoundingBox() const
+Rectangle<float> Path::getBounds() const
 {
     const auto& aabb = path->getBounds();
     return { aabb.left(), aabb.top(), aabb.width(), aabb.height() };
 }
 
+Rectangle<float> Path::getBoundsTransformed (const AffineTransform& transform) const
+{
+    return getBounds().transformed (transform);
+}
+
+//==============================================================================
+void Path::scaleToFit (float x, float y, float width, float height, bool preserveProportions) noexcept
+{
+    if (width <= 0.0f || height <= 0.0f)
+        return;
+
+    Rectangle<float> currentBounds = getBounds();
+
+    if (currentBounds.isEmpty())
+        return;
+
+    float scaleX = width / currentBounds.getWidth();
+    float scaleY = height / currentBounds.getHeight();
+
+    if (preserveProportions)
+    {
+        float scale = jmin (scaleX, scaleY);
+        scaleX = scaleY = scale;
+    }
+
+    // Calculate translation to move to target position
+    float translateX = x - currentBounds.getX() * scaleX;
+    float translateY = y - currentBounds.getY() * scaleY;
+
+    // Apply the transformation
+    AffineTransform transform = AffineTransform::scaling (scaleX, scaleY) .translated (translateX, translateY);
+
+    *this = transformed (transform);
+}
+
+//==============================================================================
 rive::RiveRenderPath* Path::getRenderPath() const
 {
     return path.get();
@@ -961,18 +1120,6 @@ bool Path::parsePathData (const String& pathData)
 }
 
 //==============================================================================
-Rectangle<float> Path::getBounds() const
-{
-    return getBoundingBox();
-}
-
-Rectangle<float> Path::getBoundsTransformed (const AffineTransform& transform) const
-{
-    Path transformedPath = transformed (transform);
-    return transformedPath.getBoundingBox();
-}
-
-//==============================================================================
 Point<float> Path::getPointAlongPath (float distance) const
 {
     // Clamp distance to valid range
@@ -1186,9 +1333,9 @@ Path Path::createStrokePolygon (float strokeWidth) const
     Point<float> lastMovePoint (0.0f, 0.0f);
 
     std::vector<Point<float>> leftSide;
-    leftSide.reserve (verbs.size());
+    leftSide.reserve(points.size());
     std::vector<Point<float>> rightSide;
-    rightSide.reserve (verbs.size());
+    rightSide.reserve(points.size());
 
     for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
     {
@@ -1442,12 +1589,12 @@ void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& point
 
 } // namespace
 
-Path Path::createPathWithRoundedCorners (const Path& originalPath, float cornerRadius)
+Path Path::withRoundedCorners (float cornerRadius) const
 {
-    if (cornerRadius <= 0.0f)
-        return originalPath;
+    if (cornerRadius <= 0.0f || path == nullptr)
+        return *this;
 
-    const auto& rawPath = originalPath.path->getRawPath();
+    const auto& rawPath = path->getRawPath();
     const auto& points = rawPath.points();
     const auto& verbs = rawPath.verbs();
 
@@ -1461,8 +1608,8 @@ Path Path::createPathWithRoundedCorners (const Path& originalPath, float cornerR
     bool hasPreviousPoint = false;
 
     std::vector<Point<float>> pathPoints;
+    pathPoints.reserve(points.size());
 
-    // First pass: collect all points
     for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
     {
         auto verb = verbs[i];
