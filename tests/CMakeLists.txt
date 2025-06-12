@@ -51,11 +51,11 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
-    yup::yup_core
-    yup::yup_audio_basics
-    yup::yup_audio_devices
-    yup::yup_events
-    yup::yup_graphics)
+    yup_core
+    yup_audio_basics
+    yup_audio_devices
+    yup_events
+    yup_graphics)
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
@@ -89,7 +89,6 @@ set_target_properties (${target_name} PROPERTIES
 # ==== Setup coverage support
 if (YUP_ENABLE_COVERAGE)
     _yup_setup_coverage_flags (${target_name})
-
     foreach (module ${target_modules})
         _yup_setup_coverage_flags (${module})
     endforeach()
