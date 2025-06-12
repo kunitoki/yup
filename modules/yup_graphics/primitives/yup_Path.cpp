@@ -867,103 +867,6 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
     }
 }
 
-void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& points, float cornerRadius, bool closed)
-{
-    if (points.size() < 3)
-        return;
-
-    bool first = true;
-
-    for (size_t i = 0; i < points.size(); ++i)
-    {
-        size_t prevIndex = (i == 0) ? (closed ? points.size() - 1 : 0) : i - 1;
-        size_t nextIndex = (i == points.size() - 1) ? (closed ? 0 : i) : i + 1;
-
-        if (!closed && (i == 0 || i == points.size() - 1))
-        {
-            // Don't round first/last points in open paths
-            if (first)
-            {
-                targetPath.moveTo (points[i]);
-                first = false;
-            }
-            else
-            {
-                targetPath.lineTo (points[i]);
-            }
-            continue;
-        }
-
-        Point<float> current = points[i];
-        Point<float> prev = points[prevIndex];
-        Point<float> next = points[nextIndex];
-
-        // Calculate vectors
-        Point<float> toPrev = (prev - current).normalized();
-        Point<float> toNext = (next - current).normalized();
-
-        // Calculate the angle between vectors
-        float dot = toPrev.dotProduct (toNext);
-        dot = jlimit (-1.0f, 1.0f, dot); // Clamp to avoid numerical issues
-
-        if (std::abs (dot + 1.0f) < 0.001f) // Vectors are opposite (180 degrees)
-        {
-            // Straight line, no rounding needed
-            if (first)
-            {
-                targetPath.moveTo (current);
-                first = false;
-            }
-            else
-            {
-                targetPath.lineTo (current);
-            }
-            continue;
-        }
-
-        // Calculate distances to round corner
-        float prevDist = current.distanceTo (prev);
-        float nextDist = current.distanceTo (next);
-        float maxRadius = jmin (cornerRadius, prevDist * 0.5f, nextDist * 0.5f);
-
-        if (maxRadius <= 0.0f)
-        {
-            if (first)
-            {
-                targetPath.moveTo (current);
-                first = false;
-            }
-            else
-            {
-                targetPath.lineTo (current);
-            }
-            continue;
-        }
-
-        // Calculate corner points
-        Point<float> cornerStart = current + toPrev * maxRadius;
-        Point<float> cornerEnd = current + toNext * maxRadius;
-
-        if (first)
-        {
-            targetPath.moveTo (cornerStart);
-            first = false;
-        }
-        else
-        {
-            targetPath.lineTo (cornerStart);
-        }
-
-        // Add rounded corner using quadratic curve
-        targetPath.quadTo (cornerEnd.getX(), cornerEnd.getY(), current.getX(), current.getY());
-    }
-
-    if (closed)
-    {
-        targetPath.close();
-    }
-}
-
 } // namespace
 
 bool Path::parsePathData (const String& pathData)
@@ -1440,6 +1343,107 @@ Path Path::createStrokePolygon (float strokeWidth) const
 }
 
 //==============================================================================
+namespace {
+
+void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& points, float cornerRadius, bool closed)
+{
+    if (points.size() < 3)
+        return;
+
+    bool first = true;
+
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        size_t prevIndex = (i == 0) ? (closed ? points.size() - 1 : 0) : i - 1;
+        size_t nextIndex = (i == points.size() - 1) ? (closed ? 0 : i) : i + 1;
+
+        if (!closed && (i == 0 || i == points.size() - 1))
+        {
+            // Don't round first/last points in open paths
+            if (first)
+            {
+                targetPath.moveTo (points[i]);
+                first = false;
+            }
+            else
+            {
+                targetPath.lineTo (points[i]);
+            }
+            continue;
+        }
+
+        Point<float> current = points[i];
+        Point<float> prev = points[prevIndex];
+        Point<float> next = points[nextIndex];
+
+        // Calculate vectors
+        Point<float> toPrev = (prev - current).normalized();
+        Point<float> toNext = (next - current).normalized();
+
+        // Calculate the angle between vectors
+        float dot = toPrev.dotProduct (toNext);
+        dot = jlimit (-1.0f, 1.0f, dot); // Clamp to avoid numerical issues
+
+        if (std::abs (dot + 1.0f) < 0.001f) // Vectors are opposite (180 degrees)
+        {
+            // Straight line, no rounding needed
+            if (first)
+            {
+                targetPath.moveTo (current);
+                first = false;
+            }
+            else
+            {
+                targetPath.lineTo (current);
+            }
+            continue;
+        }
+
+        // Calculate distances to round corner
+        float prevDist = current.distanceTo (prev);
+        float nextDist = current.distanceTo (next);
+        float maxRadius = jmin (cornerRadius, prevDist * 0.5f, nextDist * 0.5f);
+
+        if (maxRadius <= 0.0f)
+        {
+            if (first)
+            {
+                targetPath.moveTo (current);
+                first = false;
+            }
+            else
+            {
+                targetPath.lineTo (current);
+            }
+            continue;
+        }
+
+        // Calculate corner points
+        Point<float> cornerStart = current + toPrev * maxRadius;
+        Point<float> cornerEnd = current + toNext * maxRadius;
+
+        if (first)
+        {
+            targetPath.moveTo (cornerStart);
+            first = false;
+        }
+        else
+        {
+            targetPath.lineTo (cornerStart);
+        }
+
+        // Add rounded corner using quadratic curve
+        targetPath.quadTo (cornerEnd.getX(), cornerEnd.getY(), current.getX(), current.getY());
+    }
+
+    if (closed)
+    {
+        targetPath.close();
+    }
+}
+
+} // namespace
+
 Path Path::createPathWithRoundedCorners (const Path& originalPath, float cornerRadius)
 {
     if (cornerRadius <= 0.0f)
