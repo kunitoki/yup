@@ -74,38 +74,57 @@ public:
         }
         */
 
-        // Add the demos
-        int demo = 4;
-
-        if (demo == 0)
         {
+            auto button = std::make_unique<yup::TextButton> ("Audio");
+            button->onClick = [this] { selectComponent (0); };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
             components.add (std::make_unique<AudioExample> (font));
-            addAndMakeVisible (components.getLast());
+            addChildComponent (components.getLast());
         }
 
-        if (demo == 1)
         {
+            auto button = std::make_unique<yup::TextButton> ("Layout Fonts");
+            button->onClick = [this] { selectComponent (1); };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
             components.add (std::make_unique<LayoutFontsExample> (font));
-            addAndMakeVisible (components.getLast());
+            addChildComponent (components.getLast());
         }
 
-        if (demo == 2)
         {
+            auto button = std::make_unique<yup::TextButton> ("Variable Fonts");
+            button->onClick = [this] { selectComponent (2); };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
             components.add (std::make_unique<VariableFontsExample> (font));
-            addAndMakeVisible (components.getLast());
+            addChildComponent (components.getLast());
         }
 
-        if (demo == 3)
         {
+            auto button = std::make_unique<yup::TextButton> ("Paths");
+            button->onClick = [this] { selectComponent (3); };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
             components.add (std::make_unique<PathsExample>());
-            addAndMakeVisible (components.getLast());
+            addChildComponent (components.getLast());
         }
 
-        if (demo == 4)
         {
+            auto button = std::make_unique<yup::TextButton> ("Text Editor");
+            button->onClick = [this] { selectComponent (4); };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
             components.add (std::make_unique<TextEditorDemo>());
-            addAndMakeVisible (components.getLast());
+            addChildComponent (components.getLast());
         }
+
+        selectComponent (0);
 
         // Timer
         startTimerHz (10);
@@ -117,8 +136,15 @@ public:
 
     void resized() override
     {
+        auto bounds = getLocalBounds().reduced (5);
+        auto buttonBounds = bounds.removeFromTop (30);
+
+        const auto buttonWidth = buttonBounds.getWidth() / buttons.size();
+        for (auto& button : buttons)
+            button->setBounds (buttonBounds.removeFromLeft (buttonWidth));
+
         for (auto& component : components)
-            component->setBounds (getLocalBounds());
+            component->setBounds (bounds);
     }
 
     void paint (yup::Graphics& g) override
@@ -176,6 +202,14 @@ public:
         yup::YUPApplication::getInstance()->systemRequestedQuit();
     }
 
+    void selectComponent (int index)
+    {
+        for (auto& component : components)
+            component->setVisible (false);
+
+        components[index]->setVisible (true);
+    }
+
 private:
     void updateWindowTitle()
     {
@@ -194,6 +228,7 @@ private:
         setTitle (title);
     }
 
+    yup::OwnedArray<yup::TextButton> buttons;
     yup::OwnedArray<yup::Component> components;
 
     yup::Font font;

@@ -102,10 +102,6 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        // Background
-        g.setFillColor (yup::Colors::lightgray);
-        g.fillAll();
-
         // Header separator
         g.setStrokeColor (yup::Colors::darkgray);
         g.setStrokeWidth (2.0f);

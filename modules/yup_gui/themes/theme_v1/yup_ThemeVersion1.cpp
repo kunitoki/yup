@@ -119,23 +119,23 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw background
     auto backgroundColor = t.findColor (TextEditor::Colors::backgroundColorId).value_or (Colors::white);
     g.setFillColor (backgroundColor);
-    g.fillRoundedRect (bounds, cornerRadius);
+    g.fillRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
     // Draw outline
     auto outlineColor = t.hasKeyboardFocus()
-                          ? t.findColor (TextEditor::Colors::focusedOutlineColorId).value_or (Colors::blue)
+                          ? t.findColor (TextEditor::Colors::focusedOutlineColorId).value_or (Colors::cornflowerblue)
                           : t.findColor (TextEditor::Colors::outlineColorId).value_or (Colors::gray);
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = t.hasKeyboardFocus() ? 2.0f : 1.0f;
     g.setStrokeWidth (strokeWidth);
 
-    g.strokeRoundedRect (bounds.reduced (strokeWidth * 0.5f), cornerRadius);
+    g.strokeRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
     // Draw selection background
     if (t.hasSelection())
     {
-        auto selectionColor = t.findColor (TextEditor::Colors::selectionColorId).value_or (Colors::lightblue.withAlpha (0.7f));
+        auto selectionColor = t.findColor (TextEditor::Colors::selectionColorId).value_or (Colors::cornflowerblue.withAlpha (0.5f));
         g.setFillColor (selectionColor);
 
         // Get all selection rectangles for proper multiline selection rendering
@@ -177,13 +177,13 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     if (b.isButtonDown())
     {
-        backgroundColor = b.findColor (TextButton::Colors::backgroundPressedColorId).value_or (Colors::white);
-        textColor = b.findColor (TextButton::Colors::textPressedColorId).value_or (Colors::darkgray);
+        backgroundColor = b.findColor (TextButton::Colors::backgroundPressedColorId).value_or (Colors::gray);
+        textColor = b.findColor (TextButton::Colors::textPressedColorId).value_or (Colors::dimgray);
     }
     else
     {
-        backgroundColor = b.findColor (TextButton::Colors::backgroundColorId).value_or (Colors::lightgray);
-        textColor = b.findColor (TextButton::Colors::textColorId).value_or (Colors::gray);
+        backgroundColor = b.findColor (TextButton::Colors::backgroundColorId).value_or (Colors::gray);
+        textColor = b.findColor (TextButton::Colors::textColorId).value_or (Colors::white);
     }
 
     if (b.isButtonOver())
@@ -194,18 +194,18 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     // Draw background with flat color (no gradient for modern flat design)
     g.setFillColor (backgroundColor);
-    g.fillRoundedRect (bounds, cornerRadius);
+    g.fillRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
     // Draw modern outline
     Color outlineColor = b.hasKeyboardFocus()
-                           ? b.findColor (TextButton::Colors::outlineFocusedColorId).value_or (Colors::blue)
-                           : b.findColor (TextButton::Colors::outlineColorId).value_or (Colors::gray);
+        ? b.findColor (TextButton::Colors::outlineFocusedColorId).value_or (Colors::cornflowerblue)
+        : b.findColor (TextButton::Colors::outlineColorId).value_or (Colors::dimgray);
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;
     g.setStrokeWidth (strokeWidth);
 
-    g.strokeRoundedRect (bounds.reduced (strokeWidth * 0.5f), cornerRadius);
+    g.strokeRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
     // Draw text
     g.setFillColor (textColor);

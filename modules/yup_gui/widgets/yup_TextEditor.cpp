@@ -604,7 +604,7 @@ int TextEditor::getGlyphIndexAtPosition (const Point<float>& position) const
     auto relativePos = position - textBounds.getTopLeft() + scrollOffset;
 
     // Use StyledText's positioning functionality
-    return const_cast<StyledText&> (styledText).getGlyphIndexAtPosition (relativePos);
+    return styledText.getGlyphIndexAtPosition (relativePos);
 }
 
 //==============================================================================
@@ -612,7 +612,7 @@ int TextEditor::getGlyphIndexAtPosition (const Point<float>& position) const
 Rectangle<float> TextEditor::getCaretBounds() const
 {
     auto textBounds = getTextBounds();
-    auto caretBounds = const_cast<StyledText&> (styledText).getCaretBounds (caretPosition);
+    auto caretBounds = styledText.getCaretBounds (caretPosition);
 
     // Adjust bounds to be relative to the text editor's bounds with scroll offset applied
     return caretBounds.translated (textBounds.getTopLeft() - scrollOffset);

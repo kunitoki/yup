@@ -68,6 +68,7 @@ public:
     /** Inserts text at the current caret position.
 
         @param textToInsert     The text to insert
+        @param notification     Whether to trigger a change notification
     */
     void insertText (const String& textToInsert, NotificationType notification = sendNotification);
 
@@ -110,8 +111,56 @@ public:
     */
     void setCaretPosition (int newPosition);
 
-    /** */
+    /** Returns whether the caret is visible. */
     bool isCaretVisible() const noexcept { return caretVisible; }
+
+    /** Moves the caret up.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretUp (bool extendSelection = false);
+
+    /** Moves the caret down.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretDown (bool extendSelection = false);
+
+    /** Moves the caret left.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretLeft (bool extendSelection = false);
+
+    /** Moves the caret right.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretRight (bool extendSelection = false);
+
+    /** Moves the caret to the start of the line.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretToStartOfLine (bool extendSelection = false);
+
+    /** Moves the caret to the end of the line.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretToEndOfLine (bool extendSelection = false);
+
+    /** Moves the caret to the start of the text.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretToStart (bool extendSelection = false);
+
+    /** Moves the caret to the end of the text.
+
+        @param extendSelection  Whether to extend the selection to the caret position
+    */
+    void moveCaretToEnd (bool extendSelection = false);
 
     //==============================================================================
     /** Gets the current selection range.
@@ -142,7 +191,10 @@ public:
     */
     String getSelectedText() const;
 
-    /** Deletes the currently selected text. */
+    /** Deletes the currently selected text.
+
+        @param notification     Whether to trigger a change notification
+    */
     void deleteSelectedText (NotificationType notification = sendNotification);
 
     //==============================================================================
@@ -178,20 +230,24 @@ public:
     /** Reset the font to the theme one. */
     void resetFont();
 
-    /** */
+    //==============================================================================
+    /** Returns the current font size. */
     std::optional<float> getFontSize() const;
 
-    /** */
+    /** Sets the font size.
+
+        @param newFontSize    The new font size to use
+    */
     void setFontSize (float newFontSize);
 
-    /** */
+    /** Reset the font size to the theme one. */
     void resetFontSize();
 
     //==============================================================================
-    /** */
+    /** Returns the bounds of the text. */
     Rectangle<float> getTextBounds() const;
 
-    /** */
+    /** Returns the bounds of the caret. */
     Rectangle<float> getCaretBounds() const;
 
     /** Get the scroll offset. */
@@ -230,7 +286,6 @@ public:
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void textInput (const String& text) override;
-
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
@@ -241,14 +296,6 @@ private:
     void ensureCaretVisible();
     void blinkCaret();
     int getGlyphIndexAtPosition (const Point<float>& position) const;
-    void moveCaretUp (bool extendSelection = false);
-    void moveCaretDown (bool extendSelection = false);
-    void moveCaretLeft (bool extendSelection = false);
-    void moveCaretRight (bool extendSelection = false);
-    void moveCaretToStartOfLine (bool extendSelection = false);
-    void moveCaretToEndOfLine (bool extendSelection = false);
-    void moveCaretToStart (bool extendSelection = false);
-    void moveCaretToEnd (bool extendSelection = false);
     void handleBackspace();
     void handleDelete();
     void startCaretBlinking();
