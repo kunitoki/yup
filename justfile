@@ -17,7 +17,7 @@ build CONFIG="Debug":
 test CONFIG="Debug":
   cmake -G Xcode -B build
   cmake --build build --target yup_tests --config {{CONFIG}}
-  build/tests/{{CONFIG}}/yup_tests --gtest_filter=PathTests.*
+  build/tests/{{CONFIG}}/yup_tests --gtest_filter=*
 
 [doc("generate and open project in macOS using Xcode")]
 osx PROFILING="OFF":
