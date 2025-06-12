@@ -167,6 +167,9 @@ Path& Path::addLine (const Line<float>& line)
 
 Path& Path::addRectangle (float x, float y, float width, float height)
 {
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
     reserveSpace (size() + 5);
 
     moveTo (x, y);
@@ -188,6 +191,9 @@ Path& Path::addRectangle (const Rectangle<float>& rect)
 Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
     reserveSpace (size() + 9);
+
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
 
     const float centerWidth = width * 0.5f;
     const float centerHeight = height * 0.5f;
@@ -245,6 +251,9 @@ Path& Path::addEllipse (float x, float y, float width, float height)
 {
     reserveSpace (size() + 6);
 
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
     const float rx = width * 0.5f;
     const float ry = height * 0.5f;
     const float cx = x + rx;
@@ -272,6 +281,9 @@ Path& Path::addEllipse (const Rectangle<float>& r)
 Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY)
 {
     reserveSpace (size() + 6);
+
+    radiusX = jmax (0.0f, radiusX);
+    radiusY = jmax (0.0f, radiusY);
 
     const float rx = radiusX;
     const float ry = radiusY;
@@ -304,6 +316,9 @@ Path& Path::addCenteredEllipse (const Point<float>& center, const Size<float>& d
 
 Path& Path::addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
     const float radiusX = width * 0.5f;
     const float radiusY = height * 0.5f;
 
@@ -329,6 +344,9 @@ Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float r
     const float sinTheta = std::sin (rotationOfEllipse);
 
     // Initialize variables for the loop
+    radiusX = jmax (0.0f, radiusX);
+    radiusY = jmax (0.0f, radiusY);
+
     float x = std::cos (fromRadians) * radiusX;
     float y = std::sin (fromRadians) * radiusY;
     float rotatedX = x * cosTheta - y * sinTheta + centerX;
@@ -369,14 +387,15 @@ Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diame
 }
 
 //==============================================================================
-void Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
+Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
 {
-    if (numberOfSides < 3 || radius <= 0.0f)
-        return;
+    if (numberOfSides < 3)
+        return *this;
 
     reserveSpace (size() + numberOfSides + 1);
 
     const float angleIncrement = MathConstants<float>::twoPi / numberOfSides;
+    radius = jmax (0.0f, radius);
 
     // Start with the first vertex
     float angle = startAngle;
@@ -395,17 +414,21 @@ void Path::addPolygon (Point<float> centre, int numberOfSides, float radius, flo
     }
 
     close();
+
+    return *this;
 }
 
 //==============================================================================
-void Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
+Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
 {
-    if (numberOfPoints < 3 || innerRadius <= 0.0f || outerRadius <= 0.0f)
-        return;
+    if (numberOfPoints < 3)
+        return *this;
 
     reserveSpace (size() + numberOfPoints * 2 + 1);
 
     const float angleIncrement = MathConstants<float>::twoPi / (numberOfPoints * 2);
+    innerRadius = jmax (0.0f, innerRadius);
+    outerRadius = jmax (0.0f, outerRadius);
 
     // Start with the first outer vertex
     float angle = startAngle;
@@ -425,13 +448,15 @@ void Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, 
     }
 
     close();
+
+    return *this;
 }
 
 //==============================================================================
-void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
+Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
 {
     if (bodyArea.isEmpty() || maximumArea.isEmpty() || arrowBaseWidth <= 0.0f)
-        return;
+        return *this;
 
     // Clamp corner size to reasonable bounds
     cornerSize = jmin (cornerSize, bodyArea.getWidth() * 0.5f, bodyArea.getHeight() * 0.5f);
@@ -609,6 +634,8 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
 
     // Close the path
     close();
+
+    return *this;
 }
 
 //==============================================================================

@@ -13,6 +13,12 @@ clean:
 build CONFIG="Debug":
   cmake --build build --config {{CONFIG}}
 
+[doc("execute unit tests using cmake")]
+test CONFIG="Debug":
+  cmake -G Xcode -B build
+  cmake --build build --target yup_tests --config {{CONFIG}}
+  build/tests/{{CONFIG}}/yup_tests --gtest_filter=PathTests.*
+
 [doc("generate and open project in macOS using Xcode")]
 osx PROFILING="OFF":
   cmake -G Xcode -B build -DYUP_ENABLE_PROFILING={{PROFILING}}

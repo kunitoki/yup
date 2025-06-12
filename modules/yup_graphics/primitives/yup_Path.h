@@ -438,7 +438,7 @@ public:
         @param radius The radius from the center to each vertex.
         @param startAngle The starting angle in radians (0.0f starts at the right).
     */
-    void addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle = 0.0f);
+    Path& addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle = 0.0f);
 
     //==============================================================================
     /** Adds a star shape to the path.
@@ -452,7 +452,7 @@ public:
         @param outerRadius The radius from the center to the outer vertices.
         @param startAngle The starting angle in radians (0.0f starts at the right).
     */
-    void addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
+    Path& addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
 
     //==============================================================================
     /** Adds a speech bubble shape to the path.
@@ -466,7 +466,7 @@ public:
         @param cornerSize The radius of the rounded corners.
         @param arrowBaseWidth The width of the arrow at its base.
     */
-    void addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth);
+    Path& addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth);
 
     //==============================================================================
     /** Converts the path to a stroke polygon with specified width.
