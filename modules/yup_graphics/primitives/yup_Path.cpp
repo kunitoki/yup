@@ -436,52 +436,179 @@ void Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, P
     // Clamp corner size to reasonable bounds
     cornerSize = jmin (cornerSize, bodyArea.getWidth() * 0.5f, bodyArea.getHeight() * 0.5f);
 
-    // Determine which side of the body the arrow should be on
-    Point<float> bodyCenter = bodyArea.getCenter();
+    // Check if arrow tip is inside the body area - if so, draw no arrow
+    if (bodyArea.contains (arrowTipPosition))
+    {
+        // Just draw a rounded rectangle
+        addRoundedRectangle (bodyArea, cornerSize);
+        return;
+    }
 
-    // Calculate which edge the arrow should attach to
-    float leftDist = std::abs (arrowTipPosition.getX() - bodyArea.getX());
-    float rightDist = std::abs (arrowTipPosition.getX() - bodyArea.getRight());
-    float topDist = std::abs (arrowTipPosition.getY() - bodyArea.getY());
-    float bottomDist = std::abs (arrowTipPosition.getY() - bodyArea.getBottom());
-
-    float minDist = jmin (leftDist, rightDist, topDist, bottomDist);
-
-    // Start with the main body (rounded rectangle)
-    addRoundedRectangle (bodyArea, cornerSize);
-
-    // Add arrow based on closest edge
+    // Determine which side the arrow should be on based on tip position relative to rectangle
+    enum ArrowSide { Left, Right, Top, Bottom } arrowSide;
     Point<float> arrowBase1, arrowBase2;
 
-    if (minDist == leftDist) // Arrow on left side
+    // Get rectangle center for direction calculation
+    Point<float> rectCenter = bodyArea.getCenter();
+
+    // Calculate relative position of arrow tip
+    float deltaX = arrowTipPosition.getX() - rectCenter.getX();
+    float deltaY = arrowTipPosition.getY() - rectCenter.getY();
+
+    // Determine primary direction - use the larger absolute offset
+    if (std::abs(deltaX) > std::abs(deltaY))
     {
-        float arrowY = jlimit (bodyArea.getY() + cornerSize, bodyArea.getBottom() - cornerSize, arrowTipPosition.getY());
-        arrowBase1 = Point<float> (bodyArea.getX(), arrowY - arrowBaseWidth * 0.5f);
-        arrowBase2 = Point<float> (bodyArea.getX(), arrowY + arrowBaseWidth * 0.5f);
+        // Horizontal direction is dominant
+        if (deltaX < 0)
+        {
+            // Arrow tip is to the left of rectangle center
+            arrowSide = Left;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minY = bodyArea.getY() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxY = bodyArea.getBottom() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowY = jlimit (minY, maxY, arrowTipPosition.getY());
+            // For left edge (going bottom to top in clockwise direction)
+            arrowBase1 = Point<float> (bodyArea.getX(), arrowY + arrowBaseWidth * 0.5f); // bottom base point
+            arrowBase2 = Point<float> (bodyArea.getX(), arrowY - arrowBaseWidth * 0.5f); // top base point
+        }
+        else
+        {
+            // Arrow tip is to the right of rectangle center
+            arrowSide = Right;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minY = bodyArea.getY() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxY = bodyArea.getBottom() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowY = jlimit (minY, maxY, arrowTipPosition.getY());
+            // For right edge (going top to bottom in clockwise direction)
+            arrowBase1 = Point<float> (bodyArea.getRight(), arrowY - arrowBaseWidth * 0.5f); // top base point
+            arrowBase2 = Point<float> (bodyArea.getRight(), arrowY + arrowBaseWidth * 0.5f); // bottom base point
+        }
     }
-    else if (minDist == rightDist) // Arrow on right side
+    else
     {
-        float arrowY = jlimit (bodyArea.getY() + cornerSize, bodyArea.getBottom() - cornerSize, arrowTipPosition.getY());
-        arrowBase1 = Point<float> (bodyArea.getRight(), arrowY - arrowBaseWidth * 0.5f);
-        arrowBase2 = Point<float> (bodyArea.getRight(), arrowY + arrowBaseWidth * 0.5f);
-    }
-    else if (minDist == topDist) // Arrow on top side
-    {
-        float arrowX = jlimit (bodyArea.getX() + cornerSize, bodyArea.getRight() - cornerSize, arrowTipPosition.getX());
-        arrowBase1 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getY());
-        arrowBase2 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getY());
-    }
-    else // Arrow on bottom side
-    {
-        float arrowX = jlimit (bodyArea.getX() + cornerSize, bodyArea.getRight() - cornerSize, arrowTipPosition.getX());
-        arrowBase1 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getBottom());
-        arrowBase2 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getBottom());
+        // Vertical direction is dominant
+        if (deltaY < 0)
+        {
+            // Arrow tip is above rectangle center
+            arrowSide = Top;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minX = bodyArea.getX() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxX = bodyArea.getRight() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowX = jlimit (minX, maxX, arrowTipPosition.getX());
+            // For top edge (going left to right in clockwise direction)
+            arrowBase1 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getY()); // left base point
+            arrowBase2 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getY()); // right base point
+        }
+        else
+        {
+            // Arrow tip is below rectangle center
+            arrowSide = Bottom;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minX = bodyArea.getX() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxX = bodyArea.getRight() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowX = jlimit (minX, maxX, arrowTipPosition.getX());
+            // For bottom edge (going right to left in clockwise direction)
+            arrowBase1 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getBottom()); // right base point
+            arrowBase2 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getBottom()); // left base point
+        }
     }
 
-    // Add the arrow triangle
-    moveTo (arrowBase1);
-    lineTo (arrowTipPosition);
-    lineTo (arrowBase2);
+    // Use the mathematically correct constant for circular arc approximation with cubic Bezier curves
+    constexpr float kappa = 0.5522847498f;
+
+    float x = bodyArea.getX();
+    float y = bodyArea.getY();
+    float width = bodyArea.getWidth();
+    float height = bodyArea.getHeight();
+
+    // Start drawing the integrated path clockwise from top-left
+    moveTo (x + cornerSize, y);
+
+    // Top edge(left to right)
+    if (arrowSide == Top)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x + width - cornerSize, y);
+    }
+    else
+    {
+        lineTo (x + width - cornerSize, y);
+    }
+
+    // Top-right corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x + width - cornerSize + cornerSize * kappa, y,
+                 x + width, y + cornerSize - cornerSize * kappa,
+                 x + width, y + cornerSize);
+    }
+
+    // Right edge (top to bottom)
+    if (arrowSide == Right)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x + width, y + height - cornerSize);
+    }
+    else
+    {
+        lineTo (x + width, y + height - cornerSize);
+    }
+
+    // Bottom-right corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x + width, y + height - cornerSize + cornerSize * kappa,
+                 x + width - cornerSize + cornerSize * kappa, y + height,
+                 x + width - cornerSize, y + height);
+    }
+
+    // Bottom edge (right to left)
+    if (arrowSide == Bottom)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x + cornerSize, y + height);
+    }
+    else
+    {
+        lineTo (x + cornerSize, y + height);
+    }
+
+    // Bottom-left corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x + cornerSize - cornerSize * kappa, y + height,
+                 x, y + height - cornerSize + cornerSize * kappa,
+                 x, y + height - cornerSize);
+    }
+
+    // Left edge (bottom to top)
+    if (arrowSide == Left)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x, y + cornerSize);
+    }
+    else
+    {
+        lineTo (x, y + cornerSize);
+    }
+
+    // Top-left corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x, y + cornerSize - cornerSize * kappa,
+                 x + cornerSize - cornerSize * kappa, y,
+                 x + cornerSize, y);
+    }
+
+    // Close the path
     close();
 }
 
