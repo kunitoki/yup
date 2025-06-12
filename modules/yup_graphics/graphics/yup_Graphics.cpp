@@ -656,8 +656,6 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
 
     const auto& options = currentRenderOptions();
 
-    auto offset = text.getOffset (rect); // We will just use vertical offset
-
     renderer.save();
 
     rive::RawPath path;
@@ -666,6 +664,7 @@ void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>&
     auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
     renderer.clipPath (renderPath.get());
 
+    auto offset = text.getOffset (rect); // We will just use vertical offset
     auto transform = options.getTransform (rect.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 

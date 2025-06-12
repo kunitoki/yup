@@ -162,6 +162,7 @@ endfunction()
 #==============================================================================
 
 function (_yup_module_setup_target module_name
+                                   module_path
                                    module_cpp_standard
                                    module_include_paths
                                    module_options
@@ -289,6 +290,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     endif()
 
     _yup_module_setup_target ("${custom_target_name}"
+                              "${module_path}"
                               "${module_cpp_standard}"
                               "${module_include_paths}"
                               "${module_options}"
@@ -524,6 +526,7 @@ function (yup_add_module module_path module_group)
 
     # ==== Setup module sources and properties
     _yup_module_setup_target ("${module_name}"
+                              "${module_path}"
                               "${module_cpp_standard}"
                               "${module_include_paths}"
                               "${module_options}"
