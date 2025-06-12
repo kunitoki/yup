@@ -787,7 +787,7 @@ Point<float> StyledText::getOffset (const Rectangle<float>& area) const
     if (isDirty)
         return {};
 
-    auto result = Point<float>{ 0.0f, 0.0f };
+    auto result = Point<float> { 0.0f, 0.0f };
 
     if (getHorizontalAlign() == StyledText::center)
         result.setX ((area.getWidth() - bounds.getWidth()) * 0.5f);
