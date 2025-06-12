@@ -24,6 +24,27 @@ namespace yup
 
 //==============================================================================
 
+class NoOpRenderBuffer : public rive::RenderBuffer
+{
+public:
+    NoOpRenderBuffer()
+        : rive::RenderBuffer (rive::RenderBufferType::index, rive::RenderBufferFlags::none, 0)
+    {
+    }
+
+    void* onMap() override { return nullptr; }
+    void onUnmap() override {}
+};
+
+//==============================================================================
+
+class NoOpRenderShader : public rive::RenderShader
+{
+public:
+};
+
+//==============================================================================
+
 class NoOpRenderImage : public rive::RenderImage
 {
 public:
@@ -89,7 +110,7 @@ public:
         rive::RenderBufferFlags,
         size_t) override
     {
-        return nullptr;
+        return rive::make_rcp<NoOpRenderBuffer>();
     }
 
     rive::rcp<rive::RenderShader> makeLinearGradient (
@@ -101,7 +122,7 @@ public:
         const float stops[],
         size_t count) override
     {
-        return nullptr;
+        return rive::make_rcp<NoOpRenderShader>();
     }
 
     rive::rcp<rive::RenderShader> makeRadialGradient (
@@ -112,7 +133,7 @@ public:
         const float stops[],
         size_t count) override
     {
-        return nullptr;
+        return rive::make_rcp<NoOpRenderShader>();
     }
 
     rive::rcp<rive::RenderPath> makeRenderPath (rive::RawPath&, rive::FillRule) override
@@ -132,7 +153,7 @@ public:
 
     rive::rcp<rive::RenderImage> decodeImage (rive::Span<const uint8_t>) override
     {
-        return nullptr;
+        return rive::make_rcp<NoOpRenderImage>();
     }
 };
 
