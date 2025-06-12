@@ -45,13 +45,13 @@ The names of these source files must begin with the name of the module, but they
 
 In order to specify that a source file should only be compiled for a specific platform, then the filename can be suffixed with one of the following (case insensitive) strings:
 
-    _apple          <- compiled for Apple platforms only
-    _mac or _osx    <- compiled for macOS only
+    _apple          <- compiled for Apple platforms
+    _mac            <- compiled for macOS only
     _ios            <- compiled for iOS only
     _msft           <- compiled for Microsoft platforms only
-    _win32          <- compiled for Windows Win32 Desktop only
     _uwp            <- compiled for Universal Windows Platform only
-    _windows        <- compiled for Windows platforms only
+    _windows        <- compiled for Windows desktop only (MSVC)
+    _mingw          <- compiled for Windows desktop only (MinGW)
     _linux          <- compiled for Linux and FreeBSD only
     _android        <- compiled for Android only
     _posix          <- compiled for Posix platforms only
@@ -62,7 +62,7 @@ e.g.
     yup_mymodule/yup_mymodule_1.cpp         <- compiled for all platforms
     yup_mymodule/yup_mymodule_2.cpp         <- compiled for all platforms
     yup_mymodule/yup_mymodule_mac.cpp       <- compiled for macOS platforms only
-    yup_mymodule/yup_mymodule_win32.cpp     <- compiled for Windows platforms only
+    yup_mymodule/yup_mymodule_windows.cpp     <- compiled for Windows platforms only
 
 Often this isn't necessary, as in most cases you can easily add checks inside the files to do different things depending on the platform, but this may be handy just to avoid clutter in user projects where files aren't needed.
 
@@ -130,13 +130,16 @@ Possible values:
   - (Optional) A description of the type of software license that applies.
 
 - minimumCppStandard
-  - (Optional) A number indicating the minimum C++ language standard that is required for this module This must be just the standard number with no prefix e.g. 20 for C++20.
+  - (Optional) A number indicating the minimum C++ language standard that is required for this module. This must be just the standard number with no prefix e.g. 20 for C++20.
 
 - defines
   - (Optional) A list (space or comma-separated) of macro defines needed by this module.
 
 - searchpaths
   - (Optional) A space-separated list of internal include paths, relative to the module's parent folder, which need to be added to a project's header search path.
+
+- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]CppStandard
+  - (Optional) A number indicating the minimum C++ language standard that is required for this module and this platform exclusively. This must be just the standard number with no prefix e.g. 20 for C++20.
 
 - [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Deps
   - (Optional) A list (space or comma-separated) of other modules that are required by this one.
@@ -149,6 +152,9 @@ Possible values:
 
 - [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Options
   - (Optional) A list (space or comma-separated) of compile options needed by this module in a build.
+
+- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]LinkOptions
+  - (Optional) A list (space or comma-separated) of link options needed by this module in a build.
 
 - [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Searchpaths
   - (Optional) A space-separated list of internal include paths, relative to the module's parent folder, which need to be added to a project's header search path.

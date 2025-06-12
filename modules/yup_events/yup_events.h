@@ -49,7 +49,6 @@
     description:        Classes for running an application's main event loop and sending/receiving messages, timers, etc.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_core
 

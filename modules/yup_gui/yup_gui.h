@@ -31,7 +31,6 @@
     description:        The essential set of basic YUP user interface.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_events yup_graphics rive
     appleFrameworks:    Metal

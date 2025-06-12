@@ -49,7 +49,6 @@
     description:        Classes for audio buffer manipulation, midi message handling, synthesis, etc.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_core
     appleFrameworks:    Accelerate

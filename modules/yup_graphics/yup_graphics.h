@@ -31,7 +31,6 @@
     description:        The essential set of basic YUP graphics classes.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_core rive rive_renderer
     appleFrameworks:    Metal

@@ -49,7 +49,6 @@
     description:        The essential set of basic YUP classes, as required by all the other YUP modules.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       zlib
     osxFrameworks:      Cocoa Foundation IOKit Security
