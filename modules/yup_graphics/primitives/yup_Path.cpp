@@ -998,62 +998,60 @@ Point<float> Path::getPointAlongPath (float distance) const
 
         switch (verb)
         {
-        case rive::PathVerb::move:
-            if (pointIndex < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                lastMovePoint = currentPoint;
-                pointIndex++;
-            }
-            segmentLengths.push_back (0.0f);
-            break;
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    pointIndex++;
+                }
+                segmentLengths.push_back (0.0f);
+                break;
 
-        case rive::PathVerb::line:
-            if (pointIndex < points.size())
-            {
-                Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
-                float segmentLength = currentPoint.distanceTo (nextPoint);
-                segmentLengths.push_back (segmentLength);
-                totalLength += segmentLength;
-                currentPoint = nextPoint;
-                pointIndex++;
-            }
-            break;
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
+                    float segmentLength = currentPoint.distanceTo (nextPoint);
+                    segmentLengths.push_back (segmentLength);
+                    totalLength += segmentLength;
+                    currentPoint = nextPoint;
+                    pointIndex++;
+                }
+                break;
 
-        case rive::PathVerb::quad:
-            if (pointIndex + 1 < points.size())
-            {
-                Point<float> control (points[pointIndex].x, points[pointIndex].y);
-                Point<float> end (points[pointIndex + 1].x, points[pointIndex + 1].y);
+            case rive::PathVerb::quad:
+                if (pointIndex + 1 < points.size())
+                {
+                    Point<float> control (points[pointIndex].x, points[pointIndex].y);
+                    Point<float> end (points[pointIndex + 1].x, points[pointIndex + 1].y);
 
-                // Approximate quadratic curve length using control polygon
-                float segmentLength = currentPoint.distanceTo (control) + control.distanceTo (end);
-                segmentLengths.push_back (segmentLength * 0.8f); // Approximation factor
-                totalLength += segmentLength * 0.8f;
-                currentPoint = end;
-                pointIndex += 2;
-            }
-            break;
+                    // Approximate quadratic curve length using control polygon
+                    float segmentLength = currentPoint.distanceTo (control) + control.distanceTo (end);
+                    segmentLengths.push_back (segmentLength * 0.8f); // Approximation factor
+                    totalLength += segmentLength * 0.8f;
+                    currentPoint = end;
+                    pointIndex += 2;
+                }
+                break;
 
-        case rive::PathVerb::cubic:
-            if (pointIndex + 2 < points.size())
-            {
-                Point<float> control1 (points[pointIndex].x, points[pointIndex].y);
-                Point<float> control2 (points[pointIndex + 1].x, points[pointIndex + 1].y);
-                Point<float> end (points[pointIndex + 2].x, points[pointIndex + 2].y);
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    Point<float> control1 (points[pointIndex].x, points[pointIndex].y);
+                    Point<float> control2 (points[pointIndex + 1].x, points[pointIndex + 1].y);
+                    Point<float> end (points[pointIndex + 2].x, points[pointIndex + 2].y);
 
-                // Approximate cubic curve length using control polygon
-                float segmentLength = currentPoint.distanceTo (control1) +
-                                    control1.distanceTo (control2) +
-                                    control2.distanceTo (end);
-                segmentLengths.push_back (segmentLength * 0.75f); // Approximation factor
-                totalLength += segmentLength * 0.75f;
-                currentPoint = end;
-                pointIndex += 3;
-            }
-            break;
+                    // Approximate cubic curve length using control polygon
+                    float segmentLength = currentPoint.distanceTo (control1) + control1.distanceTo (control2) + control2.distanceTo (end);
+                    segmentLengths.push_back (segmentLength * 0.75f); // Approximation factor
+                    totalLength += segmentLength * 0.75f;
+                    currentPoint = end;
+                    pointIndex += 3;
+                }
+                break;
 
-        case rive::PathVerb::close:
+            case rive::PathVerb::close:
             {
                 float segmentLength = currentPoint.distanceTo (lastMovePoint);
                 segmentLengths.push_back (segmentLength);
@@ -1082,40 +1080,39 @@ Point<float> Path::getPointAlongPath (float distance) const
         if (accumulatedLength + segmentLength >= targetDistance)
         {
             // Found the segment, interpolate within it
-            float segmentProgress = segmentLength > 0.0f ?
-                (targetDistance - accumulatedLength) / segmentLength : 0.0f;
+            float segmentProgress = segmentLength > 0.0f ? (targetDistance - accumulatedLength) / segmentLength : 0.0f;
 
             switch (verb)
             {
-            case rive::PathVerb::move:
-                if (pointIndex < points.size())
-                    return Point<float> (points[pointIndex].x, points[pointIndex].y);
-                break;
+                case rive::PathVerb::move:
+                    if (pointIndex < points.size())
+                        return Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    break;
 
-            case rive::PathVerb::line:
-                if (pointIndex < points.size())
-                {
-                    Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
-                    return currentPoint.pointBetween (nextPoint, segmentProgress);
-                }
-                break;
-
-            case rive::PathVerb::quad:
-            case rive::PathVerb::cubic:
-                // For curves, approximate with linear interpolation to end point
-                if (pointIndex < points.size())
-                {
-                    size_t endIndex = verb == rive::PathVerb::quad ? pointIndex + 1 : pointIndex + 2;
-                    if (endIndex < points.size())
+                case rive::PathVerb::line:
+                    if (pointIndex < points.size())
                     {
-                        Point<float> endPoint (points[endIndex].x, points[endIndex].y);
-                        return currentPoint.pointBetween (endPoint, segmentProgress);
+                        Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
+                        return currentPoint.pointBetween (nextPoint, segmentProgress);
                     }
-                }
-                break;
+                    break;
 
-            case rive::PathVerb::close:
-                return currentPoint.pointBetween (lastMovePoint, segmentProgress);
+                case rive::PathVerb::quad:
+                case rive::PathVerb::cubic:
+                    // For curves, approximate with linear interpolation to end point
+                    if (pointIndex < points.size())
+                    {
+                        size_t endIndex = verb == rive::PathVerb::quad ? pointIndex + 1 : pointIndex + 2;
+                        if (endIndex < points.size())
+                        {
+                            Point<float> endPoint (points[endIndex].x, points[endIndex].y);
+                            return currentPoint.pointBetween (endPoint, segmentProgress);
+                        }
+                    }
+                    break;
+
+                case rive::PathVerb::close:
+                    return currentPoint.pointBetween (lastMovePoint, segmentProgress);
             }
         }
 
@@ -1124,42 +1121,42 @@ Point<float> Path::getPointAlongPath (float distance) const
         // Update current point based on verb
         switch (verb)
         {
-        case rive::PathVerb::move:
-            if (pointIndex < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                lastMovePoint = currentPoint;
-                pointIndex++;
-            }
-            break;
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    pointIndex++;
+                }
+                break;
 
-        case rive::PathVerb::line:
-            if (pointIndex < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                pointIndex++;
-            }
-            break;
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    pointIndex++;
+                }
+                break;
 
-        case rive::PathVerb::quad:
-            if (pointIndex + 1 < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
-                pointIndex += 2;
-            }
-            break;
+            case rive::PathVerb::quad:
+                if (pointIndex + 1 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
+                    pointIndex += 2;
+                }
+                break;
 
-        case rive::PathVerb::cubic:
-            if (pointIndex + 2 < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
-                pointIndex += 3;
-            }
-            break;
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
+                    pointIndex += 3;
+                }
+                break;
 
-        case rive::PathVerb::close:
-            currentPoint = lastMovePoint;
-            break;
+            case rive::PathVerb::close:
+                currentPoint = lastMovePoint;
+                break;
         }
     }
 
@@ -1189,9 +1186,9 @@ Path Path::createStrokePolygon (float strokeWidth) const
     Point<float> lastMovePoint (0.0f, 0.0f);
 
     std::vector<Point<float>> leftSide;
-    leftSide.reserve(verbs.size());
+    leftSide.reserve (verbs.size());
     std::vector<Point<float>> rightSide;
-    rightSide.reserve(verbs.size());
+    rightSide.reserve (verbs.size());
 
     for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
     {
@@ -1302,7 +1299,7 @@ Path Path::createStrokePolygon (float strokeWidth) const
 
             case rive::PathVerb::close:
                 // Connect back to start and create the stroke polygon
-                if (!leftSide.empty() && !rightSide.empty())
+                if (! leftSide.empty() && ! rightSide.empty())
                 {
                     // Create the stroke polygon by combining left and right sides
                     strokePath.moveTo (leftSide[0]);
@@ -1326,7 +1323,7 @@ Path Path::createStrokePolygon (float strokeWidth) const
     }
 
     // If path wasn't closed, still create stroke polygon
-    if (!leftSide.empty() && !rightSide.empty())
+    if (! leftSide.empty() && ! rightSide.empty())
     {
         strokePath.moveTo (leftSide[0]);
 
@@ -1343,7 +1340,8 @@ Path Path::createStrokePolygon (float strokeWidth) const
 }
 
 //==============================================================================
-namespace {
+namespace
+{
 
 void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& points, float cornerRadius, bool closed)
 {
@@ -1357,7 +1355,7 @@ void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& point
         size_t prevIndex = (i == 0) ? (closed ? points.size() - 1 : 0) : i - 1;
         size_t nextIndex = (i == points.size() - 1) ? (closed ? 0 : i) : i + 1;
 
-        if (!closed && (i == 0 || i == points.size() - 1))
+        if (! closed && (i == 0 || i == points.size() - 1))
         {
             // Don't round first/last points in open paths
             if (first)
@@ -1471,59 +1469,59 @@ Path Path::createPathWithRoundedCorners (const Path& originalPath, float cornerR
 
         switch (verb)
         {
-        case rive::PathVerb::move:
-            if (pointIndex < points.size())
-            {
-                if (!pathPoints.empty())
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
                 {
-                    // Process previous subpath
-                    if (pathPoints.size() >= 3)
-                        addRoundedSubpath (roundedPath, pathPoints, cornerRadius, false);
+                    if (! pathPoints.empty())
+                    {
+                        // Process previous subpath
+                        if (pathPoints.size() >= 3)
+                            addRoundedSubpath (roundedPath, pathPoints, cornerRadius, false);
 
-                    pathPoints.clear();
+                        pathPoints.clear();
+                    }
+
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    pathPoints.push_back (currentPoint);
+                    pointIndex++;
                 }
+                break;
 
-                currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                lastMovePoint = currentPoint;
-                pathPoints.push_back (currentPoint);
-                pointIndex++;
-            }
-            break;
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    pathPoints.push_back (currentPoint);
+                    pointIndex++;
+                }
+                break;
 
-        case rive::PathVerb::line:
-            if (pointIndex < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
-                pathPoints.push_back (currentPoint);
-                pointIndex++;
-            }
-            break;
+            case rive::PathVerb::quad:
+                if (pointIndex + 1 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
+                    pathPoints.push_back (currentPoint);
+                    pointIndex += 2;
+                }
+                break;
 
-        case rive::PathVerb::quad:
-            if (pointIndex + 1 < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
-                pathPoints.push_back (currentPoint);
-                pointIndex += 2;
-            }
-            break;
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
+                    pathPoints.push_back (currentPoint);
+                    pointIndex += 3;
+                }
+                break;
 
-        case rive::PathVerb::cubic:
-            if (pointIndex + 2 < points.size())
-            {
-                currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
-                pathPoints.push_back (currentPoint);
-                pointIndex += 3;
-            }
-            break;
+            case rive::PathVerb::close:
+                if (pathPoints.size() >= 3)
+                    addRoundedSubpath (roundedPath, pathPoints, cornerRadius, true);
 
-        case rive::PathVerb::close:
-            if (pathPoints.size() >= 3)
-                addRoundedSubpath (roundedPath, pathPoints, cornerRadius, true);
-
-            pathPoints.clear();
-            currentPoint = lastMovePoint;
-            break;
+                pathPoints.clear();
+                currentPoint = lastMovePoint;
+                break;
         }
     }
 
