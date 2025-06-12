@@ -466,7 +466,7 @@ Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, 
     {
         // Just draw a rounded rectangle
         addRoundedRectangle (bodyArea, cornerSize);
-        return;
+        return *this;
     }
 
     // Determine which side the arrow should be on based on tip position relative to rectangle
