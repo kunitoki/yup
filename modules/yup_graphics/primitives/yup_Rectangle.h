@@ -197,6 +197,17 @@ public:
         return xy.getX();
     }
 
+    [[nodiscard]] constexpr Rectangle withLeft (ValueType amount) const noexcept
+    {
+        return { xy.withX (amount), size };
+    }
+
+    [[nodiscard]] constexpr Rectangle withTrimmedLeft (ValueType amountToTrim) const noexcept
+    {
+        return withLeft (xy.getX() + amountToTrim);
+    }
+
+    //==============================================================================
     /** Returns the top-coordinate of the rectangle's top-left corner.
 
         @return The top-coordinate value.
@@ -206,6 +217,17 @@ public:
         return xy.getY();
     }
 
+    [[nodiscard]] constexpr Rectangle withTop (ValueType amount) const noexcept
+    {
+        return { xy.withY (amount), size };
+    }
+
+    [[nodiscard]] constexpr Rectangle withTrimmedTop (ValueType amountToTrim) const noexcept
+    {
+        return withTop (xy.getY() + amountToTrim);
+    }
+
+    //==============================================================================
     /** Returns the right-coordinate of the rectangle's bottom-right corner.
 
         @return The right-coordinate value.
@@ -215,6 +237,12 @@ public:
         return xy.getX() + size.getWidth();
     }
 
+    [[nodiscard]] constexpr Rectangle withTrimmedRight (ValueType amountToTrim) const noexcept
+    {
+        return withWidth (size.getWidth() - amountToTrim);
+    }
+
+    //==============================================================================
     /** Returns the bottom-coordinate of the rectangle's bottom-right corner.
 
         @return The bottom-coordinate value.
@@ -222,6 +250,11 @@ public:
     [[nodiscard]] constexpr ValueType getBottom() const noexcept
     {
         return xy.getY() + size.getHeight();
+    }
+
+    [[nodiscard]] constexpr Rectangle withTrimmedBottom (ValueType amountToTrim) const noexcept
+    {
+        return withHeight (size.getHeight() - amountToTrim);
     }
 
     //==============================================================================
