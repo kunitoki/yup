@@ -787,18 +787,13 @@ Point<float> StyledText::getOffset (const Rectangle<float>& area) const
     if (isDirty)
         return {};
 
-    Point<float> result { 0.0f, 0.0f };
+    auto result = Point<float>{ 0.0f, 0.0f };
 
-    // When maxSize width is set, let Rive handle horizontal alignment entirely
-    if (maxSize.getWidth() <= 0.0f)
-    {
-        if (getHorizontalAlign() == StyledText::center)
-            result.setX ((area.getWidth() - bounds.getWidth()) * 0.5f);
-        else if (getHorizontalAlign() == StyledText::right)
-            result.setX (area.getWidth() - bounds.getWidth());
-    }
+    if (getHorizontalAlign() == StyledText::center)
+        result.setX ((area.getWidth() - bounds.getWidth()) * 0.5f);
+    else if (getHorizontalAlign() == StyledText::right)
+        result.setX (area.getWidth() - bounds.getWidth());
 
-    // Vertical alignment is always handled by us since Rive doesn't support it
     if (getVerticalAlign() == StyledText::middle)
         result.setY ((area.getHeight() - bounds.getHeight()) * 0.5f);
     else if (getVerticalAlign() == StyledText::bottom)

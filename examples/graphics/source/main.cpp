@@ -151,13 +151,20 @@ public:
 
     void resized() override
     {
-        auto bounds = getLocalBounds().reduced (5);
+        constexpr auto margin = 5;
+
+        auto bounds = getLocalBounds().reduced (margin);
         auto buttonBounds = bounds.removeFromTop (30);
 
-        const auto buttonWidth = buttonBounds.getWidth() / buttons.size();
+        const auto totalMargin = margin * (buttons.size() - 1);
+        const auto buttonWidth = (buttonBounds.getWidth() - totalMargin) / buttons.size();
         for (auto& button : buttons)
+        {
             button->setBounds (buttonBounds.removeFromLeft (buttonWidth));
+            buttonBounds.removeFromLeft (margin);
+        }
 
+        bounds.removeFromTop (margin);
         for (auto& component : components)
             component->setBounds (bounds);
     }

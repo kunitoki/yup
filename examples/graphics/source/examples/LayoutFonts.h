@@ -53,14 +53,15 @@ public:
         const int numTexts = yup::numElementsInArray (text);
         for (int i = 0; i < numTexts; ++i)
         {
-            auto labelBounds = text[i].bounds;
+            const auto& textInstance = text[i];
+            auto labelBounds = textInstance.bounds;
 
             g.setFillColor (0xffffffff);
             g.setFeather (10.0f);
-            g.fillFittedText (text[i].styledText, labelBounds);
+            g.fillFittedText (textInstance.styledText, labelBounds);
 
             g.setFeather (0.0f);
-            g.fillFittedText (text[i].styledText, labelBounds);
+            g.fillFittedText (textInstance.styledText, labelBounds);
 
             /*
             g.setStrokeColor (yup::Colors::green);
@@ -73,10 +74,12 @@ public:
             g.strokeLine (labelBounds.getX(), labelBounds.getBottom(), labelBounds.getRight(), labelBounds.getBottom());
             */
 
-            auto offset = text[i].styledText.getOffset (labelBounds);
-
             g.setStrokeColor (yup::Colors::magenta);
-            const auto& lines = text[i].styledText.getOrderedLines();
+
+            const auto textHeight = textInstance.styledText.getComputedTextBounds().getHeight();
+
+            const auto offset = textInstance.styledText.getOffset (labelBounds);
+            const auto& lines = textInstance.styledText.getOrderedLines();
             for (const auto& line : lines)
             {
                 for (auto [glyph, _] : line)
@@ -87,9 +90,7 @@ public:
                             labelBounds.getX() + offset.getX() + xPos,
                             labelBounds.getTop() + offset.getY(),
                             labelBounds.getX() + offset.getX() + xPos,
-                            labelBounds.getTop() + offset.getY() + text[i].styledText.getComputedTextBounds().getHeight());
-
-                        //accum += advances; // / g.getContextScale();
+                            labelBounds.getTop() + offset.getY() + textHeight);
                     }
                 }
             }
