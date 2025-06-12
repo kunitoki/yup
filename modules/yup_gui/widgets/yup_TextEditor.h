@@ -286,6 +286,7 @@ public:
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
     void textInput (const String& text) override;
+
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 

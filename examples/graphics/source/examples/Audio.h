@@ -124,34 +124,34 @@ public:
             path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
         // Outermost glow layer
-        g.setStrokeColor (lineColor.withAlpha(0.1f));
+        g.setStrokeColor (lineColor.withAlpha (0.1f));
         g.setStrokeWidth (12.0f);
         g.setStrokeCap (yup::StrokeCap::Round);
         g.setStrokeJoin (yup::StrokeJoin::Round);
         g.strokePath (path);
 
         // Second glow layer
-        g.setStrokeColor (lineColor.withAlpha(0.2f));
+        g.setStrokeColor (lineColor.withAlpha (0.2f));
         g.setStrokeWidth (8.0f);
         g.strokePath (path);
 
         // Third glow layer
-        g.setStrokeColor (lineColor.withAlpha(0.4f));
+        g.setStrokeColor (lineColor.withAlpha (0.4f));
         g.setStrokeWidth (5.0f);
         g.strokePath (path);
 
         // Main stroke
-        g.setStrokeColor (lineColor.withAlpha(0.8f));
+        g.setStrokeColor (lineColor.withAlpha (0.8f));
         g.setStrokeWidth (2.5f);
         g.strokePath (path);
 
         // Bright center line
-        g.setStrokeColor (lineColor.brighter(0.3f));
+        g.setStrokeColor (lineColor.brighter (0.3f));
         g.setStrokeWidth (1.0f);
         g.strokePath (path);
 
         // Ultra-bright core
-        g.setStrokeColor (yup::Colors::white.withAlpha(0.9f));
+        g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
         g.setStrokeWidth (0.3f);
         g.strokePath (path);
     }
