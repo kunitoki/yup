@@ -604,10 +604,10 @@ void Graphics::drawImageAt (const Image& image, const Point<float>& pos)
 }
 
 //==============================================================================
-void Graphics::fillFittedText (StyledText& text, const Rectangle<float>& rect)
+void Graphics::fillFittedText (const StyledText& text, const Rectangle<float>& rect)
 {
-    text.update();
-    if (text.isEmpty())
+    jassert (! text.needsUpdate());
+    if (text.needsUpdate() || text.isEmpty())
         return;
 
     const auto& options = currentRenderOptions();
@@ -625,10 +625,10 @@ void Graphics::fillFittedText (StyledText& text, const Rectangle<float>& rect)
     renderFittedText (text, rect, std::addressof (paint));
 }
 
-void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
+void Graphics::strokeFittedText (const StyledText& text, const Rectangle<float>& rect)
 {
-    text.update();
-    if (text.isEmpty())
+    jassert (! text.needsUpdate());
+    if (text.needsUpdate() || text.isEmpty())
         return;
 
     const auto& options = currentRenderOptions();
@@ -648,25 +648,25 @@ void Graphics::strokeFittedText (StyledText& text, const Rectangle<float>& rect)
     renderFittedText (text, rect, std::addressof (paint));
 }
 
-void Graphics::renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint)
+void Graphics::renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint)
 {
-    jassert (! text.isEmpty());
+    jassert (! text.needsUpdate());
+    if (text.needsUpdate() || text.isEmpty())
+        return;
 
     const auto& options = currentRenderOptions();
 
-    auto offset = text.getOffset (rect);
-    if (text.getMaxSize().getWidth() > 0.0f) // Non negative max size in text layout will adjust X axis alignment
-        offset = offset.withX (0.0f);
+    auto offset = text.getOffset (rect); // We will just use vertical offset
 
     renderer.save();
 
     rive::RawPath path;
-    path.addRect ({ rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom() });
+    path.addRect (rect.toAABB());
     path.transformInPlace (options.getFixedTransform().toMat2D());
     auto renderPath = rive::make_rcp<rive::RiveRenderPath> (rive::FillRule::clockwise, path);
     renderer.clipPath (renderPath.get());
 
-    auto transform = options.getTransform (rect.getX() + offset.getX(), rect.getY() + offset.getY());
+    auto transform = options.getTransform (rect.getX(), rect.getY() + offset.getY());
     renderer.transform (transform.toMat2D());
 
     for (auto style : text.getRenderStyles())

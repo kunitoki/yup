@@ -31,7 +31,6 @@
     description:        The essential set of basic YUP audio processing classes.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_audio_basics yup_gui
     enableARC:          1

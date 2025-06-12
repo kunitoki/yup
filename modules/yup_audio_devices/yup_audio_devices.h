@@ -49,7 +49,6 @@
     description:        Classes to play and record from audio and MIDI I/O devices
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_audio_basics yup_events
     appleFrameworks:    CoreAudio CoreMIDI AudioToolbox

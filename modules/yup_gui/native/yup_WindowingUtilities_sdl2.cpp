@@ -58,7 +58,7 @@ KeyModifiers toKeyModifiers (Uint16 sdlMod) noexcept
         modifiers |= KeyModifiers::altMask;
 
     if (sdlMod & KMOD_GUI)
-        modifiers |= KeyModifiers::superMask;
+        modifiers |= KeyModifiers::commandMask;
 
     return modifiers;
 }

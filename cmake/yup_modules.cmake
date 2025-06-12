@@ -168,6 +168,7 @@ function (_yup_module_setup_target module_name
                                    module_defines
                                    module_sources
                                    module_libs
+                                   module_link_options
                                    module_frameworks
                                    module_dependencies
                                    module_arc_enabled)
@@ -208,18 +209,16 @@ function (_yup_module_setup_target module_name
 
     target_link_libraries (${module_name} INTERFACE
         ${module_libs}
-        ${module_frameworks})
-
-    target_link_libraries (${module_name} INTERFACE
+        ${module_frameworks}
         ${module_dependencies})
+
+    target_link_options (${module_name} INTERFACE
+        ${module_link_options})
 
     # Add coverage support if enabled
     if (YUP_ENABLE_COVERAGE)
         _yup_setup_coverage_flags (${module_name})
     endif()
-
-    #add_library("yup::${module_name}" ALIAS ${module_name})
-
 endfunction()
 
 #==============================================================================
@@ -257,6 +256,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
     get_target_property (module_defines ${plugin_client_target} YUP_MODULE_DEFINES)
     get_target_property (module_options ${plugin_client_target} YUP_MODULE_OPTIONS)
     get_target_property (module_libs ${plugin_client_target} YUP_MODULE_LIBS)
+    get_target_property (module_link_options ${plugin_client_target} YUP_MODULE_LINK_OPTIONS)
     get_target_property (module_frameworks ${plugin_client_target} YUP_MODULE_FRAMEWORK)
     get_target_property (module_dependencies ${plugin_client_target} YUP_MODULE_DEPENDENCIES)
     get_target_property (module_arc_enabled ${plugin_client_target} YUP_MODULE_ARC_ENABLED)
@@ -295,6 +295,7 @@ function (_yup_module_setup_plugin_client target_name plugin_client_target folde
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
                               "${module_arc_enabled}")
@@ -333,7 +334,7 @@ function (yup_add_module module_path module_group)
 
     # ==== Assign Configurations Dynamically
     set (global_properties "dependencies|defines|options|searchpaths")
-    set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)Packages$|^(.*)Searchpaths$|^(.*)CppStandard$")
+    set (platform_properties "^(.*)Deps$|^(.*)Defines$|^(.*)Libs$|^(.*)Frameworks$|^(.*)WeakFrameworks$|^(.*)Options$|^(.*)LinkOptions$|^(.*)Packages$|^(.*)Searchpaths$|^(.*)CppStandard$")
 
     set (parsed_config "")
     foreach (module_config ${module_configs})
@@ -370,6 +371,7 @@ function (yup_add_module module_path module_group)
             list (APPEND module_defines ${module_iosSimDefines})
             list (APPEND module_options ${module_iosSimOptions})
             list (APPEND module_libs ${module_iosSimLibs})
+            list (APPEND module_link_options ${module_iosSimLinkOptions})
             _yup_resolve_variable_paths ("${module_iosSimSearchpaths}" module_iosSimSearchpaths)
             list (APPEND module_searchpaths ${module_iosSimSearchpaths})
             _yup_module_prepare_frameworks ("${module_iosSimFrameworks}" "${module_iosSimWeakFrameworks}" module_iosSimframeworks)
@@ -382,6 +384,7 @@ function (yup_add_module module_path module_group)
             list (APPEND module_defines ${module_iosDefines})
             list (APPEND module_options ${module_iosOptions})
             list (APPEND module_libs ${module_iosLibs})
+            list (APPEND module_link_options ${module_iosLinkOptions})
             _yup_resolve_variable_paths ("${module_iosSearchpaths}" module_iosSearchpaths)
             list (APPEND module_searchpaths ${module_iosSearchpaths})
             _yup_module_prepare_frameworks ("${module_iosFrameworks}" "${module_iosWeakFrameworks}" module_iosFrameworks)
@@ -395,6 +398,7 @@ function (yup_add_module module_path module_group)
         list (APPEND module_defines ${module_appleDefines})
         list (APPEND module_options ${module_appleOptions})
         list (APPEND module_libs ${module_appleLibs})
+        list (APPEND module_link_options ${module_appleLinkOptions})
         _yup_resolve_variable_paths ("${module_appleSearchpaths}" module_appleSearchpaths)
         list (APPEND module_searchpaths ${module_appleSearchpaths})
         _yup_module_prepare_frameworks ("${module_appleFrameworks}" "${module_appleWeakFrameworks}" module_appleFrameworks)
@@ -411,7 +415,9 @@ function (yup_add_module module_path module_group)
         list (APPEND module_options ${module_osxOptions})
         list (APPEND module_options ${module_appleOptions})
         list (APPEND module_libs ${module_osxLibs})
+        list (APPEND module_link_options ${module_osxLinkOptions})
         list (APPEND module_libs ${module_appleLibs})
+        list (APPEND module_link_options ${module_appleLinkOptions})
         _yup_resolve_variable_paths ("${module_osxSearchpaths}" module_osxSearchpaths)
         list (APPEND module_searchpaths ${module_osxSearchpaths})
         _yup_resolve_variable_paths ("${module_appleSearchpaths}" module_appleSearchpaths)
@@ -432,6 +438,7 @@ function (yup_add_module module_path module_group)
         list (APPEND module_defines ${module_linuxDefines})
         list (APPEND module_options ${module_linuxOptions})
         list (APPEND module_libs ${module_linuxLibs})
+        list (APPEND module_link_options ${module_linuxLinkOptions})
         _yup_resolve_variable_paths ("${module_linuxSearchpaths}" module_linuxSearchpaths)
         list (APPEND module_searchpaths ${module_linuxSearchpaths})
         foreach (package ${module_linuxPackages})
@@ -447,6 +454,7 @@ function (yup_add_module module_path module_group)
         list (APPEND module_defines ${module_wasmDefines})
         list (APPEND module_options ${module_wasmOptions})
         list (APPEND module_libs ${module_wasmLibs})
+        list (APPEND module_link_options ${module_wasmLinkOptions})
         _yup_resolve_variable_paths ("${module_wasmSearchpaths}" module_wasmSearchpaths)
         list (APPEND module_searchpaths ${module_wasmSearchpaths})
 
@@ -458,6 +466,7 @@ function (yup_add_module module_path module_group)
         list (APPEND module_defines ${module_androidDefines})
         list (APPEND module_options ${module_androidOptions})
         list (APPEND module_libs ${module_androidLibs})
+        list (APPEND module_link_options ${module_androidLinkOptions})
         _yup_resolve_variable_paths ("${module_androidSearchpaths}" module_androidSearchpaths)
         list (APPEND module_searchpaths ${module_androidSearchpaths})
 
@@ -465,19 +474,33 @@ function (yup_add_module module_path module_group)
         if (module_msftCppStandard)
             set (module_cpp_standard "${module_msftCppStandard}")
         endif()
-        list (APPEND module_dependencies ${module_windowsDeps})
-        list (APPEND module_defines ${module_windowsDefines})
-        list (APPEND module_options ${module_windowsOptions})
-        _yup_resolve_variable_paths ("${module_windowsSearchpaths}" module_windowsSearchpaths)
-        list (APPEND module_searchpaths ${module_windowsSearchpaths})
+        list (APPEND module_libs ${module_msftLibs})
+        list (APPEND module_dependencies ${module_msftDeps})
+        list (APPEND module_defines ${module_msftDefines})
+        list (APPEND module_options ${module_msftOptions})
+        list (APPEND module_link_options ${module_msftLinkOptions})
+        _yup_resolve_variable_paths ("${module_msftSearchpaths}" module_msftSearchpaths)
+        list (APPEND module_searchpaths ${module_msftSearchpaths})
 
         if (MINGW)
             list (APPEND module_libs ${module_mingwLibs})
+            list (APPEND module_dependencies ${module_mingwDeps})
+            list (APPEND module_defines ${module_mingwDefines})
+            list (APPEND module_options ${module_mingwOptions})
+            list (APPEND module_link_options ${module_mingwLinkOptions})
+            _yup_resolve_variable_paths ("${module_mingwSearchpaths}" module_mingwSearchpaths)
+            list (APPEND module_searchpaths ${module_mingwSearchpaths})
             if (module_mingwCppStandard)
                 set (module_cpp_standard "${module_mingwCppStandard}")
             endif()
         else()
             list (APPEND module_libs ${module_windowsLibs})
+            list (APPEND module_dependencies ${module_windowsDeps})
+            list (APPEND module_defines ${module_windowsDefines})
+            list (APPEND module_options ${module_windowsOptions})
+            list (APPEND module_link_options ${module_windowsLinkOptions})
+            _yup_resolve_variable_paths ("${module_windowsSearchpaths}" module_windowsSearchpaths)
+            list (APPEND module_searchpaths ${module_windowsSearchpaths})
             if (module_windowsCppStandard)
                 set (module_cpp_standard "${module_windowsCppStandard}")
             endif()
@@ -500,13 +523,14 @@ function (yup_add_module module_path module_group)
     _yup_module_collect_sources ("${module_path}" module_sources)
 
     # ==== Setup module sources and properties
-    _yup_module_setup_target (${module_name}
+    _yup_module_setup_target ("${module_name}"
                               "${module_cpp_standard}"
                               "${module_include_paths}"
                               "${module_options}"
                               "${module_defines}"
                               "${module_sources}"
                               "${module_libs}"
+                              "${module_link_options}"
                               "${module_frameworks}"
                               "${module_dependencies}"
                               "${module_arc_enabled}")
@@ -531,6 +555,7 @@ function (yup_add_module module_path module_group)
         YUP_MODULE_DEFINES "${module_defines}"
         YUP_MODULE_SOURCES "${module_sources}"
         YUP_MODULE_LIBS "${module_libs}"
+        YUP_MODULE_LINK_OPTIONS "${module_link_options}"
         YUP_MODULE_FRAMEWORK "${module_frameworks}"
         YUP_MODULE_DEPENDENCIES "${module_dependencies}"
         YUP_MODULE_ARC_ENABLED "${module_arc_enabled}")
@@ -562,11 +587,26 @@ function (_yup_add_default_modules modules_path)
     # Yup modules
     set (modules_group "Modules")
     yup_add_module (${modules_path}/modules/yup_core ${modules_group})
+    add_library (yup::yup_core ALIAS yup_core)
+
     yup_add_module (${modules_path}/modules/yup_events ${modules_group})
+    add_library (yup::yup_events ALIAS yup_events)
+
     yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
+    add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
+
     yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
+    add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
+
     yup_add_module (${modules_path}/modules/yup_audio_processors ${modules_group})
+    add_library (yup::yup_audio_processors ALIAS yup_audio_processors)
+
     yup_add_module (${modules_path}/modules/yup_audio_plugin_client ${modules_group})
+    add_library (yup::yup_audio_plugin_client ALIAS yup_audio_plugin_client)
+
     yup_add_module (${modules_path}/modules/yup_graphics ${modules_group})
+    add_library (yup::yup_graphics ALIAS yup_graphics)
+
     yup_add_module (${modules_path}/modules/yup_gui ${modules_group})
+    add_library (yup::yup_gui ALIAS yup_gui)
 endfunction()

@@ -89,10 +89,9 @@ set_target_properties (${target_name} PROPERTIES
 # ==== Setup coverage support
 if (YUP_ENABLE_COVERAGE)
     _yup_setup_coverage_flags (${target_name})
-
     foreach (module ${target_modules})
         _yup_setup_coverage_flags (${module})
     endforeach()
 
-    _yup_setup_coverage_targets ("${target_modules}")
+    _yup_setup_coverage_targets (${target_name} "${target_modules}")
 endif()

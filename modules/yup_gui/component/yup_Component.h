@@ -924,6 +924,7 @@ private:
         bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool isRepainting : 1;
     };
 
     union

@@ -187,23 +187,39 @@ Path& Path::addRectangle (const Rectangle<float>& rect)
 
 Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    reserveSpace (size() + 10);
+    reserveSpace (size() + 9);
 
-    radiusTopLeft = jmin (radiusTopLeft, jmin (width / 2.0f, height / 2.0f));
-    radiusTopRight = jmin (radiusTopRight, jmin (width / 2.0f, height / 2.0f));
-    radiusBottomLeft = jmin (radiusBottomLeft, jmin (width / 2.0f, height / 2.0f));
-    radiusBottomRight = jmin (radiusBottomRight, jmin (width / 2.0f, height / 2.0f));
+    const float centerWidth = width * 0.5f;
+    const float centerHeight = height * 0.5f;
+    radiusTopLeft = jmin (radiusTopLeft, centerWidth, centerHeight);
+    radiusTopRight = jmin (radiusTopRight, centerWidth, centerHeight);
+    radiusBottomLeft = jmin (radiusBottomLeft, centerWidth, centerHeight);
+    radiusBottomRight = jmin (radiusBottomRight, centerWidth, centerHeight);
+
+    // Use the mathematically correct constant for circular arc approximation with cubic Bezier curves
+    // This is 4/3 * tan(pi/8) ≈ 0.5522847498f
+    constexpr float kappa = 0.5522847498f;
 
     moveTo (x + radiusTopLeft, y);
     lineTo (x + width - radiusTopRight, y);
-    cubicTo (x + width - radiusTopRight * 0.55f, y, x + width, y + radiusTopRight * 0.45f, x + width, y + radiusTopRight);
+
+    // Top-right corner
+    cubicTo (x + width - radiusTopRight + radiusTopRight * kappa, y, x + width, y + radiusTopRight - radiusTopRight * kappa, x + width, y + radiusTopRight);
+
     lineTo (x + width, y + height - radiusBottomRight);
-    cubicTo (x + width, y + height - radiusBottomRight * 0.55f, x + width - radiusBottomRight * 0.55f, y + height, x + width - radiusBottomRight, y + height);
+
+    // Bottom-right corner
+    cubicTo (x + width, y + height - radiusBottomRight + radiusBottomRight * kappa, x + width - radiusBottomRight + radiusBottomRight * kappa, y + height, x + width - radiusBottomRight, y + height);
+
     lineTo (x + radiusBottomLeft, y + height);
-    cubicTo (x + radiusBottomLeft * 0.55f, y + height, x, y + height - radiusBottomLeft * 0.55f, x, y + height - radiusBottomLeft);
+
+    // Bottom-left corner
+    cubicTo (x + radiusBottomLeft - radiusBottomLeft * kappa, y + height, x, y + height - radiusBottomLeft + radiusBottomLeft * kappa, x, y + height - radiusBottomLeft);
+
     lineTo (x, y + radiusTopLeft);
-    cubicTo (x, y + radiusTopLeft * 0.55f, x + radiusTopLeft * 0.55f, y, x + radiusTopLeft, y);
-    lineTo (x + radiusTopLeft, y);
+
+    // Top-left corner
+    cubicTo (x, y + radiusTopLeft - radiusTopLeft * kappa, x + radiusTopLeft - radiusTopLeft * kappa, y, x + radiusTopLeft, y);
 
     return *this;
 }

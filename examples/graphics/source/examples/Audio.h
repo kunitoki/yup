@@ -104,27 +104,55 @@ public:
     {
         auto bounds = getLocalBounds();
 
-        g.setFillColor (0xff101010);
+        auto backgroundColor = yup::Color (0xff101010);
+        g.setFillColor (backgroundColor);
         g.fillAll();
 
-        g.setStrokeColor (0xff4b4bff);
-        g.setStrokeWidth (1.0f);
-        g.strokeRect (bounds);
-
+        auto lineColor = yup::Color (0xff4b4bff);
         if (renderData.empty())
             return;
 
         float xSize = getWidth() / float (renderData.size());
+        float centerY = getHeight() * 0.5f;
 
+        // Build the main waveform path
         path.clear();
         path.reserveSpace ((int) renderData.size());
-
         path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
 
         for (std::size_t i = 1; i < renderData.size(); ++i)
             path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
+        // Outermost glow layer
+        g.setStrokeColor (lineColor.withAlpha (0.1f));
+        g.setStrokeWidth (12.0f);
+        g.setStrokeCap (yup::StrokeCap::Round);
+        g.setStrokeJoin (yup::StrokeJoin::Round);
+        g.strokePath (path);
+
+        // Second glow layer
+        g.setStrokeColor (lineColor.withAlpha (0.2f));
+        g.setStrokeWidth (8.0f);
+        g.strokePath (path);
+
+        // Third glow layer
+        g.setStrokeColor (lineColor.withAlpha (0.4f));
+        g.setStrokeWidth (5.0f);
+        g.strokePath (path);
+
+        // Main stroke
+        g.setStrokeColor (lineColor.withAlpha (0.8f));
+        g.setStrokeWidth (2.5f);
+        g.strokePath (path);
+
+        // Bright center line
+        g.setStrokeColor (lineColor.brighter (0.3f));
         g.setStrokeWidth (1.0f);
+        g.strokePath (path);
+
+        // Ultra-bright core
+        g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
+        g.setStrokeWidth (0.3f);
         g.strokePath (path);
     }
 

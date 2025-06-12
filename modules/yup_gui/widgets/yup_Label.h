@@ -85,14 +85,6 @@ public:
 
     //==============================================================================
 
-    /** Returns the cached styled text.
-
-        @returns The cached StyledText object used for rendering
-    */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
-
-    //==============================================================================
-
     struct Colors
     {
         static const Identifier fillColorId;
@@ -105,6 +97,9 @@ public:
     void paint (Graphics& g) override;
     /** @internal */
     void resized() override;
+
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     void prepareText();

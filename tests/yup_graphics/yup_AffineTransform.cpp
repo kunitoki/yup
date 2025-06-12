@@ -106,8 +106,8 @@ TEST (AffineTransformTests, Translation)
 
 TEST (AffineTransformTests, Rotation)
 {
-    const float pi = 3.14159265358979323846f;
-    const float angle = pi / 2.0f; // 90 degrees
+    constexpr float pi = 3.14159265358979323846f;
+    constexpr float angle = pi / 2.0f; // 90 degrees
 
     // Test the static rotation() function.
     AffineTransform t = AffineTransform::rotation (angle);

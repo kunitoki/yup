@@ -410,8 +410,8 @@ public:
     //==============================================================================
     /** Draws an attributed text.
     */
-    void fillFittedText (StyledText& text, const Rectangle<float>& rect);
-    void strokeFittedText (StyledText& text, const Rectangle<float>& rect);
+    void fillFittedText (const StyledText& text, const Rectangle<float>& rect);
+    void strokeFittedText (const StyledText& text, const Rectangle<float>& rect);
 
     //==============================================================================
     /** Clips the drawing area to the specified rectangle.
@@ -558,7 +558,7 @@ private:
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
 
-    void renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
+    void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
 
     GraphicsContext& context;
 

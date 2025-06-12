@@ -144,7 +144,7 @@ while (condition)
 using namespace yup;
 
 // Prefer limited scope usage
-TEST(MyClassTests, someFunction)
+TEST (MyClassTests, someFunction)
 {
     using namespace std::chrono;
     // use chrono types without std::chrono:: prefix
@@ -189,11 +189,11 @@ public:
     ~ClassName();
 
     // Copy/move constructors if needed
-    ClassName(const ClassName& other) = delete;
-    ClassName& operator=(const ClassName& other) = delete;
+    ClassName (const ClassName& other) = delete;
+    ClassName& operator= (const ClassName& other) = delete;
 
     // Public interface
-    void doSomething();
+    void doSomething (int arg);
     int getValue() const;
     bool isValid() const;
 
@@ -220,7 +220,7 @@ public:
 private:
     int memberVar;
 
-    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(YupStyleClass)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (YupStyleClass)
 };
 ```
 
@@ -263,16 +263,16 @@ protected:
     ClassName instance;
 };
 
-TEST_F(ClassNameTests, ConstructorInitializesCorrectly)
+TEST_F (ClassNameTests, ConstructorInitializesCorrectly)
 {
-    EXPECT_TRUE(instance.isValid());
-    EXPECT_EQ(0, instance.getValue());
+    EXPECT_TRUE (instance.isValid());
+    EXPECT_EQ (0, instance.getValue());
 }
 
-TEST(ClassNameTests, StaticMethodBehavesCorrectly)
+TEST (ClassNameTests, StaticMethodBehavesCorrectly)
 {
     auto result = ClassName::staticMethod();
-    EXPECT_NE(nullptr, result.get());
+    EXPECT_NE (nullptr, result.get());
 }
 ```
 
@@ -295,6 +295,7 @@ TEST(ClassNameTests, StaticMethodBehavesCorrectly)
 3. **Use descriptive test names** (e.g., `ReturnsNullForInvalidInput`)
 4. **Group related tests** in test fixtures
 5. **Keep tests independent** and deterministic
+6. **Never Use C or C++ macros (like M_PI)** use yup alternatives
 
 ### When suggesting refactoring:
 1. **Maintain existing API contracts**
@@ -327,7 +328,7 @@ TEST(ClassNameTests, StaticMethodBehavesCorrectly)
 yup::Result performOperation()
 {
     if (preconditionFailed)
-        return yup::Result::fail("Precondition not met");
+        return yup::Result::fail ("Precondition not met");
 
     return yup::Result::ok();
 }
@@ -335,16 +336,15 @@ yup::Result performOperation()
 yup::ResultValue<int> maybeGetInteger()
 {
     if (preconditionFailed)
-        return yup::ResultValue<int>::fail("Precondition not met");
+        return yup::ResultValue<int>::fail ("Precondition not met");
 
     return 1;
 }
 
 // Use assertions for programming errors
-void publicMethod(int value)
+void publicMethod (int value)
 {
-    jassert(value >= 0); // Debug builds only
-
+    jassert (value >= 0); // Debug builds only
     if (value < 0)
         return; // Graceful handling in release
 }
@@ -381,13 +381,13 @@ private:
 ```cpp
 // Use yup::var for dynamic types
 // Use std::optional for optional values
-std::optional<int> findValue(const String& key);
+std::optional<int> findValue (const String& key);
 ```
 
 ### String Handling
 ```cpp
 // Use yup::String for most string operations
-void processText(const yup::String& text);
+void processText (const yup::String& text);
 
 // Use std::string only when interfacing with non-YUP code
 ```

@@ -40,6 +40,8 @@
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
+    wasmOptions:        -sUSE_SDL=2
+    wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
     windowsCppStandard: 20

@@ -70,52 +70,71 @@ public:
 
     bool isEmpty() const;
 
-    //==============================================================================
-
-    void clear();
+    bool needsUpdate() const;
 
     //==============================================================================
 
-    void appendText (StringRef text,
-                     rive::rcp<rive::RenderPaint> paint,
-                     const Font& font,
-                     float fontSize = 16.0f,
-                     float lineHeight = -1.0f,
-                     float letterSpacing = 0.0f);
+    struct TextModifier
+    {
+        TextModifier (StyledText& styledText);
+        ~TextModifier();
 
-    //==============================================================================
+        void clear();
 
-    void update();
+        void appendText (StringRef text,
+                         const Font& font,
+                         float fontSize = 16.0f,
+                         float lineHeight = -1.0f,
+                         float letterSpacing = 0.0f);
+
+        void appendText (StringRef text,
+                         rive::rcp<rive::RenderPaint> paint,
+                         const Font& font,
+                         float fontSize = 16.0f,
+                         float lineHeight = -1.0f,
+                         float letterSpacing = 0.0f);
+
+        void setOverflow (TextOverflow value);
+
+        void setHorizontalAlign (HorizontalAlign value);
+
+        void setVerticalAlign (VerticalAlign value);
+
+        void setMaxSize (const Size<float>& value);
+
+        void setParagraphSpacing (float value);
+
+        void setWrap (TextWrap value);
+
+    private:
+        StyledText& styledText;
+    };
+
+    TextModifier startUpdate();
 
     //==============================================================================
 
     TextOverflow getOverflow() const;
-    void setOverflow (TextOverflow value);
 
     HorizontalAlign getHorizontalAlign() const;
-    void setHorizontalAlign (HorizontalAlign value);
 
     VerticalAlign getVerticalAlign() const;
-    void setVerticalAlign (VerticalAlign value);
 
     Size<float> getMaxSize() const;
-    void setMaxSize (const Size<float>& value);
 
     float getParagraphSpacing() const;
-    void setParagraphSpacing (float value);
 
     TextWrap getWrap() const;
-    void setWrap (TextWrap value);
 
     //==============================================================================
 
-    Rectangle<float> getComputedTextBounds();
+    Rectangle<float> getComputedTextBounds() const;
 
-    Point<float> getOffset (const Rectangle<float>& area);
+    Point<float> getOffset (const Rectangle<float>& area) const;
 
     //==============================================================================
 
-    const std::vector<rive::OrderedLine>& getOrderedLines();
+    Span<const rive::OrderedLine> getOrderedLines() const;
 
     //==============================================================================
 
@@ -136,13 +155,62 @@ public:
         bool isEmpty;
     };
 
-    const std::vector<RenderStyle*>& getRenderStyles();
+    Span<const RenderStyle* const> getRenderStyles() const;
 
     //==============================================================================
 
-    Rectangle<float> getGlyphPosition (int index) const;
+    /** Find the glyph index at a given position in the text area.
+
+        @param position The position to check
+
+        @returns The glyph index at the position, or -1 if not found
+    */
+    int getGlyphIndexAtPosition (const Point<float>& position) const;
+
+    /** Get the bounds of the caret at a given character position.
+
+        @param characterIndex The character index to get bounds for
+
+        @returns Rectangle representing the caret bounds
+    */
+    Rectangle<float> getCaretBounds (int characterIndex) const;
+
+    /** Returns all selection rectangles for multiline selections.
+
+        @param startIndex   The start character index
+        @param endIndex     The end character index
+        @returns            A vector of rectangles representing the selection
+    */
+    std::vector<Rectangle<float>> getSelectionRectangles (int startIndex, int endIndex) const;
+
+    /** Validates if a character index is within valid bounds.
+
+        @param characterIndex   The character index to validate
+        @returns                True if the index is valid
+    */
+    bool isValidCharacterIndex (int characterIndex) const;
 
 private:
+    friend class TextModifier;
+
+    void clear();
+
+    void appendText (StringRef text,
+                     rive::rcp<rive::RenderPaint> paint,
+                     const Font& font,
+                     float fontSize,
+                     float lineHeight,
+                     float letterSpacing);
+
+    void setOverflow (TextOverflow value);
+    void setHorizontalAlign (HorizontalAlign value);
+    void setVerticalAlign (VerticalAlign value);
+    void setMaxSize (const Size<float>& value);
+    void setParagraphSpacing (float value);
+    void setWrap (TextWrap value);
+
+    void update();
+
     rive::SimpleArray<rive::Paragraph> shape;
     rive::SimpleArray<rive::SimpleArray<rive::GlyphLine>> lines;
     std::vector<rive::OrderedLine> orderedLines;
@@ -150,6 +218,7 @@ private:
     rive::StyledText styledTexts;
     std::vector<RenderStyle> styles;
     std::vector<RenderStyle*> renderStyles;
+    rive::GlyphLookup glyphLookup;
 
     TextOrigin origin = TextOrigin::topOrigin;
     TextOverflow overflow = TextOverflow::visible;

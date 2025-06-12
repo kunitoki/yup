@@ -353,12 +353,18 @@ float SDL2ComponentNative::getOpacity() const
 void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
     if (lastComponentFocused != nullptr)
+    {
         lastComponentFocused->focusLost();
+        lastComponentFocused->repaint();
+    }
 
     lastComponentFocused = comp;
 
     if (lastComponentFocused)
+    {
         lastComponentFocused->focusGained();
+        lastComponentFocused->repaint();
+    }
 
     if (window != nullptr)
     {
@@ -712,14 +718,14 @@ void SDL2ComponentNative::handleMouseMoveOrDrag (const Point<float>& position)
     {
         event = event.withSourceComponent (lastComponentClicked);
 
-        lastComponentClicked->internalMouseDrag (event);
+        lastComponentClicked->internalMouseDrag (event.withRelativePositionTo (lastComponentClicked));
     }
     else
     {
         updateComponentUnderMouse (event);
 
         if (lastComponentUnderMouse != nullptr)
-            lastComponentUnderMouse->internalMouseMove (event);
+            lastComponentUnderMouse->internalMouseMove (event.withRelativePositionTo (lastComponentUnderMouse));
     }
 
     lastMouseMovePosition = position;
@@ -755,11 +761,11 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
             event = event.withLastMouseDownPosition (*lastMouseDownPosition);
             event = event.withLastMouseDownTime (*lastMouseDownTime);
 
-            lastComponentClicked->internalMouseDoubleClick (event);
+            lastComponentClicked->internalMouseDoubleClick (event.withRelativePositionTo (lastComponentClicked));
         }
         else
         {
-            lastComponentClicked->internalMouseDown (event);
+            lastComponentClicked->internalMouseDown (event.withRelativePositionTo (lastComponentClicked));
         }
 
         lastMouseDownPosition = position;
@@ -789,7 +795,7 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
     {
         event = event.withSourceComponent (lastComponentClicked);
 
-        lastComponentClicked->internalMouseUp (event);
+        lastComponentClicked->internalMouseUp (event.withRelativePositionTo (lastComponentClicked));
     }
 
     if (currentMouseButtons == MouseEvent::noButtons)
@@ -800,8 +806,6 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
     }
 
     lastMouseMovePosition = position;
-    lastMouseDownPosition.reset();
-    lastMouseDownTime.reset();
 
     if (isMouseOutsideWindow (window))
         handleFocusChanged (false);
@@ -828,15 +832,15 @@ void SDL2ComponentNative::handleMouseWheel (const Point<float>& position, const 
     {
         event = event.withSourceComponent (lastComponentClicked);
 
-        lastComponentClicked->internalMouseWheel (event, wheelData);
+        lastComponentClicked->internalMouseWheel (event.withRelativePositionTo (lastComponentClicked), wheelData);
     }
     else if (lastComponentFocused != nullptr)
     {
-        lastComponentFocused->internalMouseWheel (event, wheelData);
+        lastComponentFocused->internalMouseWheel (event.withRelativePositionTo (lastComponentFocused), wheelData);
     }
     else if (lastComponentUnderMouse != nullptr)
     {
-        lastComponentUnderMouse->internalMouseWheel (event, wheelData);
+        lastComponentUnderMouse->internalMouseWheel (event.withRelativePositionTo (lastComponentUnderMouse), wheelData);
     }
 }
 
@@ -852,7 +856,11 @@ void SDL2ComponentNative::handleMouseEnter (const Point<float>& position)
     updateComponentUnderMouse (event);
 
     if (lastComponentUnderMouse != nullptr)
-        lastComponentUnderMouse->mouseEnter (event);
+    {
+        event = event.withSourceComponent (lastComponentUnderMouse);
+
+        lastComponentUnderMouse->mouseEnter (event.withRelativePositionTo (lastComponentUnderMouse));
+    }
 }
 
 void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
@@ -863,7 +871,11 @@ void SDL2ComponentNative::handleMouseLeave (const Point<float>& position)
                      .withPosition (position);
 
     if (lastComponentUnderMouse != nullptr)
-        lastComponentUnderMouse->mouseExit (event);
+    {
+        event = event.withSourceComponent (lastComponentUnderMouse);
+
+        lastComponentUnderMouse->mouseExit (event.withRelativePositionTo (lastComponentUnderMouse));
+    }
 
     updateComponentUnderMouse (event);
 }
@@ -876,7 +888,7 @@ void SDL2ComponentNative::handleKeyDown (const KeyPress& keys, const Point<float
     keyState.set (keys.getKey(), 1);
 
     if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalKeyDown (keys, position);
+        lastComponentFocused->internalKeyDown (keys, position); // TODO: remove position
     else
         component.internalKeyDown (keys, position);
 }
@@ -887,7 +899,7 @@ void SDL2ComponentNative::handleKeyUp (const KeyPress& keys, const Point<float>&
     keyState.set (keys.getKey(), 0);
 
     if (lastComponentFocused != nullptr)
-        lastComponentFocused->internalKeyUp (keys, position);
+        lastComponentFocused->internalKeyUp (keys, position); // TODO: remove position
     else
         component.internalKeyUp (keys, position);
 }
@@ -1016,18 +1028,18 @@ void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
     {
         if (lastComponentUnderMouse == nullptr)
         {
-            child->internalMouseEnter (event);
+            child->internalMouseEnter (event.withRelativePositionTo (child));
         }
         else if (lastComponentUnderMouse != child)
         {
-            lastComponentUnderMouse->internalMouseExit (event);
-            child->internalMouseEnter (event);
+            lastComponentUnderMouse->internalMouseExit (event.withRelativePositionTo (lastComponentUnderMouse));
+            child->internalMouseEnter (event.withRelativePositionTo (child));
         }
     }
     else
     {
         if (lastComponentUnderMouse != nullptr)
-            lastComponentUnderMouse->internalMouseExit (event);
+            lastComponentUnderMouse->internalMouseExit (event.withRelativePositionTo (lastComponentUnderMouse));
     }
 
     lastComponentUnderMouse = child;
