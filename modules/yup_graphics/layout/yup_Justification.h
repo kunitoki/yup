@@ -32,20 +32,20 @@ enum class Justification
     right = 1 << 1,            /**< Aligns the content to the right. */
     horizontalCenter = 1 << 2, /**< Centers the content horizontally. */
 
-    top = 1 << 3,              /**< Aligns the content to the top. */
-    bottom = 1 << 4,           /**< Aligns the content to the bottom. */
-    verticalCenter = 1 << 5,   /**< Centers the content vertically. */
+    top = 1 << 3,            /**< Aligns the content to the top. */
+    bottom = 1 << 4,         /**< Aligns the content to the bottom. */
+    verticalCenter = 1 << 5, /**< Centers the content vertically. */
 
     topLeft = left | top,         /**< Aligns the content to the top left corner. */
     topRight = right | top,       /**< Aligns the content to the top right corner. */
     bottomLeft = left | bottom,   /**< Aligns the content to the bottom left corner. */
     bottomRight = right | bottom, /**< Aligns the content to the bottom right corner. */
 
-    centerLeft = left | verticalCenter,   /**< Aligns the content to the left and centers it vertically. */
-    centerTop = horizontalCenter | top,   /**< Centers the content horizontally and aligns it to the top. */
+    centerLeft = left | verticalCenter,         /**< Aligns the content to the left and centers it vertically. */
+    centerTop = horizontalCenter | top,         /**< Centers the content horizontally and aligns it to the top. */
     center = horizontalCenter | verticalCenter, /**< Centers the content both horizontally and vertically. */
-    centerRight = right | verticalCenter, /**< Aligns the content to the right and centers it vertically. */
-    centerBottom = horizontalCenter | bottom /**< Centers the content horizontally and aligns it to the bottom. */
+    centerRight = right | verticalCenter,       /**< Aligns the content to the right and centers it vertically. */
+    centerBottom = horizontalCenter | bottom    /**< Centers the content horizontally and aligns it to the bottom. */
 };
 
 } // namespace yup

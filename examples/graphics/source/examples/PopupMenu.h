@@ -136,8 +136,8 @@ private:
 
     void showBasicMenu()
     {
-        auto options = yup::PopupMenu::Options{}
-            .withParentComponent(&basicMenuButton);
+        auto options = yup::PopupMenu::Options {}
+                           .withParentComponent (&basicMenuButton);
 
         auto menu = yup::PopupMenu::create (options);
 
@@ -171,8 +171,8 @@ private:
         colorMenu->addItem ("Green", colorGreen);
         colorMenu->addItem ("Blue", colorBlue);
 
-        auto options = yup::PopupMenu::Options{}
-            .withParentComponent(&subMenuButton);
+        auto options = yup::PopupMenu::Options {}
+                           .withParentComponent (&subMenuButton);
         auto menu = yup::PopupMenu::create (options);
         menu->addItem ("New", newFile);
         menu->addItem ("Open", openFile);
@@ -192,8 +192,8 @@ private:
 
     void showCustomMenu()
     {
-        auto options = yup::PopupMenu::Options{}
-            .withParentComponent(&customMenuButton);
+        auto options = yup::PopupMenu::Options {}
+                           .withParentComponent (&customMenuButton);
         auto menu = yup::PopupMenu::create (options);
 
         menu->addItem ("Regular Item", 1);
@@ -230,10 +230,10 @@ private:
 
     void showNativeMenu()
     {
-        auto options = yup::PopupMenu::Options{}
-            .withNativeMenus(true)
-            .withJustification(yup::Justification::topLeft)
-            .withParentComponent(this);
+        auto options = yup::PopupMenu::Options {}
+                           .withNativeMenus (true)
+                           .withJustification (yup::Justification::topLeft)
+                           .withParentComponent (this);
 
         auto menu = yup::PopupMenu::create (options);
 
@@ -255,10 +255,10 @@ private:
 
     void showContextMenu (yup::Point<float> position)
     {
-        auto options = yup::PopupMenu::Options{}
-            // .withTargetScreenPosition(position.to<int>()) // TODO: doesn't seem to work
-            .withParentComponent(this)
-            .withAsChildToTopmost(true);
+        auto options = yup::PopupMenu::Options {}
+                           // .withTargetScreenPosition(position.to<int>()) // TODO: doesn't seem to work
+                           .withParentComponent (this)
+                           .withAsChildToTopmost (true);
 
         auto contextMenu = yup::PopupMenu::create (options);
 

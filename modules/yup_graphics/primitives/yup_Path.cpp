@@ -776,8 +776,8 @@ String Path::toString() const
                 if (pointIndex + 1 < points.size())
                 {
                     result << "Q "
-                        << points[pointIndex].x << " " << points[pointIndex].y << " "
-                        << points[pointIndex + 1].x << " " << points[pointIndex + 1].y << " ";
+                           << points[pointIndex].x << " " << points[pointIndex].y << " "
+                           << points[pointIndex + 1].x << " " << points[pointIndex + 1].y << " ";
                     pointIndex += 2;
                 }
                 break;
@@ -786,9 +786,9 @@ String Path::toString() const
                 if (pointIndex + 2 < points.size())
                 {
                     result << "C "
-                        << points[pointIndex].x << " " << points[pointIndex].y << " "
-                        << points[pointIndex + 1].x << " " << points[pointIndex + 1].y << " "
-                        << points[pointIndex + 2].x << " " << points[pointIndex + 2].y << " ";
+                           << points[pointIndex].x << " " << points[pointIndex].y << " "
+                           << points[pointIndex + 1].x << " " << points[pointIndex + 1].y << " "
+                           << points[pointIndex + 2].x << " " << points[pointIndex + 2].y << " ";
                     pointIndex += 3;
                 }
                 break;

@@ -121,9 +121,9 @@ public:
         else
         {
             // Add to desktop as a popup
-            auto nativeOptions = ComponentNative::Options{}
-                .withDecoration (false)
-                .withResizableWindow (false);
+            auto nativeOptions = ComponentNative::Options {}
+                                     .withDecoration (false)
+                                     .withResizableWindow (false);
 
             addToDesktop (nativeOptions);
         }
@@ -381,7 +381,7 @@ private:
         {
             if (! options.targetArea.isEmpty())
                 targetArea = options.targetArea;
-             else
+            else
                 targetArea = Rectangle<int> (options.targetPosition, options.targetArea.getSize());
 
             // Get screen bounds for available area
