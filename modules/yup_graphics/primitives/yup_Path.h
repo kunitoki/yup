@@ -583,15 +583,24 @@ public:
     Point<float> getPointAlongPath (float distance) const;
 
     //==============================================================================
+    /** Converts the path to an SVG path data string.
+
+        This method converts the path to a string representation using SVG path data format.
+        The resulting string can be used with fromString() to recreate the path.
+
+        @return A string containing the SVG path data representation of this path.
+    */
+    String toString() const;
+
     /** Parses the path data from a string.
 
-        This method parses the path data from a string and updates the path accordingly.
+        This method parses the path data from a string in SVG path data format and updates the path accordingly.
 
-        @param pathData The string containing the path data.
+        @param pathData The string containing the SVG path data.
 
         @return True if the path data was parsed successfully, false otherwise.
     */
-    bool parsePathData (const String& pathData);
+    bool fromString (const String& pathData);
 
     //==============================================================================
     /** Provides an iterator to the beginning of the path data.
