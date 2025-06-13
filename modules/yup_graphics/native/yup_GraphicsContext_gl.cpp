@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if YUP_RIVE_USE_OPENGL || JUCE_LINUX || JUCE_WASM || JUCE_ANDROID
+#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_WASM || YUP_ANDROID
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/gl/gles3.hpp"
 #include "rive/renderer/gl/render_buffer_gl_impl.hpp"
@@ -155,7 +155,7 @@ private:
     rive::rcp<rive::gpu::RenderTargetGL> m_renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructOpenGLGraphicsContext (GraphicsContext::Options options)
+std::unique_ptr<GraphicsContext> yup_constructOpenGLGraphicsContext (GraphicsContext::Options options)
 {
     return std::make_unique<LowLevelRenderContextGL> (options);
 }

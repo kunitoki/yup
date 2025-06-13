@@ -68,8 +68,8 @@ function (yup_audio_plugin)
 
     target_compile_definitions (${target_name}_shared INTERFACE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        JUCE_MODAL_LOOPS_PERMITTED=1
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YUP_MODAL_LOOPS_PERMITTED=1
         ${additional_definitions}
         ${YUP_ARG_DEFINITIONS})
 
@@ -94,8 +94,7 @@ function (yup_audio_plugin)
     # ==== Fetch clap SDK and build clap target
     if (YUP_ARG_PLUGIN_CREATE_CLAP)
         _yup_message (STATUS "Fetching CLAP SDK")
-        FetchContent_Declare (
-            clap
+        _yup_fetchcontent_declare (clap
             GIT_REPOSITORY https://github.com/free-audio/clap.git
             GIT_TAG main)
         FetchContent_MakeAvailable (clap)
@@ -117,7 +116,7 @@ function (yup_audio_plugin)
 
         target_compile_definitions (${target_name}_clap_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_CLAP=1
-            JUCE_STANDALONE_APPLICATION=0)
+            YUP_STANDALONE_APPLICATION=0)
 
         target_link_libraries (${target_name}_clap_plugin PRIVATE
             ${target_name}_shared
@@ -143,16 +142,15 @@ function (yup_audio_plugin)
         set (SMTG_ENABLE_VST3_HOSTING_EXAMPLES OFF)
         set (SMTG_ENABLE_VST3_PLUGIN_EXAMPLES OFF)
         set (SMTG_ENABLE_VSTGUI_SUPPORT OFF)
+        set (SMTG_CREATE_PLUGIN_LINK OFF)
         if (NOT YUP_PLATFORM_OSX OR XCODE)
             set (SMTG_RUN_VST_VALIDATOR ON)
         else()
             set (SMTG_RUN_VST_VALIDATOR OFF)
         endif()
-        FetchContent_Declare (
-            vst3sdk
+        _yup_fetchcontent_declare (vst3sdk
             GIT_REPOSITORY https://github.com/steinbergmedia/vst3sdk.git
-            GIT_TAG master
-            GIT_SUBMODULES_RECURSE ON)
+            GIT_TAG master)
         FetchContent_MakeAvailable (vst3sdk)
 
         _yup_message (STATUS "Setting up VST3 plugin client")
@@ -175,7 +173,7 @@ function (yup_audio_plugin)
 
         target_compile_definitions (${target_name}_vst3_plugin PRIVATE
             YUP_AUDIO_PLUGIN_ENABLE_VST3=1
-            JUCE_STANDALONE_APPLICATION=0)
+            YUP_STANDALONE_APPLICATION=0)
 
         target_link_libraries (${target_name}_vst3_plugin PRIVATE
             ${target_name}_shared
@@ -211,7 +209,7 @@ function (yup_audio_plugin)
             FOLDER "${YUP_ARG_TARGET_IDE_GROUP}"
             XCODE_GENERATE_SCHEME ON)
 
-        #yup_audio_plugin_copy_bundle (${target_name} vst3)
+        yup_audio_plugin_copy_bundle (${target_name} vst3)
     endif()
 
     # ==== Build standalone plugin target
@@ -238,7 +236,7 @@ function (yup_audio_plugin)
                 ${target_name}_shared
                 ${target_name}_standalone
                 yup_audio_plugin_client
-                juce_audio_devices
+                yup_audio_devices
                 ${additional_libraries}
                 ${YUP_ARG_MODULES})
     endif()
@@ -248,29 +246,33 @@ endfunction()
 #==============================================================================
 
 function (yup_audio_plugin_copy_bundle target_name plugin_type)
-    return()
-
     if (NOT YUP_PLATFORM_OSX)
+        return()
+    endif()
+
+    string (TOUPPER "${plugin_type}" plugin_type_upper)
+    set (dependency_target ${target_name}_${plugin_type}_plugin)
+    set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
+    set (plugin_target_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}")
+    set (plugin_path "${plugin_target_path}/${target_file_name}")
+
+    if (NOT EXISTS ${plugin_target_path})
+        _yup_message (STATUS "Plugin path ${plugin_target_path} does not exist, skipping copy")
         return()
     endif()
 
     _yup_message (STATUS "Generating rule to copy ${plugin_type} plugin ${target_name}")
 
-    string (TOUPPER "${plugin_type}" plugin_type_upper)
-    set (dependency_target ${target_name}_${plugin_type}_plugin)
-    set (target_file_name "${target_name}_${plugin_type}_plugin.${plugin_type}")
-    set (plugin_path "$ENV{HOME}/Library/Audio/Plug-Ins/${plugin_type_upper}/${target_file_name}")
-
     if ("${plugin_type}" STREQUAL "clap")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
-            COMMAND unlink ${plugin_path}
-            COMMAND cmake -E create_symlink "$<TARGET_FILE:${dependency_target}>" ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE:${dependency_target}>" ${plugin_path}
             COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     elseif ("${plugin_type}" STREQUAL "vst3")
         add_custom_command(TARGET ${dependency_target} POST_BUILD
-            COMMAND unlink ${plugin_path}
-            COMMAND cmake -E create_symlink "$<TARGET_FILE_DIR:${dependency_target}>/../../../${target_file_name}" ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E rm -f ${plugin_path}
+            COMMAND ${CMAKE_COMMAND} -E create_symlink "$<TARGET_FILE_DIR:${dependency_target}>/../../../${target_file_name}" ${plugin_path}
             COMMENT "Copying ${plugin_type_upper} plugin to ${plugin_path}"
             VERBATIM)
     else()

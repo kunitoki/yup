@@ -19,10 +19,13 @@ class PathDasher
 
 protected:
     void invalidateSourcePath();
-    void invalidateDash();
+    virtual void invalidateDash();
     ShapePaintPath* dash(const RawPath* source,
                          Dash* offset,
                          Span<Dash*> dashes);
+    ShapePaintPath* applyDash(const RawPath* source,
+                              Dash* offset,
+                              Span<Dash*> dashes);
 
 protected:
     ShapePaintPath m_path;
@@ -41,6 +44,7 @@ public:
     void offsetIsPercentageChanged() override;
     void updateEffect(const ShapePaintPath* source) override;
     ShapePaintPath* effectPath() override;
+    void invalidateDash() override;
 
 private:
     std::vector<Dash*> m_dashes;

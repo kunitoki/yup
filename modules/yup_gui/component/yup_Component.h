@@ -30,7 +30,7 @@ namespace yup
     It provides a common interface for all components, and is used to create and manage GUI components.
     It is a lightweight class that is used to create and manage GUI components.
  */
-class JUCE_API Component
+class YUP_API Component
 {
 public:
     //==============================================================================
@@ -195,6 +195,12 @@ public:
     Point<float> getCenter() const;
     void setCenter (const Point<float>& newCenter);
 
+    float getCenterX() const;
+    void setCenterX (float newCenterX);
+
+    float getCenterY() const;
+    void setCenterY (float newCenterY);
+
     /**
         Called when the position of the component changes.
      */
@@ -278,6 +284,16 @@ public:
         @return The bounds of the component relative to its top most component (on desktop).
      */
     Rectangle<float> getBoundsRelativeToTopLevelComponent() const;
+
+    //==============================================================================
+
+    void setTransform (const AffineTransform& transform);
+
+    AffineTransform getTransform() const;
+
+    bool isTransformed() const;
+
+    virtual void transformChanged();
 
     //==============================================================================
     /**
@@ -890,6 +906,7 @@ private:
     Component* parentComponent = nullptr;
     Array<Component*> children;
     Rectangle<float> boundsInParent;
+    AffineTransform transform;
     std::unique_ptr<ComponentNative> native;
     WeakReference<Component>::Master masterReference;
     MouseListenerList mouseListeners;
@@ -907,6 +924,7 @@ private:
         bool isFullScreen : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
+        bool isRepainting : 1;
     };
 
     union
@@ -920,7 +938,7 @@ private:
     int counter = 2;
 #endif
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Component)
 };
 
 } // namespace yup

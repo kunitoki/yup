@@ -171,7 +171,8 @@ void Slider::mouseWheel (const MouseEvent& event, const MouseWheelData& data)
 
 void Slider::paint (Graphics& g)
 {
-    ApplicationTheme::findComponentStyle (*this)->paint (g, *this);
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 //==============================================================================

@@ -24,6 +24,7 @@
 #include "rive/animation/transition_property_viewmodel_comparator.hpp"
 #include "rive/animation/transition_viewmodel_condition.hpp"
 #include "rive/animation/state_machine_fire_event.hpp"
+#include "rive/artboard_component_list.hpp"
 #include "rive/constraints/draggable_constraint.hpp"
 #include "rive/data_bind_flags.hpp"
 #include "rive/event_report.hpp"
@@ -41,6 +42,7 @@
 #include <unordered_map>
 #include <chrono>
 
+using namespace rive;
 namespace rive
 {
 class StateMachineLayerInstance
@@ -64,11 +66,16 @@ public:
             layer->anyState()->makeInstance(instance).release();
         m_layer = layer;
         changeState(m_layer->entryState());
+
+#ifdef TESTING
+        srand((unsigned int)1);
+#else
         auto now = std::chrono::high_resolution_clock::now();
         auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
                          now.time_since_epoch())
                          .count();
-        srand(nanos);
+        srand((unsigned int)nanos);
+#endif
     }
 
     void updateMix(float seconds)
@@ -177,7 +184,14 @@ public:
             stateTo);
     }
 
-    double randomValue() { return ((double)rand() / (RAND_MAX)); }
+    double randomValue()
+    {
+#ifdef TESTING
+        return 0;
+#else
+        return ((double)rand() / (RAND_MAX));
+#endif
+    }
 
     bool changeState(const LayerState* stateTo)
     {
@@ -245,13 +259,14 @@ public:
         if (totalWeight > 0)
         {
             double randomWeight = randomValue() * totalWeight * 1.0;
-            float currentWeight = 0;
+            double currentWeight = 0;
             size_t index = 0;
             StateTransition* transition;
             while (index < stateFrom->transitionCount())
             {
                 transition = stateFrom->transition(index);
-                auto transitionWeight = transition->evaluatedRandomWeight();
+                double transitionWeight =
+                    (double)transition->evaluatedRandomWeight();
                 if (currentWeight + transitionWeight > randomWeight)
                 {
                     transition->useLayerInConditions(m_stateMachineInstance,
@@ -646,7 +661,11 @@ public:
         m_constraint(constraint),
         m_draggable(draggable)
     {}
-    virtual ~DraggableConstraintListenerGroup() {}
+    ~DraggableConstraintListenerGroup()
+    {
+        delete listener();
+        delete m_draggable;
+    }
 
     DraggableConstraint* constraint() { return m_constraint; }
 
@@ -927,7 +946,7 @@ public:
         m_textValueRun = component;
         if (m_textValueRun)
         {
-            m_textValueRun->m_isHitTarget = true;
+            m_textValueRun->isHitTarget(true);
         }
     }
 
@@ -935,7 +954,7 @@ public:
     {
         if (m_textValueRun != nullptr)
         {
-            m_textValueRun->m_isHitTarget = false;
+            m_textValueRun->isHitTarget(false);
             m_textValueRun->resetHitTest();
         }
     }
@@ -1063,6 +1082,123 @@ public:
     }
     void prepareEvent(Vec2D position, ListenerType hitType) override {}
 };
+
+class HitComponentList : public HitComponent
+{
+public:
+    HitComponentList(Component* componentList,
+                     StateMachineInstance* stateMachineInstance) :
+        HitComponent(componentList, stateMachineInstance)
+    {}
+    ~HitComponentList() override {}
+
+    bool hitTest(Vec2D position) const override
+    {
+        auto componentList = m_component->as<ArtboardComponentList>();
+        if (componentList->isCollapsed())
+        {
+            return false;
+        }
+        for (int i = 0; i < componentList->artboardCount(); i++)
+        {
+            Vec2D listPosition;
+            if (!componentList->worldToLocal(position, &listPosition, i))
+            {
+                // Mounted artboard isn't ready or has a 0 scale transform.
+                continue;
+            }
+            auto stateMachine = componentList->stateMachineInstance(i);
+            if (stateMachine != nullptr && stateMachine->hitTest(listPosition))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    HitResult processEvent(Vec2D position,
+                           ListenerType hitType,
+                           bool canHit) override
+    {
+        auto componentList = m_component->as<ArtboardComponentList>();
+        HitResult hitResult = HitResult::none;
+        bool runningCanHit = canHit;
+        if (componentList->isCollapsed())
+        {
+            return hitResult;
+        }
+        for (int i = 0; i < componentList->artboardCount(); i++)
+        {
+            Vec2D listPosition;
+            bool hit = componentList->worldToLocal(position, &listPosition, i);
+            if (!hit)
+            {
+                continue;
+            }
+            auto stateMachine = componentList->stateMachineInstance(i);
+            if (stateMachine != nullptr)
+            {
+                HitResult itemHitResult = HitResult::none;
+                if (runningCanHit)
+                {
+                    switch (hitType)
+                    {
+                        case ListenerType::down:
+                            itemHitResult =
+                                stateMachine->pointerDown(listPosition);
+                            break;
+                        case ListenerType::up:
+                            itemHitResult =
+                                stateMachine->pointerUp(listPosition);
+                            break;
+                        case ListenerType::move:
+                            itemHitResult =
+                                stateMachine->pointerMove(listPosition);
+                            break;
+                        case ListenerType::enter:
+                        case ListenerType::exit:
+                        case ListenerType::event:
+                        case ListenerType::click:
+                        case ListenerType::draggableConstraint:
+                            break;
+                    }
+                }
+                else
+                {
+                    switch (hitType)
+                    {
+                        case ListenerType::down:
+                        case ListenerType::up:
+                        case ListenerType::move:
+                            stateMachine->pointerExit(listPosition);
+                            break;
+                        case ListenerType::enter:
+                        case ListenerType::exit:
+                        case ListenerType::event:
+                        case ListenerType::click:
+                        case ListenerType::draggableConstraint:
+                            break;
+                    }
+                }
+                if ((hitResult == HitResult::none &&
+                     (itemHitResult == HitResult::hit ||
+                      itemHitResult == HitResult::hitOpaque)) ||
+                    (hitResult == HitResult::hit &&
+                     itemHitResult == HitResult::hitOpaque))
+                {
+                    hitResult = itemHitResult;
+                }
+                if (hitResult == HitResult::hitOpaque)
+                {
+                    runningCanHit = false;
+                }
+            }
+        }
+        return hitResult;
+    }
+    void prepareEvent(Vec2D position, ListenerType hitType) override {}
+};
+
+} // namespace rive
 
 HitResult StateMachineInstance::updateListeners(Vec2D position,
                                                 ListenerType hitType)
@@ -1298,6 +1434,7 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
     {
         auto dataBind = machine->dataBind(i);
         auto dataBindClone = static_cast<DataBind*>(dataBind->clone());
+        dataBindClone->file(dataBind->file());
         if (dataBind->converter() != nullptr)
         {
             dataBindClone->converter(
@@ -1336,6 +1473,10 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
                 m_bindableDataBindsToTarget[bindablePropertyClone] =
                     dataBindClone;
             }
+        }
+        else
+        {
+            dataBindClone->target(dataBind->target());
         }
     }
 
@@ -1421,28 +1562,44 @@ StateMachineInstance::StateMachineInstance(const StateMachine* machine,
         {
             if (animation->is<NestedStateMachine>())
             {
-                auto notifier =
-                    animation->as<NestedStateMachine>()->stateMachineInstance();
-                notifier->setNestedArtboard(nestedArtboard);
-                notifier->addNestedEventListener(this);
+                if (auto notifier = animation->as<NestedStateMachine>()
+                                        ->stateMachineInstance())
+                {
+                    notifier->setNestedArtboard(nestedArtboard);
+                    notifier->addNestedEventListener(this);
+                }
             }
             else if (animation->is<NestedLinearAnimation>())
             {
-                auto notifier =
-                    animation->as<NestedLinearAnimation>()->animationInstance();
-                notifier->setNestedArtboard(nestedArtboard);
-                notifier->addNestedEventListener(this);
+                if (auto notifier = animation->as<NestedLinearAnimation>()
+                                        ->animationInstance())
+                {
+                    notifier->setNestedArtboard(nestedArtboard);
+                    notifier->addNestedEventListener(this);
+                }
             }
         }
+    }
+    for (auto componentList : instance->artboardComponentLists())
+    {
+        auto hc = rivestd::make_unique<HitComponentList>(
+            componentList->as<Component>(),
+            this);
+        m_hitComponents.push_back(std::move(hc));
     }
     sortHitComponents();
 }
 
 StateMachineInstance::~StateMachineInstance()
 {
+    clearDataContext();
     for (auto inst : m_inputInstances)
     {
         delete inst;
+    }
+    for (auto& listenerGroup : m_listenerGroups)
+    {
+        listenerGroup.reset();
     }
     for (auto databind : m_dataBinds)
     {
@@ -1453,6 +1610,10 @@ StateMachineInstance::~StateMachineInstance()
     {
         delete pair.second;
         pair.second = nullptr;
+    }
+    if (m_ownsDataContext)
+    {
+        delete m_DataContext;
     }
     m_bindablePropertyInstances.clear();
 }
@@ -1546,7 +1707,6 @@ bool StateMachineInstance::tryChangeState()
 
 bool StateMachineInstance::advance(float seconds, bool newFrame)
 {
-    updateDataBinds();
     if (m_drawOrderChangeCounter !=
         m_artboardInstance->drawOrderChangeCounter())
     {
@@ -1559,9 +1719,18 @@ bool StateMachineInstance::advance(float seconds, bool newFrame)
         m_reportedEvents.clear();
         m_needsAdvance = false;
     }
+    updateDataBinds();
     for (size_t i = 0; i < m_layerCount; i++)
     {
         if (m_layers[i].advance(seconds, newFrame))
+        {
+            m_needsAdvance = true;
+        }
+    }
+
+    for (auto& dataBind : m_dataBinds)
+    {
+        if (dataBind->advance(seconds))
         {
             m_needsAdvance = true;
         }
@@ -1579,7 +1748,7 @@ void StateMachineInstance::advancedDataContext()
 {
     if (m_DataContext != nullptr)
     {
-        m_DataContext->viewModelInstance()->advanced();
+        m_DataContext->advanced();
     }
 }
 
@@ -1666,13 +1835,24 @@ SMITrigger* StateMachineInstance::getTrigger(const std::string& name) const
     return getNamedInput<StateMachineTrigger, SMITrigger>(name);
 }
 
-void StateMachineInstance::setDataContextFromInstance(
-    ViewModelInstance* viewModelInstance)
+void StateMachineInstance::bindViewModelInstance(
+    rcp<ViewModelInstance> viewModelInstance)
 {
-    dataContext(new DataContext(viewModelInstance));
+    clearDataContext();
+    m_ownsDataContext = true;
+    auto dataContext = new DataContext(viewModelInstance);
+    m_artboardInstance->clearDataContext();
+    m_artboardInstance->internalDataContext(dataContext, true);
+    internalDataContext(dataContext);
 }
 
 void StateMachineInstance::dataContext(DataContext* dataContext)
+{
+    clearDataContext();
+    internalDataContext(dataContext);
+}
+
+void StateMachineInstance::internalDataContext(DataContext* dataContext)
 {
     m_DataContext = dataContext;
     for (auto dataBind : m_dataBinds)
@@ -1682,6 +1862,20 @@ void StateMachineInstance::dataContext(DataContext* dataContext)
             dataBind->as<DataBindContext>()->bindFromContext(dataContext);
         }
     }
+}
+
+void StateMachineInstance::clearDataContext()
+{
+    if (m_ownsDataContext && m_DataContext != nullptr)
+    {
+        delete m_DataContext;
+        m_DataContext = nullptr;
+    }
+    for (auto dataBind : m_dataBinds)
+    {
+        dataBind->unbind();
+    }
+    m_ownsDataContext = false;
 }
 
 size_t StateMachineInstance::stateChangedCount() const
@@ -1768,6 +1962,7 @@ void StateMachineInstance::notify(const std::vector<EventReport>& events,
                                   NestedArtboard* context)
 {
     notifyEventListeners(events, context);
+    updateDataBinds();
 }
 
 void StateMachineInstance::notifyEventListeners(
@@ -1871,5 +2066,3 @@ DataBind* StateMachineInstance::bindableDataBindToTarget(
     }
     return dataBind->second;
 }
-
-} // namespace rive

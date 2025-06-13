@@ -19,17 +19,36 @@
 
 #==============================================================================
 
+macro (_yup_fetchcontent_declare name GIT_REPOSITORY git_repository GIT_TAG git_tag)
+    FetchContent_Declare(
+		"${name}"
+		GIT_REPOSITORY "${git_repository}"
+        GIT_TAG "${git_tag}"
+        GIT_SUBMODULES_RECURSE ON
+        SOURCE_DIR "${CMAKE_BINARY_DIR}/externals/${name}")
+
+    #if (NOT DEFINED FETCHCONTENT_BASE_DIR)
+    #    set (FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/externals")
+    #endif()
+    #FetchContent_Declare(
+	#	"${name}"
+	#	DOWNLOAD_COMMAND
+	#		cd "${FETCHCONTENT_BASE_DIR}/${name}-src" &&
+	#		git init &&
+	#		git fetch --depth=1 --progress "${git_repository}" "${git_tag}" &&
+	#		git reset --hard FETCH_HEAD)
+endmacro()
+
+#==============================================================================
+
 function (_yup_fetch_sdl2)
     if (TARGET sdl2::sdl2)
         return()
     endif()
 
-    FetchContent_Declare (SDL2
+    _yup_fetchcontent_declare (SDL2
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-2.30.10
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/SDL2
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE)
+        GIT_TAG release-2.32.8)
 
     set (BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set (SDL_SHARED OFF CACHE BOOL "" FORCE)
@@ -63,12 +82,9 @@ function (_yup_fetch_perfetto)
         return()
     endif()
 
-    FetchContent_Declare (Perfetto
+    _yup_fetchcontent_declare (Perfetto
         GIT_REPOSITORY https://android.googlesource.com/platform/external/perfetto
-        GIT_TAG v42.0
-        SOURCE_DIR ${CMAKE_BINARY_DIR}/externals/Perfetto
-        GIT_SHALLOW TRUE
-        GIT_PROGRESS TRUE)
+        GIT_TAG v49.0)
 
     FetchContent_MakeAvailable (Perfetto)
 

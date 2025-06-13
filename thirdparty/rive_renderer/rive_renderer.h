@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 rive_renderer
     vendor:             rive
@@ -34,18 +34,21 @@
     minimumCppStandard: 17
 
     dependencies:       rive rive_decoders glad
-    searchpaths:        include source
+    searchpaths:        include source source/generated/shaders
     osxFrameworks:      Metal QuartzCore
     defines:            WITH_RIVE_TEXT=1 RIVE_DECODERS=1
     iosDefines:         RIVE_IOS=1
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
+    wasmOptions:        -sUSE_SDL=2
+    wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
+    windowsCppStandard: 20
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

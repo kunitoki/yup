@@ -6,7 +6,7 @@ namespace rive {
 namespace gpu {
 namespace glsl {
 const char advanced_blend[] = R"===(#ifdef HB
-#ifdef FD
+#ifdef KD
 layout(
 #ifdef XB
 blend_support_all_equations
@@ -17,13 +17,13 @@ blend_support_multiply,blend_support_screen,blend_support_overlay,blend_support_
 #endif
 #ifdef FB
 #ifdef XB
-h a7(p D0){return min(min(D0.x,D0.y),D0.z);}h Q8(p D0){return max(max(D0.x,D0.y),D0.z);}h c7(p D0){return dot(D0,K0(.30,.59,.11));}h R8(p D0){return Q8(D0)-a7(D0);}p db(p j){h f3=c7(j);h S8=a7(j);h T8=Q8(j);if(S8<.0)j=f3+((j-f3)*f3)/(f3-S8);if(T8>1.)j=f3+((j-f3)*(1.-f3))/(T8-f3);return j;}p d7(p r4,p e7){h eb=c7(r4);h fb=c7(e7);h gb=fb-eb;p j=r4+K0(gb);return db(j);}p U8(p r4,p hb,p e7){h ib=a7(r4);h V8=R8(r4);h jb=R8(hb);p j;if(V8>.0){j=(r4-ib)*jb/V8;}else{j=K0(.0);}return d7(j,e7);}
+g V7(A B0){return min(min(B0.x,B0.y),B0.z);}g N9(A B0){return max(max(B0.x,B0.y),B0.z);}g W7(A B0){return dot(B0,K0(.30,.59,.11));}g O9(A B0){return N9(B0)-V7(B0);}A kc(A j){g p3=W7(j);g P9=V7(j);g Q9=N9(j);if(P9<.0)j=p3+((j-p3)*p3)/(p3-P9);if(Q9>1.)j=p3+((j-p3)*(1.-p3))/(Q9-p3);return j;}A X7(A L4,A Y7){g lc=W7(L4);g mc=W7(Y7);g nc=mc-lc;A j=L4+K0(nc);return kc(j);}A R9(A L4,A oc,A Y7){g pc=V7(L4);g S9=O9(L4);g qc=O9(oc);A j;if(S9>.0){j=(L4-pc)*qc/S9;}else{j=K0(.0);}return X7(j,Y7);}
 #endif
-p W8(p W,p B,O W4){p y0;switch(W4){case kb:y0=W.xyz*B.xyz;break;case lb:y0=W.xyz+B.xyz-W.xyz*B.xyz;break;case mb:{for(int v=0;v<3;++v){if(B[v]<=.5)y0[v]=2.*W[v]*B[v];else y0[v]=1.-2.*(1.-W[v])*(1.-B[v]);}break;}case nb:y0=min(W.xyz,B.xyz);break;case ob:y0=max(W.xyz,B.xyz);break;case pb:y0=mix(min(B.xyz/(1.-W.xyz),K0(1.)),K0(.0),lessThanEqual(B.xyz,K0(.0)));break;case qb:y0=mix(1.-min((1.-B.xyz)/W.xyz,1.),K0(1.),greaterThanEqual(B.xyz,K0(1.)));break;case rb:{for(int v=0;v<3;++v){if(W[v]<=.5)y0[v]=2.*W[v]*B[v];else y0[v]=1.-2.*(1.-W[v])*(1.-B[v]);}break;}case sb:{for(int v=0;v<3;++v){if(W[v]<=0.5)y0[v]=B[v]-(1.-2.*W[v])*B[v]*(1.-B[v]);else if(B[v]<=.25)y0[v]=B[v]+(2.*W[v]-1.)*B[v]*((16.*B[v]-12.)*B[v]+3.);else y0[v]=B[v]+(2.*W[v]-1.)*(sqrt(B[v])-B[v]);}break;}case tb:y0=abs(B.xyz-W.xyz);break;case ub:y0=W.xyz+B.xyz-2.*W.xyz*B.xyz;break;
+A rc(A e0,i X0,a0 Z7){A h0=Y3(X0);A L0;switch(Z7){case sc:L0=e0.xyz*h0.xyz;break;case tc:L0=e0.xyz+h0.xyz-e0.xyz*h0.xyz;break;case uc:{for(int C=0;C<3;++C){if(h0[C]<=.5)L0[C]=2.*e0[C]*h0[C];else L0[C]=1.-2.*(1.-e0[C])*(1.-h0[C]);}break;}case vc:L0=min(e0.xyz,h0.xyz);break;case wc:L0=max(e0.xyz,h0.xyz);break;case xc:{X0.xyz=clamp(X0.xyz,K0(.0),X0.www);A T9=clamp(1.-e0,K0(.0),K0(1.))*X0.w;L0=mix(min(K0(1.),X0.xyz/T9),sign(X0.xyz),equal(T9,K0(.0)));break;}case zc:{e0=clamp(e0,K0(.0),K0(1.));X0.xyz=clamp(X0.xyz,K0(.0),X0.www);if(X0.w==.0)X0.w=1.;A U9=X0.w-X0.xyz;L0=1.-mix(min(K0(1.),U9/(e0*X0.w)),sign(U9),equal(e0,K0(.0)));break;}case Ac:{for(int C=0;C<3;++C){if(e0[C]<=.5)L0[C]=2.*e0[C]*h0[C];else L0[C]=1.-2.*(1.-e0[C])*(1.-h0[C]);}break;}case Bc:{for(int C=0;C<3;++C){if(e0[C]<=0.5)L0[C]=h0[C]-(1.-2.*e0[C])*h0[C]*(1.-h0[C]);else if(h0[C]<=.25)L0[C]=h0[C]+(2.*e0[C]-1.)*h0[C]*((16.*h0[C]-12.)*h0[C]+3.);else L0[C]=h0[C]+(2.*e0[C]-1.)*(sqrt(h0[C])-h0[C]);}break;}case Cc:L0=abs(h0.xyz-e0.xyz);break;case Dc:L0=e0.xyz+h0.xyz-2.*e0.xyz*h0.xyz;break;
 #ifdef XB
-case vb:if(XB){W.xyz=clamp(W.xyz,K0(.0),K0(1.));y0=U8(W.xyz,B.xyz,B.xyz);break;}case wb:if(XB){W.xyz=clamp(W.xyz,K0(.0),K0(1.));y0=U8(B.xyz,W.xyz,B.xyz);break;}case xb:if(XB){W.xyz=clamp(W.xyz,K0(.0),K0(1.));y0=d7(W.xyz,B.xyz);break;}case yb:if(XB){W.xyz=clamp(W.xyz,K0(.0),K0(1.));y0=d7(B.xyz,W.xyz);break;}
+case Ec:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=R9(e0.xyz,h0.xyz,h0.xyz);}break;case Fc:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=R9(h0.xyz,e0.xyz,h0.xyz);}break;case Gc:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=X7(e0.xyz,h0.xyz);}break;case Hc:if(XB){e0.xyz=clamp(e0.xyz,K0(.0),K0(1.));L0=X7(h0.xyz,e0.xyz);}break;
 #endif
-}return y0;}d i R5(i W,i B,O W4){p y0=W8(W.xyz,B.xyz,W4);h f7=W.w*B.w;p P3=K0(f7,W.w-f7,B.w-f7);return f2(q0(zb(y0,W.xyz,B.xyz),P3),B.w*(1.-W.w)+W.w);}d p X8(p W,i B,O W4){p y0=W8(W,B.xyz,W4);C P3=Q3(B.w,1.-B.w);return q0(Ab(y0,W),P3);}
+}return L0;}d A M4(A e0,i X0,a0 Z7){A L0=rc(e0,X0,Z7);G z5=Z3(X0.w,1.-X0.w);return C0(Ic(L0,e0),z5);}
 #endif
 #endif
 )===";

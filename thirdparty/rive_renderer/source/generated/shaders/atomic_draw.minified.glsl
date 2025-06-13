@@ -1,371 +1,377 @@
 #ifdef DRAW_PATH
 #ifdef VERTEX
-L0(e0)h0(0,e,LB);h0(1,e,MB);M0
+U0(f0)i0(0,f,LB);i0(1,f,MB);V0
 #endif
 o1
 #ifdef ENABLE_FEATHER
-o0 H(0,e,q);
+n0 H(0,f,D);
 #else
-o0 H(0,C,q);
+n0 H(0,G,D);
 #endif
-D2 H(1,O,i0);p1
+L2 H(1,a0,j0);p1
 #ifdef VERTEX
-Z0(PB,e0,o,l,I){k0(l,o,LB,e);k0(l,o,MB,e);
+q1(PB,f0,B,n,K){l0(n,B,LB,f);l0(n,B,MB,f);
 #ifdef ENABLE_FEATHER
-P(q,e);
+L(D,f);
 #else
-P(q,C);
+L(D,G);
 #endif
-P(i0,O);e Q;uint d0;c K;e M;if(S5(LB,MB,I,d0,K,M g2)){
+L(j0,a0);f Q;uint R;c J;f O;if(E6(LB,MB,K,R,J,O Y1)){
 #ifdef ENABLE_FEATHER
-q=M;
+D=O;
 #else
-q.xy=T5(M.xy);
+D.xy=F6(O.xy);
 #endif
-i0=M1(d0);Q=v2(K);}else{Q=e(m.q1,m.q1,m.q1,m.q1);}X(q);X(i0);U0(Q);}
+j0=Q1(R);Q=F2(J);}else{Q=f(q.C1,q.C1,q.C1,q.C1);}P(D);P(j0);h1(Q);}
 #endif
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
 #ifdef VERTEX
-L0(e0)h0(0,R3,IB);M0
+U0(f0)i0(0,a4,IB);V0
 #endif
 o1
-#ifdef ATLAS_COVERAGE
-o0 H(0,c,N1);
+#ifdef ATLAS_BLIT
+n0 H(0,c,Q0);
 #else
-OPTIONALLY_FLAT H(0,h,a1);
+OPTIONALLY_FLAT H(0,g,i1);
 #endif
-D2 H(1,O,i0);p1
+L2 H(1,a0,j0);p1
 #ifdef VERTEX
-Z0(PB,e0,o,l,I){k0(l,o,IB,a0);
-#ifdef ATLAS_COVERAGE
-P(N1,c);
+q1(PB,f0,B,n,K){l0(n,B,IB,Z);
+#ifdef ATLAS_BLIT
+L(Q0,c);
 #else
-P(a1,h);
+L(i1,g);
 #endif
-P(i0,O);uint d0;c K;
-#ifdef ATLAS_COVERAGE
-K=Y8(IB,d0,N1 g2);
+L(j0,a0);uint R;c J;
+#ifdef ATLAS_BLIT
+J=a8(IB,R,Q0 Y1);
 #else
-K=g7(IB,d0,a1 g2);
+J=c8(IB,R,i1 Y1);
 #endif
-i0=M1(d0);e Q=v2(K);
-#ifdef ATLAS_COVERAGE
-X(N1);
+j0=Q1(R);f Q=F2(J);
+#ifdef ATLAS_BLIT
+P(Q0);
 #else
-X(a1);
+P(i1);
 #endif
-X(i0);U0(Q);}
+P(j0);h1(Q);}
 #endif
 #endif
 #ifdef DRAW_IMAGE_RECT
 #ifdef VERTEX
-L0(e0)h0(0,e,YB);M0
+U0(f0)i0(0,f,YB);V0
 #endif
-o1 o0 H(0,c,A0);o0 H(1,h,S3);
+o1 n0 H(0,c,q0);n0 H(1,g,c4);
 #ifdef ENABLE_CLIP_RECT
-o0 H(2,e,F0);
+n0 H(2,f,R0);
 #endif
 p1
 #ifdef VERTEX
-U5(PB,e0,o,l,I){k0(l,o,YB,e);P(A0,c);P(S3,h);
+G6(PB,f0,B,n,K){l0(n,B,YB,f);L(q0,c);L(c4,g);
 #ifdef ENABLE_CLIP_RECT
-P(F0,e);
+L(R0,f);
 #endif
-bool h7=YB.z==.0||YB.w==.0;S3=h7?.0:1.;c K=YB.xy;Y w0=r1(l0.V5);Y X4=transpose(inverse(w0));if(!h7){float i7=g3*j7(X4[1])/dot(w0[1],X4[1]);if(i7>=.5){K.x=.5;S3*=T3(.5/i7);}else{K.x+=i7*YB.z;}float k7=g3*j7(X4[0])/dot(w0[0],X4[0]);if(k7>=.5){K.y=.5;S3*=T3(.5/k7);}else{K.y+=k7*YB.w;}}A0=K;K=q0(w0,K)+l0.G0;if(h7){c U3=q0(X4,YB.zw);U3*=j7(U3)/dot(U3,U3);K+=g3*U3;}
+bool d8=YB.z==.0||YB.w==.0;c4=d8?.0:1.;c J=YB.xy;S D0=D1(m0.H6);S A5=transpose(inverse(D0));if(!d8){float e8=q3*f8(A5[1])/dot(D0[1],A5[1]);if(e8>=.5){J.x=.5;c4*=d4(.5/e8);}else{J.x+=e8*YB.z;}float g8=q3*f8(A5[0])/dot(D0[0],A5[0]);if(g8>=.5){J.y=.5;c4*=d4(.5/g8);}else{J.y+=g8*YB.w;}}q0=J;J=C0(D0,J)+m0.S0;if(d8){c e4=C0(A5,YB.zw);e4*=f8(e4)/dot(e4,e4);J+=q3*e4;}
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){F0=W5(r1(l0.F1),l0.O1,K);}
+if(ENABLE_CLIP_RECT){R0=I6(D1(m0.R1),m0.Z1,J);}
 #endif
-e Q=v2(K);X(A0);X(S3);
+f Q=F2(J);P(q0);P(c4);
 #ifdef ENABLE_CLIP_RECT
-X(F0);
+P(R0);
 #endif
-U0(Q);}
+h1(Q);}
 #endif
 #elif defined(DRAW_IMAGE_MESH)
 #ifdef VERTEX
-L0(P1)h0(0,c,SB);M0 L0(h2)h0(1,c,TB);M0
+U0(a2)i0(0,c,SB);V0 U0(v2)i0(1,c,TB);V0
 #endif
-o1 o0 H(0,c,A0);
+o1 n0 H(0,c,q0);
 #ifdef ENABLE_CLIP_RECT
-o0 H(1,e,F0);
+n0 H(1,f,R0);
 #endif
 p1
 #ifdef VERTEX
-v4(PB,P1,Q1,h2,i2,l){k0(l,Q1,SB,c);k0(l,i2,TB,c);P(A0,c);
+N4(PB,a2,c2,v2,w2,n){l0(n,c2,SB,c);l0(n,w2,TB,c);L(q0,c);
 #ifdef ENABLE_CLIP_RECT
-P(F0,e);
+L(R0,f);
 #endif
-Y w0=r1(l0.V5);c K=q0(w0,SB)+l0.G0;A0=TB;
+S D0=D1(m0.H6);c J=C0(D0,SB)+m0.S0;q0=TB;
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){F0=W5(r1(l0.F1),l0.O1,K);}
+if(ENABLE_CLIP_RECT){R0=I6(D1(m0.R1),m0.Z1,J);}
 #endif
-e Q=v2(K);X(A0);
+f Q=F2(J);P(q0);
 #ifdef ENABLE_CLIP_RECT
-X(F0);
+P(R0);
 #endif
-U0(Q);}
+h1(Q);}
 #endif
 #endif
 #ifdef DRAW_RENDER_TARGET_UPDATE_BOUNDS
 #ifdef VERTEX
-L0(e0)M0
+U0(f0)V0
 #endif
 o1 p1
 #ifdef VERTEX
-Z0(PB,e0,o,l,I){f0 j2;j2.x=(l&1)==0?m.X5.x:m.X5.z;j2.y=(l&2)==0?m.X5.y:m.X5.w;e Q=v2(c(j2));U0(Q);}
+q1(PB,f0,B,n,K){c0 S1;S1.x=(n&1)==0?q.J6.x:q.J6.z;S1.y=(n&2)==0?q.J6.y:q.J6.w;f Q=F2(c(S1));h1(Q);}
 #endif
 #endif
 #ifdef DRAW_IMAGE
 #endif
 #ifdef FRAGMENT
-k2
+x2
 #ifndef FIXED_FUNCTION_COLOR_OUTPUT
 #ifdef COLOR_PLANE_IDX_OVERRIDE
-N0(COLOR_PLANE_IDX_OVERRIDE,B0);
+#define h8 COLOR_PLANE_IDX_OVERRIDE
 #else
-N0(l7,B0);
+#define h8 i8
+#endif
+#ifdef COALESCED_PLS_RESOLVE_AND_TRANSFER
+O4(h8,H0);
+#else
+M0(h8,H0);
 #endif
 #endif
 #ifdef PLS_BLEND_SRC_OVER
-#define h3 i
-#define m7 C0
-#define Y5 f2(.0)
-#define Z8(N) ((N).w!=.0)
+#define r3 i
+#define j8 I0
+#define K6 E1(.0)
+#define V9(m) ((m).w!=.0)
 #ifdef ENABLE_CLIPPING
 #ifndef RESOLVE_PLS
-N0(Y4,c1);
+M0(B5,r1);
 #else
-a9(Y4,c1);
+O4(B5,r1);
 #endif
 #endif
 #else
-#define h3 uint
-#define Y5 0u
-#define m7 V0
-#define Z8(N) ((N)!=0u)
+#define r3 uint
+#define K6 0u
+#define j8 j1
+#define V9(m) ((m)!=0u)
 #ifdef ENABLE_CLIPPING
-P0(Y4,c1);
+Y0(B5,r1);
 #endif
 #endif
-V3(n7,i3);l2 j3 W3(o7,c9,CC);X3(p7,d9,JB);k3 d uint Bb(float x){return uint(round(x*q7+r7));}d h Z5(uint x){return T3(float(x)*e9+(-r7*e9));}
+f4(k8,v3);y2 w3 g4(l8,W9,DC);h4(m8,X9,KB);x3 d uint Jc(float x){return uint(round(x*n8+o8));}d g L6(uint x){return d4(float(x)*Y9+(-o8*Y9));}
 #ifdef ENABLE_CLIPPING
-d void f9(uint m2,h3 x1,Y3(h)J){
+d void Z9(uint Z0,r3 I1,i4(g)E){
 #ifdef PLS_BLEND_SRC_OVER
-if(all(lessThan(abs(x1.xy-unpackUnorm4x8(m2).xy),Q3(.25/255.))))J=min(J,x1.z);else J=.0;
+if(all(lessThan(abs(I1.xy-unpackUnorm4x8(Z0).xy),Z3(.25/255.))))E=min(E,I1.z);else E=.0;
 #else
-if(m2==x1>>16)J=min(J,unpackHalf2x16(x1).x);else J=.0;
+if(Z0==I1>>16)E=min(E,unpackHalf2x16(I1).x);else E=.0;
 #endif
 }
 #endif
-d void a6(uint d0,h R1,G1(i)c0
+d void M6(uint R,g F1,k1(i)U
 #if defined(ENABLE_CLIPPING)&&!defined(RESOLVE_PLS)
-,Y3(h3)Q0
+,i4(r3)a1
 #endif
-Z4 l3){E0 z0=a4(CC,d0);h J=R1;if((z0.x&(Cb|v7))!=0u){J=abs(J);
+C5 y3){N0 F0=k4(DC,R);g E=F1;if((F0.x&(Kc|p8))!=0u){E=abs(E);
 #ifdef ENABLE_EVEN_ODD
-if(ENABLE_EVEN_ODD&&(z0.x&v7)!=0u){J=1.-abs(fract(J*.5)*2.+-1.);}
+if(ENABLE_EVEN_ODD&&(F0.x&p8)!=0u){E=1.-abs(fract(E*.5)*2.+-1.);}
 #endif
-}J=clamp(J,d1(.0),d1(1.));
+}E=clamp(E,v1(.0),v1(1.));
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){uint m2=z0.x>>16u;if(m2!=0u){f9(m2,m7(c1),J);}}
+if(ENABLE_CLIPPING){uint Z0=F0.x>>16u;if(Z0!=0u){Z9(Z0,j8(r1),E);}}
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT&&(z0.x&Db)!=0u){Y w0=r1(r0(JB,d0*4u+2u));e G0=r0(JB,d0*4u+3u);c Eb=q0(w0,v0)+G0.xy;C g9=T5(abs(Eb)*G0.zw-G0.zw);h c4=clamp(min(g9.x,g9.y)+.5,.0,1.);J=min(J,c4);}
+if(ENABLE_CLIP_RECT&&(F0.x&Lc)!=0u){S D0=D1(w0(KB,R*4u+2u));f S0=w0(KB,R*4u+3u);c Mc=C0(D0,y0)+S0.xy;G aa=F6(abs(Mc)*S0.zw-S0.zw);g l4=clamp(min(aa.x,aa.y)+.5,.0,1.);E=min(E,l4);}
 #endif
-uint y1=z0.x&0xfu;if(y1<=w7){c0=unpackUnorm4x8(z0.y);
+uint J1=F0.x&0xfu;if(J1<=q8){U=unpackUnorm4x8(F0.y);
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&y1==c6){
+if(ENABLE_CLIPPING&&J1==N6){
 #ifndef RESOLVE_PLS
 #ifdef PLS_BLEND_SRC_OVER
-Q0.xy=c0.zw;Q0.z=J;Q0.w=1.;
+a1.xy=U.zw;a1.z=E;a1.w=1.;
 #else
-Q0=z0.y|packHalf2x16(Q3(J,.0));
+a1=F0.y|packHalf2x16(Z3(E,.0));
 #endif
 #endif
-c0=f2(.0);}
+U=E1(.0);}
 #endif
-}else{Y w0=r1(r0(JB,d0*4u));e G0=r0(JB,d0*4u+1u);c w2=q0(w0,v0)+G0.xy;float t=y1==d6?w2.x:length(w2);t=clamp(t,.0,1.);float x=t*G0.z+G0.w;float y=uintBitsToFloat(z0.y);c0=S1(KC,x7,c(x,y),.0);}c0.w*=J;
+}else{S D0=D1(w0(KB,R*4u));f S0=w0(KB,R*4u+1u);c G2=C0(D0,y0)+S0.xy;float t=J1==O6?G2.x:length(G2);t=clamp(t,.0,1.);float x=t*S0.z+S0.w;float y=uintBitsToFloat(F0.y);U=T1(MC,r8,c(x,y),.0);}U.w*=E;
 #if!defined(FIXED_FUNCTION_COLOR_OUTPUT)&&defined(ENABLE_ADVANCED_BLEND)
-O m3;if(ENABLE_ADVANCED_BLEND&&c0.w!=.0&&(m3=M1((z0.x>>4)&0xfu))!=0u){i e1=C0(B0);c0.xyz=X8(c0.xyz,w4(e1),m3);}
+a0 z3;if(ENABLE_ADVANCED_BLEND&&U.w!=.0&&(z3=Q1((F0.x>>4)&0xfu))!=0u){i w1=I0(H0);U.xyz=M4(U.xyz,w1,z3);}
 #endif
 #ifndef PLS_BLEND_SRC_OVER
-c0.xyz*=c0.w;
+U.xyz*=U.w;
 #endif
 }
-#ifndef FIXED_FUNCTION_COLOR_OUTPUT
-d void e6(i c0 l3){
+#if!defined(FIXED_FUNCTION_COLOR_OUTPUT)&&!defined(COALESCED_PLS_RESOLVE_AND_TRANSFER)
+d void P6(i U y3){
 #ifndef PLS_BLEND_SRC_OVER
-if(c0.w==.0)return;float i9=1.-c0.w;if(i9!=.0)c0=C0(B0)*i9+c0;
+if(U.w==.0)return;float D5=1.-U.w;if(D5!=.0)U+=I0(H0)*D5;
 #endif
-H0(B0,c0);}
+T0(H0,U);}
 #endif
 #if defined(ENABLE_CLIPPING)&&!defined(RESOLVE_PLS)
-d void y7(h3 Q0 l3){
+d void v8(r3 a1 y3){
 #ifdef PLS_BLEND_SRC_OVER
-H0(c1,Q0);
+T0(r1,a1);
 #else
-if(Q0!=0u)W0(c1,Q0);
+if(a1!=0u)l1(r1,a1);
 #endif
 }
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-#define a5 n3
-#define j9 c5
-#define y4 x4
+#define E5 A3
+#define ca F5
+#define Q4 P4
 #else
-#define a5 n2
-#define j9 z4
-#define y4 E2
+#define E5 z2
+#define ca R4
+#define Q4 M2
 #endif
 #ifdef DRAW_PATH
-a5(NB){
+E5(NB){
 #ifdef ENABLE_FEATHER
-Z(q,e);
+N(D,f);
 #else
-Z(q,C);
+N(D,G);
 #endif
-Z(i0,O);h f6;
+N(j0,a0);g Q6;
 #ifdef ENABLE_FEATHER
-if(ENABLE_FEATHER&&z7(q)){f6=g6(q z1);}else if(ENABLE_FEATHER&&h6(q)){f6=A4(q z1);}else
+if(ENABLE_FEATHER&&w8(D)){Q6=R6(D x1);}else if(ENABLE_FEATHER&&S6(D)){Q6=S4(D x1);}else
 #endif
-{f6=min(min(d1(q.x),abs(d1(q.y))),d1(1.));}uint i6=Bb(f6);uint k9=(l9(i0)<<B4)|i6;uint H1=d5(i3,k9);O F2=M1(H1>>B4);if(F2==i0){if(!j6(q)){i6+=H1-max(k9,H1);i6-=A7;e5(i3,i6);}discard;}h R1=Z5(H1&k6);i c0;
+{Q6=min(min(v1(D.x),abs(v1(D.y))),v1(1.));}i U=E1(.0);
 #ifdef ENABLE_CLIPPING
-h3 Q0=Y5;
+r3 a1=K6;
 #endif
-a6(F2,R1,c0
+uint T6=Jc(Q6);uint da=(ea(j0)<<T4)|T6;uint U1=G5(v3,da);a0 N2=Q1(U1>>T4);if(N2==j0){if(!U6(D)){T6+=U1-max(da,U1);T6-=x8;H5(v3,T6);}}else{g F1=L6(U1&V6);M6(N2,F1,U
 #ifdef ENABLE_CLIPPING
-,Q0
+,a1
 #endif
-o3 v1);
+Y2 G1);}
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-A1=c0;
+K1=U;
 #else
-e6(c0 v1);
+P6(U G1);
 #endif
 #ifdef ENABLE_CLIPPING
-y7(Q0 v1);
+v8(a1 G1);
 #endif
-y4}
+Q4}
 #endif
 #ifdef DRAW_INTERIOR_TRIANGLES
-a5(NB){
-#ifdef ATLAS_COVERAGE
-Z(N1,c);
+E5(NB){
+#ifdef ATLAS_BLIT
+N(Q0,c);
 #else
-Z(a1,h);
+N(i1,g);
 #endif
-Z(i0,O);uint H1=d4(i3);O F2=M1(H1>>B4);uint B7;
-#ifndef ATLAS_COVERAGE
-if(F2==i0){B7=H1;}else
+N(j0,a0);uint U1=m4(v3);a0 N2=Q1(U1>>T4);uint y8;
+#ifndef ATLAS_BLIT
+if(N2==j0){y8=U1;}else
 #endif
-{B7=(l9(i0)<<B4)+A7;}h J;
-#ifdef ATLAS_COVERAGE
-J=C7(N1,m.f5 z1);
+{y8=(ea(j0)<<T4)+x8;}g E;
+#ifdef ATLAS_BLIT
+E=W6(Q0,q.U4 x1);
 #else
-J=a1;
+E=i1;
 #endif
-int Fb=int(round(J*q7));e4(i3,B7+uint(Fb));
-#ifndef ATLAS_COVERAGE
-if(F2==i0){discard;}
-#endif
-h D7=Z5(H1&k6);i c0;
+int Nc=int(round(E*n8));n4(v3,y8+uint(Nc));i U=E1(.0);
 #ifdef ENABLE_CLIPPING
-h3 Q0=Y5;
+r3 a1=K6;
 #endif
-a6(F2,D7,c0
+#ifndef ATLAS_BLIT
+if(N2!=j0)
+#endif
+{g z8=L6(U1&V6);M6(N2,z8,U
 #ifdef ENABLE_CLIPPING
-,Q0
+,a1
 #endif
-o3 v1);
+Y2 G1);}
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-A1=c0;
+K1=U;
 #else
-e6(c0 v1);
+P6(U G1);
 #endif
 #ifdef ENABLE_CLIPPING
-y7(Q0 v1);
+v8(a1 G1);
 #endif
-y4}
+Q4}
 #endif
 #ifdef DRAW_IMAGE
-j9(NB){Z(A0,c);
+ca(NB){N(q0,c);
 #ifdef DRAW_IMAGE_RECT
-Z(S3,h);
+N(c4,g);
 #endif
 #ifdef ENABLE_CLIP_RECT
-Z(F0,e);
+N(R0,f);
 #endif
-i f4=p3(UB,q3,A0);h C4=1.;
+i V4=o4(UB,B3,q0);g W4=1.;
 #ifdef DRAW_IMAGE_RECT
-C4=min(S3,C4);
+W4=min(c4,W4);
 #endif
 #ifdef ENABLE_CLIP_RECT
-if(ENABLE_CLIP_RECT){h c4=E7(g5(F0));C4=clamp(c4,d1(.0),C4);}
+if(ENABLE_CLIP_RECT){g l4=A8(I5(R0));W4=clamp(l4,v1(.0),W4);}
 #endif
-uint H1=d4(i3);O F2=M1(H1>>B4);h D7=Z5(H1&k6);i c0;
+uint U1=m4(v3);a0 N2=Q1(U1>>T4);g z8=L6(U1&V6);i U;
 #ifdef ENABLE_CLIPPING
-h3 Q0=Y5;
+r3 a1=K6;
 #endif
-a6(F2,D7,c0
+M6(N2,z8,U
 #ifdef ENABLE_CLIPPING
-,Q0
+,a1
 #endif
-o3 v1);
+Y2 G1);
 #ifdef PLS_BLEND_SRC_OVER
-c0.xyz*=c0.w;
+U.xyz*=U.w;
 #endif
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING&&l0.m2!=0u){h3 x1=Z8(Q0)?Q0:m7(c1);f9(l0.m2,x1,C4);}
+if(ENABLE_CLIPPING&&m0.Z0!=0u){r3 I1=V9(a1)?a1:j8(r1);Z9(m0.Z0,I1,W4);}
 #endif
-f4.w*=C4*T3(l0.G2);
 #if!defined(FIXED_FUNCTION_COLOR_OUTPUT)&&defined(ENABLE_ADVANCED_BLEND)
-if(ENABLE_ADVANCED_BLEND&&l0.m3!=F7){i e1=C0(B0)*(1.-c0.w)+c0;f4.xyz=X8(f4.xyz,w4(e1),M1(l0.m3));}
+if(ENABLE_ADVANCED_BLEND&&m0.z3!=B8){i w1=I0(H0)*(1.-U.w)+U;V4.xyz=M4(Y3(V4),w1,Q1(m0.z3))*V4.w;}
 #endif
-f4.xyz*=f4.w;c0=c0*(1.-f4.w)+f4;
+V4*=W4*d4(m0.H2);U=U*(1.-V4.w)+V4;
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-A1=c0;
+K1=U;
 #else
-e6(c0 v1);
+P6(U G1);
 #endif
 #ifdef ENABLE_CLIPPING
-y7(Q0 v1);
+v8(a1 G1);
 #endif
-e4(i3,A7);y4}
+n4(v3,x8);Q4}
 #endif
 #ifdef INITIALIZE_PLS
-a5(NB){
+E5(NB){
 #ifdef STORE_COLOR_CLEAR
-H0(B0,unpackUnorm4x8(m.Gb));
+T0(H0,unpackUnorm4x8(q.Oc));
 #endif
 #ifdef SWIZZLE_COLOR_BGRA_TO_RGBA
-i j=C0(B0);H0(B0,j.zyxw);
+i j=I0(H0);T0(H0,j.zyxw);
 #endif
-e4(i3,m.Hb);
+n4(v3,q.Pc);
 #ifdef ENABLE_CLIPPING
-if(ENABLE_CLIPPING){W0(c1,0u);}
+if(ENABLE_CLIPPING){l1(r1,0u);}
 #endif
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
 discard;
 #endif
-y4}
+Q4}
 #endif
 #ifdef RESOLVE_PLS
 #ifdef COALESCED_PLS_RESOLVE_AND_TRANSFER
-n3(NB)
+A3(NB)
 #else
-a5(NB)
+E5(NB)
 #endif
-{uint H1=d4(i3);h R1=Z5(H1&k6);O F2=M1(H1>>B4);i c0;a6(F2,R1,c0 o3 v1);
+{uint U1=m4(v3);g F1=L6(U1&V6);a0 N2=Q1(U1>>T4);i U;M6(N2,F1,U Y2 G1);
 #ifdef COALESCED_PLS_RESOLVE_AND_TRANSFER
-A1=C0(B0)*(1.-c0.w)+c0;x4
+#ifdef PLS_BLEND_SRC_OVER
+U.xyz*=U.w;
+#endif
+float D5=1.-U.w;if(D5!=.0)U+=I0(H0)*D5;K1=U;P4
 #else
 #ifdef FIXED_FUNCTION_COLOR_OUTPUT
-A1=c0;
+K1=U;
 #else
-e6(c0 v1);
+P6(U G1);
 #endif
-y4
+Q4
 #endif
 }
 #endif

@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 yup_gui
     vendor:             yup
@@ -31,13 +31,12 @@
     description:        The essential set of basic YUP user interface.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
-    dependencies:       juce_events yup_data_model yup_graphics rive
+    dependencies:       yup_events yup_data_model yup_graphics rive
     appleFrameworks:    Metal
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */
@@ -45,10 +44,11 @@
 #pragma once
 #define YUP_GUI_H_INCLUDED
 
-#include <juce_events/juce_events.h>
-
+#include <yup_events/yup_events.h>
 #include <yup_data_model/yup_data_model.h>
 #include <yup_graphics/yup_graphics.h>
+
+#include <rive/rive.h>
 
 //==============================================================================
 /** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
@@ -61,8 +61,6 @@
 
 //==============================================================================
 
-#include <rive/rive.h>
-
 #include <tuple>
 
 //==============================================================================
@@ -74,6 +72,7 @@
 #include "mouse/yup_MouseCursor.h"
 #include "mouse/yup_MouseWheelData.h"
 #include "mouse/yup_MouseListener.h"
+#include "clipboard/yup_SystemClipboard.h"
 #include "desktop/yup_Screen.h"
 #include "desktop/yup_Desktop.h"
 #include "component/yup_ComponentNative.h"
@@ -83,10 +82,12 @@
 #include "widgets/yup_TextButton.h"
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
+#include "widgets/yup_TextEditor.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
 
 //==============================================================================
+
 #include "native/yup_WindowingHelpers.h"
 
 //==============================================================================

@@ -41,7 +41,7 @@ enum class PixelFormat
 
     @tags{Core}
 */
-class JUCE_API BitmapData : public ReferenceCountedObject
+class YUP_API BitmapData : public ReferenceCountedObject
 {
 public:
     using Ptr = ReferenceCountedObjectPtr<BitmapData>;

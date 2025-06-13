@@ -24,7 +24,13 @@ namespace yup
 
 //==============================================================================
 
-Label::Label()
+const Identifier Label::Colors::fillColorId { "Label_fillColorId" };
+const Identifier Label::Colors::strokeColorId { "Label_strokeColorId" };
+
+//==============================================================================
+
+Label::Label (StringRef componentID)
+    : Component (componentID)
 {
 }
 
@@ -37,76 +43,100 @@ String Label::getText() const
 
 void Label::setText (String newText, NotificationType notification)
 {
-    //if (text == newText)
-    //    return;
+    if (text == newText)
+        return;
 
     text = std::move (newText);
+    invalidateCache();
 
-    prepareText();
+    if (notification != dontSendNotification)
+        // TODO: Send notification
+        ;
 }
 
 //==============================================================================
 
-const Font& Label::getFont() const
+std::optional<Font> Label::getFont() const
 {
     return font;
 }
 
 void Label::setFont (Font newFont)
 {
-    if (font == newFont)
+    if (font && *font == newFont)
         return;
 
-    font = newFont;
+    font = std::move (newFont);
+    invalidateCache();
+}
 
-    prepareText();
+void Label::resetFont()
+{
+    font.reset();
+}
+
+//==============================================================================
+
+void Label::setStrokeWidth (float newWidth) noexcept
+{
+    if (strokeWidth == newWidth)
+        return;
+
+    strokeWidth = newWidth;
+    repaint();
 }
 
 //==============================================================================
 
 void Label::paint (Graphics& g)
 {
-    if (! strokeColor.isTransparent() && strokeWidth > 0.0f)
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
     {
-        g.setStrokeColor (strokeColor);
-        g.setStrokeWidth (strokeWidth);
-        g.strokeFittedText (styledText, getLocalBounds());
+        if (needsUpdate)
+            prepareText();
+
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
     }
-
-    g.setFillColor (fillColor);
-    g.fillFittedText (styledText, getLocalBounds());
-
-    //g.setStrokeColor (0xffff0000);
-    //g.strokeRect (getLocalBounds());
 }
 
 //==============================================================================
 
 void Label::resized()
 {
-    prepareText();
+    invalidateCache();
 }
 
 //==============================================================================
 
 void Label::prepareText()
 {
-    auto fontSize = getHeight() * 0.8f;
+    if (! needsUpdate)
+        return;
 
-    styledText.setMaxSize (getSize());
-    styledText.setHorizontalAlign (StyledText::left);
-    styledText.setVerticalAlign (StyledText::middle);
-    styledText.setOverflow (StyledText::ellipsis);
-    styledText.setWrap (StyledText::noWrap);
+    auto fontSize = getHeight() * 0.8f; // TODO - needs config
+    if (! font)
+        font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-    styledText.clear();
-
-    if (text.isNotEmpty())
     {
-        styledText.appendText (text, nullptr, font.getFont(), fontSize);
-        styledText.update();
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (getSize());
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.setVerticalAlign (StyledText::middle);
+        modifier.setOverflow (StyledText::ellipsis);
+        modifier.setWrap (StyledText::noWrap);
+
+        modifier.clear();
+
+        if (text.isNotEmpty())
+            modifier.appendText (text, font->getFont(), fontSize);
     }
 
+    needsUpdate = false;
+}
+
+void Label::invalidateCache()
+{
+    needsUpdate = true;
     repaint();
 }
 

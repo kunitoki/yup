@@ -46,7 +46,7 @@ public:
     rcp<Texture> makeImageTexture(uint32_t width,
                                   uint32_t height,
                                   uint32_t mipLevelCount,
-                                  const uint8_t imageDataRGBA[]) override;
+                                  const uint8_t imageDataRGBAPremul[]) override;
 
     // Takes ownership of textureID and responsibility for deleting it.
     rcp<Texture> adoptImageTexture(uint32_t width,
@@ -98,12 +98,6 @@ private:
             return gpu::ShaderMiscFlags::none;
         }
 
-        // Called before issuing a plsAtomicResolve draw, so the
-        // PixelLocalStorageImpl can make any necessary GL state changes.
-        virtual void setupAtomicResolve(RenderContextGLImpl*,
-                                        const gpu::FlushDescriptor&)
-        {}
-
         virtual void pushShaderDefines(
             gpu::InterlockMode,
             std::vector<const char*>* defines) const = 0;
@@ -119,6 +113,13 @@ private:
         }
 
         virtual ~PixelLocalStorageImpl() {}
+
+#ifndef NDEBUG
+        bool rasterOrderingKnownDisabled() const
+        {
+            return m_rasterOrderingEnabled == gpu::TriState::no;
+        }
+#endif
 
     private:
         virtual void onEnableRasterOrdering(bool enabled) {}
@@ -145,6 +146,85 @@ private:
     RenderContextGLImpl(const char* rendererString,
                         GLCapabilities,
                         std::unique_ptr<PixelLocalStorageImpl>);
+
+    std::unique_ptr<BufferRing> makeUniformBufferRing(
+        size_t capacityInBytes) override;
+    std::unique_ptr<BufferRing> makeStorageBufferRing(
+        size_t capacityInBytes,
+        gpu::StorageBufferStructure) override;
+    std::unique_ptr<BufferRing> makeVertexBufferRing(
+        size_t capacityInBytes) override;
+
+    void resizeGradientTexture(uint32_t width, uint32_t height) override;
+    void resizeTessellationTexture(uint32_t width, uint32_t height) override;
+    void resizeAtlasTexture(uint32_t width, uint32_t height) override;
+
+    void flush(const FlushDescriptor&) override;
+
+    // Issues the equivalent of glDrawElementsInstancedBaseInstanceEXT(),
+    // assuming no vertex attribs are instanced, indices are uint16_t, and
+    // applying workarounds for known driver bugs.
+    //
+    // If ANGLE_base_vertex_base_instance_shader_builtin is not supported,
+    // the intended value of gl_BaseInstance is supplied via
+    // baseInstanceUniformLocation.
+    void drawIndexedInstancedNoInstancedAttribs(
+        GLenum primitiveTopology,
+        uint32_t indexCount,
+        uint32_t baseIndex,
+        uint32_t instanceCount,
+        uint32_t baseInstance,
+        GLint baseInstanceUniformLocation);
+
+    GLCapabilities m_capabilities;
+
+    std::unique_ptr<PixelLocalStorageImpl> m_plsImpl;
+
+    // Gradient texture rendering.
+    glutils::Program m_colorRampProgram;
+    glutils::VAO m_colorRampVAO;
+    glutils::Framebuffer m_colorRampFBO;
+    GLuint m_gradientTexture = 0;
+
+    // Gaussian integral table for feathering.
+    glutils::Texture m_featherTexture;
+
+    // Tessellation texture rendering.
+    glutils::Program m_tessellateProgram;
+    glutils::VAO m_tessellateVAO;
+    glutils::Buffer m_tessSpanIndexBuffer;
+    glutils::Framebuffer m_tessellateFBO;
+    GLuint m_tessVertexTexture = 0;
+
+    // Atlas rendering.
+    class AtlasProgram
+    {
+    public:
+        void compile(GLuint vertexShaderID,
+                     const char* defines[],
+                     size_t numDefines,
+                     const char* sources[],
+                     size_t numSources,
+                     const GLCapabilities&,
+                     GLState* state);
+
+        operator GLuint() const { return m_program; }
+
+        GLint baseInstanceUniformLocation() const
+        {
+            return m_baseInstanceUniformLocation;
+        }
+
+    private:
+        glutils::Program m_program = glutils::Program::Zero();
+        GLint m_baseInstanceUniformLocation = -1;
+    };
+
+    glutils::Shader m_atlasVertexShader;
+    AtlasProgram m_atlasFillProgram;
+    AtlasProgram m_atlasStrokeProgram;
+    glutils::Texture m_atlasTexture = glutils::Texture::Zero();
+    glutils::Framebuffer m_atlasFBO;
 
     // Wraps a compiled GL shader of draw_path.glsl or draw_image_mesh.glsl,
     // either vertex or fragment, with a specific set of features enabled via
@@ -186,81 +266,17 @@ private:
         ~DrawProgram();
 
         GLuint id() const { return m_id; }
-        GLint spirvCrossBaseInstanceLocation() const
+        GLint baseInstanceUniformLocation() const
         {
-            return m_spirvCrossBaseInstanceLocation;
+            return m_baseInstanceUniformLocation;
         }
 
     private:
         DrawShader m_fragmentShader;
         GLuint m_id;
-        GLint m_spirvCrossBaseInstanceLocation = -1;
+        GLint m_baseInstanceUniformLocation = -1;
         const rcp<GLState> m_state;
     };
-
-    std::unique_ptr<BufferRing> makeUniformBufferRing(
-        size_t capacityInBytes) override;
-    std::unique_ptr<BufferRing> makeStorageBufferRing(
-        size_t capacityInBytes,
-        gpu::StorageBufferStructure) override;
-    std::unique_ptr<BufferRing> makeVertexBufferRing(
-        size_t capacityInBytes) override;
-
-    void resizeGradientTexture(uint32_t width, uint32_t height) override;
-    void resizeTessellationTexture(uint32_t width, uint32_t height) override;
-    void resizeAtlasTexture(uint32_t width, uint32_t height) override;
-
-    void flush(const FlushDescriptor&) override;
-
-    GLCapabilities m_capabilities;
-
-    std::unique_ptr<PixelLocalStorageImpl> m_plsImpl;
-
-    // Gradient texture rendering.
-    glutils::Program m_colorRampProgram;
-    glutils::VAO m_colorRampVAO;
-    glutils::Framebuffer m_colorRampFBO;
-    GLuint m_gradientTexture = 0;
-
-    // Gaussian integral table for feathering.
-    glutils::Texture m_featherTexture;
-
-    // Tessellation texture rendering.
-    glutils::Program m_tessellateProgram;
-    glutils::VAO m_tessellateVAO;
-    glutils::Buffer m_tessSpanIndexBuffer;
-    glutils::Framebuffer m_tessellateFBO;
-    GLuint m_tessVertexTexture = 0;
-
-    // Atlas rendering.
-    class AtlasProgram
-    {
-    public:
-        void compile(GLuint vertexShaderID,
-                     const char* defines[],
-                     size_t numDefines,
-                     const char* sources[],
-                     size_t numSources,
-                     const GLCapabilities&,
-                     GLState* state);
-
-        operator GLuint() const { return m_program; }
-
-        GLint spirvCrossBaseInstanceLocation() const
-        {
-            return m_spirvCrossBaseInstanceLocation;
-        }
-
-    private:
-        glutils::Program m_program = glutils::Program::Zero();
-        GLint m_spirvCrossBaseInstanceLocation = -1;
-    };
-
-    glutils::Shader m_atlasVertexShader;
-    AtlasProgram m_atlasFillProgram;
-    AtlasProgram m_atlasStrokeProgram;
-    glutils::Texture m_atlasTexture = glutils::Texture::Zero();
-    glutils::Framebuffer m_atlasFBO;
 
     // Not all programs have a unique vertex shader, so we cache and reuse them
     // where possible.

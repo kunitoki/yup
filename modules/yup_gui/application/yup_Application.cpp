@@ -28,7 +28,7 @@ YUPApplication::YUPApplication()
 {
     initialiseYup_Windowing();
 
-#if JUCE_MAC
+#if YUP_MAC
     NSMenu* menuBar = [[NSMenu alloc] init];
     NSMenuItem* menuBarItem = [[NSMenuItem alloc] init];
     [menuBar addItem:menuBarItem];

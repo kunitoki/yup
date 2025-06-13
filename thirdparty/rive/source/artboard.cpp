@@ -1,4 +1,5 @@
 #include "rive/artboard.hpp"
+#include "rive/artboard_component_list.hpp"
 #include "rive/backboard.hpp"
 #include "rive/animation/linear_animation_instance.hpp"
 #include "rive/dependency_sorter.hpp"
@@ -35,7 +36,7 @@
 
 #include <unordered_map>
 
-namespace rive {
+using namespace rive;
 
 Artboard::Artboard()
 {
@@ -59,6 +60,7 @@ Artboard::~Artboard()
         audioEngine->stop(this);
     }
 #endif
+    clearDataContext();
     for (auto object : m_Objects)
     {
         // First object is artboard
@@ -88,6 +90,12 @@ Artboard::~Artboard()
         {
             delete object;
         }
+    }
+    m_dirtyLayout.clear();
+    if (m_ownsDataContext && m_DataContext != nullptr)
+    {
+        delete m_DataContext;
+        m_DataContext = nullptr;
     }
 }
 
@@ -237,9 +245,15 @@ StatusCode Artboard::initialize()
             case NestedArtboardBase::typeKey:
             case NestedArtboardLeafBase::typeKey:
             case NestedArtboardLayoutBase::typeKey:
+            {
                 m_NestedArtboards.push_back(object->as<NestedArtboard>());
+                m_ArtboardHosts.push_back(object->as<NestedArtboard>());
                 break;
-
+            }
+            case ArtboardComponentListBase::typeKey:
+                m_ComponentLists.push_back(object->as<ArtboardComponentList>());
+                m_ArtboardHosts.push_back(object->as<ArtboardComponentList>());
+                break;
             case JoystickBase::typeKey:
             {
                 Joystick* joystick = object->as<Joystick>();
@@ -247,6 +261,7 @@ StatusCode Artboard::initialize()
                 {
                     m_JoysticksApplyBeforeUpdate = false;
                 }
+                joystick->addDependents(this);
                 m_Joysticks.push_back(joystick);
                 break;
             }
@@ -587,7 +602,7 @@ void Artboard::propagateSize()
     addDirt(ComponentDirt::Path);
     if (sharesLayoutWithHost())
     {
-        m_host->markTransformDirty();
+        m_host->markHostTransformDirty();
     }
 #ifdef WITH_RIVE_TOOLS
     if (m_layoutChangedCallback != nullptr)
@@ -600,11 +615,34 @@ void Artboard::propagateSize()
 
 bool Artboard::sharesLayoutWithHost() const
 {
-    return m_host != nullptr && m_host->is<NestedArtboardLayout>();
+    return m_host != nullptr && m_host->isLayoutProvider();
 }
-void Artboard::host(NestedArtboard* nestedArtboard)
+
+void Artboard::cloneObjectDataBinds(const Core* object,
+                                    Core* clone,
+                                    Artboard* artboard) const
 {
-    m_host = nestedArtboard;
+
+    for (auto dataBind : m_DataBinds)
+    {
+        if (dataBind->target() == object)
+        {
+            auto dataBindClone = static_cast<DataBind*>(dataBind->clone());
+            dataBindClone->target(clone);
+            dataBindClone->file(dataBind->file());
+            if (dataBind->converter() != nullptr)
+            {
+
+                dataBindClone->converter(
+                    dataBind->converter()->clone()->as<DataConverter>());
+            }
+            artboard->m_DataBinds.push_back(dataBindClone);
+        }
+    }
+}
+void Artboard::host(ArtboardHost* artboardHost)
+{
+    m_host = artboardHost;
 #ifdef WITH_RIVE_LAYOUT
     if (!sharesLayoutWithHost())
     {
@@ -619,7 +657,7 @@ void Artboard::host(NestedArtboard* nestedArtboard)
 #endif
 }
 
-NestedArtboard* Artboard::host() const { return m_host; }
+ArtboardHost* Artboard::host() const { return m_host; }
 
 Artboard* Artboard::parentArtboard() const
 {
@@ -627,7 +665,7 @@ Artboard* Artboard::parentArtboard() const
     {
         return nullptr;
     }
-    return m_host->artboard();
+    return m_host->parentArtboard();
 }
 
 float Artboard::layoutWidth() const
@@ -697,16 +735,17 @@ void Artboard::update(ComponentDirt value)
 #ifdef WITH_RIVE_LAYOUT
     if (hasDirt(value, ComponentDirt::LayoutStyle))
     {
-        cascadeAnimationStyle(interpolation(),
-                              interpolator(),
-                              interpolationTime());
+        bool cascadeChanged = cascadeLayoutStyle(interpolation(),
+                                                 interpolator(),
+                                                 interpolationTime(),
+                                                 actualDirection());
         // TODO: Explore whether we can remove the syncStyleChanges call in
         // updatePass. Since updatePass calls updateComponents, where the first
         // component is the artboard itself, hence calling update, we end up
         // calling this twice. Although it is safe, because syncStyleChanges
         // checks for the list of dirty layouts that would be empty at this
         // point, it seems redundant.
-        if (syncStyleChanges() && m_updatesOwnLayout)
+        if (syncStyleChanges() && (m_updatesOwnLayout || cascadeChanged))
         {
             calculateLayout();
             updateLayoutBounds(
@@ -773,18 +812,57 @@ bool Artboard::updateComponents()
     return true;
 }
 
-void* Artboard::takeLayoutNode()
+LayoutData* Artboard::takeLayoutData()
 {
 #ifdef WITH_RIVE_LAYOUT
     m_updatesOwnLayout = false;
-    return static_cast<void*>(&m_layoutData->node);
+    return m_layoutData;
 #else
     return nullptr;
 #endif
 }
 
+void Artboard::cleanLayout(LayoutComponent* layoutComponent)
+{
+    assert(!m_isCleaningDirtyLayouts);
+    if (m_isCleaningDirtyLayouts)
+    {
+        fprintf(stderr,
+                "Artboard::cleanLayout - trying to remove a dirty layout "
+                "during clean pass!\n");
+        return;
+    }
+
+    if (!m_dirtyLayout.empty())
+    {
+        auto itr = m_dirtyLayout.find(layoutComponent);
+        if (itr != m_dirtyLayout.end())
+        {
+            m_dirtyLayout.erase(itr);
+        }
+    }
+    // If we called cleanLayout on ourselves, make sure to also
+    // call it on our parent artboard in case we were dirtied
+    if (layoutComponent == this)
+    {
+        Artboard* parent = parentArtboard();
+        if (parent != nullptr)
+        {
+            parent->cleanLayout(layoutComponent);
+        }
+    }
+}
+
 void Artboard::markLayoutDirty(LayoutComponent* layoutComponent)
 {
+    assert(!m_isCleaningDirtyLayouts);
+    if (m_isCleaningDirtyLayouts)
+    {
+        fprintf(stderr,
+                "Artboard::markLayoutDirty - trying to mark a layout dirty "
+                "during clean pass!\n");
+        return;
+    }
 #ifdef WITH_RIVE_TOOLS
     if (m_dirtyLayout.empty() && m_layoutDirtyCallback != nullptr)
     {
@@ -792,9 +870,9 @@ void Artboard::markLayoutDirty(LayoutComponent* layoutComponent)
     }
 #endif
     m_dirtyLayout.insert(layoutComponent);
-    if (sharesLayoutWithHost())
+    if (sharesLayoutWithHost() && isInstance())
     {
-        m_host->as<NestedArtboardLayout>()->markNestedLayoutDirty();
+        m_host->markHostingLayoutDirty(this->as<ArtboardInstance>());
     }
     addDirt(ComponentDirt::Components);
 }
@@ -802,11 +880,16 @@ void Artboard::markLayoutDirty(LayoutComponent* layoutComponent)
 bool Artboard::syncStyleChanges()
 {
     bool updated = false;
+    m_isCleaningDirtyLayouts = true;
 #ifdef WITH_RIVE_LAYOUT
     if (!m_dirtyLayout.empty())
     {
         for (auto layout : m_dirtyLayout)
         {
+            if (layout == nullptr)
+            {
+                continue;
+            }
             switch (layout->coreType())
             {
                 case ArtboardBase::typeKey:
@@ -833,6 +916,7 @@ bool Artboard::syncStyleChanges()
         updated = true;
     }
 #endif
+    m_isCleaningDirtyLayouts = false;
     return updated;
 }
 
@@ -854,10 +938,7 @@ bool Artboard::updatePass(bool isRoot)
             joystick->apply(this);
         }
     }
-    if (isRoot)
-    {
-        updateDataBinds();
-    }
+    updateDataBinds();
     if (updateComponents())
     {
         didUpdate = true;
@@ -868,10 +949,7 @@ bool Artboard::updatePass(bool isRoot)
         {
             if (!joystick->canApplyBeforeUpdate())
             {
-                if (isRoot)
-                {
-                    updateDataBinds();
-                }
+                updateDataBinds();
                 if (updateComponents())
                 {
                     didUpdate = true;
@@ -879,10 +957,7 @@ bool Artboard::updatePass(bool isRoot)
             }
             joystick->apply(this);
         }
-        if (isRoot)
-        {
-            updateDataBinds();
-        }
+        updateDataBinds();
         if (updateComponents())
         {
             didUpdate = true;
@@ -970,7 +1045,15 @@ void Artboard::draw(Renderer* renderer) { draw(renderer, DrawOption::kNormal); }
 
 void Artboard::draw(Renderer* renderer, DrawOption option)
 {
-    renderer->save();
+    if (renderOpacity() == 0)
+    {
+        return;
+    }
+    bool save = clip() || m_FrameOrigin;
+    if (save)
+    {
+        renderer->save();
+    }
     if (clip())
     {
         renderer->clipPath(m_worldPath.renderPath(this));
@@ -988,7 +1071,7 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
     {
         for (auto shapePaint : m_ShapePaints)
         {
-            if (!shapePaint->isVisible())
+            if (!shapePaint->shouldDraw())
             {
                 continue;
             }
@@ -1013,8 +1096,10 @@ void Artboard::draw(Renderer* renderer, DrawOption option)
             drawable->draw(renderer);
         }
     }
-
-    renderer->restore();
+    if (save)
+    {
+        renderer->restore();
+    }
 }
 
 void Artboard::addToRenderPath(RenderPath* path, const Mat2D& transform)
@@ -1068,11 +1153,15 @@ bool Artboard::hasAudio() const
             return true;
         }
     }
-    for (auto nestedArtboard : m_NestedArtboards)
+    for (auto artboardHost : m_ArtboardHosts)
     {
-        if (nestedArtboard->artboardInstance()->hasAudio())
+        for (int i = 0; i < artboardHost->artboardCount(); i++)
         {
-            return true;
+            auto artboard = artboardHost->artboardInstance(i);
+            if (artboard != nullptr && artboard->hasAudio())
+            {
+                return true;
+            }
         }
     }
     return false;
@@ -1107,13 +1196,13 @@ bool Artboard::isTranslucent(const LinearAnimationInstance* inst) const
 std::string Artboard::animationNameAt(size_t index) const
 {
     auto la = this->animation(index);
-    return la ? la->name() : nullptr;
+    return la ? la->name() : "";
 }
 
 std::string Artboard::stateMachineNameAt(size_t index) const
 {
     auto sm = this->stateMachine(index);
-    return sm ? sm->name() : nullptr;
+    return sm ? sm->name() : "";
 }
 
 LinearAnimation* Artboard::animation(const std::string& name) const
@@ -1288,21 +1377,17 @@ StatusCode Artboard::import(ImportStack& importStack)
 void Artboard::internalDataContext(DataContext* value, bool isRoot)
 {
     m_DataContext = value;
-    for (auto nestedArtboard : m_NestedArtboards)
+    for (auto artboardHost : m_NestedArtboards)
     {
-        if (nestedArtboard->artboardInstance() == nullptr)
-        {
-            continue;
-        }
         auto value = m_DataContext->getViewModelInstance(
-            nestedArtboard->dataBindPathIds());
+            artboardHost->dataBindPathIds());
         if (value != nullptr && value->is<ViewModelInstance>())
         {
-            nestedArtboard->setDataContextFromInstance(value, m_DataContext);
+            artboardHost->bindViewModelInstance(value, m_DataContext);
         }
         else
         {
-            nestedArtboard->internalDataContext(m_DataContext);
+            artboardHost->internalDataContext(m_DataContext);
         }
     }
     for (auto dataBind : m_DataBinds)
@@ -1320,16 +1405,17 @@ void Artboard::internalDataContext(DataContext* value, bool isRoot)
 
 void Artboard::clearDataContext()
 {
-    m_DataContext = nullptr;
-    for (auto nestedArtboard : m_NestedArtboards)
+    if (m_ownsDataContext && m_DataContext != nullptr)
     {
-        if (nestedArtboard->artboardInstance() == nullptr)
-        {
-            continue;
-        }
-        nestedArtboard->clearDataContext();
+        delete m_DataContext;
     }
-    for (auto dataBind : m_DataBinds)
+    m_DataContext = nullptr;
+    m_ownsDataContext = false;
+    for (auto artboardHost : m_ArtboardHosts)
+    {
+        artboardHost->clearDataContext();
+    }
+    for (auto& dataBind : m_DataBinds)
     {
         dataBind->unbind();
     }
@@ -1357,12 +1443,15 @@ float Artboard::volume() const { return m_volume; }
 void Artboard::volume(float value)
 {
     m_volume = value;
-    for (auto nestedArtboard : m_NestedArtboards)
+    for (auto artboardHost : m_ArtboardHosts)
     {
-        auto artboard = nestedArtboard->artboardInstance();
-        if (artboard != nullptr)
+        for (int i = 0; i < artboardHost->artboardCount(); i++)
         {
-            artboard->volume(value);
+            auto artboard = artboardHost->artboardInstance(i);
+            if (artboard != nullptr)
+            {
+                artboard->volume(value);
+            }
         }
     }
 }
@@ -1373,12 +1462,9 @@ void Artboard::populateDataBinds(std::vector<DataBind*>* dataBinds)
     {
         dataBinds->push_back(dataBind);
     }
-    for (auto nestedArtboard : m_NestedArtboards)
+    for (auto artboardHost : m_ArtboardHosts)
     {
-        if (nestedArtboard->artboardInstance() != nullptr)
-        {
-            nestedArtboard->artboardInstance()->populateDataBinds(dataBinds);
-        }
+        artboardHost->populateDataBinds(dataBinds);
     }
 }
 
@@ -1399,42 +1485,40 @@ void Artboard::dataContext(DataContext* value)
     internalDataContext(value, true);
 }
 
-void Artboard::setDataContextFromInstance(ViewModelInstance* viewModelInstance)
+void Artboard::bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance)
 {
-    setDataContextFromInstance(viewModelInstance, nullptr, true);
+    bindViewModelInstance(viewModelInstance, nullptr, true);
 }
 
-void Artboard::setDataContextFromInstance(ViewModelInstance* viewModelInstance,
-                                          DataContext* parent)
+void Artboard::bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance,
+                                     DataContext* parent)
 {
-    setDataContextFromInstance(viewModelInstance, parent, true);
+    bindViewModelInstance(viewModelInstance, parent, true);
 }
 
-void Artboard::setDataContextFromInstance(ViewModelInstance* viewModelInstance,
-                                          DataContext* parent,
-                                          bool isRoot)
+void Artboard::bindViewModelInstance(rcp<ViewModelInstance> viewModelInstance,
+                                     DataContext* parent,
+                                     bool isRoot)
 {
+    clearDataContext();
     if (viewModelInstance == nullptr)
     {
         return;
     }
     if (isRoot)
     {
-        viewModelInstance->setAsRoot();
+        viewModelInstance->setAsRoot(viewModelInstance);
     }
+    m_ownsDataContext = true;
     auto dataContext = new DataContext(viewModelInstance);
     dataContext->parent(parent);
     internalDataContext(dataContext, isRoot);
 }
 
-} // namespace rive
-
 ////////// ArtboardInstance
 
 #include "rive/animation/linear_animation_instance.hpp"
 #include "rive/animation/state_machine_instance.hpp"
-
-namespace rive {
 
 ArtboardInstance::ArtboardInstance() {}
 
@@ -1560,15 +1644,16 @@ rcp<AudioEngine> Artboard::audioEngine() const { return m_audioEngine; }
 void Artboard::audioEngine(rcp<AudioEngine> audioEngine)
 {
     m_audioEngine = audioEngine;
-    for (auto nestedArtboard : m_NestedArtboards)
+    for (auto artboardHost : m_ArtboardHosts)
     {
-        auto artboard = nestedArtboard->artboardInstance();
-        if (artboard != nullptr)
+        for (int i = 0; i < artboardHost->artboardCount(); i++)
         {
-            artboard->audioEngine(audioEngine);
+            auto artboard = artboardHost->artboardInstance(i);
+            if (artboard != nullptr)
+            {
+                artboard->audioEngine(audioEngine);
+            }
         }
     }
 }
 #endif
-
-} // namespace rive

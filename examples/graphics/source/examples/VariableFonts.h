@@ -55,7 +55,7 @@ public:
             if (! axisInfo)
                 continue;
 
-            auto label = labels.add (std::make_unique<yup::Label>());
+            auto label = labels.add (std::make_unique<yup::Label> (axisInfo->tagName + "Label"));
             label->setFont (font);
             addAndMakeVisible (label);
 
@@ -84,14 +84,16 @@ public:
 
         textBounds = bounds.removeFromBottom (proportionOfHeight (0.5f)).reduced (10);
 
-        styledText.setMaxSize (textBounds.getSize());
-        styledText.setHorizontalAlign (yup::StyledText::justified);
-        styledText.setVerticalAlign (yup::StyledText::middle);
-        styledText.setOverflow (yup::StyledText::visible);
-        styledText.setWrap (yup::StyledText::wrap);
-        styledText.clear();
-        styledText.appendText (text, nullptr, font.getFont(), fontSize);
-        styledText.update();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.setMaxSize (textBounds.getSize());
+            modifier.setHorizontalAlign (yup::StyledText::justified);
+            modifier.setVerticalAlign (yup::StyledText::middle);
+            modifier.setOverflow (yup::StyledText::visible);
+            modifier.setWrap (yup::StyledText::wrap);
+            modifier.clear();
+            modifier.appendText (text, font.getFont(), fontSize);
+        }
 
         bounds = bounds.reduced (10);
 
@@ -155,7 +157,7 @@ private:
 
     void addControl (yup::StringRef name, int index, float defaultValue, float minValue, float maxValue, float& valueToSet)
     {
-        auto label = labels.add (std::make_unique<yup::Label>());
+        auto label = labels.add (std::make_unique<yup::Label> (name + "Label"));
         label->setFont (font);
         addAndMakeVisible (label);
 

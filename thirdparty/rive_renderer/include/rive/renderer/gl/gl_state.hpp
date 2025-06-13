@@ -6,7 +6,7 @@
 
 #include "rive/renderer/gl/gles3.hpp"
 #include "rive/refcnt.hpp"
-#include "rive/shapes/paint/blend_mode.hpp"
+#include "rive/renderer/gpu.hpp"
 
 namespace rive::gpu
 {
@@ -19,43 +19,18 @@ public:
         invalidate();
     }
 
+    const GLCapabilities& capabilities() const { return m_capabilities; }
+
     void invalidate();
 
-    enum class GLBlendMode
-    {
-        none = 0,
-
-        srcOver = static_cast<int>(rive::BlendMode::srcOver),
-        screen = static_cast<int>(rive::BlendMode::screen),
-        overlay = static_cast<int>(rive::BlendMode::overlay),
-        darken = static_cast<int>(rive::BlendMode::darken),
-        lighten = static_cast<int>(rive::BlendMode::lighten),
-        colorDodge = static_cast<int>(rive::BlendMode::colorDodge),
-        colorBurn = static_cast<int>(rive::BlendMode::colorBurn),
-        hardLight = static_cast<int>(rive::BlendMode::hardLight),
-        softLight = static_cast<int>(rive::BlendMode::softLight),
-        difference = static_cast<int>(rive::BlendMode::difference),
-        exclusion = static_cast<int>(rive::BlendMode::exclusion),
-        multiply = static_cast<int>(rive::BlendMode::multiply),
-        hue = static_cast<int>(rive::BlendMode::hue),
-        saturation = static_cast<int>(rive::BlendMode::saturation),
-        color = static_cast<int>(rive::BlendMode::color),
-        luminosity = static_cast<int>(rive::BlendMode::luminosity),
-
-        plus = srcOver + 1,
-        max = plus + 1,
-    };
-    void setGLBlendMode(GLBlendMode);
-    void setBlendMode(rive::BlendMode blendMode)
-    {
-        setGLBlendMode(static_cast<GLBlendMode>(blendMode));
-    }
-    void disableBlending() { setGLBlendMode(GLBlendMode::none); }
-
+    void setDepthStencilEnabled(bool depthEnabled, bool stencilEnabled);
+    void setCullFace(GLenum);
+    void setBlendEquation(gpu::BlendEquation);
+    void disableBlending() { setBlendEquation(gpu::BlendEquation::none); }
     void setWriteMasks(bool colorWriteMask,
                        bool depthWriteMask,
-                       GLuint stencilWriteMask);
-    void setCullFace(GLenum);
+                       uint8_t stencilWriteMask);
+    void setPipelineState(const gpu::PipelineState&);
 
     void bindProgram(GLuint);
     void bindVAO(GLuint);
@@ -67,7 +42,9 @@ public:
 
 private:
     const GLCapabilities m_capabilities;
-    GLBlendMode m_blendMode;
+    gpu::BlendEquation m_blendEquation;
+    bool m_depthTestEnabled;
+    bool m_stencilTestEnabled;
     bool m_colorWriteMask;
     bool m_depthWriteMask;
     GLuint m_stencilWriteMask;
@@ -80,6 +57,7 @@ private:
     struct
     {
         bool blendEquation : 1;
+        bool depthStencilEnabled : 1;
         bool writeMasks : 1;
         bool cullFace : 1;
         bool boundProgramID : 1;

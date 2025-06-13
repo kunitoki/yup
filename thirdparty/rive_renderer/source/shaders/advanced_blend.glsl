@@ -144,8 +144,9 @@ half3 set_lum_sat(half3 cbase, half3 csat, half3 clum)
 
 // The advanced blend coefficients are generated from un-multiplied RGB values,
 // and control the look of each blend mode.
-half3 advanced_blend_coeffs(half3 src, half3 dst, ushort mode)
+half3 advanced_blend_coeffs(half3 src, half4 dstPremul, ushort mode)
 {
+    half3 dst = unmultiply_rgb(dstPremul);
     half3 coeffs;
     switch (mode)
     {
@@ -173,19 +174,27 @@ half3 advanced_blend_coeffs(half3 src, half3 dst, ushort mode)
             coeffs = max(src.rgb, dst.rgb);
             break;
         case BLEND_MODE_COLORDODGE:
-            // ES3 spec, 4.5.1 Range and Precision: dividing a non-zero by 0
-            // results in the appropriately signed IEEE Inf.
-            coeffs = mix(min(dst.rgb / (1. - src.rgb), make_half3(1.)),
-                         make_half3(.0),
-                         lessThanEqual(dst.rgb, make_half3(.0)));
+        {
+            dstPremul.rgb = clamp(dstPremul.rgb, make_half3(.0), dstPremul.aaa);
+            half3 denom =
+                clamp(1. - src, make_half3(.0), make_half3(1.)) * dstPremul.a;
+            coeffs = mix(min(make_half3(1.), dstPremul.rgb / denom),
+                         sign(dstPremul.rgb),
+                         equal(denom, make_half3(.0)));
             break;
+        }
         case BLEND_MODE_COLORBURN:
-            // ES3 spec, 4.5.1 Range and Precision: dividing a non-zero by 0
-            // results in the appropriately signed IEEE Inf.
-            coeffs = mix(1. - min((1. - dst.rgb) / src.rgb, 1.),
-                         make_half3(1.),
-                         greaterThanEqual(dst.rgb, make_half3(1.)));
+        {
+            src = clamp(src, make_half3(.0), make_half3(1.));
+            dstPremul.rgb = clamp(dstPremul.rgb, make_half3(.0), dstPremul.aaa);
+            if (dstPremul.a == .0)
+                dstPremul.a = 1.;
+            half3 numer = dstPremul.a - dstPremul.rgb;
+            coeffs = 1. - mix(min(make_half3(1.), numer / (src * dstPremul.a)),
+                              sign(numer),
+                              equal(src, make_half3(.0)));
             break;
+        }
         case BLEND_MODE_HARDLIGHT:
         {
             for (int i = 0; i < 3; ++i)
@@ -228,89 +237,69 @@ half3 advanced_blend_coeffs(half3 src, half3 dst, ushort mode)
             {
                 src.rgb = clamp(src.rgb, make_half3(.0), make_half3(1.));
                 coeffs = set_lum_sat(src.rgb, dst.rgb, dst.rgb);
-                break;
             }
+            break;
         case BLEND_MODE_SATURATION:
             if (@ENABLE_HSL_BLEND_MODES)
             {
                 src.rgb = clamp(src.rgb, make_half3(.0), make_half3(1.));
                 coeffs = set_lum_sat(dst.rgb, src.rgb, dst.rgb);
-                break;
             }
+            break;
         case BLEND_MODE_COLOR:
             if (@ENABLE_HSL_BLEND_MODES)
             {
                 src.rgb = clamp(src.rgb, make_half3(.0), make_half3(1.));
                 coeffs = set_lum(src.rgb, dst.rgb);
-                break;
             }
+            break;
         case BLEND_MODE_LUMINOSITY:
             if (@ENABLE_HSL_BLEND_MODES)
             {
                 src.rgb = clamp(src.rgb, make_half3(.0), make_half3(1.));
                 coeffs = set_lum(dst.rgb, src.rgb);
-                break;
             }
+            break;
 #endif
     }
     return coeffs;
 }
 
-INLINE half4 advanced_blend(half4 src, half4 dst, ushort mode)
+// Performs the given advanced blend operation with a solid RGB src color (no
+// srcAlpha).
+//
+// NOTE: This method is sufficient for all blending because alpha in the src
+// can be accounted for afterward using a standard src-over blend operation.
+//
+// e.g., dst = blend_src_over(
+//           premultiply(advanced_color_blend(src.rgb, dstPremul)),
+//           dstPremul)
+INLINE half3 advanced_color_blend(half3 src, half4 dstPremul, ushort mode)
 {
-    half3 coeffs = advanced_blend_coeffs(src.rgb, dst.rgb, mode);
-
     // The weighting functions p0, p1, and p2 are defined as follows:
     //
     //     p0(As,Ad) = As*Ad
     //     p1(As,Ad) = As*(1 - Ad)
     //     p2(As,Ad) = Ad*(1 - As)
     //
-    half sda = src.a * dst.a;
-    half3 p = make_half3(sda, src.a - sda, dst.a - sda);
-
-    // When using one of these equations, blending is performed according to the
-    // following equations:
+    // Since srcAlpha (As) == 1, this simplifies to:
     //
-    //     R = coeffs(Rs',Rd')*p0(As,Ad) + Y*Rs'*p1(As,Ad) + Z*Rd'*p2(As,Ad)
-    //     G = coeffs(Gs',Gd')*p0(As,Ad) + Y*Gs'*p1(As,Ad) + Z*Gd'*p2(As,Ad)
-    //     B = coeffs(Bs',Bd')*p0(As,Ad) + Y*Bs'*p1(As,Ad) + Z*Bd'*p2(As,Ad)
-    //     A =               X*p0(As,Ad) +     Y*p1(As,Ad) +     Z*p2(As,Ad)
+    //     p0(As,Ad) = Ad
+    //     p1(As,Ad) = (1 - Ad)
+    //     p2(As,Ad) = 0
+    //
+    // Blending is performed according to the following equations:
+    //
+    //     R = coeffs(Rs',Rd')*p0 + Y*Rs'*p1 + Z*Rd'*p2
+    //     G = coeffs(Gs',Gd')*p0 + Y*Gs'*p1 + Z*Gd'*p2
+    //     B = coeffs(Bs',Bd')*p0 + Y*Bs'*p1 + Z*Bd'*p2
+    //     A =               X*p0 +     Y*p1 +     Z*p2
     //
     // NOTE: (X,Y,Z) always == 1, so it is ignored in this implementation.
     //       Also, since (X,Y,Z) == 1, alpha simplifies to standard src-over
     //       rules: A = Ad * (1 - As) + As
-    return make_half4(MUL(make_half3x3(coeffs, src.rgb, dst.rgb), p),
-                      dst.a * (1. - src.a) + src.a);
-}
-
-// Returns an intermediate RGB color that won't produce the desired blend mode
-// until *AFTER* being blended into the framebuffer with hardware coefficients
-// of [SRC_ALPHA, ONE_MINUS_SRC_ALPHA].
-//
-// NOTE: Alpha follows standard src-over rules in all blend modes, so the shader
-// can just output the paint's alpha value, unmodified, directly to the blend
-// unit.
-INLINE half3 advanced_color_blend_pre_src_over(half3 src,
-                                               half4 dst,
-                                               ushort mode)
-{
-    // The weighting functions p0, p1, and p2 are commented in advanced_blend().
-    //
-    // We make two modifications in this variation to account for the fact that
-    // the color we generate will be subjected to HW blending:
-    //
-    // 1) To cancel the effect of the upcoming src-over blend, we subtract
-    //    "RGBd * (1 - As)" from the final RGB values. This cancels out p2
-    //    entirely.
-    //
-    // 2) Since the caller is expected to premultiply alpha, don't multiply p0
-    // or p1
-    //    by As.
-    //
-    half3 coeffs = advanced_blend_coeffs(src, dst.rgb, mode);
-    half2 p =
-        make_half2(dst.a, 1. - dst.a); // half2 because p2 got cancelled out.
+    half3 coeffs = advanced_blend_coeffs(src, dstPremul, mode);
+    half2 p = make_half2(dstPremul.a, 1. - dstPremul.a); // p2 cancelled to 0.
     return MUL(make_half2x3(coeffs, src), p);
 }
 #endif // ENABLE_ADVANCED_BLEND

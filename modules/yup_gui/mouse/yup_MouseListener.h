@@ -22,7 +22,7 @@
 namespace yup
 {
 
-class JUCE_API MouseListener
+class YUP_API MouseListener
 {
 public:
     virtual ~MouseListener() {}
@@ -44,7 +44,7 @@ public:
     virtual void mouseWheel (const MouseEvent& event, const MouseWheelData& wheelData) {}
 
 private:
-    JUCE_DECLARE_WEAK_REFERENCEABLE (MouseListener)
+    YUP_DECLARE_WEAK_REFERENCEABLE (MouseListener)
 };
 
 } // namespace yup

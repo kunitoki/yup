@@ -260,6 +260,42 @@ void Component::setCenter (const Point<float>& newCenter)
     moved();
 }
 
+float Component::getCenterX() const
+{
+    return boundsInParent.getCenterX();
+}
+
+void Component::setCenterX (float newCenterX)
+{
+    boundsInParent.setCenterX (newCenterX);
+
+    if (options.onDesktop && native != nullptr)
+    {
+        auto newCenter = boundsInParent.getCenter();
+        native->setPosition (newCenter.translated (-getWidth() / 2.0f, 0.0f).to<int>());
+    }
+
+    moved();
+}
+
+float Component::getCenterY() const
+{
+    return boundsInParent.getCenterY();
+}
+
+void Component::setCenterY (float newCenterY)
+{
+    boundsInParent.setCenterY (newCenterY);
+
+    if (options.onDesktop && native != nullptr)
+    {
+        auto newCenter = boundsInParent.getCenter();
+        native->setPosition (newCenter.translated (0.0f, -getHeight() / 2.0f).to<int>());
+    }
+
+    moved();
+}
+
 void Component::moved() {}
 
 //==============================================================================
@@ -345,6 +381,32 @@ void Component::resized() {}
 
 //==============================================================================
 
+void Component::setTransform (const AffineTransform& newTransform)
+{
+    if (transform == newTransform)
+        return;
+
+    transform = newTransform;
+
+    transformChanged();
+}
+
+AffineTransform Component::getTransform() const
+{
+    return transform;
+}
+
+bool Component::isTransformed() const
+{
+    return transform.isIdentity();
+}
+
+void Component::transformChanged()
+{
+}
+
+//==============================================================================
+
 bool Component::isFullScreen() const
 {
     return options.isFullScreen;
@@ -411,6 +473,8 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
+    jassert (! options.isRepainting); // You are likely repainting from paint !
+
     if (getBounds().isEmpty())
         return;
 
@@ -420,6 +484,8 @@ void Component::repaint()
 
 void Component::repaint (const Rectangle<float>& rect)
 {
+    jassert (! options.isRepainting); // You are likely repainting from paint !
+
     if (rect.isEmpty())
         return;
 
@@ -474,7 +540,7 @@ bool Component::isOnDesktop() const
 
 void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (options.onDesktop)
         removeFromDesktop();
@@ -496,7 +562,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
 void Component::removeFromDesktop()
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (! options.onDesktop)
         return;
@@ -711,23 +777,21 @@ int Component::getIndexOfChildComponent (Component* component) const
 
 Component* Component::findComponentAt (const Point<float>& p)
 {
-    if (options.isVisible && boundsInParent.withZeroPosition().contains (p))
+    if (! options.isVisible || ! boundsInParent.withZeroPosition().contains (p))
+        return nullptr;
+
+    for (int index = children.size(); --index >= 0;)
     {
-        for (int index = children.size(); --index >= 0;)
-        {
-            auto child = children.getUnchecked (index);
-            if (! child->isVisible() || ! child->boundsInParent.contains (p))
-                continue;
+        auto child = children.getUnchecked (index);
+        if (! child->isVisible() || ! child->boundsInParent.contains (p))
+            continue;
 
-            child = child->findComponentAt (p - child->boundsInParent.getPosition());
-            if (child != nullptr)
-                return child;
-        }
-
-        return this;
+        child = child->findComponentAt (p - child->boundsInParent.getPosition());
+        if (child != nullptr)
+            return child;
     }
 
-    return nullptr;
+    return this;
 }
 
 Component* Component::getTopLevelComponent()
@@ -771,11 +835,11 @@ void Component::setWantsKeyboardFocus (bool wantsFocus)
 
 void Component::takeKeyboardFocus()
 {
-    if (options.wantsKeyboardFocus)
-    {
-        if (auto nativeComponent = getNativeComponent())
-            nativeComponent->setFocusedComponent (this);
-    }
+    if (! options.wantsKeyboardFocus)
+        return;
+
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->setFocusedComponent (this);
 }
 
 void Component::leaveKeyboardFocus()
@@ -862,14 +926,14 @@ void Component::removeMouseListener (MouseListener* listener)
 
 void Component::setStyle (ComponentStyle::Ptr newStyle)
 {
-    if (style != newStyle)
-    {
-        style = std::move (newStyle);
+    if (style == newStyle)
+        return;
 
-        styleChanged();
+    style = std::move (newStyle);
 
-        repaint();
-    }
+    styleChanged();
+
+    repaint();
 }
 
 ComponentStyle::Ptr Component::getStyle() const
@@ -929,8 +993,11 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
     auto bounds = getBoundsRelativeToTopLevelComponent();
 
-    auto dirtyBounds = repaintArea;
-    auto boundsToRedraw = bounds.intersection (dirtyBounds);
+    auto boundsToRedraw = bounds
+                              .intersection (repaintArea)
+                              .roundToInt()
+                              .to<float>();
+
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
@@ -938,23 +1005,31 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (opacity <= 0.0f)
         return;
 
-    const auto globalState = g.saveState();
-
-    g.setOpacity (opacity);
-    g.setDrawingArea (bounds);
-    if (! options.unclippedRendering)
-        g.setClipPath (boundsToRedraw);
+    options.isRepainting = true;
 
     {
-        const auto paintState = g.saveState();
+        const auto globalState = g.saveState();
 
-        paint (g);
+        g.setOpacity (opacity);
+        g.setDrawingArea (bounds);
+        if (! options.unclippedRendering)
+            g.setClipPath (boundsToRedraw);
+
+        g.setTransform (transform);
+
+        {
+            const auto paintState = g.saveState();
+
+            paint (g);
+        }
+
+        for (auto child : children)
+            child->internalPaint (g, boundsToRedraw, renderContinuous);
+
+        paintOverChildren (g);
     }
 
-    for (auto child : children)
-        child->internalPaint (g, boundsToRedraw, renderContinuous);
-
-    paintOverChildren (g);
+    options.isRepainting = false;
 
 #if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
     g.setFillColor (debugColor);

@@ -3,7 +3,6 @@
 #include "rive/shapes/paint/fill.hpp"
 #include "rive/shapes/shape.hpp"
 #include "rive/artboard.hpp"
-#include "rive/factory.hpp"
 
 #include "rive/core_context.hpp"
 
@@ -38,7 +37,7 @@ void Feather::update(ComponentDirt value)
         renderPaint->feather(strength());
     }
 
-    if (hasDirt(value, ComponentDirt::WorldTransform))
+    if (hasDirt(value, ComponentDirt::WorldTransform | ComponentDirt::Path))
     {
         bool offsetInArtboard = space() == TransformSpace::world;
         if (inner())
@@ -68,6 +67,9 @@ void Feather::update(ComponentDirt value)
                 m_innerPath.addPathBackwards(*path->rawPath(),
                                              &innerOffsetTransform);
             }
+#ifdef TESTING
+            renderCount++;
+#endif
             return;
         }
     }

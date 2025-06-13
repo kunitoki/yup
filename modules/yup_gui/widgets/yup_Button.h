@@ -23,16 +23,16 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API Button : public Component
+class YUP_API Button : public Component
 {
 public:
     //==============================================================================
     Button (StringRef componentID);
 
     //==============================================================================
-    bool isButtonDown() const { return isButtonCurrentlyDown; }
+    bool isButtonOver() const { return isButtonCurrentlyOver; }
 
-    bool isButtonOver() const { return isButtonCurrentlyDown; }
+    bool isButtonDown() const { return isButtonCurrentlyDown; }
 
     //==============================================================================
     virtual void paintButton (Graphics& g) = 0;
