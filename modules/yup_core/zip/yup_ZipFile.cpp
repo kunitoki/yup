@@ -81,7 +81,7 @@ struct ZipFile::ZipEntryHolder
             needsZip64 = true;
 
         // Read zip64 extra field if present
-        auto const extraFieldLength = readUnalignedLittleEndianShort (buffer + 30);
+        const auto extraFieldLength = readUnalignedLittleEndianShort (buffer + 30);
         if (extraFieldLength != 0 && needsZip64)
         {
             auto extraFieldOffset = 0;
