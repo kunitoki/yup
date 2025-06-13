@@ -52,9 +52,10 @@ set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
     yup_core
+    yup_events
     yup_audio_basics
     yup_audio_devices
-    yup_events
+    yup_audio_formats
     yup_graphics)
 
 yup_standalone_app (

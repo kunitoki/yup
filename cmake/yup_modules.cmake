@@ -598,6 +598,9 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
     add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
 
+    yup_add_module (${modules_path}/modules/yup_audio_formats ${modules_group})
+    add_library (yup::yup_audio_formats ALIAS yup_audio_formats)
+
     yup_add_module (${modules_path}/modules/yup_audio_devices ${modules_group})
     add_library (yup::yup_audio_devices ALIAS yup_audio_devices)
 
