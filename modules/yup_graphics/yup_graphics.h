@@ -65,6 +65,7 @@ YUP_END_IGNORE_WARNINGS_GCC_LIKE
 
 //==============================================================================
 
+#include "layout/yup_Justification.h"
 #include "primitives/yup_AffineTransform.h"
 #include "primitives/yup_Size.h"
 #include "primitives/yup_Point.h"

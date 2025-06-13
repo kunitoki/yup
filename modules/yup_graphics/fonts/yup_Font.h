@@ -23,11 +23,15 @@ namespace yup
 {
 
 //==============================================================================
+/** Font.
 
+    This class represents a font.
+*/
 class YUP_API Font
 {
 public:
     //==============================================================================
+    /** Creates an empty font. */
     Font() = default;
 
     //==============================================================================
@@ -38,18 +42,39 @@ public:
     Font& operator= (Font&& other) noexcept = default;
 
     //==============================================================================
+    /** Loads a font from a memory block.
+
+        @param fontBytes The memory block containing the font data.
+        @return The result of the operation.
+    */
     Result loadFromData (const MemoryBlock& fontBytes);
 
     //==============================================================================
+    /** Loads a font from a file.
+
+        @param fontFile The file containing the font data.
+        @return The result of the operation.
+    */
     Result loadFromFile (const File& fontFile);
 
     //==============================================================================
+    /** Returns the ascent of the font. */
     float getAscent() const;
+
+    /** Returns the descent of the font. */
     float getDescent() const;
+
+    /** Returns the weight of the font. */
     int getWeight() const;
+
+    /** Returns true if the font is italic. */
     bool isItalic() const;
 
     //==============================================================================
+    /** Axis.
+
+        This struct represents an axis of the font.
+    */
     struct Axis
     {
         Axis() = default;
@@ -60,19 +85,102 @@ public:
         float defaultValue = 0.0f;
     };
 
+    /** Returns the number of axes in the font.
+
+        @return The number of axes in the font.
+    */
     int getNumAxis() const;
+
+    /** Returns the description of the axis at the given index.
+
+        @param index The index of the axis.
+
+        @return The description of the axis.
+    */
     std::optional<Font::Axis> getAxisDescription (int index) const;
+
+    /** Returns the description of the axis with the given tag name.
+
+        @param tagName The tag name of the axis.
+
+        @return The description of the axis.
+    */
     std::optional<Font::Axis> getAxisDescription (StringRef tagName) const;
 
+    //==============================================================================
+    /** Returns the value of the axis at the given index.
+
+        @param index The index of the axis.
+
+        @return The value of the axis.
+    */
     float getAxisValue (int index) const;
+
+    /** Sets the value of the axis at the given index.
+
+        @param index The index of the axis.
+        @param value The value of the axis.
+    */
+    void setAxisValue (int index, float value);
+
+    /** Returns a new font with the value of the axis at the given index.
+
+        @param index The index of the axis.
+        @param value The value of the axis.
+
+        @return A new font with the value of the axis at the given index.
+    */
+    Font withAxisValue (int index, float value) const;
+
+    /** Resets the value of the axis at the given index.
+
+        @param index The index of the axis.
+    */
+    void resetAxisValue (int index);
+
+    //==============================================================================
+    /** Returns the value of the axis with the given tag name.
+
+        @param tagName The tag name of the axis.
+
+        @return The value of the axis.
+    */
     float getAxisValue (StringRef tagName) const;
 
-    void setAxisValue (int index, float value);
+    /** Sets the value of the axis with the given tag name.
+
+        @param tagName The tag name of the axis.
+        @param value The value of the axis.
+    */
     void setAxisValue (StringRef tagName, float value);
 
-    Font withAxisValue (int index, float value) const;
+    /** Returns a new font with the value of the axis with the given tag name.
+
+        @param tagName The tag name of the axis.
+        @param value The value of the axis.
+
+        @return A new font with the value of the axis with the given tag name.
+    */
     Font withAxisValue (StringRef tagName, float value) const;
 
+    /** Resets the value of the axis with the given tag name.
+
+        @param tagName The tag name of the axis.
+    */
+    void resetAxisValue (StringRef tagName);
+
+    //==============================================================================
+    /** Resets the values of all axes.
+
+        @return A new font with the values of all axes reset.
+    */
+    void resetAllAxisValues();
+
+    //==============================================================================
+    /** Axis option.
+
+        This struct represents an option of the axis.
+    */
     struct AxisOption
     {
         AxisOption (StringRef tagName, float value)
@@ -85,16 +193,25 @@ public:
         float value;
     };
 
+    /** Sets the values of the axes.
+
+        @param axisOptions The options of the axes.
+    */
     void setAxisValues (std::initializer_list<AxisOption> axisOptions);
+
+    /** Returns a new font with the values of the axes.
+
+        @param axisOptions The options of the axes.
+
+        @return A new font with the values of the axes.
+    */
     Font withAxisValues (std::initializer_list<AxisOption> axisOptions) const;
 
-    void resetAxisValue (int index);
-    void resetAxisValue (StringRef tagName);
-
-    void resetAllAxisValues();
-
     //==============================================================================
+    /** Returns true if the fonts are equal. */
     bool operator== (const Font& other) const;
+
+    /** Returns true if the fonts are not equal. */
     bool operator!= (const Font& other) const;
 
     //==============================================================================

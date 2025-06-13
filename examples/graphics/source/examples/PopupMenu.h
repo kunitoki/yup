@@ -136,7 +136,10 @@ private:
 
     void showBasicMenu()
     {
-        auto menu = yup::PopupMenu::create();
+        auto options = yup::PopupMenu::Options{}
+            .withParentComponent(&basicMenuButton);
+
+        auto menu = yup::PopupMenu::create (options);
 
         menu->addItem ("New File", newFile, true, false, "Cmd+N");
         menu->addItem ("Open File", openFile, true, false, "Cmd+O");
@@ -154,7 +157,7 @@ private:
             handleMenuSelection (selectedID);
         };
 
-        menu->showAt (&basicMenuButton);
+        menu->show();
     }
 
     void showSubMenu()
@@ -168,7 +171,9 @@ private:
         colorMenu->addItem ("Green", colorGreen);
         colorMenu->addItem ("Blue", colorBlue);
 
-        auto menu = yup::PopupMenu::create();
+        auto options = yup::PopupMenu::Options{}
+            .withParentComponent(&subMenuButton);
+        auto menu = yup::PopupMenu::create (options);
         menu->addItem ("New", newFile);
         menu->addItem ("Open", openFile);
         menu->addSubMenu ("Recent Files", recentFilesMenu);
@@ -182,12 +187,14 @@ private:
             handleMenuSelection (selectedID);
         };
 
-        menu->showAt (&subMenuButton);
+        menu->show();
     }
 
     void showCustomMenu()
     {
-        auto menu = yup::PopupMenu::create();
+        auto options = yup::PopupMenu::Options{}
+            .withParentComponent(&customMenuButton);
+        auto menu = yup::PopupMenu::create (options);
 
         menu->addItem ("Regular Item", 1);
         menu->addSeparator();
@@ -218,12 +225,17 @@ private:
             handleMenuSelection (selectedID);
         };
 
-        menu->showAt (&customMenuButton);
+        menu->show();
     }
 
     void showNativeMenu()
     {
-        auto menu = yup::PopupMenu::create();
+        auto options = yup::PopupMenu::Options{}
+            .withNativeMenus(true)
+            .withJustification(yup::Justification::topLeft)
+            .withParentComponent(this);
+
+        auto menu = yup::PopupMenu::create (options);
 
         menu->addItem ("Native Item 1", 1);
         menu->addItem ("Native Item 2", 2);
@@ -235,11 +247,7 @@ private:
             handleMenuSelection (selectedID);
         };
 
-        yup::PopupMenu::Options options;
-        options.useNativeMenus = true;
-        options.parentComponent = this;
-
-        menu->show (options, [this] (int selectedID)
+        menu->show ([this] (int selectedID)
         {
             handleMenuSelection (selectedID);
         });
@@ -247,7 +255,12 @@ private:
 
     void showContextMenu (yup::Point<float> position)
     {
-        auto contextMenu = yup::PopupMenu::create();
+        auto options = yup::PopupMenu::Options{}
+            // .withTargetScreenPosition(position.to<int>()) // TODO: doesn't seem to work
+            .withParentComponent(this)
+            .withAsChildToTopmost(true);
+
+        auto contextMenu = yup::PopupMenu::create (options);
 
         contextMenu->addItem ("Copy", editCopy);
         contextMenu->addItem ("Paste", editPaste);
@@ -261,11 +274,7 @@ private:
             handleMenuSelection (selectedID);
         };
 
-        yup::PopupMenu::Options options;
-        options.parentComponent = this;
-        options.targetScreenPosition = position.to<int>();
-
-        contextMenu->show (options, [this] (int selectedID)
+        contextMenu->show ([this] (int selectedID)
         {
             handleMenuSelection (selectedID);
         });
@@ -280,39 +289,51 @@ private:
             case newFile:
                 message = "New File selected";
                 break;
+
             case openFile:
                 message = "Open File selected";
                 break;
+
             case saveFile:
                 message = "Save File selected";
                 break;
+
             case saveAsFile:
                 message = "Save As selected";
                 break;
+
             case exitApp:
                 message = "Exit selected";
                 break;
+
             case editCopy:
                 message = "Copy selected";
                 break;
+
             case editPaste:
                 message = "Paste selected";
                 break;
+
             case colorRed:
                 message = "Red color selected";
                 break;
+
             case colorGreen:
                 message = "Green color selected";
                 break;
+
             case colorBlue:
                 message = "Blue color selected";
                 break;
+
             case customSlider:
                 message = "Custom slider interacted";
                 break;
+
             case customButton:
                 message = "Custom button clicked";
                 break;
+
             default:
                 break;
         }

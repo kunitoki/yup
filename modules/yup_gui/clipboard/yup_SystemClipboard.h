@@ -22,13 +22,25 @@
 namespace yup
 {
 
+/** System clipboard.
+
+    This class provides methods to copy and retrieve text from the system clipboard.
+
+    @note This class is not thread-safe.
+*/
 class YUP_API SystemClipboard
 {
 public:
-    /** Copies the given text to the system clipboard. */
+    /** Copies the given text to the system clipboard.
+
+        @param text The text to copy to the clipboard.
+    */
     static void copyTextToClipboard (const String& text);
 
-    /** Retrieves the text from the system clipboard. */
+    /** Retrieves the text from the system clipboard.
+
+        @return The text from the clipboard.
+    */
     static String getTextFromClipboard();
 };
 

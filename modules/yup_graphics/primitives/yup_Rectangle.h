@@ -1535,6 +1535,15 @@ public:
         return contains (p.getX(), p.getY());
     }
 
+    /** TODO: doxygen */
+    [[nodiscard]] constexpr bool contains (const Rectangle& p) const noexcept
+    {
+        return p.getX() >= xy.getX()
+            && p.getY() >= xy.getY()
+            && p.getRight() <= (xy.getX() + size.getWidth())
+            && p.getBottom() <= (xy.getY() + size.getHeight());
+    }
+
     //==============================================================================
     /** Calculates the area of the rectangle.
 

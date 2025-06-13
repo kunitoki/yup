@@ -39,51 +39,55 @@ public:
     /** Options for showing the popup menu. */
     struct Options
     {
-        Options()
-            : useNativeMenus (false)
-            , parentComponent (nullptr)
-            , minWidth (0)
-            , maxWidth (0)
-            , standardItemHeight (22)
-            , dismissOnSelection (true)
-        {
-        }
-
-        /** Whether to use native system menus (when available). */
-        bool useNativeMenus;
+        Options();
 
         /** The parent component to attach the menu to. */
-        Component* parentComponent;
-
-        /** The position to show the menu at (relative to parent). */
-        Point<int> targetScreenPosition;
+        Options& withParentComponent (Component* parentComponent);
 
         /** The area to position the menu relative to. */
-        Rectangle<int> targetArea;
+        Options& withTargetArea (const Rectangle<int>& targetArea);
+
+        /** How to position the menu relative to the target area. */
+        Options& withJustification (Justification justification);
+
+        /** The position to show the menu at (relative to parent). */
+        Options& withTargetPosition (const Point<int>& targetPosition);
 
         /** Minimum width for the menu. */
-        int minWidth;
+        Options& withMinimumWidth (int minWidth);
 
         /** Maximum width for the menu. */
-        int maxWidth;
+        Options& withMaximumWidth (int maxWidth);
 
-        /** Standard menu item height. */
-        int standardItemHeight;
+        /** Whether to add the menu as a child to the topmost component. */
+        Options& withAsChildToTopmost (bool addAsChildToTopmost);
 
-        /** Whether to dismiss the menu when an item is selected. */
+        /** Whether to use native system menus (when available). */
+        Options& withNativeMenus (bool useNativeMenus);
+
+        Component* parentComponent;
+        Point<int> targetPosition;
+        Rectangle<int> targetArea;
+        Justification justification;
+        std::optional<int> minWidth;
+        std::optional<int> maxWidth;
         bool dismissOnSelection;
+        bool addAsChildToTopmost;
+        bool useNativeMenus;
     };
 
     //==============================================================================
-    /** Creates an empty popup menu. */
-    PopupMenu();
-
     /** Destructor. */
     ~PopupMenu();
 
     //==============================================================================
+    /** Creates a popup menu with the given options.
 
-    static Ptr create();
+        @param options The options for the popup menu.
+
+        @return A pointer to the popup menu.
+    */
+    static Ptr create (const Options& options = {});
 
     //==============================================================================
     /** Adds a menu item.
@@ -133,21 +137,7 @@ public:
         @param options      Options for showing the menu
         @param callback     Function to call when an item is selected (optional)
     */
-    void show (const Options& options = Options {}, std::function<void (int)> callback = nullptr);
-
-    /** Shows the menu at a specific screen position.
-
-        @param screenPos    Screen position to show the menu
-        @param callback     Function to call when an item is selected (optional)
-    */
-    void showAt (Point<int> screenPos, std::function<void (int)> callback = nullptr);
-
-    /** Shows the menu relative to a component.
-
-        @param targetComp   Component to show the menu relative to
-        @param callback     Function to call when an item is selected (optional)
-    */
-    void showAt (Component* targetComp, std::function<void (int)> callback = nullptr);
+    void show (std::function<void (int)> callback = nullptr);
 
     //==============================================================================
     /** Callback type for menu item selection. */
@@ -164,11 +154,15 @@ private:
     //==============================================================================
     friend class MenuWindow;
 
+    PopupMenu (const Options& options = {});
+    void showCustom (const Options& options, std::function<void (int)> callback);
+
     // PopupMenuItem is now an implementation detail
     class PopupMenuItem;
     std::vector<std::unique_ptr<PopupMenuItem>> items;
 
-    void showCustom (const Options& options, std::function<void (int)> callback);
+    Options options;
+
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };
