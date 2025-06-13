@@ -158,6 +158,7 @@ extern char** environ;
 #if YUP_ANDROID
 #include <ifaddrs.h>
 #include <unwind.h>
+#include <dlfcn.h>
 #include <android/log.h>
 #endif
 
