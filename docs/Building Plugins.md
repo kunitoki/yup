@@ -137,7 +137,9 @@ yup_audio_plugin (
     PLUGIN_CREATE_CLAP ON
     PLUGIN_CREATE_VST3 ON
     PLUGIN_CREATE_STANDALONE ON
-    MODULES yup_gui yup_audio_processors)
+    MODULES
+        yup::yup_gui
+        yup::yup_audio_processors)
 
 # Add source files
 file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")

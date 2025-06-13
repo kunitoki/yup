@@ -54,7 +54,7 @@ enum class BlendMode : uint8
     drawing context. It utilizes an underlying GraphicsContext and Renderer for
     actual drawing operations.
 */
-class JUCE_API Graphics
+class YUP_API Graphics
 {
 public:
     //==============================================================================
@@ -63,7 +63,7 @@ public:
         This class allows Graphics states to be saved and restored, which is useful for complex rendering tasks where
         temporary changes to the state are made and later reverted.
     */
-    class JUCE_API SavedState
+    class YUP_API SavedState
     {
     public:
         /** Constructs a SavedState linked to a specific Graphics object.
@@ -410,8 +410,8 @@ public:
     //==============================================================================
     /** Draws an attributed text.
     */
-    void fillFittedText (StyledText& text, const Rectangle<float>& rect);
-    void strokeFittedText (StyledText& text, const Rectangle<float>& rect);
+    void fillFittedText (const StyledText& text, const Rectangle<float>& rect);
+    void strokeFittedText (const StyledText& text, const Rectangle<float>& rect);
 
     //==============================================================================
     /** Clips the drawing area to the specified rectangle.
@@ -558,7 +558,7 @@ private:
     void renderStrokePath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
     void renderFillPath (const Path& path, const RenderOptions& options, const AffineTransform& transform);
 
-    void renderFittedText (StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
+    void renderFittedText (const StyledText& text, const Rectangle<float>& rect, rive::RiveRenderPaint* paint);
 
     GraphicsContext& context;
 

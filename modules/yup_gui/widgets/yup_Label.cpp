@@ -114,21 +114,21 @@ void Label::prepareText()
         return;
 
     auto fontSize = getHeight() * 0.8f; // TODO - needs config
+    if (! font)
+        font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-    styledText.setMaxSize (getSize());
-
-    // TODO - all these needs config
-    styledText.setHorizontalAlign (StyledText::left);
-    styledText.setVerticalAlign (StyledText::middle);
-    styledText.setOverflow (StyledText::ellipsis);
-    styledText.setWrap (StyledText::noWrap);
-
-    styledText.clear();
-
-    if (text.isNotEmpty())
     {
-        styledText.appendText (text, nullptr, font->getFont(), fontSize);
-        styledText.update();
+        auto modifier = styledText.startUpdate();
+        modifier.setMaxSize (getSize());
+        modifier.setHorizontalAlign (StyledText::left);
+        modifier.setVerticalAlign (StyledText::middle);
+        modifier.setOverflow (StyledText::ellipsis);
+        modifier.setWrap (StyledText::noWrap);
+
+        modifier.clear();
+
+        if (text.isNotEmpty())
+            modifier.appendText (text, font->getFont(), fontSize);
     }
 
     needsUpdate = false;

@@ -473,6 +473,8 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
+    jassert (! options.isRepainting); // You are likely repainting from paint !
+
     if (getBounds().isEmpty())
         return;
 
@@ -482,6 +484,8 @@ void Component::repaint()
 
 void Component::repaint (const Rectangle<float>& rect)
 {
+    jassert (! options.isRepainting); // You are likely repainting from paint !
+
     if (rect.isEmpty())
         return;
 
@@ -536,7 +540,7 @@ bool Component::isOnDesktop() const
 
 void Component::addToDesktop (const ComponentNative::Options& nativeOptions, void* parent)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (options.onDesktop)
         removeFromDesktop();
@@ -558,7 +562,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
 void Component::removeFromDesktop()
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     if (! options.onDesktop)
         return;
@@ -989,14 +993,19 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
     auto bounds = getBoundsRelativeToTopLevelComponent();
 
-    auto dirtyBounds = repaintArea;
-    auto boundsToRedraw = bounds.intersection (dirtyBounds);
+    auto boundsToRedraw = bounds
+                              .intersection (repaintArea)
+                              .roundToInt()
+                              .to<float>();
+
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
     const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
     if (opacity <= 0.0f)
         return;
+
+    options.isRepainting = true;
 
     {
         const auto globalState = g.saveState();
@@ -1019,6 +1028,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         paintOverChildren (g);
     }
+
+    options.isRepainting = false;
 
 #if YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
     g.setFillColor (debugColor);

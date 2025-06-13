@@ -29,7 +29,7 @@ class SDL2ComponentNative final
     , public Thread
     , public AsyncUpdater
 {
-#if (JUCE_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
+#if (YUP_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     static constexpr bool renderDrivenByTimer = true;
 #else
     static constexpr bool renderDrivenByTimer = false;
@@ -165,7 +165,7 @@ private:
     Rectangle<int> lastScreenBounds = { 0, 0, 1, 1 };
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
     std::optional<Point<float>> lastMouseDownPosition;
-    std::optional<juce::Time> lastMouseDownTime;
+    std::optional<yup::Time> lastMouseDownTime;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;

@@ -30,7 +30,7 @@ namespace yup
     converting to and from HSL (Hue, Saturation, Luminance), and for performing operations like brightening,
     darkening, and contrasting.
 */
-class JUCE_API Color
+class YUP_API Color
 {
 public:
     //==============================================================================
@@ -516,10 +516,11 @@ public:
         @param h The hue component, normalized to [0, 1].
         @param s The saturation component, normalized to [0, 1].
         @param l The luminance component, normalized to [0, 1].
+        @param a The alpha component, normalized to [0, 1].
 
         @return A Color object corresponding to the given HSL values.
     */
-    constexpr static Color fromHSL (float h, float s, float l) noexcept
+    constexpr static Color fromHSL (float h, float s, float l, float a = 1.0f) noexcept
     {
         auto hue2rgb = [] (float p, float q, float t)
         {
@@ -548,7 +549,115 @@ public:
             b = hue2rgb (p, q, h - 1.0f / 3.0f);
         }
 
-        return { static_cast<uint8> (r * 255), static_cast<uint8> (g * 255), static_cast<uint8> (b * 255) };
+        return {
+            static_cast<uint8> (r * 255),
+            static_cast<uint8> (g * 255),
+            static_cast<uint8> (b * 255),
+            static_cast<uint8> (a * 255)
+        };
+    }
+
+    //==============================================================================
+    /** Converts the color to its HSV (Hue, Saturation, Value) components.
+
+        This method provides a way to obtain the HSV representation of the color, which can be useful for color manipulation
+        and effects. The returned tuple contains the hue, saturation, and value components, respectively.
+
+        @return A tuple consisting of hue, saturation, and value.
+    */
+    constexpr std::tuple<float, float, float> toHSV() const noexcept
+    {
+        const float rf = getRedFloat();
+        const float gf = getGreenFloat();
+        const float bf = getBlueFloat();
+
+        const float max = jmax (rf, gf, bf);
+        const float min = jmin (rf, gf, bf);
+        const float delta = max - min;
+
+        float h = 0.0f;
+        float s = (max == 0.0f) ? 0.0f : delta / max;
+        float v = max;
+
+        if (delta != 0.0f)
+        {
+            if (max == rf)
+                h = fmodf ((gf - bf) / delta + (gf < bf ? 6.0f : 0.0f), 6.0f);
+            else if (max == gf)
+                h = (bf - rf) / delta + 2.0f;
+            else if (max == bf)
+                h = (rf - gf) / delta + 4.0f;
+
+            h /= 6.0f;
+        }
+
+        return std::make_tuple (h, s, v);
+    }
+
+    /** Constructs a color from HSV values.
+
+        This static method allows for the creation of a color from its HSV representation.
+        It is useful for generating colors based on more perceptual components rather than direct color component manipulation.
+
+        @param h The hue component, normalized to [0, 1].
+        @param s The saturation component, normalized to [0, 1].
+        @param v The value component, normalized to [0, 1].
+        @param a The alpha component, normalized to [0, 1].
+
+        @return A Color object corresponding to the given HSV values.
+    */
+    constexpr static Color fromHSV (float h, float s, float v, float a = 1.0f) noexcept
+    {
+        float r = 0.0f, g = 0.0f, b = 0.0f;
+
+        h = modulo (h, 1.0f); // ensure h is in [0,1]
+        const float hh = h * 6.0f;
+        const int i = static_cast<int> (hh);
+        const float f = hh - static_cast<float> (i);
+        const float p = v * (1.0f - s);
+        const float q = v * (1.0f - f * s);
+        const float t = v * (1.0f - (1.0f - f) * s);
+
+        switch (i % 6)
+        {
+            case 0:
+                r = v;
+                g = t;
+                b = p;
+                break;
+            case 1:
+                r = q;
+                g = v;
+                b = p;
+                break;
+            case 2:
+                r = p;
+                g = v;
+                b = t;
+                break;
+            case 3:
+                r = p;
+                g = q;
+                b = v;
+                break;
+            case 4:
+                r = t;
+                g = p;
+                b = v;
+                break;
+            case 5:
+                r = v;
+                g = p;
+                b = q;
+                break;
+        }
+
+        return {
+            static_cast<uint8> (r * 255),
+            static_cast<uint8> (g * 255),
+            static_cast<uint8> (b * 255),
+            static_cast<uint8> (a * 255)
+        };
     }
 
     //==============================================================================

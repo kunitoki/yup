@@ -362,7 +362,7 @@ void Artboard::mouseDrag (const MouseEvent& event)
 
 void Artboard::propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue)
 {
-    // JUCE_DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
+    // YUP_DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
 }
 
 //==============================================================================

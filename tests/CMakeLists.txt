@@ -51,10 +51,10 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
-    juce_core
-    juce_events
-    juce_audio_basics
-    juce_audio_devices
+    yup_core
+    yup_audio_basics
+    yup_audio_devices
+    yup_events
     yup_graphics)
 
 yup_standalone_app (
@@ -63,7 +63,7 @@ yup_standalone_app (
     TARGET_IDE_GROUP "Tests"
     TARGET_CONSOLE ON
     DEFINITIONS
-        JUCE_USE_CURL=0
+        YUP_USE_CURL=0
     MODULES
         ${target_modules}
         GTest::gtest_main
@@ -85,3 +85,13 @@ target_sources (${target_name} PRIVATE ${sources})
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
     VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")
+
+# ==== Setup coverage support
+if (YUP_ENABLE_COVERAGE)
+    _yup_setup_coverage_flags (${target_name})
+    foreach (module ${target_modules})
+        _yup_setup_coverage_flags (${module})
+    endforeach()
+
+    _yup_setup_coverage_targets (${target_name} "${target_modules}")
+endif()

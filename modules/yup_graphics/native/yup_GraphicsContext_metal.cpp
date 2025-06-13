@@ -23,11 +23,11 @@
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/metal/render_context_metal_impl.h"
 
-#if JUCE_MAC
+#if YUP_MAC
 #include "yup_RenderShader_mac.c"
-#elif JUCE_IOS_SIMULATOR
+#elif YUP_IOS_SIMULATOR
 #include "yup_RenderShader_iossim.c"
-#elif JUCE_IOS
+#elif YUP_IOS
 #include "yup_RenderShader_ios.c"
 #else
 #error Unsupported target sdk!
@@ -139,7 +139,7 @@ public:
 
     float dpiScale (void* window) const override
     {
-#if JUCE_IOS
+#if YUP_IOS
         UIWindow* uiWindow = (__bridge UIWindow*) window;
         UIScreen* screen = [uiWindow screen] ?: [UIScreen mainScreen];
         return screen.nativeScale;
@@ -161,7 +161,7 @@ public:
 
     void onSizeChanged (void* window, int width, int height, uint32_t sampleCount) override
     {
-#if JUCE_MAC
+#if YUP_MAC
         NSWindow* nsWindow = (__bridge NSWindow*) window;
         NSView* view = [nsWindow contentView];
         view.wantsLayer = YES;
@@ -174,11 +174,11 @@ public:
         m_swapchain.pixelFormat = MTLPixelFormatBGRA8Unorm;
         m_swapchain.contentsScale = dpiScale (window);
         m_swapchain.drawableSize = CGSizeMake (width, height);
-#if JUCE_MAC
+#if YUP_MAC
         m_swapchain.displaySyncEnabled = NO;
 #endif
 
-#if JUCE_IOS
+#if YUP_IOS
         UIView* view = (__bridge UIView*) window;
         m_swapchain.frame = view.bounds;
         [view.layer addSublayer:m_swapchain];
@@ -287,7 +287,7 @@ private:
 
 //==============================================================================
 
-std::unique_ptr<GraphicsContext> juce_constructMetalGraphicsContext (GraphicsContext::Options fiddleOptions)
+std::unique_ptr<GraphicsContext> yup_constructMetalGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
     return std::make_unique<LowLevelRenderContextMetal> (fiddleOptions);
 }

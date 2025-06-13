@@ -31,7 +31,7 @@ namespace yup
     scaling, intersection checks, and transformations among others.
 */
 template <class ValueType>
-class JUCE_API Rectangle
+class YUP_API Rectangle
 {
 public:
     //==============================================================================
@@ -137,7 +137,12 @@ public:
         return xy.getX();
     }
 
-    // TODO - doxygen
+    /** Sets the x-coordinate of the rectangle's top-left corner.
+
+        @param newX The new x-coordinate for the top-left corner.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& setX (ValueType newX) noexcept
     {
         xy.setX (newX);
@@ -167,7 +172,12 @@ public:
         return xy.getY();
     }
 
-    // TODO - doxygen
+    /** Sets the y-coordinate of the rectangle's top-left corner.
+
+        @param newY The new y-coordinate for the top-left corner.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& setY (ValueType newY) noexcept
     {
         xy.setY (newY);
@@ -197,6 +207,33 @@ public:
         return xy.getX();
     }
 
+    /** Returns a new rectangle with the left-coordinate of the top-left corner set to a new value.
+
+        This method creates a new rectangle with the same size and y-coordinate, but with the left-coordinate of the top-left corner changed to the specified value.
+
+        @param amount The new left-coordinate for the top-left corner.
+
+        @return A new rectangle with the updated left-coordinate.
+    */
+    [[nodiscard]] constexpr Rectangle withLeft (ValueType amount) const noexcept
+    {
+        return { xy.withX (amount), size };
+    }
+
+    /** Returns a new rectangle with the left-coordinate of the top-left corner trimmed by a specified amount.
+
+        This method creates a new rectangle with the same size and y-coordinate, but with the left-coordinate of the top-left corner reduced by the specified amount.
+
+        @param amountToTrim The amount to trim from the left-coordinate.
+
+        @return A new rectangle with the updated left-coordinate.
+    */
+    [[nodiscard]] constexpr Rectangle withTrimmedLeft (ValueType amountToTrim) const noexcept
+    {
+        return withLeft (xy.getX() + amountToTrim);
+    }
+
+    //==============================================================================
     /** Returns the top-coordinate of the rectangle's top-left corner.
 
         @return The top-coordinate value.
@@ -206,6 +243,33 @@ public:
         return xy.getY();
     }
 
+    /** Returns a new rectangle with the top-coordinate of the top-left corner set to a new value.
+
+        This method creates a new rectangle with the same size and x-coordinate, but with the top-coordinate of the top-left corner changed to the specified value.
+
+        @param amount The new top-coordinate for the top-left corner.
+
+        @return A new rectangle with the updated top-coordinate.
+    */
+    [[nodiscard]] constexpr Rectangle withTop (ValueType amount) const noexcept
+    {
+        return { xy.withY (amount), size };
+    }
+
+    /** Returns a new rectangle with the top-coordinate of the top-left corner trimmed by a specified amount.
+
+        This method creates a new rectangle with the same size and x-coordinate, but with the top-coordinate of the top-left corner reduced by the specified amount.
+
+        @param amountToTrim The amount to trim from the top-coordinate.
+
+        @return A new rectangle with the updated top-coordinate.
+    */
+    [[nodiscard]] constexpr Rectangle withTrimmedTop (ValueType amountToTrim) const noexcept
+    {
+        return withTop (xy.getY() + amountToTrim);
+    }
+
+    //==============================================================================
     /** Returns the right-coordinate of the rectangle's bottom-right corner.
 
         @return The right-coordinate value.
@@ -215,6 +279,20 @@ public:
         return xy.getX() + size.getWidth();
     }
 
+    /** Returns a new rectangle with the right-coordinate of the bottom-right corner trimmed by a specified amount.
+
+        This method creates a new rectangle with the same size and y-coordinate, but with the right-coordinate of the bottom-right corner reduced by the specified amount.
+
+        @param amountToTrim The amount to trim from the right-coordinate.
+
+        @return A new rectangle with the updated right-coordinate.
+    */
+    [[nodiscard]] constexpr Rectangle withTrimmedRight (ValueType amountToTrim) const noexcept
+    {
+        return withWidth (size.getWidth() - amountToTrim);
+    }
+
+    //==============================================================================
     /** Returns the bottom-coordinate of the rectangle's bottom-right corner.
 
         @return The bottom-coordinate value.
@@ -222,6 +300,19 @@ public:
     [[nodiscard]] constexpr ValueType getBottom() const noexcept
     {
         return xy.getY() + size.getHeight();
+    }
+
+    /** Returns a new rectangle with the bottom-coordinate of the bottom-right corner trimmed by a specified amount.
+
+        This method creates a new rectangle with the same size and x-coordinate, but with the bottom-coordinate of the bottom-right corner reduced by the specified amount.
+
+        @param amountToTrim The amount to trim from the bottom-coordinate.
+
+        @return A new rectangle with the updated bottom-coordinate.
+    */
+    [[nodiscard]] constexpr Rectangle withTrimmedBottom (ValueType amountToTrim) const noexcept
+    {
+        return withHeight (size.getHeight() - amountToTrim);
     }
 
     //==============================================================================
@@ -234,7 +325,12 @@ public:
         return size.getWidth();
     }
 
-    // TODO - doxygen
+    /** Sets the width of the rectangle.
+
+        @param newWidth The new width for the rectangle.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& setWidth (ValueType newWidth) noexcept
     {
         size.setWidth (newWidth);
@@ -255,6 +351,15 @@ public:
         return { xy, size.withWidth (newWidth) };
     }
 
+    /** Returns a new rectangle with the width set to a specified proportion of the original width.
+
+        This method creates a new rectangle with the same position but changes the width to a specified proportion of the original width.
+        The height remains unchanged.
+
+        @param proportion The proportion of the original width to use for the new width.
+
+        @return The new width value.
+    */
     [[nodiscard]] constexpr ValueType proportionOfWidth (float proportion) const noexcept
     {
         return static_cast<ValueType> (size.getWidth() * proportion);
@@ -270,7 +375,12 @@ public:
         return size.getHeight();
     }
 
-    // TODO - doxygen
+    /** Sets the height of the rectangle.
+
+        @param newHeight The new height for the rectangle.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& setHeight (ValueType newHeight) noexcept
     {
         size.setHeight (newHeight);
@@ -291,6 +401,15 @@ public:
         return { xy, size.withHeight (newHeight) };
     }
 
+    /** Returns a new rectangle with the height set to a specified proportion of the original height.
+
+        This method creates a new rectangle with the same position but changes the height to a specified proportion of the original height.
+        The width remains unchanged.
+
+        @param proportion The proportion of the original height to use for the new height.
+
+        @return The new height value.
+    */
     [[nodiscard]] constexpr ValueType proportionOfHeight (float proportion) const noexcept
     {
         return static_cast<ValueType> (size.getHeight() * proportion);
@@ -624,6 +743,12 @@ public:
         return xy.getX() + size.getWidth() / static_cast<ValueType> (2);
     }
 
+    /** Sets the center X of the rectangle.
+
+        @param centerX The new center X for the rectangle.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& setCenterX (ValueType centerX) noexcept
     {
         xy.setX (centerX - size.getWidth() / static_cast<ValueType> (2));
@@ -640,6 +765,12 @@ public:
         return xy.getY() + size.getHeight() / static_cast<ValueType> (2);
     }
 
+    /** Sets the center Y of the rectangle.
+
+        @param centerY The new center Y for the rectangle.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& setCenterY (ValueType centerY) noexcept
     {
         xy.setY (centerY - size.getHeight() / static_cast<ValueType> (2));
@@ -718,6 +849,14 @@ public:
         return result;
     }
 
+    /** Returns a new rectangle with its center X set to the specified value.
+
+        This method creates a new rectangle with the same size but its position adjusted so that its center X matches the given value.
+
+        @param centerX The new center X for the rectangle.
+
+        @return A new rectangle with the updated center X.
+    */
     [[nodiscard]] constexpr Rectangle withCenterX (ValueType centerX) noexcept
     {
         Rectangle result = *this;
@@ -725,6 +864,14 @@ public:
         return result;
     }
 
+    /** Returns a new rectangle with its center Y set to the specified value.
+
+        This method creates a new rectangle with the same size but its position adjusted so that its center Y matches the given value.
+
+        @param centerY The new center Y for the rectangle.
+
+        @return A new rectangle with the updated center Y.
+    */
     [[nodiscard]] constexpr Rectangle withCenterY (ValueType centerY) noexcept
     {
         Rectangle result = *this;
@@ -863,7 +1010,15 @@ public:
         return *this;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle translated by the specified x and y offsets.
+
+        This method creates a new rectangle with the same size but its position adjusted by the specified deltas.
+
+        @param deltaX The amount to add to the x-coordinate.
+        @param deltaY The amount to add to the y-coordinate.
+
+        @return A new rectangle with the updated position.
+    */
     [[nodiscard]] constexpr Rectangle<ValueType> translated (ValueType deltaX, ValueType deltaY) const noexcept
     {
         return { xy.translated (deltaX, deltaY), size };
@@ -1061,7 +1216,17 @@ public:
         return *this;
     }
 
-    // TODO - doxygen
+    /** Reduces the size of the rectangle by different amounts on all sides.
+
+        This method shrinks the rectangle's width by left and right, and height by top and bottom, reducing the size from all edges by these respective amounts.
+
+        @param left The amount to reduce the width by on the left side.
+        @param top The amount to reduce the height by on the top side.
+        @param right The amount to reduce the width by on the right side.
+        @param bottom The amount to reduce the height by on the bottom side.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& reduce (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
     {
         xy = { xy.getX() + left, xy.getY() + top };
@@ -1102,7 +1267,17 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its size reduced by different amounts on all sides.
+
+        This method creates a new rectangle with the same position but its width and height shrunk by the specified left, top, right, and bottom amounts.
+
+        @param left The amount to reduce the width by on the left side.
+        @param top The amount to reduce the height by on the top side.
+        @param right The amount to reduce the width by on the right side.
+        @param bottom The amount to reduce the height by on the bottom side.
+
+        @return A new rectangle with the reduced size.
+    */
     [[nodiscard]] constexpr Rectangle reduced (ValueType left, ValueType top, ValueType right, ValueType bottom) const noexcept
     {
         Rectangle result = *this;
@@ -1110,7 +1285,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its width reduced by a specified amount on the left side.
+
+        This method creates a new rectangle with the same position but its width shrunk by the specified delta, reducing the size from the left edge.
+
+        @param delta The amount to reduce the width by on the left side.
+
+        @return A new rectangle with the reduced size.
+    */
     [[nodiscard]] constexpr Rectangle reducedLeft (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1118,7 +1300,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its height reduced by a specified amount on the top side.
+
+        This method creates a new rectangle with the same position but its height shrunk by the specified delta, reducing the size from the top edge.
+
+        @param delta The amount to reduce the height by on the top side.
+
+        @return A new rectangle with the reduced size.
+    */
     [[nodiscard]] constexpr Rectangle reducedTop (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1126,7 +1315,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its width reduced by a specified amount on the right side.
+
+        This method creates a new rectangle with the same position but its width shrunk by the specified delta, reducing the size from the right edge.
+
+        @param delta The amount to reduce the width by on the right side.
+
+        @return A new rectangle with the reduced size.
+    */
     [[nodiscard]] constexpr Rectangle reducedRight (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1134,7 +1330,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its height reduced by a specified amount on the bottom side.
+
+        This method creates a new rectangle with the same position but its height shrunk by the specified delta, reducing the size from the bottom edge.
+
+        @param delta The amount to reduce the height by on the bottom side.
+
+        @return A new rectangle with the reduced size.
+    */
     [[nodiscard]] constexpr Rectangle reducedBottom (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1178,7 +1381,17 @@ public:
         return *this;
     }
 
-    // TODO - doxygen
+    /** Enlarges the size of the rectangle by different amounts on all sides.
+
+        This method expands the rectangle's width by left and right, and height by top and bottom, increasing the size on all edges by these respective amounts.
+
+        @param left The amount to enlarge the width by on the left side.
+        @param top The amount to enlarge the height by on the top side.
+        @param right The amount to enlarge the width by on the right side.
+        @param bottom The amount to enlarge the height by on the bottom side.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     constexpr Rectangle& enlarge (ValueType left, ValueType top, ValueType right, ValueType bottom) noexcept
     {
         xy = { xy.getX() - left, xy.getY() - top };
@@ -1219,7 +1432,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its width enlarged by a specified amount on the left side.
+
+        This method creates a new rectangle with the same position but its width enlarged by the specified delta, increasing the size from the left edge.
+
+        @param delta The amount to enlarge the width by on the left side.
+
+        @return A new rectangle with the enlarged size.
+    */
     [[nodiscard]] constexpr Rectangle enlargedLeft (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1227,7 +1447,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its height enlarged by a specified amount on the top side.
+
+        This method creates a new rectangle with the same position but its height enlarged by the specified delta, increasing the size from the top edge.
+
+        @param delta The amount to enlarge the height by on the top side.
+
+        @return A new rectangle with the enlarged size.
+    */
     [[nodiscard]] constexpr Rectangle enlargedTop (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1235,7 +1462,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its width enlarged by a specified amount on the right side.
+
+        This method creates a new rectangle with the same position but its width enlarged by the specified delta, increasing the size from the right edge.
+
+        @param delta The amount to enlarge the width by on the right side.
+
+        @return A new rectangle with the enlarged size.
+    */
     [[nodiscard]] constexpr Rectangle enlargedRight (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1243,7 +1477,14 @@ public:
         return result;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle with its height enlarged by a specified amount on the bottom side.
+
+        This method creates a new rectangle with the same position but its height enlarged by the specified delta, increasing the size from the bottom edge.
+
+        @param delta The amount to enlarge the height by on the bottom side.
+
+        @return A new rectangle with the enlarged size.
+    */
     [[nodiscard]] constexpr Rectangle enlargedBottom (ValueType delta) const noexcept
     {
         Rectangle result = *this;
@@ -1305,7 +1546,14 @@ public:
         return ! (getX() > otherBottomRight.getX() || bottomRight.getX() < other.getX() || getY() > otherBottomRight.getY() || bottomRight.getY() < other.getY());
     }
 
-    // TODO - doxygen
+    /** Returns the intersection of this rectangle with another rectangle.
+
+        This method calculates and returns the area where this rectangle and another rectangle overlap.
+
+        @param other The other rectangle to intersect with.
+
+        @return A Rectangle representing the intersection of the two rectangles, or an empty rectangle if they do not intersect.
+    */
     [[nodiscard]] constexpr Rectangle intersection (const Rectangle& other) const noexcept
     {
         const auto x1 = jmax (getX(), other.getX());
@@ -1385,7 +1633,14 @@ public:
     }
 
     //==============================================================================
-    // TODO - doxygen
+    /** Transforms the rectangle by an affine transformation.
+
+        This method applies an affine transformation to the rectangle, modifying its position and size.
+
+        @param t The affine transformation to apply.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
     Rectangle& transform (const AffineTransform& t) noexcept
     {
         auto x1 = static_cast<float> (getX());
@@ -1406,7 +1661,14 @@ public:
         return *this;
     }
 
-    // TODO - doxygen
+    /** Returns a new rectangle transformed by an affine transformation.
+
+        This method creates a new rectangle with the same position and size, but with its position and size transformed by the given affine transformation.
+
+        @param t The affine transformation to apply.
+
+        @return A new rectangle with the transformed position and size.
+    */
     [[nodiscard]] Rectangle transformed (const AffineTransform& t) const noexcept
     {
         Rectangle result (*this);
@@ -1429,6 +1691,12 @@ public:
         return { xy.template to<T>(), size.template to<T>() };
     }
 
+    /** Rounds the rectangle's position and size to integers.
+
+        This method creates a new rectangle with the same position and size, but with its position and size rounded to integers.
+
+        @return A new rectangle with the rounded position and size.
+    */
     template <class T = ValueType>
     [[nodiscard]] constexpr auto roundToInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<int>>
@@ -1518,7 +1786,14 @@ public:
     }
 
     //==============================================================================
-    /** Returns true if the two rectangles are approximately equal. */
+    /** Returns true if the two rectangles are approximately equal.
+
+        This method checks if the position and size of this rectangle are approximately equal to those of another rectangle.
+
+        @param other The other rectangle to compare against.
+
+        @return True if the rectangles are approximately equal, otherwise false.
+    */
     constexpr bool approximatelyEqualTo (const Rectangle& other) const noexcept
     {
         if constexpr (std::is_floating_point_v<ValueType>)
@@ -1595,7 +1870,7 @@ private:
     @return A reference to the modified stream.
 */
 template <class ValueType>
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Rectangle<ValueType>& r)
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Rectangle<ValueType>& r)
 {
     auto [x, y, w, h] = r;
 

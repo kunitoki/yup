@@ -146,7 +146,7 @@ private:
     rive::rcp<rive::gpu::RenderTargetD3D> m_renderTarget;
 };
 
-std::unique_ptr<GraphicsContext> juce_constructDirect3DGraphicsContext (GraphicsContext::Options fiddleOptions)
+std::unique_ptr<GraphicsContext> yup_constructDirect3DGraphicsContext (GraphicsContext::Options fiddleOptions)
 {
     // Create a DXGIFactory object.
     ComPtr<IDXGIFactory2> factory;

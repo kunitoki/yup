@@ -267,3 +267,101 @@ function (_yup_convert_png_to_icns png_path icons_path output_variable)
 
     set (${output_variable} "${output_iconset_path}" PARENT_SCOPE)
 endfunction()
+
+#==============================================================================
+
+function (_yup_setup_coverage_flags target_name)
+    if (YUP_ENABLE_COVERAGE AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+        _yup_message (STATUS "Enabling coverage for target: ${target_name}")
+
+        target_compile_options (${target_name} INTERFACE
+            --coverage
+            -fprofile-arcs
+            -fprofile-update=atomic
+            -ftest-coverage
+            -fno-elide-constructors)
+
+        target_link_options (${target_name} INTERFACE --coverage)
+
+        if (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+            target_link_libraries (${target_name} INTERFACE gcov)
+        endif()
+    endif()
+endfunction()
+
+#==============================================================================
+
+function (_yup_setup_coverage_targets test_target_name modules_list)
+    if (YUP_ENABLE_COVERAGE AND (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang"))
+        find_program (LCOV_PATH lcov)
+        find_program (GENHTML_PATH genhtml)
+
+        if (NOT LCOV_PATH)
+            _yup_message (WARNING "lcov not found! Coverage reports will not be generated.")
+            return()
+        endif()
+
+        # Create coverage directory
+        file (MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/coverage)
+
+        # Overall coverage target
+        add_custom_target (coverage_clean
+            COMMAND ${LCOV_PATH} --directory ${CMAKE_BINARY_DIR} --zerocounters
+            COMMENT "Cleaning coverage data")
+
+        # Per-module coverage targets
+        foreach (module_name ${modules_list})
+            set (module_coverage_dir ${CMAKE_BINARY_DIR}/coverage/${module_name})
+            file (MAKE_DIRECTORY ${module_coverage_dir})
+
+            add_custom_target (coverage_${module_name}
+                COMMAND ${CMAKE_COMMAND} -E echo "Generating coverage for ${module_name}"
+                COMMAND ${LCOV_PATH}
+                    --directory ${CMAKE_BINARY_DIR} --capture
+                    --output-file ${module_coverage_dir}/coverage.info
+                    --ignore-errors mismatch,gcov,source,negative
+                COMMAND ${LCOV_PATH}
+                    --extract ${module_coverage_dir}/coverage.info "*/modules/${module_name}/*"
+                    --output-file ${module_coverage_dir}/coverage_filtered.info
+                    --ignore-errors mismatch,gcov,source,negative
+                COMMAND ${LCOV_PATH}
+                    --remove ${module_coverage_dir}/coverage_filtered.info "*/thirdparty/*" "*/build/*" "*/tests/*" "*/examples/*"
+                    --output-file ${module_coverage_dir}/coverage_final.info
+                    --ignore-errors mismatch,gcov,source,negative
+                WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+                DEPENDS ${test_target_name}
+                COMMENT "Processing coverage data for ${module_name}")
+
+            if (GENHTML_PATH)
+                add_custom_target (coverage_html_${module_name}
+                    COMMAND ${GENHTML_PATH}
+                        ${module_coverage_dir}/coverage_final.info --output-directory ${module_coverage_dir}/html
+                    DEPENDS coverage_${module_name}
+                    COMMENT "Generating HTML coverage report for ${module_name}")
+            endif()
+        endforeach()
+
+        # Combined coverage target
+        add_custom_target (coverage_all
+            COMMAND ${CMAKE_COMMAND} -E echo "Generating combined coverage report"
+            COMMAND ${LCOV_PATH}
+                --directory ${CMAKE_BINARY_DIR} --capture
+                --output-file ${CMAKE_BINARY_DIR}/coverage/coverage.info
+                --ignore-errors mismatch,gcov,source,negative
+            COMMAND ${LCOV_PATH}
+                --remove ${CMAKE_BINARY_DIR}/coverage/coverage.info "*/thirdparty/*" "*/build/*" "*/tests/*" "*/examples/*"
+                --output-file ${CMAKE_BINARY_DIR}/coverage/coverage_final.info
+                --ignore-errors mismatch,gcov,source,negative
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+            DEPENDS ${test_target_name}
+            COMMENT "Processing combined coverage data")
+
+        if (GENHTML_PATH)
+            add_custom_target (coverage_html_all
+                COMMAND ${GENHTML_PATH}
+                    ${CMAKE_BINARY_DIR}/coverage/coverage_final.info --output-directory ${CMAKE_BINARY_DIR}/coverage/html
+                DEPENDS coverage_all
+                COMMENT "Generating combined HTML coverage report")
+        endif()
+    endif()
+endfunction()

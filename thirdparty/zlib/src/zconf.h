@@ -8,7 +8,7 @@
 #ifndef ZCONF_H
 #define ZCONF_H
 
-// *** Just a few hacks here to make it compile nicely with Juce..
+// *** Just a few hacks here to make it compile nicely with Yup..
 #define Z_PREFIX 1
 #undef __MACTYPES__
 

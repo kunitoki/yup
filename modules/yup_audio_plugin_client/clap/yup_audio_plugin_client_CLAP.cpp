@@ -181,11 +181,11 @@ static const clap_plugin_descriptor_t pluginDescriptor = {
     .features = pluginFeatures,
 };
 
-#if JUCE_MAC
+#if YUP_MAC
 static const char* const preferredApi = CLAP_WINDOW_API_COCOA;
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
 static const char* const preferredApi = CLAP_WINDOW_API_WIN32;
-#elif JUCE_LINUX
+#elif YUP_LINUX
 static const char* const preferredApi = CLAP_WINDOW_API_X11;
 #endif
 
@@ -684,7 +684,7 @@ bool AudioPluginProcessorCLAP::initialise()
     // ==== Setup extensions: timer support
     extensionTimerSupport.on_timer = [] (const clap_plugin_t* plugin, clap_id timerId)
     {
-#if JUCE_LINUX
+#if YUP_LINUX
         if (auto wrapper = getWrapper (plugin); wrapper->guiTimerId == timerId)
             MessageManager::getInstance()->runDispatchLoopUntil (10);
 #endif
@@ -875,11 +875,11 @@ bool AudioPluginProcessorCLAP::initialise()
 
         wrapper->audioPluginEditor->addToDesktop (
             options,
-#if JUCE_MAC
+#if YUP_MAC
             window->cocoa);
-#elif JUCE_WINDOWS
+#elif YUP_WINDOWS
             window->win32);
-#elif JUCE_LINUX
+#elif YUP_LINUX
             reinterpret_cast<void*> (window->x11));
 #else
             nullptr);
@@ -942,7 +942,7 @@ void AudioPluginProcessorCLAP::destroy()
 
 bool AudioPluginProcessorCLAP::activate (float sampleRate, int samplesPerBlock)
 {
-#if JUCE_LINUX
+#if YUP_LINUX
     if (instancesCount.fetch_add (1) == 0)
         registerTimer (16, &guiTimerId);
 #endif
@@ -957,7 +957,7 @@ void AudioPluginProcessorCLAP::deactivate()
 {
     audioProcessor->releaseResources();
 
-#if JUCE_LINUX
+#if YUP_LINUX
     if (instancesCount.fetch_sub (1) == 1)
         unregisterTimer (guiTimerId);
 #endif
@@ -1098,7 +1098,7 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
 
     plugin.init = [] (const char* path) -> bool
     {
-        yup::initialiseJuce_GUI();
+        yup::initialiseYup_GUI();
         yup::initialiseYup_Windowing();
 
         return true;
@@ -1107,7 +1107,7 @@ extern "C" const CLAP_EXPORT clap_plugin_entry_t clap_entry = []
     plugin.deinit = []
     {
         yup::shutdownYup_Windowing();
-        yup::shutdownJuce_GUI();
+        yup::shutdownYup_GUI();
     };
 
     plugin.get_factory = [] (const char* factoryId) -> const void*

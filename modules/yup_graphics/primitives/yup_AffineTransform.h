@@ -33,7 +33,7 @@ namespace yup
     or combined with other transformations to execute complex changes in the geometry
     of graphics and other spatial data.
 */
-class JUCE_API AffineTransform
+class YUP_API AffineTransform
 {
 public:
     //==============================================================================
@@ -566,7 +566,7 @@ public:
     // TODO - doxygen
     [[nodiscard]] constexpr float getScaleFactor() const noexcept
     {
-        return (juce_abs (scaleX) + juce_abs (scaleY)) / 2.0f;
+        return (yup_abs (scaleX) + yup_abs (scaleY)) / 2.0f;
     }
 
     //==============================================================================

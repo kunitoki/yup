@@ -22,7 +22,7 @@
 namespace yup
 {
 
-class JUCE_API Component;
+class YUP_API Component;
 
 //==============================================================================
 /** Contains information about a mouse event.
@@ -37,7 +37,7 @@ class JUCE_API Component;
     @see Component::mouseMove, Component::mouseEnter, Component::mouseExit,
          Component::mouseDown, Component::mouseUp, Component::mouseDrag
 */
-class JUCE_API MouseEvent
+class YUP_API MouseEvent
 {
 public:
     //==============================================================================
@@ -65,7 +65,7 @@ public:
 
     /** Creates a MouseEvent object.
 
-        @param newButtons        The buttons that are currently held down
+        @param newButtons       The buttons that are currently held down
         @param newModifiers     The key modifiers that are currently active
         @param newPosition      The mouse position, relative to the component that receives the event
     */
@@ -73,7 +73,7 @@ public:
 
     /** Creates a MouseEvent object.
 
-        @param newButtons        The buttons that are currently held down
+        @param newButtons       The buttons that are currently held down
         @param newModifiers     The key modifiers that are currently active
         @param newPosition      The mouse position, relative to the component that receives the event
         @param sourceComponent  The component that the mouse event applies to
@@ -96,31 +96,31 @@ public:
     //==============================================================================
     /** Returns true if the left mouse button is currently held down.
 
-        @returns    true if the left button is down
+        @returns true if the left button is down
     */
     bool isLeftButtoDown() const noexcept;
 
     /** Returns true if the middle mouse button is currently held down.
 
-        @returns    true if the middle button is down
+        @returns true if the middle button is down
     */
     bool isMiddleButtonDown() const noexcept;
 
     /** Returns true if the right mouse button is currently held down.
 
-        @returns    true if the right button is down
+        @returns true if the right button is down
     */
     bool isRightButtonDown() const noexcept;
 
     /** Returns true if any mouse button is currently held down.
 
-        @returns    true if any button is down
+        @returns true if any button is down
     */
     bool isAnyButtonDown() const noexcept;
 
     /** Returns the current mouse button state.
 
-        @returns    a bitmask of the buttons that are currently held down
+        @returns a bitmask of the buttons that are currently held down
 
         @see Buttons
     */
@@ -128,17 +128,17 @@ public:
 
     /** Creates a copy of this event with the specified buttons added.
 
-        @param buttonsToAdd    the buttons to add to the new event
+        @param buttonsToAdd the buttons to add to the new event
 
-        @returns              a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withButtons (Buttons buttonsToAdd) const noexcept;
 
     /** Creates a copy of this event with the specified buttons removed.
 
-        @param buttonsToRemove    the buttons to remove from the new event
+        @param buttonsToRemove the buttons to remove from the new event
 
-        @returns                 a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withoutButtons (Buttons buttonsToRemove) const noexcept;
 
@@ -151,9 +151,9 @@ public:
 
     /** Creates a copy of this event with different modifiers.
 
-        @param newModifiers    the new modifier flags to use
+        @param newModifiers the new modifier flags to use
 
-        @returns              a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withModifiers (KeyModifiers newModifiers) const noexcept;
 
@@ -166,19 +166,30 @@ public:
 
     /** Creates a copy of this event with a different position.
 
-        @param newPosition    the new position to use
+        @param newPosition the new position to use
 
-        @returns            a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withPosition (const Point<float>& newPosition) const noexcept;
 
     /** Creates a copy of this event with its position offset by the specified amount.
 
-        @param translation    the offset to apply to the position
+        @param translation the offset to apply to the position
 
-        @returns            a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withTranslatedPosition (const Point<float>& translation) const noexcept;
+
+    /** Creates a copy of this event with its position relative to the specified component.
+
+        This is used internally by the component system to ensure that mouse events
+        are delivered with coordinates relative to the receiving component.
+
+        @param targetComponent the component to make the position relative to
+
+        @returns a new MouseEvent object with position relative to the target component
+    */
+    MouseEvent withRelativePositionTo (Component* targetComponent) const noexcept;
 
     //==============================================================================
     /** Returns the position at which the last mouse-down event occurred.
@@ -189,9 +200,9 @@ public:
 
     /** Creates a copy of this event with a different last mouse-down position.
 
-        @param newPosition    the new last mouse-down position to use
+        @param newPosition the new last mouse-down position to use
 
-        @returns            a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withLastMouseDownPosition (const Point<float>& newPosition) const noexcept;
 
@@ -199,45 +210,45 @@ public:
 
         @returns    the time of the last mouse-down event
     */
-    juce::Time getLastMouseDownTime() const noexcept;
+    yup::Time getLastMouseDownTime() const noexcept;
 
     /** Creates a copy of this event with a different last mouse-down time.
 
-        @param newTime    the new time to use
+        @param newTime the new time to use
 
-        @returns        a new MouseEvent object
+        @returns a new MouseEvent object
     */
-    MouseEvent withLastMouseDownTime (juce::Time newTime) const noexcept;
+    MouseEvent withLastMouseDownTime (yup::Time newTime) const noexcept;
 
     //==============================================================================
     /** Returns the component that this event applies to.
 
-        @returns    the component that the event occurred on
+        @returns the component that the event occurred on
     */
     Component* getSourceComponent() const noexcept;
 
     /** Creates a copy of this event with a different source component.
 
-        @param newComponent    the new component to use as the source
+        @param newComponent the new component to use as the source
 
-        @returns             a new MouseEvent object
+        @returns a new MouseEvent object
     */
     MouseEvent withSourceComponent (Component* newComponent) const noexcept;
 
     //==============================================================================
     /** Compares two MouseEvent objects.
 
-        @param other    the other event to compare with
+        @param other the other event to compare with
 
-        @returns       true if the events are identical
+        @returns true if the events are identical
     */
     bool operator== (const MouseEvent& other) const noexcept;
 
     /** Compares two MouseEvent objects.
 
-        @param other    the other event to compare with
+        @param other the other event to compare with
 
-        @returns       true if the events are different
+        @returns true if the events are different
     */
     bool operator!= (const MouseEvent& other) const noexcept;
 
@@ -246,14 +257,14 @@ private:
                 KeyModifiers newModifiers,
                 const Point<float>& newPosition,
                 const Point<float>& lastMouseDownPosition,
-                juce::Time lastMouseDownTime,
+                yup::Time lastMouseDownTime,
                 Component* sourceComponent) noexcept;
 
     Buttons buttons = noButtons;
     KeyModifiers modifiers;
     Point<float> position;
     Point<float> lastMouseDownPosition;
-    juce::Time lastMouseDownTime;
+    yup::Time lastMouseDownTime;
     Component* sourceComponent = nullptr;
 };
 

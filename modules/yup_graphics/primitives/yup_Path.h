@@ -35,7 +35,7 @@ namespace yup
     allowing for efficient modifications and rendering. The Path can be used for drawing operations,
     hit testing, and bounding box calculations.
 */
-class JUCE_API Path
+class YUP_API Path
 {
 public:
     //==============================================================================
@@ -258,7 +258,16 @@ public:
     */
     Path& addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
-    // TODO - doxygen
+    /** Adds a rounded rectangle to the path.
+
+        This method appends a rounded rectangle with specified position, size, and corner radius
+        to the path. Each corner has the same radius, allowing for simple rounded corners.
+        The rounded rectangle is added as a closed sub-path.
+
+        @param x The x-coordinate of the top-left corner.
+        @param y The y-coordinate of the top-left corner.
+        @param width The width of the rectangle.
+    */
     Path& addRoundedRectangle (float x, float y, float width, float height, float radius);
 
     /** Adds a rounded rectangle described by a Rectangle object with specific corner radii to the path.
@@ -275,7 +284,14 @@ public:
     */
     Path& addRoundedRectangle (const Rectangle<float>& rect, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight);
 
-    // TODO - doxygen
+    /** Adds a rounded rectangle to the path.
+
+        This method appends a rounded rectangle with specified position, size, and corner radius
+        to the path. Each corner has the same radius, allowing for simple rounded corners.
+        The rounded rectangle is added as a closed sub-path.
+
+        @param rect The rectangle to which rounded corners are to be added.
+    */
     Path& addRoundedRectangle (const Rectangle<float>& rect, float radius);
 
     //==============================================================================
@@ -303,13 +319,38 @@ public:
     Path& addEllipse (const Rectangle<float>& rect);
 
     //==============================================================================
-    // TODO - doxygen
+    /** Adds a centered ellipse to the path.
+
+        This method appends an ellipse centered at (centerX, centerY) with specified radii.
+        The ellipse starts and ends at the rightmost point of the ellipse, forming a complete
+        and closed sub-path.
+
+        @param centerX The x-coordinate of the center of the ellipse.
+        @param centerY The y-coordinate of the center of the ellipse.
+        @param radiusX The horizontal radius of the ellipse.
+    */
     Path& addCenteredEllipse (float centerX, float centerY, float radiusX, float radiusY);
 
-    // TODO - doxygen
+    /** Adds a centered ellipse to the path.
+
+        This method appends an ellipse centered at the specified point with given radii.
+        The ellipse starts and ends at the rightmost point of the ellipse, forming a complete
+        and closed sub-path.
+
+        @param center The center point of the ellipse.
+        @param radiusX The horizontal radius of the ellipse.
+    */
     Path& addCenteredEllipse (const Point<float>& center, float radiusX, float radiusY);
 
-    // TODO - doxygen
+    /** Adds a centered ellipse to the path.
+
+        This method appends an ellipse centered at the specified point with given diameter.
+        The ellipse starts and ends at the rightmost point of the ellipse, forming a complete
+        and closed sub-path.
+
+        @param center The center point of the ellipse.
+        @param diameter The diameter of the ellipse.
+    */
     Path& addCenteredEllipse (const Point<float>& center, const Size<float>& diameter);
 
     //==============================================================================
@@ -339,11 +380,9 @@ public:
         @param toRadians The ending angle of the arc, in radians.
         @param startAsNewSubPath Whether to start this as a new sub-path or continue from the current point.
     */
-    Path& addArc (const Rectangle<float>& rect,
-                  float fromRadians,
-                  float toRadians,
-                  bool startAsNewSubPath);
+    Path& addArc (const Rectangle<float>& rect, float fromRadians, float toRadians, bool startAsNewSubPath);
 
+    //==============================================================================
     /** Adds a centered arc to the path.
 
         This method appends an arc centered at (centerX, centerY) with specified radii and rotation,
@@ -376,7 +415,82 @@ public:
     */
     Path& addCenteredArc (const Point<float>& center, float radiusX, float radiusY, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
 
+    /** Adds a centered arc described by a Point and Size object to the path.
+
+        This method appends an arc centered at the specified point with given diameter and rotation,
+        between two radial angles. The arc can either start as a new sub-path or connect to the current point
+        depending on the specified boolean.
+
+        @param center The center point of the arc.
+        @param diameter The diameter of the arc.
+        @param rotationOfEllipse The rotation angle of the ellipse, in radians.
+    */
     Path& addCenteredArc (const Point<float>& center, const Size<float>& diameter, float rotationOfEllipse, float fromRadians, float toRadians, bool startAsNewSubPath);
+
+    //==============================================================================
+    /** Adds a regular polygon to the path.
+
+        This method appends a regular polygon with the specified number of sides, centered at the given point
+        with the specified radius. The polygon starts at the given angle.
+
+        @param centre The center point of the polygon.
+        @param numberOfSides The number of sides for the polygon (minimum 3).
+        @param radius The radius from the center to each vertex.
+        @param startAngle The starting angle in radians (0.0f starts at the right).
+    */
+    Path& addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle = 0.0f);
+
+    //==============================================================================
+    /** Adds a star shape to the path.
+
+        This method appends a star shape with the specified number of points, centered at the given point
+        with inner and outer radii. The star starts at the given angle.
+
+        @param centre The center point of the star.
+        @param numberOfPoints The number of points for the star (minimum 3).
+        @param innerRadius The radius from the center to the inner vertices.
+        @param outerRadius The radius from the center to the outer vertices.
+        @param startAngle The starting angle in radians (0.0f starts at the right).
+    */
+    Path& addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle = 0.0f);
+
+    //==============================================================================
+    /** Adds a speech bubble shape to the path.
+
+        This method creates a rounded rectangle with an arrow pointing to the specified tip position,
+        suitable for speech bubbles or callout shapes.
+
+        @param bodyArea The main rectangular area of the bubble.
+        @param maximumArea The maximum area the bubble (including arrow) can occupy.
+        @param arrowTipPosition The point where the arrow should point to.
+        @param cornerSize The radius of the rounded corners.
+        @param arrowBaseWidth The width of the arrow at its base.
+    */
+    Path& addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth);
+
+    //==============================================================================
+    /** Converts the path to a stroke polygon with specified width.
+
+        This method generates a closed polygon that represents the stroke of this path
+        with the given stroke width. The resulting path can be filled to achieve the
+        appearance of a stroked path.
+
+        @param strokeWidth The width of the stroke.
+        @return A new Path representing the stroke as a closed polygon.
+    */
+    Path createStrokePolygon (float strokeWidth) const;
+
+    //==============================================================================
+    /** Creates a new path with rounded corners applied to this path.
+
+        This method generates a new path where sharp corners are replaced with
+        rounded corners of the specified radius.
+
+        @param cornerRadius The radius of the rounded corners.
+
+        @return A new Path with rounded corners applied.
+    */
+    Path withRoundedCorners (float cornerRadius) const;
 
     //==============================================================================
     /** Appends another path to this one.
@@ -398,18 +512,85 @@ public:
     Path& appendPath (const Path& other, const AffineTransform& transform);
 
     //==============================================================================
-    // TODO - doxygen
+    /** Swaps the contents of this path with another path.
+
+        This method efficiently swaps the internal data of this path with another path.
+
+        @param other The path to swap with.
+    */
+    void swapWithPath (Path& other) noexcept;
+
+    //==============================================================================
+    /** Transforms the path by applying an affine transformation.
+
+        This method applies an affine transformation to the path, modifying its shape and position.
+        The transformation is specified by an AffineTransform object.
+
+        @param t The affine transformation to apply.
+
+        @return A reference to this path after the transformation.
+    */
     Path& transform (const AffineTransform& t);
 
-    // TODO - doxygen
+    /** Returns a new path with the specified transformation applied.
+
+        This method creates a new path with the same shape as this path, but with the specified
+        transformation applied. The transformation is specified by an AffineTransform object.
+
+        @param t The affine transformation to apply.
+
+        @return A new Path with the transformation applied.
+    */
     Path transformed (const AffineTransform& t) const;
 
     //==============================================================================
-    /** Returns the bounding box of this path. */
-    Rectangle<float> getBoundingBox() const;
+    /** Scales the path to fit within the specified bounds.
+
+        This method transforms the path so that it fits within the given rectangular area.
+        If preserveProportions is true, the aspect ratio is maintained.
+
+        @param x The x-coordinate of the target area.
+        @param y The y-coordinate of the target area.
+        @param width The width of the target area.
+        @param height The height of the target area.
+        @param preserveProportions Whether to maintain the original aspect ratio.
+    */
+    void scaleToFit (float x, float y, float width, float height, bool preserveProportions) noexcept;
 
     //==============================================================================
-    // TODO - doxygen
+    /** Returns the bounding box of this path.
+
+        @return The bounding rectangle that contains all points in this path.
+    */
+    Rectangle<float> getBounds() const;
+
+    /** Returns the bounding box of this path after applying a transformation.
+
+        @param transform The transformation to apply before calculating the bounds.
+        @return The bounding rectangle that contains all transformed points in this path.
+    */
+    Rectangle<float> getBoundsTransformed (const AffineTransform& transform) const;
+
+    //==============================================================================
+    /** Gets a point at a specific position along the path.
+
+        This method returns a point located at the specified normalized distance along the path.
+        The distance parameter should be between 0.0 (start of path) and 1.0 (end of path).
+
+        @param distance The normalized distance along the path (0.0 to 1.0).
+        @return The point at the specified distance along the path.
+    */
+    Point<float> getPointAlongPath (float distance) const;
+
+    //==============================================================================
+    /** Parses the path data from a string.
+
+        This method parses the path data from a string and updates the path accordingly.
+
+        @param pathData The string containing the path data.
+
+        @return True if the path data was parsed successfully, false otherwise.
+    */
     bool parsePathData (const String& pathData);
 
     //==============================================================================
