@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-class JUCE_API AudioProcessorEditor : public Component
+class YUP_API AudioProcessorEditor : public Component
 {
 public:
     AudioProcessorEditor();

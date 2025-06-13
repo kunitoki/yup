@@ -31,7 +31,7 @@ class ComponentNative;
     access to multiple screens connected to the system. It allows querying and management
     of different screen properties through the `Screen` objects.
 */
-class JUCE_API Desktop
+class YUP_API Desktop
 {
 public:
     //==============================================================================
@@ -151,7 +151,7 @@ public:
     void handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData);
 
     //==============================================================================
-    JUCE_DECLARE_SINGLETON (Desktop, false)
+    YUP_DECLARE_SINGLETON (Desktop, false)
 
 private:
     friend class YUPApplication;
@@ -168,7 +168,7 @@ private:
     std::vector<WeakReference<MouseListener>> globalMouseListeners;
     std::unordered_map<void*, ComponentNative*> nativeComponents;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Desktop)
 };
 
 } // namespace yup

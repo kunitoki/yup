@@ -32,14 +32,14 @@ ApplicationTheme::~ApplicationTheme() = default;
 
 void ApplicationTheme::setGlobalTheme (ApplicationTheme::Ptr s)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     getGlobalThemeInstance() = std::move (s);
 }
 
 ApplicationTheme::ConstPtr ApplicationTheme::getGlobalTheme()
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     return getGlobalThemeInstance();
 }
@@ -54,7 +54,7 @@ ApplicationTheme::Ptr& ApplicationTheme::getGlobalThemeInstance()
 
 Color ApplicationTheme::findColor (const Identifier& colorId)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     auto it = getGlobalThemeInstance()->defaultColors.find (colorId);
     return it != getGlobalThemeInstance()->defaultColors.end() ? it->second : Color();
@@ -62,14 +62,14 @@ Color ApplicationTheme::findColor (const Identifier& colorId)
 
 void ApplicationTheme::setColor (const Identifier& colorId, const Color& color)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     defaultColors.insert_or_assign (colorId, color);
 }
 
 void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifier&, const Color&>> colors)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     for (const auto& entry : colors)
         defaultColors.insert_or_assign (entry.first, entry.second);
@@ -79,14 +79,14 @@ void ApplicationTheme::setColors (std::initializer_list<std::pair<const Identifi
 
 void ApplicationTheme::setDefaultFont (Font font)
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     defaultFont = std::move (font);
 }
 
 const Font& ApplicationTheme::getDefaultFont() const
 {
-    JUCE_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+    YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
 
     return defaultFont;
 }

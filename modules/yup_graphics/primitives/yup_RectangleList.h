@@ -40,7 +40,7 @@ namespace yup
     @endcode
 */
 template <class ValueType>
-class JUCE_API RectangleList
+class YUP_API RectangleList
 {
 public:
     using RectangleType = Rectangle<ValueType>;

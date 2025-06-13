@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 rive_renderer
     vendor:             rive
@@ -40,12 +40,14 @@
     iosSimDefines:      RIVE_IOS_SIMULATOR=1
     linuxDefines:       RIVE_DESKTOP_GL=1
     wasmDefines:        RIVE_WEBGL=1
+    wasmOptions:        -sUSE_SDL=2
+    wasmLinkOptions:    -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2
     androidDefines:     RIVE_ANDROID=1
     androidLibs:        EGL GLESv3
     windowsCppStandard: 20
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

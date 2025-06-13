@@ -22,7 +22,7 @@ yup_standalone_app (
     TARGET_APP_ID "my.company.${target_name}"
     TARGET_APP_NAMESPACE "my.company"
     INITIAL_MEMORY 268435456
-    MODULES yup_gui)
+    MODULES yup::yup_gui)
 
 if (NOT YUP_TARGET_ANDROID)
     file (GLOB sources "${CMAKE_CURRENT_LIST_DIR}/*.cpp")

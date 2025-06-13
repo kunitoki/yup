@@ -41,7 +41,7 @@ MouseEvent::MouseEvent (Buttons newButtons,
                         KeyModifiers newModifiers,
                         const Point<float>& newPosition,
                         const Point<float>& lastMouseDownPosition,
-                        juce::Time lastMouseDownTime,
+                        yup::Time lastMouseDownTime,
                         Component* sourceComponent) noexcept
     : buttons (newButtons)
     , modifiers (newModifiers)
@@ -126,6 +126,37 @@ MouseEvent MouseEvent::withTranslatedPosition (const Point<float>& translation) 
     return { buttons, modifiers, position.translated (translation), lastMouseDownPosition, lastMouseDownTime, sourceComponent };
 }
 
+MouseEvent MouseEvent::withRelativePositionTo (Component* targetComponent) const noexcept
+{
+    if (targetComponent == nullptr)
+        return *this;
+
+    // Calculate the position relative to the target component
+    auto relativePos = position;
+
+    // Walk up the component hierarchy to find the offset from the top-level component
+    auto currentComponent = targetComponent;
+    while (currentComponent != nullptr && currentComponent->getParentComponent() != nullptr)
+    {
+        relativePos = relativePos - currentComponent->getBounds().getPosition();
+        currentComponent = currentComponent->getParentComponent();
+    }
+
+    // Also translate the last mouse down position if it exists
+    auto relativeLastPos = lastMouseDownPosition;
+    if (lastMouseDownPosition != Point<float>() && targetComponent != nullptr)
+    {
+        currentComponent = targetComponent;
+        while (currentComponent != nullptr && currentComponent->getParentComponent() != nullptr)
+        {
+            relativeLastPos = relativeLastPos - currentComponent->getBounds().getPosition();
+            currentComponent = currentComponent->getParentComponent();
+        }
+    }
+
+    return { buttons, modifiers, relativePos, relativeLastPos, lastMouseDownTime, targetComponent };
+}
+
 //==============================================================================
 
 Point<float> MouseEvent::getLastMouseDownPosition() const noexcept
@@ -138,12 +169,12 @@ MouseEvent MouseEvent::withLastMouseDownPosition (const Point<float>& newPositio
     return { buttons, modifiers, position, newPosition, lastMouseDownTime, sourceComponent };
 }
 
-juce::Time MouseEvent::getLastMouseDownTime() const noexcept
+yup::Time MouseEvent::getLastMouseDownTime() const noexcept
 {
     return lastMouseDownTime;
 }
 
-MouseEvent MouseEvent::withLastMouseDownTime (juce::Time newTime) const noexcept
+MouseEvent MouseEvent::withLastMouseDownTime (yup::Time newTime) const noexcept
 {
     return { buttons, modifiers, position, lastMouseDownPosition, newTime, sourceComponent };
 }

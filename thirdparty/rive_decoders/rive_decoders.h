@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 rive_decoders
     vendor:             rive
@@ -36,18 +36,18 @@
     appleFrameworks:    ImageIO
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */
 
 #pragma once
 
-#if JUCE_MODULE_AVAILABLE_libpng
+#if YUP_MODULE_AVAILABLE_libpng
 #define RIVE_PNG 1
 #endif
 
-#if JUCE_MODULE_AVAILABLE_libwebp
+#if YUP_MODULE_AVAILABLE_libwebp
 #define RIVE_WEBP 1
 #endif
 

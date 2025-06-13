@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:               oboe_library
     vendor:           google
@@ -35,7 +35,7 @@
     searchpaths:      upstream/include upstream/src
     androidLibs:      OpenSLES
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

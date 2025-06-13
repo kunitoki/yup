@@ -30,7 +30,7 @@ class AudioProcessorEditor;
 
     @see AudioProcessorEditor
 */
-class JUCE_API AudioProcessor
+class YUP_API AudioProcessor
 {
 public:
     //==============================================================================

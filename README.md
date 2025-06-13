@@ -22,6 +22,10 @@ Example Rive animation display ([source code](./examples/render/source/main.cpp)
 [![Build And Test iOS](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_ios.yml)
 [![Build And Test Android](https://github.com/kunitoki/yup/actions/workflows/build_android.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/build_android.yml)
 
+[![Coverage](https://github.com/kunitoki/yup/actions/workflows/coverage.yml/badge.svg)](https://github.com/kunitoki/yup/actions/workflows/coverage.yml)
+[![codecov](https://codecov.io/gh/kunitoki/yup/branch/main/graph/badge.svg)](https://codecov.io/gh/kunitoki/yup)
+
+[![codecov](https://codecov.io/gh/kunitoki/yup/graphs/tree.svg?token=IO71C3DR1A)](https://codecov.io/gh/kunitoki/yup)
 
 ## Introduction
 YUP is an open-source library dedicated to empowering developers with advanced tools for cross-platform application and plugin development, featuring state-of-the-art rendering and audio processing. Originating from a fork of [JUCE7](https://juce.com/)'s ISC-licensed modules, YUP builds on the robust, high-performance capabilities that made JUCE7 popular among audio and visual application developers. Unlike its successor JUCE8, which moved to a restrictive AGPL license and an even more costly commercial one, YUP maintains the more permissive ISC license and ensures that all of its dependencies are either liberally licensed or public domain, remaining a freely accessible and modifiable resource for developers worldwide.
@@ -43,7 +47,7 @@ YUP brings a suite of powerful features, including:
 
 ## Supported Platforms
 | **Windows**        | **macOS**          | **Linux**          | **WASM**           | **Android**        | **iOS**            |
-|--------------------|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
+|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|:------------------:|
 | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
 
 
@@ -209,8 +213,8 @@ Compile example targets like example_app, example_console, or example_render to 
 Here is a simple example of creating a basic window using YUP, save this as `main.cpp`:
 
 ```cpp
-#include <juce_core/juce_core.h>
-#include <juce_events/juce_events.h>
+#include <yup_core/yup_core.h>
+#include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
@@ -268,7 +272,7 @@ private:
     std::unique_ptr<MyWindow> window;
 };
 
-START_JUCE_APPLICATION (MyApplication)
+START_YUP_APPLICATION (MyApplication)
 ```
 
 And add this as `CMakeLists.txt`:

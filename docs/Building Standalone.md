@@ -13,8 +13,8 @@ A basic YUP application consists of the following components:
 Here's a minimal example of a standalone application:
 
 ```cpp
-#include <juce_core/juce_core.h>
-#include <juce_events/juce_events.h>
+#include <yup_core/yup_core.h>
+#include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
@@ -46,7 +46,7 @@ public:
     }
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainWindow)
 };
 
 class MyApplication : public yup::YUPApplication
@@ -78,7 +78,7 @@ private:
     std::unique_ptr<MainWindow> window;
 };
 
-START_JUCE_APPLICATION (MyApplication)
+START_YUP_APPLICATION (MyApplication)
 ```
 
 ## Building with CMake
@@ -113,7 +113,7 @@ yup_standalone_app (
     TARGET_CXX_STANDARD 17
     INITIAL_MEMORY 268435456  # 256MB initial memory
     MODULES
-        juce_audio_devices
+        yup_audio_devices
         yup_gui
         libpng
         libwebp)
@@ -156,7 +156,7 @@ yup_add_embedded_binary_resources (
 yup_standalone_app (
     # ...
     MODULES
-        juce_audio_devices
+        yup_audio_devices
         yup_gui
         libpng
         libwebp

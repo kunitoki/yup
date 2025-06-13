@@ -23,7 +23,7 @@ namespace yup
 {
 
 template <class ValueType>
-class JUCE_API Line;
+class YUP_API Line;
 
 //==============================================================================
 /** Represents a 2D point with coordinates of a generic type.
@@ -38,7 +38,7 @@ class JUCE_API Line;
     @tparam ValueType The type of the coordinates, can be any numeric type (int, float, double, etc.).
 */
 template <class ValueType>
-class JUCE_API Point
+class YUP_API Point
 {
 public:
     //==============================================================================
@@ -687,7 +687,7 @@ public:
     */
     [[nodiscard]] constexpr bool isCollinear (const Point& other) const noexcept
     {
-        return juce_abs (crossProduct (other)) == ValueType (0);
+        return yup_abs (crossProduct (other)) == ValueType (0);
     }
 
     //==============================================================================
@@ -1271,7 +1271,7 @@ private:
     @return A reference to the output stream after the point's coordinates have been written.
 */
 template <class ValueType>
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Point<ValueType>& p)
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Point<ValueType>& p)
 {
     auto [x, y] = p;
 

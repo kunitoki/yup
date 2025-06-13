@@ -83,7 +83,7 @@ function (yup_standalone_app)
 
     # ==== Enable profiling
     if (YUP_ENABLE_PROFILING AND NOT "${target_name}" STREQUAL "yup_tests")
-        list (APPEND additional_definitions JUCE_ENABLE_PROFILING=1 YUP_ENABLE_PROFILING=1)
+        list (APPEND additional_definitions YUP_ENABLE_PROFILING=1 YUP_ENABLE_PROFILING=1)
         list (APPEND additional_libraries perfetto::perfetto)
     endif()
 
@@ -145,9 +145,6 @@ function (yup_standalone_app)
     elseif (YUP_PLATFORM_EMSCRIPTEN)
         if (NOT "${target_console}")
             set_target_properties (${target_name} PROPERTIES SUFFIX ".html")
-
-            list (APPEND additional_options -sUSE_SDL=2)
-            list (APPEND additional_link_options -sUSE_SDL=2 -sMAX_WEBGL_VERSION=2)
         endif()
 
         _yup_set_default (YUP_ARG_CUSTOM_SHELL "${CMAKE_SOURCE_DIR}/cmake/platforms/${YUP_PLATFORM}/shell.html")
@@ -210,8 +207,8 @@ function (yup_standalone_app)
 
     target_compile_definitions (${target_name} PRIVATE
         $<IF:$<CONFIG:Debug>,DEBUG=1,NDEBUG=1>
-        JUCE_GLOBAL_MODULE_SETTINGS_INCLUDED=1
-        JUCE_STANDALONE_APPLICATION=1
+        YUP_GLOBAL_MODULE_SETTINGS_INCLUDED=1
+        YUP_STANDALONE_APPLICATION=1
         ${additional_definitions}
         ${YUP_ARG_DEFINITIONS})
 

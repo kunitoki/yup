@@ -37,7 +37,7 @@ class Component;
 
     @see Component
 */
-class JUCE_API ComponentNative : public ReferenceCountedObject
+class YUP_API ComponentNative : public ReferenceCountedObject
 {
     struct decoratedWindowTag;
     struct resizableWindowTag;
@@ -410,7 +410,7 @@ protected:
     Flags flags;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComponentNative)
 };
 
 } // namespace yup

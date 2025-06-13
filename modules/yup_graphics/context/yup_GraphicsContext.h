@@ -22,8 +22,6 @@
 namespace yup
 {
 
-class LowLevelRenderContext;
-
 //==============================================================================
 /** Encapsulates a graphics context that abstracts rendering operations across various APIs.
 
@@ -31,7 +29,7 @@ class LowLevelRenderContext;
     across different graphics APIs like OpenGL, Direct3D, Metal, and Dawn. It offers a standardized interface for operations
     common to all graphics APIs.
 */
-class JUCE_API GraphicsContext
+class YUP_API GraphicsContext
 {
 public:
     //==============================================================================
@@ -42,6 +40,7 @@ public:
     /** Enumerates supported graphics APIs. */
     enum Api
     {
+        Headless, ///< Specifies the use of a headless context for rendering.
         OpenGL,   ///< Specifies the use of OpenGL for rendering.
         Direct3D, ///< Specifies the use of Direct3D for rendering.
         Metal,    ///< Specifies the use of Metal for rendering.

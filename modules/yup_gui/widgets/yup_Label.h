@@ -31,7 +31,7 @@ namespace yup
 
     @see Component, StyledText
 */
-class JUCE_API Label : public Component
+class YUP_API Label : public Component
 {
 public:
     //==============================================================================
@@ -85,18 +85,10 @@ public:
 
     //==============================================================================
 
-    /** Returns the cached styled text.
-
-        @returns The cached StyledText object used for rendering
-    */
-    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
-
-    //==============================================================================
-
     struct Colors
     {
-      static const Identifier fillColorId;
-      static const Identifier strokeColorId;
+        static const Identifier fillColorId;
+        static const Identifier strokeColorId;
     };
 
     //==============================================================================
@@ -105,6 +97,9 @@ public:
     void paint (Graphics& g) override;
     /** @internal */
     void resized() override;
+
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     void prepareText();
@@ -116,7 +111,7 @@ private:
     std::optional<Font> font;
     bool needsUpdate = true;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Label)
 };
 
 } // namespace yup
