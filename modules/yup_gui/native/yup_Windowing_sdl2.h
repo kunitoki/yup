@@ -169,6 +169,7 @@ private:
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
     std::optional<Point<float>> lastMouseDownPosition;
     std::optional<yup::Time> lastMouseDownTime;
+    std::optional<yup::Time> lastMouseUpTime;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;

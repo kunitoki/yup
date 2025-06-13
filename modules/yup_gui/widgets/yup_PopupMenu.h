@@ -23,14 +23,12 @@ namespace yup
 {
 
 //==============================================================================
-class PopupMenu;
-
 /**
     A popup menu that can display a list of items.
 
     This class supports both native system menus and custom rendered menus.
 */
-class JUCE_API PopupMenu : public ReferenceCountedObject
+class YUP_API PopupMenu : public ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -172,7 +170,7 @@ private:
 
     void showCustom (const Options& options, std::function<void (int)> callback);
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };
 
 } // namespace yup

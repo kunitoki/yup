@@ -94,7 +94,7 @@ public:
     std::optional<Color> textColor;
 
 private:
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenuItem)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenuItem)
 };
 
 //==============================================================================
@@ -285,25 +285,21 @@ private:
 
     void positionMenu()
     {
-        Rectangle<float> bounds;
+        Point<float> position;
 
         if (options.parentComponent)
         {
-            auto parentBounds = options.parentComponent->getBoundsRelativeToTopLevelComponent();
+            position = options.parentComponent->getBoundsRelativeToTopLevelComponent().getBottomLeft();
 
             if (auto native = options.parentComponent->getNativeComponent())
-                parentBounds = native->getBounds();
-
-            bounds.setTopLeft ({ parentBounds.getX() + options.targetScreenPosition.getX(),
-                                 parentBounds.getY() + options.targetScreenPosition.getY() });
+                position.translate (native->getPosition());
         }
         else
         {
-            bounds.setTopLeft (options.targetScreenPosition);
+            position = options.targetScreenPosition;
         }
 
-        bounds.setSize (getWidth(), getHeight());
-        setBounds (bounds.roundToInt());
+        setTopLeft (position.roundToInt());
     }
 
     int getItemIndexAt (Point<float> position) const
@@ -313,6 +309,7 @@ private:
             if (itemRects[i].contains (position))
                 return i;
         }
+
         return -1;
     }
 
@@ -357,7 +354,10 @@ private:
 
                 {
                     auto styledText = yup::StyledText();
-                    styledText.appendText (item.text, itemFont);
+                    {
+                        auto modifier = styledText.startUpdate();
+                        modifier.appendText (item.text, itemFont);
+                    }
                     g.fillFittedText (styledText, textRect);
                 }
 
@@ -378,8 +378,11 @@ private:
                     g.setOpacity (0.7f);
 
                     auto styledText = yup::StyledText();
-                    styledText.setHorizontalAlign (yup::StyledText::right);
-                    styledText.appendText (item.shortcutKeyText, itemFont);
+                    {
+                        auto modifier = styledText.startUpdate();
+                        modifier.setHorizontalAlign (yup::StyledText::right);
+                        modifier.appendText (item.shortcutKeyText, itemFont);
+                    }
                     g.fillFittedText (styledText, shortcutRect);
 
                     g.setOpacity (1.0f);
@@ -404,7 +407,7 @@ private:
     int hoveredItemIndex = -1;
     std::vector<Rectangle<float>> itemRects;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MenuWindow)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MenuWindow)
 };
 
 //==============================================================================

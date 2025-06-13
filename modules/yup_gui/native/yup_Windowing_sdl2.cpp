@@ -359,18 +359,31 @@ float SDL2ComponentNative::getOpacity() const
 
 void SDL2ComponentNative::setFocusedComponent (Component* comp)
 {
+    auto compBailOut = Component::BailOutChecker (comp);
+
     if (lastComponentFocused != nullptr)
     {
+        auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
+
         lastComponentFocused->focusLost();
-        lastComponentFocused->repaint();
+
+        if (! focusBailOut.shouldBailOut())
+            lastComponentFocused->repaint();
     }
+
+    if (compBailOut.shouldBailOut())
+        return;
 
     lastComponentFocused = comp;
 
-    if (lastComponentFocused)
+    if (lastComponentFocused != nullptr)
     {
+        auto focusBailOut = Component::BailOutChecker (lastComponentFocused.get());
+
         lastComponentFocused->focusGained();
-        lastComponentFocused->repaint();
+
+        if (! focusBailOut.shouldBailOut())
+            lastComponentFocused->repaint();
     }
 
     if (window != nullptr)
@@ -763,20 +776,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
 
         event = event.withSourceComponent (lastComponentClicked);
 
-        if (lastMouseDownTime
-            && lastMouseDownPosition
-            && *lastMouseDownTime > yup::Time()
-            && currentMouseDownTime - *lastMouseDownTime < doubleClickTime)
-        {
-            event = event.withLastMouseDownPosition (*lastMouseDownPosition);
-            event = event.withLastMouseDownTime (*lastMouseDownTime);
-
-            lastComponentClicked->internalMouseDoubleClick (event.withRelativePositionTo (lastComponentClicked));
-        }
-        else
-        {
-            lastComponentClicked->internalMouseDown (event.withRelativePositionTo (lastComponentClicked));
-        }
+        lastComponentClicked->internalMouseDown (event.withRelativePositionTo (lastComponentClicked));
 
         lastMouseDownPosition = position;
         lastMouseDownTime = currentMouseDownTime;
@@ -803,9 +803,20 @@ void SDL2ComponentNative::handleMouseUp (const Point<float>& position, MouseEven
 
     if (lastComponentClicked != nullptr)
     {
+        const auto currentMouseDownTime = yup::Time::getCurrentTime();
+
         event = event.withSourceComponent (lastComponentClicked);
 
+        if (lastMouseUpTime
+            && *lastMouseUpTime > yup::Time()
+            && currentMouseDownTime - *lastMouseUpTime < doubleClickTime)
+        {
+            lastComponentClicked->internalMouseDoubleClick (event.withRelativePositionTo (lastComponentClicked));
+        }
+
         lastComponentClicked->internalMouseUp (event.withRelativePositionTo (lastComponentClicked));
+
+        lastMouseUpTime = currentMouseDownTime;
     }
 
     if (currentMouseButtons == MouseEvent::noButtons)

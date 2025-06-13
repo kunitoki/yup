@@ -33,7 +33,7 @@
 #include "examples/VariableFonts.h"
 #include "examples/TextEditor.h"
 #include "examples/Paths.h"
-#include "examples/PopupMenuDemo.h"
+#include "examples/PopupMenu.h"
 
 //==============================================================================
 

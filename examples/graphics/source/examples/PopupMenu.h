@@ -83,18 +83,15 @@ public:
 
     void paint (yup::Graphics& g) override
     {
-        auto area = getLocalBounds().reduced (20);
+        auto area = getLocalBounds().reduced (5);
 
-        g.setFillColor (yup::Color (0xff1e1e1e));
-        g.fillAll();
-
-        g.setStrokeColor (yup::Color (0xff555555));
-        g.setStrokeWidth (1.0f);
-        g.strokeRect (getLocalBounds().to<float>().reduced (2.0f));
+        auto styledText = yup::StyledText();
+        {
+            auto modifier = styledText.startUpdate();
+            modifier.appendText ("PopupMenu Demo", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
+        }
 
         g.setFillColor (yup::Color (0xffffffff));
-        auto styledText = yup::StyledText();
-        styledText.appendText ("PopupMenu Demo", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
         g.fillFittedText (styledText, area.removeFromTop (20).to<float>());
     }
 
@@ -207,6 +204,7 @@ private:
         auto button = std::make_unique<yup::TextButton> ("CustomButton");
         button->setSize ({ 120, 30 });
         button->setTitle ("Custom Button");
+        button->onClick = [] { YUP_DBG("Clicked!"); };
         menu->addCustomItem (std::move (button), customButton);
 
         menu->addSeparator();
