@@ -123,7 +123,7 @@ public:
         for (std::size_t i = 1; i < renderData.size(); ++i)
             path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
-        filledPath = path.createStrokePolygon(4.0f);
+        filledPath = path.createStrokePolygon (4.0f);
 
         g.setFillColor (lineColor);
         g.setFeather (8.0f);
