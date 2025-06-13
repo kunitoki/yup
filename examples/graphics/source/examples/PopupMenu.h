@@ -204,7 +204,10 @@ private:
         auto button = std::make_unique<yup::TextButton> ("CustomButton");
         button->setSize ({ 120, 30 });
         button->setTitle ("Custom Button");
-        button->onClick = [] { YUP_DBG("Clicked!"); };
+        button->onClick = []
+        {
+            YUP_DBG ("Clicked!");
+        };
         menu->addCustomItem (std::move (button), customButton);
 
         menu->addSeparator();
