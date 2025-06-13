@@ -52,6 +52,12 @@ inline uint32 readUnalignedLittleEndianInt (const void* buffer)
     return ByteOrder::littleEndianInt (&data);
 }
 
+inline int64 readUnalignedLittleEndianInt64 (const void* buffer)
+{
+    auto data = readUnaligned<int64> (buffer);
+    return ByteOrder::littleEndianInt64 (&data);
+}
+
 struct ZipFile::ZipEntryHolder
 {
     ZipEntryHolder (const char* buffer, int fileNameLen)
@@ -68,6 +74,57 @@ struct ZipFile::ZipEntryHolder
         entry.isSymbolicLink = (fileType == 0xA);
 
         entry.filename = String::fromUTF8 (buffer + 46, fileNameLen);
+
+        // Check if any fields have zip64 marker values
+        bool needsZip64 = false;
+        if (entry.uncompressedSize == 0xFFFFFFFF || compressedSize == 0xFFFFFFFF || streamOffset == 0xFFFFFFFF)
+            needsZip64 = true;
+
+        // Read zip64 extra field if present
+        auto const extraFieldLength = readUnalignedLittleEndianShort (buffer + 30);
+        if (extraFieldLength != 0 && needsZip64)
+        {
+            auto extraFieldOffset = 0;
+            auto* extraHeaderPtr = buffer + 46 + fileNameLen;
+            auto* extraSectionPtr = extraHeaderPtr;
+
+            while (extraFieldOffset < extraFieldLength)
+            {
+                auto extraHeaderTag = readUnalignedLittleEndianShort (extraSectionPtr);
+                auto extraFieldSectionLength = readUnalignedLittleEndianShort (extraSectionPtr + 2);
+
+                if (extraHeaderTag == 0x0001) // Zip64 Tag
+                {
+                    auto* dataPtr = extraSectionPtr + 4;
+                    int dataOffset = 0;
+
+                    // Fields are present in the following order, only if the corresponding field
+                    // in the original header is 0xFFFFFFFF
+                    if (entry.uncompressedSize == 0xFFFFFFFF && dataOffset + 8 <= extraFieldSectionLength)
+                    {
+                        entry.uncompressedSize = readUnalignedLittleEndianInt64 (dataPtr + dataOffset);
+                        dataOffset += 8;
+                    }
+
+                    if (compressedSize == 0xFFFFFFFF && dataOffset + 8 <= extraFieldSectionLength)
+                    {
+                        compressedSize = readUnalignedLittleEndianInt64 (dataPtr + dataOffset);
+                        dataOffset += 8;
+                    }
+
+                    if (streamOffset == 0xFFFFFFFF && dataOffset + 8 <= extraFieldSectionLength)
+                    {
+                        streamOffset = readUnalignedLittleEndianInt64 (dataPtr + dataOffset);
+                        dataOffset += 8;
+                    }
+
+                    break; // Found zip64 extra field, no need to continue
+                }
+
+                extraFieldOffset += extraFieldSectionLength + 4;
+                extraSectionPtr = extraHeaderPtr + extraFieldOffset;
+            }
+        }
     }
 
     static Time parseFileTime (uint32 time, uint32 date) noexcept
@@ -108,31 +165,80 @@ static int64 findCentralDirectoryFileHeader (InputStream& input, int& numEntries
 
         for (int i = 0; i < 22; ++i)
         {
-            if (readUnalignedLittleEndianInt (buffer + i) == 0x06054b50)
+            if (readUnalignedLittleEndianInt (buffer + i) != 0x06054b50)
+                continue;
+
+            in.setPosition (pos + i);
+            in.read (buffer, 22);
+
+            int64 offset = 0;
+            auto numEntriesInThisDisk = readUnalignedLittleEndianShort (buffer + 8);
+            auto totalNumEntries = readUnalignedLittleEndianShort (buffer + 10);
+            auto centralDirSize = readUnalignedLittleEndianInt (buffer + 12);
+            auto centralDirOffset = readUnalignedLittleEndianInt (buffer + 16);
+
+            // Check if this is a zip64 archive
+            if (numEntriesInThisDisk == 0xFFFF
+                || totalNumEntries == 0xFFFF
+                || centralDirSize == 0xFFFFFFFF
+                || centralDirOffset == 0xFFFFFFFF)
             {
-                in.setPosition (pos + i);
-                in.read (buffer, 22);
-                numEntries = readUnalignedLittleEndianShort (buffer + 10);
-                auto offset = (int64) readUnalignedLittleEndianInt (buffer + 16);
+                // Look for Zip64 end of central directory locator: it should be 20 bytes before the EOCD
+                auto locatorPos = pos + i - 20;
+                if (locatorPos < 0)
+                    continue;
 
-                if (offset >= 4)
-                {
-                    in.setPosition (offset);
+                in.setPosition (locatorPos);
+                char locatorBuffer[20];
+                if (in.read (locatorBuffer, 20) != 20)
+                    continue;
 
-                    // This is a workaround for some zip files which seem to contain the
-                    // wrong offset for the central directory - instead of including the
-                    // header, they point to the byte immediately after it.
-                    if (in.readInt() != 0x02014b50)
-                    {
-                        in.setPosition (offset - 4);
+                if (readUnalignedLittleEndianInt (locatorBuffer) != 0x07064b50)
+                    continue;
 
-                        if (in.readInt() == 0x02014b50)
-                            offset -= 4;
-                    }
-                }
+                // Found zip64 locator
+                auto zip64EndCDOffset = readUnalignedLittleEndianInt64 (locatorBuffer + 8);
 
-                return offset;
+                // Read Zip64 end of central directory record
+                in.setPosition (zip64EndCDOffset);
+                char zip64Header[56]; // Minimum size for zip64 EOCD
+                if (in.read (zip64Header, 56) != 56)
+                    continue;
+
+                if (readUnalignedLittleEndianInt (zip64Header) != 0x06064b50)
+                    continue;
+
+                // This is a valid zip64 end of central directory record
+                auto zip64TotalEntries = readUnalignedLittleEndianInt64 (zip64Header + 32);
+                auto zip64CentralDirOffset = readUnalignedLittleEndianInt64 (zip64Header + 48);
+
+                numEntries = (int) zip64TotalEntries;
+                offset = zip64CentralDirOffset;
             }
+            else
+            {
+                // Standard zip file (not zip64)
+                numEntries = totalNumEntries;
+                offset = (int64) centralDirOffset;
+            }
+
+            if (offset >= 4)
+            {
+                in.setPosition (offset);
+
+                // This is a workaround for some zip files which seem to contain the
+                // wrong offset for the central directory - instead of including the
+                // header, they point to the byte immediately after it.
+                if (in.readInt() != 0x02014b50)
+                {
+                    in.setPosition (offset - 4);
+
+                    if (in.readInt() == 0x02014b50)
+                        offset -= 4;
+                }
+            }
+
+            return offset;
         }
     }
 
