@@ -167,6 +167,9 @@ Path& Path::addLine (const Line<float>& line)
 
 Path& Path::addRectangle (float x, float y, float width, float height)
 {
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
     reserveSpace (size() + 5);
 
     moveTo (x, y);
@@ -187,23 +190,42 @@ Path& Path::addRectangle (const Rectangle<float>& rect)
 
 Path& Path::addRoundedRectangle (float x, float y, float width, float height, float radiusTopLeft, float radiusTopRight, float radiusBottomLeft, float radiusBottomRight)
 {
-    reserveSpace (size() + 10);
+    reserveSpace (size() + 9);
 
-    radiusTopLeft = jmin (radiusTopLeft, jmin (width / 2.0f, height / 2.0f));
-    radiusTopRight = jmin (radiusTopRight, jmin (width / 2.0f, height / 2.0f));
-    radiusBottomLeft = jmin (radiusBottomLeft, jmin (width / 2.0f, height / 2.0f));
-    radiusBottomRight = jmin (radiusBottomRight, jmin (width / 2.0f, height / 2.0f));
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
+    const float centerWidth = width * 0.5f;
+    const float centerHeight = height * 0.5f;
+    radiusTopLeft = jmin (radiusTopLeft, centerWidth, centerHeight);
+    radiusTopRight = jmin (radiusTopRight, centerWidth, centerHeight);
+    radiusBottomLeft = jmin (radiusBottomLeft, centerWidth, centerHeight);
+    radiusBottomRight = jmin (radiusBottomRight, centerWidth, centerHeight);
+
+    // Use the mathematically correct constant for circular arc approximation with cubic Bezier curves
+    // This is 4/3 * tan(pi/8) ≈ 0.5522847498f
+    constexpr float kappa = 0.5522847498f;
 
     moveTo (x + radiusTopLeft, y);
     lineTo (x + width - radiusTopRight, y);
-    cubicTo (x + width - radiusTopRight * 0.55f, y, x + width, y + radiusTopRight * 0.45f, x + width, y + radiusTopRight);
+
+    // Top-right corner
+    cubicTo (x + width - radiusTopRight + radiusTopRight * kappa, y, x + width, y + radiusTopRight - radiusTopRight * kappa, x + width, y + radiusTopRight);
+
     lineTo (x + width, y + height - radiusBottomRight);
-    cubicTo (x + width, y + height - radiusBottomRight * 0.55f, x + width - radiusBottomRight * 0.55f, y + height, x + width - radiusBottomRight, y + height);
+
+    // Bottom-right corner
+    cubicTo (x + width, y + height - radiusBottomRight + radiusBottomRight * kappa, x + width - radiusBottomRight + radiusBottomRight * kappa, y + height, x + width - radiusBottomRight, y + height);
+
     lineTo (x + radiusBottomLeft, y + height);
-    cubicTo (x + radiusBottomLeft * 0.55f, y + height, x, y + height - radiusBottomLeft * 0.55f, x, y + height - radiusBottomLeft);
+
+    // Bottom-left corner
+    cubicTo (x + radiusBottomLeft - radiusBottomLeft * kappa, y + height, x, y + height - radiusBottomLeft + radiusBottomLeft * kappa, x, y + height - radiusBottomLeft);
+
     lineTo (x, y + radiusTopLeft);
-    cubicTo (x, y + radiusTopLeft * 0.55f, x + radiusTopLeft * 0.55f, y, x + radiusTopLeft, y);
-    lineTo (x + radiusTopLeft, y);
+
+    // Top-left corner
+    cubicTo (x, y + radiusTopLeft - radiusTopLeft * kappa, x + radiusTopLeft - radiusTopLeft * kappa, y, x + radiusTopLeft, y);
 
     return *this;
 }
@@ -229,12 +251,15 @@ Path& Path::addEllipse (float x, float y, float width, float height)
 {
     reserveSpace (size() + 6);
 
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
     const float rx = width * 0.5f;
     const float ry = height * 0.5f;
     const float cx = x + rx;
     const float cy = y + ry;
-    const float dx = rx * 0.5522847498;
-    const float dy = ry * 0.5522847498;
+    const float dx = rx * 0.5522847498f;
+    const float dy = ry * 0.5522847498f;
 
     moveTo (cx + rx, cy);
     cubicTo (cx + rx, cy - dy, cx + dx, cy - ry, cx, cy - ry);
@@ -257,12 +282,15 @@ Path& Path::addCenteredEllipse (float centerX, float centerY, float radiusX, flo
 {
     reserveSpace (size() + 6);
 
+    radiusX = jmax (0.0f, radiusX);
+    radiusY = jmax (0.0f, radiusY);
+
     const float rx = radiusX;
     const float ry = radiusY;
     const float cx = centerX;
     const float cy = centerY;
-    const float dx = rx * 0.5522847498;
-    const float dy = ry * 0.5522847498;
+    const float dx = rx * 0.5522847498f;
+    const float dy = ry * 0.5522847498f;
 
     moveTo (cx + rx, cy);
     cubicTo (cx + rx, cy - dy, cx + dx, cy - ry, cx, cy - ry);
@@ -288,6 +316,9 @@ Path& Path::addCenteredEllipse (const Point<float>& center, const Size<float>& d
 
 Path& Path::addArc (float x, float y, float width, float height, float fromRadians, float toRadians, bool startAsNewSubPath)
 {
+    width = jmax (0.0f, width);
+    height = jmax (0.0f, height);
+
     const float radiusX = width * 0.5f;
     const float radiusY = height * 0.5f;
 
@@ -313,6 +344,9 @@ Path& Path::addCenteredArc (float centerX, float centerY, float radiusX, float r
     const float sinTheta = std::sin (rotationOfEllipse);
 
     // Initialize variables for the loop
+    radiusX = jmax (0.0f, radiusX);
+    radiusY = jmax (0.0f, radiusY);
+
     float x = std::cos (fromRadians) * radiusX;
     float y = std::sin (fromRadians) * radiusY;
     float rotatedX = x * cosTheta - y * sinTheta + centerX;
@@ -353,6 +387,258 @@ Path& Path::addCenteredArc (const Point<float>& center, const Size<float>& diame
 }
 
 //==============================================================================
+Path& Path::addPolygon (Point<float> centre, int numberOfSides, float radius, float startAngle)
+{
+    if (numberOfSides < 3)
+        return *this;
+
+    reserveSpace (size() + numberOfSides + 1);
+
+    const float angleIncrement = MathConstants<float>::twoPi / numberOfSides;
+    radius = jmax (0.0f, radius);
+
+    // Start with the first vertex
+    float angle = startAngle;
+    float x = centre.getX() + radius * std::cos (angle);
+    float y = centre.getY() + radius * std::sin (angle);
+
+    moveTo (x, y);
+
+    // Add remaining vertices
+    for (int i = 1; i < numberOfSides; ++i)
+    {
+        angle += angleIncrement;
+        x = centre.getX() + radius * std::cos (angle);
+        y = centre.getY() + radius * std::sin (angle);
+        lineTo (x, y);
+    }
+
+    close();
+
+    return *this;
+}
+
+//==============================================================================
+Path& Path::addStar (Point<float> centre, int numberOfPoints, float innerRadius, float outerRadius, float startAngle)
+{
+    if (numberOfPoints < 3)
+        return *this;
+
+    reserveSpace (size() + numberOfPoints * 2 + 1);
+
+    const float angleIncrement = MathConstants<float>::twoPi / (numberOfPoints * 2);
+    innerRadius = jmax (0.0f, innerRadius);
+    outerRadius = jmax (0.0f, outerRadius);
+
+    // Start with the first outer vertex
+    float angle = startAngle;
+    float x = centre.getX() + outerRadius * std::cos (angle);
+    float y = centre.getY() + outerRadius * std::sin (angle);
+
+    moveTo (x, y);
+
+    // Alternate between inner and outer vertices
+    for (int i = 1; i < numberOfPoints * 2; ++i)
+    {
+        angle += angleIncrement;
+        float currentRadius = (i % 2 == 0) ? outerRadius : innerRadius;
+        x = centre.getX() + currentRadius * std::cos (angle);
+        y = centre.getY() + currentRadius * std::sin (angle);
+        lineTo (x, y);
+    }
+
+    close();
+
+    return *this;
+}
+
+//==============================================================================
+Path& Path::addBubble (Rectangle<float> bodyArea, Rectangle<float> maximumArea, Point<float> arrowTipPosition, float cornerSize, float arrowBaseWidth)
+{
+    if (bodyArea.isEmpty() || maximumArea.isEmpty() || arrowBaseWidth <= 0.0f)
+        return *this;
+
+    // Clamp corner size to reasonable bounds
+    cornerSize = jmin (cornerSize, bodyArea.getWidth() * 0.5f, bodyArea.getHeight() * 0.5f);
+
+    // Check if arrow tip is inside the body area - if so, draw no arrow
+    if (bodyArea.contains (arrowTipPosition))
+    {
+        // Just draw a rounded rectangle
+        addRoundedRectangle (bodyArea, cornerSize);
+        return *this;
+    }
+
+    // Determine which side the arrow should be on based on tip position relative to rectangle
+    enum ArrowSide
+    {
+        Left,
+        Right,
+        Top,
+        Bottom
+    } arrowSide;
+
+    Point<float> arrowBase1, arrowBase2;
+
+    // Get rectangle center for direction calculation
+    Point<float> rectCenter = bodyArea.getCenter();
+
+    // Calculate relative position of arrow tip
+    float deltaX = arrowTipPosition.getX() - rectCenter.getX();
+    float deltaY = arrowTipPosition.getY() - rectCenter.getY();
+
+    // Determine primary direction - use the larger absolute offset
+    if (std::abs (deltaX) > std::abs (deltaY))
+    {
+        // Horizontal direction is dominant
+        if (deltaX < 0)
+        {
+            // Arrow tip is to the left of rectangle center
+            arrowSide = Left;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minY = bodyArea.getY() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxY = bodyArea.getBottom() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowY = jlimit (minY, maxY, arrowTipPosition.getY());
+            // For left edge (going bottom to top in clockwise direction)
+            arrowBase1 = Point<float> (bodyArea.getX(), arrowY + arrowBaseWidth * 0.5f); // bottom base point
+            arrowBase2 = Point<float> (bodyArea.getX(), arrowY - arrowBaseWidth * 0.5f); // top base point
+        }
+        else
+        {
+            // Arrow tip is to the right of rectangle center
+            arrowSide = Right;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minY = bodyArea.getY() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxY = bodyArea.getBottom() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowY = jlimit (minY, maxY, arrowTipPosition.getY());
+            // For right edge (going top to bottom in clockwise direction)
+            arrowBase1 = Point<float> (bodyArea.getRight(), arrowY - arrowBaseWidth * 0.5f); // top base point
+            arrowBase2 = Point<float> (bodyArea.getRight(), arrowY + arrowBaseWidth * 0.5f); // bottom base point
+        }
+    }
+    else
+    {
+        // Vertical direction is dominant
+        if (deltaY < 0)
+        {
+            // Arrow tip is above rectangle center
+            arrowSide = Top;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minX = bodyArea.getX() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxX = bodyArea.getRight() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowX = jlimit (minX, maxX, arrowTipPosition.getX());
+            // For top edge (going left to right in clockwise direction)
+            arrowBase1 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getY()); // left base point
+            arrowBase2 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getY()); // right base point
+        }
+        else
+        {
+            // Arrow tip is below rectangle center
+            arrowSide = Bottom;
+            // Ensure arrow base doesn't overlap with corner radius
+            float minX = bodyArea.getX() + cornerSize + arrowBaseWidth * 0.5f;
+            float maxX = bodyArea.getRight() - cornerSize - arrowBaseWidth * 0.5f;
+            float arrowX = jlimit (minX, maxX, arrowTipPosition.getX());
+            // For bottom edge (going right to left in clockwise direction)
+            arrowBase1 = Point<float> (arrowX + arrowBaseWidth * 0.5f, bodyArea.getBottom()); // right base point
+            arrowBase2 = Point<float> (arrowX - arrowBaseWidth * 0.5f, bodyArea.getBottom()); // left base point
+        }
+    }
+
+    // Use the mathematically correct constant for circular arc approximation with cubic Bezier curves
+    constexpr float kappa = 0.5522847498f;
+
+    float x = bodyArea.getX();
+    float y = bodyArea.getY();
+    float width = bodyArea.getWidth();
+    float height = bodyArea.getHeight();
+
+    // Start drawing the integrated path clockwise from top-left
+    moveTo (x + cornerSize, y);
+
+    // Top edge(left to right)
+    if (arrowSide == Top)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x + width - cornerSize, y);
+    }
+    else
+    {
+        lineTo (x + width - cornerSize, y);
+    }
+
+    // Top-right corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x + width - cornerSize + cornerSize * kappa, y, x + width, y + cornerSize - cornerSize * kappa, x + width, y + cornerSize);
+    }
+
+    // Right edge (top to bottom)
+    if (arrowSide == Right)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x + width, y + height - cornerSize);
+    }
+    else
+    {
+        lineTo (x + width, y + height - cornerSize);
+    }
+
+    // Bottom-right corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x + width, y + height - cornerSize + cornerSize * kappa, x + width - cornerSize + cornerSize * kappa, y + height, x + width - cornerSize, y + height);
+    }
+
+    // Bottom edge (right to left)
+    if (arrowSide == Bottom)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x + cornerSize, y + height);
+    }
+    else
+    {
+        lineTo (x + cornerSize, y + height);
+    }
+
+    // Bottom-left corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x + cornerSize - cornerSize * kappa, y + height, x, y + height - cornerSize + cornerSize * kappa, x, y + height - cornerSize);
+    }
+
+    // Left edge (bottom to top)
+    if (arrowSide == Left)
+    {
+        lineTo (arrowBase1.getX(), arrowBase1.getY());
+        lineTo (arrowTipPosition.getX(), arrowTipPosition.getY());
+        lineTo (arrowBase2.getX(), arrowBase2.getY());
+        lineTo (x, y + cornerSize);
+    }
+    else
+    {
+        lineTo (x, y + cornerSize);
+    }
+
+    // Top-left corner
+    if (cornerSize > 0.0f)
+    {
+        cubicTo (x, y + cornerSize - cornerSize * kappa, x + cornerSize - cornerSize * kappa, y, x + cornerSize, y);
+    }
+
+    // Close the path
+    close();
+
+    return *this;
+}
+
+//==============================================================================
 Path& Path::appendPath (const Path& other)
 {
     path->addRenderPath (other.getRenderPath(), rive::Mat2D());
@@ -378,6 +664,12 @@ void Path::appendPath (rive::rcp<rive::RiveRenderPath> other, const AffineTransf
 }
 
 //==============================================================================
+void Path::swapWithPath (Path& other) noexcept
+{
+    path.swap (other.path);
+}
+
+//==============================================================================
 Path& Path::transform (const AffineTransform& t)
 {
     auto newPath = rive::make_rcp<rive::RiveRenderPath>();
@@ -394,12 +686,48 @@ Path Path::transformed (const AffineTransform& t) const
 }
 
 //==============================================================================
-Rectangle<float> Path::getBoundingBox() const
+Rectangle<float> Path::getBounds() const
 {
     const auto& aabb = path->getBounds();
     return { aabb.left(), aabb.top(), aabb.width(), aabb.height() };
 }
 
+Rectangle<float> Path::getBoundsTransformed (const AffineTransform& transform) const
+{
+    return getBounds().transformed (transform);
+}
+
+//==============================================================================
+void Path::scaleToFit (float x, float y, float width, float height, bool preserveProportions) noexcept
+{
+    if (width <= 0.0f || height <= 0.0f)
+        return;
+
+    Rectangle<float> currentBounds = getBounds();
+
+    if (currentBounds.isEmpty())
+        return;
+
+    float scaleX = width / currentBounds.getWidth();
+    float scaleY = height / currentBounds.getHeight();
+
+    if (preserveProportions)
+    {
+        float scale = jmin (scaleX, scaleY);
+        scaleX = scaleY = scale;
+    }
+
+    // Calculate translation to move to target position
+    float translateX = x - currentBounds.getX() * scaleX;
+    float translateY = y - currentBounds.getY() * scaleY;
+
+    // Apply the transformation
+    AffineTransform transform = AffineTransform::scaling (scaleX, scaleY).translated (translateX, translateY);
+
+    *this = transformed (transform);
+}
+
+//==============================================================================
 rive::RiveRenderPath* Path::getRenderPath() const
 {
     return path.get();
@@ -866,7 +1194,7 @@ bool Path::parsePathData (const String& pathData)
 
     while (! data.isEmpty())
     {
-        juce_wchar command = *data;
+        yup_wchar command = *data;
 
         data++;
 
@@ -942,6 +1270,566 @@ bool Path::parsePathData (const String& pathData)
     }
 
     return true;
+}
+
+//==============================================================================
+Point<float> Path::getPointAlongPath (float distance) const
+{
+    // Clamp distance to valid range
+    distance = jlimit (0.0f, 1.0f, distance);
+
+    const auto& rawPath = path->getRawPath();
+    const auto& points = rawPath.points();
+    const auto& verbs = rawPath.verbs();
+
+    if (points.empty() || verbs.empty())
+        return Point<float> (0.0f, 0.0f);
+
+    // Calculate total path length by walking through all segments
+    float totalLength = 0.0f;
+    std::vector<float> segmentLengths;
+    segmentLengths.resize (verbs.size());
+    Point<float> currentPoint (0.0f, 0.0f);
+    Point<float> lastMovePoint (0.0f, 0.0f);
+
+    for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
+    {
+        auto verb = verbs[i];
+
+        switch (verb)
+        {
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    pointIndex++;
+                }
+                segmentLengths.push_back (0.0f);
+                break;
+
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
+                    float segmentLength = currentPoint.distanceTo (nextPoint);
+                    segmentLengths.push_back (segmentLength);
+                    totalLength += segmentLength;
+                    currentPoint = nextPoint;
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::quad:
+                if (pointIndex + 1 < points.size())
+                {
+                    Point<float> control (points[pointIndex].x, points[pointIndex].y);
+                    Point<float> end (points[pointIndex + 1].x, points[pointIndex + 1].y);
+
+                    // Approximate quadratic curve length using control polygon
+                    float segmentLength = currentPoint.distanceTo (control) + control.distanceTo (end);
+                    segmentLengths.push_back (segmentLength * 0.8f); // Approximation factor
+                    totalLength += segmentLength * 0.8f;
+                    currentPoint = end;
+                    pointIndex += 2;
+                }
+                break;
+
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    Point<float> control1 (points[pointIndex].x, points[pointIndex].y);
+                    Point<float> control2 (points[pointIndex + 1].x, points[pointIndex + 1].y);
+                    Point<float> end (points[pointIndex + 2].x, points[pointIndex + 2].y);
+
+                    // Approximate cubic curve length using control polygon
+                    float segmentLength = currentPoint.distanceTo (control1) + control1.distanceTo (control2) + control2.distanceTo (end);
+                    segmentLengths.push_back (segmentLength * 0.75f); // Approximation factor
+                    totalLength += segmentLength * 0.75f;
+                    currentPoint = end;
+                    pointIndex += 3;
+                }
+                break;
+
+            case rive::PathVerb::close:
+            {
+                float segmentLength = currentPoint.distanceTo (lastMovePoint);
+                segmentLengths.push_back (segmentLength);
+                totalLength += segmentLength;
+                currentPoint = lastMovePoint;
+            }
+            break;
+        }
+    }
+
+    if (totalLength == 0.0f)
+        return Point<float> (0.0f, 0.0f);
+
+    // Find the segment containing the target distance
+    float targetDistance = distance * totalLength;
+    float accumulatedLength = 0.0f;
+
+    currentPoint = Point<float> (0.0f, 0.0f);
+    lastMovePoint = Point<float> (0.0f, 0.0f);
+
+    for (size_t i = 0, pointIndex = 0; i < verbs.size() && i < segmentLengths.size(); ++i)
+    {
+        auto verb = verbs[i];
+        float segmentLength = segmentLengths[i];
+
+        if (accumulatedLength + segmentLength >= targetDistance)
+        {
+            // Found the segment, interpolate within it
+            float segmentProgress = segmentLength > 0.0f ? (targetDistance - accumulatedLength) / segmentLength : 0.0f;
+
+            switch (verb)
+            {
+                case rive::PathVerb::move:
+                    if (pointIndex < points.size())
+                        return Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    break;
+
+                case rive::PathVerb::line:
+                    if (pointIndex < points.size())
+                    {
+                        Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
+                        return currentPoint.pointBetween (nextPoint, segmentProgress);
+                    }
+                    break;
+
+                case rive::PathVerb::quad:
+                case rive::PathVerb::cubic:
+                    // For curves, approximate with linear interpolation to end point
+                    if (pointIndex < points.size())
+                    {
+                        size_t endIndex = verb == rive::PathVerb::quad ? pointIndex + 1 : pointIndex + 2;
+                        if (endIndex < points.size())
+                        {
+                            Point<float> endPoint (points[endIndex].x, points[endIndex].y);
+                            return currentPoint.pointBetween (endPoint, segmentProgress);
+                        }
+                    }
+                    break;
+
+                case rive::PathVerb::close:
+                    return currentPoint.pointBetween (lastMovePoint, segmentProgress);
+            }
+        }
+
+        accumulatedLength += segmentLength;
+
+        // Update current point based on verb
+        switch (verb)
+        {
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::quad:
+                if (pointIndex + 1 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
+                    pointIndex += 2;
+                }
+                break;
+
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
+                    pointIndex += 3;
+                }
+                break;
+
+            case rive::PathVerb::close:
+                currentPoint = lastMovePoint;
+                break;
+        }
+    }
+
+    // If we reach here, return the last point
+    return currentPoint;
+}
+
+//==============================================================================
+Path Path::createStrokePolygon (float strokeWidth) const
+{
+    // For now, create a simple approximation by offsetting the path
+    // This is a basic implementation - a more sophisticated version would
+    // properly handle joins, caps, and curves
+
+    const auto& rawPath = path->getRawPath();
+    const auto& points = rawPath.points();
+    const auto& verbs = rawPath.verbs();
+
+    if (points.empty() || verbs.empty())
+        return Path();
+
+    Path strokePath;
+    float halfWidth = strokeWidth * 0.5f;
+
+    // Simple approach: for each line segment, create perpendicular offsets
+    Point<float> currentPoint (0.0f, 0.0f);
+    Point<float> lastMovePoint (0.0f, 0.0f);
+
+    std::vector<Point<float>> leftSide;
+    leftSide.reserve (points.size());
+    std::vector<Point<float>> rightSide;
+    rightSide.reserve (points.size());
+
+    for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
+    {
+        auto verb = verbs[i];
+
+        switch (verb)
+        {
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    leftSide.clear();
+                    rightSide.clear();
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    Point<float> nextPoint (points[pointIndex].x, points[pointIndex].y);
+
+                    // Calculate perpendicular direction
+                    Point<float> direction = nextPoint - currentPoint;
+                    float length = direction.magnitude();
+                    if (length > 0.0f)
+                    {
+                        direction.normalize();
+                        Point<float> perpendicular (-direction.getY(), direction.getX());
+
+                        Point<float> leftOffset = perpendicular * halfWidth;
+                        Point<float> rightOffset = perpendicular * (-halfWidth);
+
+                        if (leftSide.empty())
+                        {
+                            leftSide.push_back (currentPoint + leftOffset);
+                            rightSide.push_back (currentPoint + rightOffset);
+                        }
+
+                        leftSide.push_back (nextPoint + leftOffset);
+                        rightSide.push_back (nextPoint + rightOffset);
+                    }
+
+                    currentPoint = nextPoint;
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::quad:
+            case rive::PathVerb::cubic:
+                // For curves, approximate with line segments
+                if (verb == rive::PathVerb::quad && pointIndex + 1 < points.size())
+                {
+                    Point<float> endPoint (points[pointIndex + 1].x, points[pointIndex + 1].y);
+
+                    Point<float> direction = endPoint - currentPoint;
+                    float length = direction.magnitude();
+                    if (length > 0.0f)
+                    {
+                        direction.normalize();
+                        Point<float> perpendicular (-direction.getY(), direction.getX());
+
+                        Point<float> leftOffset = perpendicular * halfWidth;
+                        Point<float> rightOffset = perpendicular * (-halfWidth);
+
+                        if (leftSide.empty())
+                        {
+                            leftSide.push_back (currentPoint + leftOffset);
+                            rightSide.push_back (currentPoint + rightOffset);
+                        }
+
+                        leftSide.push_back (endPoint + leftOffset);
+                        rightSide.push_back (endPoint + rightOffset);
+                    }
+
+                    currentPoint = endPoint;
+                    pointIndex += 2;
+                }
+                else if (verb == rive::PathVerb::cubic && pointIndex + 2 < points.size())
+                {
+                    Point<float> endPoint (points[pointIndex + 2].x, points[pointIndex + 2].y);
+
+                    Point<float> direction = endPoint - currentPoint;
+                    float length = direction.magnitude();
+                    if (length > 0.0f)
+                    {
+                        direction.normalize();
+                        Point<float> perpendicular (-direction.getY(), direction.getX());
+
+                        Point<float> leftOffset = perpendicular * halfWidth;
+                        Point<float> rightOffset = perpendicular * (-halfWidth);
+
+                        if (leftSide.empty())
+                        {
+                            leftSide.push_back (currentPoint + leftOffset);
+                            rightSide.push_back (currentPoint + rightOffset);
+                        }
+
+                        leftSide.push_back (endPoint + leftOffset);
+                        rightSide.push_back (endPoint + rightOffset);
+                    }
+
+                    currentPoint = endPoint;
+                    pointIndex += 3;
+                }
+                break;
+
+            case rive::PathVerb::close:
+                // Connect back to start and create the stroke polygon
+                if (! leftSide.empty() && ! rightSide.empty())
+                {
+                    // Create the stroke polygon by combining left and right sides
+                    strokePath.moveTo (leftSide[0]);
+
+                    // Add all left side points
+                    for (size_t j = 1; j < leftSide.size(); ++j)
+                        strokePath.lineTo (leftSide[j]);
+
+                    // Add all right side points in reverse order
+                    for (int j = static_cast<int> (rightSide.size()) - 1; j >= 0; --j)
+                        strokePath.lineTo (rightSide[j]);
+
+                    strokePath.close();
+                }
+
+                currentPoint = lastMovePoint;
+                leftSide.clear();
+                rightSide.clear();
+                break;
+        }
+    }
+
+    // If path wasn't closed, still create stroke polygon
+    if (! leftSide.empty() && ! rightSide.empty())
+    {
+        strokePath.moveTo (leftSide[0]);
+
+        for (size_t j = 1; j < leftSide.size(); ++j)
+            strokePath.lineTo (leftSide[j]);
+
+        for (int j = static_cast<int> (rightSide.size()) - 1; j >= 0; --j)
+            strokePath.lineTo (rightSide[j]);
+
+        strokePath.close();
+    }
+
+    return strokePath;
+}
+
+//==============================================================================
+namespace
+{
+
+void addRoundedSubpath (Path& targetPath, const std::vector<Point<float>>& points, float cornerRadius, bool closed)
+{
+    if (points.size() < 3)
+        return;
+
+    bool first = true;
+
+    for (size_t i = 0; i < points.size(); ++i)
+    {
+        size_t prevIndex = (i == 0) ? (closed ? points.size() - 1 : 0) : i - 1;
+        size_t nextIndex = (i == points.size() - 1) ? (closed ? 0 : i) : i + 1;
+
+        if (! closed && (i == 0 || i == points.size() - 1))
+        {
+            // Don't round first/last points in open paths
+            if (first)
+            {
+                targetPath.moveTo (points[i]);
+                first = false;
+            }
+            else
+            {
+                targetPath.lineTo (points[i]);
+            }
+            continue;
+        }
+
+        Point<float> current = points[i];
+        Point<float> prev = points[prevIndex];
+        Point<float> next = points[nextIndex];
+
+        // Calculate vectors
+        Point<float> toPrev = (prev - current).normalized();
+        Point<float> toNext = (next - current).normalized();
+
+        // Calculate the angle between vectors
+        float dot = toPrev.dotProduct (toNext);
+        dot = jlimit (-1.0f, 1.0f, dot); // Clamp to avoid numerical issues
+
+        if (std::abs (dot + 1.0f) < 0.001f) // Vectors are opposite (180 degrees)
+        {
+            // Straight line, no rounding needed
+            if (first)
+            {
+                targetPath.moveTo (current);
+                first = false;
+            }
+            else
+            {
+                targetPath.lineTo (current);
+            }
+            continue;
+        }
+
+        // Calculate distances to round corner
+        float prevDist = current.distanceTo (prev);
+        float nextDist = current.distanceTo (next);
+        float maxRadius = jmin (cornerRadius, prevDist * 0.5f, nextDist * 0.5f);
+
+        if (maxRadius <= 0.0f)
+        {
+            if (first)
+            {
+                targetPath.moveTo (current);
+                first = false;
+            }
+            else
+            {
+                targetPath.lineTo (current);
+            }
+            continue;
+        }
+
+        // Calculate corner points
+        Point<float> cornerStart = current + toPrev * maxRadius;
+        Point<float> cornerEnd = current + toNext * maxRadius;
+
+        if (first)
+        {
+            targetPath.moveTo (cornerStart);
+            first = false;
+        }
+        else
+        {
+            targetPath.lineTo (cornerStart);
+        }
+
+        // Add rounded corner using quadratic curve
+        targetPath.quadTo (cornerEnd.getX(), cornerEnd.getY(), current.getX(), current.getY());
+    }
+
+    if (closed)
+    {
+        targetPath.close();
+    }
+}
+
+} // namespace
+
+Path Path::withRoundedCorners (float cornerRadius) const
+{
+    if (cornerRadius <= 0.0f || path == nullptr)
+        return *this;
+
+    const auto& rawPath = path->getRawPath();
+    const auto& points = rawPath.points();
+    const auto& verbs = rawPath.verbs();
+
+    if (points.empty() || verbs.empty())
+        return Path();
+
+    Path roundedPath;
+    Point<float> currentPoint (0.0f, 0.0f);
+    Point<float> lastMovePoint (0.0f, 0.0f);
+    Point<float> previousPoint (0.0f, 0.0f);
+    bool hasPreviousPoint = false;
+
+    std::vector<Point<float>> pathPoints;
+    pathPoints.reserve (points.size());
+
+    for (size_t i = 0, pointIndex = 0; i < verbs.size(); ++i)
+    {
+        auto verb = verbs[i];
+
+        switch (verb)
+        {
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    if (! pathPoints.empty())
+                    {
+                        // Process previous subpath
+                        if (pathPoints.size() >= 3)
+                            addRoundedSubpath (roundedPath, pathPoints, cornerRadius, false);
+
+                        pathPoints.clear();
+                    }
+
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    lastMovePoint = currentPoint;
+                    pathPoints.push_back (currentPoint);
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex].x, points[pointIndex].y);
+                    pathPoints.push_back (currentPoint);
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::quad:
+                if (pointIndex + 1 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y);
+                    pathPoints.push_back (currentPoint);
+                    pointIndex += 2;
+                }
+                break;
+
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    currentPoint = Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y);
+                    pathPoints.push_back (currentPoint);
+                    pointIndex += 3;
+                }
+                break;
+
+            case rive::PathVerb::close:
+                if (pathPoints.size() >= 3)
+                    addRoundedSubpath (roundedPath, pathPoints, cornerRadius, true);
+
+                pathPoints.clear();
+                currentPoint = lastMovePoint;
+                break;
+        }
+    }
+
+    // Handle remaining subpath
+    if (pathPoints.size() >= 3)
+        addRoundedSubpath (roundedPath, pathPoints, cornerRadius, false);
+
+    return roundedPath;
 }
 
 } // namespace yup

@@ -7,15 +7,22 @@
 #include "rive/viewmodel/viewmodel_instance_value.hpp"
 #include "rive/viewmodel/viewmodel_instance_viewmodel.hpp"
 #include "rive/importers/viewmodel_importer.hpp"
+#include "rive/viewmodel/viewmodel_property_viewmodel.hpp"
 #include "rive/core_context.hpp"
+#include "rive/refcnt.hpp"
 
 using namespace rive;
 
 ViewModelInstance::~ViewModelInstance()
 {
-    for (auto value : m_PropertyValues)
+    for (auto& value : m_PropertyValues)
     {
-        delete value;
+        value->unref();
+    }
+    m_PropertyValues.clear();
+    if (m_ViewModel != nullptr)
+    {
+        m_ViewModel->unref();
     }
 }
 
@@ -36,6 +43,31 @@ ViewModelInstanceValue* ViewModelInstance::propertyValue(const uint32_t id)
     return nullptr;
 }
 
+bool ViewModelInstance::replaceViewModelByName(const std::string& name,
+                                               rcp<ViewModelInstance> value)
+{
+    auto viewModelProperty = viewModel()->property(name);
+    if (viewModelProperty != nullptr)
+    {
+        for (auto propertyValue : m_PropertyValues)
+        {
+            if (propertyValue->viewModelProperty() == viewModelProperty)
+            {
+                if (value->viewModelId() ==
+                    viewModelProperty->as<ViewModelPropertyViewModel>()
+                        ->viewModelReferenceId())
+                {
+                    propertyValue->as<ViewModelInstanceViewModel>()
+                        ->referenceViewModelInstance(value);
+                    return true;
+                }
+                break;
+            }
+        }
+    }
+    return false;
+}
+
 ViewModelInstanceValue* ViewModelInstance::propertyValue(
     const std::string& name)
 {
@@ -53,15 +85,26 @@ ViewModelInstanceValue* ViewModelInstance::propertyValue(
     return nullptr;
 }
 
-void ViewModelInstance::viewModel(ViewModel* value) { m_ViewModel = value; }
+void ViewModelInstance::viewModel(ViewModel* value)
+{
+    if (m_ViewModel != nullptr)
+    {
+        m_ViewModel->unref();
+    }
+    value->ref();
+    m_ViewModel = value;
+}
 
 ViewModel* ViewModelInstance::viewModel() const { return m_ViewModel; }
 
 void ViewModelInstance::onComponentDirty(Component* component) {}
 
-void ViewModelInstance::setAsRoot() { setRoot(this); }
+void ViewModelInstance::setAsRoot(rcp<ViewModelInstance> instance)
+{
+    setRoot(instance);
+}
 
-void ViewModelInstance::setRoot(ViewModelInstance* value)
+void ViewModelInstance::setRoot(rcp<ViewModelInstance> value)
 {
     for (auto propertyValue : m_PropertyValues)
     {
@@ -133,4 +176,16 @@ void ViewModelInstance::advanced()
     {
         value->advanced();
     }
+}
+
+ViewModelInstanceValue* ViewModelInstance::symbol(int coreType)
+{
+    for (auto& value : m_PropertyValues)
+    {
+        if (value->coreType() == coreType)
+        {
+            return value;
+        }
+    }
+    return nullptr;
 }

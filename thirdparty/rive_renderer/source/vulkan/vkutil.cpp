@@ -6,21 +6,21 @@
 
 #include "rive/rive_types.hpp"
 #include "rive/renderer/vulkan/vulkan_context.hpp"
+#include <vk_mem_alloc.h>
 
 namespace rive::gpu::vkutil
 {
-void vkutil::RenderingResource::onRefCntReachedZero() const
+Resource::Resource(rcp<VulkanContext> vk) : GPUResource(std::move(vk)) {}
+
+VulkanContext* Resource::vk() const
 {
-    // VulkanContext will hold off on deleting "this" until any in-flight
-    // command buffers have finished (potentially) referencing our underlying
-    // Vulkan objects.
-    m_vk->onRenderingResourceReleased(this);
+    return static_cast<VulkanContext*>(m_manager.get());
 }
 
 Buffer::Buffer(rcp<VulkanContext> vk,
                const VkBufferCreateInfo& info,
                Mappability mappability) :
-    RenderingResource(std::move(vk)), m_mappability(mappability), m_info(info)
+    Resource(std::move(vk)), m_mappability(mappability), m_info(info)
 {
     m_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     init();
@@ -28,7 +28,7 @@ Buffer::Buffer(rcp<VulkanContext> vk,
 
 Buffer::~Buffer() { resizeImmediately(0); }
 
-void Buffer::resizeImmediately(size_t sizeInBytes)
+void Buffer::resizeImmediately(VkDeviceSize sizeInBytes)
 {
     if (m_info.size != sizeInBytes)
     {
@@ -36,9 +36,9 @@ void Buffer::resizeImmediately(size_t sizeInBytes)
         {
             if (m_mappability != Mappability::none)
             {
-                vmaUnmapMemory(m_vk->vmaAllocator, m_vmaAllocation);
+                vmaUnmapMemory(vk()->allocator(), m_vmaAllocation);
             }
-            vmaDestroyBuffer(m_vk->vmaAllocator, m_vkBuffer, m_vmaAllocation);
+            vmaDestroyBuffer(vk()->allocator(), m_vkBuffer, m_vmaAllocation);
         }
         m_info.size = sizeInBytes;
         init();
@@ -68,7 +68,7 @@ void Buffer::init()
             .usage = VMA_MEMORY_USAGE_AUTO,
         };
 
-        VK_CHECK(vmaCreateBuffer(m_vk->vmaAllocator,
+        VK_CHECK(vmaCreateBuffer(vk()->allocator(),
                                  &m_info,
                                  &allocInfo,
                                  &m_vkBuffer,
@@ -80,7 +80,7 @@ void Buffer::init()
             // Leave the buffer constantly mapped and let the OS/drivers handle
             // the rest.
             VK_CHECK(
-                vmaMapMemory(m_vk->vmaAllocator, m_vmaAllocation, &m_contents));
+                vmaMapMemory(vk()->allocator(), m_vmaAllocation, &m_contents));
         }
         else
         {
@@ -95,88 +95,75 @@ void Buffer::init()
     }
 }
 
-void Buffer::flushContents(size_t updatedSizeInBytes)
+void Buffer::flushContents(VkDeviceSize updatedSizeInBytes)
 {
-    // Leave the buffer constantly mapped and let the OS/drivers handle the
-    // rest.
-    vmaFlushAllocation(m_vk->vmaAllocator,
+    vmaFlushAllocation(vk()->allocator(),
                        m_vmaAllocation,
                        0,
                        updatedSizeInBytes);
 }
 
-void Buffer::invalidateContents(size_t updatedSizeInBytes)
+void Buffer::invalidateContents(VkDeviceSize updatedSizeInBytes)
 {
-    vmaInvalidateAllocation(m_vk->vmaAllocator,
+    vmaInvalidateAllocation(vk()->allocator(),
                             m_vmaAllocation,
                             0,
                             updatedSizeInBytes);
 }
 
-BufferRing::BufferRing(rcp<VulkanContext> vk,
-                       VkBufferUsageFlags usage,
-                       Mappability mappability,
-                       size_t size) :
+BufferPool::BufferPool(rcp<VulkanContext> vk,
+                       VkBufferUsageFlags usageFlags,
+                       VkDeviceSize size) :
+    GPUResourcePool(std::move(vk), MAX_POOL_SIZE),
+    m_usageFlags(usageFlags),
     m_targetSize(size)
+{}
+
+inline VulkanContext* BufferPool::vk() const
 {
-    VkBufferCreateInfo bufferCreateInfo = {
-        .size = size,
-        .usage = usage,
-    };
-    for (int i = 0; i < gpu::kBufferRingSize; ++i)
-    {
-        m_buffers[i] = vk->makeBuffer(bufferCreateInfo, mappability);
-    }
+    return static_cast<VulkanContext*>(m_manager.get());
 }
 
-void BufferRing::setTargetSize(size_t size)
+void BufferPool::setTargetSize(VkDeviceSize size)
 {
     // Buffers always get bound, even if unused, so make sure they aren't empty
     // and we get a valid Vulkan handle.
-    if (m_buffers[0]->info().usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
+    size = std::max<VkDeviceSize>(size, 1);
+
+    if (m_usageFlags & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)
     {
-        size = std::max<size_t>(size, 256);
         // Uniform blocks must be multiples of 256 bytes in size.
+        size = std::max<VkDeviceSize>(size, 256);
         assert(size % 256 == 0);
     }
-    else
-    {
-        size = std::max<size_t>(size, 1);
-    }
+
     m_targetSize = size;
 }
 
-void BufferRing::synchronizeSizeAt(int bufferRingIdx)
+rcp<vkutil::Buffer> BufferPool::acquire()
 {
-    if (m_buffers[bufferRingIdx]->info().size != m_targetSize)
+    auto buffer = static_rcp_cast<vkutil::Buffer>(GPUResourcePool::acquire());
+    if (buffer == nullptr)
     {
-        m_buffers[bufferRingIdx]->resizeImmediately(m_targetSize);
+        buffer = vk()->makeBuffer(
+            {
+                .size = m_targetSize,
+                .usage = m_usageFlags,
+            },
+            Mappability::writeOnly);
     }
+    else if (buffer->info().size != m_targetSize)
+    {
+        buffer->resizeImmediately(m_targetSize);
+    }
+    return buffer;
 }
 
-void* BufferRing::contentsAt(int bufferRingIdx, size_t dirtySize)
-{
-    m_pendingFlushSize = dirtySize;
-    return m_buffers[bufferRingIdx]->contents();
-}
-
-void BufferRing::flushContentsAt(int bufferRingIdx)
-{
-    assert(m_pendingFlushSize > 0);
-    m_buffers[bufferRingIdx]->flushContents(m_pendingFlushSize);
-    m_pendingFlushSize = 0;
-}
-
-Texture::Texture(rcp<VulkanContext> vk, const VkImageCreateInfo& info) :
-    RenderingResource(std::move(vk)), m_info(info)
+Image::Image(rcp<VulkanContext> vulkanContext, const VkImageCreateInfo& info) :
+    Resource(std::move(vulkanContext)), m_info(info)
 {
     m_info = info;
     m_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-
-    if (m_info.imageType == 0)
-    {
-        m_info.imageType = VK_IMAGE_TYPE_2D;
-    }
 
     if (m_info.mipLevels == 0)
     {
@@ -206,7 +193,7 @@ Texture::Texture(rcp<VulkanContext> vk, const VkImageCreateInfo& info) :
             .usage = VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED,
         };
 
-        if (vmaCreateImage(m_vk->vmaAllocator,
+        if (vmaCreateImage(vk()->allocator(),
                            &m_info,
                            &allocInfo,
                            &m_vkImage,
@@ -221,7 +208,7 @@ Texture::Texture(rcp<VulkanContext> vk, const VkImageCreateInfo& info) :
         .usage = VMA_MEMORY_USAGE_AUTO,
     };
 
-    VK_CHECK(vmaCreateImage(m_vk->vmaAllocator,
+    VK_CHECK(vmaCreateImage(vk()->allocator(),
                             &m_info,
                             &allocInfo,
                             &m_vkImage,
@@ -229,39 +216,241 @@ Texture::Texture(rcp<VulkanContext> vk, const VkImageCreateInfo& info) :
                             nullptr));
 }
 
-Texture::~Texture()
+Image::~Image()
 {
     if (m_vmaAllocation != VK_NULL_HANDLE)
     {
-        vmaDestroyImage(m_vk->vmaAllocator, m_vkImage, m_vmaAllocation);
+        vmaDestroyImage(vk()->allocator(), m_vkImage, m_vmaAllocation);
     }
 }
 
-TextureView::TextureView(rcp<VulkanContext> vk,
-                         rcp<Texture> textureRef,
-                         VkImageUsageFlags flags,
-                         const VkImageViewCreateInfo& info) :
-    RenderingResource(std::move(vk)),
+ImageView::ImageView(rcp<VulkanContext> vulkanContext,
+                     rcp<Image> textureRef,
+                     const VkImageViewCreateInfo& info) :
+    Resource(std::move(vulkanContext)),
     m_textureRefOrNull(std::move(textureRef)),
-    m_usageFlags(flags),
     m_info(info)
 {
+    assert(m_textureRefOrNull == nullptr || info.image == *m_textureRefOrNull);
     m_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     VK_CHECK(
-        m_vk->CreateImageView(m_vk->device, &m_info, nullptr, &m_vkImageView));
+        vk()->CreateImageView(vk()->device, &m_info, nullptr, &m_vkImageView));
 }
 
-TextureView::~TextureView()
+ImageView::~ImageView()
 {
-    m_vk->DestroyImageView(m_vk->device, m_vkImageView, nullptr);
+    vk()->DestroyImageView(vk()->device, m_vkImageView, nullptr);
 }
 
-Framebuffer::Framebuffer(rcp<VulkanContext> vk,
+Texture2D::Texture2D(rcp<VulkanContext> vk, VkImageCreateInfo info) :
+    rive::gpu::Texture(info.extent.width, info.extent.height),
+    m_lastAccess({
+        .pipelineStages = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        .accessMask = VK_ACCESS_NONE,
+        .layout = VK_IMAGE_LAYOUT_UNDEFINED,
+    })
+{
+    assert(info.imageType == 0 || info.imageType == VK_IMAGE_TYPE_2D);
+    if (info.imageType == 0)
+    {
+        info.imageType = VK_IMAGE_TYPE_2D;
+    }
+    if (info.extent.depth == 0)
+    {
+        info.extent.depth = 1;
+    }
+    if (info.usage == 0)
+    {
+        info.usage =
+            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+    m_image = vk->makeImage(info);
+    m_imageView = vk->makeImageView(m_image);
+}
+
+void Texture2D::stageContentsForUpload(const void* imageData,
+                                       size_t imageDataSizeInBytes)
+{
+    m_imageUploadBuffer = m_image->vk()->makeBuffer(
+        {
+            .size = imageDataSizeInBytes,
+            .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        },
+        vkutil::Mappability::writeOnly);
+    memcpy(m_imageUploadBuffer->contents(), imageData, imageDataSizeInBytes);
+    m_imageUploadBuffer->flushContents();
+}
+
+void Texture2D::synchronize(VkCommandBuffer commandBuffer)
+{
+    assert(hasUpdates());
+    assert(m_imageUploadBuffer != nullptr);
+
+    VkBufferImageCopy bufferImageCopy = {
+        .imageSubresource =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .layerCount = 1,
+            },
+        .imageExtent = {width(), height(), 1},
+    };
+
+    barrier(commandBuffer,
+            {
+                .pipelineStages = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .accessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            },
+            vkutil::ImageAccessAction::invalidateContents);
+
+    m_image->vk()->CmdCopyBufferToImage(commandBuffer,
+                                        *m_imageUploadBuffer,
+                                        *m_image,
+                                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                        1,
+                                        &bufferImageCopy);
+
+    generateMipmaps(commandBuffer,
+                    {
+                        .pipelineStages = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                        .accessMask = VK_ACCESS_SHADER_READ_BIT,
+                        .layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    });
+
+    m_imageUploadBuffer = nullptr;
+}
+
+void Texture2D::barrier(VkCommandBuffer commandBuffer,
+                        const vkutil::ImageAccess& dstAccess,
+                        vkutil::ImageAccessAction imageAccessAction,
+                        VkDependencyFlags dependencyFlags)
+{
+    m_lastAccess = m_image->vk()->simpleImageMemoryBarrier(commandBuffer,
+                                                           m_lastAccess,
+                                                           dstAccess,
+                                                           *m_image,
+                                                           imageAccessAction,
+                                                           dependencyFlags);
+}
+
+void Texture2D::generateMipmaps(VkCommandBuffer commandBuffer,
+                                const ImageAccess& dstAccess)
+{
+    VulkanContext* vk = m_image->vk();
+    uint32_t mipLevels = m_image->info().mipLevels;
+    if (mipLevels <= 1)
+    {
+        barrier(commandBuffer, dstAccess);
+        return;
+    }
+
+    barrier(commandBuffer,
+            {
+                .pipelineStages = VK_PIPELINE_STAGE_TRANSFER_BIT,
+                .accessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            });
+
+    int2 dstSize, srcSize = {static_cast<int32_t>(width()),
+                             static_cast<int32_t>(height())};
+    for (uint32_t level = 1; level < mipLevels; ++level, srcSize = dstSize)
+    {
+        dstSize = simd::max(srcSize >> 1, int2(1));
+
+        VkImageBlit imageBlit = {
+            .srcSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = level - 1,
+                    .layerCount = 1,
+                },
+            .dstSubresource =
+                {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = level,
+                    .layerCount = 1,
+                },
+        };
+
+        imageBlit.srcOffsets[0] = {0, 0, 0};
+        imageBlit.srcOffsets[1] = {srcSize.x, srcSize.y, 1};
+
+        imageBlit.dstOffsets[0] = {0, 0, 0};
+        imageBlit.dstOffsets[1] = {dstSize.x, dstSize.y, 1};
+
+        vk->imageMemoryBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            0,
+            {
+                .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+                .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+                .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .image = *m_image,
+                .subresourceRange =
+                    {
+                        .baseMipLevel = level - 1,
+                        .levelCount = 1,
+                    },
+            });
+
+        vk->CmdBlitImage(commandBuffer,
+                         *m_image,
+                         VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                         *m_image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         1,
+                         &imageBlit,
+                         VK_FILTER_LINEAR);
+    }
+
+    VkImageMemoryBarrier barriers[] = {
+        {
+            // The first N - 1 layers are in TRANSFER_READ.
+            .srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+            .dstAccessMask = dstAccess.accessMask,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            .newLayout = dstAccess.layout,
+            .image = *m_image,
+            .subresourceRange =
+                {
+                    .baseMipLevel = 0,
+                    .levelCount = mipLevels - 1,
+                },
+        },
+        {
+            // The final layer is still in TRANSFER_WRITE.
+            .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+            .dstAccessMask = dstAccess.accessMask,
+            .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            .newLayout = dstAccess.layout,
+            .image = *m_image,
+            .subresourceRange =
+                {
+                    .baseMipLevel = mipLevels - 1,
+                    .levelCount = 1,
+                },
+        },
+    };
+
+    vk->imageMemoryBarriers(commandBuffer,
+                            VK_PIPELINE_STAGE_TRANSFER_BIT,
+                            dstAccess.pipelineStages,
+                            0,
+                            std::size(barriers),
+                            barriers);
+
+    m_lastAccess = dstAccess;
+}
+
+Framebuffer::Framebuffer(rcp<VulkanContext> vulkanContext,
                          const VkFramebufferCreateInfo& info) :
-    RenderingResource(std::move(vk)), m_info(info)
+    Resource(std::move(vulkanContext)), m_info(info)
 {
     m_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    VK_CHECK(m_vk->CreateFramebuffer(m_vk->device,
+    VK_CHECK(vk()->CreateFramebuffer(vk()->device,
                                      &m_info,
                                      nullptr,
                                      &m_vkFramebuffer));
@@ -269,6 +458,6 @@ Framebuffer::Framebuffer(rcp<VulkanContext> vk,
 
 Framebuffer::~Framebuffer()
 {
-    m_vk->DestroyFramebuffer(m_vk->device, m_vkFramebuffer, nullptr);
+    vk()->DestroyFramebuffer(vk()->device, m_vkFramebuffer, nullptr);
 }
 } // namespace rive::gpu::vkutil

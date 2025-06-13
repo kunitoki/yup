@@ -5,7 +5,7 @@
 #include "rive/animation/state_machine_instance.hpp"
 #include "rive/hit_result.hpp"
 
-namespace rive {
+using namespace rive;
 
 NestedStateMachine::NestedStateMachine() {}
 NestedStateMachine::~NestedStateMachine() {}
@@ -110,12 +110,12 @@ void NestedStateMachine::addNestedInput(NestedInput* input)
     m_nestedInputs.push_back(input);
 }
 
-void NestedStateMachine::setDataContextFromInstance(
-    ViewModelInstance* viewModelInstance)
+void NestedStateMachine::bindViewModelInstance(
+    rcp<ViewModelInstance> viewModelInstance)
 {
     if (m_StateMachineInstance != nullptr)
     {
-        m_StateMachineInstance->setDataContextFromInstance(viewModelInstance);
+        m_StateMachineInstance->bindViewModelInstance(viewModelInstance);
     }
 }
 
@@ -135,5 +135,3 @@ bool NestedStateMachine::tryChangeState()
     }
     return false;
 }
-
-} // namespace rive

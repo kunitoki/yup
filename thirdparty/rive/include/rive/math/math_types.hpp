@@ -140,11 +140,44 @@ RIVE_ALWAYS_INLINE static float clamp(float x, float lo, float hi)
     return fminf(fmaxf(lo, x), hi);
 }
 
+// Matches Dart modulus:
+// https://api.dart.dev/stable/2.19.0/dart-core/double/operator_modulo.html
+RIVE_ALWAYS_INLINE static float positive_mod(float value, float range)
+{
+    // assert(range > 0.0f);
+    if (range < 0)
+    {
+        range = -range;
+    }
+    float v = fmodf(value, range);
+    if (v < 0.0f)
+    {
+        v += range;
+    }
+    return v;
+}
+
 inline float degrees_to_radians(float degrees) { return degrees * PI / 180.0f; }
 
 RIVE_ALWAYS_INLINE static float degreesToRadians(float degrees)
 {
     return degrees * (PI / 180.0f);
+}
+
+// Returns the smallest number that can be added to 'value', such that
+// 'value % alignment' == 0.
+template <uint32_t ALIGNMENT> uint32_t padding_to_align_up(uintptr_t value)
+{
+    constexpr uintptr_t MAX_MULTIPLE_OF_ALIGNMENT =
+        std::numeric_limits<uintptr_t>::max() / ALIGNMENT * ALIGNMENT;
+    uint32_t padding = (MAX_MULTIPLE_OF_ALIGNMENT - value) % ALIGNMENT;
+    assert((value + padding) % ALIGNMENT == 0);
+    return padding;
+}
+
+template <typename T> uint32_t padding_to_align_up(void* ptr)
+{
+    return padding_to_align_up<alignof(T)>(reinterpret_cast<uintptr_t>(ptr));
 }
 } // namespace math
 

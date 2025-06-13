@@ -28,7 +28,7 @@ namespace yup
     This class encapsulates a gradient, which can be either linear or radial, specified by two color stops.
     Each stop has a color and a position, and in the case of radial gradients, a radius is calculated.
 */
-class JUCE_API ColorGradient
+class YUP_API ColorGradient
 {
 public:
     //==============================================================================

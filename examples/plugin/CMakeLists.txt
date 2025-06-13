@@ -45,8 +45,8 @@ yup_audio_plugin (
     PLUGIN_CREATE_VST3 ON
     PLUGIN_CREATE_STANDALONE ON
     MODULES
-        yup_gui
-        yup_audio_processors)
+        yup::yup_gui
+        yup::yup_audio_processors)
 
 # ==== Prepare sources
 file (GLOB_RECURSE sources
@@ -54,4 +54,3 @@ file (GLOB_RECURSE sources
     "${CMAKE_CURRENT_LIST_DIR}/source/*.h")
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})
 target_sources (${target_name}_shared PUBLIC ${sources})
-

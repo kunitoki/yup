@@ -22,11 +22,12 @@ protected:
     rcp<RenderBuffer> m_UVRenderBuffer;
 
 public:
-    MeshType type = MeshType::vertex;
+    virtual MeshType type() { return MeshType::vertex; }
     virtual ~MeshDrawable() = default;
     virtual void onAssetLoaded(RenderImage* image) = 0;
     virtual void draw(Renderer* renderer,
                       const RenderImage* image,
+                      ImageSampler,
                       BlendMode blendMode,
                       float opacity) = 0;
 };

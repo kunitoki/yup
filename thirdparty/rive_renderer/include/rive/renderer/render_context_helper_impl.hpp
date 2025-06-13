@@ -14,8 +14,6 @@ namespace rive::gpu
 class RenderContextHelperImpl : public RenderContextImpl
 {
 public:
-    rcp<Texture> decodeImageTexture(Span<const uint8_t> encodedBytes) override;
-
     void resizeFlushUniformBuffer(size_t sizeInBytes) override;
     void resizeImageDrawUniformBuffer(size_t sizeInBytes) override;
     void resizePathBuffer(size_t sizeInBytes,
@@ -40,15 +38,15 @@ public:
     void* mapTessVertexSpanBuffer(size_t mapSizeInBytes) override;
     void* mapTriangleVertexBuffer(size_t mapSizeInBytes) override;
 
-    void unmapFlushUniformBuffer() override;
-    void unmapImageDrawUniformBuffer() override;
-    void unmapPathBuffer() override;
-    void unmapPaintBuffer() override;
-    void unmapPaintAuxBuffer() override;
-    void unmapContourBuffer() override;
-    void unmapGradSpanBuffer() override;
-    void unmapTessVertexSpanBuffer() override;
-    void unmapTriangleVertexBuffer() override;
+    void unmapFlushUniformBuffer(size_t mapSizeInBytes) override;
+    void unmapImageDrawUniformBuffer(size_t mapSizeInBytes) override;
+    void unmapPathBuffer(size_t mapSizeInBytes) override;
+    void unmapPaintBuffer(size_t mapSizeInBytes) override;
+    void unmapPaintAuxBuffer(size_t mapSizeInBytes) override;
+    void unmapContourBuffer(size_t mapSizeInBytes) override;
+    void unmapGradSpanBuffer(size_t mapSizeInBytes) override;
+    void unmapTessVertexSpanBuffer(size_t mapSizeInBytes) override;
+    void unmapTriangleVertexBuffer(size_t mapSizeInBytes) override;
 
     double secondsNow() const override
     {

@@ -5,6 +5,7 @@
 #pragma once
 
 #include "rive/renderer/render_context.hpp"
+#include "rive/renderer/texture.hpp"
 
 namespace rive::gpu
 {
@@ -26,15 +27,22 @@ public:
                                                RenderBufferFlags,
                                                size_t) = 0;
 
-    // Decodes the image bytes and creates a texture that can be bound to the
-    // draw shader for an image paint.
-    virtual rcp<Texture> decodeImageTexture(
-        Span<const uint8_t> encodedBytes) = 0;
+    // Use platform apis to decode the image bytes and creates a texture if
+    // available. If not available leaving its default implementation will cause
+    // rive decoders to be used instead
+    virtual rcp<Texture> platformDecodeImageTexture(
+        Span<const uint8_t> encodedBytes)
+    {
+        return nullptr;
+    };
 
-    virtual rcp<Texture> makeImageTexture(uint32_t width,
-                                          uint32_t height,
-                                          uint32_t mipLevelCount,
-                                          const uint8_t imageDataRGBA[]) = 0;
+    // this is called in the case of the default Bitmap class being used to
+    // decode images so that it can be converted into a backend specific image.
+    virtual rcp<Texture> makeImageTexture(
+        uint32_t width,
+        uint32_t height,
+        uint32_t mipLevelCount,
+        const uint8_t imageDataRGBAPremul[]) = 0;
 
     // Resize GPU buffers. These methods cannot fail, and must allocate the
     // exact size requested.
@@ -59,9 +67,17 @@ public:
     virtual void resizeTessVertexSpanBuffer(size_t sizeInBytes) = 0;
     virtual void resizeTriangleVertexBuffer(size_t sizeInBytes) = 0;
 
-    // Perform any synchronization or other tasks that need to run immediately
-    // before RenderContext begins mapping buffers for the next flush.
-    virtual void prepareToMapBuffers() {}
+    // Perform any bookkeeping or other tasks that need to run before
+    // RenderContext begins accessing GPU resources for the flush. (Update
+    // counters, advance buffer pools, etc.)
+    //
+    // The provided resource lifetime counters communicate how the client is
+    // performing CPU-GPU synchronization. Resources used during the upcoming
+    // flush will belong to 'nextFrameNumber'. Resources last used on or before
+    // 'safeFrameNumber' are safe to be released or recycled.
+    virtual void prepareToFlush(uint64_t nextFrameNumber,
+                                uint64_t safeFrameNumber)
+    {}
 
     // Map GPU buffers. (The implementation may wish to allocate the mappable
     // buffers in rings, in order to avoid expensive synchronization with the
@@ -77,15 +93,15 @@ public:
     virtual void* mapTriangleVertexBuffer(size_t mapSizeInBytes) = 0;
 
     // Unmap GPU buffers. All buffers will be unmapped before flush().
-    virtual void unmapFlushUniformBuffer() = 0;
-    virtual void unmapImageDrawUniformBuffer() = 0;
-    virtual void unmapPathBuffer() = 0;
-    virtual void unmapPaintBuffer() = 0;
-    virtual void unmapPaintAuxBuffer() = 0;
-    virtual void unmapContourBuffer() = 0;
-    virtual void unmapGradSpanBuffer() = 0;
-    virtual void unmapTessVertexSpanBuffer() = 0;
-    virtual void unmapTriangleVertexBuffer() = 0;
+    virtual void unmapFlushUniformBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapImageDrawUniformBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapPathBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapPaintBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapPaintAuxBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapContourBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapGradSpanBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapTessVertexSpanBuffer(size_t mapSizeInBytes) = 0;
+    virtual void unmapTriangleVertexBuffer(size_t mapSizeInBytes) = 0;
 
     // Allocate resources that are updated and used during flush().
     virtual void resizeGradientTexture(uint32_t width, uint32_t height) = 0;
@@ -111,10 +127,14 @@ public:
     //  2. Render the TessVertexSpan instances into the tessellation texture.
     //
     //  3. Execute the draw list. (The Rive renderer shaders read the gradient
-    //  and tessellation
-    //     textures in order to do path rendering.)
+    //     and tessellation textures in order to do path rendering.)
     //
+    // A single frame may have multiple logical flushes (and call flush()
+    // multiple times).
     virtual void flush(const gpu::FlushDescriptor&) = 0;
+
+    // Called after all logical flushes in a frame have completed.
+    virtual void postFlush(const RenderContext::FlushResources&) {}
 
     // Steady clock, used to determine when we should trim our resource
     // allocations.

@@ -19,41 +19,44 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-if (YUP_PLATFORM_EMSCRIPTEN)
-    add_definitions (-DTEST_HAS_PTHREAD=0)
-    set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
-endif()
+enable_testing()
 
 # ==== Setup googletests
-include (FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.15.2.zip
-)
+if (YUP_PLATFORM_EMSCRIPTEN)
+    set (gtest_disable_pthreads ON CACHE BOOL "" FORCE)
+    set (gtest_disable_warnings ON CACHE BOOL "" FORCE)
+    set (gtest_hide_internal_symbols ON CACHE BOOL "" FORCE)
+    add_definitions (-DTEST_HAS_PTHREAD=0)
+endif()
+
 set (gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+
+_yup_fetchcontent_declare (googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.17.0)
+
 FetchContent_MakeAvailable (googletest)
-set_target_properties (gtest PROPERTIES FOLDER "Tests")
-set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
-set_target_properties (gmock PROPERTIES FOLDER "Tests")
-set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 
 if (YUP_PLATFORM_EMSCRIPTEN)
     target_compile_options (gmock PRIVATE -pthread)
     target_compile_options (gtest PRIVATE -pthread)
 endif()
 
+set_target_properties (gtest PROPERTIES FOLDER "Tests")
+set_target_properties (gtest_main PROPERTIES FOLDER "Tests")
+set_target_properties (gmock PROPERTIES FOLDER "Tests")
+set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
+
 # ==== Create executable
 set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_modules
-    juce_core
-    juce_events
-    juce_audio_basics
-    juce_audio_devices
+    yup_core
+    yup_events
+    yup_audio_basics
+    yup_audio_devices
     yup_audio_formats
     yup_graphics)
-
-enable_testing()
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
@@ -61,12 +64,11 @@ yup_standalone_app (
     TARGET_IDE_GROUP "Tests"
     TARGET_CONSOLE ON
     DEFINITIONS
-        JUCE_USE_CURL=0
+        YUP_USE_CURL=0
     MODULES
         ${target_modules}
         GTest::gtest_main
-        GTest::gmock_main
-)
+        GTest::gmock_main)
 
 # ==== Setup sources
 file (GLOB_RECURSE sources
@@ -84,3 +86,13 @@ target_sources (${target_name} PRIVATE ${sources})
 set_target_properties (${target_name} PROPERTIES
     XCODE_SCHEME_ARGUMENTS "--gtest_filter=*"
     VS_DEBUGGER_COMMAND_ARGUMENTS "--gtest_filter=*")
+
+# ==== Setup coverage support
+if (YUP_ENABLE_COVERAGE)
+    _yup_setup_coverage_flags (${target_name})
+    foreach (module ${target_modules})
+        _yup_setup_coverage_flags (${module})
+    endforeach()
+
+    _yup_setup_coverage_targets (${target_name} "${target_modules}")
+endif()

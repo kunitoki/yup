@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 yup_audio_plugin_client
     vendor:             yup
@@ -31,12 +31,11 @@
     description:        The essential set of basic YUP audio plugin clients.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
     dependencies:       yup_audio_processors yup_gui
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

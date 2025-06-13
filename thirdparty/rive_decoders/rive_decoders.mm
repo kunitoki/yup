@@ -20,5 +20,3 @@
 */
 
 #include "rive_decoders.cpp"
-
-// #include "source/bitmap_decoder_cg.mm"

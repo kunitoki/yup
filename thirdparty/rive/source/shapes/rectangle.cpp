@@ -1,3 +1,5 @@
+#pragma once
+
 #include "rive/shapes/rectangle.hpp"
 
 using namespace rive;

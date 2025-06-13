@@ -20,7 +20,7 @@
 */
 
 #include <yup_gui/yup_gui.h>
-#include <juce_audio_devices/juce_audio_devices.h>
+#include <yup_audio_devices/yup_audio_devices.h>
 
 #include <memory>
 #include <cmath> // For sine wave generation
@@ -49,9 +49,9 @@ public:
     void setFrequency (double newFrequency, bool immediate = false)
     {
         if (immediate)
-            frequency.setCurrentAndTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+            frequency.setCurrentAndTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
         else
-            frequency.setTargetValue ((juce::MathConstants<double>::twoPi * newFrequency) / sampleRate);
+            frequency.setTargetValue ((yup::MathConstants<double>::twoPi * newFrequency) / sampleRate);
     }
 
     void setAmplitude (float newAmplitude)
@@ -69,8 +69,8 @@ public:
         auto sample = std::sin (currentAngle) * amplitude.getNextValue();
 
         currentAngle += frequency.getNextValue();
-        if (currentAngle >= juce::MathConstants<double>::twoPi)
-            currentAngle -= juce::MathConstants<double>::twoPi;
+        if (currentAngle >= yup::MathConstants<double>::twoPi)
+            currentAngle -= yup::MathConstants<double>::twoPi;
 
         return static_cast<float> (sample);
     }
@@ -104,33 +104,52 @@ public:
     {
         auto bounds = getLocalBounds();
 
-        g.setFillColor (0xff101010);
+        auto backgroundColor = yup::Color (0xff101010);
+        g.setFillColor (backgroundColor);
         g.fillAll();
 
-        g.setStrokeColor (0xff4b4bff);
-        g.setStrokeWidth (1.0f);
-        g.strokeRect (bounds);
-
+        auto lineColor = yup::Color (0xff4b4bff);
         if (renderData.empty())
             return;
 
         float xSize = getWidth() / float (renderData.size());
+        float centerY = getHeight() * 0.5f;
 
+        // Build the main waveform path
         path.clear();
         path.reserveSpace ((int) renderData.size());
-
         path.moveTo (0.0f, (renderData[0] + 1.0f) * 0.5f * getHeight());
 
         for (std::size_t i = 1; i < renderData.size(); ++i)
             path.lineTo (i * xSize, (renderData[i] + 1.0f) * 0.5f * getHeight());
 
+        filledPath = path.createStrokePolygon(4.0f);
+
+        g.setFillColor (lineColor);
+        g.setFeather (8.0f);
+        g.fillPath (filledPath);
+
+        g.setFillColor (lineColor.brighter (0.2f));
+        g.setFeather (4.0f);
+        g.fillPath (filledPath);
+
+        g.setStrokeColor (lineColor.withAlpha (0.8f));
+        g.setStrokeWidth (2.0f);
+        g.strokePath (path);
+
+        g.setStrokeColor (lineColor.brighter (0.3f));
         g.setStrokeWidth (1.0f);
+        g.strokePath (path);
+
+        g.setStrokeColor (yup::Colors::white.withAlpha (0.9f));
+        g.setStrokeWidth (0.5f);
         g.strokePath (path);
     }
 
 private:
     std::vector<float> renderData;
     yup::Path path;
+    yup::Path filledPath;
 };
 
 //==============================================================================
@@ -177,7 +196,7 @@ public:
         button->onClick = [this]
         {
             for (int i = 0; i < sliders.size(); ++i)
-                sliders[i]->setValue (juce::Random::getSystemRandom().nextFloat());
+                sliders[i]->setValue (yup::Random::getSystemRandom().nextFloat());
         };
         addAndMakeVisible (*button);
 

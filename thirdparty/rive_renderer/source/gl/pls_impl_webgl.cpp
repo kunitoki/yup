@@ -83,6 +83,20 @@ EM_JS(void,
           }
       });
 
+EM_JS(int,
+      getFramebufferPixelLocalStorageParameterivWEBGL,
+      (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE gl, int plane, int pname),
+      {
+          const pls = GL.getContext(gl).GLctx.pls;
+          if (pls)
+          {
+              return pls["getFramebufferPixelLocalStorageParameterWEBGL"](
+                  plane,
+                  pname);
+          }
+          return 0;
+      });
+
 EM_JS(bool,
       enable_WEBGL_provoking_vertex,
       (EMSCRIPTEN_WEBGL_CONTEXT_HANDLE gl),
@@ -156,6 +170,16 @@ void glEndPixelLocalStorageANGLE(GLsizei n, const uint32_t storeops[])
                                   sizeof(uint32_t));
 }
 
+void glGetFramebufferPixelLocalStorageParameterivANGLE(GLint plane,
+                                                       GLenum pname,
+                                                       GLint* param)
+{
+    *param = getFramebufferPixelLocalStorageParameterivWEBGL(
+        emscripten_webgl_get_current_context(),
+        plane,
+        pname);
+}
+
 void glProvokingVertexANGLE(GLenum provokeMode)
 {
     provokingVertexWEBGL(emscripten_webgl_get_current_context(), provokeMode);
@@ -227,7 +251,7 @@ class RenderContextGLImpl::PLSImplWebGL
         if (desc.colorLoadAction == LoadAction::clear)
         {
             float clearColor4f[4];
-            UnpackColorToRGBA32FPremul(desc.clearColor, clearColor4f);
+            UnpackColorToRGBA32FPremul(desc.colorClearValue, clearColor4f);
             glFramebufferPixelLocalClearValuefvANGLE(COLOR_PLANE_IDX,
                                                      clearColor4f);
         }

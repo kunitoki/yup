@@ -14,19 +14,54 @@ using namespace rive;
 /// Compute an ideal control point distance to create a curve of the given
 /// radius. Based on "natural rounding"
 /// https://observablehq.com/@daformat/rounding-polygon-corners
-static float computeIdealControlPointDistance(const Vec2D& toPrev,
-                                              const Vec2D& toNext,
-                                              float radius)
+float Path::computeIdealControlPointDistance(const Vec2D& toPrev,
+                                             const Vec2D& toNext,
+                                             float radius)
 {
     // Get the angle between next and prev
-    float angle =
-        fabs(atan2(Vec2D::cross(toPrev, toNext), Vec2D::dot(toPrev, toNext)));
+    float angle = fabs(
+        std::atan2(Vec2D::cross(toPrev, toNext), Vec2D::dot(toPrev, toNext)));
 
-    return fmin(
-        radius,
-        (4.0f / 3.0f) * tan(math::PI / (2.0f * ((2.0f * math::PI) / angle))) *
-            radius *
-            (angle < math::PI / 2 ? 1 + cos(angle) : 2.0f - sin(angle)));
+    return fmin(radius,
+                (4.0f / 3.0f) *
+                    std::tan(math::PI / (2.0f * ((2.0f * math::PI) / angle))) *
+                    radius *
+                    (angle < math::PI / 2 ? 1 + std::cos(angle)
+                                          : 2.0f - std::sin(angle)));
+}
+
+static void rotatePoints(const Vec2D& nextPoint,
+                         const Vec2D& prevPoint,
+                         const Vec2D& point,
+                         Vec2D& outPoint,
+                         Vec2D& inPoint)
+{
+    // Calculate angle between original pos and new positions
+    auto v1 = prevPoint - nextPoint;
+    auto v2 = point - nextPoint;
+    float angle = std::atan2(Vec2D::cross(v1, v2), Vec2D::dot(v1, v2));
+    {
+        // Rotate outPoint around prevPoint twice the angle
+        float s = std::sin(angle * 2);
+        float c = std::cos(angle * 2);
+        outPoint.x -= prevPoint.x;
+        outPoint.y -= prevPoint.y;
+        float xNew = outPoint.x * c - outPoint.y * s;
+        float yNew = outPoint.x * s + outPoint.y * c;
+        outPoint.x = xNew + prevPoint.x;
+        outPoint.y = yNew + prevPoint.y;
+    }
+    {
+        // Rotate inPoint around nextPoint twice the angle
+        float s = std::sin(-angle * 2);
+        float c = std::cos(-angle * 2);
+        inPoint.x -= nextPoint.x;
+        inPoint.y -= nextPoint.y;
+        float xNew = inPoint.x * c - inPoint.y * s;
+        float yNew = inPoint.x * s + inPoint.y * c;
+        inPoint.x = xNew + nextPoint.x;
+        inPoint.y = yNew + nextPoint.y;
+    }
 }
 
 RenderPathDeformer* Path::deformer() const
@@ -123,7 +158,7 @@ void Path::buildPath(RawPath& rawPath) const
         startIsCubic = prevIsCubic = false;
         auto point = *firstPoint->as<StraightVertex>();
         auto radius = point.radius();
-        if (radius > 0.0f)
+        if (radius != 0.0f)
         {
             auto prev = vertices[length - 1];
 
@@ -144,11 +179,13 @@ void Path::buildPath(RawPath& rawPath) const
                 pos;
             auto toNextLength = toNext.normalizeLength();
 
-            float renderRadius =
-                std::min(toPrevLength / 2.0f,
-                         std::min(toNextLength / 2.0f, radius));
+            float renderRadius = std::min(
+                toPrevLength / 2.0f,
+                std::min(toNextLength / 2.0f, radius > 0 ? radius : -radius));
             float idealDistance =
-                computeIdealControlPointDistance(toPrev, toNext, renderRadius);
+                Path::computeIdealControlPointDistance(toPrev,
+                                                       toNext,
+                                                       renderRadius);
 
             startIn = start = Vec2D::scaleAndAdd(pos, toPrev, renderRadius);
             rawPath.move(startIn);
@@ -158,6 +195,11 @@ void Path::buildPath(RawPath& rawPath) const
             Vec2D inPoint =
                 Vec2D::scaleAndAdd(pos, toNext, renderRadius - idealDistance);
             out = Vec2D::scaleAndAdd(pos, toNext, renderRadius);
+
+            if (radius < 0)
+            {
+                rotatePoints(out, startIn, pos, outPoint, inPoint);
+            }
             rawPath.cubic(outPoint, inPoint, out);
             prevIsCubic = false;
         }
@@ -188,7 +230,7 @@ void Path::buildPath(RawPath& rawPath) const
             auto point = *vertex->as<StraightVertex>();
             Vec2D pos = point.renderTranslation();
             auto radius = point.radius();
-            if (radius > 0.0f)
+            if (radius != 0.0f)
             {
                 auto prev = vertices[i - 1];
                 Vec2D toPrev = (prev->is<CubicVertex>()
@@ -207,7 +249,8 @@ void Path::buildPath(RawPath& rawPath) const
 
                 float renderRadius =
                     std::min(toPrevLength / 2.0f,
-                             std::min(toNextLength / 2.0f, radius));
+                             std::min(toNextLength / 2.0f,
+                                      radius > 0 ? radius : -radius));
                 float idealDistance =
                     computeIdealControlPointDistance(toPrev,
                                                      toNext,
@@ -233,6 +276,11 @@ void Path::buildPath(RawPath& rawPath) const
                                        toNext,
                                        renderRadius - idealDistance);
                 out = Vec2D::scaleAndAdd(pos, toNext, renderRadius);
+
+                if (radius < 0)
+                {
+                    rotatePoints(out, translation, pos, outPoint, inPoint);
+                }
                 rawPath.cubic(outPoint, inPoint, out);
                 prevIsCubic = false;
             }
@@ -303,8 +351,8 @@ void Path::update(ComponentDirt value)
     bool worldTransformChanged = hasDirt(value, ComponentDirt::WorldTransform);
     bool deformerChanged = hasDirt(value, ComponentDirt::NSlicer);
 
-    if (pathChanged ||
-        (deformer() != nullptr && (worldTransformChanged || deformerChanged)))
+    if (pathChanged || deformerChanged ||
+        (deformer() != nullptr && worldTransformChanged))
     {
         if (canDeferPathUpdate())
         {
@@ -326,6 +374,8 @@ void Path::update(ComponentDirt value)
     // 	m_Shape->pathChanged();
     // }
 }
+
+void Path::isHoleChanged() { markPathDirty(); }
 
 bool Path::collapse(bool value)
 {

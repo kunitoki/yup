@@ -64,86 +64,186 @@ void GLState::invalidate()
     glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
 }
 
-void GLState::setGLBlendMode(GLBlendMode blendMode)
+static void gl_enable_disable(GLenum state, bool enabled)
 {
-    if (m_validState.blendEquation && blendMode == m_blendMode)
+    if (enabled)
+        glEnable(state);
+    else
+        glDisable(state);
+}
+
+void GLState::setDepthStencilEnabled(bool depthEnabled, bool stencilEnabled)
+{
+    if (!m_validState.depthStencilEnabled || m_depthTestEnabled != depthEnabled)
+    {
+        gl_enable_disable(GL_DEPTH_TEST, depthEnabled);
+        m_depthTestEnabled = depthEnabled;
+    }
+
+    if (!m_validState.depthStencilEnabled ||
+        m_stencilTestEnabled != stencilEnabled)
+    {
+        gl_enable_disable(GL_STENCIL_TEST, stencilEnabled);
+        m_stencilTestEnabled = stencilEnabled;
+    }
+
+    m_validState.depthStencilEnabled = true;
+}
+
+void GLState::setCullFace(GLenum cullFace)
+{
+    if (!m_validState.cullFace || cullFace != m_cullFace)
+    {
+        if (cullFace == GL_NONE)
+        {
+            glDisable(GL_CULL_FACE);
+        }
+        else
+        {
+            if (!m_validState.cullFace || m_cullFace == GL_NONE)
+            {
+                glEnable(GL_CULL_FACE);
+            }
+            glCullFace(cullFace);
+        }
+        m_cullFace = cullFace;
+        m_validState.cullFace = true;
+    }
+}
+
+static GLenum gl_stencil_op(StencilOp op)
+{
+    switch (op)
+    {
+        case StencilOp::keep:
+            return GL_KEEP;
+        case StencilOp::replace:
+            return GL_REPLACE;
+        case StencilOp::zero:
+            return GL_ZERO;
+        case StencilOp::decrClamp:
+            return GL_DECR;
+        case StencilOp::incrWrap:
+            return GL_INCR_WRAP;
+        case StencilOp::decrWrap:
+            return GL_DECR_WRAP;
+    }
+    RIVE_UNREACHABLE();
+}
+
+static GLenum gl_stencil_func(gpu::StencilCompareOp compareOp)
+{
+    switch (compareOp)
+    {
+        case gpu::StencilCompareOp::less:
+            return GL_LESS;
+        case gpu::StencilCompareOp::equal:
+            return GL_EQUAL;
+        case gpu::StencilCompareOp::lessOrEqual:
+            return GL_LEQUAL;
+        case gpu::StencilCompareOp::notEqual:
+            return GL_NOTEQUAL;
+        case gpu::StencilCompareOp::always:
+            return GL_ALWAYS;
+    }
+    RIVE_UNREACHABLE();
+}
+
+static GLenum gl_cull_face(CullFace riveCullFace)
+{
+    switch (riveCullFace)
+    {
+        case CullFace::none:
+            return GL_NONE;
+        case CullFace::clockwise:
+            return GL_FRONT;
+        case CullFace::counterclockwise:
+            return GL_BACK;
+    }
+    RIVE_UNREACHABLE();
+}
+
+void GLState::setBlendEquation(gpu::BlendEquation blendEquation)
+{
+    if (m_validState.blendEquation && blendEquation == m_blendEquation)
     {
         return;
     }
-    if (!m_validState.blendEquation || m_blendMode == GLBlendMode::none)
+    if (!m_validState.blendEquation ||
+        m_blendEquation == gpu::BlendEquation::none)
     {
         glEnable(GL_BLEND);
     }
-    switch (blendMode)
+    switch (blendEquation)
     {
-        case GLBlendMode::none:
+        case gpu::BlendEquation::none:
             glDisable(GL_BLEND);
             break;
-        case GLBlendMode::srcOver:
+        case gpu::BlendEquation::srcOver:
             glBlendEquation(GL_FUNC_ADD);
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             break;
-        case GLBlendMode::screen:
+        case gpu::BlendEquation::screen:
             glBlendEquation(GL_SCREEN_KHR);
             break;
-        case GLBlendMode::overlay:
+        case gpu::BlendEquation::overlay:
             glBlendEquation(GL_OVERLAY_KHR);
             break;
-        case GLBlendMode::darken:
+        case gpu::BlendEquation::darken:
             glBlendEquation(GL_DARKEN_KHR);
             break;
-        case GLBlendMode::lighten:
+        case gpu::BlendEquation::lighten:
             glBlendEquation(GL_LIGHTEN_KHR);
             break;
-        case GLBlendMode::colorDodge:
+        case gpu::BlendEquation::colorDodge:
             glBlendEquation(GL_COLORDODGE_KHR);
             break;
-        case GLBlendMode::colorBurn:
+        case gpu::BlendEquation::colorBurn:
             glBlendEquation(GL_COLORBURN_KHR);
             break;
-        case GLBlendMode::hardLight:
+        case gpu::BlendEquation::hardLight:
             glBlendEquation(GL_HARDLIGHT_KHR);
             break;
-        case GLBlendMode::softLight:
+        case gpu::BlendEquation::softLight:
             glBlendEquation(GL_SOFTLIGHT_KHR);
             break;
-        case GLBlendMode::difference:
+        case gpu::BlendEquation::difference:
             glBlendEquation(GL_DIFFERENCE_KHR);
             break;
-        case GLBlendMode::exclusion:
+        case gpu::BlendEquation::exclusion:
             glBlendEquation(GL_EXCLUSION_KHR);
             break;
-        case GLBlendMode::multiply:
+        case gpu::BlendEquation::multiply:
             glBlendEquation(GL_MULTIPLY_KHR);
             break;
-        case GLBlendMode::hue:
+        case gpu::BlendEquation::hue:
             glBlendEquation(GL_HSL_HUE_KHR);
             break;
-        case GLBlendMode::saturation:
+        case gpu::BlendEquation::saturation:
             glBlendEquation(GL_HSL_SATURATION_KHR);
             break;
-        case GLBlendMode::color:
+        case gpu::BlendEquation::color:
             glBlendEquation(GL_HSL_COLOR_KHR);
             break;
-        case GLBlendMode::luminosity:
+        case gpu::BlendEquation::luminosity:
             glBlendEquation(GL_HSL_LUMINOSITY_KHR);
             break;
-        case GLBlendMode::plus:
+        case gpu::BlendEquation::plus:
             glBlendEquation(GL_FUNC_ADD);
             glBlendFunc(GL_ONE, GL_ONE);
             break;
-        case GLBlendMode::max:
+        case gpu::BlendEquation::max:
             glBlendEquation(GL_MAX);
             glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
             break;
     }
-    m_blendMode = blendMode;
+    m_blendEquation = blendEquation;
     m_validState.blendEquation = true;
 }
 
 void GLState::setWriteMasks(bool colorWriteMask,
                             bool depthWriteMask,
-                            GLuint stencilWriteMask)
+                            uint8_t stencilWriteMask)
 {
     if (!m_validState.writeMasks)
     {
@@ -181,25 +281,52 @@ void GLState::setWriteMasks(bool colorWriteMask,
     }
 }
 
-void GLState::setCullFace(GLenum cullFace)
+void GLState::setPipelineState(const gpu::PipelineState& pipelineState)
 {
-    if (!m_validState.cullFace || cullFace != m_cullFace)
+    setDepthStencilEnabled(pipelineState.depthTestEnabled,
+                           pipelineState.stencilTestEnabled);
+    if (pipelineState.stencilTestEnabled)
     {
-        if (cullFace == GL_NONE)
+        if (!pipelineState.stencilDoubleSided)
         {
-            glDisable(GL_CULL_FACE);
+            glStencilFunc(
+                gl_stencil_func(pipelineState.stencilFrontOps.compareOp),
+                pipelineState.stencilReference,
+                pipelineState.stencilCompareMask);
+            glStencilOp(
+                gl_stencil_op(pipelineState.stencilFrontOps.failOp),
+                gl_stencil_op(pipelineState.stencilFrontOps.depthFailOp),
+                gl_stencil_op(pipelineState.stencilFrontOps.passOp));
         }
         else
         {
-            if (!m_validState.cullFace || m_cullFace == GL_NONE)
-            {
-                glEnable(GL_CULL_FACE);
-            }
-            glCullFace(cullFace);
+            glStencilFuncSeparate(
+                GL_FRONT,
+                gl_stencil_func(pipelineState.stencilFrontOps.compareOp),
+                pipelineState.stencilReference,
+                pipelineState.stencilCompareMask);
+            glStencilOpSeparate(
+                GL_FRONT,
+                gl_stencil_op(pipelineState.stencilFrontOps.failOp),
+                gl_stencil_op(pipelineState.stencilFrontOps.depthFailOp),
+                gl_stencil_op(pipelineState.stencilFrontOps.passOp));
+            glStencilFuncSeparate(
+                GL_BACK,
+                gl_stencil_func(pipelineState.stencilBackOps.compareOp),
+                pipelineState.stencilReference,
+                pipelineState.stencilCompareMask);
+            glStencilOpSeparate(
+                GL_BACK,
+                gl_stencil_op(pipelineState.stencilBackOps.failOp),
+                gl_stencil_op(pipelineState.stencilBackOps.depthFailOp),
+                gl_stencil_op(pipelineState.stencilBackOps.passOp));
         }
-        m_cullFace = cullFace;
-        m_validState.cullFace = true;
     }
+    setCullFace(gl_cull_face(pipelineState.cullFace));
+    setBlendEquation(pipelineState.blendEquation);
+    setWriteMasks(pipelineState.colorWriteEnabled,
+                  pipelineState.depthWriteEnabled,
+                  pipelineState.stencilWriteMask);
 }
 
 void GLState::bindProgram(GLuint programID)

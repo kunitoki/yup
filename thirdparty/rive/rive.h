@@ -22,7 +22,7 @@
 /*
   ==============================================================================
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:               rive
     vendor:           rive
@@ -34,9 +34,10 @@
 
     dependencies:     harfbuzz sheenbidi yoga_library
     defines:          WITH_RIVE_TEXT=1 WITH_RIVE_YOGA=1 WITH_RIVE_LAYOUT=1
+    appleFrameworks:  CoreText
     searchpaths:      include
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
   ==============================================================================
 */

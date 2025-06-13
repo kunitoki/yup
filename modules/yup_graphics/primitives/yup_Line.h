@@ -34,7 +34,7 @@ namespace yup
     @tparam ValueType The data type of the coordinates (e.g., int, float, double).
 */
 template <class ValueType>
-class JUCE_API Line
+class YUP_API Line
 {
 public:
     //==============================================================================
@@ -630,7 +630,7 @@ private:
     @return A reference to the output stream after the line's coordinates have been written.
 */
 template <class ValueType>
-JUCE_API String& JUCE_CALLTYPE operator<< (String& string1, const Line<ValueType>& l)
+YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Line<ValueType>& l)
 {
     auto [x1, y1, x2, y2] = l;
 

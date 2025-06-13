@@ -19,14 +19,14 @@
   ==============================================================================
 */
 
-#include <juce_core/juce_core.h>
+#include <yup_core/yup_core.h>
 
 int main (int argc, char* argv[])
 {
-    juce::String s;
+    yup::String s;
     s << "Testing is fine !";
 
-    juce::Logger::getCurrentLogger()->writeToLog (s);
+    yup::Logger::getCurrentLogger()->writeToLog (s);
 
     return 0;
 }

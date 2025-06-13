@@ -1,5 +1,6 @@
 #include "rive/animation/keyframe_interpolator.hpp"
 #include "rive/artboard.hpp"
+#include "rive/artboard_component_list.hpp"
 #include "rive/constraints/layout_constraint.hpp"
 #include "rive/drawable.hpp"
 #include "rive/factory.hpp"
@@ -23,6 +24,10 @@
 #include <vector>
 
 using namespace rive;
+
+#if defined(WITH_RIVE_LAYOUT) && defined(WITH_RIVE_TOOLS) && defined(DEBUG)
+uint32_t LayoutData::count = 0;
+#endif
 
 void LayoutComponent::buildDependencies()
 {
@@ -97,6 +102,12 @@ void LayoutComponent::heightOverride(float height, int unitValue, bool isRow)
     markLayoutNodeDirty();
 }
 
+void LayoutComponent::parentIsRow(bool isRow)
+{
+    m_parentIsRow = isRow;
+    markLayoutNodeDirty();
+}
+
 void LayoutComponent::widthIntrinsicallySizeOverride(bool intrinsic)
 {
     m_widthIntrinsicallySizeOverride = intrinsic;
@@ -117,6 +128,10 @@ void LayoutComponent::heightIntrinsicallySizeOverride(bool intrinsic)
 
 void LayoutComponent::forcedWidth(float width)
 {
+    if (m_forcedWidth == width)
+    {
+        return;
+    }
     m_forcedWidth = width;
     markLayoutStyleDirty();
     markLayoutNodeDirty();
@@ -124,6 +139,10 @@ void LayoutComponent::forcedWidth(float width)
 
 void LayoutComponent::forcedHeight(float height)
 {
+    if (m_forcedHeight == height)
+    {
+        return;
+    }
     m_forcedHeight = height;
     markLayoutStyleDirty();
     markLayoutNodeDirty();
@@ -167,33 +186,22 @@ bool LayoutComponent::isHidden() const
 bool LayoutComponent::isDisplayHidden() const
 {
 #ifdef WITH_RIVE_LAYOUT
-    if (m_displayHidden)
+    if (m_displayHidden || parent() == nullptr ||
+        !parent()->is<LayoutComponent>())
     {
-        return true;
+        return m_displayHidden;
     }
-    auto p = parent();
-    while (p != nullptr)
-    {
-        if (p->is<LayoutComponent>())
-        {
-            auto layout = p->as<LayoutComponent>();
-            if (layout->isDisplayHidden())
-            {
-                return true;
-            }
-        }
-        p = p->parent();
-    }
-    return false;
+    return parent()->as<LayoutComponent>()->isDisplayHidden();
 #endif
     return false;
 }
 
 void LayoutComponent::propagateCollapse(bool collapse)
 {
+    bool displayHidden = isDisplayHidden();
     for (Component* child : children())
     {
-        child->collapse(collapse || isDisplayHidden());
+        child->collapse(collapse || displayHidden);
     }
 }
 
@@ -205,7 +213,7 @@ bool LayoutComponent::collapse(bool value)
     }
     for (Component* child : children())
     {
-        child->collapse(value || isDisplayHidden());
+        child->collapse(value || m_displayHidden);
     }
     return true;
 }
@@ -216,6 +224,28 @@ LayoutComponent::LayoutComponent() :
     m_layoutData(new LayoutData()), m_proxy(this)
 {
     m_layoutData->node.getConfig()->setPointScaleFactor(0);
+}
+
+float LayoutComponent::gapHorizontal()
+{
+    if (m_style == nullptr)
+    {
+        return 0;
+    }
+    return m_style->gapHorizontalUnits() == YGUnitPercent
+               ? (m_style->gapHorizontal() / 100.0f) * layoutWidth()
+               : m_style->gapHorizontal();
+}
+
+float LayoutComponent::gapVertical()
+{
+    if (m_style == nullptr)
+    {
+        return 0;
+    }
+    return m_style->gapVerticalUnits() == YGUnitPercent
+               ? (m_style->gapVertical() / 100.0f) * layoutHeight()
+               : m_style->gapVertical();
 }
 
 StatusCode LayoutComponent::onAddedDirty(CoreContext* context)
@@ -252,57 +282,6 @@ StatusCode LayoutComponent::onAddedClean(CoreContext* context)
     return StatusCode::Ok;
 }
 
-bool LayoutComponent::willComputeValidWidth()
-{
-    auto p = parent();
-    while (p != nullptr)
-    {
-        if (p->is<LayoutComponent>() && !p->is<Artboard>())
-        {
-            auto layout = p->as<LayoutComponent>();
-            if (layout->style() != nullptr)
-            {
-                if (layout->style()->widthScaleType() == LayoutScaleType::fixed)
-                {
-                    return true;
-                }
-                if (layout->style()->positionType() == YGPositionTypeAbsolute)
-                {
-                    break;
-                }
-            }
-        }
-        p = p->parent();
-    }
-    return false;
-}
-
-bool LayoutComponent::willComputeValidHeight()
-{
-    auto p = parent();
-    while (p != nullptr)
-    {
-        if (p->is<LayoutComponent>() && !p->is<Artboard>())
-        {
-            auto layout = p->as<LayoutComponent>();
-            if (layout->style() != nullptr)
-            {
-                if (layout->style()->heightScaleType() ==
-                    LayoutScaleType::fixed)
-                {
-                    return true;
-                }
-                if (layout->style()->positionType() == YGPositionTypeAbsolute)
-                {
-                    break;
-                }
-            }
-        }
-        p = p->parent();
-    }
-    return false;
-}
-
 void LayoutComponent::drawProxy(Renderer* renderer)
 {
     if (clip())
@@ -312,7 +291,7 @@ void LayoutComponent::drawProxy(Renderer* renderer)
     }
     for (auto shapePaint : m_ShapePaints)
     {
-        if (!shapePaint->isVisible())
+        if (!shapePaint->shouldDraw())
         {
             continue;
         }
@@ -344,11 +323,21 @@ void LayoutComponent::updateRenderPath()
     m_backgroundRect.height(m_layout.height());
     if (style() != nullptr)
     {
+        bool isLTR = actualDirection() != LayoutDirection::rtl;
+        auto linkedValue = style()->cornerRadiusTL();
+        auto tl = isLTR ? style()->cornerRadiusTL() : style()->cornerRadiusTR();
+        auto tr = isLTR ? style()->cornerRadiusTR() : style()->cornerRadiusTL();
+        auto bl = isLTR ? style()->cornerRadiusBL() : style()->cornerRadiusBR();
+        auto br = isLTR ? style()->cornerRadiusBR() : style()->cornerRadiusBL();
         m_backgroundRect.linkCornerRadius(style()->linkCornerRadius());
-        m_backgroundRect.cornerRadiusTL(style()->cornerRadiusTL());
-        m_backgroundRect.cornerRadiusTR(style()->cornerRadiusTR());
-        m_backgroundRect.cornerRadiusBL(style()->cornerRadiusBL());
-        m_backgroundRect.cornerRadiusBR(style()->cornerRadiusBR());
+        m_backgroundRect.cornerRadiusTL(
+            style()->linkCornerRadius() ? linkedValue : tl);
+        m_backgroundRect.cornerRadiusTR(
+            style()->linkCornerRadius() ? linkedValue : tr);
+        m_backgroundRect.cornerRadiusBL(
+            style()->linkCornerRadius() ? linkedValue : bl);
+        m_backgroundRect.cornerRadiusBR(
+            style()->linkCornerRadius() ? linkedValue : br);
     }
     m_backgroundRect.update(ComponentDirt::Path);
 
@@ -360,7 +349,7 @@ void LayoutComponent::updateRenderPath()
 
     for (auto shapePaint : m_ShapePaints)
     {
-        if (!shapePaint->isVisible())
+        if (!shapePaint->shouldDraw())
         {
             continue;
         }
@@ -436,7 +425,8 @@ bool LayoutComponent::isLeaf()
 {
     for (auto child : children())
     {
-        if (child->is<LayoutComponent>() || child->is<NestedArtboardLayout>())
+        auto layout = LayoutNodeProvider::from(child);
+        if (layout != nullptr)
         {
             return false;
         }
@@ -444,9 +434,18 @@ bool LayoutComponent::isLeaf()
     return true;
 }
 
+void* LayoutComponent::layoutNode(int index)
+{
+    if (m_layoutData != nullptr)
+    {
+        return static_cast<void*>(&m_layoutData->node);
+    }
+    return nullptr;
+}
+
 void LayoutComponent::syncStyle()
 {
-    if (m_style == nullptr)
+    if (m_style == nullptr || m_layoutData == nullptr)
     {
         return;
     }
@@ -647,7 +646,6 @@ void LayoutComponent::syncStyle()
         case LayoutAlignmentType::topLeft:
         case LayoutAlignmentType::topCenter:
         case LayoutAlignmentType::topRight:
-        case LayoutAlignmentType::spaceBetweenStart:
             if (isRowForAlignment)
             {
                 ygStyle.alignItems() = YGAlignFlexStart;
@@ -661,7 +659,6 @@ void LayoutComponent::syncStyle()
         case LayoutAlignmentType::centerLeft:
         case LayoutAlignmentType::center:
         case LayoutAlignmentType::centerRight:
-        case LayoutAlignmentType::spaceBetweenCenter:
             if (isRowForAlignment)
             {
                 ygStyle.alignItems() = YGAlignCenter;
@@ -675,7 +672,6 @@ void LayoutComponent::syncStyle()
         case LayoutAlignmentType::bottomLeft:
         case LayoutAlignmentType::bottomCenter:
         case LayoutAlignmentType::bottomRight:
-        case LayoutAlignmentType::spaceBetweenEnd:
             if (isRowForAlignment)
             {
                 ygStyle.alignItems() = YGAlignFlexEnd;
@@ -685,6 +681,8 @@ void LayoutComponent::syncStyle()
             {
                 ygStyle.justifyContent() = YGJustifyFlexEnd;
             }
+            break;
+        default:
             break;
     }
     switch (m_style->alignmentType())
@@ -729,8 +727,18 @@ void LayoutComponent::syncStyle()
             }
             break;
         case LayoutAlignmentType::spaceBetweenStart:
+            ygStyle.alignItems() = YGAlignFlexStart;
+            ygStyle.alignContent() = YGAlignFlexStart;
+            ygStyle.justifyContent() = YGJustifySpaceBetween;
+            break;
         case LayoutAlignmentType::spaceBetweenCenter:
+            ygStyle.alignItems() = YGAlignCenter;
+            ygStyle.alignContent() = YGAlignCenter;
+            ygStyle.justifyContent() = YGJustifySpaceBetween;
+            break;
         case LayoutAlignmentType::spaceBetweenEnd:
+            ygStyle.alignItems() = YGAlignFlexEnd;
+            ygStyle.alignContent() = YGAlignFlexEnd;
             ygStyle.justifyContent() = YGJustifySpaceBetween;
             break;
     }
@@ -747,51 +755,37 @@ void LayoutComponent::syncStyle()
         YGValue{m_style->gapHorizontal(), m_style->gapHorizontalUnits()};
     ygStyle.gap()[YGGutterRow] =
         YGValue{m_style->gapVertical(), m_style->gapVerticalUnits()};
-    ygStyle.border()[YGEdgeLeft] =
+
+    bool isLTR = actualDirection() != LayoutDirection::rtl;
+    auto startEdge = isLTR ? YGEdgeLeft : YGEdgeRight;
+    auto endEdge = isLTR ? YGEdgeRight : YGEdgeLeft;
+    ygStyle.border()[startEdge] =
         YGValue{m_style->borderLeft(), m_style->borderLeftUnits()};
-    ygStyle.border()[YGEdgeRight] =
+    ygStyle.border()[endEdge] =
         YGValue{m_style->borderRight(), m_style->borderRightUnits()};
     ygStyle.border()[YGEdgeTop] =
         YGValue{m_style->borderTop(), m_style->borderTopUnits()};
     ygStyle.border()[YGEdgeBottom] =
         YGValue{m_style->borderBottom(), m_style->borderBottomUnits()};
-
-    auto hasValidWidth = willComputeValidWidth();
-    auto hasValidHeight = willComputeValidHeight();
-    auto marginLeftUnits =
-        !hasValidWidth && m_style->marginLeftUnits() == YGUnitPercent
-            ? YGUnitAuto
-            : m_style->marginLeftUnits();
-    auto marginRightUnits =
-        !hasValidWidth && m_style->marginRightUnits() == YGUnitPercent
-            ? YGUnitAuto
-            : m_style->marginRightUnits();
-    auto marginTopUnits =
-        !hasValidHeight && m_style->marginTopUnits() == YGUnitPercent
-            ? YGUnitAuto
-            : m_style->marginTopUnits();
-    auto marginBottomUnits =
-        !hasValidHeight && m_style->marginBottomUnits() == YGUnitPercent
-            ? YGUnitAuto
-            : m_style->marginBottomUnits();
-    ygStyle.margin()[YGEdgeLeft] =
-        YGValue{m_style->marginLeft(), marginLeftUnits};
-    ygStyle.margin()[YGEdgeRight] =
-        YGValue{m_style->marginRight(), marginRightUnits};
-    ygStyle.margin()[YGEdgeTop] = YGValue{m_style->marginTop(), marginTopUnits};
+    ygStyle.margin()[startEdge] =
+        YGValue{m_style->marginLeft(), m_style->marginLeftUnits()};
+    ygStyle.margin()[endEdge] =
+        YGValue{m_style->marginRight(), m_style->marginRightUnits()};
+    ygStyle.margin()[YGEdgeTop] =
+        YGValue{m_style->marginTop(), m_style->marginTopUnits()};
     ygStyle.margin()[YGEdgeBottom] =
-        YGValue{m_style->marginBottom(), marginBottomUnits};
-    ygStyle.padding()[YGEdgeLeft] =
+        YGValue{m_style->marginBottom(), m_style->marginBottomUnits()};
+    ygStyle.padding()[startEdge] =
         YGValue{m_style->paddingLeft(), m_style->paddingLeftUnits()};
-    ygStyle.padding()[YGEdgeRight] =
+    ygStyle.padding()[endEdge] =
         YGValue{m_style->paddingRight(), m_style->paddingRightUnits()};
     ygStyle.padding()[YGEdgeTop] =
         YGValue{m_style->paddingTop(), m_style->paddingTopUnits()};
     ygStyle.padding()[YGEdgeBottom] =
         YGValue{m_style->paddingBottom(), m_style->paddingBottomUnits()};
-    ygStyle.position()[YGEdgeLeft] =
+    ygStyle.position()[startEdge] =
         YGValue{m_style->positionLeft(), m_style->positionLeftUnits()};
-    ygStyle.position()[YGEdgeRight] =
+    ygStyle.position()[endEdge] =
         YGValue{m_style->positionRight(), m_style->positionRightUnits()};
     ygStyle.position()[YGEdgeTop] =
         YGValue{m_style->positionTop(), m_style->positionTopUnits()};
@@ -803,8 +797,15 @@ void LayoutComponent::syncStyle()
     ygStyle.flex() = YGFloatOptional(m_style->flex());
     ygStyle.flexDirection() = m_style->flexDirection();
     ygStyle.flexWrap() = m_style->flexWrap();
+    ygStyle.direction() = m_style->direction();
 
     ygNode.setStyle(ygStyle);
+}
+
+void LayoutComponent::clearLayoutChildren()
+{
+    YGNode& ourNode = m_layoutData->node;
+    YGNodeRemoveAllChildren(&ourNode);
 }
 
 void LayoutComponent::syncLayoutChildren()
@@ -819,17 +820,36 @@ void LayoutComponent::syncLayoutChildren()
         {
             case LayoutComponentBase::typeKey:
                 node = &child->as<LayoutComponent>()->m_layoutData->node;
+                if (node != nullptr)
+                {
+                    ourNode.insertChild(node, index++);
+                    node->setOwner(&ourNode);
+                    ourNode.markDirtyAndPropagate();
+                }
                 break;
             case NestedArtboardLayoutBase::typeKey:
                 node = static_cast<YGNode*>(
-                    child->as<NestedArtboardLayout>()->layoutNode());
+                    child->as<NestedArtboardLayout>()->layoutNode(0));
+                if (node != nullptr)
+                {
+                    ourNode.insertChild(node, index++);
+                    node->setOwner(&ourNode);
+                    ourNode.markDirtyAndPropagate();
+                }
                 break;
-        }
-        if (node != nullptr)
-        {
-            ourNode.insertChild(node, index++);
-            node->setOwner(&ourNode);
-            ourNode.markDirtyAndPropagate();
+            case ArtboardComponentListBase::typeKey:
+                auto list = child->as<ArtboardComponentList>();
+                for (int i = 0; i < list->artboardCount(); i++)
+                {
+                    node = static_cast<YGNode*>(list->layoutNode(i));
+                    if (node != nullptr)
+                    {
+                        ourNode.insertChild(node, index++);
+                        node->setOwner(&ourNode);
+                        ourNode.markDirtyAndPropagate();
+                    }
+                }
+                break;
         }
     }
     markLayoutNodeDirty();
@@ -858,7 +878,8 @@ void LayoutComponent::propagateSizeToChildren(ContainerComponent* component)
             sizeableChild->controlSize(
                 Vec2D(m_layout.width(), m_layout.height()),
                 widthScaleType,
-                heightScaleType);
+                heightScaleType,
+                actualDirection());
 
             if (!sizeableChild->shouldPropagateSizeToChildren())
             {
@@ -888,6 +909,23 @@ bool LayoutComponent::styleDisplayHidden()
         return false;
     }
     return m_style->display() == YGDisplayNone;
+}
+
+LayoutDirection LayoutComponent::actualDirection()
+{
+    if (m_style == nullptr)
+    {
+        return m_inheritedDirection;
+    }
+    switch (m_style->direction())
+    {
+        case YGDirectionLTR:
+            return LayoutDirection::ltr;
+        case YGDirectionRTL:
+            return LayoutDirection::rtl;
+        default:
+            return m_inheritedDirection;
+    }
 }
 
 void LayoutComponent::onDirty(ComponentDirt value)
@@ -935,13 +973,10 @@ void LayoutComponent::updateLayoutBounds(bool animate)
 
     for (auto child : children())
     {
-        if (child->is<LayoutComponent>())
+        auto layout = LayoutNodeProvider::from(child);
+        if (layout != nullptr)
         {
-            child->as<LayoutComponent>()->updateLayoutBounds(animate);
-        }
-        else if (child->is<NestedArtboardLayout>())
-        {
-            child->as<NestedArtboardLayout>()->updateLayoutBounds(animate);
+            layout->updateLayoutBounds(animate);
         }
     }
 
@@ -952,7 +987,7 @@ void LayoutComponent::updateLayoutBounds(bool animate)
     if (animate && animates())
     {
         auto animationData = currentAnimationData();
-        if (newLayout != animationData->to)
+        if (newLayout != animationData->to || m_forceUpdateLayoutBounds)
         {
             if (animationData->elapsedSeconds != 0.0f)
             {
@@ -975,7 +1010,7 @@ void LayoutComponent::updateLayoutBounds(bool animate)
             markWorldTransformDirty();
         }
     }
-    else if (newLayout != m_layout)
+    else if (newLayout != m_layout || m_forceUpdateLayoutBounds)
     {
         if (m_layout.width() != newLayout.width() ||
             m_layout.height() != newLayout.height())
@@ -988,6 +1023,7 @@ void LayoutComponent::updateLayoutBounds(bool animate)
         propagateSize();
         markWorldTransformDirty();
     }
+    m_forceUpdateLayoutBounds = false;
 }
 
 bool LayoutComponent::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
@@ -1072,42 +1108,69 @@ float LayoutComponent::interpolationTime()
     }
 }
 
-void LayoutComponent::cascadeAnimationStyle(
+bool LayoutComponent::cascadeLayoutStyle(
     LayoutStyleInterpolation inheritedInterpolation,
     KeyFrameInterpolator* inheritedInterpolator,
-    float inheritedInterpolationTime)
+    float inheritedInterpolationTime,
+    LayoutDirection direction)
 {
+    bool updated = false;
     if (m_style != nullptr &&
         m_style->animationStyle() == LayoutAnimationStyle::inherit)
     {
-        setInheritedInterpolation(inheritedInterpolation,
-                                  inheritedInterpolator,
-                                  inheritedInterpolationTime);
+        updated = setInheritedInterpolation(inheritedInterpolation,
+                                            inheritedInterpolator,
+                                            inheritedInterpolationTime);
     }
     else
     {
         clearInheritedInterpolation();
     }
+    auto oldDirection = m_inheritedDirection;
+    if (direction == LayoutDirection::inherit ||
+        (m_style != nullptr && m_style->direction() != YGDirectionInherit))
+    {
+        m_inheritedDirection = LayoutDirection::inherit;
+    }
+    else
+    {
+        m_inheritedDirection = direction;
+    }
+    if (m_inheritedDirection != oldDirection)
+    {
+        markLayoutNodeDirty(true);
+        addDirt(ComponentDirt::Path);
+        updated = true;
+    }
     for (auto child : children())
     {
         if (child->is<LayoutComponent>())
         {
-            child->as<LayoutComponent>()->cascadeAnimationStyle(
+            child->as<LayoutComponent>()->cascadeLayoutStyle(
                 interpolation(),
                 interpolator(),
-                interpolationTime());
+                interpolationTime(),
+                actualDirection());
         }
     }
+    return updated;
 }
 
-void LayoutComponent::setInheritedInterpolation(
+bool LayoutComponent::setInheritedInterpolation(
     LayoutStyleInterpolation inheritedInterpolation,
     KeyFrameInterpolator* inheritedInterpolator,
     float inheritedInterpolationTime)
 {
-    m_inheritedInterpolation = inheritedInterpolation;
-    m_inheritedInterpolator = inheritedInterpolator;
-    m_inheritedInterpolationTime = inheritedInterpolationTime;
+    if (inheritedInterpolation != m_inheritedInterpolation ||
+        inheritedInterpolator != m_inheritedInterpolator ||
+        inheritedInterpolationTime != m_inheritedInterpolationTime)
+    {
+        m_inheritedInterpolation = inheritedInterpolation;
+        m_inheritedInterpolator = inheritedInterpolator;
+        m_inheritedInterpolationTime = inheritedInterpolationTime;
+        return true;
+    }
+    return false;
 }
 
 void LayoutComponent::clearInheritedInterpolation()
@@ -1232,8 +1295,12 @@ void LayoutComponent::interruptAnimation()
     }
 }
 
-void LayoutComponent::markLayoutNodeDirty()
+void LayoutComponent::markLayoutNodeDirty(bool shouldForceUpdateLayoutBounds)
 {
+    if (shouldForceUpdateLayoutBounds == true)
+    {
+        m_forceUpdateLayoutBounds = shouldForceUpdateLayoutBounds;
+    }
     m_layoutData->node.markDirtyAndPropagate();
     artboard()->markLayoutDirty(this);
 }
@@ -1311,20 +1378,26 @@ void LayoutComponent::flexDirectionChanged()
     markLayoutNodeDirty();
     for (Component* child : children())
     {
-        if (child->is<LayoutComponent>())
+        auto layout = LayoutNodeProvider::from(child);
+        if (layout != nullptr)
         {
-            child->as<LayoutComponent>()->markLayoutNodeDirty();
-        }
-        else if (child->is<NestedArtboardLayout>())
-        {
-            child->as<NestedArtboardLayout>()->markLayoutNodeDirty();
+            layout->markLayoutNodeDirty();
         }
     }
+}
+
+void LayoutComponent::directionChanged()
+{
+    markLayoutStyleDirty();
+    markLayoutNodeDirty(true);
 }
 #else
 LayoutComponent::LayoutComponent() :
     m_layoutData(new LayoutData()), m_proxy(this)
 {}
+
+float LayoutComponent::gapHorizontal() { return 0; }
+float LayoutComponent::gapVertical() { return 0; }
 
 void LayoutComponent::drawProxy(Renderer* renderer) {}
 
@@ -1345,7 +1418,7 @@ bool LayoutComponent::advanceComponent(float elapsedSeconds, AdvanceFlags flags)
     return false;
 }
 
-void LayoutComponent::markLayoutNodeDirty() {}
+void LayoutComponent::markLayoutNodeDirty(bool shouldForceUpdateLayoutBounds) {}
 void LayoutComponent::markLayoutStyleDirty() {}
 void LayoutComponent::onDirty(ComponentDirt value) {}
 bool LayoutComponent::mainAxisIsRow() { return true; }
@@ -1353,7 +1426,18 @@ bool LayoutComponent::mainAxisIsRow() { return true; }
 bool LayoutComponent::mainAxisIsColumn() { return false; }
 #endif
 
-LayoutComponent::~LayoutComponent() { delete m_layoutData; }
+LayoutComponent::~LayoutComponent()
+{
+    if (artboard() != nullptr)
+    {
+        artboard()->cleanLayout(this);
+    }
+#ifdef WITH_RIVE_TOOLS
+    m_layoutData->unref();
+#else
+    delete m_layoutData;
+#endif
+}
 
 void LayoutComponent::clipChanged() { markLayoutNodeDirty(); }
 void LayoutComponent::widthChanged() { markLayoutNodeDirty(); }

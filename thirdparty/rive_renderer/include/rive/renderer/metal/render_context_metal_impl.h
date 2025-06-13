@@ -5,7 +5,8 @@
 #pragma once
 
 #include "rive/renderer/render_context_helper_impl.hpp"
-#include <map>
+#include "rive/shapes/paint/image_sampler.hpp"
+#include <unordered_map>
 #include <mutex>
 
 #ifndef RIVE_OBJC_NOP
@@ -124,7 +125,7 @@ public:
     rcp<Texture> makeImageTexture(uint32_t width,
                                   uint32_t height,
                                   uint32_t mipLevelCount,
-                                  const uint8_t imageDataRGBA[]) override;
+                                  const uint8_t imageDataRGBAPremul[]) override;
 
     // Atomic mode requires a barrier between overlapping draws. We have to
     // implement this barrier in various different ways, depending on which
@@ -176,7 +177,8 @@ private:
     // Obtains an exclusive lock on the next buffer ring index, potentially
     // blocking until the GPU has finished rendering with it. This ensures it is
     // safe for the CPU to begin modifying the next buffers in our rings.
-    void prepareToMapBuffers() override;
+    void prepareToFlush(uint64_t nextFrameNumber,
+                        uint64_t safeFrameNumber) override;
 
     // Creates a MTLRenderCommandEncoder and sets the common state for PLS
     // draws.
@@ -192,10 +194,12 @@ private:
     // the given features.
     const DrawPipeline* findCompatibleDrawPipeline(gpu::DrawType,
                                                    gpu::ShaderFeatures,
-                                                   gpu::InterlockMode,
+                                                   const gpu::FlushDescriptor&,
                                                    gpu::ShaderMiscFlags);
 
     void flush(const FlushDescriptor&) override;
+
+    void postFlush(const RenderContext::FlushResources&) override;
 
     const ContextOptions m_contextOptions;
     const id<MTLDevice> m_gpu;
@@ -225,7 +229,9 @@ private:
     std::unique_ptr<AtlasPipeline> m_atlasStrokePipeline;
     id<MTLTexture> m_atlasTexture = nullptr;
 
-    std::map<uint32_t, std::unique_ptr<DrawPipeline>> m_drawPipelines;
+    id<MTLSamplerState> m_imageSamplers[ImageSampler::MAX_SAMPLER_PERMUTATIONS];
+
+    std::unordered_map<uint32_t, std::unique_ptr<DrawPipeline>> m_drawPipelines;
 
     // Vertex/index buffers for drawing path patches.
     id<MTLBuffer> m_pathPatchVertexBuffer;

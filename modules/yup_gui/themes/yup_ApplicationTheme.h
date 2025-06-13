@@ -32,7 +32,7 @@ namespace yup
 
     @tags{UI}
 */
-class JUCE_API ApplicationTheme final : public ReferenceCountedObject
+class YUP_API ApplicationTheme final : public ReferenceCountedObject
 {
 public:
     /** Typedef for a reference-counted pointer to an ApplicationTheme object. */
@@ -82,6 +82,8 @@ public:
     static auto findComponentStyle (ComponentType& component)
         -> std::enable_if_t<std::is_base_of_v<Component, ComponentType>, ComponentStyle::Ptr>
     {
+        YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
         auto& componentStyles = getGlobalThemeInstance()->componentStyles;
 
         if (auto style = component.getStyle())
@@ -115,6 +117,8 @@ public:
     template <class ComponentType>
     void setComponentStyle (ComponentStyle::Ptr style)
     {
+        YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
+
         componentStyles.try_emplace (std::type_index (typeid (ComponentType)), std::move (style));
     }
 
@@ -151,7 +155,7 @@ private:
     std::unordered_map<Identifier, Color> defaultColors;
     Font defaultFont;
 
-    JUCE_LEAK_DETECTOR (ApplicationTheme)
+    YUP_LEAK_DETECTOR (ApplicationTheme)
 };
 
 } // namespace yup

@@ -16,7 +16,7 @@ namespace rive
 {
 class AABB;
 class KeyFrameInterpolator;
-struct LayoutData;
+class LayoutData;
 class LayoutComponentStyle;
 class LayoutConstraint;
 class Layout
@@ -113,6 +113,7 @@ protected:
     LayoutStyleInterpolation m_inheritedInterpolation =
         LayoutStyleInterpolation::hold;
     float m_inheritedInterpolationTime = 0;
+    LayoutDirection m_inheritedDirection = LayoutDirection::inherit;
     Rectangle m_backgroundRect;
     ShapePaintPath m_localPath;
     ShapePaintPath m_worldPath;
@@ -138,6 +139,10 @@ protected:
     bool isDisplayHidden() const;
     void propagateCollapse(bool collapse);
     bool collapse(bool value) override;
+    float computedLocalX() override { return m_layout.left(); };
+    float computedLocalY() override { return m_layout.top(); };
+    float computedWidth() override { return m_layout.width(); };
+    float computedHeight() override { return m_layout.height(); };
 
 private:
     float m_widthOverride = NAN;
@@ -149,10 +154,10 @@ private:
     bool m_heightIntrinsicallySizeOverride = false;
     float m_forcedWidth = NAN;
     float m_forcedHeight = NAN;
+    bool m_forceUpdateLayoutBounds = false;
 
 #ifdef WITH_RIVE_LAYOUT
 protected:
-    void syncLayoutChildren();
     void propagateSizeToChildren(ContainerComponent* component);
     bool applyInterpolation(float elapsedSeconds, bool animate = true);
     void calculateLayout();
@@ -184,6 +189,7 @@ public:
                               m_layout.width(),
                               m_layout.height());
     }
+    size_t numLayoutNodes() override { return 1; }
     AABB localBounds() const override
     {
         return AABB::fromLTWH(0.0f, 0.0f, m_layout.width(), m_layout.height());
@@ -218,10 +224,14 @@ public:
     float paddingTop() { return m_layoutPadding.top(); }
     float paddingBottom() { return m_layoutPadding.bottom(); }
 
+    float gapHorizontal();
+    float gapVertical();
+
     // We provide a way for nested artboards (or other objects) to override this
     // layout's width/height and unit values.
     void widthOverride(float width, int unitValue = 1, bool isRow = true);
     void heightOverride(float height, int unitValue = 1, bool isRow = true);
+    void parentIsRow(bool isRow);
     void widthIntrinsicallySizeOverride(bool intrinsic);
     void heightIntrinsicallySizeOverride(bool intrinsic);
     virtual bool canHaveOverrides() { return false; }
@@ -248,9 +258,12 @@ public:
     ~LayoutComponent();
 #ifdef WITH_RIVE_LAYOUT
 
+    void* layoutNode(int index) override;
     void syncStyle();
+    void syncLayoutChildren();
+    void clearLayoutChildren();
     virtual void propagateSize();
-    void updateLayoutBounds(bool animate = true);
+    void updateLayoutBounds(bool animate = true) override;
     StatusCode onAddedDirty(CoreContext* context) override;
     StatusCode onAddedClean(CoreContext* context) override;
     bool advance(float elapsedSeconds);
@@ -260,10 +273,11 @@ public:
     LayoutStyleInterpolation interpolation();
     float interpolationTime();
 
-    void cascadeAnimationStyle(LayoutStyleInterpolation inheritedInterpolation,
-                               KeyFrameInterpolator* inheritedInterpolator,
-                               float inheritedInterpolationTime);
-    void setInheritedInterpolation(
+    bool cascadeLayoutStyle(LayoutStyleInterpolation inheritedInterpolation,
+                            KeyFrameInterpolator* inheritedInterpolator,
+                            float inheritedInterpolationTime,
+                            LayoutDirection direction);
+    bool setInheritedInterpolation(
         LayoutStyleInterpolation inheritedInterpolation,
         KeyFrameInterpolator* inheritedInterpolator,
         float inheritedInterpolationTime);
@@ -274,12 +288,13 @@ public:
     void scaleTypeChanged();
     void displayChanged();
     void flexDirectionChanged();
-    bool willComputeValidWidth();
-    bool willComputeValidHeight();
+    void directionChanged();
+    LayoutDirection actualDirection();
 #endif
     void buildDependencies() override;
 
-    void markLayoutNodeDirty();
+    void markLayoutNodeDirty(
+        bool shouldForceUpdateLayoutBounds = false) override;
     void markLayoutStyleDirty();
     void clipChanged() override;
     void widthChanged() override;

@@ -19,14 +19,14 @@
   ==============================================================================
 */
 
-#include <juce_core/juce_core.h>
-#include <juce_events/juce_events.h>
+#include <yup_core/yup_core.h>
+#include <yup_events/yup_events.h>
 #include <yup_graphics/yup_graphics.h>
 #include <yup_gui/yup_gui.h>
 
 #include <memory>
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
 #include <BinaryData.h>
 #endif
 
@@ -43,7 +43,7 @@ public:
         // Set title
         setTitle ("main");
 
-#if JUCE_WASM
+#if YUP_WASM
         yup::File riveFilePath = yup::File ("/data")
                                      .getChildFile ("artboard.riv");
 #else
@@ -59,7 +59,7 @@ public:
             auto art = artboards.add (std::make_unique<yup::Artboard> (yup::String ("art") + yup::String (i)));
             addAndMakeVisible (art);
 
-#if JUCE_ANDROID
+#if YUP_ANDROID
             yup::MemoryInputStream is (yup::RiveFile_data, yup::RiveFile_size, false);
             art->loadFromStream (is, 0, true);
 #else
@@ -213,7 +213,7 @@ struct Application : yup::YUPApplication
         yup::Logger::outputDebugString ("Starting app " + commandLineParameters);
 
         window = std::make_unique<CustomWindow>();
-#if JUCE_IOS || JUCE_ANDROID
+#if YUP_IOS || YUP_ANDROID
         window->centreWithSize ({ 1080, 2400 });
 #else
         window->centreWithSize ({ 1280, 866 });
@@ -243,4 +243,4 @@ private:
     //std::unique_ptr<CustomWindow2> window2;
 };
 
-START_JUCE_APPLICATION (Application)
+START_YUP_APPLICATION (Application)

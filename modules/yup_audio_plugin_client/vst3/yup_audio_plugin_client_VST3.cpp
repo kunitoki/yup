@@ -98,23 +98,23 @@ void toString128 (const String& source, Vst::String128 destination)
 
 static std::atomic_int numScopedInitInstancesGui = 0;
 
-struct ScopedYupInitialiser_GUI
+struct VST3ScopedYupInitialiser
 {
-    ScopedYupInitialiser_GUI()
+    VST3ScopedYupInitialiser()
     {
         if (numScopedInitInstancesGui.fetch_add (1) == 0)
         {
-            initialiseJuce_GUI();
+            initialiseYup_GUI();
             initialiseYup_Windowing();
         }
     }
 
-    ~ScopedYupInitialiser_GUI()
+    ~VST3ScopedYupInitialiser()
     {
         if (numScopedInitInstancesGui.fetch_add (-1) == 1)
         {
             shutdownYup_Windowing();
-            shutdownJuce_GUI();
+            shutdownYup_GUI();
         }
     }
 };
@@ -325,15 +325,15 @@ public:
 
     tresult PLUGIN_API isPlatformTypeSupported (FIDString type) override
     {
-#if JUCE_WINDOWS
+#if YUP_WINDOWS
         if (std::string_view (type) == kPlatformTypeHWND)
             return kResultTrue;
-#elif JUCE_MAC
+#elif YUP_MAC
         if (std::string_view (type) == kPlatformTypeNSView)
             return kResultTrue;
         else if (std::string_view (type) == kPlatformTypeHIView)
             return kResultFalse;
-#elif JUCE_LINUX
+#elif YUP_LINUX
         if (std::string_view (type) == kPlatformTypeX11EmbedWindowID)
             return kResultTrue;
 #endif
@@ -1028,7 +1028,7 @@ public:
     }
 
 private:
-    ScopedYupInitialiser_GUI scopeInitialiser;
+    VST3ScopedYupInitialiser scopeInitialiser;
 
     std::unique_ptr<AudioProcessor> processor;
 

@@ -6,34 +6,15 @@
 #include "rive/text_engine.hpp"
 #include "rive/shapes/shape_paint_path.hpp"
 #include "rive/simple_array.hpp"
-#include <vector>
 #include "rive/text/glyph_lookup.hpp"
+#include "rive/text/text_interface.hpp"
+
+#include <unordered_map>
+#include <vector>
+
 namespace rive
 {
 
-enum class TextSizing : uint8_t
-{
-    autoWidth,
-    autoHeight,
-    fixed
-};
-
-enum class TextOverflow : uint8_t
-{
-    visible,
-    hidden,
-    clipped,
-    ellipsis,
-    fit,
-};
-
-enum class TextOrigin : uint8_t
-{
-    top,
-    baseline
-};
-
-class OrderedLine;
 class TextModifierGroup;
 
 class StyledText
@@ -59,137 +40,39 @@ public:
     void swapRuns(std::vector<TextRun>& otherRuns) { m_runs.swap(otherRuns); }
 };
 
-// STL-style iterator for individual glyphs in a line, simplfies call sites from
-// needing to iterate both runs and glyphs within those runs per line. A single
-// iterator allows iterating all the glyphs in the line and provides the correct
-// run they belong to (this also takes into account bidi which can put the runs
-// in different order from how they were provided by the line breaker).
-//
-//   for (auto [run, glyphIndex] : orderedLine) { ... }
-//
-class GlyphItr
+struct TextBoundsInfo
 {
-public:
-    GlyphItr() = default;
-    GlyphItr(const OrderedLine* line,
-             const rive::GlyphRun* const* run,
-             uint32_t glyphIndex) :
-        m_line(line), m_run(run), m_glyphIndex(glyphIndex)
-    {}
-
-    void tryAdvanceRun();
-
-    bool operator!=(const GlyphItr& that) const
-    {
-        return m_run != that.m_run || m_glyphIndex != that.m_glyphIndex;
-    }
-    bool operator==(const GlyphItr& that) const
-    {
-        return m_run == that.m_run && m_glyphIndex == that.m_glyphIndex;
-    }
-
-    GlyphItr& operator++();
-
-    std::tuple<const GlyphRun*, uint32_t> operator*() const
-    {
-        return {*m_run, m_glyphIndex};
-    }
-
-private:
-    const OrderedLine* m_line;
-    const rive::GlyphRun* const* m_run;
-    uint32_t m_glyphIndex;
+    float minY;
+    float maxWidth;
+    float totalHeight;
+    int ellipsisLine;
+    bool isEllipsisLineLast;
 };
 
-// Represents a line of text with runs ordered visually. Also tracks logical
-// start/end which will defer when using bidi.
-class OrderedLine
+enum class LineIter : uint8_t
 {
-public:
-    OrderedLine(const Paragraph& paragraph,
-                const GlyphLine& line,
-                float lineWidth, // for ellipsis
-                bool wantEllipsis,
-                bool isEllipsisLineLast,
-                GlyphRun* ellipsisRun);
-
-    bool buildEllipsisRuns(std::vector<const GlyphRun*>& logicalRuns,
-                           const Paragraph& paragraph,
-                           const GlyphLine& line,
-                           float lineWidth,
-                           bool isEllipsisLineLast,
-                           GlyphRun* ellipsisRun);
-    const GlyphRun* startLogical() const { return m_startLogical; }
-    const GlyphRun* endLogical() const { return m_endLogical; }
-    const std::vector<const GlyphRun*>& runs() const { return m_runs; }
-
-    GlyphItr begin() const
-    {
-        auto runItr = m_runs.data();
-        auto itr = GlyphItr(this, runItr, startGlyphIndex(*runItr));
-        itr.tryAdvanceRun();
-        return itr;
-    }
-
-    GlyphItr end() const
-    {
-        auto runItr =
-            m_runs.data() + (m_runs.size() == 0 ? 0 : m_runs.size() - 1);
-        return GlyphItr(this, runItr, endGlyphIndex(*runItr));
-    }
-
-private:
-    const GlyphRun* m_startLogical = nullptr;
-    const GlyphRun* m_endLogical = nullptr;
-    uint32_t m_startGlyphIndex;
-    uint32_t m_endGlyphIndex;
-    std::vector<const GlyphRun*> m_runs;
-
-public:
-    const GlyphRun* lastRun() const { return m_runs.back(); }
-    uint32_t startGlyphIndex(const GlyphRun* run) const
-    {
-        TextDirection dir =
-            run->level & 1 ? TextDirection::rtl : TextDirection::ltr;
-        switch (dir)
-        {
-            case TextDirection::ltr:
-                return m_startLogical == run ? m_startGlyphIndex : 0;
-            case TextDirection::rtl:
-                return (m_endLogical == run ? m_endGlyphIndex
-                                            : (uint32_t)run->glyphs.size()) -
-                       1;
-        }
-        RIVE_UNREACHABLE();
-    }
-    uint32_t endGlyphIndex(const GlyphRun* run) const
-    {
-        TextDirection dir =
-            run->level & 1 ? TextDirection::rtl : TextDirection::ltr;
-        switch (dir)
-        {
-            case TextDirection::ltr:
-                return m_endLogical == run ? m_endGlyphIndex
-                                           : (uint32_t)run->glyphs.size();
-            case TextDirection::rtl:
-                return (m_startLogical == run ? m_startGlyphIndex : 0) - 1;
-        }
-        RIVE_UNREACHABLE();
-    }
+    drawLine,
+    skipThisLine,
+    yOutOfBounds
 };
 
-class TextStyle;
-class Text : public TextBase
+class TextStylePaint;
+class Text : public TextBase, public TextInterface
 {
 public:
+    // Implements TextInterface
+    void markShapeDirty() override;
+    void markPaintDirty() override;
+
     void draw(Renderer* renderer) override;
     Core* hitTest(HitInfo*, const Mat2D&) override;
     void addRun(TextValueRun* run);
     void addModifierGroup(TextModifierGroup* group);
-    void markShapeDirty(bool sendToLayout = true);
+    void markShapeDirty(bool sendToLayout);
     void modifierShapeDirty();
-    void markPaintDirty();
+
     void update(ComponentDirt value) override;
+    void onDirty(ComponentDirt value) override;
     Mat2D m_transform;
     Mat2D m_shapeWorldTransform;
 
@@ -203,9 +86,10 @@ public:
     {
         return (VerticalTextAlign)verticalAlignValue();
     }
+    TextAlign align() const;
     void overflow(TextOverflow value) { return overflowValue((uint32_t)value); }
     void buildRenderStyles();
-    const TextStyle* styleFromShaperId(uint16_t id) const;
+    const TextStylePaint* styleFromShaperId(uint16_t id) const;
     bool modifierRangesNeedShape() const;
     AABB localBounds() const override;
     void originXChanged() override;
@@ -217,7 +101,8 @@ public:
                         LayoutMeasureMode heightMode) override;
     void controlSize(Vec2D size,
                      LayoutScaleType widthScaleType,
-                     LayoutScaleType heightScaleType) override;
+                     LayoutScaleType heightScaleType,
+                     LayoutDirection direction) override;
     float effectiveWidth()
     {
         return std::isnan(m_layoutWidth) ? width() : m_layoutWidth;
@@ -226,6 +111,8 @@ public:
     {
         return std::isnan(m_layoutHeight) ? height() : m_layoutHeight;
     }
+    float computedWidth() override { return localBounds().width(); };
+    float computedHeight() override { return localBounds().height(); };
 #ifdef WITH_RIVE_TEXT
     const std::vector<TextValueRun*>& runs() const { return m_runs; }
     static SimpleArray<SimpleArray<GlyphLine>> BreakLines(
@@ -233,10 +120,6 @@ public:
         float width,
         TextAlign align,
         TextWrap wrap);
-#endif
-
-#ifdef WITH_RIVE_LAYOUT
-    void markLayoutNodeDirty();
 #endif
 
     bool haveModifiers() const
@@ -277,7 +160,7 @@ private:
 #ifdef WITH_RIVE_TEXT
     void updateOriginWorldTransform();
     std::vector<TextValueRun*> m_runs;
-    std::vector<TextStyle*> m_renderStyles;
+    std::vector<TextStylePaint*> m_renderStyles;
     SimpleArray<Paragraph> m_shape;
     SimpleArray<Paragraph> m_modifierShape;
     SimpleArray<SimpleArray<GlyphLine>> m_lines;
@@ -292,13 +175,18 @@ private:
 
     StyledText m_styledText;
     StyledText m_modifierStyledText;
-
     GlyphLookup m_glyphLookup;
+
+    void clearRenderStyles();
+    TextBoundsInfo computeBoundsInfo();
+    LineIter shouldDrawLine(float y, float totalHeight, const GlyphLine& line);
+
 #endif
     float m_layoutWidth = NAN;
     float m_layoutHeight = NAN;
     uint8_t m_layoutWidthScaleType = std::numeric_limits<uint8_t>::max();
     uint8_t m_layoutHeightScaleType = std::numeric_limits<uint8_t>::max();
+    LayoutDirection m_layoutDirection = LayoutDirection::inherit;
     Vec2D measure(Vec2D maxSize);
 };
 } // namespace rive

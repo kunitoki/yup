@@ -13,6 +13,25 @@
 // -FEATHER_TEXTURE_STDDEVS to +FEATHER_TEXTURE_STDDEVS in the domain x=0..1.
 #define FEATHER_TEXTURE_STDDEVS float(3)
 
+// Indices of function tables in the feather texture1d array.
+// NOTE: This will be a texture2d if texture1d isn't supported.
+#define FEATHER_FUNCTION_ARRAY_INDEX 0
+#define FEATHER_INVERSE_FUNCTION_ARRAY_INDEX 1
+#define FEATHER_TEXTURE_1D_ARRAY_LENGTH 2
+
+// Number of additional tessellation "helper" vertices that need to be allocated
+// for a feather join.
+#define FEATHER_JOIN_HELPER_VERTEX_COUNT 3u
+
+// Amount to increase "joinSegmentCount" in a feather join so the number of
+// literal vertices allocated increases by FEATHER_JOIN_HELPER_VERTEX_COUNT.
+#define FEATHER_JOIN_HELPER_SEGMENT_COUNT                                      \
+    (FEATHER_JOIN_HELPER_VERTEX_COUNT + 1u)
+
+// Feather joins are split into a backward and forward section. Both sections
+// need at least one segment, thus a minimum of 2 (plus helper vertices).
+#define FEATHER_JOIN_MIN_SEGMENT_COUNT (2u + FEATHER_JOIN_HELPER_SEGMENT_COUNT)
+
 // Width to use for a texture that emulates a storage buffer.
 //
 // Minimize width since the texture needs to be updated in entire rows from the
@@ -41,38 +60,44 @@
 // wouldn't be worth it to put them in their own dedicated draw call.
 #define RETROFITTED_TRIANGLE_CONTOUR_FLAG (1u << 31u)
 
+// Skip bit 30 in the contour flags so that it's always 0. This ensures we never
+// generate special NaN/Inf floating point values in contourIDWithFlags, which
+// may confuse the driver.
+#define NEVER_USED_CONTOUR_FLAG (1u << 30u)
+
 // Tells the tessellation shader to re-run Wang's formula on the given curve,
 // figure out how many segments it actually needs, and make any excess segments
 // degenerate by co-locating their vertices at T=0. (Used on the "outerCurve"
 // patches that are drawn with interior triangulations.)
-#define CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG (1u << 30u)
+#define CULL_EXCESS_TESSELLATION_SEGMENTS_CONTOUR_FLAG (1u << 29u)
 
 // Flags for specifying the join type.
-#define JOIN_TYPE_MASK (7u << 27u)
-#define MITER_CLIP_JOIN_CONTOUR_FLAG (5u << 27u)
-#define MITER_REVERT_JOIN_CONTOUR_FLAG (4u << 27u)
-#define BEVEL_JOIN_CONTOUR_FLAG (3u << 27u)
-#define ROUND_JOIN_CONTOUR_FLAG (2u << 27u)
-#define FEATHER_JOIN_CONTOUR_FLAG (1u << 27u)
+#define JOIN_TYPE_MASK (7u << 26u)
+#define MITER_CLIP_JOIN_CONTOUR_FLAG (5u << 26u)
+#define MITER_REVERT_JOIN_CONTOUR_FLAG (4u << 26u)
+#define BEVEL_JOIN_CONTOUR_FLAG (3u << 26u)
+#define ROUND_JOIN_CONTOUR_FLAG (2u << 26u)
+#define FEATHER_JOIN_CONTOUR_FLAG (1u << 26u)
 
 // When a join is being used to emulate a stroke cap, the shader emits
 // additional vertices at T=0 and T=1 for round joins, and changes the miter
 // limit to 1 for miter-clip joins.
-#define EMULATED_STROKE_CAP_CONTOUR_FLAG (1u << 26u)
+#define EMULATED_STROKE_CAP_CONTOUR_FLAG (1u << 25u)
 
 // Flip the sign on interpolated fragment coverage for fills. Ignored on
 // strokes. This is used when reversing the winding direction of a path.
-#define NEGATE_PATH_FILL_COVERAGE_FLAG (1u << 25u)
+#define NEGATE_PATH_FILL_COVERAGE_FLAG (1u << 24u)
 
 // Internal contour flags.
-#define MIRRORED_CONTOUR_CONTOUR_FLAG (1u << 24u)
-// Degenerate outsets are used to implement discontinuities in feather joins.
-#define ZERO_FEATHER_OUTSET_CONTOUR_FLAG (1u << 23u)
+#define MIRRORED_CONTOUR_CONTOUR_FLAG (1u << 23u)
 #define JOIN_TANGENT_0_CONTOUR_FLAG (1u << 22u)
 #define JOIN_TANGENT_INNER_CONTOUR_FLAG (1u << 21u)
 #define LEFT_JOIN_CONTOUR_FLAG (1u << 20u)
 #define RIGHT_JOIN_CONTOUR_FLAG (1u << 19u)
 #define CONTOUR_ID_MASK 0xffffu
+
+// This is guaranteed to not collide with a neighboring contour ID.
+#define INVALID_CONTOUR_ID_WITH_FLAGS 0u
 
 // Says which part of the patch a vertex belongs to.
 #define STROKE_VERTEX 0
@@ -102,26 +127,32 @@
 #define PER_DRAW_BINDINGS_SET 1
 
 // Index at which we access each resource.
-#define TESS_VERTEX_TEXTURE_IDX 0
-#define GRAD_TEXTURE_IDX 1
-#define FEATHER_TEXTURE_IDX 2
-#define ATLAS_TEXTURE_IDX 3
-#define IMAGE_TEXTURE_IDX 4
-#define PATH_BUFFER_IDX 5
-#define PAINT_BUFFER_IDX 6
-#define PAINT_AUX_BUFFER_IDX 7
-#define CONTOUR_BUFFER_IDX 8
-#define FLUSH_UNIFORM_BUFFER_IDX 9
-#define PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX 10
-#define IMAGE_DRAW_UNIFORM_BUFFER_IDX 11
+// (Enumerate buffers first because GLES allows a hard limit on buffer index
+// bindings as low as 7.)
+#define FLUSH_UNIFORM_BUFFER_IDX 0
+#define PATH_BASE_INSTANCE_UNIFORM_BUFFER_IDX 1
+#define IMAGE_DRAW_UNIFORM_BUFFER_IDX 2
+#define PATH_BUFFER_IDX 3
+#define PAINT_BUFFER_IDX 4
+#define PAINT_AUX_BUFFER_IDX 5
+#define CONTOUR_BUFFER_IDX 6
 // Coverage buffer used in coverageAtomic mode.
-#define COVERAGE_BUFFER_IDX 12
-#define DST_COLOR_TEXTURE_IDX 13
-#define DEFAULT_BINDINGS_SET_SIZE 14
+#define COVERAGE_BUFFER_IDX 7
+#define TESS_VERTEX_TEXTURE_IDX 8
+#define GRAD_TEXTURE_IDX 9
+#define FEATHER_TEXTURE_IDX 10
+#define ATLAS_TEXTURE_IDX 11
+#define IMAGE_TEXTURE_IDX 12
+#define IMAGE_SAMPLER_IDX 13
+#define DST_COLOR_TEXTURE_IDX 14
+#define DEFAULT_BINDINGS_SET_SIZE 15
+
+// Metal doesn't allow us to bind buffers index 0 or 1. Offset them by 2.
+#define METAL_BUFFER_IDX(IDX) (2 + IDX)
 
 // Samplers are accessed at the same index as their corresponding texture, so we
 // put them in a separate binding set.
-#define SAMPLER_BINDINGS_SET 2
+#define IMMUTABLE_SAMPLER_BINDINGS_SET 2
 
 // PLS textures are accessed at the same index as their PLS planes, so we put
 // them in a separate binding set.
@@ -134,6 +165,8 @@
 #define CLIP_PLANE_IDX 1
 #define SCRATCH_COLOR_PLANE_IDX 2
 #define COVERAGE_PLANE_IDX 3
+#define PLS_PLANE_COUNT 4
+#define DEPTH_STENCIL_IDX PLS_PLANE_COUNT
 
 // Rive has a hard-coded miter limit of 4 in the editor and all runtimes.
 #define RIVE_MITER_LIMIT float(4)
@@ -186,12 +219,13 @@
 #define CLOCKWISE_COVERAGE_INVERSE_PRECISION float(0.00048828125)
 #define CLOCKWISE_FILL_ZERO_VALUE (1u << 16)
 
-// Binding points for storage buffers.
-#define PAINT_STORAGE_BUFFER_IDX 8
-#define PAINT_MATRIX_STORAGE_BUFFER_IDX 9
-#define PAINT_TRANSLATE_STORAGE_BUFFER_IDX 10
-#define CLIPRECT_MATRIX_STORAGE_BUFFER_IDX 11
-#define CLIPRECT_TRANSLATE_STORAGE_BUFFER_IDX 12
+// Vendor IDs for driver workarounds.
+#define VULKAN_VENDOR_AMD 0x1002u
+#define VULKAN_VENDOR_IMG_TEC 0x1010u
+#define VULKAN_VENDOR_NVIDIA 0x10DEu
+#define VULKAN_VENDOR_ARM 0x13B5u
+#define VULKAN_VENDOR_QUALCOMM 0x5143u
+#define VULKAN_VENDOR_INTEL 0x8086u
 
 // Indices for SPIRV specialization constants (used in lieu of #defines in
 // Vulkan.)
@@ -204,4 +238,5 @@
 #define HSL_BLEND_MODES_SPECIALIZATION_IDX 6
 #define CLOCKWISE_FILL_SPECIALIZATION_IDX 7
 #define BORROWED_COVERAGE_PREPASS_SPECIALIZATION_IDX 8
-#define SPECIALIZATION_COUNT 9
+#define VULKAN_VENDOR_ID_SPECIALIZATION_IDX 9
+#define SPECIALIZATION_COUNT 10
