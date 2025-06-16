@@ -40,7 +40,8 @@
 namespace yup
 {
 
-namespace {
+namespace
+{
 /** This maps was created using the data provided by IBM:
 
     https://www.ibm.com/docs/en/i/7.2?topic=tables-unicode-lowercase-uppercase-conversion-mapping-table
