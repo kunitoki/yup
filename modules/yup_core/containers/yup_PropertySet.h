@@ -176,6 +176,9 @@ public:
     /** Returns the keys/value pair array containing all the properties. */
     StringPairArray& getAllProperties() noexcept { return properties; }
 
+    /** Returns the keys/value pair array containing all the properties. */
+    const StringPairArray& getAllProperties() const noexcept { return properties; }
+
     /** Returns the lock used when reading or writing to this set */
     const CriticalSection& getLock() const noexcept { return lock; }
 
