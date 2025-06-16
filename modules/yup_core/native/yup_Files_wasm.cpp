@@ -22,6 +22,11 @@
 namespace yup
 {
 
+//==============================================================================
+const char* const* yup_argv = nullptr;
+int yup_argc = 0;
+
+//==============================================================================
 enum
 {
     U_ISOFS_SUPER_MAGIC = 0x9660, // linux/iso_fs.h
@@ -63,13 +68,18 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
-    jassertfalse; // xxx not implemented for linux!
+    jassertfalse; // xxx not yet implemented for wasm!
     return false;
 }
 
 String File::getVersion() const
 {
     return {}; // xxx not yet implemented
+}
+
+bool File::isHidden() const
+{
+    return getFileName().startsWithChar ('.');
 }
 
 bool File::isSymbolicLink() const
@@ -82,11 +92,55 @@ String File::getNativeLinkedTarget() const
     return {}; // xxx not yet implemented
 }
 
+bool File::copyInternal (const File& dest) const
+{
+    FileInputStream in (*this);
+
+    if (dest.deleteFile())
+    {
+        {
+            FileOutputStream out (dest);
+
+            if (out.failedToOpen())
+                return false;
+
+            if (out.writeFromInputStream (in, -1) == getSize())
+                return true;
+        }
+
+        dest.deleteFile();
+    }
+
+    return false;
+}
+
 //==============================================================================
+void File::findFileSystemRoots (Array<File>& destArray)
+{
+    destArray.add (File ("/"));
+}
 
-const char* const* yup_argv = nullptr;
-int yup_argc = 0;
+int64 File::getBytesFreeOnVolume() const
+{
+    return 0; // xxx not yet implemented
+}
 
+int64 File::getVolumeTotalSize() const
+{
+    return 0; // xxx not yet implemented
+}
+
+String File::getVolumeLabel() const
+{
+    return {}; // xxx not yet implemented
+}
+
+int File::getVolumeSerialNumber() const
+{
+    return 0; // xxx not yet implemented
+}
+
+//==============================================================================
 File File::getSpecialLocation (const SpecialLocationType type)
 {
     /*
@@ -178,6 +232,16 @@ void File::revealToUser() const
 
     else if (getParentDirectory().exists())
         getParentDirectory().startAsProcess();
+}
+
+//==============================================================================
+void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exclusive)
+{
+    jassertfalse;
+}
+
+MemoryMappedFile::~MemoryMappedFile()
+{
 }
 
 //==============================================================================
