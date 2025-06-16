@@ -105,9 +105,6 @@ function (yup_standalone_app)
 
     target_compile_features (${target_name} PRIVATE cxx_std_${target_cxx_standard})
 
-    add_compile_options ("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
-    add_compile_options ("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-
     # ==== Per platform configuration
     if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
         if (NOT "${target_console}")

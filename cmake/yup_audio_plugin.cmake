@@ -64,9 +64,6 @@ function (yup_audio_plugin)
     _yup_message (STATUS "Creating static library for user's plugin code")
     add_library (${target_name}_shared INTERFACE)
 
-    add_compile_options ("$<$<C_COMPILER_ID:MSVC>:/utf-8>")
-    add_compile_options ("$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
-
     target_compile_features (${target_name}_shared INTERFACE cxx_std_${target_cxx_standard})
 
     target_compile_definitions (${target_name}_shared INTERFACE
