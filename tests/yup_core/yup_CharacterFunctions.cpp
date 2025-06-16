@@ -541,17 +541,17 @@ TEST (CharacterFunctionsGeneralTests, IsWhitespace)
     EXPECT_FALSE (CharacterFunctions::isWhitespace ('!'));
 
     // yup_wchar version
-    EXPECT_TRUE (CharacterFunctions::isWhitespace (L' '));
-    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\t'));
-    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\n'));
-    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\r'));
-    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\v'));
-    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\f'));
-    //EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\u00A0')); // Non-breaking space
-    //EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\u2000')); // En quad
-    //EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\u2001')); // Em quad
-    EXPECT_FALSE (CharacterFunctions::isWhitespace (L'a'));
-    EXPECT_FALSE (CharacterFunctions::isWhitespace (L'0'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L' ')));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\t')));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\n')));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\r')));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\v')));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\f')));
+    //EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\u00A0'))); // Non-breaking space
+    //EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\u2000'))); // En quad
+    //EXPECT_TRUE (CharacterFunctions::isWhitespace (yup_wchar (L'\u2001'))); // Em quad
+    EXPECT_FALSE (CharacterFunctions::isWhitespace (yup_wchar (L'a')));
+    EXPECT_FALSE (CharacterFunctions::isWhitespace (yup_wchar (L'0')));
 }
 
 TEST (CharacterFunctionsGeneralTests, IsDigit)
@@ -566,12 +566,12 @@ TEST (CharacterFunctionsGeneralTests, IsDigit)
     EXPECT_FALSE (CharacterFunctions::isDigit ('!'));
 
     // yup_wchar version
-    for (wchar_t c = L'0'; c <= L'9'; ++c)
+    for (auto c = yup_wchar (L'0'); c <= yup_wchar (L'9'); ++c)
         EXPECT_TRUE (CharacterFunctions::isDigit (c));
 
-    EXPECT_FALSE (CharacterFunctions::isDigit (L'a'));
-    EXPECT_FALSE (CharacterFunctions::isDigit (L'A'));
-    EXPECT_FALSE (CharacterFunctions::isDigit (L' '));
+    EXPECT_FALSE (CharacterFunctions::isDigit (yup_wchar (L'a')));
+    EXPECT_FALSE (CharacterFunctions::isDigit (yup_wchar (L'A')));
+    EXPECT_FALSE (CharacterFunctions::isDigit (yup_wchar (L' ')));
 
     // Unicode digits from other scripts (should return true if iswdigit supports them)
     // Note: The behavior may vary depending on the locale and platform
@@ -592,20 +592,20 @@ TEST (CharacterFunctionsGeneralTests, IsLetter)
     EXPECT_FALSE (CharacterFunctions::isLetter ('!'));
 
     // yup_wchar version
-    for (wchar_t c = L'a'; c <= L'z'; ++c)
+    for (auto c = yup_wchar (L'a'); c <= yup_wchar (L'z'); ++c)
         EXPECT_TRUE (CharacterFunctions::isLetter (c));
 
-    for (wchar_t c = L'A'; c <= L'Z'; ++c)
+    for (auto c = yup_wchar (L'A'); c <= yup_wchar (L'Z'); ++c)
         EXPECT_TRUE (CharacterFunctions::isLetter (c));
 
     // Extended characters
-    //EXPECT_TRUE (CharacterFunctions::isLetter (L'á'));
-    //EXPECT_TRUE (CharacterFunctions::isLetter (L'Ñ'));
-    //EXPECT_TRUE (CharacterFunctions::isLetter (L'ω'));
-    //EXPECT_TRUE (CharacterFunctions::isLetter (L'Я'));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (yup_wchar (L'á')));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (yup_wchar (L'Ñ')));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (yup_wchar (L'ω')));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (yup_wchar (L'Я')));
 
-    EXPECT_FALSE (CharacterFunctions::isLetter (L'0'));
-    EXPECT_FALSE (CharacterFunctions::isLetter (L' '));
+    EXPECT_FALSE (CharacterFunctions::isLetter (yup_wchar (L'0')));
+    EXPECT_FALSE (CharacterFunctions::isLetter (yup_wchar (L' ')));
 }
 
 TEST (CharacterFunctionsGeneralTests, IsLetterOrDigit)
@@ -625,21 +625,21 @@ TEST (CharacterFunctionsGeneralTests, IsLetterOrDigit)
     EXPECT_FALSE (CharacterFunctions::isLetterOrDigit ('@'));
 
     // yup_wchar version
-    for (wchar_t c = L'a'; c <= L'z'; ++c)
+    for (auto c = yup_wchar (L'a'); c <= yup_wchar (L'z'); ++c)
         EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
 
-    for (wchar_t c = L'A'; c <= L'Z'; ++c)
+    for (auto c = yup_wchar (L'A'); c <= yup_wchar (L'Z'); ++c)
         EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
 
-    for (wchar_t c = L'0'; c <= L'9'; ++c)
+    for (auto c = yup_wchar (L'0'); c <= yup_wchar (L'9'); ++c)
         EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
 
     // Extended characters
-    //EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (L'á'));
-    //EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (L'Ω'));
+    //EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (yup_wchar (L'á')));
+    //EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (yup_wchar (L'Ω')));
 
-    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (L' '));
-    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (L'!'));
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (yup_wchar (L' ')));
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (yup_wchar (L'!')));
 }
 
 TEST (CharacterFunctionsGeneralTests, IsPrintable)
@@ -655,16 +655,16 @@ TEST (CharacterFunctionsGeneralTests, IsPrintable)
     //EXPECT_FALSE (CharacterFunctions::isPrintable (0x7F)); // DEL
 
     // yup_wchar version
-    for (wchar_t c = L' '; c <= L'~'; ++c)
+    for (auto c = yup_wchar (L' '); c <= yup_wchar (L'~'); ++c)
         EXPECT_TRUE (CharacterFunctions::isPrintable (c));
 
-    //EXPECT_TRUE (CharacterFunctions::isPrintable (L'á'));
-    //EXPECT_TRUE (CharacterFunctions::isPrintable (L'€'));
-    //EXPECT_TRUE (CharacterFunctions::isPrintable (L'♪'));
+    //EXPECT_TRUE (CharacterFunctions::isPrintable (yup_wchar (L'á')));
+    //EXPECT_TRUE (CharacterFunctions::isPrintable (yup_wchar (L'€')));
+    //EXPECT_TRUE (CharacterFunctions::isPrintable (yup_wchar (L'♪')));
 
-    EXPECT_FALSE (CharacterFunctions::isPrintable (L'\0'));
-    EXPECT_FALSE (CharacterFunctions::isPrintable (L'\n'));
-    EXPECT_FALSE (CharacterFunctions::isPrintable (L'\t'));
+    EXPECT_FALSE (CharacterFunctions::isPrintable (yup_wchar (L'\0')));
+    EXPECT_FALSE (CharacterFunctions::isPrintable (yup_wchar (L'\n')));
+    EXPECT_FALSE (CharacterFunctions::isPrintable (yup_wchar (L'\t')));
 }
 
 TEST (CharacterFunctionsGeneralTests, GetHexDigitValue)
