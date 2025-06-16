@@ -428,26 +428,26 @@ TEST (CharacterFunctionsGeneralTests, ToUpperCase)
     EXPECT_EQ (CharacterFunctions::toUpperCase ('!'), '!');
 
     // Latin-1 Supplement
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'à'), L'À');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'é'), L'É');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ñ'), L'Ñ');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ÿ'), L'Ÿ');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u00E0'), L'\u00C0'); // à -> À
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u00E9'), L'\u00C9'); // é -> É
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u00F1'), L'\u00D1'); // ñ -> Ñ
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u00FF'), L'\u0178'); // ÿ -> Ÿ
 
     // Latin Extended
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ā'), L'Ā');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ě'), L'Ě');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ő'), L'Ő');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u0101'), L'\u0100'); // ā -> Ā
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u011B'), L'\u011A'); // ě -> Ě
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u0151'), L'\u0150'); // ő -> Ő
 
     // Greek
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'α'), L'Α');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ω'), L'Ω');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u03B1'), L'\u0391'); // α -> Α
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u03C9'), L'\u03A9'); // ω -> Ω
 
     // Cyrillic
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'а'), L'А');
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'я'), L'Я');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u0430'), L'\u0410'); // а -> А
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u044F'), L'\u042F'); // я -> Я
 
     // Special case: dotless i
-    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ı'), L'I');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'\u0131'), L'I'); // ı -> I
 }
 
 TEST (CharacterFunctionsGeneralTests, ToLowerCase)
@@ -461,26 +461,26 @@ TEST (CharacterFunctionsGeneralTests, ToLowerCase)
     EXPECT_EQ (CharacterFunctions::toLowerCase ('!'), '!');
 
     // Latin-1 Supplement
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'À'), L'à');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'É'), L'é');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ñ'), L'ñ');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ÿ'), L'ÿ');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u00C0'), L'\u00E0'); // À -> à
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u00C9'), L'\u00E9'); // É -> é
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u00D1'), L'\u00F1'); // Ñ -> ñ
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u0178'), L'\u00FF'); // Ÿ -> ÿ
 
     // Latin Extended
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ā'), L'ā');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ě'), L'ě');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ő'), L'ő');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u0100'), L'\u0101'); // Ā -> ā
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u011A'), L'\u011B'); // Ě -> ě
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u0150'), L'\u0151'); // Ő -> ő
 
     // Greek
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Α'), L'α');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ω'), L'ω');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u0391'), L'\u03B1'); // Α -> α
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u03A9'), L'\u03C9'); // Ω -> ω
 
     // Cyrillic
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'А'), L'а');
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Я'), L'я');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u0410'), L'\u0430'); // А -> а
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u042F'), L'\u044F'); // Я -> я
 
-    // Special case: capital I to dotted i
-    EXPECT_EQ (CharacterFunctions::toLowerCase (L'İ'), L'i');
+    // Special case: capital I with dot to lowercase i
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'\u0130'), L'i'); // İ -> i
 }
 
 TEST (CharacterFunctionsGeneralTests, IsUpperCase)
@@ -494,15 +494,15 @@ TEST (CharacterFunctionsGeneralTests, IsUpperCase)
     EXPECT_FALSE (CharacterFunctions::isUpperCase ('!'));
 
     // Extended characters
-    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'À'));
-    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'Ñ'));
-    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'Ω'));
-    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'Я'));
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'\u00C0')); // À
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'\u00D1')); // Ñ
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'\u03A9')); // Ω
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'\u042F')); // Я
 
-    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'à'));
-    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'ñ'));
-    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'ω'));
-    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'я'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'\u00E0')); // à
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'\u00F1')); // ñ
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'\u03C9')); // ω
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'\u044F')); // я
 }
 
 TEST (CharacterFunctionsGeneralTests, IsLowerCase)
@@ -516,15 +516,15 @@ TEST (CharacterFunctionsGeneralTests, IsLowerCase)
     EXPECT_FALSE (CharacterFunctions::isLowerCase ('!'));
 
     // Extended characters
-    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'à'));
-    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'ñ'));
-    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'ω'));
-    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'я'));
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'\u00E0')); // à
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'\u00F1')); // ñ
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'\u03C9')); // ω
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'\u044F')); // я
 
-    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'À'));
-    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'Ñ'));
-    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'Ω'));
-    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'Я'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'\u00C0')); // À
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'\u00D1')); // Ñ
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'\u03A9')); // Ω
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'\u042F')); // Я
 }
 
 TEST (CharacterFunctionsGeneralTests, IsWhitespace)
@@ -693,7 +693,7 @@ TEST (CharacterFunctionsGeneralTests, GetHexDigitValue)
     EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'9'), 9);
     EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'a'), 10);
     EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'F'), 15);
-    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'€'), -1);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'\u20AC'), -1); // €
 }
 
 TEST (CharacterFunctionsGeneralTests, GetUnicodeCharFromWindows1252Codepage)
@@ -764,7 +764,7 @@ TEST (CharacterFunctionsGeneralTests, CaseConversionConsistency)
     }
 
     // Test some extended characters
-    const yup_wchar testChars[] = { L'à', L'é', L'ñ', L'α', L'ω', L'а', L'я' };
+    const yup_wchar testChars[] = { L'\u00E0', L'\u00E9', L'\u00F1', L'\u03B1', L'\u03C9', L'\u0430', L'\u044F' }; // à, é, ñ, α, ω, а, я
     for (auto c : testChars)
     {
         auto upper = CharacterFunctions::toUpperCase (c);
