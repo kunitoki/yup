@@ -357,12 +357,14 @@ yup_wchar CharacterFunctions::toLowerCase (const yup_wchar character) noexcept
 
 bool CharacterFunctions::isUpperCase (const yup_wchar character) noexcept
 {
-    return upperCaseToLowerCaseMap().find (character) != std::cend (upperCaseToLowerCaseMap());
+    return upperCaseToLowerCaseMap().find (character) != std::cend (upperCaseToLowerCaseMap())
+        || iswupper ((wint_t) character) != 0;
 }
 
 bool CharacterFunctions::isLowerCase (const yup_wchar character) noexcept
 {
-    return lowerCaseToUpperCaseMap().find (character) != std::cend (lowerCaseToUpperCaseMap());
+    return lowerCaseToUpperCaseMap().find (character) != std::cend (lowerCaseToUpperCaseMap())
+        || iswlower ((wint_t) character) != 0;
 }
 
 YUP_END_IGNORE_WARNINGS_MSVC
