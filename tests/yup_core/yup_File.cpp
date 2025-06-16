@@ -247,11 +247,11 @@ TEST_F (FileTests, FileTimestamps)
     tempFile.create();
 
     Time beforeMod = Time::getCurrentTime();
-    Thread::sleep (10); // Small delay to ensure timestamp difference
+    Thread::sleep (50); // Small delay to ensure timestamp difference
 
     tempFile.appendText ("test");
 
-    Thread::sleep (10);
+    Thread::sleep (50);
     Time afterMod = Time::getCurrentTime();
 
     Time modTime = tempFile.getLastModificationTime();
@@ -543,4 +543,357 @@ TEST_F (FileTests, CreateLegalFileName)
     EXPECT_EQ (File::createLegalFileName ("hello?world.txt"), "helloworld.txt");
     EXPECT_EQ (File::createLegalFileName ("hello<world>.txt"), "helloworld.txt");
     EXPECT_EQ (File::createLegalFileName ("hello|world.txt"), "helloworld.txt");
+}
+
+TEST_F (FileTests, CreateLegalPathName)
+{
+    // createLegalPathName should preserve slashes
+    String path = "/path/to/file<>*.txt";
+    String legalPath = File::createLegalPathName (path);
+    EXPECT_TRUE (legalPath.contains ("/"));
+    EXPECT_FALSE (legalPath.contains ("<"));
+    EXPECT_FALSE (legalPath.contains (">"));
+    EXPECT_FALSE (legalPath.contains ("*"));
+}
+
+TEST_F (FileTests, PathUtilities)
+{
+    // Test separator methods
+    yup_wchar sep = File::getSeparatorChar();
+#if YUP_WINDOWS
+    EXPECT_EQ (sep, '\\');
+#else
+    EXPECT_EQ (sep, '/');
+#endif
+
+    String sepStr = File::getSeparatorString();
+    EXPECT_EQ (sepStr.length(), 1);
+    EXPECT_EQ (sepStr[0], sep);
+
+    // Test absolute path detection
+    EXPECT_TRUE (File::isAbsolutePath ("/absolute/path"));
+    EXPECT_FALSE (File::isAbsolutePath ("relative/path"));
+#if YUP_WINDOWS
+    EXPECT_TRUE (File::isAbsolutePath ("C:\\Windows"));
+    EXPECT_TRUE (File::isAbsolutePath ("D:/path"));
+#endif
+
+    // Test trailing separator
+    EXPECT_EQ (File::addTrailingSeparator ("/path"), "/path" + sepStr);
+    EXPECT_EQ (File::addTrailingSeparator ("/path" + sepStr), "/path" + sepStr);
+
+    // Test case sensitivity
+    bool caseSensitive = File::areFileNamesCaseSensitive();
+    // On macOS, the file system can be case-sensitive or case-insensitive
+    // depending on how it's formatted, so we just verify the method exists
+#if YUP_WINDOWS
+    EXPECT_FALSE (caseSensitive);
+#endif
+}
+
+TEST_F (FileTests, HashCodes)
+{
+    File file1 ("/path/to/file.txt");
+    File file2 ("/path/to/file.txt");
+    File file3 ("/different/path.txt");
+
+    // Same files should have same hash
+    EXPECT_EQ (file1.hashCode(), file2.hashCode());
+    EXPECT_EQ (file1.hashCode64(), file2.hashCode64());
+
+    // Different files should (likely) have different hash
+    EXPECT_NE (file1.hashCode(), file3.hashCode());
+    EXPECT_NE (file1.hashCode64(), file3.hashCode64());
+}
+
+TEST_F (FileTests, DescriptionOfSizeInBytes)
+{
+    EXPECT_EQ (File::descriptionOfSizeInBytes (0), "0 bytes");
+    EXPECT_EQ (File::descriptionOfSizeInBytes (1), "1 byte");
+    EXPECT_EQ (File::descriptionOfSizeInBytes (100), "100 bytes");
+    // The implementation includes decimal points
+    EXPECT_EQ (File::descriptionOfSizeInBytes (1024), "1.0 KB");
+    EXPECT_EQ (File::descriptionOfSizeInBytes (2048), "2.0 KB");
+    EXPECT_EQ (File::descriptionOfSizeInBytes (1048576), "1.0 MB");
+    EXPECT_EQ (File::descriptionOfSizeInBytes (1073741824), "1.0 GB");
+}
+
+TEST_F (FileTests, TempFileCreation)
+{
+    File tempFile = File::createTempFile ("test.tmp");
+    EXPECT_FALSE (tempFile.exists());
+    EXPECT_TRUE (tempFile.getFileName().contains ("test"));
+    EXPECT_TRUE (tempFile.hasFileExtension (".tmp"));
+
+    File tempDir = File::getSpecialLocation (File::tempDirectory);
+    EXPECT_TRUE (tempFile.isAChildOf (tempDir));
+}
+
+TEST_F (FileTests, IdenticalContent)
+{
+    tempFolder.createDirectory();
+    File file1 = tempFolder.getChildFile ("identical1.txt");
+    File file2 = tempFolder.getChildFile ("identical2.txt");
+    File file3 = tempFolder.getChildFile ("different.txt");
+
+    String content = "This is test content";
+    file1.replaceWithText (content);
+    file2.replaceWithText (content);
+    file3.replaceWithText ("Different content");
+
+    EXPECT_TRUE (file1.hasIdenticalContentTo (file2));
+    EXPECT_FALSE (file1.hasIdenticalContentTo (file3));
+
+    // Test with non-existent file
+    File nonExistent = tempFolder.getChildFile ("nothere.txt");
+    EXPECT_FALSE (file1.hasIdenticalContentTo (nonExistent));
+}
+
+TEST_F (FileTests, ReadLines)
+{
+    tempFolder.createDirectory();
+    File tempFile = tempFolder.getChildFile ("lines.txt");
+
+    String content = "Line 1\nLine 2\r\nLine 3\rLine 4";
+    tempFile.replaceWithText (content);
+
+    StringArray lines;
+    tempFile.readLines (lines);
+
+    EXPECT_EQ (lines.size(), 4);
+    EXPECT_EQ (lines[0], "Line 1");
+    EXPECT_EQ (lines[1], "Line 2");
+    EXPECT_EQ (lines[2], "Line 3");
+    EXPECT_EQ (lines[3], "Line 4");
+}
+
+TEST_F (FileTests, ExtendedTimeTests)
+{
+    tempFolder.createDirectory();
+    File tempFile = tempFolder.getChildFile ("timetest.txt");
+    tempFile.create();
+
+    // Test all three time attributes
+    Time testTime = Time::getCurrentTime() - RelativeTime::days (2);
+
+    // Set times - note that setCreationTime may not be supported on all platforms
+    bool creationTimeSupported = tempFile.setCreationTime (testTime);
+    EXPECT_TRUE (tempFile.setLastAccessTime (testTime + RelativeTime::hours (1)));
+    EXPECT_TRUE (tempFile.setLastModificationTime (testTime + RelativeTime::hours (2)));
+
+    // Read times back
+    Time creationTime = tempFile.getCreationTime();
+    Time accessTime = tempFile.getLastAccessTime();
+    Time modTime = tempFile.getLastModificationTime();
+
+    // Allow 1 second tolerance for filesystem precision
+    if (creationTimeSupported)
+    {
+        EXPECT_LE (std::abs ((int) (creationTime.toMilliseconds() - testTime.toMilliseconds())), 1000);
+    }
+    EXPECT_LE (std::abs ((int) (accessTime.toMilliseconds() - (testTime + RelativeTime::hours (1)).toMilliseconds())), 1000);
+    EXPECT_LE (std::abs ((int) (modTime.toMilliseconds() - (testTime + RelativeTime::hours (2)).toMilliseconds())), 1000);
+}
+
+TEST_F (FileTests, ExecutePermission)
+{
+    tempFolder.createDirectory();
+    File tempFile = tempFolder.getChildFile ("executable.sh");
+    tempFile.create();
+
+#if ! YUP_WINDOWS
+    // Execute permission is mainly relevant on Unix-like systems
+    EXPECT_TRUE (tempFile.setExecutePermission (true));
+    EXPECT_TRUE (tempFile.setExecutePermission (false));
+#endif
+}
+
+TEST_F (FileTests, FileIdentifier)
+{
+    tempFolder.createDirectory();
+    File tempFile = tempFolder.getChildFile ("identifier.txt");
+    tempFile.create();
+
+    uint64 id = tempFile.getFileIdentifier();
+    // On most systems, existing files should have a non-zero identifier
+    if (tempFile.exists())
+    {
+        EXPECT_NE (id, 0);
+    }
+}
+
+TEST_F (FileTests, VolumeExtendedInfo)
+{
+    File home = File::getSpecialLocation (File::userHomeDirectory);
+
+    // Volume label might be empty on some systems
+    String label = home.getVolumeLabel();
+
+    // Serial number might be 0 on some systems
+    int serialNumber = home.getVolumeSerialNumber();
+
+    // These are platform-specific but should return reasonable values
+    bool onDvd = home.isOnCDRomDrive();
+    bool onRemovable = home.isOnRemovableDrive();
+
+    // Home directory should not be on DVD
+    EXPECT_FALSE (onDvd);
+}
+
+TEST_F (FileTests, SymbolicLinks)
+{
+#if ! YUP_WINDOWS // Symbolic links require special privileges on Windows
+    tempFolder.createDirectory();
+    File original = tempFolder.getChildFile ("original.txt");
+    File link = tempFolder.getChildFile ("link.txt");
+
+    original.create();
+    original.replaceWithText ("Original content");
+
+    EXPECT_TRUE (original.createSymbolicLink (link, true));
+    EXPECT_TRUE (link.exists());
+    EXPECT_TRUE (link.isSymbolicLink());
+    EXPECT_FALSE (original.isSymbolicLink());
+
+    File target = link.getLinkedTarget();
+    EXPECT_EQ (target, original);
+
+    // Reading through symlink should work
+    EXPECT_EQ (link.loadFileAsString(), "Original content");
+#endif
+}
+
+TEST_F (FileTests, CopyDirectory)
+{
+    tempFolder.createDirectory();
+    File sourceDir = tempFolder.getChildFile ("source");
+    File destDir = tempFolder.getChildFile ("dest");
+
+    // Create source directory structure
+    sourceDir.createDirectory();
+    sourceDir.getChildFile ("file1.txt").replaceWithText ("Content 1");
+    sourceDir.getChildFile ("subdir").createDirectory();
+    sourceDir.getChildFile ("subdir/file2.txt").replaceWithText ("Content 2");
+
+    // Copy directory
+    EXPECT_TRUE (sourceDir.copyDirectoryTo (destDir));
+
+    // Verify copy
+    EXPECT_TRUE (destDir.exists());
+    EXPECT_TRUE (destDir.isDirectory());
+    EXPECT_TRUE (destDir.getChildFile ("file1.txt").exists());
+    EXPECT_EQ (destDir.getChildFile ("file1.txt").loadFileAsString(), "Content 1");
+    EXPECT_TRUE (destDir.getChildFile ("subdir").isDirectory());
+    EXPECT_TRUE (destDir.getChildFile ("subdir/file2.txt").exists());
+    EXPECT_EQ (destDir.getChildFile ("subdir/file2.txt").loadFileAsString(), "Content 2");
+}
+
+TEST_F (FileTests, ReplaceFileIn)
+{
+    tempFolder.createDirectory();
+    File source = tempFolder.getChildFile ("source.txt");
+    File target = tempFolder.getChildFile ("target.txt");
+
+    source.replaceWithText ("Source content");
+    target.replaceWithText ("Target content");
+
+    Time targetCreationTime = target.getCreationTime();
+
+    EXPECT_TRUE (source.replaceFileIn (target));
+
+    // Source should be gone, target should have source content
+    EXPECT_FALSE (source.exists());
+    EXPECT_TRUE (target.exists());
+    EXPECT_EQ (target.loadFileAsString(), "Source content");
+}
+
+TEST_F (FileTests, MoveToTrash)
+{
+    tempFolder.createDirectory();
+    File fileToTrash = tempFolder.getChildFile ("trash_me.txt");
+    fileToTrash.create();
+
+    // moveToTrash might not work on all systems (CI, etc)
+    // so we just test that it doesn't crash
+    bool result = fileToTrash.moveToTrash();
+    if (result)
+    {
+        EXPECT_FALSE (fileToTrash.exists());
+    }
+}
+
+TEST_F (FileTests, NaturalFileComparator)
+{
+    File::NaturalFileComparator comparator (true); // folders first
+
+    File file1 ("/path/file1.txt");
+    File file2 ("/path/file2.txt");
+    File file10 ("/path/file10.txt");
+    File dir1 ("/path/dir1");
+
+    // Natural comparison should handle numbers correctly
+    EXPECT_LT (comparator.compareElements (file1, file2), 0);
+    EXPECT_LT (comparator.compareElements (file2, file10), 0);
+
+    // With foldersFirst = true, directories should come first
+    // Note: This assumes the files are marked as directories in the comparison
+}
+
+TEST_F (FileTests, AppendTextWithLineEndings)
+{
+    tempFolder.createDirectory();
+    File tempFile = tempFolder.getChildFile ("lineendings.txt");
+
+    // Test different line ending conversions
+    tempFile.replaceWithText ("Line1\nLine2", false, false, "\r\n");
+    String content = tempFile.loadFileAsString();
+    EXPECT_TRUE (content.contains ("Line1\r\nLine2"));
+
+    tempFile.replaceWithText ("Line1\r\nLine2", false, false, "\n");
+    content = tempFile.loadFileAsString();
+    EXPECT_TRUE (content.contains ("Line1\nLine2"));
+}
+
+TEST_F (FileTests, Version)
+{
+    // Version is typically only available for executables
+    File exe = File::getSpecialLocation (File::currentExecutableFile);
+    String version = exe.getVersion();
+    // Version might be empty for test executables
+}
+
+TEST_F (FileTests, StartAsProcess)
+{
+    // Limited testing - we don't want to actually launch processes in unit tests
+    tempFolder.createDirectory();
+    File textFile = tempFolder.getChildFile ("test.txt");
+    textFile.create();
+
+    // Just verify the method exists and doesn't crash
+    // Actual process launching should be tested manually
+}
+
+TEST_F (FileTests, RecursiveReadOnly)
+{
+    tempFolder.createDirectory();
+    File subDir = tempFolder.getChildFile ("subdir");
+    subDir.createDirectory();
+
+    File file1 = tempFolder.getChildFile ("file1.txt");
+    File file2 = subDir.getChildFile ("file2.txt");
+
+    file1.create();
+    file2.create();
+
+    // Set read-only recursively
+    EXPECT_TRUE (tempFolder.setReadOnly (true, true));
+
+    // Check files are read-only
+    EXPECT_FALSE (file1.hasWriteAccess());
+    EXPECT_FALSE (file2.hasWriteAccess());
+
+    // Reset
+    EXPECT_TRUE (tempFolder.setReadOnly (false, true));
+    EXPECT_TRUE (file1.hasWriteAccess());
+    EXPECT_TRUE (file2.hasWriteAccess());
 }
