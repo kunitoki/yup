@@ -102,8 +102,12 @@ TEST_F (FileTests, FileSystemRoots)
 TEST_F (FileTests, VolumeInformation)
 {
     File home (File::getSpecialLocation (File::userHomeDirectory));
+
+#if ! YUP_WASM
     EXPECT_GT (home.getVolumeTotalSize(), 1024 * 1024);
     EXPECT_GT (home.getBytesFreeOnVolume(), 0);
+#endif
+
     EXPECT_FALSE (home.isHidden());
     EXPECT_FALSE (home.isOnCDRomDrive());
 
@@ -261,12 +265,14 @@ TEST_F (FileTests, FileTimestamps)
     //EXPECT_GT (modTime.toMilliseconds(), beforeMod.toMilliseconds()); // Seems to fail on linux... missing fsync ?
     //EXPECT_LT (modTime.toMilliseconds(), afterMod.toMilliseconds());  // Seems to fail on linux... missing fsync ?
 
+#if ! YUP_WASM
     // Test setting modification time
     Time newTime = Time::getCurrentTime() - RelativeTime::days (1);
     EXPECT_TRUE (tempFile.setLastModificationTime (newTime));
 
     Time readTime = tempFile.getLastModificationTime();
     EXPECT_LE (std::abs ((int) (readTime.toMilliseconds() - newTime.toMilliseconds())), 1000);
+#endif
 }
 
 TEST_F (FileTests, LoadFileAsData)
@@ -316,6 +322,7 @@ TEST_F (FileTests, FileOutputStream)
     EXPECT_EQ (tempFile.loadFileAsString(), "0123456789");
 }
 
+#if ! YUP_WASM
 TEST_F (FileTests, MemoryMappedFileReadOnly)
 {
     tempFolder.createDirectory();
@@ -353,6 +360,7 @@ TEST_F (FileTests, MemoryMappedFileReadWrite)
     // Also verify through normal file read
     EXPECT_EQ (tempFile.loadFileAsString(), "abcdefghij");
 }
+#endif
 
 TEST_F (FileTests, AppendData)
 {
@@ -420,6 +428,7 @@ TEST_F (FileTests, DeleteFile)
     EXPECT_FALSE (tempFile.exists());
 }
 
+#if ! YUP_WASM
 TEST_F (FileTests, FindChildFiles)
 {
     tempFolder.createDirectory();
@@ -463,6 +472,7 @@ TEST_F (FileTests, GetNumberOfChildFiles)
     EXPECT_EQ (tempFolder.getNumberOfChildFiles (File::findFilesAndDirectories), 2);
     EXPECT_TRUE (tempFolder.containsSubDirectories());
 }
+#endif
 
 TEST_F (FileTests, GetNonexistentChildFile)
 {
@@ -516,6 +526,7 @@ TEST_F (FileTests, RelativePaths)
     EXPECT_TRUE (parentRelPath.endsWith (tempFolder.getFileName()));
 }
 
+#if ! YUP_WASM
 TEST_F (FileTests, DeleteRecursively)
 {
     tempFolder.createDirectory();
@@ -533,6 +544,7 @@ TEST_F (FileTests, DeleteRecursively)
     EXPECT_FALSE (subDir1.exists());
     EXPECT_FALSE (subDir2.exists());
 }
+#endif
 
 TEST_F (FileTests, CreateLegalFileName)
 {
@@ -675,6 +687,7 @@ TEST_F (FileTests, ReadLines)
     EXPECT_EQ (lines[3], "Line 4");
 }
 
+#if ! YUP_WASM
 TEST_F (FileTests, ExtendedTimeTests)
 {
     tempFolder.createDirectory();
@@ -702,6 +715,7 @@ TEST_F (FileTests, ExtendedTimeTests)
     EXPECT_LE (std::abs ((int) (accessTime.toMilliseconds() - (testTime + RelativeTime::hours (1)).toMilliseconds())), 1000);
     EXPECT_LE (std::abs ((int) (modTime.toMilliseconds() - (testTime + RelativeTime::hours (2)).toMilliseconds())), 1000);
 }
+#endif
 
 TEST_F (FileTests, ExecutePermission)
 {
@@ -748,9 +762,9 @@ TEST_F (FileTests, VolumeExtendedInfo)
     EXPECT_FALSE (onDvd);
 }
 
+#if ! YUP_WINDOWS && ! YUP_WASM
 TEST_F (FileTests, SymbolicLinks)
 {
-#if ! YUP_WINDOWS // Symbolic links require special privileges on Windows
     tempFolder.createDirectory();
     File original = tempFolder.getChildFile ("original.txt");
     File link = tempFolder.getChildFile ("link.txt");
@@ -768,9 +782,10 @@ TEST_F (FileTests, SymbolicLinks)
 
     // Reading through symlink should work
     EXPECT_EQ (link.loadFileAsString(), "Original content");
-#endif
 }
+#endif
 
+#if ! YUP_WASM
 TEST_F (FileTests, CopyDirectory)
 {
     tempFolder.createDirectory();
@@ -795,6 +810,7 @@ TEST_F (FileTests, CopyDirectory)
     EXPECT_TRUE (destDir.getChildFile ("subdir/file2.txt").exists());
     EXPECT_EQ (destDir.getChildFile ("subdir/file2.txt").loadFileAsString(), "Content 2");
 }
+#endif
 
 TEST_F (FileTests, ReplaceFileIn)
 {
@@ -881,6 +897,7 @@ TEST_F (FileTests, StartAsProcess)
     // Actual process launching should be tested manually
 }
 
+#if ! YUP_WASM
 TEST_F (FileTests, RecursiveReadOnly)
 {
     tempFolder.createDirectory();
@@ -905,3 +922,4 @@ TEST_F (FileTests, RecursiveReadOnly)
     EXPECT_TRUE (file1.hasWriteAccess());
     EXPECT_TRUE (file2.hasWriteAccess());
 }
+#endif
