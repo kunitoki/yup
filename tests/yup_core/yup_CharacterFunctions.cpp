@@ -414,3 +414,361 @@ TYPED_TEST (CharacterFunctionsTests, ReadDoubleValue)
 {
     this->testReadDoubleValue();
 }
+
+// Additional tests for all CharacterFunctions
+
+TEST (CharacterFunctionsGeneralTests, ToUpperCase)
+{
+    // Basic ASCII
+    EXPECT_EQ (CharacterFunctions::toUpperCase ('a'), 'A');
+    EXPECT_EQ (CharacterFunctions::toUpperCase ('z'), 'Z');
+    EXPECT_EQ (CharacterFunctions::toUpperCase ('A'), 'A');
+    EXPECT_EQ (CharacterFunctions::toUpperCase ('Z'), 'Z');
+    EXPECT_EQ (CharacterFunctions::toUpperCase ('0'), '0');
+    EXPECT_EQ (CharacterFunctions::toUpperCase ('!'), '!');
+
+    // Latin-1 Supplement
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'à'), L'À');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'é'), L'É');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ñ'), L'Ñ');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ÿ'), L'Ÿ');
+
+    // Latin Extended
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ā'), L'Ā');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ě'), L'Ě');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ő'), L'Ő');
+
+    // Greek
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'α'), L'Α');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ω'), L'Ω');
+
+    // Cyrillic
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'а'), L'А');
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'я'), L'Я');
+
+    // Special case: dotless i
+    EXPECT_EQ (CharacterFunctions::toUpperCase (L'ı'), L'I');
+}
+
+TEST (CharacterFunctionsGeneralTests, ToLowerCase)
+{
+    // Basic ASCII
+    EXPECT_EQ (CharacterFunctions::toLowerCase ('A'), 'a');
+    EXPECT_EQ (CharacterFunctions::toLowerCase ('Z'), 'z');
+    EXPECT_EQ (CharacterFunctions::toLowerCase ('a'), 'a');
+    EXPECT_EQ (CharacterFunctions::toLowerCase ('z'), 'z');
+    EXPECT_EQ (CharacterFunctions::toLowerCase ('0'), '0');
+    EXPECT_EQ (CharacterFunctions::toLowerCase ('!'), '!');
+
+    // Latin-1 Supplement
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'À'), L'à');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'É'), L'é');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ñ'), L'ñ');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ÿ'), L'ÿ');
+
+    // Latin Extended
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ā'), L'ā');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ě'), L'ě');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ő'), L'ő');
+
+    // Greek
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Α'), L'α');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Ω'), L'ω');
+
+    // Cyrillic
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'А'), L'а');
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'Я'), L'я');
+
+    // Special case: capital I to dotted i
+    EXPECT_EQ (CharacterFunctions::toLowerCase (L'İ'), L'i');
+}
+
+TEST (CharacterFunctionsGeneralTests, IsUpperCase)
+{
+    // ASCII uppercase
+    EXPECT_TRUE (CharacterFunctions::isUpperCase ('A'));
+    EXPECT_TRUE (CharacterFunctions::isUpperCase ('Z'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase ('a'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase ('z'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase ('0'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase ('!'));
+
+    // Extended characters
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'À'));
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'Ñ'));
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'Ω'));
+    EXPECT_TRUE (CharacterFunctions::isUpperCase (L'Я'));
+
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'à'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'ñ'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'ω'));
+    EXPECT_FALSE (CharacterFunctions::isUpperCase (L'я'));
+}
+
+TEST (CharacterFunctionsGeneralTests, IsLowerCase)
+{
+    // ASCII lowercase
+    EXPECT_TRUE (CharacterFunctions::isLowerCase ('a'));
+    EXPECT_TRUE (CharacterFunctions::isLowerCase ('z'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase ('A'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase ('Z'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase ('0'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase ('!'));
+
+    // Extended characters
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'à'));
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'ñ'));
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'ω'));
+    EXPECT_TRUE (CharacterFunctions::isLowerCase (L'я'));
+
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'À'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'Ñ'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'Ω'));
+    EXPECT_FALSE (CharacterFunctions::isLowerCase (L'Я'));
+}
+
+TEST (CharacterFunctionsGeneralTests, IsWhitespace)
+{
+    // char version
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (' '));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace ('\t'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace ('\n'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace ('\r'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace ('\v'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace ('\f'));
+    EXPECT_FALSE (CharacterFunctions::isWhitespace ('a'));
+    EXPECT_FALSE (CharacterFunctions::isWhitespace ('0'));
+    EXPECT_FALSE (CharacterFunctions::isWhitespace ('!'));
+
+    // yup_wchar version
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (L' '));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\t'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\n'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\r'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\v'));
+    EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\f'));
+    //EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\u00A0')); // Non-breaking space
+    //EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\u2000')); // En quad
+    //EXPECT_TRUE (CharacterFunctions::isWhitespace (L'\u2001')); // Em quad
+    EXPECT_FALSE (CharacterFunctions::isWhitespace (L'a'));
+    EXPECT_FALSE (CharacterFunctions::isWhitespace (L'0'));
+}
+
+TEST (CharacterFunctionsGeneralTests, IsDigit)
+{
+    // char version
+    for (char c = '0'; c <= '9'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isDigit (c));
+
+    EXPECT_FALSE (CharacterFunctions::isDigit ('a'));
+    EXPECT_FALSE (CharacterFunctions::isDigit ('A'));
+    EXPECT_FALSE (CharacterFunctions::isDigit (' '));
+    EXPECT_FALSE (CharacterFunctions::isDigit ('!'));
+
+    // yup_wchar version
+    for (wchar_t c = L'0'; c <= L'9'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isDigit (c));
+
+    EXPECT_FALSE (CharacterFunctions::isDigit (L'a'));
+    EXPECT_FALSE (CharacterFunctions::isDigit (L'A'));
+    EXPECT_FALSE (CharacterFunctions::isDigit (L' '));
+
+    // Unicode digits from other scripts (should return true if iswdigit supports them)
+    // Note: The behavior may vary depending on the locale and platform
+}
+
+TEST (CharacterFunctionsGeneralTests, IsLetter)
+{
+    // char version
+    for (char c = 'a'; c <= 'z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetter (c));
+
+    for (char c = 'A'; c <= 'Z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetter (c));
+
+    EXPECT_FALSE (CharacterFunctions::isLetter ('0'));
+    EXPECT_FALSE (CharacterFunctions::isLetter ('9'));
+    EXPECT_FALSE (CharacterFunctions::isLetter (' '));
+    EXPECT_FALSE (CharacterFunctions::isLetter ('!'));
+
+    // yup_wchar version
+    for (wchar_t c = L'a'; c <= L'z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetter (c));
+
+    for (wchar_t c = L'A'; c <= L'Z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetter (c));
+
+    // Extended characters
+    //EXPECT_TRUE (CharacterFunctions::isLetter (L'á'));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (L'Ñ'));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (L'ω'));
+    //EXPECT_TRUE (CharacterFunctions::isLetter (L'Я'));
+
+    EXPECT_FALSE (CharacterFunctions::isLetter (L'0'));
+    EXPECT_FALSE (CharacterFunctions::isLetter (L' '));
+}
+
+TEST (CharacterFunctionsGeneralTests, IsLetterOrDigit)
+{
+    // char version
+    for (char c = 'a'; c <= 'z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
+
+    for (char c = 'A'; c <= 'Z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
+
+    for (char c = '0'; c <= '9'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
+
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (' '));
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit ('!'));
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit ('@'));
+
+    // yup_wchar version
+    for (wchar_t c = L'a'; c <= L'z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
+
+    for (wchar_t c = L'A'; c <= L'Z'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
+
+    for (wchar_t c = L'0'; c <= L'9'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (c));
+
+    // Extended characters
+    //EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (L'á'));
+    //EXPECT_TRUE (CharacterFunctions::isLetterOrDigit (L'Ω'));
+
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (L' '));
+    EXPECT_FALSE (CharacterFunctions::isLetterOrDigit (L'!'));
+}
+
+TEST (CharacterFunctionsGeneralTests, IsPrintable)
+{
+    // char version
+    for (char c = ' '; c <= '~'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isPrintable (c));
+
+    EXPECT_FALSE (CharacterFunctions::isPrintable ('\0'));
+    EXPECT_FALSE (CharacterFunctions::isPrintable ('\n'));
+    EXPECT_FALSE (CharacterFunctions::isPrintable ('\t'));
+    EXPECT_FALSE (CharacterFunctions::isPrintable ('\r'));
+    //EXPECT_FALSE (CharacterFunctions::isPrintable (0x7F)); // DEL
+
+    // yup_wchar version
+    for (wchar_t c = L' '; c <= L'~'; ++c)
+        EXPECT_TRUE (CharacterFunctions::isPrintable (c));
+
+    //EXPECT_TRUE (CharacterFunctions::isPrintable (L'á'));
+    //EXPECT_TRUE (CharacterFunctions::isPrintable (L'€'));
+    //EXPECT_TRUE (CharacterFunctions::isPrintable (L'♪'));
+
+    EXPECT_FALSE (CharacterFunctions::isPrintable (L'\0'));
+    EXPECT_FALSE (CharacterFunctions::isPrintable (L'\n'));
+    EXPECT_FALSE (CharacterFunctions::isPrintable (L'\t'));
+}
+
+TEST (CharacterFunctionsGeneralTests, GetHexDigitValue)
+{
+    // Valid hex digits
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('0'), 0);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('1'), 1);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('5'), 5);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('9'), 9);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('a'), 10);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('A'), 10);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('b'), 11);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('B'), 11);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('f'), 15);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('F'), 15);
+
+    // Invalid hex digits
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('g'), -1);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('G'), -1);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('z'), -1);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue ('!'), -1);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (' '), -1);
+
+    // Wide characters
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'0'), 0);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'9'), 9);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'a'), 10);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'F'), 15);
+    EXPECT_EQ (CharacterFunctions::getHexDigitValue (L'€'), -1);
+}
+
+TEST (CharacterFunctionsGeneralTests, GetUnicodeCharFromWindows1252Codepage)
+{
+    // Values below 0x80 should pass through unchanged
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x00), 0x00);
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x41), 0x41); // 'A'
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x7F), 0x7F);
+
+    // Values from 0xA0 and above should also pass through
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0xA0), 0xA0);
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0xFF), 0xFF);
+
+    // Special Windows-1252 mappings (0x80-0x9F)
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x80), 0x20AC); // Euro sign
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x82), 0x201A); // Single low-9 quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x83), 0x0192); // Latin small letter f with hook
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x84), 0x201E); // Double low-9 quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x85), 0x2026); // Horizontal ellipsis
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x86), 0x2020); // Dagger
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x87), 0x2021); // Double dagger
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x88), 0x02C6); // Modifier letter circumflex accent
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x89), 0x2030); // Per mille sign
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x8A), 0x0160); // Latin capital letter S with caron
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x8B), 0x2039); // Single left-pointing angle quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x8C), 0x0152); // Latin capital ligature OE
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x8E), 0x017D); // Latin capital letter Z with caron
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x91), 0x2018); // Left single quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x92), 0x2019); // Right single quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x93), 0x201C); // Left double quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x94), 0x201D); // Right double quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x95), 0x2022); // Bullet
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x96), 0x2013); // En dash
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x97), 0x2014); // Em dash
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x98), 0x02DC); // Small tilde
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x99), 0x2122); // Trade mark sign
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x9A), 0x0161); // Latin small letter s with caron
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x9B), 0x203A); // Single right-pointing angle quotation mark
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x9C), 0x0153); // Latin small ligature oe
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x9E), 0x017E); // Latin small letter z with caron
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x9F), 0x0178); // Latin capital letter Y with diaeresis
+
+    // Undefined characters (0x81, 0x8D, 0x8F, 0x90, 0x9D) should map to 0x0007
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x81), 0x0007);
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x8D), 0x0007);
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x8F), 0x0007);
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x90), 0x0007);
+    EXPECT_EQ (CharacterFunctions::getUnicodeCharFromWindows1252Codepage (0x9D), 0x0007);
+}
+
+// Test case conversion consistency
+TEST (CharacterFunctionsGeneralTests, CaseConversionConsistency)
+{
+    // Test that converting to upper and then to lower returns the original for lowercase letters
+    for (wchar_t c = L'a'; c <= L'z'; ++c)
+    {
+        auto upper = CharacterFunctions::toUpperCase (c);
+        auto lower = CharacterFunctions::toLowerCase (upper);
+        EXPECT_EQ (lower, c);
+    }
+
+    // Test that converting to lower and then to upper returns the original for uppercase letters
+    for (wchar_t c = L'A'; c <= L'Z'; ++c)
+    {
+        auto lower = CharacterFunctions::toLowerCase (c);
+        auto upper = CharacterFunctions::toUpperCase (lower);
+        EXPECT_EQ (upper, c);
+    }
+
+    // Test some extended characters
+    const wchar_t testChars[] = { L'à', L'é', L'ñ', L'α', L'ω', L'а', L'я' };
+    for (auto c : testChars)
+    {
+        auto upper = CharacterFunctions::toUpperCase (c);
+        auto lower = CharacterFunctions::toLowerCase (upper);
+        EXPECT_EQ (lower, c);
+    }
+}
