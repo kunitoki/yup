@@ -100,7 +100,7 @@ TEST_F (URLTests, FileConstruction)
     EXPECT_EQ (retrievedFile.getFullPathName(), testFile.getFullPathName());
 
     // Empty file
-    URL emptyFileUrl ((File())); // Add extra parentheses to avoid vexing parse
+    URL emptyFileUrl (File {});
     EXPECT_TRUE (emptyFileUrl.isEmpty());
 }
 
