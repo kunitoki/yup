@@ -551,7 +551,7 @@ bool URL::isWellFormed() const
                 return false;
         }
 
-                auto domainStart = URLHelpers::findDomainStart (url, netLocationStart);
+        auto domainStart = URLHelpers::findDomainStart (url, netLocationStart);
         auto pathStart = url.indexOfChar (domainStart, '/');
 
         // Extract domain
