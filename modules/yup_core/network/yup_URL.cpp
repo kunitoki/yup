@@ -580,7 +580,7 @@ bool URL::isWellFormed() const
 
         // Special handling for file URLs with three slashes (file:///)
         const bool isFileWithThreeSlashes =
-            (scheme == "file" && url.substring(schemeEnd - 1, schemeEnd + 3) == ":///");
+            (scheme == "file" && url.substring (schemeEnd - 1, schemeEnd + 3) == ":///");
 
         auto domainStart = URLHelpers::findDomainStart (url, netLocationStart);
         auto pathStart = url.indexOfChar (domainStart, '/');
@@ -956,7 +956,7 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
 String URL::getDomainInternal (bool ignorePort) const
 {
     // Special handling for file URLs with three slashes (file:///) should have empty domain
-    if (getScheme() == "file" && url.substring(0, 8) == "file:///")
+    if (getScheme() == "file" && url.substring (0, 8) == "file:///")
         return String();
 
     auto start = URLHelpers::findStartOfNetLocation (url);
