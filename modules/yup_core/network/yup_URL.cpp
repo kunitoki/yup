@@ -304,6 +304,14 @@ static int findStartOfNetLocation (const String& url)
 
 static int findStartOfPath (const String& url)
 {
+    auto schemeEnd = findEndOfScheme (url);
+    auto scheme = url.substring (0, schemeEnd - 1).toLowerCase();
+
+    // Special handling for file URLs with three slashes (file:///)
+    // The path starts immediately after the second slash
+    if (scheme == "file" && url.substring (schemeEnd - 1).startsWith (":///"))
+        return schemeEnd + 2;
+
     return url.indexOfChar (findStartOfNetLocation (url), '/') + 1;
 }
 
@@ -332,7 +340,6 @@ static String removeLastPathSection (const String& url)
     return url.substring (0, std::max (startOfPath, lastSlash));
 }
 
-// Helper to find the start of the domain after authentication info
 static int findDomainStart (const String& url, int startOfNetLocation)
 {
     auto atPos = url.indexOfChar (startOfNetLocation, '@');
@@ -344,13 +351,37 @@ static int findDomainStart (const String& url, int startOfNetLocation)
     return startOfNetLocation;
 }
 
-// Helper to check if we have an IPv6 address
+static bool isIPv4Address (const String& domain)
+{
+    int dotCount = 0;
+    StringArray octets = StringArray::fromTokens (domain, ".", "");
+
+    if (octets.size() != 4)
+        return false;
+
+    for (const auto& octet : octets)
+    {
+        if (octet.isEmpty() || octet.length() > 3)
+            return false;
+
+        for (int i = 0; i < octet.length(); ++i)
+        {
+            if (! CharacterFunctions::isDigit (octet[i]))
+                return false;
+        }
+
+        if (auto value = octet.getIntValue(); value < 0 || value > 255)
+            return false;
+    }
+
+    return true;
+}
+
 static bool isIPv6Address (const String& url, int domainStart)
 {
     return domainStart < url.length() && url[domainStart] == '[';
 }
 
-// Helper to find the end of IPv6 address (closing bracket)
 static int findIPv6End (const String& url, int domainStart)
 {
     if (! isIPv6Address (url, domainStart))
@@ -359,7 +390,6 @@ static int findIPv6End (const String& url, int domainStart)
     return url.indexOfChar (domainStart, ']');
 }
 
-// Helper to extract port string from URL
 static String extractPortString (const String& url, int portStart, int pathStart)
 {
     if (portStart <= 0)
@@ -369,7 +399,6 @@ static String extractPortString (const String& url, int portStart, int pathStart
     return url.substring (portStart + 1, portEnd);
 }
 
-// Helper to validate port number
 static bool isValidPort (const String& portStr)
 {
     if (portStr.isEmpty())
@@ -385,7 +414,6 @@ static bool isValidPort (const String& portStr)
     return port >= 0 && port <= 65535;
 }
 
-// Helper to find port separator position
 static int findPortSeparator (const String& url, int domainStart, int pathStart)
 {
     if (isIPv6Address (url, domainStart))
@@ -406,7 +434,6 @@ static int findPortSeparator (const String& url, int domainStart, int pathStart)
     return -1;
 }
 
-// Helper to validate IPv6 address content
 static bool isValidIPv6Content (const String& ipv6Addr)
 {
     if (ipv6Addr.isEmpty())
@@ -431,7 +458,6 @@ static bool isValidIPv6Content (const String& ipv6Addr)
     return colonCount > 0; // Must have at least one colon
 }
 
-// Helper to extract just the domain (without port) from a URL
 static String extractDomain (const String& url, int domainStart, int pathStart)
 {
     int end = pathStart > 0 ? pathStart : url.length();
@@ -484,6 +510,7 @@ bool URL::isWellFormed() const
         return false;
 
     auto scheme = url.substring (0, schemeEnd - 1).toLowerCase();
+    int pathStart = -1; // Will be set later based on URL type
 
     // Common valid schemes
     static const StringArray validSchemes = { "http", "https", "ftp", "ftps", "file", "mailto", "tel", "data", "ws", "wss" };
@@ -551,26 +578,43 @@ bool URL::isWellFormed() const
                 return false;
         }
 
+        // Special handling for file URLs with three slashes (file:///)
+        const bool isFileWithThreeSlashes =
+            (scheme == "file" && url.substring(schemeEnd - 1, schemeEnd + 3) == ":///");
+
         auto domainStart = URLHelpers::findDomainStart (url, netLocationStart);
         auto pathStart = url.indexOfChar (domainStart, '/');
 
         // Extract domain
-        String domain = URLHelpers::extractDomain (url, domainStart, pathStart);
+        String domain;
 
-        // For IPv6, check if closing bracket exists
-        if (URLHelpers::isIPv6Address (url, domainStart))
+        if (isFileWithThreeSlashes)
         {
-            if (URLHelpers::findIPv6End (url, domainStart) < 0)
-                return false; // No closing bracket
+            domain = String();
+            // For file:/// URLs, the path starts right after the three slashes
+            pathStart = schemeEnd + 3;
         }
-
-        // Extract and validate port if present
-        auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
-        if (portSeparator > 0)
+        else
         {
-            auto portStr = URLHelpers::extractPortString (url, portSeparator, pathStart);
-            if (! URLHelpers::isValidPort (portStr))
+            domain = URLHelpers::extractDomain (url, domainStart, pathStart);
+            if (domain.isEmpty())
                 return false;
+
+            // For IPv6, check if closing bracket exists
+            if (URLHelpers::isIPv6Address (url, domainStart))
+            {
+                if (URLHelpers::findIPv6End (url, domainStart) < 0)
+                    return false; // No closing bracket
+            }
+
+            // Extract and validate port if present
+            auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
+            if (portSeparator > 0)
+            {
+                auto portStr = URLHelpers::extractPortString (url, portSeparator, pathStart);
+                if (! URLHelpers::isValidPort (portStr))
+                    return false;
+            }
         }
 
         // File URLs can have empty domain (for local files)
@@ -579,63 +623,16 @@ bool URL::isWellFormed() const
             // File URLs are allowed to have empty domain for local files
             // e.g., file:///path/to/file or file://localhost/path
         }
-        else if (domain.isEmpty())
-        {
-            return false; // Non-file URLs must have a domain
-        }
         else
         {
-            // Validate domain characters
-            // Domain can be IP address or hostname
-
             // Check if it's an IPv4 address
-            bool isIPv4 = true;
-            int dotCount = 0;
-            StringArray octets = StringArray::fromTokens (domain, ".", "");
-
-            if (octets.size() == 4)
-            {
-                for (const auto& octet : octets)
-                {
-                    if (octet.isEmpty() || octet.length() > 3)
-                    {
-                        isIPv4 = false;
-                        break;
-                    }
-
-                    for (int i = 0; i < octet.length(); ++i)
-                    {
-                        if (! CharacterFunctions::isDigit (octet[i]))
-                        {
-                            isIPv4 = false;
-                            break;
-                        }
-                    }
-
-                    if (isIPv4)
-                    {
-                        auto value = octet.getIntValue();
-                        if (value < 0 || value > 255)
-                        {
-                            isIPv4 = false;
-                            break;
-                        }
-                    }
-                }
-            }
-            else
-            {
-                isIPv4 = false;
-            }
+            bool isIPv4 = URLHelpers::isIPv4Address (domain);
 
             // Check if it's an IPv6 address
             bool isIPv6 = false;
-            if (domain.startsWith ("[") && domain.endsWith ("]"))
+            if (! isIPv4 && domain.startsWith ("[") && domain.endsWith ("]"))
             {
-                // Extract the address between brackets
-                auto ipv6Addr = domain.substring (1, domain.length() - 1);
-
-                if (! URLHelpers::isValidIPv6Content (ipv6Addr))
+                if (! URLHelpers::isValidIPv6Content (domain.substring (1, domain.length() - 1)))
                     return false;
 
                 isIPv6 = true;
@@ -692,8 +689,7 @@ bool URL::isWellFormed() const
     }
 
     // Basic path validation - check for invalid characters
-    auto pathStart = URLHelpers::findStartOfPath (url);
-    if (pathStart > 0 && pathStart < url.length())
+    if (pathStart >= 0 && pathStart < url.length())
     {
         auto path = url.substring (pathStart);
 
@@ -968,6 +964,11 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
 
 String URL::getDomainInternal (bool ignorePort) const
 {
+    // Special handling for file URLs with three slashes (file:///)
+    // These should have empty domain
+    if (getScheme() == "file" && url.substring(0, 8) == "file:///")
+        return String();
+
     auto start = URLHelpers::findStartOfNetLocation (url);
     auto domainStart = URLHelpers::findDomainStart (url, start);
     auto pathStart = url.indexOfChar (domainStart, '/');

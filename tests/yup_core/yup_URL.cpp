@@ -130,9 +130,8 @@ TEST_F (URLTests, IsWellFormed)
     EXPECT_TRUE (URL ("http://example.com:8080").isWellFormed());
     EXPECT_TRUE (URL ("ftp://ftp.example.com/file.txt").isWellFormed());
     EXPECT_TRUE (URL ("file:///home/user/document.txt").isWellFormed());
-#if YUP_WINDOWS
-    EXPECT_TRUE (URL ("file://C:/Users/document.txt").isWellFormed());
-#endif
+    EXPECT_TRUE (URL ("file:///C:/Users/document.txt").isWellFormed());
+    EXPECT_TRUE (URL ("file://localhost/C:/Users/document.txt").isWellFormed());
     EXPECT_TRUE (URL ("mailto:user@example.com").isWellFormed());
     EXPECT_TRUE (URL ("tel:+1234567890").isWellFormed());
     EXPECT_TRUE (URL ("ws://websocket.example.com").isWellFormed());
@@ -145,6 +144,8 @@ TEST_F (URLTests, IsWellFormed)
     EXPECT_TRUE (URL ("http://www.google.com").isWellFormed());
     EXPECT_TRUE (URL ("ftp://user@host:45/foo/bar").isWellFormed());
     EXPECT_TRUE (URL ("ftp://user:password@host:45/foo/bar").isWellFormed());
+    EXPECT_TRUE (URL ("ftp://user:password@host:45/foo/bar?test=1+2+3").isWellFormed());
+    EXPECT_TRUE (URL ("ftp://user:password@host:45/foo/bar/?test=1+2+3").isWellFormed());
     EXPECT_TRUE (URL ("http://www.google.com/index.html").isWellFormed());
     EXPECT_TRUE (URL ("http://www.google.com/index.html?key=value").isWellFormed());
     EXPECT_TRUE (URL ("http://www.google.com/index.html#anchor").isWellFormed());
@@ -160,6 +161,9 @@ TEST_F (URLTests, IsWellFormed)
     EXPECT_TRUE (URL ("data:text/plain;base64,SGVsbG8sIFdvcmxkIQ==").isWellFormed());
     EXPECT_TRUE (URL ("ws://example.com:8080/socket").isWellFormed());
     EXPECT_TRUE (URL ("wss://example.com/socket").isWellFormed());
+    EXPECT_TRUE (URL ("ldap://[2001:db8::7]/c=GB?objectClass?one").isWellFormed());
+    EXPECT_TRUE (URL ("telnet://192.0.2.16:80/").isWellFormed());
+
     auto imageUrl = URL ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA"
                          "AAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO"
                          "9TXL0Y4OHwAAAABJRU5ErkJggg==");
