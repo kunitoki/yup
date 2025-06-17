@@ -77,69 +77,6 @@ String File::getVersion() const
     return {}; // xxx not yet implemented
 }
 
-bool File::isHidden() const
-{
-    return getFileName().startsWithChar ('.');
-}
-
-bool File::isSymbolicLink() const
-{
-    return false; // xxx not yet implemented
-}
-
-String File::getNativeLinkedTarget() const
-{
-    return {}; // xxx not yet implemented
-}
-
-bool File::copyInternal (const File& dest) const
-{
-    FileInputStream in (*this);
-
-    if (dest.deleteFile())
-    {
-        {
-            FileOutputStream out (dest);
-
-            if (out.failedToOpen())
-                return false;
-
-            if (out.writeFromInputStream (in, -1) == getSize())
-                return true;
-        }
-
-        dest.deleteFile();
-    }
-
-    return false;
-}
-
-//==============================================================================
-void File::findFileSystemRoots (Array<File>& destArray)
-{
-    destArray.add (File ("/"));
-}
-
-int64 File::getBytesFreeOnVolume() const
-{
-    return 0; // xxx not yet implemented
-}
-
-int64 File::getVolumeTotalSize() const
-{
-    return 0; // xxx not yet implemented
-}
-
-String File::getVolumeLabel() const
-{
-    return {}; // xxx not yet implemented
-}
-
-int File::getVolumeSerialNumber() const
-{
-    return 0; // xxx not yet implemented
-}
-
 //==============================================================================
 File File::getSpecialLocation (const SpecialLocationType type)
 {
@@ -242,30 +179,6 @@ void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exc
 
 MemoryMappedFile::~MemoryMappedFile()
 {
-}
-
-//==============================================================================
-class DirectoryIterator::NativeIterator::Pimpl
-{
-};
-
-DirectoryIterator::NativeIterator::NativeIterator (const File& directory, const String& wildCardStr)
-{
-    ignoreUnused (directory, wildCardStr);
-}
-
-DirectoryIterator::NativeIterator::~NativeIterator() {}
-
-bool DirectoryIterator::NativeIterator::next (String& filenameFound,
-                                              bool* isDir,
-                                              bool* isHidden,
-                                              int64* fileSize,
-                                              Time* modTime,
-                                              Time* creationTime,
-                                              bool* isReadOnly)
-{
-    ignoreUnused (filenameFound, isDir, isHidden, fileSize, modTime, creationTime, isReadOnly);
-    return false;
 }
 
 //==============================================================================
