@@ -176,6 +176,9 @@ public:
     /** Returns the keys/value pair array containing all the properties. */
     StringPairArray& getAllProperties() noexcept { return properties; }
 
+    /** Returns the keys/value pair array containing all the properties. */
+    const StringPairArray& getAllProperties() const noexcept { return properties; }
+
     /** Returns the lock used when reading or writing to this set */
     const CriticalSection& getLock() const noexcept { return lock; }
 
@@ -193,7 +196,7 @@ public:
     void restoreFromXml (const XmlElement& xml);
 
     //==============================================================================
-    /** Sets up a second PopertySet that will be used to look up any values that aren't
+    /** Sets up a second PropertySet that will be used to look up any values that aren't
         set in this one.
 
         If you set this up to be a pointer to a second property set, then whenever one

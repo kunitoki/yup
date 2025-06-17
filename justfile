@@ -68,6 +68,12 @@ emscripten CONFIG="Debug":
   emcmake cmake -G "Ninja Multi-Config" -B build
   @just build {{CONFIG}}
 
+[doc("run tests for WASM")]
+emscripten_test CONFIG="Debug":
+  emcmake cmake -G "Ninja Multi-Config" -B build
+  @just build {{CONFIG}}
+  node build/tests/{{CONFIG}}/yup_tests.js --gtest_filter=*
+
 [doc("serve project for WASM")]
 emscripten_serve CONFIG="Debug":
   python3 -m http.server -d .

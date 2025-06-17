@@ -22,6 +22,11 @@
 namespace yup
 {
 
+//==============================================================================
+const char* const* yup_argv = nullptr;
+int yup_argc = 0;
+
+//==============================================================================
 enum
 {
     U_ISOFS_SUPER_MAGIC = 0x9660, // linux/iso_fs.h
@@ -63,7 +68,7 @@ bool File::isOnHardDisk() const
 
 bool File::isOnRemovableDrive() const
 {
-    jassertfalse; // xxx not implemented for linux!
+    jassertfalse; // xxx not yet implemented for wasm!
     return false;
 }
 
@@ -72,21 +77,7 @@ String File::getVersion() const
     return {}; // xxx not yet implemented
 }
 
-bool File::isSymbolicLink() const
-{
-    return false; // xxx not yet implemented
-}
-
-String File::getNativeLinkedTarget() const
-{
-    return {}; // xxx not yet implemented
-}
-
 //==============================================================================
-
-const char* const* yup_argv = nullptr;
-int yup_argc = 0;
-
 File File::getSpecialLocation (const SpecialLocationType type)
 {
     /*
@@ -181,27 +172,13 @@ void File::revealToUser() const
 }
 
 //==============================================================================
-class DirectoryIterator::NativeIterator::Pimpl
+void MemoryMappedFile::openInternal (const File& file, AccessMode mode, bool exclusive)
 {
-};
-
-DirectoryIterator::NativeIterator::NativeIterator (const File& directory, const String& wildCardStr)
-{
-    ignoreUnused (directory, wildCardStr);
+    jassertfalse;
 }
 
-DirectoryIterator::NativeIterator::~NativeIterator() {}
-
-bool DirectoryIterator::NativeIterator::next (String& filenameFound,
-                                              bool* isDir,
-                                              bool* isHidden,
-                                              int64* fileSize,
-                                              Time* modTime,
-                                              Time* creationTime,
-                                              bool* isReadOnly)
+MemoryMappedFile::~MemoryMappedFile()
 {
-    ignoreUnused (filenameFound, isDir, isHidden, fileSize, modTime, creationTime, isReadOnly);
-    return false;
 }
 
 //==============================================================================

@@ -169,7 +169,10 @@ public:
     explicit String (const std::wstring& text);
 
     /** Creates a string from a UTF-8 encoded std::string_view. */
-    explicit String (std::string_view start);
+    explicit String (std::string_view text);
+
+    /** Creates a string from a UTF-8 encoded std::wstring_view. */
+    explicit String (std::wstring_view text);
 
     //==============================================================================
     /** Creates a string from a single character. */
