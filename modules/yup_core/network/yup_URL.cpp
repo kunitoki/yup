@@ -604,7 +604,7 @@ bool URL::isWellFormed() const
             if (URLHelpers::isIPv6Address (url, domainStart))
             {
                 if (URLHelpers::findIPv6End (url, domainStart) < 0)
-                    return false; // No closing bracket
+                    return false;
             }
 
             // Extract and validate port if present
@@ -640,48 +640,39 @@ bool URL::isWellFormed() const
 
             if (! isIPv4 && ! isIPv6)
             {
-#if YUP_WINDOWS
-                // Special case for Windows file URLs with drive letters (e.g., "C:")
-                if (scheme == "file" && domain.length() == 2 && CharacterFunctions::isLetter (domain[0]) && domain[1] == ':')
-                {
-                    // Valid Windows drive letter
-                }
-                else
-#endif
-                {
-                    // Validate as hostname
-                    // Check for valid hostname characters
-                    bool lastWasDot = false;
-                    bool lastWasHyphen = false;
+                // Validate as hostname: check for valid hostname characters
+                bool lastWasDot = false;
+                bool lastWasHyphen = false;
 
-                    for (int i = 0; i < domain.length(); ++i)
+                for (int i = 0; i < domain.length(); ++i)
+                {
+                    auto ch = domain[i];
+
+                    if (ch == '.')
                     {
-                        auto ch = domain[i];
-
-                        if (ch == '.')
-                        {
-                            if (i == 0 || i == domain.length() - 1 || lastWasDot || lastWasHyphen)
-                                return false;
-                            lastWasDot = true;
-                            lastWasHyphen = false;
-                        }
-                        else if (ch == '-')
-                        {
-                            if (i == 0 || i == domain.length() - 1 || lastWasDot)
-                                return false;
-                            lastWasHyphen = true;
-                            lastWasDot = false;
-                        }
-                        else if (CharacterFunctions::isLetterOrDigit (ch))
-                        {
-                            lastWasDot = false;
-                            lastWasHyphen = false;
-                        }
-                        else
-                        {
-                            // Invalid character in hostname
+                        if (i == 0 || i == domain.length() - 1 || lastWasDot || lastWasHyphen)
                             return false;
-                        }
+
+                        lastWasDot = true;
+                        lastWasHyphen = false;
+                    }
+                    else if (ch == '-')
+                    {
+                        if (i == 0 || i == domain.length() - 1 || lastWasDot)
+                            return false;
+
+                        lastWasHyphen = true;
+                        lastWasDot = false;
+                    }
+                    else if (CharacterFunctions::isLetterOrDigit (ch))
+                    {
+                        lastWasDot = false;
+                        lastWasHyphen = false;
+                    }
+                    else
+                    {
+                        // Invalid character in hostname
+                        return false;
                     }
                 }
             }
@@ -964,8 +955,7 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
 
 String URL::getDomainInternal (bool ignorePort) const
 {
-    // Special handling for file URLs with three slashes (file:///)
-    // These should have empty domain
+    // Special handling for file URLs with three slashes (file:///) should have empty domain
     if (getScheme() == "file" && url.substring(0, 8) == "file:///")
         return String();
 
@@ -1111,6 +1101,7 @@ private:
     }
 };
 #endif
+
 //==============================================================================
 template <typename Member, typename Item>
 static URL::InputStreamOptions with (URL::InputStreamOptions options, Member&& member, Item&& item)
