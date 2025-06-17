@@ -932,7 +932,7 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
     auto atSign = possibleEmailAddress.indexOfChar ('@');
 
     return atSign > 0
-        && atSign == possibleEmailAddress.lastIndexOfChar('@')
+        && atSign == possibleEmailAddress.lastIndexOfChar ('@')
         && possibleEmailAddress.lastIndexOfChar ('.') > (atSign + 1)
         && ! possibleEmailAddress.endsWithChar ('.');
 }
