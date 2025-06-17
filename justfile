@@ -1,5 +1,7 @@
 alias c := clean
 
+gtest_filter := "*"
+
 [doc("list available recipes")]
 default:
   @just --list
@@ -17,7 +19,7 @@ build CONFIG="Debug":
 test CONFIG="Debug":
   cmake -G Xcode -B build
   cmake --build build --target yup_tests --config {{CONFIG}}
-  build/tests/{{CONFIG}}/yup_tests --gtest_filter=*
+  build/tests/{{CONFIG}}/yup_tests --gtest_filter={{gtest_filter}}
 
 [doc("generate and open project in macOS using Xcode")]
 osx PROFILING="OFF":
@@ -70,9 +72,8 @@ emscripten CONFIG="Debug":
 
 [doc("run tests for WASM")]
 emscripten_test CONFIG="Debug":
-  emcmake cmake -G "Ninja Multi-Config" -B build
   @just build {{CONFIG}}
-  node build/tests/{{CONFIG}}/yup_tests.js --gtest_filter=*
+  node build/tests/{{CONFIG}}/yup_tests.js --gtest_filter={{gtest_filter}}
 
 [doc("serve project for WASM")]
 emscripten_serve CONFIG="Debug":
