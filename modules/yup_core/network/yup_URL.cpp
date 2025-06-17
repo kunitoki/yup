@@ -331,6 +331,126 @@ static String removeLastPathSection (const String& url)
 
     return url.substring (0, std::max (startOfPath, lastSlash));
 }
+
+// Helper to find the start of the domain after authentication info
+static int findDomainStart (const String& url, int startOfNetLocation)
+{
+    auto atPos = url.indexOfChar (startOfNetLocation, '@');
+    auto firstSlash = url.indexOfChar (startOfNetLocation, '/');
+
+    if (atPos > 0 && (firstSlash < 0 || atPos < firstSlash))
+        return atPos + 1; // Skip past authentication info
+
+    return startOfNetLocation;
+}
+
+// Helper to check if we have an IPv6 address
+static bool isIPv6Address (const String& url, int domainStart)
+{
+    return domainStart < url.length() && url[domainStart] == '[';
+}
+
+// Helper to find the end of IPv6 address (closing bracket)
+static int findIPv6End (const String& url, int domainStart)
+{
+    if (! isIPv6Address (url, domainStart))
+        return -1;
+
+    return url.indexOfChar (domainStart, ']');
+}
+
+// Helper to extract port string from URL
+static String extractPortString (const String& url, int portStart, int pathStart)
+{
+    if (portStart <= 0)
+        return {};
+
+    auto portEnd = pathStart > 0 ? pathStart : url.length();
+    return url.substring (portStart + 1, portEnd);
+}
+
+// Helper to validate port number
+static bool isValidPort (const String& portStr)
+{
+    if (portStr.isEmpty())
+        return false;
+
+    for (int i = 0; i < portStr.length(); ++i)
+    {
+        if (! CharacterFunctions::isDigit (portStr[i]))
+            return false;
+    }
+
+    auto port = portStr.getIntValue();
+    return port >= 0 && port <= 65535;
+}
+
+// Helper to find port separator position
+static int findPortSeparator (const String& url, int domainStart, int pathStart)
+{
+    if (isIPv6Address (url, domainStart))
+    {
+        // For IPv6, look for port after closing bracket
+        auto closeBracket = findIPv6End (url, domainStart);
+        if (closeBracket > 0 && closeBracket + 1 < url.length() && url[closeBracket + 1] == ':')
+            return closeBracket + 1;
+    }
+    else
+    {
+        // For regular domain, find colon before path
+        auto colonPos = url.indexOfChar (domainStart, ':');
+        if (colonPos > domainStart && (pathStart < 0 || colonPos < pathStart))
+            return colonPos;
+    }
+
+    return -1;
+}
+
+// Helper to validate IPv6 address content
+static bool isValidIPv6Content (const String& ipv6Addr)
+{
+    if (ipv6Addr.isEmpty())
+        return false;
+
+    int colonCount = 0;
+
+    for (int i = 0; i < ipv6Addr.length(); ++i)
+    {
+        auto ch = ipv6Addr[i];
+
+        if (ch == ':')
+            colonCount++;
+        else if (ch == '.')
+            continue; // Dots allowed for IPv4-mapped addresses
+        else if (ch == '%')
+            break; // Zone identifier - everything after is zone
+        else if (CharacterFunctions::getHexDigitValue (ch) < 0)
+            return false; // Invalid character
+    }
+
+    return colonCount > 0; // Must have at least one colon
+}
+
+// Helper to extract just the domain (without port) from a URL
+static String extractDomain (const String& url, int domainStart, int pathStart)
+{
+    int end = pathStart > 0 ? pathStart : url.length();
+
+    if (isIPv6Address (url, domainStart))
+    {
+        auto closeBracket = findIPv6End (url, domainStart);
+        if (closeBracket > 0)
+            return url.substring (domainStart, closeBracket + 1);
+    }
+    else
+    {
+        auto portSeparator = findPortSeparator (url, domainStart, pathStart);
+        if (portSeparator > 0)
+            end = portSeparator;
+    }
+
+    return url.substring (domainStart, end);
+}
 } // namespace URLHelpers
 
 void URL::addParameter (const String& name, const String& value)
@@ -418,85 +538,38 @@ bool URL::isWellFormed() const
             return false;
 
         // Check for valid domain/host
-        auto domainStart = URLHelpers::findStartOfNetLocation (url);
+        auto netLocationStart = URLHelpers::findStartOfNetLocation (url);
 
-        // Check for authentication info (user:pass@)
-        auto atPos = url.indexOfChar (domainStart, '@');
-        auto firstSlash = url.indexOfChar (domainStart, '/');
+        // Check for authentication info
+        auto atPos = url.indexOfChar (netLocationStart, '@');
+        auto firstSlash = url.indexOfChar (netLocationStart, '/');
         if (atPos > 0 && (firstSlash < 0 || atPos < firstSlash))
         {
             // Validate authentication part
-            auto authPart = url.substring (domainStart, atPos);
+            auto authPart = url.substring (netLocationStart, atPos);
             if (authPart.isEmpty())
                 return false;
-            domainStart = atPos + 1;
         }
 
-        // Find the end of domain (either path start, port start, or end of string)
+                auto domainStart = URLHelpers::findDomainStart (url, netLocationStart);
         auto pathStart = url.indexOfChar (domainStart, '/');
 
-        String domain;
-        String portStr;
+        // Extract domain
+        String domain = URLHelpers::extractDomain (url, domainStart, pathStart);
 
-        // Check if we have an IPv6 address
-        if (url[domainStart] == '[')
+        // For IPv6, check if closing bracket exists
+        if (URLHelpers::isIPv6Address (url, domainStart))
         {
-            // IPv6 address - find the closing bracket
-            auto closeBracket = url.indexOfChar (domainStart, ']');
-            if (closeBracket < 0)
+            if (URLHelpers::findIPv6End (url, domainStart) < 0)
                 return false; // No closing bracket
-
-            domain = url.substring (domainStart, closeBracket + 1);
-
-            // Check for port after IPv6 address
-            if (closeBracket + 1 < url.length() && url[closeBracket + 1] == ':')
-            {
-                auto portEnd = pathStart > 0 ? pathStart : url.length();
-                portStr = url.substring (closeBracket + 2, portEnd);
-            }
-        }
-        else
-        {
-            // For regular domain or IPv4, look for port colon after the domain start
-            // (to avoid confusion with colons in authentication)
-            auto portStart = url.indexOfChar (domainStart, ':');
-
-            // Make sure the colon is before any path and is not part of IPv6
-            if (portStart > domainStart && (pathStart < 0 || portStart < pathStart))
-            {
-                // We have a port
-                domain = url.substring (domainStart, portStart);
-                auto portEnd = pathStart > 0 ? pathStart : url.length();
-                portStr = url.substring (portStart + 1, portEnd);
-
-                // If we found a colon but no port number, it's invalid
-                if (portStr.isEmpty())
-                    return false;
-            }
-            else if (pathStart > 0)
-            {
-                // No port, but we have a path
-                domain = url.substring (domainStart, pathStart);
-            }
-            else
-            {
-                // No port, no path
-                domain = url.substring (domainStart);
-            }
         }
 
-        // Validate port if present
-        if (! portStr.isEmpty())
+        // Extract and validate port if present
+        auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
+        if (portSeparator > 0)
         {
-            // Validate port number
-            for (int i = 0; i < portStr.length(); ++i)
-            {
-                if (! CharacterFunctions::isDigit (portStr[i]))
-                    return false;
-            }
-
-            auto port = portStr.getIntValue();
-            if (port < 0 || port > 65535)
+            auto portStr = URLHelpers::extractPortString (url, portSeparator, pathStart);
+            if (! URLHelpers::isValidPort (portStr))
                 return false;
         }
 
@@ -562,34 +635,7 @@ bool URL::isWellFormed() const
                 // Extract the address between brackets
                 auto ipv6Addr = domain.substring (1, domain.length() - 1);
 
-                // Empty brackets are invalid
-                if (ipv6Addr.isEmpty())
-                    return false;
-
-                // Basic IPv6 validation
-                // Check for valid characters (hex digits, colons, dots for IPv4-mapped, % for zone)
-                bool hasDoubleColon = ipv6Addr.contains ("::");
-                int colonCount = 0;
-
-                for (int i = 0; i < ipv6Addr.length(); ++i)
-                {
-                    auto ch = ipv6Addr[i];
-
-                    if (ch == ':')
-                        colonCount++;
-
-                    else if (ch == '.')
-                        continue;
-
-                    else if (ch == '%')
-                        break;
-
-                    else if (CharacterFunctions::getHexDigitValue (ch) < 0)
-                        return false;
-                }
-
-                // At minimum, an IPv6 address needs some colons
-                if (colonCount == 0)
+                if (! URLHelpers::isValidIPv6Content (ipv6Addr))
                     return false;
 
                 isIPv6 = true;
@@ -597,38 +643,48 @@ bool URL::isWellFormed() const
 
             if (! isIPv4 && ! isIPv6)
             {
-                // Validate as hostname
-                // Check for valid hostname characters
-                bool lastWasDot = false;
-                bool lastWasHyphen = false;
-
-                for (int i = 0; i < domain.length(); ++i)
+#if YUP_WINDOWS
+                // Special case for Windows file URLs with drive letters (e.g., "C:")
+                if (scheme == "file" && domain.length() == 2 && CharacterFunctions::isLetter (domain[0]) && domain[1] == ':')
                 {
-                    auto ch = domain[i];
+                    // Valid Windows drive letter
+                }
+                else
+#endif
+                {
+                    // Validate as hostname
+                    // Check for valid hostname characters
+                    bool lastWasDot = false;
+                    bool lastWasHyphen = false;
 
-                    if (ch == '.')
+                    for (int i = 0; i < domain.length(); ++i)
                     {
-                        if (i == 0 || i == domain.length() - 1 || lastWasDot || lastWasHyphen)
+                        auto ch = domain[i];
+
+                        if (ch == '.')
+                        {
+                            if (i == 0 || i == domain.length() - 1 || lastWasDot || lastWasHyphen)
+                                return false;
+                            lastWasDot = true;
+                            lastWasHyphen = false;
+                        }
+                        else if (ch == '-')
+                        {
+                            if (i == 0 || i == domain.length() - 1 || lastWasDot)
+                                return false;
+                            lastWasHyphen = true;
+                            lastWasDot = false;
+                        }
+                        else if (CharacterFunctions::isLetterOrDigit (ch))
+                        {
+                            lastWasDot = false;
+                            lastWasHyphen = false;
+                        }
+                        else
+                        {
+                            // Invalid character in hostname
                             return false;
-                        lastWasDot = true;
-                        lastWasHyphen = false;
-                    }
-                    else if (ch == '-')
-                    {
-                        if (i == 0 || i == domain.length() - 1 || lastWasDot)
-                            return false;
-                        lastWasHyphen = true;
-                        lastWasDot = false;
-                    }
-                    else if (CharacterFunctions::isLetterOrDigit (ch))
-                    {
-                        lastWasDot = false;
-                        lastWasHyphen = false;
-                    }
-                    else
-                    {
-                        // Invalid character in hostname
-                        return false;
+                        }
                     }
                 }
             }
@@ -761,41 +817,14 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
 int URL::getPort() const
 {
     auto start = URLHelpers::findStartOfNetLocation (url);
+    auto domainStart = URLHelpers::findDomainStart (url, start);
+    auto pathStart = url.indexOfChar (domainStart, '/');
+    auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
 
-    // Check for authentication info (user:pass@)
-    auto atPos = url.indexOfChar (start, '@');
-    auto firstSlash = url.indexOfChar (start, '/');
-    if (atPos > 0 && (firstSlash < 0 || atPos < firstSlash))
-        start = atPos + 1;
-
-    auto colonPos = -1;
-
-    // Check if this is an IPv6 address
-    if (start < url.length() && url[start] == '[')
+    if (portSeparator > 0)
     {
-        // Find the closing bracket for IPv6
-        auto closeBracket = url.indexOfChar (start, ']');
-        if (closeBracket > start)
-        {
-            // Look for port after the closing bracket
-            if (closeBracket + 1 < url.length() && url[closeBracket + 1] == ':')
-                colonPos = closeBracket + 1;
-        }
-    }
-    else
-    {
-        // Regular domain - find the colon after the domain
-        colonPos = url.indexOfChar (start, ':');
-    }
-
-    // Make sure the colon is before any path
-    if (colonPos > 0)
-    {
-        auto pathStart = url.indexOfChar (start, '/');
-        if (pathStart > 0 && colonPos > pathStart)
-            return 0; // Colon is in the path, not a port separator
-
-        return url.substring (colonPos + 1).getIntValue();
+        auto portStr = URLHelpers::extractPortString (url, portSeparator, pathStart);
+        return portStr.getIntValue();
     }
 
     return 0;
@@ -940,41 +969,19 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
 String URL::getDomainInternal (bool ignorePort) const
 {
     auto start = URLHelpers::findStartOfNetLocation (url);
+    auto domainStart = URLHelpers::findDomainStart (url, start);
+    auto pathStart = url.indexOfChar (domainStart, '/');
 
-    // Check for authentication info (user:pass@)
-    auto atPos = url.indexOfChar (start, '@');
-    auto firstSlash = url.indexOfChar (start, '/');
-    if (atPos > 0 && (firstSlash < 0 || atPos < firstSlash))
-        start = atPos + 1;
-
-    auto end1 = url.indexOfChar (start, '/');
-    auto end2 = -1;
+    int end = pathStart > 0 ? pathStart : std::numeric_limits<int>::max();
 
     if (! ignorePort)
     {
-        // Check if this is an IPv6 address
-        if (start < url.length() && url[start] == '[')
-        {
-            // Find the closing bracket for IPv6
-            auto closeBracket = url.indexOfChar (start, ']');
-            if (closeBracket > start)
-            {
-                // Look for port after the closing bracket
-                if (closeBracket + 1 < url.length() && url[closeBracket + 1] == ':')
-                    end2 = closeBracket + 1;
-            }
-        }
-        else
-        {
-            // Regular domain - look for port
-            end2 = url.indexOfChar (start, ':');
-        }
+        auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
+        if (portSeparator > 0)
+            end = jmin (end, portSeparator);
     }
 
-    auto end = (end1 < 0 && end2 < 0) ? std::numeric_limits<int>::max()
-                                      : ((end1 < 0 || end2 < 0) ? jmax (end1, end2)
-                                                                : jmin (end1, end2));
-    return url.substring (start, end);
+    return url.substring (domainStart, end);
 }
 
 #if YUP_IOS
