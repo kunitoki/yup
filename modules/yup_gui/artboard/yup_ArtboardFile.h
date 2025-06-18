@@ -25,18 +25,41 @@ namespace yup
 class Artboard;
 
 //==============================================================================
-class JUCE_API ArtboardFile
+/** Represents a Rive file.
+
+    This class is used to load Rive binary files (aka .riv files).
+*/
+class YUP_API ArtboardFile
 {
 public:
     //==============================================================================
-    const rive::File* getRiveFile() const;
-    rive::File* getRiveFile();
-
-    //==============================================================================
+    /** The result of loading a Rive file. */
     using LoadResult = ResultValue<std::shared_ptr<ArtboardFile>>;
 
+    /** Loads a Rive file from a file.
+
+        @param file The file to load.
+        @param factory The factory to use to create the Rive file.
+
+        @return The result of loading the Rive file.
+    */
     static LoadResult load (const File& file, rive::Factory& factory);
+
+    /** Loads a Rive file from an input stream.
+
+        @param is The input stream to load the Rive file from.
+        @param factory The factory to use to create the Rive file.
+
+        @return The result of loading the Rive file.
+    */
     static LoadResult load (InputStream& is, rive::Factory& factory);
+
+    //==============================================================================
+    /** Returns the underlying Rive file. */
+    const rive::File* getRiveFile() const;
+
+    /** Returns the underlying Rive file. */
+    rive::File* getRiveFile();
 
 private:
     ArtboardFile() = default;
