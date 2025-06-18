@@ -194,6 +194,26 @@ URL::URL (File localFile)
     jassert (isWellFormed());
 }
 
+URL::URL (const URL& other)
+    : url (other.url)
+    , postData (other.postData)
+    , parameterNames (other.parameterNames)
+    , parameterValues (other.parameterValues)
+    , anchor (other.anchor)
+    , filesToUpload (other.filesToUpload)
+{
+}
+
+URL::URL (URL&& other)
+    : url (std::move (other.url))
+    , postData (std::move (other.postData))
+    , parameterNames (std::move (other.parameterNames))
+    , parameterValues (std::move (other.parameterValues))
+    , anchor (std::move (other.anchor))
+    , filesToUpload (std::move (other.filesToUpload))
+{
+}
+
 void URL::init()
 {
     auto i = url.indexOfChar ('#');

@@ -69,6 +69,12 @@ public:
     /** Creates URL referring to a local file on your disk using the file:// scheme. */
     explicit URL (File localFile);
 
+    /** Copy construct an URL. */
+    URL (const URL& other);
+
+    /** Move construct an URL. */
+    URL (URL&& other);
+
     /** Compares two URLs.
 
         All aspects of the URLs must be identical for them to match, including any parameters,
