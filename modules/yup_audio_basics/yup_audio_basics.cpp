@@ -50,10 +50,6 @@
 
 #include "yup_audio_basics.h"
 
-#if YUP_MINGW && ! defined(alloca)
-#define alloca __builtin_alloca
-#endif
-
 #if YUP_USE_SSE_INTRINSICS
 #include <emmintrin.h>
 #endif

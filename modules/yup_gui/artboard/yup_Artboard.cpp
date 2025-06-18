@@ -29,41 +29,35 @@ Artboard::Artboard (StringRef componentID)
 {
 }
 
-//==============================================================================
-
-Result Artboard::loadFromFile (const File& file, int defaultArtboardIndex, bool shouldUseStateMachines)
+Artboard::Artboard (StringRef componentID, std::shared_ptr<ArtboardFile> file)
+    : Component (componentID)
 {
-    if (! file.existsAsFile())
-        return Result::fail ("Failed to find file to load");
-
-    auto is = file.createInputStream();
-    if (is == nullptr || ! is->openedOk())
-        return Result::fail ("Failed to open file for reading");
-
-    return loadFromStream (*is, defaultArtboardIndex, shouldUseStateMachines);
+    setFile (std::move (file));
 }
 
-Result Artboard::loadFromStream (InputStream& is, int defaultArtboardIndex, bool shouldUseStateMachines)
+//==============================================================================
+
+void Artboard::setFile (std::shared_ptr<ArtboardFile> file)
 {
-    if (getNativeComponent() == nullptr)
-        return Result::fail ("Unable to access top level native component");
+    clear();
 
-    auto factory = getNativeComponent()->getFactory();
-    if (factory == nullptr)
-        return Result::fail ("Failed to create a graphics context");
-
-    yup::MemoryBlock mb;
-    is.readIntoMemoryBlock (mb);
-
-    rivFile = rive::File::import ({ static_cast<const uint8_t*> (mb.getData()), mb.getSize() }, factory);
-    artboardIndex = jlimit (-1, static_cast<int> (rivFile->artboardCount()) - 1, defaultArtboardIndex);
-
-    useStateMachines = shouldUseStateMachines;
+    artboardFile = std::move (file);
 
     updateSceneFromFile();
-    repaint();
+}
 
-    return Result::ok();
+//==============================================================================
+
+void Artboard::clear()
+{
+    artboardFile.reset();
+
+    artboard.reset();
+    scene.reset();
+
+    stateMachine = nullptr;
+
+    eventProperties.clear();
 }
 
 //==============================================================================
@@ -98,15 +92,143 @@ float Artboard::durationSeconds() const
 
 //==============================================================================
 
+bool Artboard::hasBoolInput (const String& name) const
+{
+    if (scene == nullptr)
+        return false;
+
+    return scene->getBool (name.toStdString()) != nullptr;
+}
+
+void Artboard::setBoolInput (const String& name, bool value)
+{
+    if (scene == nullptr)
+        return;
+
+    if (auto sceneInput = scene->getBool (name.toStdString()))
+    {
+        sceneInput->value (value);
+
+        repaint();
+    }
+}
+
+bool Artboard::hasNumberInput (const String& name) const
+{
+    if (scene == nullptr)
+        return false;
+
+    return scene->getNumber (name.toStdString()) != nullptr;
+}
+
 void Artboard::setNumberInput (const String& name, double value)
 {
     if (scene == nullptr)
         return;
 
-    if (auto numberInput = scene->getNumber (name.toStdString()))
-        numberInput->value (static_cast<float> (value));
+    if (auto sceneInput = scene->getNumber (name.toStdString()))
+    {
+        sceneInput->value (static_cast<float> (value));
 
-    repaint();
+        repaint();
+    }
+}
+
+bool Artboard::hasTriggerInput (const String& name) const
+{
+    if (scene == nullptr)
+        return false;
+
+    return scene->getTrigger (name.toStdString()) != nullptr;
+}
+
+void Artboard::triggerInput (const String& name)
+{
+    if (scene == nullptr)
+        return;
+
+    if (auto sceneInput = scene->getTrigger (name.toStdString()))
+    {
+        sceneInput->fire();
+
+        repaint();
+    }
+}
+
+//==============================================================================
+
+var Artboard::getAllInputs() const
+{
+    if (stateMachine == nullptr)
+        return {};
+
+    Array<var> stateMachineInputs;
+    stateMachineInputs.ensureStorageAllocated (static_cast<int> (stateMachine->inputCount()));
+
+    for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
+    {
+        auto inputObject = stateMachine->input (inputIndex);
+
+        DynamicObject::Ptr object = new DynamicObject;
+        object->setProperty ("id", String (inputObject->name()));
+
+        if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
+        {
+            object->setProperty ("type", "number");
+            object->setProperty ("value", number->value());
+        }
+        else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
+        {
+            object->setProperty ("type", "boolean");
+            object->setProperty ("value", boolean->value());
+        }
+        else if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        {
+            object->setProperty ("type", "trigger");
+        }
+
+        stateMachineInputs.add (var (object.get()));
+    }
+
+    return stateMachineInputs;
+}
+
+void Artboard::setAllInputs (const var& value)
+{
+}
+
+void Artboard::setInput (const String& inputName, const var& value)
+{
+    if (stateMachine == nullptr)
+        return;
+
+    for (std::size_t inputIndex = 0; inputIndex < stateMachine->inputCount(); ++inputIndex)
+    {
+        auto inputObject = stateMachine->input (inputIndex);
+
+        if (StringRef (inputObject->name()) != inputName)
+            continue;
+
+        if (auto trigger = dynamic_cast<rive::SMITrigger*> (inputObject))
+        {
+            trigger->fire();
+            break;
+        }
+        else if (auto boolean = dynamic_cast<rive::SMIBool*> (inputObject))
+        {
+            jassert (value.isBool());
+
+            boolean->value (static_cast<bool> (value));
+            break;
+        }
+        else if (auto number = dynamic_cast<rive::SMINumber*> (inputObject))
+        {
+            jassert (value.isDouble() || value.isInt() || value.isInt64());
+
+            number->value (static_cast<float> (value));
+            break;
+        }
+    }
 }
 
 //==============================================================================
@@ -240,45 +362,33 @@ void Artboard::mouseDrag (const MouseEvent& event)
 
 void Artboard::propertyChanged (const String& eventName, const String& propertyName, const var& oldValue, const var& newValue)
 {
-    YUP_DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
+    // YUP_DBG (eventName << " (" << propertyName << ") = " << newValue.toString() << " (" << oldValue.toString() << ")");
 }
 
 //==============================================================================
 
 void Artboard::updateSceneFromFile()
 {
-    jassert (rivFile != nullptr);
-
     artboard.reset();
     scene.reset();
     stateMachine = nullptr;
-    eventProperties.clear();
 
-    auto currentArtboard = (artboardIndex == -1)
-                             ? rivFile->artboardDefault()
-                             : rivFile->artboard (artboardIndex)->instance();
+    auto rivFile = artboardFile->getRiveFile();
+    if (rivFile == nullptr)
+        return;
+
+    auto currentArtboard = rivFile->artboardDefault();
+    if (currentArtboard == nullptr)
+        return;
 
     std::unique_ptr<rive::Scene> currentScene;
     rive::StateMachineInstance* currentStateMachine = nullptr;
 
-    if (useStateMachines)
+    if (currentArtboard->stateMachineCount() > 0)
     {
-        if (yup::isPositiveAndBelow (stateMachineIndex, currentArtboard->stateMachineCount()))
-        {
-            auto machine = currentArtboard->stateMachineAt (stateMachineIndex);
-            currentStateMachine = machine.get();
-            currentScene = std::move (machine);
-        }
-        else if (currentArtboard->stateMachineCount() > 0)
-        {
-            auto machine = currentArtboard->defaultStateMachine();
-            currentStateMachine = machine.get();
-            currentScene = std::move (machine);
-        }
-    }
-    else if (yup::isPositiveAndBelow (animationIndex, currentArtboard->animationCount()))
-    {
-        currentScene = currentArtboard->animationAt (animationIndex);
+        auto machine = currentArtboard->defaultStateMachine();
+        currentStateMachine = machine.get();
+        currentScene = std::move (machine);
     }
     else if (currentArtboard->animationCount() > 0)
     {
@@ -293,8 +403,7 @@ void Artboard::updateSceneFromFile()
     artboard = std::move (currentArtboard);
     scene = std::move (currentScene);
 
-    if (currentStateMachine)
-        stateMachine = currentStateMachine;
+    stateMachine = currentStateMachine;
 }
 
 //==============================================================================
@@ -332,7 +441,11 @@ void Artboard::pullEventsFromStateMachines()
                 continue;
 
             eventProperties.set (eventName, newValue);
+
             propertyChanged (eventName, String (child->name()), oldValue, newValue);
+
+            if (onPropertyChanged)
+                onPropertyChanged (*this, eventName, String (child->name()), oldValue, newValue);
         }
     }
 }

@@ -57,13 +57,6 @@ YUP_API void yupDLL_free (void* block) { std::free (block); }
 
 static int findNumberOfPhysicalCores() noexcept
 {
-#if YUP_MINGW
-    // Not implemented in MinGW
-    jassertfalse;
-
-    return 1;
-#else
-
     DWORD bufferSize = 0;
     GetLogicalProcessorInformation (nullptr, &bufferSize);
 
@@ -87,8 +80,6 @@ static int findNumberOfPhysicalCores() noexcept
     {
         return info.Relationship == RelationProcessorCore;
     });
-
-#endif // YUP_MINGW
 }
 
 //==============================================================================
@@ -98,7 +89,7 @@ static int findNumberOfPhysicalCores() noexcept
 #pragma intrinsic(__rdtsc)
 #endif
 
-#if YUP_MINGW || YUP_CLANG
+#if YUP_CLANG
 static void callCPUID (int result[4], uint32 type)
 {
     uint32 la = (uint32) result[0], lb = (uint32) result[1],
@@ -268,30 +259,6 @@ static DebugFlagsInitialiser debugFlagsInitialiser;
 #endif
 
 //==============================================================================
-#if YUP_MINGW
-static uint64 getWindowsVersion()
-{
-    auto filename = _T ("kernel32.dll");
-    DWORD handle = 0;
-
-    if (auto size = GetFileVersionInfoSize (filename, &handle))
-    {
-        HeapBlock<char> data (size);
-
-        if (GetFileVersionInfo (filename, handle, size, data))
-        {
-            VS_FIXEDFILEINFO* info = nullptr;
-            UINT verSize = 0;
-
-            if (VerQueryValue (data, (LPCTSTR) _T ("\\"), (void**) &info, &verSize))
-                if (size > 0 && info != nullptr && info->dwSignature == 0xfeef04bd)
-                    return ((uint64) info->dwFileVersionMS << 32) | (uint64) info->dwFileVersionLS;
-        }
-    }
-
-    return 0;
-}
-#else
 RTL_OSVERSIONINFOW getWindowsVersionInfo();
 
 RTL_OSVERSIONINFOW getWindowsVersionInfo()
@@ -314,32 +281,25 @@ RTL_OSVERSIONINFOW getWindowsVersionInfo()
 
     return versionInfo;
 }
-#endif
 
 String SystemStats::getOperatingSystemVersionString()
 {
-    auto versionInfo = getWindowsVersionInfo();
+    const auto versionInfo = getWindowsVersionInfo();
 
-    auto major = versionInfo.dwMajorVersion;
-    auto minor = versionInfo.dwMinorVersion;
-    auto build = versionInfo.dwBuildNumber;
+    const auto major = versionInfo.dwMajorVersion;
+    const auto minor = versionInfo.dwMinorVersion;
+    const auto build = versionInfo.dwBuildNumber;
 
     return String::formatted ("%d.%d.%d", major, minor, build);
 }
 
 SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 {
-#if YUP_MINGW
-    const auto v = getWindowsVersion();
-    const auto major = (v >> 48) & 0xffff;
-    const auto minor = (v >> 32) & 0xffff;
-    const auto build = (v >> 16) & 0xffff;
-#else
     const auto versionInfo = getWindowsVersionInfo();
+
     const auto major = versionInfo.dwMajorVersion;
     const auto minor = versionInfo.dwMinorVersion;
     const auto build = versionInfo.dwBuildNumber;
-#endif
 
     jassert (major <= 10); // need to add support for new version!
 

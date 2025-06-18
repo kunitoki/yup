@@ -247,8 +247,14 @@ String SystemStats::getStackBacktrace()
 {
     String result;
 
-#if YUP_MINGW || (YUP_WASM && ! YUP_EMSCRIPTEN)
+#if (YUP_WASM && ! YUP_EMSCRIPTEN)
     jassertfalse; // sorry, not implemented yet!
+
+#elif YUP_EMSCRIPTEN
+    std::string temporaryStack;
+    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8) (stackTrace()); }));
+    EM_ASM_ARGS ({ (stringToUTF8 || Module.stringToUTF8) (stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
+    result << temporaryStack.c_str();
 
 #elif YUP_WINDOWS
     HANDLE process = GetCurrentProcess();
@@ -280,12 +286,6 @@ String SystemStats::getStackBacktrace()
             result << symbol->Name << " + 0x" << String::toHexString ((int64) displacement) << newLine;
         }
     }
-
-#elif YUP_EMSCRIPTEN
-    std::string temporaryStack;
-    temporaryStack.resize (10 * EM_ASM_INT_V ({ return (lengthBytesUTF8 || Module.lengthBytesUTF8) (stackTrace()); }));
-    EM_ASM_ARGS ({ (stringToUTF8 || Module.stringToUTF8) (stackTrace(), $0, $1); }, temporaryStack.data(), temporaryStack.size());
-    result << temporaryStack.c_str();
 
 #else
     void* stack[128];

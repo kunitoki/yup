@@ -35,6 +35,8 @@
 //==============================================================================
 
 #include <rive/layout.hpp>
+#include <rive/file_asset_loader.hpp>
+#include <rive/assets/file_asset.hpp>
 #include <rive/custom_property_number.hpp>
 #include <rive/custom_property_boolean.hpp>
 #include <rive/custom_property_string.hpp>
@@ -104,9 +106,10 @@
 #include "component/yup_Component.cpp"
 #include "widgets/yup_Button.cpp"
 #include "widgets/yup_TextButton.cpp"
+#include "widgets/yup_TextEditor.cpp"
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
-#include "widgets/yup_TextEditor.cpp"
+#include "artboard/yup_ArtboardFile.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
