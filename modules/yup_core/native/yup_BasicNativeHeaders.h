@@ -94,7 +94,9 @@
 #pragma warning(push, 0) // disable all warnings whilst including system headers
 #endif
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #define STRICT 1

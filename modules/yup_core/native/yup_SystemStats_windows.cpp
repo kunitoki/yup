@@ -318,11 +318,17 @@ RTL_OSVERSIONINFOW getWindowsVersionInfo()
 
 String SystemStats::getOperatingSystemVersionString()
 {
-    auto versionInfo = getWindowsVersionInfo();
-
-    auto major = versionInfo.dwMajorVersion;
-    auto minor = versionInfo.dwMinorVersion;
-    auto build = versionInfo.dwBuildNumber;
+#if YUP_MINGW
+    const auto versionInfo = getWindowsVersion();
+    const auto major = (versionInfo >> 48) & 0xffff;
+    const auto minor = (versionInfo >> 32) & 0xffff;
+    const auto build = (versionInfo >> 16) & 0xffff;
+#else
+    const auto versionInfo = getWindowsVersionInfo();
+    const auto major = versionInfo.dwMajorVersion;
+    const auto minor = versionInfo.dwMinorVersion;
+    const auto build = versionInfo.dwBuildNumber;
+#endif
 
     return String::formatted ("%d.%d.%d", major, minor, build);
 }
@@ -330,10 +336,10 @@ String SystemStats::getOperatingSystemVersionString()
 SystemStats::OperatingSystemType SystemStats::getOperatingSystemType()
 {
 #if YUP_MINGW
-    const auto v = getWindowsVersion();
-    const auto major = (v >> 48) & 0xffff;
-    const auto minor = (v >> 32) & 0xffff;
-    const auto build = (v >> 16) & 0xffff;
+    const auto versionInfo = getWindowsVersion();
+    const auto major = (versionInfo >> 48) & 0xffff;
+    const auto minor = (versionInfo >> 32) & 0xffff;
+    const auto build = (versionInfo >> 16) & 0xffff;
 #else
     const auto versionInfo = getWindowsVersionInfo();
     const auto major = versionInfo.dwMajorVersion;
