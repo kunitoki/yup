@@ -261,6 +261,8 @@ bool URL::operator!= (const URL& other) const
 
 namespace URLHelpers
 {
+
+//==============================================================================
 static String getMangledParameters (const URL& url)
 {
     jassert (url.getParameterNames().size() == url.getParameterValues().size());
@@ -282,37 +284,93 @@ static String getMangledParameters (const URL& url)
     return p;
 }
 
-static int findEndOfScheme (const String& url)
+static Range<int> findSchemeRange (const String& url)
 {
     int i = 0;
+    const int length = url.length();
 
-    while (CharacterFunctions::isLetterOrDigit (url[i]) || url[i] == '+' || url[i] == '-' || url[i] == '.')
+    // First character must be a letter
+    if (i >= length || !CharacterFunctions::isLetter (url[i]))
+        return {};
+
+    // Find end of scheme
+    while (i < length)
+    {
+        auto ch = url[i];
+        if (ch == ':')
+            return Range<int> (0, i);
+
+        if (!CharacterFunctions::isLetterOrDigit (ch) && ch != '+' && ch != '-' && ch != '.')
+            break;
+
         ++i;
+    }
 
-    return url.substring (i).startsWith (":") ? i + 1 : 0;
+    return {};
 }
 
-static int findStartOfNetLocation (const String& url)
+static Range<int> findAuthorityRange (const String& url)
 {
-    int start = findEndOfScheme (url);
+    auto schemeRange = findSchemeRange (url);
+    if (schemeRange.isEmpty())
+        return {};
 
-    while (url[start] == '/')
-        ++start;
+    int start = schemeRange.getEnd();
+    const int length = url.length();
 
-    return start;
+    // Check for "://" after scheme
+    if (start + 3 > length || url.substring (start, start + 3) != "://")
+        return {};
+
+    start += 3; // Skip "://"
+
+    // Find end of authority (next '/', '?', '#' or end of string)
+    int end = start;
+    while (end < length)
+    {
+        auto ch = url[end];
+        if (ch == '/' || ch == '?' || ch == '#')
+            break;
+        ++end;
+    }
+
+    return end > start ? Range<int> (start, end) : Range<int>();
 }
 
-static int findStartOfPath (const String& url)
+static Range<int> findPathRange (const String& url)
 {
-    auto schemeEnd = findEndOfScheme (url);
-    auto scheme = url.substring (0, schemeEnd - 1).toLowerCase();
+    auto schemeRange = findSchemeRange (url);
+    if (schemeRange.isEmpty())
+        return {};
+
+    auto scheme = url.substring (schemeRange.getStart(), schemeRange.getEnd()).toLowerCase();
 
     // Special handling for file URLs with three slashes (file:///)
-    // The path starts at the third slash (includes the leading slash)
-    if (scheme == "file" && url.substring (schemeEnd - 1).startsWith (":///"))
-        return schemeEnd + 2; // Position of the third slash
+    if (scheme == "file" && url.substring (schemeRange.getEnd()).startsWith (":///"))
+    {
+        int start = schemeRange.getEnd() + 3; // Position after ":///"
+        int end = start;
+        const int length = url.length();
 
-    return url.indexOfChar (findStartOfNetLocation (url), '/') + 1;
+        while (end < length && url[end] != '?' && url[end] != '#')
+            ++end;
+
+        return Range<int> (start, end);
+    }
+
+    auto authorityRange = findAuthorityRange (url);
+    int start = authorityRange.isEmpty() ? schemeRange.getEnd() + 3 : authorityRange.getEnd();
+
+    if (start >= url.length() || url[start] != '/')
+        return {};
+
+    int end = start;
+    const int length = url.length();
+
+    while (end < length && url[end] != '?' && url[end] != '#')
+        ++end;
+
+    return Range<int> (start, end);
 }
 
 static void concatenatePaths (String& path, const String& suffix)
@@ -328,110 +386,106 @@ static void concatenatePaths (String& path, const String& suffix)
 
 static String removeLastPathSection (const String& url)
 {
-    auto startOfPath = findStartOfPath (url);
-    auto lastSlash = url.lastIndexOfChar ('/');
+    auto pathRange = findPathRange (url);
+    if (pathRange.isEmpty())
+        return url;
 
-    if (lastSlash > startOfPath && lastSlash == url.length() - 1)
+    auto path = url.substring (pathRange.getStart(), pathRange.getEnd());
+
+    // Special case: if path is just "/" (root path), return unchanged
+    if (path == "/")
+        return url;
+
+    auto lastSlash = url.lastIndexOfChar ('/');
+    auto pathStart = pathRange.getStart();
+
+    if (lastSlash > pathStart && lastSlash == url.length() - 1)
         return removeLastPathSection (url.dropLastCharacters (1));
 
     if (lastSlash < 0)
         return url;
 
-    return url.substring (0, std::max (startOfPath, lastSlash));
+    return url.substring (0, jmax (pathStart, lastSlash));
 }
 
-static int findDomainStart (const String& url, int startOfNetLocation)
+static Range<int> findHostRange (const String& url)
 {
-    auto atPos = url.indexOfChar (startOfNetLocation, '@');
-    auto firstSlash = url.indexOfChar (startOfNetLocation, '/');
-
-    if (atPos > 0 && (firstSlash < 0 || atPos < firstSlash))
-        return atPos + 1; // Skip past authentication info
-
-    return startOfNetLocation;
-}
-
-static bool isIPv4Address (const String& domain)
-{
-    int dotCount = 0;
-    StringArray octets = StringArray::fromTokens (domain, ".", "");
-
-    if (octets.size() != 4)
-        return false;
-
-    for (const auto& octet : octets)
-    {
-        if (octet.isEmpty() || octet.length() > 3)
-            return false;
-
-        for (int i = 0; i < octet.length(); ++i)
-        {
-            if (! CharacterFunctions::isDigit (octet[i]))
-                return false;
-        }
-
-        if (auto value = octet.getIntValue(); value < 0 || value > 255)
-            return false;
-    }
-
-    return true;
-}
-
-static bool isIPv6Address (const String& url, int domainStart)
-{
-    return domainStart < url.length() && url[domainStart] == '[';
-}
-
-static int findIPv6End (const String& url, int domainStart)
-{
-    if (! isIPv6Address (url, domainStart))
-        return -1;
-
-    return url.indexOfChar (domainStart, ']');
-}
-
-static String extractPortString (const String& url, int portStart, int pathStart)
-{
-    if (portStart <= 0)
+    auto authorityRange = findAuthorityRange (url);
+    if (authorityRange.isEmpty())
         return {};
 
-    auto portEnd = pathStart > 0 ? pathStart : url.length();
-    return url.substring (portStart + 1, portEnd);
+    int start = authorityRange.getStart();
+    int end = authorityRange.getEnd();
+
+    // Skip user info if present (everything before @)
+    auto atPos = url.indexOfChar (start, '@');
+    if (atPos >= 0 && atPos < end)
+        start = atPos + 1;
+
+    // Handle IPv6 addresses [::1]
+    if (start < end && url[start] == '[')
+    {
+        auto closeBracket = url.indexOfChar (start, ']');
+        if (closeBracket >= 0 && closeBracket < end)
+            return Range<int> (start, closeBracket + 1);
+    }
+
+    // Handle regular host - find port separator (last colon in range)
+    int colonPos = -1;
+    for (int i = end - 1; i >= start; --i)
+    {
+        if (url[i] == ':')
+        {
+            colonPos = i;
+            break;
+        }
+    }
+
+    if (colonPos >= 0)
+        end = colonPos;
+
+    return Range<int> (start, end);
 }
 
-static bool isValidPort (const String& portStr)
+static Range<int> findPortRange (const String& url)
 {
-    if (portStr.isEmpty())
-        return false;
+    auto authorityRange = findAuthorityRange (url);
+    if (authorityRange.isEmpty())
+        return {};
 
-    for (int i = 0; i < portStr.length(); ++i)
+    int start = authorityRange.getStart();
+    int end = authorityRange.getEnd();
+
+    // Skip user info if present
+    auto atPos = url.indexOfChar (start, '@');
+    if (atPos >= 0 && atPos < end)
+        start = atPos + 1;
+
+    // Handle IPv6 addresses [::1]:port
+    if (start < end && url[start] == '[')
     {
-        if (! CharacterFunctions::isDigit (portStr[i]))
-            return false;
+        auto closeBracket = url.indexOfChar (start, ']');
+        if (closeBracket >= 0 && closeBracket + 1 < end && url[closeBracket + 1] == ':')
+            return Range<int> (closeBracket + 2, end);
+
+        return {};
     }
 
-    auto port = portStr.getIntValue();
-    return port >= 0 && port <= 65535;
-}
-
-static int findPortSeparator (const String& url, int domainStart, int pathStart)
-{
-    if (isIPv6Address (url, domainStart))
+    // Handle regular host:port - find last colon in range
+    int colonPos = -1;
+    for (int i = end - 1; i >= start; --i)
     {
-        // For IPv6, look for port after closing bracket
-        auto closeBracket = findIPv6End (url, domainStart);
-        if (closeBracket > 0 && closeBracket + 1 < url.length() && url[closeBracket + 1] == ':')
-            return closeBracket + 1;
-    }
-    else
-    {
-        // For regular domain, find colon before path
-        auto colonPos = url.indexOfChar (domainStart, ':');
-        if (colonPos > domainStart && (pathStart < 0 || colonPos < pathStart))
-            return colonPos;
+        if (url[i] == ':')
+        {
+            colonPos = i;
+            break;
+        }
     }
 
-    return -1;
+    if (colonPos >= 0 && colonPos + 1 < end)
+        return Range<int> (colonPos + 1, end);
+
+    return {};
 }
 
 static bool isValidIPv6Content (const String& ipv6Addr)
@@ -440,42 +494,54 @@ static bool isValidIPv6Content (const String& ipv6Addr)
         return false;
 
     int colonCount = 0;
+    int doubleColonCount = 0;
+    bool hasDoubleColon = false;
 
+    // Check for invalid characters and count colons
     for (int i = 0; i < ipv6Addr.length(); ++i)
     {
         auto ch = ipv6Addr[i];
 
         if (ch == ':')
+        {
             colonCount++;
+            // Check for double colon
+            if (i + 1 < ipv6Addr.length() && ipv6Addr[i + 1] == ':')
+            {
+                if (hasDoubleColon)
+                    return false; // Only one double colon allowed
+                hasDoubleColon = true;
+                doubleColonCount++;
+                i++; // Skip next colon
+                colonCount++; // Count the second colon too
+            }
+        }
         else if (ch == '.')
-            continue; // Dots allowed for IPv4-mapped addresses
+        {
+            // IPv4 embedded - basic check for IPv4 at end
+            continue;
+        }
         else if (ch == '%')
-            break; // Zone identifier - everything after is zone
+        {
+            // Zone identifier - everything after this is zone
+            break;
+        }
         else if (CharacterFunctions::getHexDigitValue (ch) < 0)
-            return false; // Invalid character
+        {
+            return false; // Invalid hex character
+        }
     }
 
-    return colonCount > 0; // Must have at least one colon
-}
+    // Basic IPv6 structure validation
+    if (colonCount < 2) // IPv6 needs at least 2 colons (unless it's just ::)
+        return false;
 
-static String extractDomain (const String& url, int domainStart, int pathStart)
-{
-    int end = pathStart > 0 ? pathStart : url.length();
+    // Simple validation: if no double colon, should have 7 colons (8 groups)
+    // If double colon present, can have fewer
+    if (!hasDoubleColon && colonCount != 7)
+        return false;
 
-    if (isIPv6Address (url, domainStart))
-    {
-        auto closeBracket = findIPv6End (url, domainStart);
-        if (closeBracket > 0)
-            return url.substring (domainStart, closeBracket + 1);
-    }
-    else
-    {
-        auto portSeparator = findPortSeparator (url, domainStart, pathStart);
-        if (portSeparator > 0)
-            end = portSeparator;
-    }
-
-    return url.substring (domainStart, end);
+    return true;
 }
 } // namespace URLHelpers
 
@@ -505,51 +571,15 @@ bool URL::isWellFormed() const
         return false;
 
     // Check for valid scheme
-    auto schemeEnd = URLHelpers::findEndOfScheme (url);
-    if (schemeEnd <= 1) // No scheme or empty scheme
+    auto schemeRange = URLHelpers::findSchemeRange (url);
+    if (schemeRange.isEmpty())
         return false;
 
-    auto scheme = url.substring (0, schemeEnd - 1).toLowerCase();
-    int pathStart = -1; // Will be set later based on URL type
-
-    // Common valid schemes
-    static const StringArray validSchemes = { "http", "https", "ftp", "ftps", "file", "mailto", "tel", "data", "ws", "wss" };
-
-    bool hasValidScheme = false;
-    for (const auto& validScheme : validSchemes)
-    {
-        if (scheme == validScheme)
-        {
-            hasValidScheme = true;
-            break;
-        }
-    }
-
-    // Also accept any scheme that contains only valid characters
-    if (! hasValidScheme)
-    {
-        for (int i = 0; i < scheme.length(); ++i)
-        {
-            auto ch = scheme[i];
-            if (i == 0)
-            {
-                // First character must be a letter
-                if (! CharacterFunctions::isLetter (ch))
-                    return false;
-            }
-            else
-            {
-                // Subsequent characters can be letters, digits, +, -, or .
-                if (! (CharacterFunctions::isLetterOrDigit (ch) || ch == '+' || ch == '-' || ch == '.'))
-                    return false;
-            }
-        }
-    }
+    auto scheme = url.substring (schemeRange.getStart(), schemeRange.getEnd()).toLowerCase();
 
     // Special schemes that don't require "//" or domain
-    const StringArray specialSchemes = { "mailto", "tel", "data" };
     bool isSpecialScheme = false;
-    for (const auto& special : specialSchemes)
+    for (const auto& special : StringArray{ "mailto", "tel", "data" })
     {
         if (scheme == special)
         {
@@ -560,145 +590,84 @@ bool URL::isWellFormed() const
 
     if (! isSpecialScheme)
     {
-        // Check for "://" after scheme
-        if (! url.substring (schemeEnd - 1).startsWith ("://"))
+        // Check for valid authority/host
+        auto authorityRange = URLHelpers::findAuthorityRange (url);
+
+        // File URLs can have empty authority (for local files like file:///path)
+        if (scheme != "file" && authorityRange.isEmpty())
             return false;
 
-        // Check for valid domain/host
-        auto netLocationStart = URLHelpers::findStartOfNetLocation (url);
-
-        // Check for authentication info
-        auto atPos = url.indexOfChar (netLocationStart, '@');
-        auto firstSlash = url.indexOfChar (netLocationStart, '/');
-        if (atPos > 0 && (firstSlash < 0 || atPos < firstSlash))
+        if (! authorityRange.isEmpty())
         {
-            // Validate authentication part
-            auto authPart = url.substring (netLocationStart, atPos);
-            if (authPart.isEmpty())
-                return false;
-        }
-
-        // Special handling for file URLs with three slashes (file:///)
-        const bool isFileWithThreeSlashes =
-            (scheme == "file" && url.substring (schemeEnd - 1, schemeEnd + 3) == ":///");
-
-        auto domainStart = URLHelpers::findDomainStart (url, netLocationStart);
-        auto pathStart = url.indexOfChar (domainStart, '/');
-
-        // Extract domain
-        String domain;
-
-        if (isFileWithThreeSlashes)
-        {
-            domain = String();
-            // For file:/// URLs, the path starts right after the three slashes
-            pathStart = schemeEnd + 3;
-        }
-        else
-        {
-            domain = URLHelpers::extractDomain (url, domainStart, pathStart);
-            if (domain.isEmpty())
-                return false;
-
-            // For IPv6, check if closing bracket exists
-            if (URLHelpers::isIPv6Address (url, domainStart))
+            // Check for authentication info
+            auto authString = url.substring (authorityRange.getStart(), authorityRange.getEnd());
+            auto atPos = authString.indexOfChar ('@');
+            if (atPos >= 0)
             {
-                if (URLHelpers::findIPv6End (url, domainStart) < 0)
+                // Validate authentication part
+                auto authPart = authString.substring (0, atPos);
+                if (authPart.isEmpty())
                     return false;
             }
 
-            // Extract and validate port if present
-            auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
-            if (portSeparator > 0)
+            // Extract and validate host
+            auto hostRange = URLHelpers::findHostRange (url);
+            if (! hostRange.isEmpty())
             {
-                auto portStr = URLHelpers::extractPortString (url, portSeparator, pathStart);
-                if (! URLHelpers::isValidPort (portStr))
-                    return false;
-            }
-        }
+                auto host = url.substring (hostRange.getStart(), hostRange.getEnd());
 
-        // File URLs can have empty domain (for local files)
-        if (scheme == "file" && domain.isEmpty())
-        {
-            // File URLs are allowed to have empty domain for local files
-            // e.g., file:///path/to/file or file://localhost/path
-        }
-        else
-        {
-            // Check if it's an IPv4 address
-            bool isIPv4 = URLHelpers::isIPv4Address (domain);
-
-            // Check if it's an IPv6 address
-            bool isIPv6 = false;
-            if (! isIPv4 && domain.startsWith ("[") && domain.endsWith ("]"))
-            {
-                if (! URLHelpers::isValidIPv6Content (domain.substring (1, domain.length() - 1)))
-                    return false;
-
-                isIPv6 = true;
-            }
-
-            if (! isIPv4 && ! isIPv6)
-            {
-                // Validate as hostname: check for valid hostname characters
-                bool lastWasDot = false;
-                bool lastWasHyphen = false;
-
-                for (int i = 0; i < domain.length(); ++i)
+                // Validate IPv6 addresses
+                if (host.startsWith ("["))
                 {
-                    auto ch = domain[i];
-
-                    if (ch == '.')
-                    {
-                        if (i == 0 || i == domain.length() - 1 || lastWasDot || lastWasHyphen)
-                            return false;
-
-                        lastWasDot = true;
-                        lastWasHyphen = false;
-                    }
-                    else if (ch == '-')
-                    {
-                        if (i == 0 || i == domain.length() - 1 || lastWasDot)
-                            return false;
-
-                        lastWasHyphen = true;
-                        lastWasDot = false;
-                    }
-                    else if (CharacterFunctions::isLetterOrDigit (ch))
-                    {
-                        lastWasDot = false;
-                        lastWasHyphen = false;
-                    }
-                    else
-                    {
-                        // Invalid character in hostname
+                    if (! host.endsWith ("]"))
                         return false;
+
+                    auto ipv6Content = host.substring (1, host.length() - 1);
+                    if (ipv6Content.isEmpty())
+                        return false;
+
+                    if (! URLHelpers::isValidIPv6Content (ipv6Content))
+                        return false;
+                }
+                else if (host.isEmpty())
+                {
+                    return false; // Empty host not allowed for non-file URLs
+                }
+
+                // Check for empty port (invalid syntax like "example.com:")
+                auto colonPos = hostRange.getEnd();
+                if (colonPos < authorityRange.getEnd() && url[colonPos] == ':')
+                {
+                    auto portRange = URLHelpers::findPortRange (url);
+                    if (portRange.isEmpty())
+                        return false; // Empty port after colon is invalid
+
+                    auto portStr = url.substring (portRange.getStart(), portRange.getEnd());
+                    if (portStr.isEmpty())
+                        return false;
+
+                    for (int i = 0; i < portStr.length(); ++i)
+                    {
+                        if (!CharacterFunctions::isDigit (portStr[i]))
+                            return false;
                     }
+
+                    auto port = portStr.getIntValue();
+                    if (port < 0 || port > 65535)
+                        return false;
                 }
             }
         }
     }
 
-    // Basic path validation - check for invalid characters
-    if (pathStart >= 0 && pathStart < url.length())
+    auto pathRange = URLHelpers::findPathRange (url);
+    if (! pathRange.isEmpty())
     {
-        auto path = url.substring (pathStart);
+        auto path = url.substring (pathRange.getStart(), pathRange.getEnd());
 
-        // Remove query string and anchor for path validation
-        auto queryPos = path.indexOfChar ('?');
-        if (queryPos >= 0)
-            path = path.substring (0, queryPos);
-
-        auto anchorPos = path.indexOfChar ('#');
-        if (anchorPos >= 0)
-            path = path.substring (0, anchorPos);
-
-        // Path should not contain certain invalid characters
-        // Note: We're being lenient here as paths can contain many special characters
         for (int i = 0; i < path.length(); ++i)
         {
             auto ch = path[i];
-            // Disallow control characters
             if (ch < 32 || ch == 127)
                 return false;
         }
@@ -709,14 +678,21 @@ bool URL::isWellFormed() const
 
 String URL::getDomain() const
 {
-    return getDomainInternal (false);
+    auto hostRange = URLHelpers::findHostRange (url);
+    if (hostRange.isEmpty())
+        return {};
+
+    return url.substring (hostRange.getStart(), hostRange.getEnd());
 }
 
 String URL::getSubPath (bool includeGetParameters) const
 {
-    auto startOfPath = URLHelpers::findStartOfPath (url);
-    auto subPath = startOfPath <= 0 ? String()
-                                    : url.substring (startOfPath);
+    auto pathRange = URLHelpers::findPathRange (url);
+    auto subPath = pathRange.isEmpty() ? String()
+                                       : url.substring (pathRange.getStart(), pathRange.getEnd());
+
+    if (subPath.startsWithChar ('/'))
+        subPath = subPath.substring (1);
 
     if (includeGetParameters)
         subPath += getQueryString();
@@ -747,7 +723,11 @@ String URL::getAnchorString() const
 
 String URL::getScheme() const
 {
-    return url.substring (0, URLHelpers::findEndOfScheme (url) - 1);
+    auto schemeRange = URLHelpers::findSchemeRange (url);
+    if (schemeRange.isEmpty())
+        return {};
+
+    return url.substring (schemeRange.getStart(), schemeRange.getEnd());
 }
 
 #if ! YUP_ANDROID
@@ -780,7 +760,9 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
         return {};
     }
 
-    auto path = removeEscapeChars (fileURL.getDomainInternal (true)).replace ("+", "%2B");
+    auto hostRange = URLHelpers::findHostRange (fileURL.url);
+    auto path = hostRange.isEmpty() ? String()
+                                    : removeEscapeChars (fileURL.url.substring (hostRange.getStart(), hostRange.getEnd())).replace ("+", "%2B");
 
     auto subPath = fileURL.getSubPath();
     if (subPath.startsWith ("/"))
@@ -804,18 +786,12 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
 
 int URL::getPort() const
 {
-    auto start = URLHelpers::findStartOfNetLocation (url);
-    auto domainStart = URLHelpers::findDomainStart (url, start);
-    auto pathStart = url.indexOfChar (domainStart, '/');
-    auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
+    auto portRange = URLHelpers::findPortRange (url);
+    if (portRange.isEmpty())
+        return 0;
 
-    if (portSeparator > 0)
-    {
-        auto portStr = URLHelpers::extractPortString (url, portSeparator, pathStart);
-        return portStr.getIntValue();
-    }
-
-    return 0;
+    auto portStr = url.substring (portRange.getStart(), portRange.getEnd());
+    return portStr.getIntValue();
 }
 
 String URL::getOrigin() const
@@ -829,10 +805,26 @@ String URL::getOrigin() const
     return schemeAndDomain;
 }
 
-URL URL::withNewDomainAndPath (const String& newURL) const
+URL URL::withNewDomainAndPath (const String& newDomainAndPath) const
 {
     URL u (*this);
-    u.url = newURL;
+
+    // Extract the current scheme
+    auto scheme = getScheme();
+    if (scheme.isEmpty())
+        scheme = "http"; // Default to http if no scheme
+
+    // Build new URL with the scheme + new domain and path
+    u.url = scheme + "://" + newDomainAndPath;
+
+    // Re-parse to extract any parameters and anchors from the new URL
+    u.init();
+
+    // Copy over parameters and anchor from the original URL
+    u.parameterNames = parameterNames;
+    u.parameterValues = parameterValues;
+    u.anchor = anchor;
+
     return u;
 }
 
@@ -840,10 +832,10 @@ URL URL::withNewSubPath (const String& newPath) const
 {
     URL u (*this);
 
-    auto startOfPath = URLHelpers::findStartOfPath (url);
+    auto pathRange = URLHelpers::findPathRange (url);
 
-    if (startOfPath > 0)
-        u.url = url.substring (0, startOfPath);
+    if (!pathRange.isEmpty())
+        u.url = url.substring (0, pathRange.getStart());
 
     URLHelpers::concatenatePaths (u.url, newPath);
     return u;
@@ -951,31 +943,11 @@ bool URL::isProbablyAnEmailAddress (const String& possibleEmailAddress)
     return atSign > 0
         && atSign == possibleEmailAddress.lastIndexOfChar ('@')
         && possibleEmailAddress.lastIndexOfChar ('.') > (atSign + 1)
-        && ! possibleEmailAddress.endsWithChar ('.');
+        && ! possibleEmailAddress.endsWithChar ('.')
+        && ! possibleEmailAddress.containsChar (':');
 }
 
-String URL::getDomainInternal (bool ignorePort) const
-{
-    // Special handling for file URLs with three slashes (file:///) should have empty domain
-    if (getScheme() == "file" && url.substring (0, 8) == "file:///")
-        return String();
-
-    auto start = URLHelpers::findStartOfNetLocation (url);
-    auto domainStart = URLHelpers::findDomainStart (url, start);
-    auto pathStart = url.indexOfChar (domainStart, '/');
-
-    int end = pathStart > 0 ? pathStart : std::numeric_limits<int>::max();
-
-    if (! ignorePort)
-    {
-        auto portSeparator = URLHelpers::findPortSeparator (url, domainStart, pathStart);
-        if (portSeparator > 0)
-            end = jmin (end, portSeparator);
-    }
-
-    return url.substring (domainStart, end);
-}
-
+//==============================================================================
 #if YUP_IOS
 URL::Bookmark::Bookmark (void* bookmarkToUse)
     : data (bookmarkToUse)
@@ -1294,8 +1266,7 @@ URL URL::withParameters (const StringPairArray& parametersToAdd) const
     auto u = *this;
 
     for (int i = 0; i < parametersToAdd.size(); ++i)
-        u.addParameter (parametersToAdd.getAllKeys()[i],
-                        parametersToAdd.getAllValues()[i]);
+        u.addParameter (parametersToAdd.getAllKeys()[i], parametersToAdd.getAllValues()[i]);
 
     return u;
 }
@@ -1320,6 +1291,7 @@ URL URL::withPOSTData (const MemoryBlock& newPostData) const
     return u;
 }
 
+//==============================================================================
 URL::Upload::Upload (const String& param, const String& name, const String& mime, const File& f, MemoryBlock* mb)
     : parameterName (param)
     , filename (name)
@@ -1384,8 +1356,7 @@ String URL::removeEscapeChars (const String& s)
 
 String URL::addEscapeChars (const String& s, bool isParameter, bool roundBracketsAreLegal)
 {
-    String legalChars (isParameter ? "_-.~"
-                                   : ",$_-.*!'");
+    String legalChars (isParameter ? "_-.~" : ",$_-.*!'");
 
     if (roundBracketsAreLegal)
         legalChars += "()";
@@ -1421,7 +1392,7 @@ bool URL::launchInDefaultBrowser() const
 {
     auto u = toString (true);
 
-    if (u.containsChar ('@') && ! u.containsChar (':'))
+    if (isProbablyAnEmailAddress (u) && ! u.startsWith ("mailto:"))
         u = "mailto:" + u;
 
     return Process::openDocument (u, {});

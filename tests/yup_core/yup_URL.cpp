@@ -205,6 +205,7 @@ TEST_F (URLTests, IsWellFormed)
     EXPECT_TRUE (imageUrl.isWellFormed());
 
     EXPECT_FALSE (URL ("").isWellFormed());
+    EXPECT_FALSE (URL ("user@example.com").isWellFormed());
     EXPECT_FALSE (URL ("http://").isWellFormed());
     EXPECT_FALSE (URL ("://example.com").isWellFormed());
     EXPECT_FALSE (URL ("http//example.com").isWellFormed());
