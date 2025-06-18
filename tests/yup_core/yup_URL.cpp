@@ -122,6 +122,41 @@ TEST_F (URLTests, Equality)
     EXPECT_NE (url4, url6);
 }
 
+#if YUP_WINDOWS
+TEST_F (URLTests, WindowsPaths)
+{
+    {
+        auto path = URL ("file:///C:");
+        EXPECT_TRUE (path.isWellFormed());
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:");
+    }
+
+    {
+        auto path = URL ("file:///C:/");
+        EXPECT_TRUE (path.isWellFormed());
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\");
+    }
+
+    {
+        auto path = URL ("file:///C:/Users");
+        EXPECT_TRUE (path.isWellFormed());
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\Users");
+    }
+
+    {
+        auto path = URL ("file:///C:/Users/");
+        EXPECT_TRUE (path.isWellFormed());
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\Users\\");
+    }
+
+    {
+        auto path = URL ("file:///C:/Users/document.txt");
+        EXPECT_TRUE (path.isWellFormed());
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\Users\\document.txt");
+    }
+}
+#endif
+
 TEST_F (URLTests, IsWellFormed)
 {
     EXPECT_TRUE (URL ("http://www.example.com").isWellFormed());

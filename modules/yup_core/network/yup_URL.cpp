@@ -308,9 +308,9 @@ static int findStartOfPath (const String& url)
     auto scheme = url.substring (0, schemeEnd - 1).toLowerCase();
 
     // Special handling for file URLs with three slashes (file:///)
-    // The path starts immediately after the second slash
+    // The path starts at the third slash (includes the leading slash)
     if (scheme == "file" && url.substring (schemeEnd - 1).startsWith (":///"))
-        return schemeEnd + 2;
+        return schemeEnd + 2;  // Position of the third slash
 
     return url.indexOfChar (findStartOfNetLocation (url), '/') + 1;
 }
@@ -782,20 +782,21 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
 
     auto path = removeEscapeChars (fileURL.getDomainInternal (true)).replace ("+", "%2B");
 
-#if YUP_WINDOWS
-    bool isUncPath = (! fileURL.url.startsWith ("file:///"));
-#else
-    path = File::getSeparatorString() + path;
+    auto subPath = fileURL.getSubPath();
+    if (subPath.startsWith ("/"))
+        subPath = subPath.substring (1);
+
+#if ! YUP_WINDOWS
+    if (! path.isEmpty())
+        path = File::getSeparatorString() + path;
 #endif
 
-    auto urlElements = StringArray::fromTokens (fileURL.getSubPath(), "/", "");
-
-    for (auto urlElement : urlElements)
+    for (auto urlElement : StringArray::fromTokens (subPath, "/", ""))
         path += File::getSeparatorString() + removeEscapeChars (urlElement.replace ("+", "%2B"));
 
 #if YUP_WINDOWS
-    if (isUncPath)
-        path = "\\\\" + path;
+    if (path.startsWith ("/"))
+        path = path.substring (1);
 #endif
 
     return path;

@@ -397,7 +397,7 @@ String Time::getTimeZone() const
 {
     String zone[2];
 
-#if YUP_WINDOWS && (YUP_MSVC || YUP_CLANG)
+#if YUP_WINDOWS
     _tzset();
 
     for (int i = 0; i < 2; ++i)
