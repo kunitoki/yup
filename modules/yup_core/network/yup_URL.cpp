@@ -428,6 +428,22 @@ static String removeLastPathSection (const String& url)
     return url.substring (0, jmax (pathStart, lastSlash));
 }
 
+static Range<int> findAuthenticationRange (const String& url)
+{
+    auto authorityRange = findAuthorityRange (url);
+    if (authorityRange.isEmpty())
+        return {};
+
+    int start = authorityRange.getStart();
+    int end = authorityRange.getEnd();
+
+    auto atPos = url.indexOfChar (start, '@');
+    if (atPos >= 0 && atPos < end)
+        return Range<int> (start, atPos);
+
+    return {};
+}
+
 static Range<int> findHostRange (const String& url)
 {
     auto authorityRange = findAuthorityRange (url);
@@ -705,6 +721,15 @@ String URL::getDomain() const
     return url.substring (hostRange.getStart(), hostRange.getEnd());
 }
 
+String URL::getAuthentication() const
+{
+    auto authRange = URLHelpers::findAuthenticationRange (url);
+    if (authRange.isEmpty())
+        return {};
+
+    return url.substring (authRange.getStart(), authRange.getEnd());
+}
+
 String URL::getSubPath (bool includeGetParameters) const
 {
     auto pathRange = URLHelpers::findPathRange (url);
@@ -785,8 +810,6 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
                                     : removeEscapeChars (fileURL.url.substring (hostRange.getStart(), hostRange.getEnd())).replace ("+", "%2B");
 
     auto subPath = fileURL.getSubPath();
-    if (subPath.startsWith ("/"))
-        subPath = subPath.substring (1);
 
 #if ! YUP_WINDOWS
     if (! path.isEmpty())
@@ -797,11 +820,10 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
         path += File::getSeparatorString() + removeEscapeChars (urlElement.replace ("+", "%2B"));
 
 #if YUP_WINDOWS
-    if (path.startsWith ("/"))
+    if (path.startsWith (File::getSeparatorString()))
         path = path.substring (1);
 #endif
 
-    printf (">>>>> %s\n", path.toRawUTF8());
     return path;
 }
 

@@ -106,6 +106,12 @@ public:
     */
     String getDomain() const;
 
+    /** Returns just the authentication part of the URL.
+
+        e.g. for "http://user:password@www.xyz.com/foobar", this will return "user:password".
+    */
+    String getAuthentication() const;
+
     /** Returns the path part of the URL.
 
         e.g. for "http://www.xyz.com/foo/bar?x=1", this will return "foo/bar".

@@ -231,6 +231,7 @@ TEST_F (URLTests, IsWellFormed)
     EXPECT_TRUE (URL ("http://example.com:8080").isWellFormed());
     EXPECT_TRUE (URL ("https://example.com:443/path").isWellFormed());
     EXPECT_TRUE (URL ("http://localhost:3000").isWellFormed());
+    EXPECT_EQ (URL ("http://localhost:3000").getAuthentication(), "");
 
     // URLs with authentication and ports
     EXPECT_TRUE (URL ("http://user:pass@example.com:8080").isWellFormed());
@@ -238,9 +239,12 @@ TEST_F (URLTests, IsWellFormed)
     EXPECT_TRUE (URL ("ftp://user:password@ftp.example.com:21/files").isWellFormed());
 
     // Edge cases
-    EXPECT_TRUE (URL ("http://user@example.com").isWellFormed());  // No password
+    EXPECT_TRUE (URL ("http://user@example.com").isWellFormed()); // No password
+    EXPECT_EQ (URL ("http://user@example.com").getAuthentication(), "user");
     EXPECT_TRUE (URL ("http://user:@example.com").isWellFormed()); // Empty password
+    EXPECT_EQ (URL ("http://user:@example.com").getAuthentication(), "user:");
     EXPECT_TRUE (URL ("http://:pass@example.com").isWellFormed()); // Empty username
+    EXPECT_EQ (URL ("http://:pass@example.com").getAuthentication(), ":pass");
 }
 
 TEST_F (URLTests, GettersAndProperties)
