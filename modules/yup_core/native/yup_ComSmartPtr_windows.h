@@ -40,7 +40,7 @@
 namespace yup
 {
 
-#if (YUP_MINGW && YUP_32BIT) || (! defined(_MSC_VER) && ! defined(__uuidof))
+#if (! defined(_MSC_VER) && ! defined(__uuidof))
 #ifdef __uuidof
 #undef __uuidof
 #endif

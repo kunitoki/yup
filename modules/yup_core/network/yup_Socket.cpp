@@ -343,7 +343,7 @@ static int waitForReadiness (std::atomic<int>& handle, CriticalSection& readLock
 
     auto h = handle.load();
 
-#if YUP_WINDOWS || YUP_MINGW
+#if YUP_WINDOWS
     struct timeval timeout;
     struct timeval* timeoutp;
 

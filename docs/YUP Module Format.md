@@ -51,7 +51,6 @@ In order to specify that a source file should only be compiled for a specific pl
     _msft           <- compiled for Microsoft platforms only
     _uwp            <- compiled for Universal Windows Platform only
     _windows        <- compiled for Windows desktop only (MSVC)
-    _mingw          <- compiled for Windows desktop only (MinGW)
     _linux          <- compiled for Linux and FreeBSD only
     _android        <- compiled for Android only
     _posix          <- compiled for Posix platforms only
@@ -71,7 +70,7 @@ To simplify the use of obj-C++ there's also a special-case rule: If the folder c
 
 ### Precompiled libraries
 
-Precompiled libraries can be included in a module by placing them in a libs/ subdirectory. The following directories are automatically added to the library search paths, and libraries placed in these directories can be linked with projects via the OSXLibs, iOSLibs, windowsLibs, linuxLibs and mingwLibs keywords in the module declaration (see the following section).
+Precompiled libraries can be included in a module by placing them in a libs/ subdirectory. The following directories are automatically added to the library search paths, and libraries placed in these directories can be linked with projects via the OSXLibs, iOSLibs, windowsLibs and linuxLibs keywords in the module declaration (see the following section).
 
 - OS X
   - libs/MacOSX - to support multiple architectures, you may place libraries built as universal binaries at this location. When building with CMake, only libraries built as universal binaries are supported and the arch subfolders are ignored.
@@ -138,25 +137,25 @@ Possible values:
 - searchpaths
   - (Optional) A space-separated list of internal include paths, relative to the module's parent folder, which need to be added to a project's header search path.
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]CppStandard
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]CppStandard
   - (Optional) A number indicating the minimum C++ language standard that is required for this module and this platform exclusively. This must be just the standard number with no prefix e.g. 20 for C++20.
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Deps
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]Deps
   - (Optional) A list (space or comma-separated) of other modules that are required by this one.
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Defines
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]Defines
   - (Optional) A list (space or comma-separated) of macro defines needed by this module in a build.
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Libs
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]Libs
   - (Optional) A list (space or comma-separated) of static or dynamic libs that should be linked in a build (these are passed to the linker via the -l flag).
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Options
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]Options
   - (Optional) A list (space or comma-separated) of compile options needed by this module in a build.
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]LinkOptions
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]LinkOptions
   - (Optional) A list (space or comma-separated) of link options needed by this module in a build.
 
-- [android|apple|ios|linux|mingw|mobile|msft|osx|wasm|win32|windows]Searchpaths
+- [android|apple|ios|linux|mobile|msft|osx|wasm|win32|windows]Searchpaths
   - (Optional) A space-separated list of internal include paths, relative to the module's parent folder, which need to be added to a project's header search path.
 
 - [ios|osx|apple]Frameworks
@@ -184,6 +183,5 @@ Here's an example block:
      osxFrameworks:    CoreAudio CoreMIDI DiscRecording
      iosFrameworks:    CoreAudio CoreMIDI AudioToolbox AVFoundation
      linuxLibs:        asound
-     mingwLibs:        winmm
 
     END_YUP_MODULE_DECLARATION

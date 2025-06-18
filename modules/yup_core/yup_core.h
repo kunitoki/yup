@@ -57,7 +57,6 @@
     linuxLibs:          rt dl pthread
     androidLibs:        log android
     androidSearchpaths: {ANDROID_NDK}/sources/android/cpufeatures
-    mingwLibs:          ws2_32 uuid wininet version kernel32 user32 wsock32 advapi32 secur32 ole32 oleaut32 imm32 comdlg32 shlwapi rpcrt4 winmm pathcch
 
   END_YUP_MODULE_DECLARATION
 
