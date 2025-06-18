@@ -604,9 +604,9 @@ TEST_F (FileTests, PathUtilities)
 
 TEST_F (FileTests, HashCodes)
 {
-    File file1 ("/path/to/file.txt");
-    File file2 ("/path/to/file.txt");
-    File file3 ("/different/path.txt");
+    File file1 = File::getCurrentWorkingDirectory().getChildFile ("path/to/file.txt");
+    File file2 = File::getCurrentWorkingDirectory().getChildFile ("path/to/file.txt");
+    File file3 = File::getCurrentWorkingDirectory().getChildFile ("different/path.txt");
 
     // Same files should have same hash
     EXPECT_EQ (file1.hashCode(), file2.hashCode());
@@ -837,10 +837,10 @@ TEST_F (FileTests, NaturalFileComparator)
 {
     File::NaturalFileComparator comparator (true); // folders first
 
-    File file1 ("/path/file1.txt");
-    File file2 ("/path/file2.txt");
-    File file10 ("/path/file10.txt");
-    File dir1 ("/path/dir1");
+    File file1 = File::getCurrentWorkingDirectory().getChildFile ("path/file1.txt");
+    File file2 = File::getCurrentWorkingDirectory().getChildFile ("path/file2.txt");
+    File file10 = File::getCurrentWorkingDirectory().getChildFile ("path/file10.txt");
+    File dir1 = File::getCurrentWorkingDirectory().getChildFile ("path/dir1");
 
     // Natural comparison should handle numbers correctly
     EXPECT_LT (comparator.compareElements (file1, file2), 0);

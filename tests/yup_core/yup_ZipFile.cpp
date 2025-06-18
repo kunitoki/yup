@@ -46,9 +46,20 @@ using namespace yup;
 class ZipFileTests : public ::testing::Test
 {
 protected:
+    void SetUp() override
+    {
+        zipFile = File::getSpecialLocation (File::tempDirectory).getNonexistentChildFile ("test", ".zip");
+        zipFile.deleteFile();
+    }
+
+    void TearDown() override
+    {
+        zipFile.deleteFile();
+    }
+
     File getNonExistingZipFile() const
     {
-        return File::getCurrentWorkingDirectory().getChildFile ("test.zip");
+        return zipFile;
     }
 
     MemoryBlock createZipMemoryBlock (const StringArray& entryNames) const
@@ -73,6 +84,8 @@ protected:
 
         return data;
     }
+
+    File zipFile;
 };
 
 TEST_F (ZipFileTests, BasicZipFileFunctionality)
@@ -165,6 +178,8 @@ TEST_F (ZipFileTests, DISABLED_CreateFromInputStreamNoOwnership)
     ZipFile zip (fileStream);
 
     EXPECT_EQ (zip.getNumEntries(), 0);
+
+    zipFile.deleteFile();
 }
 
 TEST_F (ZipFileTests, CreateFromInputSource)
