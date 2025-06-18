@@ -35,18 +35,18 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: Configure
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
     - name: Build SDL2
       run: |
-        cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target SDL2-static
-        cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target SDL2-static
 
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v4
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
 
   build_tests:
@@ -58,16 +58,16 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_TESTS=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
-    - working-directory: ${{runner.workspace}}/build/tests/Debug
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
-    - working-directory: ${{runner.workspace}}/build/tests/Release
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: ./yup_tests
 
   build_console:
@@ -79,13 +79,13 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
 
   build_app:
     runs-on: macos-latest
@@ -96,13 +96,13 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
 
   build_graphics:
     runs-on: macos-latest
@@ -113,13 +113,13 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
 
   build_render:
     runs-on: macos-latest
@@ -130,13 +130,13 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render
 
   build_plugins:
     runs-on: macos-latest
@@ -147,14 +147,14 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: macos-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_clap_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_standalone_plugin
+      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_clap_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_standalone_plugin

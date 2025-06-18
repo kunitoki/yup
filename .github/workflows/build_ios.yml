@@ -36,19 +36,19 @@ jobs:
 
     - name: Configure
       run: |
-        cmake ${{runner.workspace}} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{runner.workspace}}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
     - name: Build SDL2
       run: |
-        cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target SDL2-static
-        cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target SDL2-static
 
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v4
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ github.workspace }}/build
         key: ios-build-${{ github.sha }}
 
   build_console:
@@ -60,15 +60,15 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: ios-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{runner.workspace}} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
 
   build_app:
     runs-on: macos-latest
@@ -79,15 +79,15 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: ios-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{runner.workspace}} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
 
   build_graphics:
     runs-on: macos-latest
@@ -98,15 +98,15 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: ios-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{runner.workspace}} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
 
   build_render:
     runs-on: macos-latest
@@ -117,12 +117,12 @@ jobs:
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: ios-build-${{ github.sha }}
     - name: Configure If Cache Missed
       if: steps.cache-restore.outputs.cache-hit != 'true'
       run: |
-        cmake ${{runner.workspace}} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
-          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+        cmake ${{ github.workspace }} -G "Ninja Multi-Config" -DCMAKE_TOOLCHAIN_FILE=cmake/toolchains/ios.cmake \
+          -DPLATFORM=${{ env.IOS_PLATFORM }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render
