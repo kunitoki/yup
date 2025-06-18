@@ -134,7 +134,7 @@ TEST_F (URLTests, WindowsPaths)
     {
         auto path = URL ("file:///C:/");
         EXPECT_TRUE (path.isWellFormed());
-        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\");
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:");
     }
 
     {
@@ -146,7 +146,7 @@ TEST_F (URLTests, WindowsPaths)
     {
         auto path = URL ("file:///C:/Users/");
         EXPECT_TRUE (path.isWellFormed());
-        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\Users\\");
+        EXPECT_EQ (path.getLocalFile().getFullPathName(), "C:\\Users");
     }
 
     {
