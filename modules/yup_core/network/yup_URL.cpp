@@ -290,7 +290,7 @@ static Range<int> findSchemeRange (const String& url)
     const int length = url.length();
 
     // First character must be a letter
-    if (i >= length || !CharacterFunctions::isLetter (url[i]))
+    if (i >= length || ! CharacterFunctions::isLetter (url[i]))
         return {};
 
     // Find end of scheme
@@ -300,7 +300,7 @@ static Range<int> findSchemeRange (const String& url)
         if (ch == ':')
             return Range<int> (0, i);
 
-        if (!CharacterFunctions::isLetterOrDigit (ch) && ch != '+' && ch != '-' && ch != '.')
+        if (! CharacterFunctions::isLetterOrDigit (ch) && ch != '+' && ch != '-' && ch != '.')
             break;
 
         ++i;
@@ -512,7 +512,7 @@ static bool isValidIPv6Content (const String& ipv6Addr)
                     return false; // Only one double colon allowed
                 hasDoubleColon = true;
                 doubleColonCount++;
-                i++; // Skip next colon
+                i++;          // Skip next colon
                 colonCount++; // Count the second colon too
             }
         }
@@ -538,7 +538,7 @@ static bool isValidIPv6Content (const String& ipv6Addr)
 
     // Simple validation: if no double colon, should have 7 colons (8 groups)
     // If double colon present, can have fewer
-    if (!hasDoubleColon && colonCount != 7)
+    if (! hasDoubleColon && colonCount != 7)
         return false;
 
     return true;
@@ -579,7 +579,7 @@ bool URL::isWellFormed() const
 
     // Special schemes that don't require "//" or domain
     bool isSpecialScheme = false;
-    for (const auto& special : StringArray{ "mailto", "tel", "data" })
+    for (const auto& special : StringArray { "mailto", "tel", "data" })
     {
         if (scheme == special)
         {
@@ -648,7 +648,7 @@ bool URL::isWellFormed() const
 
                     for (int i = 0; i < portStr.length(); ++i)
                     {
-                        if (!CharacterFunctions::isDigit (portStr[i]))
+                        if (! CharacterFunctions::isDigit (portStr[i]))
                             return false;
                     }
 
@@ -834,7 +834,7 @@ URL URL::withNewSubPath (const String& newPath) const
 
     auto pathRange = URLHelpers::findPathRange (url);
 
-    if (!pathRange.isEmpty())
+    if (! pathRange.isEmpty())
         u.url = url.substring (0, pathRange.getStart());
 
     URLHelpers::concatenatePaths (u.url, newPath);
