@@ -135,10 +135,8 @@
 #endif
 #include <security.h>
 
-#else
 #include <crtdbg.h>
 #include <comutil.h>
-#endif
 
 #ifndef S_FALSE
 #define S_FALSE (1) // (apparently some obscure win32 dev environments don't define this)
