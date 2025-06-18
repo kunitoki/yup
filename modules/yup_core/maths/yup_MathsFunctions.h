@@ -99,7 +99,7 @@ using pointer_sized_int = int;
 using pointer_sized_uint = unsigned int;
 #endif
 
-#if YUP_WINDOWS && ! YUP_MINGW
+#if YUP_WINDOWS
 using ssize_t = pointer_sized_int;
 #endif
 

@@ -94,7 +94,9 @@
 #pragma warning(push, 0) // disable all warnings whilst including system headers
 #endif
 
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS 1
 #define STRICT 1
@@ -133,16 +135,8 @@
 #endif
 #include <security.h>
 
-#if YUP_MINGW
-#include <basetyps.h>
-#include <sys/time.h>
-#ifndef alloca
-#define alloca __builtin_alloca
-#endif
-#else
 #include <crtdbg.h>
 #include <comutil.h>
-#endif
 
 #ifndef S_FALSE
 #define S_FALSE (1) // (apparently some obscure win32 dev environments don't define this)
@@ -155,7 +149,7 @@
 #pragma warning(4 : 4511 4512 4100)
 #endif
 
-#if ! YUP_MINGW && ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 #pragma comment(lib, "kernel32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "wininet.lib")

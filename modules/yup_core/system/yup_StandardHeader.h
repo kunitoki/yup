@@ -133,11 +133,6 @@ YUP_BEGIN_IGNORE_WARNINGS_MSVC (4514 4245 4100)
 
 YUP_END_IGNORE_WARNINGS_MSVC
 
-#if YUP_MINGW
-#include <cstring>
-#include <sys/types.h>
-#endif
-
 #if YUP_ANDROID
 #include <cstring>
 #include <byteswap.h>

@@ -305,7 +305,7 @@ bool YUPApplicationBase::initialiseApp()
     }
 #endif
 
-#if YUP_WINDOWS && (! defined(_CONSOLE)) && (! YUP_MINGW)
+#if YUP_WINDOWS && (! defined(_CONSOLE))
     if (isStandaloneApp() && AttachConsole (ATTACH_PARENT_PROCESS) != 0)
     {
         // if we've launched a GUI app from cmd.exe or PowerShell, we need this to enable printf etc.

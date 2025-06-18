@@ -33,23 +33,19 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
 
-    - name: Create Build Environment
-      run: cmake -E make_directory ${{runner.workspace}}/build
-
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
-      run: cmake ${{ github.workspace }} -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
     - name: Build SDL2
       run: |
-        cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target SDL2-static
-        cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target SDL2-static
+        cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target SDL2-static
 
     - name: Cache Configure
       id: cache-build
       uses: actions/cache/save@v4
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
 
   build_tests:
@@ -59,14 +55,18 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
-    - working-directory: ${{runner.workspace}}/build/tests/Debug
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests.exe
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
-    - working-directory: ${{runner.workspace}}/build/tests/Release
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: ./yup_tests.exe
 
   build_console:
@@ -76,11 +76,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
 
   build_app:
     runs-on: windows-latest
@@ -89,11 +93,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
 
   build_graphics:
     runs-on: windows-latest
@@ -102,11 +110,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
 
   build_render:
     runs-on: windows-latest
@@ -115,11 +127,15 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render
 
   build_plugin:
     runs-on: windows-latest
@@ -128,12 +144,16 @@ jobs:
     - uses: actions/checkout@v4
     - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
-        path: ${{runner.workspace}}/build
+        path: ${{ runner.workspace }}/build
         key: windows-build-${{ github.sha }}
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_clap_plugin
-    #- run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
-    #- run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_standalone_plugin
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_clap_plugin
+    #- run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin
+    #- run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_vst3_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_plugin_standalone_plugin
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_plugin_standalone_plugin

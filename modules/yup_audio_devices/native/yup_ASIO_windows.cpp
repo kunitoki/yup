@@ -1196,18 +1196,14 @@ private:
 
         if (asioObject != nullptr)
         {
-#if ! YUP_MINGW
             __try
-#endif
             {
                 asioObject->Release();
             }
-#if ! YUP_MINGW
             __except (EXCEPTION_EXECUTE_HANDLER)
             {
                 releasedOK = false;
             }
-#endif
 
             asioObject = nullptr;
         }
@@ -1231,19 +1227,15 @@ private:
 
     bool tryCreatingDriver (bool& crashed)
     {
-#if ! YUP_MINGW
         __try
-#endif
         {
             return CoCreateInstance (classId, 0, CLSCTX_INPROC_SERVER, classId, (void**) &asioObject) == S_OK;
         }
-#if ! YUP_MINGW
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
             crashed = true;
         }
         return false;
-#endif
     }
 
     String getLastDriverError() const

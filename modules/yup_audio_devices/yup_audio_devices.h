@@ -56,7 +56,6 @@
     iosSimFrameworks:   AVFoundation
     linuxPackages:      alsa
     androidDeps:        oboe_library
-    mingwLibs:          winmm
 
   END_YUP_MODULE_DECLARATION
 

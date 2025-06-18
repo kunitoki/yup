@@ -287,7 +287,7 @@ public:
 
     int compareIgnoreCase (const CharPointer_ASCII other) const
     {
-#if YUP_MINGW || (YUP_WINDOWS && YUP_CLANG)
+#if (YUP_WINDOWS && YUP_CLANG)
         return CharacterFunctions::compareIgnoreCase (*this, other);
 #elif YUP_WINDOWS
         return stricmp (data, other.data);
@@ -363,7 +363,7 @@ public:
     /** Parses this string as a 64-bit integer. */
     int64 getIntValue64() const noexcept
     {
-#if YUP_LINUX || YUP_BSD || YUP_ANDROID || YUP_MINGW
+#if YUP_LINUX || YUP_BSD || YUP_ANDROID
         return atoll (data);
 #elif YUP_WINDOWS
         return _atoi64 (data);

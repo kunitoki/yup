@@ -68,10 +68,6 @@
 #undef Factor
 
 //==============================================================================
-#if YUP_MINGW && ! defined(__SSE2__)
-#define YUP_USE_SSE_INTRINSICS 0
-#endif
-
 #ifndef YUP_USE_SSE_INTRINSICS
 #define YUP_USE_SSE_INTRINSICS 1
 #endif

@@ -68,18 +68,12 @@
 #endif
 
 #if YUP_WINDOWS
-#if YUP_MINGW
-#include <ws2spi.h>
-#include <cstdio>
-#include <locale.h>
-#else
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4091)
 #include <Dbghelp.h>
 YUP_END_IGNORE_WARNINGS_MSVC
 
 #if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 #pragma comment(lib, "DbgHelp.lib")
-#endif
 #endif
 
 #else
@@ -92,14 +86,18 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #endif
 
 #if YUP_WASM
+#include <dirent.h>
+#include <errno.h>
+#include <fnmatch.h>
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <sys/vfs.h>
-#include <errno.h>
-#include <unistd.h>
 #include <netinet/in.h>
+#include <unistd.h>
+#include <utime.h>
 #endif
 
 #if YUP_EMSCRIPTEN
@@ -137,7 +135,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <execinfo.h>
 #endif
 
-#if ! (YUP_WASM || YUP_MINGW)
+#if ! (YUP_WASM || YUP_WINDOWS)
 #include <cxxabi.h>
 #endif
 
@@ -158,6 +156,7 @@ extern char** environ;
 #if YUP_ANDROID
 #include <ifaddrs.h>
 #include <unwind.h>
+#include <dlfcn.h>
 #include <android/log.h>
 #endif
 
@@ -311,6 +310,7 @@ extern char** environ;
 #include "native/yup_Files_wasm.cpp"
 #include "native/yup_Network_wasm.cpp"
 #include "native/yup_Threads_wasm.cpp"
+#include "native/yup_CommonFile_linux.cpp"
 #include "native/yup_PlatformTimer_generic.cpp"
 #endif
 

@@ -61,13 +61,9 @@ jobs:
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
 
-    - name: Create Build Environment
-      run: cmake -E make_directory ${{runner.workspace}}/build
-
     - name: Configure CMake with Coverage
-      working-directory: ${{runner.workspace}}/build
       run: |
-        cmake $GITHUB_WORKSPACE \
+        cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build \
           -G "Ninja Multi-Config" \
           -DYUP_BUILD_TESTS=ON \
           -DYUP_BUILD_EXAMPLES=OFF \
@@ -75,19 +71,19 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug
 
     - name: Build Tests
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --config Debug --parallel 4 --target yup_tests
 
     - name: Clean Coverage Data
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{ runner.workspace }}/build
       run: cmake --build . --target coverage_clean
 
     - name: Run Tests
-      working-directory: ${{runner.workspace}}/build/tests/Debug
+      working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: ./yup_tests --gtest_output=xml:test_results.xml
 
     - name: Generate Combined Coverage Report
-      working-directory: ${{runner.workspace}}/build
+      working-directory: ${{ runner.workspace }}/build
       run: |
         lcov --directory . --capture --output-file coverage/coverage.info --ignore-errors mismatch,gcov,source,negative,unused,empty
         lcov --remove coverage/coverage.info \
@@ -104,7 +100,7 @@ jobs:
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ${{runner.workspace}}/build/coverage/coverage_final.info
+        file: ${{ runner.workspace }}/build/coverage/coverage_final.info
         name: overall-coverage
         fail_ci_if_error: false
         verbose: true
@@ -114,11 +110,11 @@ jobs:
       if: always()
       with:
         name: test-results
-        path: ${{runner.workspace}}/build/tests/Debug/test_results.xml
+        path: ${{ runner.workspace }}/build/tests/Debug/test_results.xml
 
     - name: Upload Coverage Reports
       uses: actions/upload-artifact@v4
       if: always()
       with:
         name: coverage-reports
-        path: ${{runner.workspace}}/build/coverage/
+        path: ${{ runner.workspace }}/build/coverage/

@@ -425,15 +425,37 @@ public:
     //==============================================================================
     /** Join a multicast group.
 
+        @param multicastIPAddress  the IP address of the multicast group to join
+
         @returns  true if it succeeds
     */
     bool joinMulticast (const String& multicastIPAddress);
 
+    /** Join a multicast group.
+
+        @param multicastIPAddress  the IP address of the multicast group to join
+        @param localIPAddress      the IP address of the local interface to use
+
+        @returns  true if it succeeds
+    */
+    bool joinMulticast (const String& multicastIPAddress, const String& localIPAddress);
+
     /** Leave a multicast group.
+
+        @param multicastIPAddress  the IP address of the multicast group to leave
 
         @returns  true if it succeeds
     */
     bool leaveMulticast (const String& multicastIPAddress);
+
+    /** Leave a multicast group.
+
+        @param multicastIPAddress  the IP address of the multicast group to leave
+        @param localIPAddress      the IP address of the local interface to use
+
+        @returns  true if it succeeds
+    */
+    bool leaveMulticast (const String& multicastIPAddress, const String& localIPAddress);
 
     /** Enables or disables multicast loopback.
 
