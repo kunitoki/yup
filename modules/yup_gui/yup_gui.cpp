@@ -35,6 +35,8 @@
 //==============================================================================
 
 #include <rive/layout.hpp>
+#include <rive/file_asset_loader.hpp>
+#include <rive/assets/file_asset.hpp>
 #include <rive/custom_property_number.hpp>
 #include <rive/custom_property_boolean.hpp>
 #include <rive/custom_property_string.hpp>

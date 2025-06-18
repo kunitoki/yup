@@ -33,8 +33,20 @@ class YUP_API ArtboardFile
 {
 public:
     //==============================================================================
+
+    struct AssetInfo
+    {
+        AssetInfo() = default;
+
+        String uniqueName;
+        File uniquePath;
+        String extension;
+    };
+
+    //==============================================================================
     /** The result of loading a Rive file. */
     using LoadResult = ResultValue<std::shared_ptr<ArtboardFile>>;
+    using AssetLoadCallback = std::function<bool (const AssetInfo&, Span<const uint8>, rive::Factory& factory)>;
 
     /** Loads a Rive file from a file.
 
@@ -45,6 +57,15 @@ public:
     */
     static LoadResult load (const File& file, rive::Factory& factory);
 
+    /** Loads a Rive file from a file.
+
+        @param file The file to load.
+        @param factory The factory to use to create the Rive file.
+
+        @return The result of loading the Rive file.
+    */
+    static LoadResult load (const File& file, rive::Factory& factory, const AssetLoadCallback& assetCallback);
+
     /** Loads a Rive file from an input stream.
 
         @param is The input stream to load the Rive file from.
@@ -53,6 +74,16 @@ public:
         @return The result of loading the Rive file.
     */
     static LoadResult load (InputStream& is, rive::Factory& factory);
+
+    /** Loads a Rive file from an input stream.
+
+        @param is The input stream to load the Rive file from.
+        @param factory The factory to use to create the Rive file.
+        @param assetCallback The callback that will be invoked when loading  to use to create the Rive file.
+
+        @return The result of loading the Rive file.
+    */
+    static LoadResult load (InputStream& is, rive::Factory& factory, const AssetLoadCallback& assetCallback);
 
     //==============================================================================
     /** Returns the underlying Rive file. */

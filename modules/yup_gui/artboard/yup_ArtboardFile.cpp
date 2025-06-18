@@ -22,6 +22,39 @@
 namespace yup
 {
 
+namespace
+{
+
+//==============================================================================
+
+class LambdaAssetLoader : public rive::FileAssetLoader
+{
+public:
+    LambdaAssetLoader (const ArtboardFile::AssetLoadCallback& assetCallback)
+        : assetCallback (assetCallback)
+    {
+    }
+
+    bool loadContents (rive::FileAsset& asset,
+                       rive::Span<const uint8_t> inBandBytes,
+                       rive::Factory* factory) override
+    {
+        jassert (factory != nullptr);
+
+        ArtboardFile::AssetInfo assetInfo;
+        assetInfo.uniqueName = String (asset.uniqueName());
+        assetInfo.uniquePath = String (asset.uniqueFilename());
+        assetInfo.extension = String (asset.fileExtension());
+
+        return assetCallback (assetInfo, Span<const uint8>{ inBandBytes.data(), inBandBytes.size() }, *factory);
+    }
+
+private:
+    ArtboardFile::AssetLoadCallback assetCallback;
+};
+
+} // namespace
+
 //==============================================================================
 
 ArtboardFile::ArtboardFile (std::unique_ptr<rive::File> rivFile)
@@ -45,6 +78,11 @@ rive::File* ArtboardFile::getRiveFile()
 
 ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& factory)
 {
+    return load (file, factory, nullptr);
+}
+
+ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& factory, const AssetLoadCallback& assetCallback)
+{
     if (! file.existsAsFile())
         return LoadResult::fail ("Failed to find artboard file to load");
 
@@ -52,19 +90,39 @@ ArtboardFile::LoadResult ArtboardFile::load (const File& file, rive::Factory& fa
     if (is == nullptr || ! is->openedOk())
         return LoadResult::fail ("Failed to open artboard file for reading");
 
-    return load (*is, factory);
+    return load (*is, factory, assetCallback);
 }
 
+//==============================================================================
+
 ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& factory)
+{
+    return load (is, factory, nullptr);
+}
+
+ArtboardFile::LoadResult ArtboardFile::load (InputStream& is, rive::Factory& factory, const AssetLoadCallback& assetCallback)
 {
     yup::MemoryBlock mb;
     is.readIntoMemoryBlock (mb);
 
     rive::ImportResult result;
-    auto rivFile = rive::File::import (
-        { static_cast<const uint8_t*> (mb.getData()), mb.getSize() },
-        std::addressof (factory),
-        std::addressof (result));
+    std::unique_ptr<rive::File> rivFile;
+
+    if (assetCallback != nullptr)
+    {
+        rivFile = rive::File::import (
+            { static_cast<const uint8_t*> (mb.getData()), mb.getSize() },
+            std::addressof (factory),
+            std::addressof (result),
+            rive::make_rcp<LambdaAssetLoader> (assetCallback));
+    }
+    else
+    {
+        rivFile = rive::File::import (
+            { static_cast<const uint8_t*> (mb.getData()), mb.getSize() },
+            std::addressof (factory),
+            std::addressof (result));
+    }
 
     if (result == rive::ImportResult::malformed)
         return LoadResult::fail ("Malformed artboard file");
