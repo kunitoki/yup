@@ -44,12 +44,12 @@ jobs:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
-      run: emcmake cmake ${{github.workspace}} -B ${{runner.workspace}}/build -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
-    - working-directory: ${{runner.workspace}}/build/tests/Debug
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Debug
       run: node yup_tests.js
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target yup_tests
-    - working-directory: ${{runner.workspace}}/build/tests/Release
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
+    - working-directory: ${{ runner.workspace }}/build/tests/Release
       run: node yup_tests.js
 
   build_console:
@@ -64,9 +64,9 @@ jobs:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
-      run: emcmake cmake ${{github.workspace}} -B ${{runner.workspace}}/build -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_console
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_console
 
   build_app:
     runs-on: ubuntu-latest
@@ -80,9 +80,9 @@ jobs:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
-      run: emcmake cmake ${{github.workspace}} -B ${{runner.workspace}}/build -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_app
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_app
 
   build_graphics:
     runs-on: ubuntu-latest
@@ -96,9 +96,9 @@ jobs:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
-      run: emcmake cmake ${{github.workspace}} -B ${{runner.workspace}}/build -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
 
   build_render:
     runs-on: ubuntu-latest
@@ -112,6 +112,6 @@ jobs:
         version: ${{ env.EM_VERSION }}
         actions-cache-folder: ${{ env.EM_CACHE_FOLDER }}
     - name: Configure
-      run: emcmake cmake ${{github.workspace}} -B ${{runner.workspace}}/build -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
+      run: emcmake cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
+    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render

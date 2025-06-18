@@ -505,7 +505,7 @@ public:
     /** Parses this string as a 64-bit integer. */
     int64 getIntValue64() const noexcept
     {
-#if YUP_WINDOWS && ! YUP_MINGW
+#if YUP_WINDOWS
         return _atoi64 (data);
 #else
         return atoll (data);

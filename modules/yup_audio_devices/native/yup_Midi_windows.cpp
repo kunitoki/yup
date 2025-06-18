@@ -1887,15 +1887,13 @@ private:
 
 //==============================================================================
 //==============================================================================
-#if ! YUP_MINGW
 extern RTL_OSVERSIONINFOW getWindowsVersionInfo();
-#endif
 
 struct MidiService final : public DeletedAtShutdown
 {
     MidiService()
     {
-#if YUP_USE_WINRT_MIDI && ! YUP_MINGW
+#if YUP_USE_WINRT_MIDI
 #if ! YUP_FORCE_WINRT_MIDI
         auto windowsVersionInfo = getWindowsVersionInfo();
         if (windowsVersionInfo.dwMajorVersion >= 10 && windowsVersionInfo.dwBuildNumber >= 17763)

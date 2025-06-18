@@ -239,7 +239,6 @@ bool yup_stat (const String& fileName, yup_statStruct& info)
         && YUP_STAT (fileName.toUTF8(), &info) == 0;
 }
 
-#if ! YUP_WASM
 // if this file doesn't exist, find a parent of it that does..
 bool yup_doStatFS (File f, struct statfs& result)
 {
@@ -286,7 +285,6 @@ void updateStatInfoForFile (const String& path, bool* isDir, int64* fileSize, Ti
     if (isReadOnly != nullptr)
         *isReadOnly = access (path.toUTF8(), W_OK) != 0;
 }
-#endif
 
 Result getResultForErrno()
 {
@@ -418,7 +416,6 @@ void File::getFileTimesInternal (int64& modificationTime, int64& accessTime, int
 
 bool File::setFileTimesInternal (int64 modificationTime, int64 accessTime, int64 /*creationTime*/) const
 {
-#if ! YUP_WASM
     yup_statStruct info;
 
     if ((modificationTime != 0 || accessTime != 0) && yup_stat (fullPath, info))
@@ -450,7 +447,6 @@ bool File::setFileTimesInternal (int64 modificationTime, int64 accessTime, int64
         return utime (fullPath.toUTF8(), &times) == 0;
 #endif
     }
-#endif
 
     return false;
 }
@@ -471,10 +467,8 @@ bool File::deleteFile() const
 
 bool File::moveInternal (const File& dest) const
 {
-#if ! YUP_WASM
     if (rename (fullPath.toUTF8(), dest.getFullPathName().toUTF8()) == 0)
         return true;
-#endif
 
     if (isNonEmptyDirectory())
         return false;
@@ -737,6 +731,7 @@ File yup_getExecutableFile()
     static String filename = DLAddrReader::getFilename();
     return File::getCurrentWorkingDirectory().getChildFile (filename);
 }
+#endif
 
 //==============================================================================
 int64 File::getBytesFreeOnVolume() const
@@ -798,8 +793,6 @@ int File::getVolumeSerialNumber() const
 {
     return 0;
 }
-
-#endif
 
 //==============================================================================
 #if ! YUP_IOS
@@ -1102,9 +1095,7 @@ static void* makeThreadHandle (PosixThreadAttribute& attr, void* userData, void*
     if (status != 0)
         return nullptr;
 
-    //#if !YUP_EMSCRIPTEN || defined(__EMSCRIPTEN_PTHREADS__)
     pthread_detach (handle);
-    //#endif
 
     return (void*) handle;
 }

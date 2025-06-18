@@ -69,6 +69,18 @@ public:
     /** Creates URL referring to a local file on your disk using the file:// scheme. */
     explicit URL (File localFile);
 
+    /** Copy construct an URL. */
+    URL (const URL& other);
+
+    /** Move construct an URL. */
+    URL (URL&& other);
+
+    /** Copy assign an URL. */
+    URL& operator= (const URL& other);
+
+    /** Move assign an URL. */
+    URL& operator= (URL&& other);
+
     /** Compares two URLs.
 
         All aspects of the URLs must be identical for them to match, including any parameters,
@@ -100,6 +112,12 @@ public:
     */
     String getDomain() const;
 
+    /** Returns just the authentication part of the URL.
+
+        e.g. for "http://user:password@www.xyz.com/foobar", this will return "user:password".
+    */
+    String getAuthentication() const;
+
     /** Returns the path part of the URL.
 
         e.g. for "http://www.xyz.com/foo/bar?x=1", this will return "foo/bar".
@@ -112,14 +130,10 @@ public:
     */
     String getSubPath (bool includeGetParameters = false) const;
 
-    /** If any parameters are set, returns these URL-encoded, including the "?"
-        prefix.
-    */
-    String getQueryString() const;
+    /** If any parameters are set, returns these URL-encoded, including the "?" prefix. */
+    String getQueryString (bool includeAnchor = true) const;
 
-    /** If any anchor is set, returns URL-encoded anchor, including the "#"
-        prefix.
-    */
+    /** If any anchor is set, returns URL-encoded anchor, including the "#" prefix. */
     String getAnchorString() const;
 
     /** Returns the scheme of the URL.
@@ -311,6 +325,9 @@ public:
 
     /** Returns the data that was set using withPOSTData() as a MemoryBlock. */
     const MemoryBlock& getPostDataAsMemoryBlock() const noexcept { return postData; }
+
+    /** Returns true if it has either file uploads or post data ready to be sent. */
+    bool hasBodyDataToSend() const;
 
     //==============================================================================
     /** Tries to launch the system's default browser to open the URL.
@@ -724,7 +741,6 @@ private:
     URL (const String&, int);
     void init();
     void addParameter (const String&, const String&);
-    bool hasBodyDataToSend() const;
     void createHeadersAndPostData (String&, MemoryBlock&, bool) const;
     URL withUpload (Upload*) const;
 

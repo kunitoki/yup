@@ -44,11 +44,7 @@ namespace TimeHelpers
 {
 static std::tm millisToLocal (int64 millis) noexcept
 {
-#if YUP_WINDOWS && YUP_MINGW
-    auto now = (time_t) (millis / 1000);
-    return *localtime (&now);
-
-#elif YUP_WINDOWS
+#if YUP_WINDOWS
     std::tm result;
     millis /= 1000;
 
@@ -70,11 +66,7 @@ static std::tm millisToLocal (int64 millis) noexcept
 
 static std::tm millisToUTC (int64 millis) noexcept
 {
-#if YUP_WINDOWS && YUP_MINGW
-    auto now = (time_t) (millis / 1000);
-    return *gmtime (&now);
-
-#elif YUP_WINDOWS
+#if YUP_WINDOWS
     std::tm result;
     millis /= 1000;
 
@@ -235,7 +227,7 @@ Time::Time (int year, int month, int day, int hours, int minutes, int seconds, i
 //==============================================================================
 int64 Time::currentTimeMillis() noexcept
 {
-#if YUP_WINDOWS && ! YUP_MINGW
+#if YUP_WINDOWS
     struct _timeb t;
     _ftime_s (&t);
     return ((int64) t.time) * 1000 + t.millitm;
@@ -405,7 +397,7 @@ String Time::getTimeZone() const
 {
     String zone[2];
 
-#if YUP_WINDOWS && (YUP_MSVC || YUP_CLANG)
+#if YUP_WINDOWS
     _tzset();
 
     for (int i = 0; i < 2; ++i)
@@ -416,11 +408,15 @@ String Time::getTimeZone() const
         zone[i] = name;
     }
 #else
+    YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
+
     tzset();
 
     auto zonePtr = (const char**) tzname;
     zone[0] = zonePtr[0];
     zone[1] = zonePtr[1];
+
+    YUP_END_IGNORE_DEPRECATION_WARNINGS
 #endif
 
     if (isDaylightSavingTime())

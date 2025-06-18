@@ -111,7 +111,7 @@
 /** Quote the argument, turning it into a string. */
 #define YUP_TO_STRING(x) #x
 
-#if YUP_CLANG || YUP_GCC || YUP_MINGW
+#if YUP_CLANG || YUP_GCC
 #define YUP_IGNORE_GCC_IMPL_(compiler, warning)
 #define YUP_IGNORE_GCC_IMPL_0(compiler, warning)
 #define YUP_IGNORE_GCC_IMPL_1(compiler, warning) \
