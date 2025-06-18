@@ -68,18 +68,12 @@
 #endif
 
 #if YUP_WINDOWS
-#if YUP_MINGW
-#include <ws2spi.h>
-#include <cstdio>
-#include <locale.h>
-#else
 YUP_BEGIN_IGNORE_WARNINGS_MSVC (4091)
 #include <Dbghelp.h>
 YUP_END_IGNORE_WARNINGS_MSVC
 
 #if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
 #pragma comment(lib, "DbgHelp.lib")
-#endif
 #endif
 
 #else
@@ -141,7 +135,7 @@ YUP_END_IGNORE_WARNINGS_MSVC
 #include <execinfo.h>
 #endif
 
-#if ! (YUP_WASM || YUP_MINGW)
+#if ! (YUP_WASM || YUP_WINDOWS)
 #include <cxxabi.h>
 #endif
 

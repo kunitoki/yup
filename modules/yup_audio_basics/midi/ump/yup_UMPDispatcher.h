@@ -126,13 +126,7 @@ public:
     {
         using CallbackPtr = decltype (std::addressof (callback));
 
-#if YUP_MINGW
-#define YUP_MINGW_HIDDEN_VISIBILITY __attribute__ ((visibility ("hidden")))
-#else
-#define YUP_MINGW_HIDDEN_VISIBILITY
-#endif
-
-        struct YUP_MINGW_HIDDEN_VISIBILITY Callback
+        struct Callback
         {
             Callback (BytestreamToUMPDispatcher& d, CallbackPtr c)
                 : dispatch (d)
@@ -153,8 +147,6 @@ public:
             BytestreamToUMPDispatcher& dispatch;
             CallbackPtr callbackPtr = nullptr;
         };
-
-#undef YUP_MINGW_HIDDEN_VISIBILITY
 
         Callback inputCallback { *this, &callback };
         concatenator.pushMidiData (begin, int (end - begin), timestamp, (void*) nullptr, inputCallback);

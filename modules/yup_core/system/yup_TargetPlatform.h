@@ -108,6 +108,10 @@
 
 //==============================================================================
 #if YUP_WINDOWS
+#ifdef __MINGW32__
+#error "MingW is no longer supported by YUP!"
+#endif
+
 #ifdef _MSC_VER
 #ifdef _WIN64
 #define YUP_64BIT 1
@@ -118,15 +122,6 @@
 
 #ifdef _DEBUG
 #define YUP_DEBUG 1
-#endif
-
-#ifdef __MINGW32__
-#define YUP_MINGW 1
-#ifdef __MINGW64__
-#define YUP_64BIT 1
-#else
-#define YUP_32BIT 1
-#endif
 #endif
 
 /** If defined, this indicates that the processor is little-endian. */
