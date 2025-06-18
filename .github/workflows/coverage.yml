@@ -61,13 +61,9 @@ jobs:
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
 
-    - name: Create Build Environment
-      run: cmake -E make_directory ${{runner.workspace}}/build
-
     - name: Configure CMake with Coverage
-      working-directory: ${{runner.workspace}}/build
       run: |
-        cmake $GITHUB_WORKSPACE \
+        cmake ${{runner.workspace}} -B ${{runner.workspace}}/build \
           -G "Ninja Multi-Config" \
           -DYUP_BUILD_TESTS=ON \
           -DYUP_BUILD_EXAMPLES=OFF \

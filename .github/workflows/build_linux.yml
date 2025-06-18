@@ -40,12 +40,8 @@ jobs:
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
 
-    - name: Create Build Environment
-      run: cmake -E make_directory ${{runner.workspace}}/build
-
     - name: Configure
-      working-directory: ${{runner.workspace}}/build
-      run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
     - name: Build SDL2
       run: |
@@ -67,9 +63,13 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{runner.workspace}}/build/tests/Debug
       run: ./yup_tests
@@ -85,9 +85,13 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
@@ -99,9 +103,13 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_app
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_app
 
@@ -113,9 +121,13 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_graphics
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_graphics
 
@@ -127,9 +139,13 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_render
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_render
 
@@ -141,9 +157,13 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     - run: sudo apt-get update && sudo apt-get install -y ${INSTALL_DEPS}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: linux-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_ENABLE_EXAMPLES=ON
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_clap_plugin
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_plugin_clap_plugin
     #- run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_plugin_vst3_plugin

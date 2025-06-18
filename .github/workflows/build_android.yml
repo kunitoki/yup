@@ -50,12 +50,8 @@ jobs:
           with:
             ndk-version: ${{env.NDK_VERSION}}
 
-        - name: Create Build Environment
-          run: cmake -E make_directory ${{runner.workspace}}/build
-
         - name: Configure
-          working-directory: ${{runner.workspace}}/build
-          run: cmake $GITHUB_WORKSPACE -G "Ninja Multi-Config" -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
+          run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
 
         - name: Cache Configure
           id: cache-build
@@ -82,14 +78,17 @@ jobs:
       with:
         ndk-version: ${{env.NDK_VERSION}}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: android-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_EXAMPLES=ON
     - working-directory: ${{runner.workspace}}/build/examples/app
       run: ./gradlew assembleDebug
     - working-directory: ${{runner.workspace}}/build/examples/app
       run: ./gradlew assemble
-
 
   build_graphics:
     runs-on: ubuntu-latest
@@ -109,9 +108,13 @@ jobs:
       with:
         ndk-version: ${{env.NDK_VERSION}}
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: android-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_EXAMPLES=ON
     - working-directory: ${{runner.workspace}}/build/examples/graphics
       run: ./gradlew assembleDebug
     - working-directory: ${{runner.workspace}}/build/examples/graphics
@@ -135,9 +138,13 @@ jobs:
       with:
         ndk-version: r26d
     - uses: actions/cache/restore@v4
+      id: cache-restore
       with:
         path: ${{runner.workspace}}/build
         key: android-build-${{ github.sha }}
+    - name: Configure If Cache Missed
+      if: steps.cache-restore.outputs.cache-hit != 'true'
+      run: cmake ${{runner.workspace}} -G "Ninja Multi-Config" -B ${{runner.workspace}}/build -DYUP_TARGET_ANDROID=ON -DYUP_ENABLE_EXAMPLES=ON
     - working-directory: ${{runner.workspace}}/build/examples/render
       run: ./gradlew assembleDebug
     - working-directory: ${{runner.workspace}}/build/examples/render
