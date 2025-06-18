@@ -265,6 +265,36 @@ URL URL::createWithoutParsing (const String& u)
     return URL (u, 0);
 }
 
+URL& URL::operator= (const URL& other)
+{
+    if (this != std::addressof (other))
+    {
+        url = other.url;
+        postData = other.postData;
+        parameterNames = other.parameterNames;
+        parameterValues = other.parameterValues;
+        anchor = other.anchor;
+        filesToUpload = other.filesToUpload;
+    }
+
+    return *this;
+}
+
+URL& URL::operator= (URL&& other)
+{
+    if (this != std::addressof (other))
+    {
+        url = std::move (other.url);
+        postData = std::move (other.postData);
+        parameterNames = std::move (other.parameterNames);
+        parameterValues = std::move (other.parameterValues);
+        anchor = std::move (other.anchor);
+        filesToUpload = std::move (other.filesToUpload);
+    }
+
+    return *this;
+}
+
 bool URL::operator== (const URL& other) const
 {
     return url == other.url

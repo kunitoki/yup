@@ -75,6 +75,12 @@ public:
     /** Move construct an URL. */
     URL (URL&& other);
 
+    /** Copy assign an URL. */
+    URL& operator= (const URL& other);
+
+    /** Move assign an URL. */
+    URL& operator= (URL&& other);
+
     /** Compares two URLs.
 
         All aspects of the URLs must be identical for them to match, including any parameters,

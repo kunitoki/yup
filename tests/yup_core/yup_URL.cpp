@@ -57,6 +57,46 @@ TEST_F (URLTests, DefaultConstruction)
     EXPECT_FALSE (url.isWellFormed());
 }
 
+TEST_F (URLTests, CopyConstruction)
+{
+    URL url1 ("http://user@www.example.com?q=test&page=2#abc");
+
+    URL url2 { url1 };
+    EXPECT_EQ (url1, url2);
+    EXPECT_EQ (url1.toString (true), url2.toString (true));
+    EXPECT_EQ (url1.toString (false), url2.toString (false));
+}
+
+TEST_F (URLTests, CopyAssignment)
+{
+    URL url1 ("http://user@www.example.com?q=test&page=2#abc");
+
+    URL url2;
+    url2 = url1;
+    EXPECT_EQ (url1, url2);
+    EXPECT_EQ (url1.toString (true), url2.toString (true));
+    EXPECT_EQ (url1.toString (false), url2.toString (false));
+}
+
+TEST_F (URLTests, MoveConstruction)
+{
+    auto urlString = String ("http://user@www.example.com?q=test&page=2#abc");
+    URL url1 { urlString };
+
+    URL url2 { std::move (url1) };
+    EXPECT_EQ (url2.toString (true), urlString);
+}
+
+TEST_F (URLTests, MoveAssignment)
+{
+    auto urlString = String ("http://user@www.example.com?q=test&page=2#abc");
+    URL url1 { urlString };
+
+    URL url2;
+    url2 = std::move (url1);
+    EXPECT_EQ (url2.toString (true), urlString);
+}
+
 TEST_F (URLTests, StringConstruction)
 {
     // Basic URL
