@@ -175,10 +175,10 @@ function (_yup_module_setup_target module_name
                                    module_arc_enabled)
     if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
-        if (YUP_PLATFORM_MSVC)
-            list (APPEND module_options /bigobj)
-        elseif (YUP_PLATFORM_MINGW)
+        if (MINGW)
             list (APPEND module_options -Wa,-mbig-obj)
+        elseif (MSVC)
+            list (APPEND module_options /bigobj)
         endif()
     endif()
 

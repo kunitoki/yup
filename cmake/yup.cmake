@@ -64,7 +64,7 @@ function (_yup_setup_platform)
 
         if (MINGW)
             list (APPEND platforms "mingw")
-        else()
+        elseif (MSVC)
             list (APPEND platforms "msvc")
         endif()
 
