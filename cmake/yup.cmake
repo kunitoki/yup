@@ -62,6 +62,12 @@ function (_yup_setup_platform)
             list (APPEND platforms "windows" "msft" "desktop")
         endif()
 
+        if (MINGW)
+            list (APPEND platforms "mingw")
+        else()
+            list (APPEND platforms "msvc")
+        endif()
+
     elseif (UNIX)
         set (platform "linux")
         list (APPEND platforms "linux" "posix" "desktop")

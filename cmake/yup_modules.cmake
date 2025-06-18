@@ -175,6 +175,11 @@ function (_yup_module_setup_target module_name
                                    module_arc_enabled)
     if (YUP_PLATFORM_MSFT)
         list (APPEND module_defines NOMINMAX=1 WIN32_LEAN_AND_MEAN=1)
+        if (YUP_PLATFORM_MSVC)
+            list (APPEND module_link_options /bigobj)
+        elseif (YUP_PLATFORM_MINGW)
+            list (APPEND module_link_options -Wa,-mbig-obj)
+        endif()
     endif()
 
     target_sources (${module_name} INTERFACE ${module_sources})

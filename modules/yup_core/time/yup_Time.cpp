@@ -416,11 +416,15 @@ String Time::getTimeZone() const
         zone[i] = name;
     }
 #else
+    YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
+
     tzset();
 
     auto zonePtr = (const char**) tzname;
     zone[0] = zonePtr[0];
     zone[1] = zonePtr[1];
+
+    YUP_END_IGNORE_DEPRECATION_WARNINGS
 #endif
 
     if (isDaylightSavingTime())
