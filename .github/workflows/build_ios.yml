@@ -65,6 +65,8 @@ jobs:
       with:
         path: ${{runner.workspace}}/build
         key: ios-build-${{ github.sha }}
+    - run: ls -la ${{runner.workspace}}
+    - run: ls -la ${{runner.workspace}}/build
     - run: cmake --build ${{runner.workspace}}/build --config Debug --parallel 4 --target example_console
     - run: cmake --build ${{runner.workspace}}/build --config Release --parallel 4 --target example_console
 
