@@ -781,6 +781,7 @@ File URL::fileFromFileSchemeURL (const URL& fileURL)
         path = path.substring (1);
 #endif
 
+    printf (">>>>> %s\n", path.toRawUTF8());
     return path;
 }
 
@@ -809,21 +810,11 @@ URL URL::withNewDomainAndPath (const String& newDomainAndPath) const
 {
     URL u (*this);
 
-    // Extract the current scheme
     auto scheme = getScheme();
     if (scheme.isEmpty())
-        scheme = "http"; // Default to http if no scheme
+        scheme = "http";
 
-    // Build new URL with the scheme + new domain and path
     u.url = scheme + "://" + newDomainAndPath;
-
-    // Re-parse to extract any parameters and anchors from the new URL
-    u.init();
-
-    // Copy over parameters and anchor from the original URL
-    u.parameterNames = parameterNames;
-    u.parameterValues = parameterValues;
-    u.anchor = anchor;
 
     return u;
 }
