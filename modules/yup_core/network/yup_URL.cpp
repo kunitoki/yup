@@ -310,7 +310,7 @@ static int findStartOfPath (const String& url)
     // Special handling for file URLs with three slashes (file:///)
     // The path starts at the third slash (includes the leading slash)
     if (scheme == "file" && url.substring (schemeEnd - 1).startsWith (":///"))
-        return schemeEnd + 2;  // Position of the third slash
+        return schemeEnd + 2; // Position of the third slash
 
     return url.indexOfChar (findStartOfNetLocation (url), '/') + 1;
 }
