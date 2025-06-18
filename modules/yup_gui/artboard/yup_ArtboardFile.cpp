@@ -46,7 +46,7 @@ public:
         assetInfo.uniquePath = String (asset.uniqueFilename());
         assetInfo.extension = String (asset.fileExtension());
 
-        return assetCallback (assetInfo, Span<const uint8>{ inBandBytes.data(), inBandBytes.size() }, *factory);
+        return assetCallback (assetInfo, Span<const uint8> { inBandBytes.data(), inBandBytes.size() }, *factory);
     }
 
 private:
