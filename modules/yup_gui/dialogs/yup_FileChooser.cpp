@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #if ! YUP_LINUX
-class FileChooserImpl
+class FileChooser::FileChooserImpl
 {
 public:
     virtual ~FileChooserImpl() = default;

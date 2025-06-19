@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-class FileChooserImpl : public Thread
+class FileChooser::FileChooserImpl : public Thread
 {
 public:
     FileChooserImpl (CompletionCallback callback, String command, bool allowsMultiple, bool isSave)
