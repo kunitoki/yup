@@ -22,33 +22,36 @@
 namespace yup
 {
 
-static Array<String> parseFileExtensions(const String& pattern)
+//==============================================================================
+static Array<String> parseFileExtensions (const String& pattern)
 {
     Array<String> extensions;
 
     if (pattern.isEmpty())
         return extensions;
 
-    StringArray tokens = StringArray::fromTokens(pattern, ";,", String());
+    StringArray tokens = StringArray::fromTokens (pattern, ";,", String());
 
     for (const auto& token : tokens)
     {
-        String ext = token.trim();
-        if (ext.startsWith("*."))
-            ext = ext.substring(2);
-        else if (ext.startsWith("*"))
-            ext = ext.substring(1);
+        auto extension = token.trim();
 
-        if (ext.isNotEmpty())
-            extensions.add(ext);
+        if (extension.startsWith ("*."))
+            extension = extension.substring (2);
+        else if (extension.startsWith ("*"))
+            extension = extension.substring (1);
+
+        if (extension.isNotEmpty())
+            extensions.add (extension);
     }
 
     return extensions;
 }
 
-static NSArray* createAllowedFileTypes(const String& filters)
+//==============================================================================
+static NSArray* createAllowedFileTypes (const String& filters)
 {
-    auto extensions = parseFileExtensions(filters);
+    auto extensions = parseFileExtensions (filters);
 
     if (extensions.isEmpty())
         return nil;
@@ -65,7 +68,8 @@ static NSArray* createAllowedFileTypes(const String& filters)
     return types.count > 0 ? [NSArray arrayWithArray:types] : nil;
 }
 
-void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
+//==============================================================================
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     YUP_AUTORELEASEPOOL
     {
@@ -86,7 +90,7 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
             if (warnAboutOverwrite)
                 [panel setExtensionHidden:NO];
 
-            NSArray* allowedTypes = createAllowedFileTypes(filters);
+            NSArray* allowedTypes = createAllowedFileTypes (filters);
             if (allowedTypes != nil)
             {
                 [panel setAllowedFileTypes:allowedTypes];
@@ -106,24 +110,23 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
                 }
             }
 
-            NSModalResponse result = [panel runModal]; // - (void) beginWithCompletionHandler:(void (^)(NSModalResponse result)) handler;
+            [panel beginWithCompletionHandler:^(NSModalResponse result)
+            {
+                Array<File> results;
 
-            [panel beginWithCompletionHandler:^(NSModalResponse result) {
-              Array<File> results;
+                if (result == NSModalResponseOK)
+                {
+                    NSURL* url = [panel URL];
+                    if (url != nil)
+                    {
+                        NSString* path = [url path];
+                        if (path != nil)
+                            results.add (File (String::fromUTF8 ([path UTF8String])));
+                    }
+                }
 
-              if (result == NSModalResponseOK)
-              {
-                  NSURL* url = [panel URL];
-                  if (url != nil)
-                  {
-                      NSString* path = [url path];
-                      if (path != nil)
-                          results.add(File(String::fromUTF8([path UTF8String])));
-                  }
-              }
-
-              MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
+                MessageManager::callAsync ([this, callback = std::move (callback), result, results]
+                                           { invokeCallback (std::move (callback), result == NSModalResponseOK, results); });
             }];
         }
         else
@@ -137,7 +140,7 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
             [panel setShowsHiddenFiles:NO];
             [panel setTreatsFilePackagesAsDirectories:packageDirsAsFiles];
 
-            NSArray* allowedTypes = createAllowedFileTypes(filters);
+            NSArray* allowedTypes = createAllowedFileTypes (filters);
             if (allowedTypes != nil && canChooseFiles)
             {
                 [panel setAllowedFileTypes:allowedTypes];
@@ -147,23 +150,19 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
             if (startingFile.exists())
                 [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
 
-            [panel beginWithCompletionHandler:^(NSModalResponse result) {
-              Array<File> results;
+            [panel beginWithCompletionHandler:^(NSModalResponse result)
+            {
+                Array<File> results;
 
-              if (result == NSModalResponseOK)
-              {
-                  NSArray* urls = [panel URLs];
+                for (NSURL* url in urls)
+                {
+                    NSString* path = [url path];
+                    if (path != nil)
+                        results.add (File (String::fromUTF8 ([path UTF8String])));
+                }
 
-                  for (NSURL* url in urls)
-                  {
-                      NSString* path = [url path];
-                      if (path != nil)
-                          results.add(File(String::fromUTF8([path UTF8String])));
-                  }
-              }
-
-              MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
+                MessageManager::callAsync ([this, callback = std::move (callback), result, results]
+                                           { invokeCallback (std::move (callback), result == NSModalResponseOK, results); });
             }];
         }
     }
