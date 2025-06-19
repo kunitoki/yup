@@ -202,15 +202,15 @@ public:
 
 private:
     //==============================================================================
-    static constexpr int openMode                   = 1 << 0;
-    static constexpr int saveMode                   = 1 << 1;
-    static constexpr int canSelectFiles             = 1 << 2;
-    static constexpr int canSelectDirectories       = 1 << 3;
-    static constexpr int canSelectMultipleItems     = 1 << 4;
-    static constexpr int useDialogForAll            = 1 << 5;
-    static constexpr int treatFilePackagesAsDirs    = 1 << 6;
-    static constexpr int doNotResolveSymlinks       = 1 << 7;
-    static constexpr int warnAboutOverwriting       = 1 << 8;
+    static constexpr int openMode = 1 << 0;
+    static constexpr int saveMode = 1 << 1;
+    static constexpr int canSelectFiles = 1 << 2;
+    static constexpr int canSelectDirectories = 1 << 3;
+    static constexpr int canSelectMultipleItems = 1 << 4;
+    static constexpr int useDialogForAll = 1 << 5;
+    static constexpr int treatFilePackagesAsDirs = 1 << 6;
+    static constexpr int doNotResolveSymlinks = 1 << 7;
+    static constexpr int warnAboutOverwriting = 1 << 8;
 
     friend void yup_fileChooserAddFileResult (FileChooser& chooser, File path);
 

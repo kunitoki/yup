@@ -323,18 +323,19 @@ void yup_fileChooserAddFileResult (FileChooser& chooser, File path)
     chooser.results.add (std::move (path));
 }
 
-extern "C" {
-void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+extern "C"
 {
-    if (chooser != nullptr)
-        chooser->processResults();
-}
+    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+    {
+        if (chooser != nullptr)
+            chooser->processResults();
+    }
 
-void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
-{
-    if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
-        yup_fileChooserAddFileResult (*chooser->fileChooser, File (String::fromUTF8 (path)));
-}
+    void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+    {
+        if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
+            yup_fileChooserAddFileResult (*chooser->fileChooser, File (String::fromUTF8 (path)));
+    }
 } // extern "C"
 
 void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
