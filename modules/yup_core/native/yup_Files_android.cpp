@@ -203,295 +203,289 @@ static LocalRef<jobject> urlToUri (const URL& url)
 }
 
 //==============================================================================
-struct AndroidContentUriResolver
+LocalRef<jobject> AndroidContentUriResolver::getContentResolver()
 {
-public:
-    static LocalRef<jobject> getContentResolver()
+    return LocalRef<jobject> (getEnv()->CallObjectMethod (getAppContext().get(), AndroidContext.getContentResolver));
+}
+
+File AndroidContentUriResolver::getLocalFileFromContentUri (const URL& url)
+{
+    // only use this method for content URIs
+    jassert (url.getScheme() == "content");
+
+    auto authority = url.getDomain();
+    auto documentId = URL::removeEscapeChars (url.getSubPath().fromFirstOccurrenceOf ("/", false, false));
+    auto tokens = StringArray::fromTokens (documentId, ":", "");
+
+    if (authority == "com.android.externalstorage.documents")
     {
-        return LocalRef<jobject> (getEnv()->CallObjectMethod (getAppContext().get(), AndroidContext.getContentResolver));
+        auto storageId = tokens[0];
+        auto subpath = tokens[1];
+
+        auto storagePath = getStorageDevicePath (storageId);
+
+        if (storagePath != File())
+            return storagePath.getChildFile (subpath);
+    }
+    else if (authority == "com.android.providers.downloads.documents")
+    {
+        auto type = tokens[0];
+        auto downloadId = tokens[1];
+
+        if (type.equalsIgnoreCase ("raw"))
+            return File (downloadId);
+
+        if (type.equalsIgnoreCase ("downloads"))
+        {
+            auto subDownloadPath = url.getSubPath().fromFirstOccurrenceOf ("tree/downloads", false, false);
+            return File (getWellKnownFolder ("DIRECTORY_DOWNLOADS").getFullPathName() + "/" + subDownloadPath);
+        }
+
+        return getLocalFileFromContentUri (URL ("content://downloads/public_downloads/" + documentId));
+    }
+    else if (authority == "com.android.providers.media.documents" && documentId.isNotEmpty())
+    {
+        auto type = tokens[0];
+        auto mediaId = tokens[1];
+
+        if (type == "image")
+            type = "images";
+
+        return getCursorDataColumn (URL ("content://media/external/" + type + "/media"),
+                                    "_id=?",
+                                    StringArray { mediaId });
     }
 
-    static File getLocalFileFromContentUri (const URL& url)
-    {
-        // only use this method for content URIs
-        jassert (url.getScheme() == "content");
+    return getCursorDataColumn (url);
+}
 
-        auto authority = url.getDomain();
-        auto documentId = URL::removeEscapeChars (url.getSubPath().fromFirstOccurrenceOf ("/", false, false));
-        auto tokens = StringArray::fromTokens (documentId, ":", "");
+String AndroidContentUriResolver::getFileNameFromContentUri (const URL& url)
+{
+    auto uri = urlToUri (url);
+    auto* env = getEnv();
+    const auto contentResolver = getContentResolver();
 
-        if (authority == "com.android.externalstorage.documents")
-        {
-            auto storageId = tokens[0];
-            auto subpath = tokens[1];
-
-            auto storagePath = getStorageDevicePath (storageId);
-
-            if (storagePath != File())
-                return storagePath.getChildFile (subpath);
-        }
-        else if (authority == "com.android.providers.downloads.documents")
-        {
-            auto type = tokens[0];
-            auto downloadId = tokens[1];
-
-            if (type.equalsIgnoreCase ("raw"))
-                return File (downloadId);
-
-            if (type.equalsIgnoreCase ("downloads"))
-            {
-                auto subDownloadPath = url.getSubPath().fromFirstOccurrenceOf ("tree/downloads", false, false);
-                return File (getWellKnownFolder ("DIRECTORY_DOWNLOADS").getFullPathName() + "/" + subDownloadPath);
-            }
-
-            return getLocalFileFromContentUri (URL ("content://downloads/public_downloads/" + documentId));
-        }
-        else if (authority == "com.android.providers.media.documents" && documentId.isNotEmpty())
-        {
-            auto type = tokens[0];
-            auto mediaId = tokens[1];
-
-            if (type == "image")
-                type = "images";
-
-            return getCursorDataColumn (URL ("content://media/external/" + type + "/media"),
-                                        "_id=?",
-                                        StringArray { mediaId });
-        }
-
-        return getCursorDataColumn (url);
-    }
-
-    static String getFileNameFromContentUri (const URL& url)
-    {
-        auto uri = urlToUri (url);
-        auto* env = getEnv();
-        const auto contentResolver = getContentResolver();
-
-        if (contentResolver == nullptr)
-            return {};
-
-        auto filename = getStringUsingDataColumn ("_display_name", env, uri, contentResolver);
-
-        // Fallback to "_data" column
-        if (filename.isEmpty())
-        {
-            auto path = getStringUsingDataColumn ("_data", env, uri, contentResolver);
-            filename = path.fromLastOccurrenceOf ("/", false, true);
-        }
-
-        return filename;
-    }
-
-private:
-    //==============================================================================
-    static String getCursorDataColumn (const URL& url, const String& selection = {}, const StringArray& selectionArgs = {})
-    {
-        auto uri = urlToUri (url);
-        auto* env = getEnv();
-        const auto contentResolver = getContentResolver();
-
-        if (contentResolver)
-        {
-            LocalRef<jstring> columnName (javaString ("_data"));
-            LocalRef<jobjectArray> projection (env->NewObjectArray (1, JavaString, columnName.get()));
-
-            LocalRef<jobjectArray> args;
-
-            if (selection.isNotEmpty())
-            {
-                args = LocalRef<jobjectArray> (env->NewObjectArray (selectionArgs.size(), JavaString, javaString ("").get()));
-
-                for (int i = 0; i < selectionArgs.size(); ++i)
-                    env->SetObjectArrayElement (args.get(), i, javaString (selectionArgs[i]).get());
-            }
-
-            LocalRef<jstring> jSelection (selection.isNotEmpty() ? javaString (selection) : LocalRef<jstring>());
-            LocalRef<jobject> cursor (env->CallObjectMethod (contentResolver.get(), ContentResolver.query, uri.get(), projection.get(), jSelection.get(), args.get(), nullptr));
-
-            if (jniCheckHasExceptionOccurredAndClear())
-            {
-                // An exception has occurred, have you acquired RuntimePermissions::readExternalStorage permission?
-                jassertfalse;
-                return {};
-            }
-
-            if (cursor)
-            {
-                if (env->CallBooleanMethod (cursor.get(), AndroidCursor.moveToFirst) != 0)
-                {
-                    auto columnIndex = env->CallIntMethod (cursor.get(), AndroidCursor.getColumnIndex, columnName.get());
-
-                    if (columnIndex >= 0)
-                    {
-                        LocalRef<jstring> value ((jstring) env->CallObjectMethod (cursor.get(), AndroidCursor.getString, columnIndex));
-
-                        if (value)
-                            return yupString (value.get());
-                    }
-                }
-
-                env->CallVoidMethod (cursor.get(), AndroidCursor.close);
-            }
-        }
-
+    if (contentResolver == nullptr)
         return {};
+
+    auto filename = getStringUsingDataColumn ("_display_name", env, uri, contentResolver);
+
+    // Fallback to "_data" column
+    if (filename.isEmpty())
+    {
+        auto path = getStringUsingDataColumn ("_data", env, uri, contentResolver);
+        filename = path.fromLastOccurrenceOf ("/", false, true);
     }
 
-    //==============================================================================
-    static File getStorageDevicePath (const String& storageId)
+    return filename;
+}
+
+String AndroidContentUriResolver::getCursorDataColumn (const URL& url, const String& selection, const StringArray& selectionArgs)
+{
+    auto uri = urlToUri (url);
+    auto* env = getEnv();
+    const auto contentResolver = getContentResolver();
+
+    if (contentResolver)
     {
-        // check for the primary alias
-        if (storageId == "primary")
-            return getPrimaryStorageDirectory();
-
-        auto storageDevices = getSecondaryStorageDirectories();
-
-        for (auto storageDevice : storageDevices)
-            if (getStorageIdForMountPoint (storageDevice) == storageId)
-                return storageDevice;
-
-        return {};
-    }
-
-    static File getPrimaryStorageDirectory()
-    {
-        return yupFile (LocalRef<jobject> (getEnv()->CallStaticObjectMethod (AndroidEnvironment, AndroidEnvironment.getExternalStorageDirectory)));
-    }
-
-    static Array<File> getSecondaryStorageDirectories()
-    {
-        Array<File> results;
-
-        if (getAndroidSDKVersion() >= 19)
-        {
-            auto* env = getEnv();
-            static jmethodID m = (env->GetMethodID (AndroidContext, "getExternalFilesDirs", "(Ljava/lang/String;)[Ljava/io/File;"));
-            if (m == nullptr)
-                return {};
-
-            auto paths = convertFileArray (LocalRef<jobject> (env->CallObjectMethod (getAppContext().get(), m, nullptr)));
-
-            for (auto path : paths)
-                results.add (getMountPointForFile (path));
-        }
-        else
-        {
-            // on older SDKs other external storages are located "next" to the primary
-            // storage mount point
-            auto mountFolder = getMountPointForFile (getPrimaryStorageDirectory())
-                                   .getParentDirectory();
-
-            // don't include every folder. Only folders which are actually mountpoints
-            yup_statStruct info;
-            if (! yup_stat (mountFolder.getFullPathName(), info))
-                return {};
-
-            auto rootFsDevice = info.st_dev;
-
-            for (const auto& iter : RangedDirectoryIterator (mountFolder, false, "*", File::findDirectories))
-            {
-                auto candidate = iter.getFile();
-
-                if (yup_stat (candidate.getFullPathName(), info)
-                    && info.st_dev != rootFsDevice)
-                    results.add (candidate);
-            }
-        }
-
-        return results;
-    }
-
-    //==============================================================================
-    static String getStorageIdForMountPoint (const File& mountpoint)
-    {
-        // currently this seems to work fine, but something
-        // more intelligent may be needed in the future
-        return mountpoint.getFileName();
-    }
-
-    static File getMountPointForFile (const File& file)
-    {
-        yup_statStruct info;
-
-        if (yup_stat (file.getFullPathName(), info))
-        {
-            auto dev = info.st_dev;
-            File mountPoint = file;
-
-            for (;;)
-            {
-                auto parent = mountPoint.getParentDirectory();
-
-                if (parent == mountPoint)
-                    break;
-
-                yup_stat (parent.getFullPathName(), info);
-
-                if (info.st_dev != dev)
-                    break;
-
-                mountPoint = parent;
-            }
-
-            return mountPoint;
-        }
-
-        return {};
-    }
-
-    //==============================================================================
-    static Array<File> convertFileArray (LocalRef<jobject> obj)
-    {
-        auto* env = getEnv();
-        int n = (int) env->GetArrayLength ((jobjectArray) obj.get());
-        Array<File> files;
-
-        for (int i = 0; i < n; ++i)
-            files.add (yupFile (LocalRef<jobject> (env->GetObjectArrayElement ((jobjectArray) obj.get(),
-                                                                               (jsize) i))));
-
-        return files;
-    }
-
-    //==============================================================================
-    static String getStringUsingDataColumn (const String& columnNameToUse, JNIEnv* env, const LocalRef<jobject>& uri, const LocalRef<jobject>& contentResolver)
-    {
-        LocalRef<jstring> columnName (javaString (columnNameToUse));
+        LocalRef<jstring> columnName (javaString ("_data"));
         LocalRef<jobjectArray> projection (env->NewObjectArray (1, JavaString, columnName.get()));
 
-        LocalRef<jobject> cursor (env->CallObjectMethod (contentResolver.get(), ContentResolver.query, uri.get(), projection.get(), nullptr, nullptr, nullptr));
+        LocalRef<jobjectArray> args;
+
+        if (selection.isNotEmpty())
+        {
+            args = LocalRef<jobjectArray> (env->NewObjectArray (selectionArgs.size(), JavaString, javaString ("").get()));
+
+            for (int i = 0; i < selectionArgs.size(); ++i)
+                env->SetObjectArrayElement (args.get(), i, javaString (selectionArgs[i]).get());
+        }
+
+        LocalRef<jstring> jSelection (selection.isNotEmpty() ? javaString (selection) : LocalRef<jstring>());
+        LocalRef<jobject> cursor (env->CallObjectMethod (contentResolver.get(), ContentResolver.query, uri.get(), projection.get(), jSelection.get(), args.get(), nullptr));
 
         if (jniCheckHasExceptionOccurredAndClear())
         {
-            // An exception has occurred, have you acquired RuntimePermission::readExternalStorage permission?
+            // An exception has occurred, have you acquired RuntimePermissions::readExternalStorage permission?
             jassertfalse;
             return {};
         }
 
-        if (cursor == nullptr)
+        if (cursor)
+        {
+            if (env->CallBooleanMethod (cursor.get(), AndroidCursor.moveToFirst) != 0)
+            {
+                auto columnIndex = env->CallIntMethod (cursor.get(), AndroidCursor.getColumnIndex, columnName.get());
+
+                if (columnIndex >= 0)
+                {
+                    LocalRef<jstring> value ((jstring) env->CallObjectMethod (cursor.get(), AndroidCursor.getString, columnIndex));
+
+                    if (value)
+                        return yupString (value.get());
+                }
+            }
+
+            env->CallVoidMethod (cursor.get(), AndroidCursor.close);
+        }
+    }
+
+    return {};
+}
+
+//==============================================================================
+File AndroidContentUriResolver::getStorageDevicePath (const String& storageId)
+{
+    // check for the primary alias
+    if (storageId == "primary")
+        return getPrimaryStorageDirectory();
+
+    auto storageDevices = getSecondaryStorageDirectories();
+
+    for (auto storageDevice : storageDevices)
+        if (getStorageIdForMountPoint (storageDevice) == storageId)
+            return storageDevice;
+
+    return {};
+}
+
+File AndroidContentUriResolver::getPrimaryStorageDirectory()
+{
+    return yupFile (LocalRef<jobject> (getEnv()->CallStaticObjectMethod (AndroidEnvironment, AndroidEnvironment.getExternalStorageDirectory)));
+}
+
+Array<File> AndroidContentUriResolver::getSecondaryStorageDirectories()
+{
+    Array<File> results;
+
+    if (getAndroidSDKVersion() >= 19)
+    {
+        auto* env = getEnv();
+        static jmethodID m = (env->GetMethodID (AndroidContext, "getExternalFilesDirs", "(Ljava/lang/String;)[Ljava/io/File;"));
+        if (m == nullptr)
             return {};
 
-        String fileName;
+        auto paths = convertFileArray (LocalRef<jobject> (env->CallObjectMethod (getAppContext().get(), m, nullptr)));
 
-        if (env->CallBooleanMethod (cursor.get(), AndroidCursor.moveToFirst) != 0)
+        for (auto path : paths)
+            results.add (getMountPointForFile (path));
+    }
+    else
+    {
+        // on older SDKs other external storages are located "next" to the primary
+        // storage mount point
+        auto mountFolder = getMountPointForFile (getPrimaryStorageDirectory())
+                                .getParentDirectory();
+
+        // don't include every folder. Only folders which are actually mountpoints
+        yup_statStruct info;
+        if (! yup_stat (mountFolder.getFullPathName(), info))
+            return {};
+
+        auto rootFsDevice = info.st_dev;
+
+        for (const auto& iter : RangedDirectoryIterator (mountFolder, false, "*", File::findDirectories))
         {
-            auto columnIndex = env->CallIntMethod (cursor.get(), AndroidCursor.getColumnIndex, columnName.get());
+            auto candidate = iter.getFile();
 
-            if (columnIndex >= 0)
-            {
-                LocalRef<jstring> value ((jstring) env->CallObjectMethod (cursor.get(), AndroidCursor.getString, columnIndex));
+            if (yup_stat (candidate.getFullPathName(), info)
+                && info.st_dev != rootFsDevice)
+                results.add (candidate);
+        }
+    }
 
-                if (value)
-                    fileName = yupString (value.get());
-            }
+    return results;
+}
+
+//==============================================================================
+String AndroidContentUriResolver::getStorageIdForMountPoint (const File& mountpoint)
+{
+    // currently this seems to work fine, but something
+    // more intelligent may be needed in the future
+    return mountpoint.getFileName();
+}
+
+File AndroidContentUriResolver::getMountPointForFile (const File& file)
+{
+    yup_statStruct info;
+
+    if (yup_stat (file.getFullPathName(), info))
+    {
+        auto dev = info.st_dev;
+        File mountPoint = file;
+
+        for (;;)
+        {
+            auto parent = mountPoint.getParentDirectory();
+
+            if (parent == mountPoint)
+                break;
+
+            yup_stat (parent.getFullPathName(), info);
+
+            if (info.st_dev != dev)
+                break;
+
+            mountPoint = parent;
         }
 
-        env->CallVoidMethod (cursor.get(), AndroidCursor.close);
-
-        return fileName;
+        return mountPoint;
     }
-};
+
+    return {};
+}
+
+//==============================================================================
+Array<File> AndroidContentUriResolver::convertFileArray (LocalRef<jobject> obj)
+{
+    auto* env = getEnv();
+    int n = (int) env->GetArrayLength ((jobjectArray) obj.get());
+    Array<File> files;
+
+    for (int i = 0; i < n; ++i)
+        files.add (yupFile (LocalRef<jobject> (env->GetObjectArrayElement ((jobjectArray) obj.get(),
+                                                                            (jsize) i))));
+
+    return files;
+}
+
+//==============================================================================
+String AndroidContentUriResolver::getStringUsingDataColumn (const String& columnNameToUse, JNIEnv* env, const LocalRef<jobject>& uri, const LocalRef<jobject>& contentResolver)
+{
+    LocalRef<jstring> columnName (javaString (columnNameToUse));
+    LocalRef<jobjectArray> projection (env->NewObjectArray (1, JavaString, columnName.get()));
+
+    LocalRef<jobject> cursor (env->CallObjectMethod (contentResolver.get(), ContentResolver.query, uri.get(), projection.get(), nullptr, nullptr, nullptr));
+
+    if (jniCheckHasExceptionOccurredAndClear())
+    {
+        // An exception has occurred, have you acquired RuntimePermission::readExternalStorage permission?
+        jassertfalse;
+        return {};
+    }
+
+    if (cursor == nullptr)
+        return {};
+
+    String fileName;
+
+    if (env->CallBooleanMethod (cursor.get(), AndroidCursor.moveToFirst) != 0)
+    {
+        auto columnIndex = env->CallIntMethod (cursor.get(), AndroidCursor.getColumnIndex, columnName.get());
+
+        if (columnIndex >= 0)
+        {
+            LocalRef<jstring> value ((jstring) env->CallObjectMethod (cursor.get(), AndroidCursor.getString, columnIndex));
+
+            if (value)
+                fileName = yupString (value.get());
+        }
+    }
+
+    env->CallVoidMethod (cursor.get(), AndroidCursor.close);
+
+    return fileName;
+}
 
 //==============================================================================
 struct AndroidContentUriOutputStream final : public OutputStream

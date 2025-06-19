@@ -23,6 +23,20 @@ namespace yup
 {
 
 //==============================================================================
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
+    METHOD (getItemCount, "getItemCount", "()I") \
+    METHOD (getItemAt, "getItemAt", "(I)Landroid/content/ClipData$Item;")
+
+DECLARE_JNI_CLASS (AndroidClipData, "android/content/ClipData")
+#undef JNI_CLASS_MEMBERS
+
+#define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
+    METHOD (getUri, "getUri", "()Landroid/net/Uri;")
+
+DECLARE_JNI_CLASS (AndroidClipDataItem, "android/content/ClipData$Item")
+#undef JNI_CLASS_MEMBERS
+
+//==============================================================================
 static StringArray createMimeTypes (const String& filters)
 {
     StringArray mimeTypes;
@@ -185,6 +199,7 @@ private:
 
 static AndroidFileChooserCallback* currentCallback = nullptr;
 
+//==============================================================================
 extern "C" JNIEXPORT void JNICALL
     Java_com_yourpackage_FileChooserActivity_onActivityResult (JNIEnv* env, jobject thiz, jint requestCode, jint resultCode, jobject data)
 {
@@ -195,6 +210,7 @@ extern "C" JNIEXPORT void JNICALL
     }
 }
 
+//==============================================================================
 void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     const bool isSave = (flags & saveMode) != 0;
@@ -284,7 +300,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
         // Start the activity
         const int requestCode = 12345;
-        env->CallVoidMethod (getCurrentActivity(), AndroidContext.startActivityForResult, intent.get(), requestCode);
+        env->CallVoidMethod (getCurrentActivity(), AndroidActivity.startActivityForResult, intent.get(), requestCode);
 
         // Wait for the result (simplified approach)
         auto startTime = Time::getCurrentTime();
