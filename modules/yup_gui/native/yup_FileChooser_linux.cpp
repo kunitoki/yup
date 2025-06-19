@@ -111,5 +111,3 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 }
 
 } // namespace yup
-
-#endif
