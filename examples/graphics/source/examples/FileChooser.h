@@ -19,25 +19,55 @@
   ==============================================================================
 */
 
+#pragma once
+
 class FileChooserDemo : public yup::Component
 {
 public:
     FileChooserDemo()
         : Component ("FileChooserDemo")
+        , openFile ("Open File")
+        , openMultipleFiles ("Multiple Files")
     {
-    }
-
-    void mouseDown (const yup::MouseEvent& e) override
-    {
-        yup::FileChooser chooser ("Select a file", yup::File::getCurrentWorkingDirectory(), "*.txt");
-        if (chooser.browseForFileToOpen())
+        addAndMakeVisible (openFile);
+        openFile.onClick = [this]
         {
-            yup::File selectedFile = chooser.getResult();
-            std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
-        }
+            yup::FileChooser chooser ("Select a file", yup::File::getCurrentWorkingDirectory(), "*.txt");
+            if (chooser.browseForFileToOpen())
+            {
+                yup::File selectedFile = chooser.getResult();
+                std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
+            }
+        };
+
+        addAndMakeVisible (openMultipleFiles);
+        openMultipleFiles.onClick = [this]
+        {
+            yup::FileChooser chooser ("Select multiple files", yup::File::getCurrentWorkingDirectory(), "*");
+            if (chooser.browseForMultipleFilesToOpen())
+            {
+                auto selectedFiles = chooser.getResults();
+                for (const auto& selectedFile : selectedFiles)
+                    std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
+            }
+        };
     }
 
     void resized() override
     {
+        constexpr int margin = 5;
+        constexpr int buttonWidth = 100;
+        constexpr int buttonHeight = 30;
+
+        auto bounds = getLocalBounds().reduced (margin);
+
+        auto buttons1 = bounds.removeFromTop (buttonHeight);
+        openFile.setBounds (buttons1.removeFromLeft (buttonWidth));
+        buttons1.removeFromLeft (margin);
+        openMultipleFiles.setBounds (buttons1.removeFromLeft (buttonWidth));
     }
+
+private:
+    yup::TextButton openFile;
+    yup::TextButton openMultipleFiles;
 };

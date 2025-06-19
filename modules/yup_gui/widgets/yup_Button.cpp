@@ -56,9 +56,6 @@ void Button::mouseDown (const MouseEvent& event)
 {
     isButtonCurrentlyDown = true;
 
-    if (onClick)
-        onClick();
-
     takeKeyboardFocus();
 
     repaint();
@@ -67,6 +64,9 @@ void Button::mouseDown (const MouseEvent& event)
 void Button::mouseUp (const MouseEvent& event)
 {
     isButtonCurrentlyDown = false;
+
+    if (onClick)
+        onClick();
 
     repaint();
 }

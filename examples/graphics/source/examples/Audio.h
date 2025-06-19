@@ -19,8 +19,7 @@
   ==============================================================================
 */
 
-#include <yup_gui/yup_gui.h>
-#include <yup_audio_devices/yup_audio_devices.h>
+#pragma once
 
 #include <memory>
 #include <cmath> // For sine wave generation
