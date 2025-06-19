@@ -110,7 +110,7 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
     return specs;
 }
 
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     HRESULT hr = CoInitializeEx (NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 
@@ -119,6 +119,8 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
     const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
     const bool allowsMultipleSelection = (flags & canSelectMultipleItems) != 0;
     const bool warnAboutOverwrite = (flags & warnAboutOverwriting) != 0;
+
+    Array<File> results;
 
     if (isSave)
     {
@@ -195,6 +197,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
             delete[] filterSpecs;
             pFileSave->Release();
         }
+
+        // Invoke callback with results
+        invokeCallback(std::move(callback), SUCCEEDED(hr) && results.size() > 0, results);
     }
     else
     {
@@ -310,6 +315,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 
             pFileOpen->Release();
         }
+
+        // Invoke callback with results
+        invokeCallback (std::move (callback), SUCCEEDED(hr) && results.size() > 0, results);
     }
 
     CoUninitialize();

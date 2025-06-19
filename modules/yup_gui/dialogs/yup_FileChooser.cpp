@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -23,14 +23,24 @@ namespace yup
 {
 
 //==============================================================================
+FileChooser::Ptr FileChooser::create (const String& dialogBoxTitle,
+                                      const File& initialFileOrDirectory,
+                                      const String& filePatternsAllowed,
+                                      bool useOSNativeDialogBox,
+                                      bool treatFilePackagesAsDirs)
+{
+    return { new FileChooser (dialogBoxTitle, initialFileOrDirectory, filePatternsAllowed, useOSNativeDialogBox, treatFilePackagesAsDirs) };
+}
+
+//==============================================================================
 FileChooser::FileChooser (const String& dialogBoxTitle,
                           const File& initialFileOrDirectory,
                           const String& filePatternsAllowed,
                           bool useOSNativeDialogBox,
                           bool treatFilePackagesAsDirs)
     : title (dialogBoxTitle)
-    , filters (filePatternsAllowed)
     , startingFile (initialFileOrDirectory)
+    , filters (filePatternsAllowed)
     , useNativeDialogBox (useOSNativeDialogBox)
     , packageDirsAsFiles (treatFilePackagesAsDirs)
 {
@@ -47,60 +57,85 @@ FileChooser::FileChooser (const String& dialogBoxTitle,
 FileChooser::~FileChooser() = default;
 
 //==============================================================================
-bool FileChooser::browseForFileToOpen (Component* previewComponent)
+void FileChooser::browseForFileToOpen (CompletionCallback callback)
 {
-    return showDialog (openMode | canSelectFiles, previewComponent);
+    int flags = openMode | canSelectFiles;
+    showDialog (std::move (callback), flags);
 }
 
-bool FileChooser::browseForMultipleFilesToOpen (Component* previewComponent)
+void FileChooser::browseForMultipleFilesToOpen (CompletionCallback callback)
 {
-    return showDialog (openMode | canSelectFiles | canSelectMultipleItems, previewComponent);
+    int flags = openMode | canSelectFiles | canSelectMultipleItems;
+    showDialog (std::move (callback), flags);
 }
 
-bool FileChooser::browseForMultipleFilesOrDirectoriesToOpen (Component* previewComponent)
+void FileChooser::browseForMultipleFilesOrDirectoriesToOpen (CompletionCallback callback)
 {
-    return showDialog (openMode | canSelectFiles | canSelectDirectories | canSelectMultipleItems, previewComponent);
+    int flags = openMode | canSelectFiles | canSelectDirectories | canSelectMultipleItems;
+    showDialog (std::move (callback), flags);
 }
 
-bool FileChooser::browseForFileToSave (bool warnAboutOverwritingExistingFiles)
+void FileChooser::browseForFileToSave (CompletionCallback callback, bool warnAboutOverwritingExistingFiles)
 {
-    return showDialog (saveMode | canSelectFiles | (warnAboutOverwritingExistingFiles ? warnAboutOverwriting : 0), nullptr);
+    int flags = saveMode | canSelectFiles;
+
+    if (warnAboutOverwritingExistingFiles)
+        flags |= warnAboutOverwriting;
+
+    showDialog (std::move (callback), flags);
 }
 
-bool FileChooser::browseForDirectory()
+void FileChooser::browseForDirectory (CompletionCallback callback)
 {
-    return showDialog (openMode | canSelectDirectories, nullptr);
-}
-
-bool FileChooser::showDialog (int flags, Component* previewComponent)
-{
-    YUP_ASSERT_MESSAGE_THREAD
-
-    results.clear();
-
-    showPlatformDialog (flags, previewComponent);
-
-    return results.size() > 0;
+    int flags = openMode | canSelectDirectories;
+    showDialog (std::move (callback), flags);
 }
 
 //==============================================================================
-File FileChooser::getResult() const
+void FileChooser::showDialog (CompletionCallback callback, int flags)
 {
-    return results.size() > 0 ? results[0] : File();
-}
+    YUP_ASSERT_MESSAGE_THREAD
 
-Array<File> FileChooser::getResults() const
-{
-    return results;
+    // Set additional flags based on construction parameters
+    if (packageDirsAsFiles)
+        flags |= treatFilePackagesAsDirs;
+
+    if (useNativeDialogBox)
+    {
+        showPlatformDialog (createCapturingCallback (std::move (callback)), flags);
+    }
+    else
+    {
+        // TODO: Implement YUP-based file browser when needed
+        // For now, fall back to platform dialog
+        showPlatformDialog (createCapturingCallback (std::move (callback)), flags);
+    }
 }
 
 //==============================================================================
 String FileChooser::getFilePatternsForPlatform() const
 {
-    if (filters.isEmpty())
-        return String();
+    return filters;
+}
 
-    return filters.replaceCharacter (',', ';');
+void FileChooser::invokeCallback (CompletionCallback callback, bool success, const Array<File>& results)
+{
+    if (callback)
+    {
+        // Invoke callback on the message thread for safety
+        MessageManager::callAsync ([callback = std::move (callback), success, results]()
+        {
+            callback (success, results);
+        });
+    }
+}
+
+FileChooser::CompletionCallback FileChooser::createCapturingCallback (CompletionCallback callback)
+{
+    return [self = Ptr{ this }, callback = std::move (callback)](bool success, const Array<File>& results)
+    {
+        callback (success, results);
+    };
 }
 
 } // namespace yup

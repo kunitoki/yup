@@ -65,7 +65,7 @@ static NSArray* createAllowedFileTypes(const String& filters)
     return types.count > 0 ? [NSArray arrayWithArray:types] : nil;
 }
 
-void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
 {
     YUP_AUTORELEASEPOOL
     {
@@ -106,20 +106,28 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
                 }
             }
 
-            NSModalResponse result = [panel runModal];
+            NSModalResponse result = [panel runModal]; // - (void) beginWithCompletionHandler:(void (^)(NSModalResponse result)) handler;
 
-            if (result == NSModalResponseOK)
+            [panel beginWithCompletionHandler:^(NSModalResponse result)
             {
-                NSURL* url = [panel URL];
-                if (url != nil)
+                Array<File> results;
+
+                if (result == NSModalResponseOK)
                 {
-                    NSString* path = [url path];
-                    if (path != nil)
+                    NSURL* url = [panel URL];
+                    if (url != nil)
                     {
-                        results.add(File(String::fromUTF8([path UTF8String])));
+                        NSString* path = [url path];
+                        if (path != nil)
+                            results.add(File(String::fromUTF8([path UTF8String])));
                     }
                 }
-            }
+
+                MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                {
+                    invokeCallback(std::move(callback), result == NSModalResponseOK, results);
+                });
+            }];
         }
         else
         {
@@ -140,25 +148,30 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
             }
 
             if (startingFile.exists())
-            {
                 [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
-            }
 
-            NSModalResponse result = [panel runModal];
 
-            if (result == NSModalResponseOK)
+            [panel beginWithCompletionHandler:^(NSModalResponse result)
             {
-                NSArray* urls = [panel URLs];
+                Array<File> results;
 
-                for (NSURL* url in urls)
+                if (result == NSModalResponseOK)
                 {
-                    NSString* path = [url path];
-                    if (path != nil)
+                    NSArray* urls = [panel URLs];
+
+                    for (NSURL* url in urls)
                     {
-                        results.add(File(String::fromUTF8([path UTF8String])));
+                        NSString* path = [url path];
+                        if (path != nil)
+                            results.add(File(String::fromUTF8([path UTF8String])));
                     }
                 }
-            }
+
+                MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                {
+                    invokeCallback(std::move(callback), result == NSModalResponseOK, results);
+                });
+            }];
         }
     }
 }

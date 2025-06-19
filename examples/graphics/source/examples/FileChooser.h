@@ -32,24 +32,37 @@ public:
         addAndMakeVisible (openFile);
         openFile.onClick = [this]
         {
-            yup::FileChooser chooser ("Select a file", yup::File::getCurrentWorkingDirectory(), "*.txt");
-            if (chooser.browseForFileToOpen())
+            auto chooser = yup::FileChooser::create ("Select a file", yup::File::getCurrentWorkingDirectory(), "*.txt");
+            chooser->browseForFileToOpen([](bool success, const yup::Array<yup::File>& results)
             {
-                yup::File selectedFile = chooser.getResult();
-                std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
-            }
+                if (success && results.size() > 0)
+                {
+                    yup::File selectedFile = results[0];
+                    std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
+                }
+                else
+                {
+                    std::cout << "Failure selecting file !" << std::endl;
+                }
+            });
         };
 
         addAndMakeVisible (openMultipleFiles);
         openMultipleFiles.onClick = [this]
         {
-            yup::FileChooser chooser ("Select multiple files", yup::File::getCurrentWorkingDirectory(), "*");
-            if (chooser.browseForMultipleFilesToOpen())
+            auto chooser = yup::FileChooser::create ("Select multiple files", yup::File::getCurrentWorkingDirectory(), "*");
+            chooser->browseForMultipleFilesToOpen([](bool success, const yup::Array<yup::File>& results)
             {
-                auto selectedFiles = chooser.getResults();
-                for (const auto& selectedFile : selectedFiles)
-                    std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
-            }
+                if (success && results.size() > 0)
+                {
+                    for (const auto& selectedFile : results)
+                        std::cout << "Selected file: " << selectedFile.getFullPathName() << std::endl;
+                }
+                else
+                {
+                    std::cout << "Failure selecting files !" << std::endl;
+                }
+            });
         };
     }
 

@@ -37,168 +37,146 @@ namespace yup
     Example usage:
     @code
     // For opening a single file
-    FileChooser chooser("Select an audio file", File::getSpecialLocation(File::userDocumentsDirectory), "*.wav;*.mp3;*.aiff");
-    if (chooser.browseForFileToOpen())
+    auto chooser = FileChooser::create ("Select an audio file", File::getSpecialLocation(File::userDocumentsDirectory), "*.wav;*.mp3;*.aiff");
+    chooser->browseForFileToOpen ([](bool success, const Array<File>& results)
     {
-        File selectedFile = chooser.getResult();
-        // Process the selected file...
-    }
+        if (success && results.size() > 0)
+        {
+            File selectedFile = results[0];
+            // Process the selected file...
+        }
+    });
 
     // For opening multiple files
-    FileChooser chooser("Select audio files", File(), "*.wav;*.mp3");
-    if (chooser.browseForMultipleFilesToOpen())
+    auto chooser = FileChooser::create ("Select audio files", File(), "*.wav;*.mp3");
+    chooser->browseForMultipleFilesToOpen ([](bool success, const Array<File>& results)
     {
-        Array<File> selectedFiles = chooser.getResults();
-        // Process the selected files...
-    }
+        if (success && results.size() > 0)
+        {
+            // Process the selected files...
+            for (const auto& file : results)
+            {
+                // Process each file...
+            }
+        }
+    });
 
     // For saving a file
-    FileChooser chooser("Save project", File(), "*.proj", true);
-    if (chooser.browseForFileToSave(true))
+    auto chooser = FileChooser::create ("Save project", File(), "*.proj", true);
+    chooser->browseForFileToSave ([](bool success, const Array<File>& results)
     {
-        File saveLocation = chooser.getResult();
-        // Save to the selected location...
-    }
+        if (success && results.size() > 0)
+        {
+            File saveLocation = results[0];
+            // Save to the selected location...
+        }
+    }, true);
     @endcode
 
     @tags{GUI}
 */
-class YUP_API FileChooser
+class YUP_API FileChooser : public ReferenceCountedObject
 {
 public:
+    using Ptr = ReferenceCountedObjectPtr<FileChooser>;
+
+    //==============================================================================
+    /** Destructor. */
+    ~FileChooser();
+
     //==============================================================================
     /** Creates a FileChooser.
 
-        @param dialogBoxTitle       a text string to display in the dialog box to
-                                    tell the user what the dialog is for.
-        @param initialFileOrDirectory  the file or directory that should be selected
-                                       when the dialog opens. If this is File(), a sensible
-                                       default location will be used.
+        @param dialogBoxTitle       a text string to display in the dialog box to tell the user what the dialog is for.
+        @param initialFileOrDirectory  the file or directory that should be selected when the dialog opens.
+                                      If this is File(), a sensible default location will be used.
         @param filePatternsAllowed  a set of file patterns to specify which files can be
-                                    selected - each pattern should be separated by a comma or
-                                    semicolon, e.g. "*.wav;*.aiff" or "*.txt,*.doc".
-                                    An empty string means that all files are allowed. To specify
-                                    that sub-directories can also be selected, add "<Directories>"
-                                    to the end of the pattern.
+                                   selected - each pattern should be separated by a comma or
+                                   semicolon, e.g. "*.wav;*.aiff" or "*.txt,*.doc".
+                                   An empty string means that all files are allowed. To specify
+                                   that sub-directories can also be selected, add "<Directories>"
+                                   to the end of the pattern.
         @param useOSNativeDialogBox if true, then on platforms that support it, a native
                                     dialog box will be used; if false, then a YUP-based
                                     browser dialog box will be displayed. Some platforms may not
                                     support native dialogs, in which case the YUP dialog will
                                     be used regardless of this setting.
         @param treatFilePackagesAsDirs  if true, then the file chooser will allow the selection
-                                        of files inside packages when they are opened in the OS.
+                                       of files inside packages when they are opened in the OS.
     */
-    FileChooser (const String& dialogBoxTitle,
-                 const File& initialFileOrDirectory = File(),
-                 const String& filePatternsAllowed = String(),
-                 bool useOSNativeDialogBox = true,
-                 bool treatFilePackagesAsDirs = false);
-
-    /** Destructor. */
-    ~FileChooser();
+    static Ptr create (const String& dialogBoxTitle,
+                       const File& initialFileOrDirectory = File(),
+                       const String& filePatternsAllowed = String(),
+                       bool useOSNativeDialogBox = true,
+                       bool treatFilePackagesAsDirs = false);
 
     //==============================================================================
-    /** Shows a dialog box to choose a file to open.
+    /** A callback function type used by the async file chooser methods.
 
-        This will display the dialog, and if the user chooses a file, the full
-        pathname is returned by getResult().
-
-        @param previewComponent   an optional component to display inside the dialog,
-                                 for showing previews of the files that the user
-                                 is browsing. The component will not be deleted by this
-                                 object, so the caller must take care of it.
-
-        @returns    true if the user selected a file, false if they cancelled
-
-        @see getResult, browseForMultipleFilesToOpen, browseForFileToSave, browseForDirectory
+        @param success   true if the user selected files, false if they cancelled
+        @param results   the array of selected files (may be empty if cancelled)
     */
-    bool browseForFileToOpen (Component* previewComponent = nullptr);
+    using CompletionCallback = std::function<void (bool, const Array<File>&)>;
+
+    //==============================================================================
+    /** Shows a dialog box to choose a file to open asynchronously.
+
+        This will display the dialog, and when the user makes a selection or cancels,
+        the callback will be invoked on the message thread.
+
+        @param callback           function to call when the dialog completes
+
+        @see browseForMultipleFilesToOpen, browseForFileToSave, browseForDirectory
+    */
+    void browseForFileToOpen (CompletionCallback callback);
 
     /** Same as browseForFileToOpen, but allows the user to select multiple files.
 
-        The chosen files are returned by getResults(). If you only need a single file,
-        use browseForFileToOpen() instead.
+        @param callback           function to call when the dialog completes
 
-        @param previewComponent   an optional component to display inside the dialog
-
-        @returns    true if the user selected one or more files, false if they cancelled
-
-        @see browseForFileToOpen, getResults
+        @see browseForFileToOpen
     */
-    bool browseForMultipleFilesToOpen (Component* previewComponent = nullptr);
+    void browseForMultipleFilesToOpen (CompletionCallback callback);
 
     /** Same as browseForMultipleFilesToOpen and browseForDirectory, but allows the user to select multiple files or directories.
 
-        The chosen files are returned by getResults().
+        @param callback           function to call when the dialog completes
 
-        @param previewComponent   an optional component to display inside the dialog
-
-        @returns    true if the user selected one or more files or directories, false if they cancelled
-
-        @see browseForMultipleFilesToOpen, getResults
+        @see browseForMultipleFilesToOpen
     */
-    bool browseForMultipleFilesOrDirectoriesToOpen (Component* previewComponent = nullptr);
+    void browseForMultipleFilesOrDirectoriesToOpen (CompletionCallback callback);
 
-    /** Shows a dialog box to choose a file to save.
+    /** Shows a dialog box to choose a file to save asynchronously.
 
-        This will display the dialog, and if the user chooses a file, the full
-        pathname is returned by getResult().
+        This will display the dialog, and when the user makes a selection or cancels,
+        the callback will be invoked on the message thread.
 
-        @param warnAboutOverwritingExistingFiles     if true, the dialog will ask
-                                                    the user if they're sure they want to
-                                                    overwrite a file that already exists
+        @param callback                             function to call when the dialog completes
+        @param warnAboutOverwritingExistingFiles    if true, the dialog will ask
+                                                   the user if they're sure they want to
+                                                   overwrite a file that already exists
 
-        @returns    true if the user chose a file, false if they cancelled
-
-        @see getResult, browseForFileToOpen
+        @see browseForFileToOpen
     */
-    bool browseForFileToSave (bool warnAboutOverwritingExistingFiles);
+    void browseForFileToSave (CompletionCallback callback, bool warnAboutOverwritingExistingFiles);
 
-    /** Shows a dialog box to choose a directory.
+    /** Shows a dialog box to choose a directory asynchronously.
 
-        This will display the dialog, and if the user chooses a directory, the full
-        pathname is returned by getResult().
+        This will display the dialog, and when the user makes a selection or cancels,
+        the callback will be invoked on the message thread.
 
-        @returns    true if the user chose a directory, false if they cancelled
+        @param callback function to call when the dialog completes
 
-        @see getResult, browseForFileToOpen
+        @see browseForFileToOpen
     */
-    bool browseForDirectory();
+    void browseForDirectory (CompletionCallback callback);
 
-    /** Runs a modal file browser.
+    /** Runs a modal file browser asynchronously.
 
+        @param callback             function to call when the dialog completes
         @param flags                a set of flags to specify which type of browser to use
-        @param previewComponent     an optional component to display inside the dialog
-
-        @returns    true if the user chose a file, false if they cancelled
     */
-    bool showDialog (int flags, Component* previewComponent);
-
-    //==============================================================================
-    /** Returns the last file that was chosen by one of the browse methods.
-
-        After calling the appropriate browse method, this method lets you
-        find out what file or directory they chose.
-
-        Note that the file returned is only valid if the browse method returned true
-        (i.e. if the user pressed 'ok' rather than cancelling).
-
-        If you're using a multiple-file select, then use getResults() to get the
-        list of all files chosen.
-
-        @see getResults, browseForFileToOpen, browseForFileToSave, browseForDirectory
-    */
-    File getResult() const;
-
-    /** Returns a list of all the files that were chosen during the last call to a
-        browse method.
-
-        This array may be empty if no files were chosen, or can contain multiple entries
-        if multiple files were chosen.
-
-        @see getResult
-    */
-    Array<File> getResults() const;
+    void showDialog (CompletionCallback callback, int flags);
 
 private:
     //==============================================================================
@@ -212,14 +190,19 @@ private:
     static constexpr int doNotResolveSymlinks = 1 << 7;
     static constexpr int warnAboutOverwriting = 1 << 8;
 
-    friend void yup_fileChooserAddFileResult (FileChooser& chooser, File path);
+    FileChooser (const String& dialogBoxTitle,
+                 const File& initialFileOrDirectory = File(),
+                 const String& filePatternsAllowed = String(),
+                 bool useOSNativeDialogBox = true,
+                 bool treatFilePackagesAsDirs = false);
 
-    void showPlatformDialog (int flags, Component* previewComponent);
+    void showPlatformDialog (CompletionCallback callback, int flags);
     String getFilePatternsForPlatform() const;
+    void invokeCallback (CompletionCallback callback, bool success, const Array<File>& results);
+    CompletionCallback createCapturingCallback (CompletionCallback callback);
 
     String title, filters;
     File startingFile;
-    Array<File> results;
     bool useNativeDialogBox;
     bool packageDirsAsFiles;
 

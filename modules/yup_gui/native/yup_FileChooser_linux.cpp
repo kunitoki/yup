@@ -22,12 +22,14 @@
 namespace yup
 {
 
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     const bool isSave = (flags & saveMode) != 0;
     const bool canChooseFiles = (flags & canSelectFiles) != 0;
     const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
     const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
+
+    Array<File> results;
 
     String command = "zenity --file-selection";
 
@@ -93,6 +95,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
             results.add (File (output));
         }
     }
+
+    // Invoke callback with results
+    invokeCallback(std::move(callback), result == 0 && results.size() > 0, results);
 }
 
 } // namespace yup

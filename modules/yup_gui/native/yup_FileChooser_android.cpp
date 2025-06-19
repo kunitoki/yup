@@ -107,18 +107,16 @@ static StringArray createMimeTypes (const String& filters)
 class AndroidFileChooserCallback
 {
 public:
-    AndroidFileChooserCallback (FileChooser* chooser)
-        : fileChooser (chooser)
+    AndroidFileChooserCallback (FileChooser::CompletionCallback cb)
+        : callback (std::move (cb))
         , completed (false)
     {
     }
 
     void onActivityResult (int requestCode, int resultCode, LocalRef<jobject> data)
     {
-        if (fileChooser == nullptr)
-            return;
-
         auto* env = getEnv();
+        Array<File> results;
 
         if (resultCode == -1) // RESULT_OK
         {
@@ -137,7 +135,7 @@ public:
                     if (resultFile == File())
                         resultFile = File (pathString); // Use the URI as-is
 
-                    fileChooser->results.add (resultFile);
+                    results.add (resultFile);
                 }
 
                 // Handle multiple file selection
@@ -161,12 +159,18 @@ public:
                                 if (resultFile == File())
                                     resultFile = File (itemPathString);
 
-                                fileChooser->results.add (resultFile);
+                                results.add (resultFile);
                             }
                         }
                     }
                 }
             }
+        }
+
+        // Invoke callback with results
+        if (callback)
+        {
+            callback (resultCode == -1, results);
         }
 
         completed = true;
@@ -175,7 +179,7 @@ public:
     bool isCompleted() const { return completed; }
 
 private:
-    FileChooser* fileChooser;
+    FileChooser::CompletionCallback callback;
     bool completed;
 };
 
@@ -191,7 +195,7 @@ extern "C" JNIEXPORT void JNICALL
     }
 }
 
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     const bool isSave = (flags & saveMode) != 0;
     const bool canChooseFiles = (flags & canSelectFiles) != 0;
@@ -204,8 +208,8 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         return;
 
     // Create the callback
-    AndroidFileChooserCallback callback (this);
-    currentCallback = &callback;
+    AndroidFileChooserCallback androidCallback (std::move (callback));
+    currentCallback = &androidCallback;
 
     LocalRef<jobject> intent;
 
@@ -284,7 +288,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 
         // Wait for the result (simplified approach)
         auto startTime = Time::getCurrentTime();
-        while (! callback.isCompleted() && (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
+        while (! androidCallback.isCompleted() && (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
         {
             // Process any pending messages
             Thread::sleep (100);

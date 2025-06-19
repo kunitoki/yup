@@ -55,8 +55,8 @@ static String createAcceptAttribute (const String& filters)
 class EmscriptenFileChooser
 {
 public:
-    EmscriptenFileChooser (FileChooser* chooser, String filters, bool isSave, bool canChooseDirectories, bool allowsMultiple)
-        : fileChooser (chooser)
+    EmscriptenFileChooser (FileChooser::CompletionCallback callback, String filters, bool isSave, bool canChooseDirectories, bool allowsMultiple)
+        : callback (std::move (callback))
         , filters (std::move (filters))
         , isSave (isSave)
         , canChooseDirectories (canChooseDirectories)
@@ -285,15 +285,17 @@ public:
 
     void processResults()
     {
+        Array<File> results;
+
         // clang-format off
         EM_ASM ({
             if (Module.fileChooserResults)
             {
-                var results = Module.fileChooserResults;
+                var jsResults = Module.fileChooserResults;
 
-                for (var i = 0; i < results.length; i++)
+                for (var i = 0; i < jsResults.length; i++)
                 {
-                    var result = results[i];
+                    var result = jsResults[i];
                     var path = result.path || ('/tmp/' + result.name);
 
                     // Call back to C++ with the file path
@@ -305,10 +307,17 @@ public:
         }, this);
         // clang-format on
 
+        // Invoke callback with collected results
+        if (callback)
+        {
+            callback (results.size() > 0, results);
+        }
+
         completed = true;
     }
 
-    FileChooser* fileChooser;
+    FileChooser::CompletionCallback callback;
+    Array<File> results;
     String filters;
     bool isSave;
     bool canChooseDirectories;
@@ -318,6 +327,8 @@ public:
 
 static EmscriptenFileChooser* currentFileChooser = nullptr;
 
+extern "C" {
+void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
 void yup_fileChooserAddFileResult (FileChooser& chooser, File path)
 {
     chooser.results.add (std::move (path));
@@ -338,13 +349,13 @@ extern "C"
     }
 } // extern "C"
 
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     const bool isSave = (flags & saveMode) != 0;
     const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
     const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
 
-    EmscriptenFileChooser chooser (this, filters, isSave, canChooseDirectories, allowsMultiple);
+    EmscriptenFileChooser chooser (std::move (callback), filters, isSave, canChooseDirectories, allowsMultiple);
     currentFileChooser = &chooser;
 
     chooser.showDialog();

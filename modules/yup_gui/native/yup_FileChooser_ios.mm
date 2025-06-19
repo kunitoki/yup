@@ -19,9 +19,47 @@
   ==============================================================================
 */
 
+//==============================================================================
+@interface YUPFileChooserDelegate : NSObject <UIDocumentPickerDelegate>
+@property (nonatomic) yup::FileChooser::CompletionCallback callback;
+@property (nonatomic) yup::Array<yup::File> results;
+@end
+
+@implementation YUPFileChooserDelegate
+
+- (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls
+{
+    for (NSURL* url in urls)
+    {
+        NSString* path = [url path];
+        if (path != nil)
+            self.results.add (yup::File (yup::String::fromUTF8 ([path UTF8String])));
+    }
+
+    yup::MessageManager::callAsync ([self]
+    {
+        if (self.callback)
+            self.callback (true, self.results);
+
+        self.results.clear();
+    });
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController*)controller
+{
+    yup::MessageManager::callAsync ([self]
+    {
+        if (self.callback)
+            self.callback (false, {});
+    });
+}
+
+@end
+
 namespace yup
 {
 
+//==============================================================================
 // For iOS 13.0 compatibility, we use string-based UTI identifiers
 static NSArray<NSString*>* createDocumentTypes(const String& filters)
 {
@@ -82,6 +120,7 @@ static NSArray<NSString*>* createDocumentTypes(const String& filters)
     return [NSArray arrayWithArray:types];
 }
 
+//==============================================================================
 // iOS 14.0+ version using UTType
 static NSArray* createUTTypes(const String& filters) API_AVAILABLE(ios(14.0))
 {
@@ -121,42 +160,8 @@ static NSArray* createUTTypes(const String& filters) API_AVAILABLE(ios(14.0))
     return nil;
 }
 
-} // namespace yup
-
-@interface YUPFileChooserDelegate : NSObject <UIDocumentPickerDelegate>
-@property (nonatomic) yup::FileChooser* fileChooser;
-@property (nonatomic) yup::Array<yup::File>* results;
-@property (nonatomic) BOOL completed;
-@end
-
-@implementation YUPFileChooserDelegate
-
-- (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls
-{
-    if (self.results != nullptr)
-    {
-        for (NSURL* url in urls)
-        {
-            NSString* path = [url path];
-            if (path != nil)
-                self.results->add(yup::File(yup::String::fromUTF8([path UTF8String])));
-        }
-    }
-
-    self.completed = YES;
-}
-
-- (void)documentPickerWasCancelled:(UIDocumentPickerViewController*)controller
-{
-    self.completed = YES;
-}
-
-@end
-
-namespace yup
-{
-
-void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
+//==============================================================================
+void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
 {
     YUP_AUTORELEASEPOOL
     {
@@ -199,7 +204,10 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
 
         rootViewController = keyWindow.rootViewController;
         if (rootViewController == nil)
+        {
+            callback (false, {});
             return;
+        }
 
         UIDocumentPickerViewController* documentPicker = nil;
 
@@ -275,27 +283,19 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
         }
 
         if (documentPicker == nil)
+        {
+            callback (false, {});
             return;
+        }
 
         YUPFileChooserDelegate* delegate = [[YUPFileChooserDelegate alloc] init];
-        delegate.fileChooser = this;
-        delegate.results = &results;
-        delegate.completed = NO;
+        delegate.callback = std::move (callback);
+        delegate.results = yup::Array<yup::File>();
 
         documentPicker.delegate = delegate;
         documentPicker.modalPresentationStyle = UIModalPresentationPageSheet;
 
-        // Present the document picker
-        [rootViewController presentViewController:documentPicker animated:YES completion:nil];
-
-        // Wait for completion using CFRunLoop
-        // This processes UI events while waiting for the delegate callbacks
-        /*while (!delegate.completed)
-        {
-            @autoreleasepool {
-                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
-            }
-        }*/
+        [rootViewController presentViewController:documentPicker animated:NO completion:nil];
     }
 }
 
