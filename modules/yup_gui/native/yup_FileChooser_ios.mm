@@ -192,10 +192,9 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
 
         if (keyWindow == nil)
         {
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+            YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
             keyWindow = [UIApplication sharedApplication].keyWindow;
-#pragma clang diagnostic pop
+            YUP_END_IGNORE_DEPRECATION_WARNINGS
         }
 
         rootViewController = keyWindow.rootViewController;
@@ -235,10 +234,10 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
                 // For iOS 13.0, save mode is not directly supported with document picker
                 // We'll fall back to the open mode
                 NSArray<NSString*>* documentTypes = createDocumentTypes(filters);
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+
+                YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
                 documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:documentTypes inMode:UIDocumentPickerModeOpen];
-#pragma clang diagnostic pop
+                YUP_END_IGNORE_DEPRECATION_WARNINGS
             }
         }
         else
