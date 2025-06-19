@@ -52,22 +52,27 @@ static String createAcceptAttribute (const String& filters)
 }
 
 //==============================================================================
-class EmscriptenFileChooser
+class EmscriptenFileChooser : public ReferenceCountedObject
 {
 public:
-    EmscriptenFileChooser (FileChooser::CompletionCallback callback, String filters, bool isSave, bool canChooseDirectories, bool allowsMultiple)
-        : callback (std::move (callback))
-        , filters (std::move (filters))
+    using Ptr = ReferenceCountedObjectPtr<EmscriptenFileChooser>;
+
+    EmscriptenFileChooser (String filters, bool isSave, bool canChooseDirectories, bool allowsMultiple)
+        : filters (std::move (filters))
         , isSave (isSave)
         , canChooseDirectories (canChooseDirectories)
         , allowsMultiple (allowsMultiple)
-        , completed (false)
     {
     }
 
-    bool isCompleted() const
+    void setCallback (FileChooser::CompletionCallback callback)
     {
-        return completed;
+        this->callback = std::move (callback);
+    }
+
+    void addFileResult (File path)
+    {
+        results.add (std::move (path));
     }
 
     void showDialog()
@@ -285,8 +290,6 @@ public:
 
     void processResults()
     {
-        Array<File> results;
-
         // clang-format off
         EM_ASM ({
             if (Module.fileChooserResults)
@@ -307,13 +310,8 @@ public:
         }, this);
         // clang-format on
 
-        // Invoke callback with collected results
         if (callback)
-        {
             callback (results.size() > 0, results);
-        }
-
-        completed = true;
     }
 
     FileChooser::CompletionCallback callback;
@@ -329,41 +327,35 @@ static EmscriptenFileChooser* currentFileChooser = nullptr;
 
 extern "C"
 {
-    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser) void yup_fileChooserAddFileResult (FileChooser& chooser, File path)
+
+void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+{
+    if (chooser != nullptr)
+        chooser->processResults();
+}
+
+void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+{
+    if (chooser != nullptr && path != nullptr)
+        chooser->addFileResult (File (String::fromUTF8 (path)));
+}
+
+} // extern "C"
+
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
+{
+    const bool isSave = (flags & saveMode) != 0;
+    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
+    const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
+
+    auto chooser = EmscriptenFileChooser::Ptr{ new EmscriptenFileChooser (filters, isSave, canChooseDirectories, allowsMultiple) };
+
+    chooser->setCallback ([callback = std::move (callback), chooser] (bool success, const Array<File>& results)
     {
-        chooser.results.add (std::move (path));
-    }
+        callback (success, results);
+    });
 
-    extern "C"
-    {
-        void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
-        {
-            if (chooser != nullptr)
-                chooser->processResults();
-        }
-
-        void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
-        {
-            if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
-                yup_fileChooserAddFileResult (*chooser->fileChooser, File (String::fromUTF8 (path)));
-        }
-    } // extern "C"
-
-    void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
-    {
-        const bool isSave = (flags & saveMode) != 0;
-        const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
-        const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
-
-        EmscriptenFileChooser chooser (std::move (callback), filters, isSave, canChooseDirectories, allowsMultiple);
-        currentFileChooser = &chooser;
-
-        chooser.showDialog();
-
-        while (! chooser.isCompleted())
-            emscripten_sleep (10);
-
-        currentFileChooser = nullptr;
-    }
+    chooser->showDialog();
+}
 
 } // namespace yup
