@@ -89,7 +89,7 @@ public:
             }
         }
 
-        MessageManager::callAsync ([callback = std::move (callback), result, std::move (results)]
+        MessageManager::callAsync ([callback = std::move (callback), result, results = std::move (results)]
         {
             callback (result == 0 && results.size() > 0, results);
         });
@@ -110,8 +110,6 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     const bool canChooseFiles = (flags & canSelectFiles) != 0;
     const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
     const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
-
-    Array<File> results;
 
     String command = "zenity --file-selection";
 
