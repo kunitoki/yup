@@ -127,6 +127,18 @@ public:
     */
     bool browseForMultipleFilesToOpen (Component* previewComponent = nullptr);
 
+    /** Same as browseForMultipleFilesToOpen and browseForDirectory, but allows the user to select multiple files or directories.
+
+        The chosen files are returned by getResults().
+
+        @param previewComponent   an optional component to display inside the dialog
+
+        @returns    true if the user selected one or more files or directories, false if they cancelled
+
+        @see browseForMultipleFilesToOpen, getResults
+    */
+    bool browseForMultipleFilesOrDirectoriesToOpen (Component* previewComponent = nullptr);
+
     /** Shows a dialog box to choose a file to save.
 
         This will display the dialog, and if the user chooses a file, the full
@@ -188,33 +200,28 @@ public:
     */
     Array<File> getResults() const;
 
-    //==============================================================================
-    /** For dialog boxes that can return multiple files, this indicates whether the
-        user can select multiple files or not.
-
-        This is used for browsing in multi-select mode, where the user can select
-        multiple files to be returned.
-    */
-    static const int openMode = 1,
-                     saveMode = 2,
-                     canSelectFiles = 4,
-                     canSelectDirectories = 8,
-                     canSelectMultipleItems = 16,
-                     useDialogForAll = 32,
-                     treatFilePackagesAsDirs = 64,
-                     doNotResolveSymlinks = 128,
-                     warnAboutOverwriting = 256;
-
 private:
     //==============================================================================
+    static constexpr int openMode                   = 1 << 0;
+    static constexpr int saveMode                   = 1 << 1;
+    static constexpr int canSelectFiles             = 1 << 2;
+    static constexpr int canSelectDirectories       = 1 << 3;
+    static constexpr int canSelectMultipleItems     = 1 << 4;
+    static constexpr int useDialogForAll            = 1 << 5;
+    static constexpr int treatFilePackagesAsDirs    = 1 << 6;
+    static constexpr int doNotResolveSymlinks       = 1 << 7;
+    static constexpr int warnAboutOverwriting       = 1 << 8;
+
+    friend void yup_fileChooserAddFileResult (FileChooser& chooser, File path);
+
+    void showPlatformDialog (int flags, Component* previewComponent);
+    String getFilePatternsForPlatform() const;
+
     String title, filters;
     File startingFile;
     Array<File> results;
     bool useNativeDialogBox;
     bool packageDirsAsFiles;
-
-    void showPlatformDialog (int flags, Component* previewComponent);
-    String getFilePatternsForPlatform() const;
 
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileChooser)

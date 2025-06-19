@@ -55,19 +55,23 @@ static String createAcceptAttribute (const String& filters)
 class EmscriptenFileChooser
 {
 public:
-    EmscriptenFileChooser (FileChooser* chooser, int flags)
+    EmscriptenFileChooser (FileChooser* chooser, String filters, bool isSave, bool canChooseDirectories, bool allowsMultiple)
         : fileChooser (chooser)
-        , dialogFlags (flags)
+        , filters (std::move (filters))
+        , isSave (isSave)
+        , canChooseDirectories (canChooseDirectories)
+        , allowsMultiple (allowsMultiple)
         , completed (false)
     {
     }
 
+    bool isCompleted() const
+    {
+        return completed;
+    }
+
     void showDialog()
     {
-        const bool isSave = (dialogFlags & FileChooser::saveMode) != 0;
-        const bool canChooseDirectories = (dialogFlags & FileChooser::canSelectDirectories) != 0;
-        const bool allowsMultiple = (dialogFlags & FileChooser::canSelectMultipleItems) != 0;
-
         if (isSave)
         {
             // For save operations, we'll create a download link
@@ -87,36 +91,34 @@ public:
         }
     }
 
-    bool isCompleted() const { return completed; }
-
-private:
     void showOpenDialog (bool multiple)
     {
         // Create a hidden file input element
-        EM_ASM({
-            var fileInput = document.createElement('input');
+        // clang-format off
+        EM_ASM ({
+            var fileInput = document.createElement ('input');
             fileInput.type = 'file';
             fileInput.style.display = 'none';
 
-            if ($1) { // multiple
+            if ($1) // multiple
                 fileInput.multiple = true;
-            }
 
             var acceptAttr = UTF8ToString($2);
-            if (acceptAttr) {
+            if (acceptAttr)
                 fileInput.accept = acceptAttr;
-            }
 
-            fileInput.onchange = function(event) {
+            fileInput.onchange = function (event)
+            {
                 var files = event.target.files;
                 var fileCount = files.length;
 
                 // Store file information
                 Module.fileChooserResults = [];
 
-                for (var i = 0; i < fileCount; i++) {
+                for (var i = 0; i < fileCount; i++)
+                {
                     var file = files[i];
-                    Module.fileChooserResults.push({
+                    Module.fileChooserResults.push ({
                         name: file.name,
                         size: file.size,
                         type: file.type,
@@ -128,55 +130,65 @@ private:
 
                     // Read file content and store it in the virtual filesystem
                     var reader = new FileReader();
-                    reader.onload = function(e) {
-                        try {
-                            var data = new Uint8Array(e.target.result);
-                            FS.writeFile(virtualPath, data);
-                        } catch (err) {
-                            console.warn('Could not write file to virtual filesystem:', err);
+                    reader.onload = function (e)
+                    {
+                        try
+                        {
+                            var data = new Uint8Array (e.target.result);
+                            FS.writeFile (virtualPath, data);
+                        }
+                        catch (err)
+                        {
+                            console.warn ('Could not write file to virtual filesystem:', err);
                         }
                     };
-                    reader.readAsArrayBuffer(file);
+
+                    reader.readAsArrayBuffer (file);
                 }
 
                 // Notify completion
-                Module.ccall('fileChooserCallback', null, ['number'], [$0]);
+                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
 
                 // Clean up
-                document.body.removeChild(fileInput);
+                document.body.removeChild (fileInput);
             };
 
-            fileInput.oncancel = function() {
-                Module.ccall('fileChooserCallback', null, ['number'], [$0]);
-                document.body.removeChild(fileInput);
+            fileInput.oncancel = function()
+             {
+                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
+                document.body.removeChild (fileInput);
             };
 
             document.body.appendChild(fileInput);
             fileInput.click();
-        }, this, allowsMultiple ? 1 : 0, createAcceptAttribute (fileChooser->filters).toRawUTF8());
+        }, this, (allowsMultiple ? 1 : 0), (createAcceptAttribute (filters).toRawUTF8()));
+        // clang-format on
     }
 
     void showDirectoryDialog()
     {
-        EM_ASM({
-            var fileInput = document.createElement('input');
+        // clang-format off
+        EM_ASM ({
+            var fileInput = document.createElement ('input');
             fileInput.type = 'file';
             fileInput.style.display = 'none';
             fileInput.webkitdirectory = true;
 
-            fileInput.onchange = function(event) {
+            fileInput.onchange = function (event)
+            {
                 var files = event.target.files;
                 var fileCount = files.length;
 
                 Module.fileChooserResults = [];
 
-                if (fileCount > 0) {
+                if (fileCount > 0)
+                {
                     // Get the directory name from the first file's path
                     var firstFile = files[0];
-                    var pathParts = firstFile.webkitRelativePath.split('/');
+                    var pathParts = firstFile.webkitRelativePath.split ('/');
                     var dirName = pathParts[0];
 
-                    Module.fileChooserResults.push({
+                    Module.fileChooserResults.push ({
                         name: dirName,
                         isDirectory: true,
                         path: '/tmp/' + dirName
@@ -185,22 +197,28 @@ private:
                     // Create directory structure in virtual filesystem
                     var processedDirs = new Set();
 
-                    for (var i = 0; i < fileCount; i++) {
+                    for (var i = 0; i < fileCount; i++)
+                    {
                         var file = files[i];
                         var relativePath = file.webkitRelativePath;
                         var fullPath = '/tmp/' + relativePath;
 
                         // Create directories
-                        var pathParts = relativePath.split('/');
+                        var pathParts = relativePath.split ('/');
                         var currentPath = '/tmp';
 
-                        for (var j = 0; j < pathParts.length - 1; j++) {
+                        for (var j = 0; j < pathParts.length - 1; j++)
+                        {
                             currentPath += '/' + pathParts[j];
-                            if (!processedDirs.has(currentPath)) {
-                                try {
-                                    FS.mkdir(currentPath);
-                                    processedDirs.add(currentPath);
-                                } catch (err) {
+                            if (! processedDirs.has(currentPath))
+                            {
+                                try
+                                {
+                                    FS.mkdir (currentPath);
+                                    processedDirs.add (currentPath);
+                                }
+                                catch (err)
+                                {
                                     // Directory might already exist
                                 }
                             }
@@ -208,115 +226,130 @@ private:
 
                         // Write file
                         var reader = new FileReader();
-                        reader.onload = function(e) {
-                            try {
-                                var data = new Uint8Array(e.target.result);
-                                FS.writeFile(fullPath, data);
-                            } catch (err) {
-                                console.warn('Could not write file to virtual filesystem:', err);
+                        reader.onload = function (e)
+                        {
+                            try
+                            {
+                                var data = new Uint8Array (e.target.result);
+                                FS.writeFile (fullPath, data);
+                            }
+                            catch (err)
+                            {
+                                console.warn ('Could not write file to virtual filesystem:', err);
                             }
                         };
-                        reader.readAsArrayBuffer(file);
+
+                        reader.readAsArrayBuffer (file);
                     }
                 }
 
-                Module.ccall('fileChooserCallback', null, ['number'], [$0]);
-                document.body.removeChild(fileInput);
+                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
+                document.body.removeChild (fileInput);
             };
 
-            fileInput.oncancel = function() {
-                Module.ccall('fileChooserCallback', null, ['number'], [$0]);
-                document.body.removeChild(fileInput);
+            fileInput.oncancel = function()
+            {
+                Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
+                document.body.removeChild (fileInput);
             };
 
             document.body.appendChild(fileInput);
             fileInput.click();
         }, this);
+        // clang-format on
     }
 
     void showSaveDialog()
     {
-        // For save operations in the browser, we typically use download links
-        // This is a placeholder - the actual save would need to be triggered
-        // by the application when it has content to save
+        // clang-format off
+        EM_ASM ({
+            var filename = prompt ('Enter filename:');
 
-        EM_ASM({
-            // Create a simple prompt for filename
-            var filename = prompt('Enter filename:');
-
-            if (filename) {
-                Module.fileChooserResults = [{
-                    name: filename,
-                    isSave: true,
-                    path: '/tmp/' + filename
-                }];
-            } else {
+            if (filename)
+            {
+                var result = {};
+                result['name'] = filename;
+                result['isSave'] = true;
+                result['path'] = '/tmp/' + filename;
+                Module.fileChooserResults = [result];
+            }
+            else
+            {
                 Module.fileChooserResults = [];
             }
 
-            Module.ccall('fileChooserCallback', null, ['number'], [$0]);
+            Module.ccall ('fileChooserCallback', null, ['number'], [$0]);
         }, this);
+        // clang-format on
     }
 
     void processResults()
     {
-        EM_ASM({
-            if (Module.fileChooserResults) {
+        // clang-format off
+        EM_ASM ({
+            if (Module.fileChooserResults)
+            {
                 var results = Module.fileChooserResults;
 
-                for (var i = 0; i < results.length; i++) {
+                for (var i = 0; i < results.length; i++)
+                {
                     var result = results[i];
                     var path = result.path || ('/tmp/' + result.name);
 
                     // Call back to C++ with the file path
-                    Module.ccall('addFileResult', null, ['number', 'string'], [$0, path]);
+                    Module.ccall ('addFileResult', null, ['number', 'string'], [$0, path]);
                 }
 
                 delete Module.fileChooserResults;
             }
         }, this);
+        // clang-format on
 
         completed = true;
     }
 
     FileChooser* fileChooser;
-    int dialogFlags;
+    String filters;
+    bool isSave;
+    bool canChooseDirectories;
+    bool allowsMultiple;
     bool completed;
 };
 
 static EmscriptenFileChooser* currentFileChooser = nullptr;
 
-extern "C"
+void yup_fileChooserAddFileResult (FileChooser& chooser, File path)
 {
-    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
-    {
-        if (chooser != nullptr)
-        {
-            chooser->processResults();
-        }
-    }
-
-    void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
-    {
-        if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
-        {
-            chooser->fileChooser->results.add (File (String::fromUTF8 (path)));
-        }
-    }
+    chooser.results.add (std::move (path));
 }
+
+extern "C" {
+void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+{
+    if (chooser != nullptr)
+        chooser->processResults();
+}
+
+void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+{
+    if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
+        yup_fileChooserAddFileResult (*chooser->fileChooser, File (String::fromUTF8 (path)));
+}
+} // extern "C"
 
 void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 {
-    EmscriptenFileChooser chooser (this, flags);
+    const bool isSave = (flags & saveMode) != 0;
+    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
+    const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
+
+    EmscriptenFileChooser chooser (this, filters, isSave, canChooseDirectories, allowsMultiple);
     currentFileChooser = &chooser;
 
     chooser.showDialog();
 
-    // Wait for completion
     while (! chooser.isCompleted())
-    {
         emscripten_sleep (10);
-    }
 
     currentFileChooser = nullptr;
 }

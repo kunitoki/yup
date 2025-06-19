@@ -22,26 +22,30 @@
 namespace yup
 {
 
-static bool runZenityDialog (const String& title, const String& startingPath, const String& filters, int flags, Array<File>& results)
+void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 {
-    const bool isSave = (flags & FileChooser::saveMode) != 0;
-    const bool canChooseDirectories = (flags & FileChooser::canSelectDirectories) != 0;
-    const bool allowsMultiple = (flags & FileChooser::canSelectMultipleItems) != 0;
+    const bool isSave = (flags & saveMode) != 0;
+    const bool canChooseFiles = (flags & canSelectFiles) != 0;
+    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
+    const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
 
     String command = "zenity --file-selection";
 
     if (isSave)
         command += " --save";
+
     if (canChooseDirectories)
         command += " --directory";
+
     if (allowsMultiple && ! isSave)
         command += " --multiple";
+
     if (title.isNotEmpty())
         command += " --title=\"" + title + "\"";
-    if (startingPath.isNotEmpty())
-        command += " --filename=\"" + startingPath + "\"";
 
-    // Add file filters for zenity
+    if (auto path = startingFile.getFullPathName(); path.isNotEmpty())
+        command += " --filename=\"" + path + "\"";
+
     if (filters.isNotEmpty() && ! canChooseDirectories)
     {
         StringArray extensions = StringArray::fromTokens (filters, ";,", String());
@@ -62,18 +66,15 @@ static bool runZenityDialog (const String& title, const String& startingPath, co
 
     FILE* pipe = popen (command.toUTF8(), "r");
     if (pipe == nullptr)
-        return false;
+        return;
 
     char buffer[4096];
     String output;
 
     while (fgets (buffer, sizeof (buffer), pipe) != nullptr)
-    {
         output += String::fromUTF8 (buffer);
-    }
 
     int result = pclose (pipe);
-
     if (result == 0 && output.isNotEmpty())
     {
         output = output.trim();
@@ -91,23 +92,7 @@ static bool runZenityDialog (const String& title, const String& startingPath, co
         {
             results.add (File (output));
         }
-
-        return results.size() > 0;
     }
-
-    return false;
-}
-
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
-{
-    const bool isSave = (flags & saveMode) != 0;
-    const bool canChooseFiles = (flags & canSelectFiles) != 0;
-    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
-    const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
-
-    // First try zenity (works on most Linux distributions)
-    if (runZenityDialog (title, startingFile.getFullPathName(), filters, flags, results))
-        return;
 }
 
 } // namespace yup

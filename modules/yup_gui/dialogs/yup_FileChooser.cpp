@@ -44,9 +44,7 @@ FileChooser::FileChooser (const String& dialogBoxTitle,
     }
 }
 
-FileChooser::~FileChooser()
-{
-}
+FileChooser::~FileChooser() = default;
 
 //==============================================================================
 bool FileChooser::browseForFileToOpen (Component* previewComponent)
@@ -59,11 +57,14 @@ bool FileChooser::browseForMultipleFilesToOpen (Component* previewComponent)
     return showDialog (openMode | canSelectFiles | canSelectMultipleItems, previewComponent);
 }
 
+bool FileChooser::browseForMultipleFilesOrDirectoriesToOpen (Component* previewComponent)
+{
+    return showDialog (openMode | canSelectFiles | canSelectDirectories | canSelectMultipleItems, previewComponent);
+}
+
 bool FileChooser::browseForFileToSave (bool warnAboutOverwritingExistingFiles)
 {
-    return showDialog (saveMode | canSelectFiles
-                           | (warnAboutOverwritingExistingFiles ? warnAboutOverwriting : 0),
-                       nullptr);
+    return showDialog (saveMode | canSelectFiles | (warnAboutOverwritingExistingFiles ? warnAboutOverwriting : 0), nullptr);
 }
 
 bool FileChooser::browseForDirectory()
@@ -73,6 +74,8 @@ bool FileChooser::browseForDirectory()
 
 bool FileChooser::showDialog (int flags, Component* previewComponent)
 {
+    YUP_ASSERT_MESSAGE_THREAD
+
     results.clear();
 
     showPlatformDialog (flags, previewComponent);
