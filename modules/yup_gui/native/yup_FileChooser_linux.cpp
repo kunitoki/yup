@@ -89,7 +89,7 @@ public:
             }
         }
 
-        MessageManager::callAsync([callback = std::move (callback), result, std::move (results)]
+        MessageManager::callAsync ([callback = std::move (callback), result, std::move (results)]
         {
             callback (result == 0 && results.size() > 0, results);
         });

@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-#if !YUP_LINUX
+#if ! YUP_LINUX
 class FileChooserImpl
 {
 public:
