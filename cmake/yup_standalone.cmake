@@ -162,6 +162,7 @@ function (yup_standalone_app)
             $<$<CONFIG:DEBUG>:-gsource-map -g>
             -fexceptions
             -pthread
+            -Wno-pthreads-mem-growth
             -sWASM=1
             -sWASM_WORKERS=1
             -sAUDIO_WORKLET=1
@@ -182,9 +183,6 @@ function (yup_standalone_app)
             -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${YUP_ARG_CUSTOM_SHELL}")
-
-        list (APPEND additional_link_options
-            -Wno-pthreads-mem-growth)
 
         foreach (preload_file ${YUP_ARG_PRELOAD_FILES})
             list (APPEND additional_link_options --preload-file ${preload_file})
