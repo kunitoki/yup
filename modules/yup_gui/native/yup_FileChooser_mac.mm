@@ -116,7 +116,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
                 if (result == NSModalResponseOK)
                 {
-                    NSURL* url = [panel URL];
+                    auto* url = [panel URL];
                     if (url != nil)
                     {
                         NSString* path = [url path];
@@ -154,11 +154,15 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
             {
                 Array<File> results;
 
-                for (NSURL* url in urls)
+                auto* urls = [panel URLs];
+                if (urls != nil)
                 {
-                    NSString* path = [url path];
-                    if (path != nil)
-                        results.add (File (String::fromUTF8 ([path UTF8String])));
+                    for (NSURL* url in urls)
+                    {
+                        NSString* path = [url path];
+                        if (path != nil)
+                            results.add (File (String::fromUTF8 ([path UTF8String])));
+                    }
                 }
 
                 MessageManager::callAsync ([this, callback = std::move (callback), result, results]
