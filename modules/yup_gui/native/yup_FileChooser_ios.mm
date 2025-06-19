@@ -126,7 +126,7 @@ static NSArray* createUTTypes(const String& filters) API_AVAILABLE(ios(14.0))
 @interface YUPFileChooserDelegate : NSObject <UIDocumentPickerDelegate>
 @property (nonatomic) yup::FileChooser* fileChooser;
 @property (nonatomic) yup::Array<yup::File>* results;
-@property (nonatomic) bool completed;
+@property (nonatomic) BOOL completed;
 @end
 
 @implementation YUPFileChooserDelegate
@@ -143,12 +143,12 @@ static NSArray* createUTTypes(const String& filters) API_AVAILABLE(ios(14.0))
         }
     }
 
-    self.completed = true;
+    self.completed = YES;
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController*)controller
 {
-    self.completed = true;
+    self.completed = YES;
 }
 
 @end
@@ -265,10 +265,9 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
                 else
                     documentTypes = createDocumentTypes(filters);
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                YUP_BEGIN_IGNORE_DEPRECATION_WARNINGS
                 documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:documentTypes inMode:UIDocumentPickerModeOpen];
-#pragma clang diagnostic pop
+                YUP_END_IGNORE_DEPRECATION_WARNINGS
 
                 if (@available(iOS 11.0, *))
                     documentPicker.allowsMultipleSelection = allowsMultiple;
@@ -281,20 +280,22 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
         YUPFileChooserDelegate* delegate = [[YUPFileChooserDelegate alloc] init];
         delegate.fileChooser = this;
         delegate.results = &results;
-        delegate.completed = false;
+        delegate.completed = NO;
 
         documentPicker.delegate = delegate;
         documentPicker.modalPresentationStyle = UIModalPresentationPageSheet;
 
+        // Present the document picker
         [rootViewController presentViewController:documentPicker animated:YES completion:nil];
 
-        // Wait for completion - this is a simplified approach
-        // In a real application, you might want to use a more sophisticated callback mechanism
-        NSRunLoop* runLoop = [NSRunLoop currentRunLoop];
-        while (!delegate.completed && [runLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]])
+        // Wait for completion using CFRunLoop
+        // This processes UI events while waiting for the delegate callbacks
+        /*while (!delegate.completed)
         {
-            // Keep the run loop alive while waiting
-        }
+            @autoreleasepool {
+                [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.01]];
+            }
+        }*/
     }
 }
 
