@@ -22,12 +22,13 @@
 namespace yup
 {
 
-static NSArray<UTType*>* createUTTypes(const String& filters)
+// For iOS 13.0 compatibility, we use string-based UTI identifiers
+static NSArray<NSString*>* createDocumentTypes(const String& filters)
 {
     if (filters.isEmpty())
-        return @[ UTTypeItem ];
+        return @[ @"public.item" ];
 
-    NSMutableArray<UTType*>* types = [NSMutableArray array];
+    NSMutableArray<NSString*>* types = [NSMutableArray array];
     StringArray extensions = StringArray::fromTokens(filters, ";,", String());
 
     for (const auto& ext : extensions)
@@ -43,17 +44,81 @@ static NSArray<UTType*>* createUTTypes(const String& filters)
         if (extension.isNotEmpty())
         {
             NSString* nsExt = [NSString stringWithUTF8String:extension.toUTF8()];
-            UTType* type = [UTType typeWithFilenameExtension:nsExt];
 
-            if (type != nil)
-                [types addObject:type];
+            // Map common extensions to UTI identifiers
+            NSString* uti = nil;
+            if ([nsExt isEqualToString:@"txt"])
+                uti = @"public.plain-text";
+            else if ([nsExt isEqualToString:@"pdf"])
+                uti = @"com.adobe.pdf";
+            else if ([nsExt isEqualToString:@"png"])
+                uti = @"public.png";
+            else if ([nsExt isEqualToString:@"jpg"] || [nsExt isEqualToString:@"jpeg"])
+                uti = @"public.jpeg";
+            else if ([nsExt isEqualToString:@"mp3"])
+                uti = @"public.mp3";
+            else if ([nsExt isEqualToString:@"mp4"])
+                uti = @"public.mpeg-4";
+            else if ([nsExt isEqualToString:@"zip"])
+                uti = @"public.zip-archive";
+            else if ([nsExt isEqualToString:@"json"])
+                uti = @"public.json";
+            else if ([nsExt isEqualToString:@"xml"])
+                uti = @"public.xml";
+            else
+            {
+                // For unknown extensions, try to create a UTI
+                uti = [NSString stringWithFormat:@"public.%@", nsExt];
+            }
+
+            if (uti != nil)
+                [types addObject:uti];
         }
     }
 
     if (types.count == 0)
-        [types addObject:UTTypeItem];
+        [types addObject:@"public.item"];
 
     return [NSArray arrayWithArray:types];
+}
+
+// iOS 14.0+ version using UTType
+static NSArray* createUTTypes(const String& filters) API_AVAILABLE(ios(14.0))
+{
+    if (@available(iOS 14.0, *))
+    {
+        if (filters.isEmpty())
+            return @[ UTTypeItem ];
+
+        NSMutableArray* types = [NSMutableArray array];
+        StringArray extensions = StringArray::fromTokens(filters, ";,", String());
+
+        for (const auto& ext : extensions)
+        {
+            String extension = ext.trim();
+            if (extension.startsWith("*."))
+                extension = extension.substring(2);
+            else if (extension.startsWith("*"))
+                extension = extension.substring(1);
+            else if (extension.startsWith("."))
+                extension = extension.substring(1);
+
+            if (extension.isNotEmpty())
+            {
+                NSString* nsExt = [NSString stringWithUTF8String:extension.toUTF8()];
+                UTType* type = [UTType typeWithFilenameExtension:nsExt];
+
+                if (type != nil)
+                    [types addObject:type];
+            }
+        }
+
+        if (types.count == 0)
+            [types addObject:UTTypeItem];
+
+        return [NSArray arrayWithArray:types];
+    }
+    return nil;
 }
 
 } // namespace yup
@@ -74,9 +139,7 @@ static NSArray<UTType*>* createUTTypes(const String& filters)
         {
             NSString* path = [url path];
             if (path != nil)
-            {
                 self.results->add(yup::File(yup::String::fromUTF8([path UTF8String])));
-            }
         }
     }
 
@@ -110,28 +173,32 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
         {
             for (UIWindowScene* windowScene in [UIApplication sharedApplication].connectedScenes)
             {
-                if (windowScene.activationState == UISceneActivationStateForegroundActive)
+                if (windowScene.activationState != UISceneActivationStateForegroundActive)
+                    continue;
+
+                for (UIWindow* window in windowScene.windows)
                 {
-                    for (UIWindow* window in windowScene.windows)
+                    if (window.isKeyWindow)
                     {
-                        if (window.isKeyWindow)
-                        {
-                            keyWindow = window;
-                            break;
-                        }
-                    }
-                    if (keyWindow != nil)
+                        keyWindow = window;
                         break;
+                    }
                 }
+
+                if (keyWindow != nil)
+                    break;
             }
         }
-        else
+
+        if (keyWindow == nil)
         {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
             keyWindow = [UIApplication sharedApplication].keyWindow;
+#pragma clang diagnostic pop
         }
 
         rootViewController = keyWindow.rootViewController;
-
         if (rootViewController == nil)
             return;
 
@@ -139,45 +206,74 @@ void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
 
         if (isSave)
         {
-            // For save operations, we'll use the export mode
-            NSURL* tempURL = nil;
-
-            if (startingFile.exists() && startingFile.existsAsFile())
+            // For save operations on iOS 14.0+
+            if (@available(iOS 14.0, *))
             {
-                tempURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]];
+                NSURL* tempURL = nil;
+
+                if (startingFile.exists() && startingFile.existsAsFile())
+                {
+                    tempURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]];
+                }
+                else
+                {
+                    // Create a temporary file for export
+                    NSString* tempDir = NSTemporaryDirectory();
+                    NSString* fileName = startingFile.getFileName().isEmpty() ? @"untitled" : [NSString stringWithUTF8String:startingFile.getFileName().toUTF8()];
+                    NSString* tempPath = [tempDir stringByAppendingPathComponent:fileName];
+                    tempURL = [NSURL fileURLWithPath:tempPath];
+
+                    // Create empty file
+                    [@"" writeToURL:tempURL atomically:YES encoding:NSUTF8StringEncoding error:nil];
+                }
+
+                if (tempURL != nil)
+                    documentPicker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[ tempURL ]];
             }
             else
             {
-                // Create a temporary file for export
-                NSString* tempDir = NSTemporaryDirectory();
-                NSString* fileName = startingFile.getFileName().isEmpty() ? @"untitled" : [NSString stringWithUTF8String:startingFile.getFileName().toUTF8()];
-                NSString* tempPath = [tempDir stringByAppendingPathComponent:fileName];
-                tempURL = [NSURL fileURLWithPath:tempPath];
-
-                // Create empty file
-                [@"" writeToURL:tempURL atomically:YES encoding:NSUTF8StringEncoding error:nil];
-            }
-
-            if (tempURL != nil)
-            {
-                documentPicker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[ tempURL ]];
+                // For iOS 13.0, save mode is not directly supported with document picker
+                // We'll fall back to the open mode
+                NSArray<NSString*>* documentTypes = createDocumentTypes(filters);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:documentTypes inMode:UIDocumentPickerModeOpen];
+#pragma clang diagnostic pop
             }
         }
         else
         {
-            NSArray<UTType*>* allowedTypes;
-
-            if (canChooseDirectories && !canChooseFiles)
+            if (@available(iOS 14.0, *))
             {
-                allowedTypes = @[ UTTypeFolder ];
+                // iOS 14.0+ using UTType
+                NSArray* allowedTypes;
+
+                if (canChooseDirectories && !canChooseFiles)
+                    allowedTypes = @[ UTTypeFolder ];
+                else
+                    allowedTypes = createUTTypes(filters);
+
+                documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:allowedTypes];
+                documentPicker.allowsMultipleSelection = allowsMultiple;
             }
             else
             {
-                allowedTypes = createUTTypes(filters);
-            }
+                // iOS 13.0 using string-based document types
+                NSArray<NSString*>* documentTypes;
 
-            documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:allowedTypes];
-            documentPicker.allowsMultipleSelection = allowsMultiple;
+                if (canChooseDirectories && !canChooseFiles)
+                    documentTypes = @[ @"public.folder" ];
+                else
+                    documentTypes = createDocumentTypes(filters);
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+                documentPicker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:documentTypes inMode:UIDocumentPickerModeOpen];
+#pragma clang diagnostic pop
+
+                if (@available(iOS 11.0, *))
+                    documentPicker.allowsMultipleSelection = allowsMultiple;
+            }
         }
 
         if (documentPicker == nil)

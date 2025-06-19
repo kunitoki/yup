@@ -25,6 +25,7 @@
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wempty-body"
  #pragma GCC diagnostic ignored "-Wunused-function"
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
 #include "upstream/graph/gsubgpos-context.cc"

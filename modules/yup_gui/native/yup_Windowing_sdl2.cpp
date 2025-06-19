@@ -1423,9 +1423,6 @@ void initialiseYup_Windowing()
     Desktop::getInstance()->updateScreens();
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
-    // Set the default theme
-    ApplicationTheme::setGlobalTheme (createThemeVersion1());
-
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
     {
@@ -1447,6 +1444,12 @@ void initialiseYup_Windowing()
         if (! timeoutDetector.hasTimedOut())
             Thread::sleep (1);
     });
+
+    // Set the default theme
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    }
 
     SDL2ComponentNative::isInitialised.test_and_set();
 }
