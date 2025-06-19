@@ -23,35 +23,35 @@ namespace yup
 {
 
 //==============================================================================
-static Array<String> parseFileExtensions (const String& pattern)
+static Array<String> parseFileExtensions(const String& pattern)
 {
     Array<String> extensions;
 
     if (pattern.isEmpty())
         return extensions;
 
-    StringArray tokens = StringArray::fromTokens (pattern, ";,", String());
+    StringArray tokens = StringArray::fromTokens(pattern, ";,", String());
 
     for (const auto& token : tokens)
     {
         auto extension = token.trim();
 
-        if (extension.startsWith ("*."))
-            extension = extension.substring (2);
-        else if (extension.startsWith ("*"))
-            extension = extension.substring (1);
+        if (extension.startsWith("*."))
+            extension = extension.substring(2);
+        else if (extension.startsWith("*"))
+            extension = extension.substring(1);
 
         if (extension.isNotEmpty())
-            extensions.add (extension);
+            extensions.add(extension);
     }
 
     return extensions;
 }
 
 //==============================================================================
-static NSArray* createAllowedFileTypes (const String& filters)
+static NSArray* createAllowedFileTypes(const String& filters)
 {
-    auto extensions = parseFileExtensions (filters);
+    auto extensions = parseFileExtensions(filters);
 
     if (extensions.isEmpty())
         return nil;
@@ -69,7 +69,7 @@ static NSArray* createAllowedFileTypes (const String& filters)
 }
 
 //==============================================================================
-void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
+void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
 {
     YUP_AUTORELEASEPOOL
     {
@@ -90,7 +90,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
             if (warnAboutOverwrite)
                 [panel setExtensionHidden:NO];
 
-            NSArray* allowedTypes = createAllowedFileTypes (filters);
+            NSArray* allowedTypes = createAllowedFileTypes(filters);
             if (allowedTypes != nil)
             {
                 [panel setAllowedFileTypes:allowedTypes];
@@ -110,23 +110,22 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
                 }
             }
 
-            [panel beginWithCompletionHandler:^(NSModalResponse result)
-            {
-                Array<File> results;
+            [panel beginWithCompletionHandler:^(NSModalResponse result) {
+              Array<File> results;
 
-                if (result == NSModalResponseOK)
-                {
-                    auto* url = [panel URL];
-                    if (url != nil)
-                    {
-                        NSString* path = [url path];
-                        if (path != nil)
-                            results.add (File (String::fromUTF8 ([path UTF8String])));
-                    }
-                }
+              if (result == NSModalResponseOK)
+              {
+                  auto* url = [panel URL];
+                  if (url != nil)
+                  {
+                      NSString* path = [url path];
+                      if (path != nil)
+                          results.add(File(String::fromUTF8([path UTF8String])));
+                  }
+              }
 
-                MessageManager::callAsync ([this, callback = std::move (callback), result, results]
-                                           { invokeCallback (std::move (callback), result == NSModalResponseOK, results); });
+              MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
             }];
         }
         else
@@ -140,7 +139,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
             [panel setShowsHiddenFiles:NO];
             [panel setTreatsFilePackagesAsDirectories:packageDirsAsFiles];
 
-            NSArray* allowedTypes = createAllowedFileTypes (filters);
+            NSArray* allowedTypes = createAllowedFileTypes(filters);
             if (allowedTypes != nil && canChooseFiles)
             {
                 [panel setAllowedFileTypes:allowedTypes];
@@ -150,23 +149,22 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
             if (startingFile.exists())
                 [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
 
-            [panel beginWithCompletionHandler:^(NSModalResponse result)
-            {
-                Array<File> results;
+            [panel beginWithCompletionHandler:^(NSModalResponse result) {
+              Array<File> results;
 
-                auto* urls = [panel URLs];
-                if (urls != nil)
-                {
-                    for (NSURL* url in urls)
-                    {
-                        NSString* path = [url path];
-                        if (path != nil)
-                            results.add (File (String::fromUTF8 ([path UTF8String])));
-                    }
-                }
+              auto* urls = [panel URLs];
+              if (urls != nil)
+              {
+                  for (NSURL* url in urls)
+                  {
+                      NSString* path = [url path];
+                      if (path != nil)
+                          results.add(File(String::fromUTF8([path UTF8String])));
+                  }
+              }
 
-                MessageManager::callAsync ([this, callback = std::move (callback), result, results]
-                                           { invokeCallback (std::move (callback), result == NSModalResponseOK, results); });
+              MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
             }];
         }
     }

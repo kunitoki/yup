@@ -1424,7 +1424,7 @@ void initialiseYup_Windowing()
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
     // Set the default theme now in all platforms except ios
-#if !YUP_IOS
+#if ! YUP_IOS
     ApplicationTheme::setGlobalTheme (createThemeVersion1());
 #endif
 

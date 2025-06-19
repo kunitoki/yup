@@ -327,18 +327,17 @@ static EmscriptenFileChooser* currentFileChooser = nullptr;
 
 extern "C"
 {
+    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+    {
+        if (chooser != nullptr)
+            chooser->processResults();
+    }
 
-void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
-{
-    if (chooser != nullptr)
-        chooser->processResults();
-}
-
-void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
-{
-    if (chooser != nullptr && path != nullptr)
-        chooser->addFileResult (File (String::fromUTF8 (path)));
-}
+    void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+    {
+        if (chooser != nullptr && path != nullptr)
+            chooser->addFileResult (File (String::fromUTF8 (path)));
+    }
 
 } // extern "C"
 
@@ -348,7 +347,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
     const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
 
-    auto chooser = EmscriptenFileChooser::Ptr{ new EmscriptenFileChooser (filters, isSave, canChooseDirectories, allowsMultiple) };
+    auto chooser = EmscriptenFileChooser::Ptr { new EmscriptenFileChooser (filters, isSave, canChooseDirectories, allowsMultiple) };
 
     chooser->setCallback ([callback = std::move (callback), chooser] (bool success, const Array<File>& results)
     {
