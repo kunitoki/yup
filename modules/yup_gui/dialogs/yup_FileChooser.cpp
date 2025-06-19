@@ -23,6 +23,15 @@ namespace yup
 {
 
 //==============================================================================
+#if !YUP_LINUX
+class FileChooserImpl
+{
+public:
+    virtual ~FileChooserImpl() = default;
+};
+#endif
+
+//==============================================================================
 FileChooser::Ptr FileChooser::create (const String& dialogBoxTitle,
                                       const File& initialFileOrDirectory,
                                       const String& filePatternsAllowed,

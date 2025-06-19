@@ -206,6 +206,9 @@ private:
     bool useNativeDialogBox;
     bool packageDirsAsFiles;
 
+    class FileChooserImpl;
+    std::unique_ptr<FileChooserImpl> impl;
+
     //==============================================================================
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FileChooser)
 };

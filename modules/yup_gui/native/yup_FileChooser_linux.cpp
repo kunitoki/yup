@@ -22,6 +22,88 @@
 namespace yup
 {
 
+//==============================================================================
+class FileChooserImpl : public Thread
+{
+public:
+    FileChooserImpl (CompletionCallback callback, String command, bool allowsMultiple, bool isSave)
+        : Thread ("FileChooser")
+        , callback (std::move (callback))
+        , command (std::move (command))
+        , allowsMultiple (allowsMultiple)
+        , isSave (isSave)
+    {
+    }
+
+    ~FileChooserImpl() override
+    {
+        stopThread (2000);
+    }
+
+    void run() override
+    {
+        int result = 1;
+
+        if (FILE* pipe = popen (command.toUTF8(), "r"))
+        {
+            int fd = fileno (pipe);
+            int flags = fcntl (fd, F_GETFL, 0);
+            flags |= O_NONBLOCK;
+            fcntl (fd, F_SETFL, flags);
+
+            char buffer[4096];
+            String output;
+
+            while (! threadShouldExit())
+            {
+                while (fgets (buffer, sizeof (buffer), pipe) != nullptr && ! threadShouldExit())
+                    output += String::fromUTF8 (buffer);
+
+                result = pclose (pipe);
+                if (threadShouldExit())
+                {
+                    result = 1;
+                    break;
+                }
+
+                if (result == 0 && output.isNotEmpty())
+                {
+                    output = output.trim();
+
+                    if (allowsMultiple && ! isSave)
+                    {
+                        StringArray paths = StringArray::fromTokens (output, "|", String());
+                        for (const auto& path : paths)
+                        {
+                            if (path.isNotEmpty())
+                                results.add (File (path));
+                        }
+                    }
+                    else
+                    {
+                        results.add (File (output));
+                    }
+                }
+
+                break;
+            }
+        }
+
+        MessageManager::callAsync([callback = std::move (callback), result, std::move (results)]
+        {
+            callback (result == 0 && results.size() > 0, results);
+        });
+    }
+
+private:
+    CompletionCallback callback;
+    String command;
+    bool allowsMultiple;
+    bool isSave;
+    Array<File> results;
+};
+
+//==============================================================================
 void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     const bool isSave = (flags & saveMode) != 0;
@@ -66,38 +148,8 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
     command += " 2>/dev/null";
 
-    FILE* pipe = popen (command.toUTF8(), "r");
-    if (pipe == nullptr)
-        return;
-
-    char buffer[4096];
-    String output;
-
-    while (fgets (buffer, sizeof (buffer), pipe) != nullptr)
-        output += String::fromUTF8 (buffer);
-
-    int result = pclose (pipe);
-    if (result == 0 && output.isNotEmpty())
-    {
-        output = output.trim();
-
-        if (allowsMultiple && ! isSave)
-        {
-            StringArray paths = StringArray::fromTokens (output, "|", String());
-            for (const auto& path : paths)
-            {
-                if (path.isNotEmpty())
-                    results.add (File (path));
-            }
-        }
-        else
-        {
-            results.add (File (output));
-        }
-    }
-
-    // Invoke callback with results
-    invokeCallback (std::move (callback), result == 0 && results.size() > 0, results);
+    impl = std::make_unique<FileChooserImpl> (std::move (callback), command, allowsMultiple, isSave);
+    impl->startThread();
 }
 
 } // namespace yup
