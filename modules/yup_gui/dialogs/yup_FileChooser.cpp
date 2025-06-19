@@ -24,15 +24,15 @@ namespace yup
 
 //==============================================================================
 FileChooser::FileChooser (const String& dialogBoxTitle,
-                         const File& initialFileOrDirectory,
-                         const String& filePatternsAllowed,
-                         bool useOSNativeDialogBox,
-                         bool treatFilePackagesAsDirs)
-    : title (dialogBoxTitle),
-      filters (filePatternsAllowed),
-      startingFile (initialFileOrDirectory),
-      useNativeDialogBox (useOSNativeDialogBox),
-      packageDirsAsFiles (treatFilePackagesAsDirs)
+                          const File& initialFileOrDirectory,
+                          const String& filePatternsAllowed,
+                          bool useOSNativeDialogBox,
+                          bool treatFilePackagesAsDirs)
+    : title (dialogBoxTitle)
+    , filters (filePatternsAllowed)
+    , startingFile (initialFileOrDirectory)
+    , useNativeDialogBox (useOSNativeDialogBox)
+    , packageDirsAsFiles (treatFilePackagesAsDirs)
 {
     if (startingFile == File())
     {
@@ -62,7 +62,8 @@ bool FileChooser::browseForMultipleFilesToOpen (Component* previewComponent)
 bool FileChooser::browseForFileToSave (bool warnAboutOverwritingExistingFiles)
 {
     return showDialog (saveMode | canSelectFiles
-                      | (warnAboutOverwritingExistingFiles ? warnAboutOverwriting : 0), nullptr);
+                           | (warnAboutOverwritingExistingFiles ? warnAboutOverwriting : 0),
+                       nullptr);
 }
 
 bool FileChooser::browseForDirectory()

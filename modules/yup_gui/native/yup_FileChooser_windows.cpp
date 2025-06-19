@@ -41,7 +41,7 @@ static String createFilterString (const String& filters)
             String ext = extensions[i].trim();
             if (ext.isNotEmpty())
             {
-                if (! ext.startsWith("*"))
+                if (! ext.startsWith ("*"))
                     ext = "*." + ext;
 
                 if (allPatterns.isNotEmpty())
@@ -52,11 +52,11 @@ static String createFilterString (const String& filters)
 
         if (allPatterns.isNotEmpty())
         {
-            result += desc + String::charToString(0) + allPatterns + String::charToString(0);
+            result += desc + String::charToString (0) + allPatterns + String::charToString (0);
         }
     }
 
-    result += "All Files" + String::charToString(0) + "*.*" + String::charToString(0) + String::charToString(0);
+    result += "All Files" + String::charToString (0) + "*.*" + String::charToString (0) + String::charToString (0);
     return result;
 }
 
@@ -93,7 +93,7 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
         String ext = extensions[i].trim();
         if (ext.isNotEmpty())
         {
-            if (! ext.startsWith("*"))
+            if (! ext.startsWith ("*"))
                 ext = "*." + ext;
 
             if (allPatterns.isNotEmpty())
@@ -124,10 +124,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
     {
         IFileSaveDialog* pFileSave = nullptr;
 
-        hr = CoCreateInstance (CLSID_FileSaveDialog, NULL, CLSCTX_ALL,
-                              IID_IFileSaveDialog, reinterpret_cast<void**>(&pFileSave));
+        hr = CoCreateInstance (CLSID_FileSaveDialog, NULL, CLSCTX_ALL, IID_IFileSaveDialog, reinterpret_cast<void**> (&pFileSave));
 
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED (hr))
         {
             // Set title
             pFileSave->SetTitle (title.toWideCharPointer());
@@ -148,8 +147,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
                 File dirToUse = startingFile.isDirectory() ? startingFile : startingFile.getParentDirectory();
 
                 hr = SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
-                                                 NULL, IID_PPV_ARGS(&psi));
-                if (SUCCEEDED(hr))
+                                                  NULL,
+                                                  IID_PPV_ARGS (&psi));
+                if (SUCCEEDED (hr))
                 {
                     pFileSave->SetFolder (psi);
                     psi->Release();
@@ -172,17 +172,17 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
             // Show the dialog
             hr = pFileSave->Show (NULL);
 
-            if (SUCCEEDED(hr))
+            if (SUCCEEDED (hr))
             {
                 IShellItem* pItem = nullptr;
                 hr = pFileSave->GetResult (&pItem);
 
-                if (SUCCEEDED(hr))
+                if (SUCCEEDED (hr))
                 {
                     PWSTR pszFilePath = nullptr;
                     hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
 
-                    if (SUCCEEDED(hr))
+                    if (SUCCEEDED (hr))
                     {
                         results.add (File (String (pszFilePath)));
                         CoTaskMemFree (pszFilePath);
@@ -200,10 +200,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
     {
         IFileOpenDialog* pFileOpen = nullptr;
 
-        hr = CoCreateInstance (CLSID_FileOpenDialog, NULL, CLSCTX_ALL,
-                              IID_IFileOpenDialog, reinterpret_cast<void**>(&pFileOpen));
+        hr = CoCreateInstance (CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**> (&pFileOpen));
 
-        if (SUCCEEDED(hr))
+        if (SUCCEEDED (hr))
         {
             // Set title
             pFileOpen->SetTitle (title.toWideCharPointer());
@@ -226,8 +225,9 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
             {
                 IShellItem* psi = nullptr;
                 hr = SHCreateItemFromParsingName (startingFile.getFullPathName().toWideCharPointer(),
-                                                 NULL, IID_PPV_ARGS(&psi));
-                if (SUCCEEDED(hr))
+                                                  NULL,
+                                                  IID_PPV_ARGS (&psi));
+                if (SUCCEEDED (hr))
                 {
                     pFileOpen->SetFolder (psi);
                     psi->Release();
@@ -242,7 +242,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
             if (allowsMultipleSelection)
                 options |= FOS_ALLOWMULTISELECT;
 
-            if (canChooseDirectories && !canChooseFiles)
+            if (canChooseDirectories && ! canChooseFiles)
                 options |= FOS_PICKFOLDERS;
             else if (canChooseDirectories && canChooseFiles)
                 options |= FOS_PICKFOLDERS;
@@ -252,14 +252,14 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
             // Show the dialog
             hr = pFileOpen->Show (NULL);
 
-            if (SUCCEEDED(hr))
+            if (SUCCEEDED (hr))
             {
                 if (allowsMultipleSelection)
                 {
                     IShellItemArray* pItems = nullptr;
                     hr = pFileOpen->GetResults (&pItems);
 
-                    if (SUCCEEDED(hr))
+                    if (SUCCEEDED (hr))
                     {
                         DWORD itemCount;
                         pItems->GetCount (&itemCount);
@@ -269,12 +269,12 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
                             IShellItem* pItem = nullptr;
                             hr = pItems->GetItemAt (i, &pItem);
 
-                            if (SUCCEEDED(hr))
+                            if (SUCCEEDED (hr))
                             {
                                 PWSTR pszFilePath = nullptr;
                                 hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
 
-                                if (SUCCEEDED(hr))
+                                if (SUCCEEDED (hr))
                                 {
                                     results.add (File (String (pszFilePath)));
                                     CoTaskMemFree (pszFilePath);
@@ -292,12 +292,12 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
                     IShellItem* pItem = nullptr;
                     hr = pFileOpen->GetResult (&pItem);
 
-                    if (SUCCEEDED(hr))
+                    if (SUCCEEDED (hr))
                     {
                         PWSTR pszFilePath = nullptr;
                         hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
 
-                        if (SUCCEEDED(hr))
+                        if (SUCCEEDED (hr))
                         {
                             results.add (File (String (pszFilePath)));
                             CoTaskMemFree (pszFilePath);

@@ -22,33 +22,33 @@
 namespace yup
 {
 
-static Array<String> parseFileExtensions (const String& pattern)
+static Array<String> parseFileExtensions(const String& pattern)
 {
     Array<String> extensions;
 
     if (pattern.isEmpty())
         return extensions;
 
-    StringArray tokens = StringArray::fromTokens (pattern, ";,", String());
+    StringArray tokens = StringArray::fromTokens(pattern, ";,", String());
 
     for (const auto& token : tokens)
     {
         String ext = token.trim();
-        if (ext.startsWith ("*."))
-            ext = ext.substring (2);
-        else if (ext.startsWith ("*"))
-            ext = ext.substring (1);
+        if (ext.startsWith("*."))
+            ext = ext.substring(2);
+        else if (ext.startsWith("*"))
+            ext = ext.substring(1);
 
         if (ext.isNotEmpty())
-            extensions.add (ext);
+            extensions.add(ext);
     }
 
     return extensions;
 }
 
-static NSArray* createAllowedFileTypes (const String& filters)
+static NSArray* createAllowedFileTypes(const String& filters)
 {
-    auto extensions = parseFileExtensions (filters);
+    auto extensions = parseFileExtensions(filters);
 
     if (extensions.isEmpty())
         return nil;
@@ -57,15 +57,15 @@ static NSArray* createAllowedFileTypes (const String& filters)
 
     for (const auto& ext : extensions)
     {
-        NSString* nsExt = [NSString stringWithUTF8String: ext.toUTF8()];
+        NSString* nsExt = [NSString stringWithUTF8String:ext.toUTF8()];
         if (nsExt != nil)
-            [types addObject: nsExt];
+            [types addObject:nsExt];
     }
 
-    return types.count > 0 ? [NSArray arrayWithArray: types] : nil;
+    return types.count > 0 ? [NSArray arrayWithArray:types] : nil;
 }
 
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
 {
     YUP_AUTORELEASEPOOL
     {
@@ -79,30 +79,30 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         {
             NSSavePanel* panel = [NSSavePanel savePanel];
 
-            [panel setTitle: [NSString stringWithUTF8String: title.toUTF8()]];
-            [panel setCanCreateDirectories: YES];
-            [panel setShowsHiddenFiles: NO];
+            [panel setTitle:[NSString stringWithUTF8String:title.toUTF8()]];
+            [panel setCanCreateDirectories:YES];
+            [panel setShowsHiddenFiles:NO];
 
             if (warnAboutOverwrite)
-                [panel setExtensionHidden: NO];
+                [panel setExtensionHidden:NO];
 
-            NSArray* allowedTypes = createAllowedFileTypes (filters);
+            NSArray* allowedTypes = createAllowedFileTypes(filters);
             if (allowedTypes != nil)
             {
-                [panel setAllowedFileTypes: allowedTypes];
-                [panel setAllowsOtherFileTypes: NO];
+                [panel setAllowedFileTypes:allowedTypes];
+                [panel setAllowsOtherFileTypes:NO];
             }
 
             if (startingFile.exists())
             {
                 if (startingFile.isDirectory())
                 {
-                    [panel setDirectoryURL: [NSURL fileURLWithPath: [NSString stringWithUTF8String: startingFile.getFullPathName().toUTF8()]]];
+                    [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
                 }
                 else
                 {
-                    [panel setDirectoryURL: [NSURL fileURLWithPath: [NSString stringWithUTF8String: startingFile.getParentDirectory().getFullPathName().toUTF8()]]];
-                    [panel setNameFieldStringValue: [NSString stringWithUTF8String: startingFile.getFileName().toUTF8()]];
+                    [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getParentDirectory().getFullPathName().toUTF8()]]];
+                    [panel setNameFieldStringValue:[NSString stringWithUTF8String:startingFile.getFileName().toUTF8()]];
                 }
             }
 
@@ -116,7 +116,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
                     NSString* path = [url path];
                     if (path != nil)
                     {
-                        results.add (File (String::fromUTF8 ([path UTF8String])));
+                        results.add(File(String::fromUTF8([path UTF8String])));
                     }
                 }
             }
@@ -125,23 +125,23 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         {
             NSOpenPanel* panel = [NSOpenPanel openPanel];
 
-            [panel setTitle: [NSString stringWithUTF8String: title.toUTF8()]];
-            [panel setCanChooseFiles: canChooseFiles];
-            [panel setCanChooseDirectories: canChooseDirectories];
-            [panel setAllowsMultipleSelection: allowsMultipleSelection];
-            [panel setShowsHiddenFiles: NO];
-            [panel setTreatsFilePackagesAsDirectories: packageDirsAsFiles];
+            [panel setTitle:[NSString stringWithUTF8String:title.toUTF8()]];
+            [panel setCanChooseFiles:canChooseFiles];
+            [panel setCanChooseDirectories:canChooseDirectories];
+            [panel setAllowsMultipleSelection:allowsMultipleSelection];
+            [panel setShowsHiddenFiles:NO];
+            [panel setTreatsFilePackagesAsDirectories:packageDirsAsFiles];
 
-            NSArray* allowedTypes = createAllowedFileTypes (filters);
+            NSArray* allowedTypes = createAllowedFileTypes(filters);
             if (allowedTypes != nil && canChooseFiles)
             {
-                [panel setAllowedFileTypes: allowedTypes];
-                [panel setAllowsOtherFileTypes: NO];
+                [panel setAllowedFileTypes:allowedTypes];
+                [panel setAllowsOtherFileTypes:NO];
             }
 
             if (startingFile.exists())
             {
-                [panel setDirectoryURL: [NSURL fileURLWithPath: [NSString stringWithUTF8String: startingFile.getFullPathName().toUTF8()]]];
+                [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
             }
 
             NSModalResponse result = [panel runModal];
@@ -155,7 +155,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
                     NSString* path = [url path];
                     if (path != nil)
                     {
-                        results.add (File (String::fromUTF8 ([path UTF8String])));
+                        results.add(File(String::fromUTF8([path UTF8String])));
                     }
                 }
             }

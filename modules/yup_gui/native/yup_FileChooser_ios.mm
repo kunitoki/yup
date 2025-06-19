@@ -22,38 +22,38 @@
 namespace yup
 {
 
-static NSArray<UTType*>* createUTTypes (const String& filters)
+static NSArray<UTType*>* createUTTypes(const String& filters)
 {
     if (filters.isEmpty())
-        return @[UTTypeItem];
+        return @[ UTTypeItem ];
 
     NSMutableArray<UTType*>* types = [NSMutableArray array];
-    StringArray extensions = StringArray::fromTokens (filters, ";,", String());
+    StringArray extensions = StringArray::fromTokens(filters, ";,", String());
 
     for (const auto& ext : extensions)
     {
         String extension = ext.trim();
-        if (extension.startsWith ("*."))
-            extension = extension.substring (2);
-        else if (extension.startsWith ("*"))
-            extension = extension.substring (1);
-        else if (extension.startsWith ("."))
-            extension = extension.substring (1);
+        if (extension.startsWith("*."))
+            extension = extension.substring(2);
+        else if (extension.startsWith("*"))
+            extension = extension.substring(1);
+        else if (extension.startsWith("."))
+            extension = extension.substring(1);
 
         if (extension.isNotEmpty())
         {
-            NSString* nsExt = [NSString stringWithUTF8String: extension.toUTF8()];
-            UTType* type = [UTType typeWithFilenameExtension: nsExt];
+            NSString* nsExt = [NSString stringWithUTF8String:extension.toUTF8()];
+            UTType* type = [UTType typeWithFilenameExtension:nsExt];
 
             if (type != nil)
-                [types addObject: type];
+                [types addObject:type];
         }
     }
 
     if (types.count == 0)
-        [types addObject: UTTypeItem];
+        [types addObject:UTTypeItem];
 
-    return [NSArray arrayWithArray: types];
+    return [NSArray arrayWithArray:types];
 }
 
 } // namespace yup
@@ -66,7 +66,7 @@ static NSArray<UTType*>* createUTTypes (const String& filters)
 
 @implementation YUPFileChooserDelegate
 
-- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+- (void)documentPicker:(UIDocumentPickerViewController*)controller didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls
 {
     if (self.results != nullptr)
     {
@@ -75,7 +75,7 @@ static NSArray<UTType*>* createUTTypes (const String& filters)
             NSString* path = [url path];
             if (path != nil)
             {
-                self.results->add (yup::File (yup::String::fromUTF8 ([path UTF8String])));
+                self.results->add(yup::File(yup::String::fromUTF8([path UTF8String])));
             }
         }
     }
@@ -83,7 +83,7 @@ static NSArray<UTType*>* createUTTypes (const String& filters)
     self.completed = true;
 }
 
-- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController*)controller
 {
     self.completed = true;
 }
@@ -93,7 +93,7 @@ static NSArray<UTType*>* createUTTypes (const String& filters)
 namespace yup
 {
 
-void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
+void FileChooser::showPlatformDialog(int flags, Component* previewComponent)
 {
     YUP_AUTORELEASEPOOL
     {
@@ -144,23 +144,23 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 
             if (startingFile.exists() && startingFile.existsAsFile())
             {
-                tempURL = [NSURL fileURLWithPath: [NSString stringWithUTF8String: startingFile.getFullPathName().toUTF8()]];
+                tempURL = [NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]];
             }
             else
             {
                 // Create a temporary file for export
                 NSString* tempDir = NSTemporaryDirectory();
-                NSString* fileName = startingFile.getFileName().isEmpty() ? @"untitled" : [NSString stringWithUTF8String: startingFile.getFileName().toUTF8()];
-                NSString* tempPath = [tempDir stringByAppendingPathComponent: fileName];
-                tempURL = [NSURL fileURLWithPath: tempPath];
+                NSString* fileName = startingFile.getFileName().isEmpty() ? @"untitled" : [NSString stringWithUTF8String:startingFile.getFileName().toUTF8()];
+                NSString* tempPath = [tempDir stringByAppendingPathComponent:fileName];
+                tempURL = [NSURL fileURLWithPath:tempPath];
 
                 // Create empty file
-                [@"" writeToURL: tempURL atomically: YES encoding: NSUTF8StringEncoding error: nil];
+                [@"" writeToURL:tempURL atomically:YES encoding:NSUTF8StringEncoding error:nil];
             }
 
             if (tempURL != nil)
             {
-                documentPicker = [[UIDocumentPickerViewController alloc] initForExportingURLs: @[tempURL]];
+                documentPicker = [[UIDocumentPickerViewController alloc] initForExportingURLs:@[ tempURL ]];
             }
         }
         else
@@ -169,14 +169,14 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
 
             if (canChooseDirectories && !canChooseFiles)
             {
-                allowedTypes = @[UTTypeFolder];
+                allowedTypes = @[ UTTypeFolder ];
             }
             else
             {
-                allowedTypes = createUTTypes (filters);
+                allowedTypes = createUTTypes(filters);
             }
 
-            documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes: allowedTypes];
+            documentPicker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:allowedTypes];
             documentPicker.allowsMultipleSelection = allowsMultiple;
         }
 
@@ -191,12 +191,12 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         documentPicker.delegate = delegate;
         documentPicker.modalPresentationStyle = UIModalPresentationPageSheet;
 
-        [rootViewController presentViewController: documentPicker animated: YES completion: nil];
+        [rootViewController presentViewController:documentPicker animated:YES completion:nil];
 
         // Wait for completion - this is a simplified approach
         // In a real application, you might want to use a more sophisticated callback mechanism
         NSRunLoop* runLoop = [NSRunLoop currentRunLoop];
-        while (!delegate.completed && [runLoop runMode: NSDefaultRunLoopMode beforeDate: [NSDate dateWithTimeIntervalSinceNow: 0.1]])
+        while (!delegate.completed && [runLoop runMode:NSDefaultRunLoopMode beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.1]])
         {
             // Keep the run loop alive while waiting
         }

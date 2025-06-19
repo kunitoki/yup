@@ -93,7 +93,7 @@ static StringArray createMimeTypes (const String& filters)
         else
             mimeType = "*/*"; // Fallback for unknown extensions
 
-        if (mimeType.isNotEmpty() && !mimeTypes.contains (mimeType))
+        if (mimeType.isNotEmpty() && ! mimeTypes.contains (mimeType))
             mimeTypes.add (mimeType);
     }
 
@@ -108,7 +108,8 @@ class AndroidFileChooserCallback
 {
 public:
     AndroidFileChooserCallback (FileChooser* chooser)
-        : fileChooser (chooser), completed (false)
+        : fileChooser (chooser)
+        , completed (false)
     {
     }
 
@@ -181,8 +182,7 @@ private:
 static AndroidFileChooserCallback* currentCallback = nullptr;
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_yourpackage_FileChooserActivity_onActivityResult (JNIEnv* env, jobject thiz,
-                                                          jint requestCode, jint resultCode, jobject data)
+    Java_com_yourpackage_FileChooserActivity_onActivityResult (JNIEnv* env, jobject thiz, jint requestCode, jint resultCode, jobject data)
 {
     if (currentCallback != nullptr)
     {
@@ -215,8 +215,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         LocalRef<jstring> action (javaString ("android.intent.action.CREATE_DOCUMENT"));
         intent = LocalRef<jobject> (env->NewObject (AndroidIntent, AndroidIntent.constructWithString, action.get()));
 
-        env->CallObjectMethod (intent.get(), AndroidIntent.addCategory,
-                              javaString ("android.intent.category.OPENABLE").get());
+        env->CallObjectMethod (intent.get(), AndroidIntent.addCategory, javaString ("android.intent.category.OPENABLE").get());
 
         // Set MIME type
         StringArray mimeTypes = createMimeTypes (filters);
@@ -228,12 +227,10 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         // Set initial filename
         if (startingFile.getFileName().isNotEmpty())
         {
-            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra,
-                                  javaString ("android.intent.extra.TITLE").get(),
-                                  javaString (startingFile.getFileName()).get());
+            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.TITLE").get(), javaString (startingFile.getFileName()).get());
         }
     }
-    else if (canChooseDirectories && !canChooseFiles)
+    else if (canChooseDirectories && ! canChooseFiles)
     {
         // Use ACTION_OPEN_DOCUMENT_TREE for directory selection
         LocalRef<jstring> action (javaString ("android.intent.action.OPEN_DOCUMENT_TREE"));
@@ -242,18 +239,15 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
     else
     {
         // Use ACTION_OPEN_DOCUMENT for file selection
-                 LocalRef<jstring> action (javaString ("android.intent.action.OPEN_DOCUMENT"));
+        LocalRef<jstring> action (javaString ("android.intent.action.OPEN_DOCUMENT"));
         intent = LocalRef<jobject> (env->NewObject (AndroidIntent, AndroidIntent.constructWithString, action.get()));
 
-        env->CallObjectMethod (intent.get(), AndroidIntent.addCategory,
-                              javaString ("android.intent.category.OPENABLE").get());
+        env->CallObjectMethod (intent.get(), AndroidIntent.addCategory, javaString ("android.intent.category.OPENABLE").get());
 
         // Enable multiple selection if requested
         if (allowsMultiple)
         {
-            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra,
-                                  javaString ("android.intent.extra.ALLOW_MULTIPLE").get(),
-                                  true);
+            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.ALLOW_MULTIPLE").get(), true);
         }
 
         // Set MIME types
@@ -272,9 +266,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
                 env->SetObjectArrayElement (mimeTypeArray.get(), i, javaString (mimeTypes[i]).get());
             }
 
-            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra,
-                                  javaString ("android.intent.extra.MIME_TYPES").get(),
-                                  mimeTypeArray.get());
+            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.MIME_TYPES").get(), mimeTypeArray.get());
         }
     }
 
@@ -283,20 +275,16 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
         // Set title if provided
         if (title.isNotEmpty())
         {
-            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra,
-                                  javaString ("android.intent.extra.TITLE").get(),
-                                  javaString (title).get());
+            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.TITLE").get(), javaString (title).get());
         }
 
         // Start the activity
         const int requestCode = 12345;
-        env->CallVoidMethod (getCurrentActivity(), AndroidContext.startActivityForResult,
-                           intent.get(), requestCode);
+        env->CallVoidMethod (getCurrentActivity(), AndroidContext.startActivityForResult, intent.get(), requestCode);
 
         // Wait for the result (simplified approach)
         auto startTime = Time::getCurrentTime();
-        while (!callback.isCompleted() &&
-               (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
+        while (! callback.isCompleted() && (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
         {
             // Process any pending messages
             Thread::sleep (100);

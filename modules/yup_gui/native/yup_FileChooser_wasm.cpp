@@ -56,7 +56,9 @@ class EmscriptenFileChooser
 {
 public:
     EmscriptenFileChooser (FileChooser* chooser, int flags)
-        : fileChooser (chooser), dialogFlags (flags), completed (false)
+        : fileChooser (chooser)
+        , dialogFlags (flags)
+        , completed (false)
     {
     }
 
@@ -284,7 +286,8 @@ private:
 
 static EmscriptenFileChooser* currentFileChooser = nullptr;
 
-extern "C" {
+extern "C"
+{
     void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
     {
         if (chooser != nullptr)
@@ -310,7 +313,7 @@ void FileChooser::showPlatformDialog (int flags, Component* previewComponent)
     chooser.showDialog();
 
     // Wait for completion
-    while (!chooser.isCompleted())
+    while (! chooser.isCompleted())
     {
         emscripten_sleep (10);
     }

@@ -22,8 +22,7 @@
 namespace yup
 {
 
-static bool runZenityDialog (const String& title, const String& startingPath,
-                             const String& filters, int flags, Array<File>& results)
+static bool runZenityDialog (const String& title, const String& startingPath, const String& filters, int flags, Array<File>& results)
 {
     const bool isSave = (flags & FileChooser::saveMode) != 0;
     const bool canChooseDirectories = (flags & FileChooser::canSelectDirectories) != 0;
@@ -35,7 +34,7 @@ static bool runZenityDialog (const String& title, const String& startingPath,
         command += " --save";
     if (canChooseDirectories)
         command += " --directory";
-    if (allowsMultiple && !isSave)
+    if (allowsMultiple && ! isSave)
         command += " --multiple";
     if (title.isNotEmpty())
         command += " --title=\"" + title + "\"";
@@ -43,7 +42,7 @@ static bool runZenityDialog (const String& title, const String& startingPath,
         command += " --filename=\"" + startingPath + "\"";
 
     // Add file filters for zenity
-    if (filters.isNotEmpty() && !canChooseDirectories)
+    if (filters.isNotEmpty() && ! canChooseDirectories)
     {
         StringArray extensions = StringArray::fromTokens (filters, ";,", String());
         for (const auto& ext : extensions)
@@ -51,7 +50,7 @@ static bool runZenityDialog (const String& title, const String& startingPath,
             String pattern = ext.trim();
             if (pattern.isNotEmpty())
             {
-                if (! pattern.startsWith("*"))
+                if (! pattern.startsWith ("*"))
                     pattern = "*." + pattern;
 
                 command += " --file-filter=\"" + pattern + "\"";
@@ -68,7 +67,7 @@ static bool runZenityDialog (const String& title, const String& startingPath,
     char buffer[4096];
     String output;
 
-    while (fgets (buffer, sizeof(buffer), pipe) != nullptr)
+    while (fgets (buffer, sizeof (buffer), pipe) != nullptr)
     {
         output += String::fromUTF8 (buffer);
     }
@@ -79,7 +78,7 @@ static bool runZenityDialog (const String& title, const String& startingPath,
     {
         output = output.trim();
 
-        if (allowsMultiple && !isSave)
+        if (allowsMultiple && ! isSave)
         {
             StringArray paths = StringArray::fromTokens (output, "|", String());
             for (const auto& path : paths)

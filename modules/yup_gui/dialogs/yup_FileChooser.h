@@ -195,15 +195,15 @@ public:
         This is used for browsing in multi-select mode, where the user can select
         multiple files to be returned.
     */
-    static const int openMode                   = 1,
-                     saveMode                   = 2,
-                     canSelectFiles             = 4,
-                     canSelectDirectories       = 8,
-                     canSelectMultipleItems     = 16,
-                     useDialogForAll            = 32,
-                     treatFilePackagesAsDirs    = 64,
-                     doNotResolveSymlinks       = 128,
-                     warnAboutOverwriting       = 256;
+    static const int openMode = 1,
+                     saveMode = 2,
+                     canSelectFiles = 4,
+                     canSelectDirectories = 8,
+                     canSelectMultipleItems = 16,
+                     useDialogForAll = 32,
+                     treatFilePackagesAsDirs = 64,
+                     doNotResolveSymlinks = 128,
+                     warnAboutOverwriting = 256;
 
 private:
     //==============================================================================
