@@ -178,6 +178,7 @@ function (yup_standalone_app)
             -sNODERAWFS=0
             -sWASMFS=1
             -sFETCH=1
+            -sASYNCIFY=1
             -sEXPORTED_RUNTIME_METHODS=ccall,cwrap
             -sDEFAULT_LIBRARY_FUNCS_TO_INCLUDE='$dynCall'
             --shell-file "${YUP_ARG_CUSTOM_SHELL}")
