@@ -118,10 +118,10 @@ static StringArray createMimeTypes (const String& filters)
 }
 
 //==============================================================================
-class AndroidFileChooserCallback
+class AndroidActivityCallback
 {
 public:
-    AndroidFileChooserCallback (FileChooser::CompletionCallback cb)
+    AndroidActivityCallback (FileChooser::CompletionCallback cb)
         : callback (std::move (cb))
         , completed (false)
     {
@@ -197,7 +197,14 @@ private:
     bool completed;
 };
 
-static AndroidFileChooserCallback* currentCallback = nullptr;
+
+class FileChooser::FileChooserImpl : public AndroidActivityCallback
+{
+public:
+    using AndroidActivityCallback::AndroidActivityCallback;
+};
+
+static AndroidActivityCallback* currentCallback = nullptr;
 
 //==============================================================================
 extern "C" JNIEXPORT void JNICALL
@@ -219,13 +226,15 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
 
     auto* env = getEnv();
-
     if (env == nullptr)
+    {
+        callback (false, {});
         return;
+    }
 
     // Create the callback
-    AndroidFileChooserCallback androidCallback (std::move (callback));
-    currentCallback = &androidCallback;
+    impl = std::make_unique<FileChooserImpl> (std::move (callback));
+    currentCallback = impl.get();
 
     LocalRef<jobject> intent;
 
@@ -240,15 +249,11 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
         // Set MIME type
         StringArray mimeTypes = createMimeTypes (filters);
         if (mimeTypes.size() > 0)
-        {
             env->CallObjectMethod (intent.get(), AndroidIntent.setType, javaString (mimeTypes[0]).get());
-        }
 
         // Set initial filename
         if (startingFile.getFileName().isNotEmpty())
-        {
             env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.TITLE").get(), javaString (startingFile.getFileName()).get());
-        }
     }
     else if (canChooseDirectories && ! canChooseFiles)
     {
@@ -266,9 +271,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
         // Enable multiple selection if requested
         if (allowsMultiple)
-        {
             env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.ALLOW_MULTIPLE").get(), true);
-        }
 
         // Set MIME types
         StringArray mimeTypes = createMimeTypes (filters);
@@ -282,9 +285,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
             LocalRef<jobjectArray> mimeTypeArray (env->NewObjectArray (mimeTypes.size(), JavaString, nullptr));
             for (int i = 0; i < mimeTypes.size(); ++i)
-            {
                 env->SetObjectArrayElement (mimeTypeArray.get(), i, javaString (mimeTypes[i]).get());
-            }
 
             env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.MIME_TYPES").get(), mimeTypeArray.get());
         }
@@ -294,19 +295,16 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     {
         // Set title if provided
         if (title.isNotEmpty())
-        {
             env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.TITLE").get(), javaString (title).get());
-        }
 
         // Start the activity
         const int requestCode = 12345;
-        env->CallVoidMethod (getCurrentActivity(), AndroidActivity.startActivityForResult, intent.get(), requestCode);
+        env->CallVoidMethod (getMainActivity(), AndroidActivity.startActivityForResult, intent.get(), requestCode);
 
         // Wait for the result (simplified approach)
         auto startTime = Time::getCurrentTime();
-        while (! androidCallback.isCompleted() && (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
+        while (currentCallback != nullptr && ! currentCallback->isCompleted() && (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
         {
-            // Process any pending messages
             Thread::sleep (100);
         }
     }
