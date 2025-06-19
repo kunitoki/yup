@@ -87,6 +87,7 @@
 #include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
+#include "dialogs/yup_FileChooser.h"
 
 //==============================================================================
 

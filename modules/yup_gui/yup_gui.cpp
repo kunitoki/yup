@@ -59,10 +59,15 @@
 #import <AppKit/AppKit.h>
 #import <Cocoa/Cocoa.h>
 
+#include "native/yup_FileChooser_mac.mm"
 #include "native/yup_Windowing_mac.mm"
 #endif
 
 #if YUP_IOS
+#import <UIKit/UIKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
+#include "native/yup_FileChooser_ios.mm"
 #include "native/yup_Windowing_ios.mm"
 #endif
 
@@ -76,23 +81,32 @@
 #undef KeyPress
 #undef SIZEOF
 
+#include "native/yup_FileChooser_linux.cpp"
 #include "native/yup_Windowing_linux.cpp"
 
 //==============================================================================
 
 #elif YUP_WINDOWS
+#include <commdlg.h>
+#include <shobjidl.h>
+#include <shlwapi.h>
+
+#include "native/yup_FileChooser_windows.cpp"
 #include "native/yup_Windowing_windows.cpp"
 
 //==============================================================================
 
 #elif YUP_ANDROID
+#include "native/yup_FileChooser_android.cpp"
 
 //==============================================================================
 
 #elif YUP_EMSCRIPTEN
 #include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
+#include <emscripten/bind.h>
 
+#include "native/yup_FileChooser_wasm.cpp"
 #endif
 
 //==============================================================================
@@ -112,6 +126,7 @@
 #include "artboard/yup_ArtboardFile.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"
+#include "dialogs/yup_FileChooser.cpp"
 #include "themes/yup_ApplicationTheme.cpp"
 #include "themes/theme_v1/yup_ThemeVersion1.cpp"
 #include "themes/theme_v1/yup_ThemeVersion1_Resources.cpp"
