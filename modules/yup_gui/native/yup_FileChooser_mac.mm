@@ -108,25 +108,22 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
 
             NSModalResponse result = [panel runModal]; // - (void) beginWithCompletionHandler:(void (^)(NSModalResponse result)) handler;
 
-            [panel beginWithCompletionHandler:^(NSModalResponse result)
-            {
-                Array<File> results;
+            [panel beginWithCompletionHandler:^(NSModalResponse result) {
+              Array<File> results;
 
-                if (result == NSModalResponseOK)
-                {
-                    NSURL* url = [panel URL];
-                    if (url != nil)
-                    {
-                        NSString* path = [url path];
-                        if (path != nil)
-                            results.add(File(String::fromUTF8([path UTF8String])));
-                    }
-                }
+              if (result == NSModalResponseOK)
+              {
+                  NSURL* url = [panel URL];
+                  if (url != nil)
+                  {
+                      NSString* path = [url path];
+                      if (path != nil)
+                          results.add(File(String::fromUTF8([path UTF8String])));
+                  }
+              }
 
-                MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                {
-                    invokeCallback(std::move(callback), result == NSModalResponseOK, results);
-                });
+              MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
             }];
         }
         else
@@ -150,27 +147,23 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
             if (startingFile.exists())
                 [panel setDirectoryURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:startingFile.getFullPathName().toUTF8()]]];
 
+            [panel beginWithCompletionHandler:^(NSModalResponse result) {
+              Array<File> results;
 
-            [panel beginWithCompletionHandler:^(NSModalResponse result)
-            {
-                Array<File> results;
+              if (result == NSModalResponseOK)
+              {
+                  NSArray* urls = [panel URLs];
 
-                if (result == NSModalResponseOK)
-                {
-                    NSArray* urls = [panel URLs];
+                  for (NSURL* url in urls)
+                  {
+                      NSString* path = [url path];
+                      if (path != nil)
+                          results.add(File(String::fromUTF8([path UTF8String])));
+                  }
+              }
 
-                    for (NSURL* url in urls)
-                    {
-                        NSString* path = [url path];
-                        if (path != nil)
-                            results.add(File(String::fromUTF8([path UTF8String])));
-                    }
-                }
-
-                MessageManager::callAsync([this, callback = std::move(callback), result, results]
-                {
-                    invokeCallback(std::move(callback), result == NSModalResponseOK, results);
-                });
+              MessageManager::callAsync([this, callback = std::move(callback), result, results]
+                                        { invokeCallback(std::move(callback), result == NSModalResponseOK, results); });
             }];
         }
     }

@@ -132,7 +132,7 @@ void FileChooser::invokeCallback (CompletionCallback callback, bool success, con
 
 FileChooser::CompletionCallback FileChooser::createCapturingCallback (CompletionCallback callback)
 {
-    return [self = Ptr{ this }, callback = std::move (callback)](bool success, const Array<File>& results)
+    return [self = Ptr { this }, callback = std::move (callback)] (bool success, const Array<File>& results)
     {
         callback (success, results);
     };

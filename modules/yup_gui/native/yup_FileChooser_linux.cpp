@@ -97,7 +97,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
     }
 
     // Invoke callback with results
-    invokeCallback(std::move(callback), result == 0 && results.size() > 0, results);
+    invokeCallback (std::move (callback), result == 0 && results.size() > 0, results);
 }
 
 } // namespace yup

@@ -33,7 +33,7 @@ public:
         openFile.onClick = [this]
         {
             auto chooser = yup::FileChooser::create ("Select a file", yup::File::getCurrentWorkingDirectory(), "*.txt");
-            chooser->browseForFileToOpen([](bool success, const yup::Array<yup::File>& results)
+            chooser->browseForFileToOpen ([] (bool success, const yup::Array<yup::File>& results)
             {
                 if (success && results.size() > 0)
                 {
@@ -51,7 +51,7 @@ public:
         openMultipleFiles.onClick = [this]
         {
             auto chooser = yup::FileChooser::create ("Select multiple files", yup::File::getCurrentWorkingDirectory(), "*");
-            chooser->browseForMultipleFilesToOpen([](bool success, const yup::Array<yup::File>& results)
+            chooser->browseForMultipleFilesToOpen ([] (bool success, const yup::Array<yup::File>& results)
             {
                 if (success && results.size() > 0)
                 {

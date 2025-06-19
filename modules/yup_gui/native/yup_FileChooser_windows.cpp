@@ -199,7 +199,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
         }
 
         // Invoke callback with results
-        invokeCallback(std::move(callback), SUCCEEDED(hr) && results.size() > 0, results);
+        invokeCallback (std::move (callback), SUCCEEDED (hr) && results.size() > 0, results);
     }
     else
     {
@@ -317,7 +317,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
         }
 
         // Invoke callback with results
-        invokeCallback (std::move (callback), SUCCEEDED(hr) && results.size() > 0, results);
+        invokeCallback (std::move (callback), SUCCEEDED (hr) && results.size() > 0, results);
     }
 
     CoUninitialize();

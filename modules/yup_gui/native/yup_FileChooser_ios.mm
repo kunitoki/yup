@@ -33,25 +33,23 @@
     {
         NSString* path = [url path];
         if (path != nil)
-            self.results.add (yup::File (yup::String::fromUTF8 ([path UTF8String])));
+            self.results.add(yup::File(yup::String::fromUTF8([path UTF8String])));
     }
 
-    yup::MessageManager::callAsync ([self]
-    {
+    yup::MessageManager::callAsync([self]
+                                   {
         if (self.callback)
             self.callback (true, self.results);
 
-        self.results.clear();
-    });
+        self.results.clear(); });
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController*)controller
 {
-    yup::MessageManager::callAsync ([self]
-    {
+    yup::MessageManager::callAsync([self]
+                                   {
         if (self.callback)
-            self.callback (false, {});
-    });
+            self.callback (false, {}); });
 }
 
 @end
@@ -205,7 +203,7 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
         rootViewController = keyWindow.rootViewController;
         if (rootViewController == nil)
         {
-            callback (false, {});
+            callback(false, {});
             return;
         }
 
@@ -284,12 +282,12 @@ void FileChooser::showPlatformDialog(CompletionCallback callback, int flags)
 
         if (documentPicker == nil)
         {
-            callback (false, {});
+            callback(false, {});
             return;
         }
 
         YUPFileChooserDelegate* delegate = [[YUPFileChooserDelegate alloc] init];
-        delegate.callback = std::move (callback);
+        delegate.callback = std::move(callback);
         delegate.results = yup::Array<yup::File>();
 
         documentPicker.delegate = delegate;

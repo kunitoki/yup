@@ -327,43 +327,43 @@ public:
 
 static EmscriptenFileChooser* currentFileChooser = nullptr;
 
-extern "C" {
-void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
-void yup_fileChooserAddFileResult (FileChooser& chooser, File path)
-{
-    chooser.results.add (std::move (path));
-}
-
 extern "C"
 {
-    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+    void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser) void yup_fileChooserAddFileResult (FileChooser& chooser, File path)
     {
-        if (chooser != nullptr)
-            chooser->processResults();
+        chooser.results.add (std::move (path));
     }
 
-    void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+    extern "C"
     {
-        if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
-            yup_fileChooserAddFileResult (*chooser->fileChooser, File (String::fromUTF8 (path)));
+        void EMSCRIPTEN_KEEPALIVE fileChooserCallback (EmscriptenFileChooser* chooser)
+        {
+            if (chooser != nullptr)
+                chooser->processResults();
+        }
+
+        void EMSCRIPTEN_KEEPALIVE addFileResult (EmscriptenFileChooser* chooser, const char* path)
+        {
+            if (chooser != nullptr && chooser->fileChooser != nullptr && path != nullptr)
+                yup_fileChooserAddFileResult (*chooser->fileChooser, File (String::fromUTF8 (path)));
+        }
+    } // extern "C"
+
+    void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
+    {
+        const bool isSave = (flags & saveMode) != 0;
+        const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
+        const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
+
+        EmscriptenFileChooser chooser (std::move (callback), filters, isSave, canChooseDirectories, allowsMultiple);
+        currentFileChooser = &chooser;
+
+        chooser.showDialog();
+
+        while (! chooser.isCompleted())
+            emscripten_sleep (10);
+
+        currentFileChooser = nullptr;
     }
-} // extern "C"
-
-void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
-{
-    const bool isSave = (flags & saveMode) != 0;
-    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
-    const bool allowsMultiple = (flags & canSelectMultipleItems) != 0;
-
-    EmscriptenFileChooser chooser (std::move (callback), filters, isSave, canChooseDirectories, allowsMultiple);
-    currentFileChooser = &chooser;
-
-    chooser.showDialog();
-
-    while (! chooser.isCompleted())
-        emscripten_sleep (10);
-
-    currentFileChooser = nullptr;
-}
 
 } // namespace yup
