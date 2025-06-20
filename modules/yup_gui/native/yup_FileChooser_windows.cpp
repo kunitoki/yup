@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the YUP library.
-   Copyright (c) 2024 - kunitoki@gmail.com
+   Copyright (c) 2025 - kunitoki@gmail.com
 
    YUP is an open source library subject to open-source licensing.
 
@@ -18,6 +18,9 @@
 
   ==============================================================================
 */
+
+//==============================================================================
+typedef HRESULT(WINAPI* SHCreateItemFromParsingNameProc)(_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
 
 namespace yup
 {
@@ -113,8 +116,6 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
 
 //==============================================================================
 
-typedef HRESULT (WINAPI* SHCreateItemFromParsingNameProc) (_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
-
 class FileChooser::FileChooserImpl
 {
 public:
@@ -127,19 +128,6 @@ public:
         , allowsMultipleSelection (allowsMultipleSelection)
         , warnAboutOverwrite (warnAboutOverwrite)
     {
-        SHCreateItemFromParsingNameProcInstance = []
-        {
-            HMODULE hlib = LoadLibraryA ("Shell32.dll");
-            if (hlib)
-            {
-                SHCreateItemFromParsingNameProc p_SHCreateItemFromParsingNameProc = (SHCreateItemFromParsingNameProc) GetProcAddress (hlib, "SHCreateItemFromParsingName");
-                if (p_SHCreateItemFromParsingNameProc)
-                    return p_SHCreateItemFromParsingNameProc;
-            }
-            return nullptr;
-        }();
-
-        if (SHCreateItemFromParsingNameProcInstance == nullptr)
     }
 
     bool runDialogOnCurrentThread()
