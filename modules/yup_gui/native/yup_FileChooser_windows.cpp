@@ -138,11 +138,11 @@ public:
             if (SUCCEEDED (hr))
             {
                 // Set title
-                pFileSave->SetTitle (owner.title.toWideCharPointer());
+                pFileSave->SetTitle (fileChooser.title.toWideCharPointer());
 
                 // Set file type filters
                 int numFilters;
-                COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (owner.filters, numFilters);
+                COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (fileChooser.filters, numFilters);
                 if (filterSpecs != nullptr)
                 {
                     pFileSave->SetFileTypes (numFilters, filterSpecs);
@@ -151,23 +151,23 @@ public:
                 }
 
                 // Set starting directory
-                if (owner.startingFile.exists())
+                if (fileChooser.startingFile.exists())
                 {
                     IShellItem* psi = nullptr;
-                    File dirToUse = owner.startingFile.isDirectory() ? owner.startingFile : owner.startingFile.getParentDirectory();
+                    File dirToUse = fileChooser.startingFile.isDirectory() ? fileChooser.startingFile : fileChooser.startingFile.getParentDirectory();
 
-                    hr = ::SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
-                                                        NULL,
-                                                        IID_IShellItem,
-                                                        IID_PPV_ARGS (&psi));
+                    hr = SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
+                                                      NULL,
+                                                      IID_IShellItem,
+                                                      IID_PPV_ARGS (&psi));
                     if (SUCCEEDED (hr))
                     {
                         pFileSave->SetFolder (psi);
                         psi->Release();
                     }
 
-                    if (owner.startingFile.existsAsFile())
-                        pFileSave->SetFileName (owner.startingFile.getFileName().toWideCharPointer());
+                    if (fileChooser.startingFile.existsAsFile())
+                        pFileSave->SetFileName (fileChooser.startingFile.getFileName().toWideCharPointer());
                 }
 
                 // Set options
@@ -213,13 +213,13 @@ public:
             if (SUCCEEDED (hr))
             {
                 // Set title
-                pFileOpen->SetTitle (owner.title.toWideCharPointer());
+                pFileOpen->SetTitle (fileChooser.title.toWideCharPointer());
 
                 // Set file type filters
                 if (canChooseFiles)
                 {
                     int numFilters;
-                    COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (owner.filters, numFilters);
+                    COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (fileChooser.filters, numFilters);
                     if (filterSpecs != nullptr)
                     {
                         pFileOpen->SetFileTypes (numFilters, filterSpecs);
@@ -229,13 +229,13 @@ public:
                 }
 
                 // Set starting directory
-                if (owner.startingFile.exists())
+                if (fileChooser.startingFile.exists())
                 {
                     IShellItem* psi = nullptr;
-                    hr = ::SHCreateItemFromParsingName (owner.startingFile.getFullPathName().toWideCharPointer(),
-                                                        NULL,
-                                                        IID_IShellItem,
-                                                        IID_PPV_ARGS (&psi));
+                    hr = SHCreateItemFromParsingName (fileChooser.startingFile.getFullPathName().toWideCharPointer(),
+                                                      NULL,
+                                                      IID_IShellItem,
+                                                      IID_PPV_ARGS (&psi));
                     if (SUCCEEDED (hr))
                     {
                         pFileOpen->SetFolder (psi);

@@ -99,6 +99,10 @@
 
 #include <thread>
 
+#if ! YUP_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#pragma comment(lib, "shell32.lib")
+#endif
+
 #include "native/yup_FileChooser_windows.cpp"
 #include "native/yup_Windowing_windows.cpp"
 
