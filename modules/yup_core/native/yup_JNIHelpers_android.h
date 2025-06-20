@@ -1213,6 +1213,26 @@ private:
 };
 
 //==============================================================================
+struct AndroidContentUriResolver
+{
+public:
+    static LocalRef<jobject> getContentResolver();
+
+    static File getLocalFileFromContentUri (const URL& url);
+    static String getFileNameFromContentUri (const URL& url);
+
+private:
+    static String getCursorDataColumn (const URL& url, const String& selection = {}, const StringArray& selectionArgs = {});
+    static File getStorageDevicePath (const String& storageId);
+    static File getPrimaryStorageDirectory();
+    static Array<File> getSecondaryStorageDirectories();
+    static String getStorageIdForMountPoint (const File& mountpoint);
+    static File getMountPointForFile (const File& file);
+    static Array<File> convertFileArray (LocalRef<jobject> obj);
+    static String getStringUsingDataColumn (const String& columnNameToUse, JNIEnv* env, const LocalRef<jobject>& uri, const LocalRef<jobject>& contentResolver);
+};
+
+//==============================================================================
 bool androidHasSystemFeature (const String& property);
 String audioManagerGetProperty (const String& property);
 

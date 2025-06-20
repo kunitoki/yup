@@ -30,6 +30,7 @@
 
 #include "examples/Audio.h"
 #include "examples/LayoutFonts.h"
+#include "examples/FileChooser.h"
 #include "examples/VariableFonts.h"
 #include "examples/TextEditor.h"
 #include "examples/Paths.h"
@@ -150,6 +151,19 @@ public:
             buttons.add (std::move (button));
 
             components.add (std::make_unique<PopupMenuDemo>());
+            addChildComponent (components.getLast());
+        }
+
+        {
+            auto button = std::make_unique<yup::TextButton> ("File Chooser");
+            button->onClick = [this]
+            {
+                selectComponent (6);
+            };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
+            components.add (std::make_unique<FileChooserDemo>());
             addChildComponent (components.getLast());
         }
 

@@ -24,17 +24,19 @@
 
   BEGIN_YUP_MODULE_DECLARATION
 
-    ID:                 yup_gui
-    vendor:             yup
-    version:            1.0.0
-    name:               YUP Graphical User Interface
-    description:        The essential set of basic YUP user interface.
-    website:            https://github.com/kunitoki/yup
-    license:            ISC
+    ID:                   yup_gui
+    vendor:               yup
+    version:              1.0.0
+    name:                 YUP Graphical User Interface
+    description:          The essential set of basic YUP user interface.
+    website:              https://github.com/kunitoki/yup
+    license:              ISC
 
-    dependencies:       yup_events yup_graphics rive
-    appleFrameworks:    Metal
-    enableARC:          1
+    dependencies:         yup_events yup_graphics rive
+    appleFrameworks:      Metal
+    iosWeakFrameworks:    UniformTypeIdentifiers
+    iosSimWeakFrameworks: UniformTypeIdentifiers
+    enableARC:           1
 
   END_YUP_MODULE_DECLARATION
 
@@ -89,6 +91,7 @@
 #include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"
+#include "dialogs/yup_FileChooser.h"
 
 //==============================================================================
 

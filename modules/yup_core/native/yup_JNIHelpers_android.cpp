@@ -428,96 +428,33 @@ jobject ActivityLifecycleCallbacks::invoke (jobject proxy, jobject method, jobje
         }
     };
 
-    static const std::map<const char*, void (*) (ActivityLifecycleCallbacks&, jobject, jobject), Comparator> entries {
-        { "onActivityConfigurationChanged", [] (auto& t, auto activity, auto)
+    // clang-format off
+    static const std::map<const char*, void (*) (ActivityLifecycleCallbacks&, jobject, jobject), Comparator> entries
     {
-        t.onActivityConfigurationChanged (activity);
-    } },
-        { "onActivityCreated", [] (auto& t, auto activity, auto bundle)
-    {
-        t.onActivityCreated (activity, bundle);
-    } },
-        { "onActivityDestroyed", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityDestroyed (activity);
-    } },
-        { "onActivityPaused", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPaused (activity);
-    } },
-        { "onActivityPostCreated", [] (auto& t, auto activity, auto bundle)
-    {
-        t.onActivityPostCreated (activity, bundle);
-    } },
-        { "onActivityPostDestroyed", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPostDestroyed (activity);
-    } },
-        { "onActivityPostPaused", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPostPaused (activity);
-    } },
-        { "onActivityPostResumed", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPostResumed (activity);
-    } },
-        { "onActivityPostSaveInstanceState", [] (auto& t, auto activity, auto bundle)
-    {
-        t.onActivityPostSaveInstanceState (activity, bundle);
-    } },
-        { "onActivityPostStarted", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPostStarted (activity);
-    } },
-        { "onActivityPostStopped", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPostStopped (activity);
-    } },
-        { "onActivityPreCreated", [] (auto& t, auto activity, auto bundle)
-    {
-        t.onActivityPreCreated (activity, bundle);
-    } },
-        { "onActivityPreDestroyed", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPreDestroyed (activity);
-    } },
-        { "onActivityPrePaused", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPrePaused (activity);
-    } },
-        { "onActivityPreResumed", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPreResumed (activity);
-    } },
-        { "onActivityPreSaveInstanceState", [] (auto& t, auto activity, auto bundle)
-    {
-        t.onActivityPreSaveInstanceState (activity, bundle);
-    } },
-        { "onActivityPreStarted", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPreStarted (activity);
-    } },
-        { "onActivityPreStopped", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityPreStopped (activity);
-    } },
-        { "onActivityResumed", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityResumed (activity);
-    } },
-        { "onActivitySaveInstanceState", [] (auto& t, auto activity, auto bundle)
-    {
-        t.onActivitySaveInstanceState (activity, bundle);
-    } },
-        { "onActivityStarted", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityStarted (activity);
-    } },
-        { "onActivityStopped", [] (auto& t, auto activity, auto)
-    {
-        t.onActivityStopped (activity);
-    } },
+        { "onActivityConfigurationChanged", [] (auto& t, auto activity, auto) { t.onActivityConfigurationChanged (activity); } },
+        { "onActivityCreated", [] (auto& t, auto activity, auto bundle) { t.onActivityCreated (activity, bundle); } },
+        { "onActivityDestroyed", [] (auto& t, auto activity, auto) { t.onActivityDestroyed (activity); } },
+        { "onActivityPaused", [] (auto& t, auto activity, auto) { t.onActivityPaused (activity); } },
+        { "onActivityPostCreated", [] (auto& t, auto activity, auto bundle) { t.onActivityPostCreated (activity, bundle); } },
+        { "onActivityPostDestroyed", [] (auto& t, auto activity, auto) { t.onActivityPostDestroyed (activity); } },
+        { "onActivityPostPaused", [] (auto& t, auto activity, auto) { t.onActivityPostPaused (activity); } },
+        { "onActivityPostResumed", [] (auto& t, auto activity, auto) { t.onActivityPostResumed (activity); } },
+        { "onActivityPostSaveInstanceState", [] (auto& t, auto activity, auto bundle) { t.onActivityPostSaveInstanceState (activity, bundle); } },
+        { "onActivityPostStarted", [] (auto& t, auto activity, auto) { t.onActivityPostStarted (activity); } },
+        { "onActivityPostStopped", [] (auto& t, auto activity, auto) { t.onActivityPostStopped (activity); } },
+        { "onActivityPreCreated", [] (auto& t, auto activity, auto bundle) { t.onActivityPreCreated (activity, bundle); } },
+        { "onActivityPreDestroyed", [] (auto& t, auto activity, auto) { t.onActivityPreDestroyed (activity); } },
+        { "onActivityPrePaused", [] (auto& t, auto activity, auto) { t.onActivityPrePaused (activity); } },
+        { "onActivityPreResumed", [] (auto& t, auto activity, auto) { t.onActivityPreResumed (activity); } },
+        { "onActivityPreSaveInstanceState", [] (auto& t, auto activity, auto bundle) { t.onActivityPreSaveInstanceState (activity, bundle); } },
+        { "onActivityPreStarted", [] (auto& t, auto activity, auto) { t.onActivityPreStarted (activity); } },
+        { "onActivityPreStopped", [] (auto& t, auto activity, auto) { t.onActivityPreStopped (activity); } },
+        { "onActivityResumed", [] (auto& t, auto activity, auto) { t.onActivityResumed (activity); } },
+        { "onActivitySaveInstanceState", [] (auto& t, auto activity, auto bundle) { t.onActivitySaveInstanceState (activity, bundle); } },
+        { "onActivityStarted", [] (auto& t, auto activity, auto) { t.onActivityStarted (activity); } },
+        { "onActivityStopped", [] (auto& t, auto activity, auto) { t.onActivityStopped (activity); } },
     };
+    // clang-format on
 
     const auto methodName = yupString ((jstring) env->CallObjectMethod (method, JavaMethod.getName));
     const auto iter = entries.find (methodName.toRawUTF8());
@@ -616,7 +553,7 @@ void FragmentOverlay::open()
     env->CallVoidMethod (bundle.get(), AndroidBundle.putLong, javaString ("cppThis").get(), (jlong) this);
     env->CallVoidMethod (native.get(), AndroidFragment.setArguments, bundle.get());
 
-    LocalRef<jobject> fm (env->CallObjectMethod (getCurrentActivity().get(), AndroidActivity.getFragmentManager));
+    LocalRef<jobject> fm (env->CallObjectMethod (getMainActivity().get(), AndroidActivity.getFragmentManager));
     env->CallVoidMethod (native.get(), AndroidDialogFragment.show, fm.get(), javaString ("FragmentOverlay").get());
 }
 

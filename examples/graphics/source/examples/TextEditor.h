@@ -19,6 +19,8 @@
   ==============================================================================
 */
 
+#pragma once
+
 class TextEditorDemo : public yup::Component
 {
 public:
