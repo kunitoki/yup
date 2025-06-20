@@ -24,7 +24,7 @@ namespace yup
 
 //==============================================================================
 #define JNI_CLASS_MEMBERS(METHOD, STATICMETHOD, FIELD, STATICFIELD, CALLBACK) \
-    METHOD (getItemCount, "getItemCount", "()I") \
+    METHOD (getItemCount, "getItemCount", "()I")                              \
     METHOD (getItemAt, "getItemAt", "(I)Landroid/content/ClipData$Item;")
 
 DECLARE_JNI_CLASS (AndroidClipData, "android/content/ClipData")

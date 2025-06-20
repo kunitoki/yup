@@ -141,13 +141,13 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
 };
 
 #ifndef DOXYGEN
-#define YUP_PRIVATE_DECLARE_SINGLETON(Classname, mutex, doNotRecreate, inlineToken, getter)                       \
-    static inlineToken yup::SingletonHolder<Classname, mutex, doNotRecreate> singletonHolder;                     \
-    friend yup::SingletonHolder<Classname, mutex, doNotRecreate>;                                                 \
-    static Classname* YUP_CALLTYPE getInstance()                            { return singletonHolder.getter(); }  \
-    static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept    { return singletonHolder.instance; }  \
-    static void YUP_CALLTYPE deleteInstance() noexcept                      { singletonHolder.deleteInstance(); } \
-    void clearSingletonInstance() noexcept                                  { singletonHolder.clear (this); }
+#define YUP_PRIVATE_DECLARE_SINGLETON(Classname, mutex, doNotRecreate, inlineToken, getter)                   \
+    static inlineToken yup::SingletonHolder<Classname, mutex, doNotRecreate> singletonHolder;                 \
+    friend yup::SingletonHolder<Classname, mutex, doNotRecreate>;                                             \
+    static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.getter(); }                         \
+    static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; } \
+    static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                  \
+    void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
 #endif
 
 //==============================================================================

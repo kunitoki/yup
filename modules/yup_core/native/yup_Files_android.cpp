@@ -375,7 +375,7 @@ Array<File> AndroidContentUriResolver::getSecondaryStorageDirectories()
         // on older SDKs other external storages are located "next" to the primary
         // storage mount point
         auto mountFolder = getMountPointForFile (getPrimaryStorageDirectory())
-                                .getParentDirectory();
+                               .getParentDirectory();
 
         // don't include every folder. Only folders which are actually mountpoints
         yup_statStruct info;
@@ -444,7 +444,7 @@ Array<File> AndroidContentUriResolver::convertFileArray (LocalRef<jobject> obj)
 
     for (int i = 0; i < n; ++i)
         files.add (yupFile (LocalRef<jobject> (env->GetObjectArrayElement ((jobjectArray) obj.get(),
-                                                                            (jsize) i))));
+                                                                           (jsize) i))));
 
     return files;
 }
