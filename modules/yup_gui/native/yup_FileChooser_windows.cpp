@@ -112,6 +112,9 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
 }
 
 //==============================================================================
+
+typedef HRESULT(WINAPI* SHCreateItemFromParsingNameProc)(_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
+
 class FileChooser::FileChooserImpl
 {
 public:
@@ -124,11 +127,33 @@ public:
         , allowsMultipleSelection (allowsMultipleSelection)
         , warnAboutOverwrite (warnAboutOverwrite)
     {
+		SHCreateItemFromParsingNameProcInstance = []
+        {
+            HMODULE hlib = LoadLibraryA ("Shell32.dll");
+    		if (hlib)
+	    	{
+		    	SHCreateItemFromParsingNameProc p_SHCreateItemFromParsingNameProc = (SHCreateItemFromParsingNameProc)GetProcAddress(hlib, "SHCreateItemFromParsingName");
+                if (p_SHCreateItemFromParsingNameProc)
+                    return p_SHCreateItemFromParsingNameProc;
+            }
+            return nullptr;
+        }();
+
+        if (SHCreateItemFromParsingNameProcInstance == nullptr)
+
     }
 
     bool runDialogOnCurrentThread()
     {
         HRESULT hr = S_OK;
+
+        SHCreateItemFromParsingNameProc SHCreateItemFromParsingName_ = []
+        {
+    		if (HMODULE hlib = LoadLibraryA ("Shell32.dll"))
+		    	return (SHCreateItemFromParsingNameProc) GetProcAddress (hlib, "SHCreateItemFromParsingName");
+
+            return nullptr;
+        }();
 
         if (isSave)
         {
@@ -151,24 +176,24 @@ public:
                 }
 
                 // Set starting directory
-                if (fileChooser.startingFile.exists())
+                if (SHCreateItemFromParsingName_ && fileChooser.startingFile.exists())
                 {
                     IShellItem* psi = nullptr;
                     File dirToUse = fileChooser.startingFile.isDirectory() ? fileChooser.startingFile : fileChooser.startingFile.getParentDirectory();
 
-                    hr = SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
-                                                      NULL,
-                                                      IID_IShellItem,
-                                                      IID_PPV_ARGS (&psi));
+                    hr = SHCreateItemFromParsingName_ (dirToUse.getFullPathName().toWideCharPointer(),
+                                                       NULL,
+                                                       &IID_IShellItem,
+                                                       reinterpret_cast<void**> (&psi));
                     if (SUCCEEDED (hr))
                     {
                         pFileSave->SetFolder (psi);
                         psi->Release();
                     }
-
-                    if (fileChooser.startingFile.existsAsFile())
-                        pFileSave->SetFileName (fileChooser.startingFile.getFileName().toWideCharPointer());
                 }
+
+                if (fileChooser.startingFile.existsAsFile())
+                    pFileSave->SetFileName (fileChooser.startingFile.getFileName().toWideCharPointer());
 
                 // Set options
                 DWORD options;
@@ -229,13 +254,13 @@ public:
                 }
 
                 // Set starting directory
-                if (fileChooser.startingFile.exists())
+                if (SHCreateItemFromParsingName_ && fileChooser.startingFile.exists())
                 {
                     IShellItem* psi = nullptr;
-                    hr = SHCreateItemFromParsingName (fileChooser.startingFile.getFullPathName().toWideCharPointer(),
-                                                      NULL,
-                                                      IID_IShellItem,
-                                                      IID_PPV_ARGS (&psi));
+                    hr = SHCreateItemFromParsingName_ (fileChooser.startingFile.getFullPathName().toWideCharPointer(),
+                                                       NULL,
+                                                       &IID_IShellItem,
+                                                       reinterpret_cast<void**> (&psi));
                     if (SUCCEEDED (hr))
                     {
                         pFileOpen->SetFolder (psi);
