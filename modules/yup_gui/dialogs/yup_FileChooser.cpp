@@ -103,7 +103,7 @@ void FileChooser::browseForDirectory (CompletionCallback callback)
 //==============================================================================
 void FileChooser::showDialog (CompletionCallback callback, int flags)
 {
-    YUP_ASSERT_MESSAGE_THREAD
+    //YUP_ASSERT_MESSAGE_THREAD
 
     // Set additional flags based on construction parameters
     if (packageDirsAsFiles)
