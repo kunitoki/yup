@@ -31,7 +31,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
 
     - name: Configure
       run: cmake ${{ github.workspace }} -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON -DYUP_ENABLE_EXAMPLES=ON
@@ -53,7 +52,6 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -72,7 +70,6 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -87,7 +84,6 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -102,7 +98,6 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -117,7 +112,6 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:
@@ -132,7 +126,6 @@ jobs:
     needs: [configure]
     steps:
     - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
     - uses: actions/cache/restore@v4
       id: cache-restore
       with:

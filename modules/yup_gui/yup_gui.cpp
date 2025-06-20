@@ -94,6 +94,7 @@
 #elif YUP_WINDOWS
 #include <commdlg.h>
 #include <shobjidl.h>
+#include <shobjidl_core.h>
 #include <shlwapi.h>
 #include <objbase.h>
 

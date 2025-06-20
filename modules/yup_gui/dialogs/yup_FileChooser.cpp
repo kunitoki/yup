@@ -23,7 +23,7 @@ namespace yup
 {
 
 //==============================================================================
-#if ! YUP_LINUX && ! YUP_ANDROID
+#if ! YUP_LINUX && ! YUP_WINDOWS && ! YUP_ANDROID
 class FileChooser::FileChooserImpl
 {
 public:
