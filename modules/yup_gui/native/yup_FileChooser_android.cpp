@@ -118,16 +118,16 @@ static StringArray createMimeTypes (const String& filters)
 }
 
 //==============================================================================
-class AndroidActivityCallback
+class FileChooser::FileChooserImpl
 {
 public:
-    AndroidActivityCallback (FileChooser::CompletionCallback cb)
-        : callback (std::move (cb))
-        , completed (false)
+    FileChooserImpl (FileChooser& owner, CompletionCallback cb)
+        : fileChooser (owner)
+        , callback (std::move (cb))
     {
     }
 
-    void onActivityResult (int requestCode, int resultCode, LocalRef<jobject> data)
+    void processActivityResult (int requestCode, int resultCode, LocalRef<jobject> data)
     {
         auto* env = getEnv();
         Array<File> results;
@@ -183,41 +183,22 @@ public:
 
         // Invoke callback with results
         if (callback)
-        {
             callback (resultCode == -1, results);
-        }
 
-        completed = true;
+        // Clean up - remove this impl from the FileChooser
+        fileChooser.impl.reset();
     }
 
-    bool isCompleted() const { return completed; }
+    void invokeCallback (bool result, const Array<File>& results)
+    {
+        callback (result, results);
+    }
 
 private:
-    FileChooser::CompletionCallback callback;
-    bool completed;
+    FileChooser& fileChooser;
+    CompletionCallback callback;
 };
 
-
-class FileChooser::FileChooserImpl : public AndroidActivityCallback
-{
-public:
-    using AndroidActivityCallback::AndroidActivityCallback;
-};
-
-static AndroidActivityCallback* currentCallback = nullptr;
-
-//==============================================================================
-extern "C" JNIEXPORT void JNICALL
-    Java_com_yourpackage_FileChooserActivity_onActivityResult (JNIEnv* env, jobject thiz, jint requestCode, jint resultCode, jobject data)
-{
-    if (currentCallback != nullptr)
-    {
-        LocalRef<jobject> dataRef (data);
-        currentCallback->onActivityResult (requestCode, resultCode, dataRef);
-    }
-}
-
-//==============================================================================
 void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 {
     const bool isSave = (flags & saveMode) != 0;
@@ -232,9 +213,8 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
         return;
     }
 
-    // Create the callback
-    impl = std::make_unique<FileChooserImpl> (std::move (callback));
-    currentCallback = impl.get();
+    // Create the implementation that will stay alive until the result comes back
+    impl = std::make_unique<FileChooserImpl> (*this, std::move (callback));
 
     LocalRef<jobject> intent;
 
@@ -271,7 +251,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
         // Enable multiple selection if requested
         if (allowsMultiple)
-            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.ALLOW_MULTIPLE").get(), true);
+            env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.ALLOW_MULTIPLE").get(), javaString ("true").get());
 
         // Set MIME types
         StringArray mimeTypes = createMimeTypes (filters);
@@ -297,19 +277,25 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
         if (title.isNotEmpty())
             env->CallObjectMethod (intent.get(), AndroidIntent.putExtra, javaString ("android.intent.extra.TITLE").get(), javaString (title).get());
 
-        // Start the activity
+        // Use YUP's non-blocking activity result handler
         const int requestCode = 12345;
-        env->CallVoidMethod (getMainActivity(), AndroidActivity.startActivityForResult, intent.get(), requestCode);
-
-        // Wait for the result (simplified approach)
-        auto startTime = Time::getCurrentTime();
-        while (currentCallback != nullptr && ! currentCallback->isCompleted() && (Time::getCurrentTime() - startTime).inSeconds() < 30.0)
+        startAndroidActivityForResult (intent, requestCode, [this] (int activityRequestCode, int resultCode, LocalRef<jobject> data)
         {
-            Thread::sleep (100);
-        }
-    }
+            YUP_DBG (">>>>>>>>>>>>>>>> xyz");
 
-    currentCallback = nullptr;
+            // Forward to our implementation which stays alive
+            if (impl)
+                impl->processActivityResult (activityRequestCode, resultCode, data);
+        });
+    }
+    else
+    {
+        // Failed to create intent, cleanup and call callback
+        if (impl != nullptr)
+            impl->invokeCallback (false, {});
+
+        impl.reset();
+    }
 }
 
 } // namespace yup
