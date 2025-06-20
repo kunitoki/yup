@@ -130,7 +130,7 @@ public:
     {
     }
 
-    bool runDialogOnCurrentThread()
+    void runDialogOnCurrentThread()
     {
         HRESULT hr = S_OK;
 
