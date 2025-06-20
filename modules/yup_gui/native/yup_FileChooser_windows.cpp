@@ -170,7 +170,7 @@ public:
 
                     hr = SHCreateItemFromParsingName_ (dirToUse.getFullPathName().toWideCharPointer(),
                                                        NULL,
-                                                       &IID_IShellItem,
+                                                       IID_IShellItem,
                                                        reinterpret_cast<void**> (&psi));
                     if (SUCCEEDED (hr))
                     {
@@ -246,7 +246,7 @@ public:
                     IShellItem* psi = nullptr;
                     hr = SHCreateItemFromParsingName_ (fileChooser.startingFile.getFullPathName().toWideCharPointer(),
                                                        NULL,
-                                                       &IID_IShellItem,
+                                                       IID_IShellItem,
                                                        reinterpret_cast<void**> (&psi));
                     if (SUCCEEDED (hr))
                     {
