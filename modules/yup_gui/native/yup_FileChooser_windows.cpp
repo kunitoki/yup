@@ -60,6 +60,7 @@ static String createFilterString (const String& filters)
     return result;
 }
 
+//==============================================================================
 static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilters)
 {
     numFilters = 0;
@@ -110,194 +111,82 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
     return specs;
 }
 
-void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
+//==============================================================================
+class FileChooser::FileChooserImpl
 {
-    HRESULT hr = CoInitializeEx (NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-
-    const bool isSave = (flags & saveMode) != 0;
-    const bool canChooseFiles = (flags & canSelectFiles) != 0;
-    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
-    const bool allowsMultipleSelection = (flags & canSelectMultipleItems) != 0;
-    const bool warnAboutOverwrite = (flags & warnAboutOverwriting) != 0;
-
-    Array<File> results;
-
-    if (isSave)
+public:
+    FileChooserImpl (FileChooser& owner, CompletionCallback cb, bool isSave, bool canChooseFiles, bool canChooseDirectories, bool allowsMultipleSelection, bool warnAboutOverwrite)
+        : fileChooser (owner)
+        , callback (std::move (cb))
+        , isSave (isSave)
+        , canChooseFiles (canChooseFiles)
+        , canChooseDirectories (canChooseDirectories)
+        , allowsMultipleSelection (allowsMultipleSelection)
+        , warnAboutOverwrite (warnAboutOverwrite)
     {
-        IFileSaveDialog* pFileSave = nullptr;
+    }
 
-        hr = CoCreateInstance (CLSID_FileSaveDialog, NULL, CLSCTX_ALL, IID_IFileSaveDialog, reinterpret_cast<void**> (&pFileSave));
+    bool runDialogOnCurrentThread (Array<File>& results)
+    {
+        HRESULT hr = S_OK;
 
-        if (SUCCEEDED (hr))
+        if (isSave)
         {
-            // Set title
-            pFileSave->SetTitle (title.toWideCharPointer());
+            IFileSaveDialog* pFileSave = nullptr;
 
-            // Set file type filters
-            int numFilters;
-            COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (filters, numFilters);
-            if (filterSpecs != nullptr)
-            {
-                pFileSave->SetFileTypes (numFilters, filterSpecs);
-                pFileSave->SetFileTypeIndex (1);
-            }
-
-            // Set starting directory
-            if (startingFile.exists())
-            {
-                IShellItem* psi = nullptr;
-                File dirToUse = startingFile.isDirectory() ? startingFile : startingFile.getParentDirectory();
-
-                hr = SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
-                                                  NULL,
-                                                  IID_IShellItem,
-                                                  IID_PPV_ARGS (&psi));
-                if (SUCCEEDED (hr))
-                {
-                    pFileSave->SetFolder (psi);
-                    psi->Release();
-                }
-
-                if (startingFile.existsAsFile())
-                {
-                    pFileSave->SetFileName (startingFile.getFileName().toWideCharPointer());
-                }
-            }
-
-            // Set options
-            DWORD options;
-            pFileSave->GetOptions (&options);
-            options |= FOS_FORCEFILESYSTEM;
-            if (warnAboutOverwrite)
-                options |= FOS_OVERWRITEPROMPT;
-            pFileSave->SetOptions (options);
-
-            // Show the dialog
-            hr = pFileSave->Show (NULL);
+            hr = CoCreateInstance (CLSID_FileSaveDialog, NULL, CLSCTX_ALL, IID_IFileSaveDialog, reinterpret_cast<void**> (&pFileSave));
 
             if (SUCCEEDED (hr))
             {
-                IShellItem* pItem = nullptr;
-                hr = pFileSave->GetResult (&pItem);
+                // Set title
+                pFileSave->SetTitle (title.toWideCharPointer());
 
-                if (SUCCEEDED (hr))
-                {
-                    PWSTR pszFilePath = nullptr;
-                    hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
-
-                    if (SUCCEEDED (hr))
-                    {
-                        results.add (File (String (pszFilePath)));
-                        CoTaskMemFree (pszFilePath);
-                    }
-
-                    pItem->Release();
-                }
-            }
-
-            delete[] filterSpecs;
-            pFileSave->Release();
-        }
-
-        // Invoke callback with results
-        invokeCallback (std::move (callback), SUCCEEDED (hr) && results.size() > 0, results);
-    }
-    else
-    {
-        IFileOpenDialog* pFileOpen = nullptr;
-
-        hr = CoCreateInstance (CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**> (&pFileOpen));
-
-        if (SUCCEEDED (hr))
-        {
-            // Set title
-            pFileOpen->SetTitle (title.toWideCharPointer());
-
-            // Set file type filters
-            if (canChooseFiles)
-            {
+                // Set file type filters
                 int numFilters;
                 COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (filters, numFilters);
                 if (filterSpecs != nullptr)
                 {
-                    pFileOpen->SetFileTypes (numFilters, filterSpecs);
-                    pFileOpen->SetFileTypeIndex (1);
-                    delete[] filterSpecs;
+                    pFileSave->SetFileTypes (numFilters, filterSpecs);
+                    pFileSave->SetFileTypeIndex (1);
                 }
-            }
 
-            // Set starting directory
-            if (startingFile.exists())
-            {
-                IShellItem* psi = nullptr;
-                hr = SHCreateItemFromParsingName (startingFile.getFullPathName().toWideCharPointer(),
-                                                  NULL,
-                                                  IID_IShellItem,
-                                                  IID_PPV_ARGS (&psi));
-                if (SUCCEEDED (hr))
+                // Set starting directory
+                if (startingFile.exists())
                 {
-                    pFileOpen->SetFolder (psi);
-                    psi->Release();
-                }
-            }
+                    IShellItem* psi = nullptr;
+                    File dirToUse = startingFile.isDirectory() ? startingFile : startingFile.getParentDirectory();
 
-            // Set options
-            DWORD options;
-            pFileOpen->GetOptions (&options);
-            options |= FOS_FORCEFILESYSTEM;
-
-            if (allowsMultipleSelection)
-                options |= FOS_ALLOWMULTISELECT;
-
-            if (canChooseDirectories && ! canChooseFiles)
-                options |= FOS_PICKFOLDERS;
-            else if (canChooseDirectories && canChooseFiles)
-                options |= FOS_PICKFOLDERS;
-
-            pFileOpen->SetOptions (options);
-
-            // Show the dialog
-            hr = pFileOpen->Show (NULL);
-
-            if (SUCCEEDED (hr))
-            {
-                if (allowsMultipleSelection)
-                {
-                    IShellItemArray* pItems = nullptr;
-                    hr = pFileOpen->GetResults (&pItems);
-
+                    hr = ::SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
+                                                        NULL,
+                                                        IID_IShellItem,
+                                                        IID_PPV_ARGS (&psi));
                     if (SUCCEEDED (hr))
                     {
-                        DWORD itemCount;
-                        pItems->GetCount (&itemCount);
+                        pFileSave->SetFolder (psi);
+                        psi->Release();
+                    }
 
-                        for (DWORD i = 0; i < itemCount; ++i)
-                        {
-                            IShellItem* pItem = nullptr;
-                            hr = pItems->GetItemAt (i, &pItem);
-
-                            if (SUCCEEDED (hr))
-                            {
-                                PWSTR pszFilePath = nullptr;
-                                hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
-
-                                if (SUCCEEDED (hr))
-                                {
-                                    results.add (File (String (pszFilePath)));
-                                    CoTaskMemFree (pszFilePath);
-                                }
-
-                                pItem->Release();
-                            }
-                        }
-
-                        pItems->Release();
+                    if (startingFile.existsAsFile())
+                    {
+                        pFileSave->SetFileName (startingFile.getFileName().toWideCharPointer());
                     }
                 }
-                else
+
+                // Set options
+                DWORD options;
+                pFileSave->GetOptions (&options);
+                options |= FOS_FORCEFILESYSTEM;
+                if (warnAboutOverwrite)
+                    options |= FOS_OVERWRITEPROMPT;
+                pFileSave->SetOptions (options);
+
+                // Show the dialog
+                hr = pFileSave->Show (NULL);
+
+                if (SUCCEEDED (hr))
                 {
                     IShellItem* pItem = nullptr;
-                    hr = pFileOpen->GetResult (&pItem);
+                    hr = pFileSave->GetResult (&pItem);
 
                     if (SUCCEEDED (hr))
                     {
@@ -313,16 +202,176 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
                         pItem->Release();
                     }
                 }
+
+                delete[] filterSpecs;
+                pFileSave->Release();
             }
 
-            pFileOpen->Release();
+            return SUCCEEDED (hr) && results.size() > 0;
         }
+        else
+        {
+            IFileOpenDialog* pFileOpen = nullptr;
 
-        // Invoke callback with results
-        invokeCallback (std::move (callback), SUCCEEDED (hr) && results.size() > 0, results);
+            hr = CoCreateInstance (CLSID_FileOpenDialog, NULL, CLSCTX_ALL, IID_IFileOpenDialog, reinterpret_cast<void**> (&pFileOpen));
+
+            if (SUCCEEDED (hr))
+            {
+                // Set title
+                pFileOpen->SetTitle (title.toWideCharPointer());
+
+                // Set file type filters
+                if (canChooseFiles)
+                {
+                    int numFilters;
+                    COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (filters, numFilters);
+                    if (filterSpecs != nullptr)
+                    {
+                        pFileOpen->SetFileTypes (numFilters, filterSpecs);
+                        pFileOpen->SetFileTypeIndex (1);
+                        delete[] filterSpecs;
+                    }
+                }
+
+                // Set starting directory
+                if (startingFile.exists())
+                {
+                    IShellItem* psi = nullptr;
+                    hr = ::SHCreateItemFromParsingName (startingFile.getFullPathName().toWideCharPointer(),
+                                                        NULL,
+                                                        IID_IShellItem,
+                                                        IID_PPV_ARGS (&psi));
+                    if (SUCCEEDED (hr))
+                    {
+                        pFileOpen->SetFolder (psi);
+                        psi->Release();
+                    }
+                }
+
+                // Set options
+                DWORD options;
+                pFileOpen->GetOptions (&options);
+                options |= FOS_FORCEFILESYSTEM;
+
+                if (allowsMultipleSelection)
+                    options |= FOS_ALLOWMULTISELECT;
+
+                if (canChooseDirectories && ! canChooseFiles)
+                    options |= FOS_PICKFOLDERS;
+                else if (canChooseDirectories && canChooseFiles)
+                    options |= FOS_PICKFOLDERS;
+
+                pFileOpen->SetOptions (options);
+
+                // Show the dialog
+                hr = pFileOpen->Show (NULL);
+
+                if (SUCCEEDED (hr))
+                {
+                    if (allowsMultipleSelection)
+                    {
+                        IShellItemArray* pItems = nullptr;
+                        hr = pFileOpen->GetResults (&pItems);
+
+                        if (SUCCEEDED (hr))
+                        {
+                            DWORD itemCount;
+                            pItems->GetCount (&itemCount);
+
+                            for (DWORD i = 0; i < itemCount; ++i)
+                            {
+                                IShellItem* pItem = nullptr;
+                                hr = pItems->GetItemAt (i, &pItem);
+
+                                if (SUCCEEDED (hr))
+                                {
+                                    PWSTR pszFilePath = nullptr;
+                                    hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
+
+                                    if (SUCCEEDED (hr))
+                                    {
+                                        results.add (File (String (pszFilePath)));
+                                        CoTaskMemFree (pszFilePath);
+                                    }
+
+                                    pItem->Release();
+                                }
+                            }
+
+                            pItems->Release();
+                        }
+                    }
+                    else
+                    {
+                        IShellItem* pItem = nullptr;
+                        hr = pFileOpen->GetResult (&pItem);
+
+                        if (SUCCEEDED (hr))
+                        {
+                            PWSTR pszFilePath = nullptr;
+                            hr = pItem->GetDisplayName (SIGDN_FILESYSPATH, &pszFilePath);
+
+                            if (SUCCEEDED (hr))
+                            {
+                                results.add (File (String (pszFilePath)));
+                                CoTaskMemFree (pszFilePath);
+                            }
+
+                            pItem->Release();
+                        }
+                    }
+                }
+
+                pFileOpen->Release();
+            }
+
+            return SUCCEEDED (hr) && results.size() > 0;
+        }
     }
 
-    CoUninitialize();
+private:
+    FileChooser& fileChooser;
+    CompletionCallback callback;
+    Array<File> results;
+    bool isSave;
+    bool canChooseFiles;
+    bool canChooseDirectories;
+    bool allowsMultipleSelection;
+    bool warnAboutOverwrite;
+};
+
+//==============================================================================
+void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
+{
+    const bool isSave = (flags & saveMode) != 0;
+    const bool canChooseFiles = (flags & canSelectFiles) != 0;
+    const bool canChooseDirectories = (flags & canSelectDirectories) != 0;
+    const bool allowsMultipleSelection = (flags & canSelectMultipleItems) != 0;
+    const bool warnAboutOverwrite = (flags & warnAboutOverwriting) != 0;
+
+    impl = std::make_unique<FileChooserImpl> (*this, std::move (callback), isSave, canChooseFiles, canChooseDirectories, allowsMultipleSelection, warnAboutOverwrite);
+
+    // Run the dialog asynchronously on a background thread
+    auto dialogThread = std::thread ([this]
+    {
+        bool success = false;
+
+        // Initialize COM for this thread
+        HRESULT hr = CoInitializeEx (NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+        if (SUCCEEDED (hr) && impl != nullptr)
+        {
+            success = impl->runDialogOnCurrentThread (results, flags);
+            CoUninitialize();
+        }
+
+        // Schedule callback to run on the main thread
+        MessageManager::callAsync ([callback = std::move (callback), success, results = std::move (results)]
+        {
+            callback (success, results);
+        });
+    });
+
+    dialogThread.detach();
 }
 
 } // namespace yup

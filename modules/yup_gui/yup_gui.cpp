@@ -95,6 +95,9 @@
 #include <commdlg.h>
 #include <shobjidl.h>
 #include <shlwapi.h>
+#include <objbase.h>
+
+#include <thread>
 
 #include "native/yup_FileChooser_windows.cpp"
 #include "native/yup_Windowing_windows.cpp"
