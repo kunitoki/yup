@@ -134,7 +134,7 @@ public:
     {
         HRESULT hr = S_OK;
 
-        SHCreateItemFromParsingNameProc SHCreateItemFromParsingName_ = []
+        SHCreateItemFromParsingNameProc SHCreateItemFromParsingName_ = []() -> SHCreateItemFromParsingNameProc
         {
             if (HMODULE hlib = LoadLibraryA ("Shell32.dll"))
                 return (SHCreateItemFromParsingNameProc) GetProcAddress (hlib, "SHCreateItemFromParsingName");
