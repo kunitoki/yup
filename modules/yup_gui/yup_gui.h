@@ -32,11 +32,11 @@
     website:              https://github.com/kunitoki/yup
     license:              ISC
 
-    dependencies:         yup_events yup_graphics rive
+    dependencies:         yup_events yup_data_model yup_graphics rive
     appleFrameworks:      Metal
     iosWeakFrameworks:    UniformTypeIdentifiers
     iosSimWeakFrameworks: UniformTypeIdentifiers
-    enableARC:           1
+    enableARC:            1
 
   END_YUP_MODULE_DECLARATION
 
@@ -47,7 +47,10 @@
 #define YUP_GUI_H_INCLUDED
 
 #include <yup_events/yup_events.h>
+#include <yup_data_model/yup_data_model.h>
 #include <yup_graphics/yup_graphics.h>
+
+#include <rive/rive.h>
 
 //==============================================================================
 /** Config: YUP_ENABLE_COMPONENT_REPAINT_DEBUGGING
@@ -59,10 +62,6 @@
 #endif
 
 //==============================================================================
-
-#include <rive/artboard.hpp>
-#include <rive/file.hpp>
-#include <rive/static_scene.hpp>
 
 #include <tuple>
 #include <unordered_map>

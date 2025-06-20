@@ -55,6 +55,7 @@ set (target_modules
     yup_audio_basics
     yup_audio_devices
     yup_events
+    yup_data_model
     yup_graphics)
 
 yup_standalone_app (
