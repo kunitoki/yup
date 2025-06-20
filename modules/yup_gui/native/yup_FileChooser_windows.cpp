@@ -126,7 +126,7 @@ public:
     {
     }
 
-    bool runDialogOnCurrentThread (Array<File>& results)
+    bool runDialogOnCurrentThread()
     {
         HRESULT hr = S_OK;
 
@@ -135,26 +135,26 @@ public:
             IFileSaveDialog* pFileSave = nullptr;
 
             hr = CoCreateInstance (CLSID_FileSaveDialog, NULL, CLSCTX_ALL, IID_IFileSaveDialog, reinterpret_cast<void**> (&pFileSave));
-
             if (SUCCEEDED (hr))
             {
                 // Set title
-                pFileSave->SetTitle (title.toWideCharPointer());
+                pFileSave->SetTitle (owner.title.toWideCharPointer());
 
                 // Set file type filters
                 int numFilters;
-                COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (filters, numFilters);
+                COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (owner.filters, numFilters);
                 if (filterSpecs != nullptr)
                 {
                     pFileSave->SetFileTypes (numFilters, filterSpecs);
                     pFileSave->SetFileTypeIndex (1);
+                    delete[] filterSpecs;
                 }
 
                 // Set starting directory
-                if (startingFile.exists())
+                if (owner.startingFile.exists())
                 {
                     IShellItem* psi = nullptr;
-                    File dirToUse = startingFile.isDirectory() ? startingFile : startingFile.getParentDirectory();
+                    File dirToUse = owner.startingFile.isDirectory() ? owner.startingFile : owner.startingFile.getParentDirectory();
 
                     hr = ::SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
                                                         NULL,
@@ -166,10 +166,8 @@ public:
                         psi->Release();
                     }
 
-                    if (startingFile.existsAsFile())
-                    {
-                        pFileSave->SetFileName (startingFile.getFileName().toWideCharPointer());
-                    }
+                    if (owner.startingFile.existsAsFile())
+                        pFileSave->SetFileName (owner.startingFile.getFileName().toWideCharPointer());
                 }
 
                 // Set options
@@ -203,11 +201,8 @@ public:
                     }
                 }
 
-                delete[] filterSpecs;
                 pFileSave->Release();
             }
-
-            return SUCCEEDED (hr) && results.size() > 0;
         }
         else
         {
@@ -218,13 +213,13 @@ public:
             if (SUCCEEDED (hr))
             {
                 // Set title
-                pFileOpen->SetTitle (title.toWideCharPointer());
+                pFileOpen->SetTitle (owner.title.toWideCharPointer());
 
                 // Set file type filters
                 if (canChooseFiles)
                 {
                     int numFilters;
-                    COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (filters, numFilters);
+                    COMDLG_FILTERSPEC* filterSpecs = createFilterSpecs (owner.filters, numFilters);
                     if (filterSpecs != nullptr)
                     {
                         pFileOpen->SetFileTypes (numFilters, filterSpecs);
@@ -234,10 +229,10 @@ public:
                 }
 
                 // Set starting directory
-                if (startingFile.exists())
+                if (owner.startingFile.exists())
                 {
                     IShellItem* psi = nullptr;
-                    hr = ::SHCreateItemFromParsingName (startingFile.getFullPathName().toWideCharPointer(),
+                    hr = ::SHCreateItemFromParsingName (owner.startingFile.getFullPathName().toWideCharPointer(),
                                                         NULL,
                                                         IID_IShellItem,
                                                         IID_PPV_ARGS (&psi));
@@ -324,9 +319,14 @@ public:
 
                 pFileOpen->Release();
             }
-
-            return SUCCEEDED (hr) && results.size() > 0;
         }
+
+        // Schedule callback to run on the main thread
+        bool success = SUCCEEDED (hr) && results.size() > 0;
+        MessageManager::callAsync ([callback = std::move (callback), success, results = std::move (results)]
+        {
+            callback (success, results);
+        });
     }
 
 private:
@@ -351,24 +351,16 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
     impl = std::make_unique<FileChooserImpl> (*this, std::move (callback), isSave, canChooseFiles, canChooseDirectories, allowsMultipleSelection, warnAboutOverwrite);
 
-    // Run the dialog asynchronously on a background thread
     auto dialogThread = std::thread ([this]
     {
-        bool success = false;
-
-        // Initialize COM for this thread
         HRESULT hr = CoInitializeEx (NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+
         if (SUCCEEDED (hr) && impl != nullptr)
         {
-            success = impl->runDialogOnCurrentThread (results, flags);
+            impl->runDialogOnCurrentThread();
+
             CoUninitialize();
         }
-
-        // Schedule callback to run on the main thread
-        MessageManager::callAsync ([callback = std::move (callback), success, results = std::move (results)]
-        {
-            callback (success, results);
-        });
     });
 
     dialogThread.detach();
