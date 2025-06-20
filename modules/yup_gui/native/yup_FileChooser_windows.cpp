@@ -150,6 +150,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
 
                 hr = SHCreateItemFromParsingName (dirToUse.getFullPathName().toWideCharPointer(),
                                                   NULL,
+                                                  IID_IShellItem,
                                                   IID_PPV_ARGS (&psi));
                 if (SUCCEEDED (hr))
                 {
@@ -231,6 +232,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
                 IShellItem* psi = nullptr;
                 hr = SHCreateItemFromParsingName (startingFile.getFullPathName().toWideCharPointer(),
                                                   NULL,
+                                                  IID_IShellItem,
                                                   IID_PPV_ARGS (&psi));
                 if (SUCCEEDED (hr))
                 {
