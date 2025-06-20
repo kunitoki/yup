@@ -31,6 +31,7 @@
     description:        The Rive Renderer is a vector and raster graphics renderer custom-built for Rive content, for animation, and for runtime.
     website:            https://github.com/rive-app/rive-runtime
     license:            MIT
+    minimumCppStandard: 17
 
     dependencies:       rive rive_decoders glad
     searchpaths:        include source source/generated/shaders
@@ -122,28 +123,33 @@
 #endif
 #endif
 
+//==============================================================================
+
 #if __GNUC__
  #pragma GCC diagnostic push
  #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif __clang__
+ #pragma clang diagnostic push
+ #pragma clang diagnostic ignored "-Wattributes"
 #elif _MSC_VER
  __pragma (warning (push))
  __pragma (warning (disable: 4244))
 #endif
 
-//==============================================================================
 // Public API
 #include <rive/renderer/texture.hpp>
 #include <rive/renderer/rive_render_image.hpp>
 #include <rive/renderer/render_context.hpp>
 #include <rive/renderer/render_context_impl.hpp>
 
-//==============================================================================
 // Internals
 #include <rive_renderer/source/rive_render_path.hpp>
 #include <rive_renderer/source/rive_render_paint.hpp>
 
 #if __GNUC__
  #pragma GCC diagnostic pop
+#elif __clang__
+ #pragma clang diagnostic pop
 #elif _MSC_VER
  __pragma (warning (pop))
 #endif

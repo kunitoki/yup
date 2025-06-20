@@ -582,6 +582,9 @@ function (_yup_add_default_modules modules_path)
     yup_add_module (${modules_path}/modules/yup_events ${modules_group})
     add_library (yup::yup_events ALIAS yup_events)
 
+    yup_add_module (${modules_path}/modules/yup_data_model ${modules_group})
+    add_library (yup::yup_data_model ALIAS yup_data_model)
+
     yup_add_module (${modules_path}/modules/yup_audio_basics ${modules_group})
     add_library (yup::yup_audio_basics ALIAS yup_audio_basics)
 
