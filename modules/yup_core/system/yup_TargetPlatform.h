@@ -158,7 +158,7 @@
 #endif
 
 #if ! (defined(DEBUG) || defined(_DEBUG) || defined(NDEBUG) || defined(_NDEBUG))
-#warning "Neither NDEBUG or DEBUG has been defined - you should set one of these to make it clear whether this is a release build,"
+#warning "Neither NDEBUG or DEBUG has been defined - you should set one of these to make it clear whether this is a release build."
 #endif
 
 #ifdef __LITTLE_ENDIAN__
@@ -193,8 +193,12 @@
 //==============================================================================
 #if YUP_LINUX || YUP_ANDROID || YUP_BSD
 
-#ifdef _DEBUG
+#if defined(DEBUG) || defined(_DEBUG) || ! (defined(NDEBUG) || defined(_NDEBUG))
 #define YUP_DEBUG 1
+#endif
+
+#if ! (defined(DEBUG) || defined(_DEBUG) || defined(NDEBUG) || defined(_NDEBUG))
+#warning "Neither NDEBUG or DEBUG has been defined - you should set one of these to make it clear whether this is a release build."
 #endif
 
 // Allow override for big-endian Linux platforms
@@ -221,8 +225,12 @@
 
 //==============================================================================
 #if YUP_WASM
-#ifdef _DEBUG
+#if defined(DEBUG) || defined(_DEBUG) || ! (defined(NDEBUG) || defined(_NDEBUG))
 #define YUP_DEBUG 1
+#endif
+
+#if ! (defined(DEBUG) || defined(_DEBUG) || defined(NDEBUG) || defined(_NDEBUG))
+#warning "Neither NDEBUG or DEBUG has been defined - you should set one of these to make it clear whether this is a release build."
 #endif
 
 #define YUP_LITTLE_ENDIAN 1
@@ -242,5 +250,5 @@
 #define YUP_MSVC 1
 
 #else
-#error unknown compiler
+#error "Unknown compiler detected."
 #endif

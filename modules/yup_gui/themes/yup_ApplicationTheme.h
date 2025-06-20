@@ -82,8 +82,6 @@ public:
     static auto findComponentStyle (ComponentType& component)
         -> std::enable_if_t<std::is_base_of_v<Component, ComponentType>, ComponentStyle::Ptr>
     {
-        YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
-
         auto& componentStyles = getGlobalThemeInstance()->componentStyles;
 
         if (auto style = component.getStyle())
@@ -117,8 +115,6 @@ public:
     template <class ComponentType>
     void setComponentStyle (ComponentStyle::Ptr style)
     {
-        YUP_ASSERT_MESSAGE_MANAGER_IS_LOCKED
-
         componentStyles.try_emplace (std::type_index (typeid (ComponentType)), std::move (style));
     }
 

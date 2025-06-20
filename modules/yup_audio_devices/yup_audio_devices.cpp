@@ -37,7 +37,6 @@
   ==============================================================================
 */
 
-// clang-format off
 #ifdef YUP_AUDIO_DEVICES_H_INCLUDED
 /* When you add this cpp file to your project, you mustn't include it in a file where you've
    already included any other headers - just put it inside a file on its own, possibly with your config
@@ -46,7 +45,6 @@
 */
 #error "Incorrect use of YUP cpp file"
 #endif
-// clang-format on
 
 #define YUP_CORE_INCLUDE_OBJC_HELPERS 1
 #define YUP_CORE_INCLUDE_COM_SMART_PTR 1
