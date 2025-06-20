@@ -21,7 +21,7 @@
 
 /*******************************************************************************
 
-  BEGIN_JUCE_MODULE_DECLARATION
+  BEGIN_YUP_MODULE_DECLARATION
 
     ID:                 yup_data_model
     vendor:             yup
@@ -30,19 +30,18 @@
     description:        The essential set of basic YUP data model classes.
     website:            https://github.com/kunitoki/yup
     license:            ISC
-    minimumCppStandard: 17
 
-    dependencies:       juce_events
+    dependencies:       yup_events
     enableARC:          1
 
-  END_JUCE_MODULE_DECLARATION
+  END_YUP_MODULE_DECLARATION
 
 *******************************************************************************/
 
 #pragma once
 #define YUP_DATA_MODEL_H_INCLUDED
 
-#include <juce_events/juce_events.h>
+#include <yup_events/yup_events.h>
 
 //==============================================================================
 #include "undo/yup_UndoableAction.h"

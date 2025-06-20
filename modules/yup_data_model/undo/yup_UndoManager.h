@@ -43,7 +43,7 @@ namespace yup
 
     @see UndoableAction
 */
-class UndoManager
+class YUP_API UndoManager
     : public ReferenceCountedObject
     , private Timer
 {
@@ -327,8 +327,8 @@ private:
 
     bool isUndoEnabled = false;
 
-    JUCE_DECLARE_WEAK_REFERENCEABLE (UndoManager)
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoManager)
+    YUP_DECLARE_WEAK_REFERENCEABLE (UndoManager)
+    YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (UndoManager)
 };
 
 } // namespace yup

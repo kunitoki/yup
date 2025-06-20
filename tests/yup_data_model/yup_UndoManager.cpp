@@ -176,8 +176,8 @@ TEST_F (UndoManagerTest, TransactionIteration)
         EXPECT_EQ (undoManager->getNumTransactions(), 2);
     }
 
-    EXPECT_EQ (juce::String ("1"), undoManager->getTransactionName (0));
-    EXPECT_EQ (juce::String ("2"), undoManager->getTransactionName (1));
+    EXPECT_EQ (String ("1"), undoManager->getTransactionName (0));
+    EXPECT_EQ (String ("2"), undoManager->getTransactionName (1));
 }
 
 TEST_F (UndoManagerTest, RedoAction)
@@ -264,7 +264,7 @@ TEST_F (UndoManagerTest, PerformWithLambda)
         int counter = 0;
 
     private:
-        JUCE_DECLARE_WEAK_REFERENCEABLE (Object)
+        YUP_DECLARE_WEAK_REFERENCEABLE (Object)
     };
 
     auto lambdaAction = [] (Object::Ptr x, UndoableActionState s) -> bool
