@@ -113,7 +113,7 @@ static COMDLG_FILTERSPEC* createFilterSpecs (const String& filters, int& numFilt
 
 //==============================================================================
 
-typedef HRESULT(WINAPI* SHCreateItemFromParsingNameProc)(_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
+typedef HRESULT (WINAPI* SHCreateItemFromParsingNameProc) (_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
 
 class FileChooser::FileChooserImpl
 {
@@ -127,12 +127,12 @@ public:
         , allowsMultipleSelection (allowsMultipleSelection)
         , warnAboutOverwrite (warnAboutOverwrite)
     {
-		SHCreateItemFromParsingNameProcInstance = []
+        SHCreateItemFromParsingNameProcInstance = []
         {
             HMODULE hlib = LoadLibraryA ("Shell32.dll");
-    		if (hlib)
-	    	{
-		    	SHCreateItemFromParsingNameProc p_SHCreateItemFromParsingNameProc = (SHCreateItemFromParsingNameProc)GetProcAddress(hlib, "SHCreateItemFromParsingName");
+            if (hlib)
+            {
+                SHCreateItemFromParsingNameProc p_SHCreateItemFromParsingNameProc = (SHCreateItemFromParsingNameProc) GetProcAddress (hlib, "SHCreateItemFromParsingName");
                 if (p_SHCreateItemFromParsingNameProc)
                     return p_SHCreateItemFromParsingNameProc;
             }
@@ -140,7 +140,6 @@ public:
         }();
 
         if (SHCreateItemFromParsingNameProcInstance == nullptr)
-
     }
 
     bool runDialogOnCurrentThread()
@@ -149,8 +148,8 @@ public:
 
         SHCreateItemFromParsingNameProc SHCreateItemFromParsingName_ = []
         {
-    		if (HMODULE hlib = LoadLibraryA ("Shell32.dll"))
-		    	return (SHCreateItemFromParsingNameProc) GetProcAddress (hlib, "SHCreateItemFromParsingName");
+            if (HMODULE hlib = LoadLibraryA ("Shell32.dll"))
+                return (SHCreateItemFromParsingNameProc) GetProcAddress (hlib, "SHCreateItemFromParsingName");
 
             return nullptr;
         }();
