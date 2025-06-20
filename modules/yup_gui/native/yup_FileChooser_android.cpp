@@ -182,8 +182,7 @@ public:
         }
 
         // Invoke callback with results
-        if (callback)
-            callback (resultCode == -1, results);
+        invokeCallback (resultCode == -1, results);
 
         // Clean up - remove this impl from the FileChooser
         fileChooser.impl.reset();
@@ -191,7 +190,8 @@ public:
 
     void invokeCallback (bool result, const Array<File>& results)
     {
-        callback (result, results);
+        if (callback)
+            callback (result, results);
     }
 
 private:
@@ -281,10 +281,7 @@ void FileChooser::showPlatformDialog (CompletionCallback callback, int flags)
         const int requestCode = 12345;
         startAndroidActivityForResult (intent, requestCode, [this] (int activityRequestCode, int resultCode, LocalRef<jobject> data)
         {
-            YUP_DBG (">>>>>>>>>>>>>>>> xyz");
-
-            // Forward to our implementation which stays alive
-            if (impl)
+            if (impl != nullptr)
                 impl->processActivityResult (activityRequestCode, resultCode, data);
         });
     }
