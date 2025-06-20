@@ -1423,8 +1423,10 @@ void initialiseYup_Windowing()
     Desktop::getInstance()->updateScreens();
     SDL_AddEventWatch (displayEventDispatcher, Desktop::getInstance());
 
-    // Set the default theme
+    // Set the default theme now in all platforms except ios
+#if ! YUP_IOS
     ApplicationTheme::setGlobalTheme (createThemeVersion1());
+#endif
 
     // Inject the event loop
     MessageManager::getInstance()->registerEventLoopCallback ([]
@@ -1448,6 +1450,14 @@ void initialiseYup_Windowing()
             Thread::sleep (1);
     });
 
+    // Set the default theme on ios
+#if YUP_IOS
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (createThemeVersion1());
+    }
+#endif
+
     SDL2ComponentNative::isInitialised.test_and_set();
 }
 
@@ -1460,7 +1470,10 @@ void shutdownYup_Windowing()
     Desktop::getInstance()->deleteInstance();
 
     // Unregister theme
-    ApplicationTheme::setGlobalTheme (nullptr);
+    {
+        const MessageManagerLock mmLock;
+        ApplicationTheme::setGlobalTheme (nullptr);
+    }
 
     // Unregister event loop
     MessageManager::getInstance()->registerEventLoopCallback (nullptr);

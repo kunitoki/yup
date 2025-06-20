@@ -150,8 +150,7 @@ public:
 
         if (currentActivity != nullptr)
         {
-            // see Clarification June 2001 in JNI reference for why this is
-            // necessary
+            // see Clarification June 2001 in JNI reference for why this is necessary
             LocalRef<jobject> localStorage (env->NewLocalRef (currentActivity));
 
             if (env->IsSameObject (localStorage.get(), activity) != 0)

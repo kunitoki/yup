@@ -140,6 +140,16 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
     std::atomic<Type*> instance { nullptr };
 };
 
+#ifndef DOXYGEN
+#define YUP_PRIVATE_DECLARE_SINGLETON(Classname, mutex, doNotRecreate, inlineToken, getter)                   \
+    static inlineToken yup::SingletonHolder<Classname, mutex, doNotRecreate> singletonHolder;                 \
+    friend yup::SingletonHolder<Classname, mutex, doNotRecreate>;                                             \
+    static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.getter(); }                         \
+    static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; } \
+    static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                  \
+    void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
+#endif
+
 //==============================================================================
 /**
     Macro to generate the appropriate methods and boilerplate for a singleton class.
@@ -197,15 +207,16 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
 
     @see YUP_IMPLEMENT_SINGLETON, YUP_DECLARE_SINGLETON_SINGLETHREADED
 */
-#define YUP_DECLARE_SINGLETON(Classname, doNotRecreateAfterDeletion)                                          \
-                                                                                                              \
-    static yup::SingletonHolder<Classname, yup::CriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
-    friend yup::SingletonHolder<Classname, yup::CriticalSection, doNotRecreateAfterDeletion>;                 \
-                                                                                                              \
-    static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.get(); }                            \
-    static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; } \
-    static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                  \
-    void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
+#define YUP_DECLARE_SINGLETON(Classname, doNotRecreateAfterDeletion) \
+    YUP_PRIVATE_DECLARE_SINGLETON (Classname, yup::CriticalSection, doNotRecreateAfterDeletion, , get)
+
+//==============================================================================
+/**
+    The same as YUP_DECLARE_SINGLETON, but does not require a matching
+    YUP_IMPLEMENT_SINGLETON definition.
+*/
+#define YUP_DECLARE_SINGLETON_INLINE(Classname, doNotRecreateAfterDeletion) \
+    YUP_PRIVATE_DECLARE_SINGLETON (Classname, yup::CriticalSection, doNotRecreateAfterDeletion, inline, get)
 
 //==============================================================================
 /** This is a counterpart to the YUP_DECLARE_SINGLETON macros.
@@ -214,7 +225,6 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
     to be used in the cpp file.
 */
 #define YUP_IMPLEMENT_SINGLETON(Classname) \
-                                           \
     decltype (Classname::singletonHolder) Classname::singletonHolder;
 
 //==============================================================================
@@ -237,15 +247,15 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
 
     @see YUP_IMPLEMENT_SINGLETON, YUP_DECLARE_SINGLETON, YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL
 */
-#define YUP_DECLARE_SINGLETON_SINGLETHREADED(Classname, doNotRecreateAfterDeletion)                                \
-                                                                                                                   \
-    static yup::SingletonHolder<Classname, yup::DummyCriticalSection, doNotRecreateAfterDeletion> singletonHolder; \
-    friend decltype (singletonHolder);                                                                             \
-                                                                                                                   \
-    static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.get(); }                                 \
-    static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; }      \
-    static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                       \
-    void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
+#define YUP_DECLARE_SINGLETON_SINGLETHREADED(Classname, doNotRecreateAfterDeletion) \
+    YUP_PRIVATE_DECLARE_SINGLETON (Classname, yup::DummyCriticalSection, doNotRecreateAfterDeletion, , get)
+
+/**
+    The same as YUP_DECLARE_SINGLETON_SINGLETHREADED, but does not require a matching
+    YUP_IMPLEMENT_SINGLETON definition.
+*/
+#define YUP_DECLARE_SINGLETON_SINGLETHREADED_INLINE(Classname, doNotRecreateAfterDeletion) \
+    YUP_PRIVATE_DECLARE_SINGLETON (Classname, yup::DummyCriticalSection, doNotRecreateAfterDeletion, inline, get)
 
 //==============================================================================
 /**
@@ -262,25 +272,14 @@ struct SingletonHolder : private MutexType // (inherited so we can use the empty
 
     @see YUP_IMPLEMENT_SINGLETON, YUP_DECLARE_SINGLETON
 */
-#define YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL(Classname)                                               \
-                                                                                                              \
-    static yup::SingletonHolder<Classname, yup::DummyCriticalSection, false> singletonHolder;                 \
-    friend decltype (singletonHolder);                                                                        \
-                                                                                                              \
-    static Classname* YUP_CALLTYPE getInstance() { return singletonHolder.getWithoutChecking(); }             \
-    static Classname* YUP_CALLTYPE getInstanceWithoutCreating() noexcept { return singletonHolder.instance; } \
-    static void YUP_CALLTYPE deleteInstance() noexcept { singletonHolder.deleteInstance(); }                  \
-    void clearSingletonInstance() noexcept { singletonHolder.clear (this); }
+#define YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL(Classname) \
+    YUP_PRIVATE_DECLARE_SINGLETON (Classname, yup::DummyCriticalSection, false, , getWithoutChecking)
 
-//==============================================================================
-#ifndef DOXYGEN
-// These are ancient macros, and have now been updated with new names to match the JUCE style guide,
-// so please update your code to use the newer versions!
-#define yup_DeclareSingleton(Classname, doNotRecreate) YUP_DECLARE_SINGLETON (Classname, doNotRecreate)
-#define yup_DeclareSingleton_SingleThreaded(Classname, doNotRecreate) YUP_DECLARE_SINGLETON_SINGLETHREADED (Classname, doNotRecreate)
-#define yup_DeclareSingleton_SingleThreaded_Minimal(Classname) YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL (Classname)
-#define yup_ImplementSingleton(Classname) YUP_IMPLEMENT_SINGLETON (Classname)
-#define yup_ImplementSingleton_SingleThreaded(Classname) YUP_IMPLEMENT_SINGLETON (Classname)
-#endif
+/**
+    The same as YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL, but does not require a matching
+    YUP_IMPLEMENT_SINGLETON definition.
+*/
+#define YUP_DECLARE_SINGLETON_SINGLETHREADED_MINIMAL_INLINE(Classname) \
+    YUP_PRIVATE_DECLARE_SINGLETON (Classname, yup::DummyCriticalSection, false, inline, getWithoutChecking)
 
 } // namespace yup
