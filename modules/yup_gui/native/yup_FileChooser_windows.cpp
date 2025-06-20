@@ -20,7 +20,7 @@
 */
 
 //==============================================================================
-typedef HRESULT(WINAPI* SHCreateItemFromParsingNameProc)(_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
+typedef HRESULT (WINAPI* SHCreateItemFromParsingNameProc) (_In_ PCWSTR pszPath, _In_opt_ IBindCtx* pbc, _In_ REFIID riid, _Outptr_ void** ppv);
 
 namespace yup
 {
