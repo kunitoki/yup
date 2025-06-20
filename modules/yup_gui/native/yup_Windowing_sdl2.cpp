@@ -23,7 +23,6 @@ namespace yup
 {
 
 //==============================================================================
-
 #ifndef YUP_WINDOWING_LOGGING
 #define YUP_WINDOWING_LOGGING 1
 #endif
