@@ -9,6 +9,7 @@ on:
       - "**/tests/**"
     branches:
       - "**"
+      - "!main"
 
 jobs:
   format:
@@ -29,6 +30,7 @@ jobs:
         uses: tj-actions/changed-files@v44
         with:
           files: |
+            **/*.c
             **/*.cpp
             **/*.h
             **/*.hpp
