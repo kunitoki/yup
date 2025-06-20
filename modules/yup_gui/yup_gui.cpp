@@ -80,6 +80,7 @@
 #elif YUP_LINUX
 #include <X11/Xlib.h>
 #include <dlfcn.h>
+#include <fcntl.h>
 
 #undef None
 #undef KeyPress
