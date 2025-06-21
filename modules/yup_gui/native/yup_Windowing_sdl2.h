@@ -32,7 +32,7 @@ class SDL2ComponentNative final
 #if (YUP_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
     static constexpr bool renderDrivenByTimer = true;
 #else
-    static constexpr bool renderDrivenByTimer = false;
+    static constexpr bool renderDrivenByTimer = true;
 #endif
 
 public:

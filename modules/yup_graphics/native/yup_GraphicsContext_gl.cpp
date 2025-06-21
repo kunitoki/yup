@@ -19,7 +19,7 @@
   ==============================================================================
 */
 
-#if YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_WASM || YUP_ANDROID
+#if 0 && (YUP_RIVE_USE_OPENGL || YUP_LINUX || YUP_WASM || YUP_ANDROID)
 #include "rive/renderer/rive_renderer.hpp"
 #include "rive/renderer/gl/gles3.hpp"
 #include "rive/renderer/gl/render_buffer_gl_impl.hpp"
@@ -80,8 +80,8 @@ public:
         }
 #endif
 
-        m_plsContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
-        if (! m_plsContext)
+        m_renderContext = rive::gpu::RenderContextGLImpl::MakeContext (rive::gpu::RenderContextGLImpl::ContextOptions());
+        if (! m_renderContext)
         {
             fprintf (stderr, "Failed to create a renderer.\n");
             exit (-1);
@@ -121,9 +121,9 @@ public:
 #endif
     }
 
-    rive::Factory* factory() override { return m_plsContext.get(); }
+    rive::Factory* factory() override { return m_renderContext.get(); }
 
-    rive::gpu::RenderContext* renderContext() override { return m_plsContext.get(); }
+    rive::gpu::RenderContext* renderContext() override { return m_renderContext.get(); }
 
     rive::gpu::RenderTarget* renderTarget() override { return m_renderTarget.get(); }
 
@@ -134,24 +134,24 @@ public:
 
     std::unique_ptr<rive::Renderer> makeRenderer (int width, int height) override
     {
-        return std::make_unique<rive::RiveRenderer> (m_plsContext.get());
+        return std::make_unique<rive::RiveRenderer> (m_renderContext.get());
     }
 
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
-        m_plsContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
-        m_plsContext->beginFrame (frameDescriptor);
+        m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
+        m_renderContext->beginFrame (frameDescriptor);
     }
 
     void end (void*) override
     {
-        m_plsContext->flush ({ m_renderTarget.get() });
+        m_renderContext->flush ({ m_renderTarget.get() });
 
-        m_plsContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
+        m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
     }
 
 private:
-    std::unique_ptr<rive::gpu::RenderContext> m_plsContext;
+    std::unique_ptr<rive::gpu::RenderContext> m_renderContext;
     rive::rcp<rive::gpu::RenderTargetGL> m_renderTarget;
 };
 

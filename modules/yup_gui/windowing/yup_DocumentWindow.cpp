@@ -27,14 +27,7 @@ namespace yup
 DocumentWindow::DocumentWindow (const ComponentNative::Options& options, const Color& backgroundColor)
     : backgroundColor (backgroundColor)
 {
-    auto finalOptions = options;
-
-#if YUP_EMSCRIPTEN
-    // This is enforced for now until we have a better way to handle dirty regions on emscripten
-    finalOptions = finalOptions.withRenderContinuous (true);
-#endif
-
-    addToDesktop (finalOptions, nullptr);
+    addToDesktop (options, nullptr);
 }
 
 DocumentWindow::~DocumentWindow()

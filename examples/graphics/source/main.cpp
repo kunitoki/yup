@@ -76,11 +76,13 @@ public:
         }
         */
 
+        int counter = 0;
+
         {
             auto button = std::make_unique<yup::TextButton> ("Audio");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (0);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));
@@ -91,9 +93,9 @@ public:
 
         {
             auto button = std::make_unique<yup::TextButton> ("Layout Fonts");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (1);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));
@@ -104,9 +106,9 @@ public:
 
         {
             auto button = std::make_unique<yup::TextButton> ("Variable Fonts");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (2);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));
@@ -117,9 +119,9 @@ public:
 
         {
             auto button = std::make_unique<yup::TextButton> ("Paths");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (3);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));
@@ -130,9 +132,9 @@ public:
 
         {
             auto button = std::make_unique<yup::TextButton> ("Text Editor");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (4);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));
@@ -143,9 +145,9 @@ public:
 
         {
             auto button = std::make_unique<yup::TextButton> ("Popup Menu");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (5);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));
@@ -156,9 +158,9 @@ public:
 
         {
             auto button = std::make_unique<yup::TextButton> ("File Chooser");
-            button->onClick = [this]
+            button->onClick = [this, &counter]
             {
-                selectComponent (6);
+                selectComponent (counter++);
             };
             addAndMakeVisible (button.get());
             buttons.add (std::move (button));

@@ -1583,8 +1583,10 @@ void initialiseYup_Windowing()
                 break;
         }
 
+#if ! YUP_WASM
         if (! timeoutDetector.hasTimedOut())
             Thread::sleep (1);
+#endif
     });
 
     // Set the default theme on ios
