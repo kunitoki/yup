@@ -116,6 +116,8 @@ public:
     {
 #if RIVE_DESKTOP_GL && __APPLE__
         return 2;
+#elif RIVE_WEBGL && YUP_EMSCRIPTEN
+        return (float) emscripten_get_device_pixel_ratio();
 #else
         return 1;
 #endif
@@ -140,6 +142,7 @@ public:
     void begin (const rive::gpu::RenderContext::FrameDescriptor& frameDescriptor) override
     {
         m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->invalidateGLState();
+
         m_renderContext->beginFrame (frameDescriptor);
     }
 

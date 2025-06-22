@@ -413,6 +413,7 @@ private:
 
         switch (justification)
         {
+            default:
             case Justification::topLeft:
                 position = targetArea.getTopLeft();
                 break;

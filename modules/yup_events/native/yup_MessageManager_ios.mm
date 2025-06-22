@@ -48,9 +48,6 @@ void runNSApplication()
         [[NSRunLoop currentRunLoop] runMode:NSDefaultRunLoopMode
                                  beforeDate:[NSDate dateWithTimeIntervalSinceNow:0.001]];
     }
-
-    for (const auto& func : shutdownCallbacks)
-        func();
 }
 
 //==============================================================================
@@ -108,7 +105,12 @@ void MessageManager::doPlatformSpecificInitialisation()
     if (messageQueue == nullptr)
         messageQueue.reset(new InternalMessageQueue());
 
-    MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
+    MessageManager::getInstance()->registerEventLoopCallback([this]
+                                                             {
+        runNSApplication();
+
+        for (const auto& func : shutdownCallbacks)
+            func(); });
 }
 
 void MessageManager::doPlatformSpecificShutdown()
