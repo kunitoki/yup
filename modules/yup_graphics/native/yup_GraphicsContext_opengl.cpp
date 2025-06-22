@@ -81,10 +81,10 @@ struct Vertex
 
 // Full-screen quad covering clip space, with texture coordinates mapping the texture.
 const Vertex quadVertices[] = {
-    { { -1.0f,  1.0f }, { 0.0f, 0.0f } },  // Top-left
-    { { -1.0f, -1.0f }, { 0.0f, 1.0f } },  // Bottom-left
-    { {  1.0f,  1.0f }, { 1.0f, 0.0f } },  // Top-right
-    { {  1.0f, -1.0f }, { 1.0f, 1.0f } }   // Bottom-right
+    { { -1.0f, 1.0f }, { 0.0f, 0.0f } },  // Top-left
+    { { -1.0f, -1.0f }, { 0.0f, 1.0f } }, // Bottom-left
+    { { 1.0f, 1.0f }, { 1.0f, 0.0f } },   // Top-right
+    { { 1.0f, -1.0f }, { 1.0f, 1.0f } }   // Bottom-right
 };
 
 const char* getVertexShaderSource (bool isGLES)
@@ -122,8 +122,8 @@ void main()
 
 const char* getFragmentShaderSource (bool isGLES)
 {
-            if (isGLES)
-            return R"(#version 300 es
+    if (isGLES)
+        return R"(#version 300 es
 precision highp float;
 precision highp sampler2D;
 
@@ -139,8 +139,8 @@ void main()
     fragColor = texture(uTexture, flippedCoord);
 }
 )";
-        else
-            return R"(#version 330 core
+    else
+        return R"(#version 330 core
 
 in vec2 vTexCoord;
 uniform sampler2D uTexture;
