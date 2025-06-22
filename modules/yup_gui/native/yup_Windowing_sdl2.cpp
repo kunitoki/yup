@@ -258,6 +258,11 @@ void SDL2ComponentNative::setBounds (const Rectangle<int>& newBounds)
     int leftMargin = 0, topMargin = 0, rightMargin = 0, bottomMargin = 0;
 
 #if YUP_EMSCRIPTEN && RIVE_WEBGL
+    //const double devicePixelRatio = emscripten_get_device_pixel_ratio();
+    //SDL_SetWindowSize (window,
+    //                   jmax (0, (int) (newBounds.getWidth() * devicePixelRatio)),
+    //                   jmax (0, (int) (newBounds.getHeight() * devicePixelRatio)));
+
     SDL_SetWindowSize (window,
                        jmax (0, newBounds.getWidth()),
                        jmax (0, newBounds.getHeight()));

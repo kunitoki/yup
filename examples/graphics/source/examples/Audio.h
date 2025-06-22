@@ -281,14 +281,12 @@ public:
             readPos = readPos % inputData.size();
         }
 
-        const yup::CriticalSection::ScopedLockType sl (renderMutex);
+        //const yup::CriticalSection::ScopedLockType sl (renderMutex);
         std::swap (inputData, renderData);
     }
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
-        const yup::CriticalSection::ScopedLockType sl (renderMutex);
-
         inputData.resize (device->getDefaultBufferSize());
         renderData.resize (device->getDefaultBufferSize());
         readPos = 0;
