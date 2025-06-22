@@ -245,11 +245,12 @@ public:
     void refreshDisplay (double lastFrameTimeSeconds) override
     {
         {
-            const yup::CriticalSection::ScopedLockType sl (renderMutex);
+            // const yup::CriticalSection::ScopedLockType sl (renderMutex);
             oscilloscope.setRenderData (renderData, readPos);
         }
 
-        oscilloscope.repaint();
+        if (oscilloscope.isVisible())
+            oscilloscope.repaint();
     }
 
     void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,

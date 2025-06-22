@@ -240,7 +240,7 @@ public:
         if (! gladLoadCustomLoader ((GLADloadproc) options.loaderFunction))
         {
             fprintf (stderr, "Failed to initialize glad.\n");
-            exit (-1);
+            return;
         }
 #endif
 
@@ -248,7 +248,7 @@ public:
         if (! m_renderContext)
         {
             fprintf (stderr, "Failed to create a renderer.\n");
-            exit (-1);
+            return;
         }
 
         printf ("GL_VENDOR:   %s\n", glGetString (GL_VENDOR));
@@ -336,33 +336,28 @@ public:
 
     void end (void*) override
     {
-        // Render Rive content to offscreen framebuffer
-        m_renderContext->flush ({ m_offscreenRenderTarget.get() });
-
-        // Blit offscreen texture to main framebuffer
-        blitToMainFramebuffer();
+        rive::gpu::RenderContext::FlushResources flushResources;
+        flushResources.renderTarget = m_offscreenRenderTarget.get();
+        m_renderContext->flush (flushResources);
 
         m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
+
+        blitToMainFramebuffer();
     }
 
 private:
     void initializeBlitResources()
     {
-        printf ("initializeBlitResources: Creating blit resources\n");
-
         // Create blit shader program
         m_blitProgram = createBlitProgram (m_isGLES);
         if (m_blitProgram == 0)
         {
-            printf ("Failed to create blit shader program.\n");
+            fprintf (stderr, "Failed to create blit shader program.\n");
             return;
         }
 
-        printf ("Blit shader program created: %u\n", m_blitProgram);
-
         // Get uniform location
         m_textureUniformLocation = glGetUniformLocation (m_blitProgram, "uTexture");
-        printf ("Uniform location for uTexture: %d\n", m_textureUniformLocation);
 
         // Create vertex buffer for fullscreen quad
         glGenBuffers (1, &m_quadVertexBuffer);
@@ -416,11 +411,9 @@ private:
     {
         if (m_width <= 0 || m_height <= 0)
         {
-            printf ("createOffscreenResources: Invalid size %dx%d\n", m_width, m_height);
+            fprintf (stderr, "createOffscreenResources: Invalid size %dx%d\n", m_width, m_height);
             return;
         }
-
-        printf ("createOffscreenResources: Creating %dx%d framebuffer\n", m_width, m_height);
 
         cleanupOffscreenResources();
 
@@ -436,9 +429,7 @@ private:
         // Check for GL errors after texture creation
         GLenum error = glGetError();
         if (error != GL_NO_ERROR)
-        {
-            printf ("GL error after texture creation: 0x%x\n", error);
-        }
+            fprintf (stderr, "GL error after texture creation: 0x%x\n", error);
 
         glBindTexture (GL_TEXTURE_2D, 0);
 
@@ -450,20 +441,12 @@ private:
         // Check framebuffer completeness
         GLenum status = glCheckFramebufferStatus (GL_FRAMEBUFFER);
         if (status != GL_FRAMEBUFFER_COMPLETE)
-        {
-            printf ("Offscreen framebuffer is not complete: 0x%x\n", status);
-        }
-        else
-        {
-            printf ("Offscreen framebuffer created successfully: FBO=%u, TEX=%u\n", m_offscreenFramebuffer, m_offscreenTexture);
-        }
+            fprintf (stderr, "Offscreen framebuffer is not complete: 0x%x\n", status);
 
         glBindFramebuffer (GL_FRAMEBUFFER, 0);
 
         // Create Rive render target that uses our offscreen framebuffer
         m_offscreenRenderTarget = rive::make_rcp<rive::gpu::FramebufferRenderTargetGL> (m_width, m_height, m_offscreenFramebuffer, m_sampleCount);
-
-        printf ("Rive render target created\n");
     }
 
     void cleanupOffscreenResources()
@@ -486,34 +469,14 @@ private:
     void blitToMainFramebuffer()
     {
         if (m_blitProgram == 0 || m_offscreenTexture == 0)
+        {
+            fprintf (stderr, "blitToMainFramebuffer: Invalid program or texture\n");
             return;
+        }
 
-        // Bind main framebuffer
-        glBindFramebuffer (GL_FRAMEBUFFER, 0);
-        glViewport (0, 0, m_width, m_height);
-
-        // Disable depth test, blending, and face culling for the blit
-        glDisable (GL_DEPTH_TEST);
-        glDisable (GL_BLEND);
-        glDisable (GL_CULL_FACE);
-        glDisable (GL_SCISSOR_TEST);
-
-        // Use blit shader
-        glUseProgram (m_blitProgram);
-
-        // Bind offscreen texture
-        glActiveTexture (GL_TEXTURE0);
-        glBindTexture (GL_TEXTURE_2D, m_offscreenTexture);
-        glUniform1i (m_textureUniformLocation, 0);
-
-        // Draw fullscreen quad
-        glBindVertexArray (m_quadVAO);
-        glDrawArrays (GL_TRIANGLE_STRIP, 0, 4);
-
-        // Cleanup
-        glBindVertexArray (0);
-        glUseProgram (0);
-        glBindTexture (GL_TEXTURE_2D, 0);
+        glBindFramebuffer (GL_READ_FRAMEBUFFER, m_offscreenFramebuffer);
+        glBindFramebuffer (GL_DRAW_FRAMEBUFFER, 0);
+        glBlitFramebuffer (0, 0, m_width, m_height, 0, 0, m_width, m_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     }
 
 private:
