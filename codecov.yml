@@ -114,14 +114,7 @@ ignore:
   - "cmake/**/*"
   - "docs/**/*"
   - "standalone/**/*"
-  - "**/*.mm"
-  - "**/*_android.*"
-  - "**/*_windows.*"
-  - "**/*_ios.*"
-  - "**/*_mac.*"
-  - "**/*_apple.*"
-  - "**/*_emscripten.*"
-  - "**/*_wasm.*"
+  - "**/modules/*/native/*"
 
 comment:
   layout: "header, reach, components, diff, flags, files, footer"
