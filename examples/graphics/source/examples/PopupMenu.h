@@ -38,28 +38,28 @@ public:
         statusLabel.setTitle ("Right-click anywhere to show context menu");
 
         addAndMakeVisible (basicMenuButton);
-        basicMenuButton.setTitle ("Show Basic Menu");
+        basicMenuButton.setButtonText ("Show Basic Menu");
         basicMenuButton.onClick = [this]
         {
             showBasicMenu();
         };
 
         addAndMakeVisible (subMenuButton);
-        subMenuButton.setTitle ("Show Sub-Menu");
+        subMenuButton.setButtonText ("Show Sub-Menu");
         subMenuButton.onClick = [this]
         {
             showSubMenu();
         };
 
         addAndMakeVisible (customMenuButton);
-        customMenuButton.setTitle ("Show Custom Menu");
+        customMenuButton.setButtonText ("Show Custom Menu");
         customMenuButton.onClick = [this]
         {
             showCustomMenu();
         };
 
         addAndMakeVisible (nativeMenuButton);
-        nativeMenuButton.setTitle ("Show Native Menu");
+        nativeMenuButton.setButtonText ("Show Native Menu");
         nativeMenuButton.onClick = [this]
         {
             showNativeMenu();
