@@ -568,6 +568,7 @@ MountedVolumeListChangeDetector::MountedVolumeListChangeDetector()
 {
     pimpl.reset(new Pimpl(*this));
 }
+
 MountedVolumeListChangeDetector::~MountedVolumeListChangeDetector() {}
 #endif
 

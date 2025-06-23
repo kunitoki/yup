@@ -64,6 +64,9 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
+    for (const auto& func : shutdownCallbacks)
+        func();
+
     if (!SystemStats::isRunningInAppExtensionSandbox())
         [[[UIApplication sharedApplication] delegate] applicationWillTerminate:[UIApplication sharedApplication]];
 
@@ -105,12 +108,7 @@ void MessageManager::doPlatformSpecificInitialisation()
     if (messageQueue == nullptr)
         messageQueue.reset(new InternalMessageQueue());
 
-    MessageManager::getInstance()->registerEventLoopCallback([this]
-                                                             {
-        runNSApplication();
-
-        for (const auto& func : shutdownCallbacks)
-            func(); });
+    MessageManager::getInstance()->registerEventLoopCallback(runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()
