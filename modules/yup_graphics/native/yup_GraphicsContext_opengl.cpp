@@ -68,159 +68,6 @@ static void GLAPIENTRY err_msg_callback (GLenum source,
 }
 #endif
 
-namespace
-{
-
-//==============================================================================
-
-struct Vertex
-{
-    float position[2];
-    float texCoord[2];
-};
-
-// Full-screen quad covering clip space, with texture coordinates mapping the texture.
-const Vertex quadVertices[] = {
-    { { -1.0f, 1.0f }, { 0.0f, 0.0f } },  // Top-left
-    { { -1.0f, -1.0f }, { 0.0f, 1.0f } }, // Bottom-left
-    { { 1.0f, 1.0f }, { 1.0f, 0.0f } },   // Top-right
-    { { 1.0f, -1.0f }, { 1.0f, 1.0f } }   // Bottom-right
-};
-
-const char* getVertexShaderSource (bool isGLES)
-{
-    if (isGLES)
-        return R"(#version 300 es
-precision highp float;
-
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 texCoord;
-
-out vec2 vTexCoord;
-
-void main()
-{
-    gl_Position = vec4(position, 0.0, 1.0);
-    vTexCoord = texCoord;
-}
-)";
-    else
-        return R"(#version 330 core
-
-layout(location = 0) in vec2 position;
-layout(location = 1) in vec2 texCoord;
-
-out vec2 vTexCoord;
-
-void main()
-{
-    gl_Position = vec4(position, 0.0, 1.0);
-    vTexCoord = texCoord;
-}
-)";
-}
-
-const char* getFragmentShaderSource (bool isGLES)
-{
-    if (isGLES)
-        return R"(#version 300 es
-precision highp float;
-precision highp sampler2D;
-
-in vec2 vTexCoord;
-uniform sampler2D uTexture;
-
-out vec4 fragColor;
-
-void main()
-{
-    // Fix Y-flip by inverting the Y coordinate
-    vec2 flippedCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y);
-    fragColor = texture(uTexture, flippedCoord);
-}
-)";
-    else
-        return R"(#version 330 core
-
-in vec2 vTexCoord;
-uniform sampler2D uTexture;
-
-out vec4 fragColor;
-
-void main()
-{
-    // Fix Y-flip by inverting the Y coordinate
-    vec2 flippedCoord = vec2(vTexCoord.x, 1.0 - vTexCoord.y);
-    fragColor = texture(uTexture, flippedCoord);
-}
-)";
-}
-
-GLuint compileShader (GLenum type, const char* source)
-{
-    GLuint shader = glCreateShader (type);
-    glShaderSource (shader, 1, &source, nullptr);
-    glCompileShader (shader);
-
-    GLint compiled = 0;
-    glGetShaderiv (shader, GL_COMPILE_STATUS, &compiled);
-    if (compiled == GL_FALSE)
-    {
-        GLint maxLength = 0;
-        glGetShaderiv (shader, GL_INFO_LOG_LENGTH, &maxLength);
-
-        std::vector<GLchar> infoLog (maxLength);
-        glGetShaderInfoLog (shader, maxLength, &maxLength, &infoLog[0]);
-
-        printf ("Shader compilation failed: %s\n", &infoLog[0]);
-        glDeleteShader (shader);
-        return 0;
-    }
-
-    return shader;
-}
-
-GLuint createBlitProgram (bool isGLES)
-{
-    GLuint vertexShader = compileShader (GL_VERTEX_SHADER, getVertexShaderSource (isGLES));
-    if (vertexShader == 0)
-        return 0;
-
-    GLuint fragmentShader = compileShader (GL_FRAGMENT_SHADER, getFragmentShaderSource (isGLES));
-    if (fragmentShader == 0)
-    {
-        glDeleteShader (vertexShader);
-        return 0;
-    }
-
-    GLuint program = glCreateProgram();
-    glAttachShader (program, vertexShader);
-    glAttachShader (program, fragmentShader);
-    glLinkProgram (program);
-
-    glDeleteShader (vertexShader);
-    glDeleteShader (fragmentShader);
-
-    GLint linked = 0;
-    glGetProgramiv (program, GL_LINK_STATUS, &linked);
-    if (linked == GL_FALSE)
-    {
-        GLint maxLength = 0;
-        glGetProgramiv (program, GL_INFO_LOG_LENGTH, &maxLength);
-
-        std::vector<GLchar> infoLog (maxLength);
-        glGetProgramInfoLog (program, maxLength, &maxLength, &infoLog[0]);
-
-        printf ("Program linking failed: %s\n", &infoLog[0]);
-        glDeleteProgram (program);
-        return 0;
-    }
-
-    return program;
-}
-
-} // namespace
-
 //==============================================================================
 
 /**
@@ -256,8 +103,6 @@ public:
         printf ("GL_VERSION:  %s\n", glGetString (GL_VERSION));
 
 #if RIVE_DESKTOP_GL
-        m_isGLES = strstr ((const char*) glGetString (GL_VERSION), "OpenGL ES") != nullptr;
-
         printf ("GL_ANGLE_shader_pixel_local_storage_coherent: %i\n", GLAD_GL_ANGLE_shader_pixel_local_storage_coherent);
 
 #if DEBUG
@@ -268,8 +113,6 @@ public:
             glDebugMessageCallbackKHR (&err_msg_callback, nullptr);
         }
 #endif
-#else
-        m_isGLES = true;
 #endif
 
 #if DEBUG && ! RIVE_ANDROID
@@ -278,13 +121,11 @@ public:
         for (size_t i = 0; i < n; ++i)
             printf ("  %s\n", glGetStringi (GL_EXTENSIONS, i));
 #endif
-
-        initializeBlitResources();
     }
 
     ~LowLevelRenderContextGL()
     {
-        cleanupBlitResources();
+        cleanupOffscreenResources();
     }
 
     float dpiScale (void*) const override
@@ -336,9 +177,7 @@ public:
 
     void end (void*) override
     {
-        rive::gpu::RenderContext::FlushResources flushResources;
-        flushResources.renderTarget = m_offscreenRenderTarget.get();
-        m_renderContext->flush (flushResources);
+        m_renderContext->flush ({ m_offscreenRenderTarget.get() });
 
         m_renderContext->static_impl_cast<rive::gpu::RenderContextGLImpl>()->unbindGLInternalResources();
 
@@ -346,67 +185,6 @@ public:
     }
 
 private:
-    void initializeBlitResources()
-    {
-        // Create blit shader program
-        m_blitProgram = createBlitProgram (m_isGLES);
-        if (m_blitProgram == 0)
-        {
-            fprintf (stderr, "Failed to create blit shader program.\n");
-            return;
-        }
-
-        // Get uniform location
-        m_textureUniformLocation = glGetUniformLocation (m_blitProgram, "uTexture");
-
-        // Create vertex buffer for fullscreen quad
-        glGenBuffers (1, &m_quadVertexBuffer);
-        glBindBuffer (GL_ARRAY_BUFFER, m_quadVertexBuffer);
-        glBufferData (GL_ARRAY_BUFFER, sizeof (quadVertices), quadVertices, GL_STATIC_DRAW);
-
-        // Create vertex array object
-        glGenVertexArrays (1, &m_quadVAO);
-        glBindVertexArray (m_quadVAO);
-
-        // Setup vertex attributes
-        glBindBuffer (GL_ARRAY_BUFFER, m_quadVertexBuffer);
-
-        // Position attribute
-        glVertexAttribPointer (0, 2, GL_FLOAT, GL_FALSE, sizeof (Vertex), (void*) offsetof (Vertex, position));
-        glEnableVertexAttribArray (0);
-
-        // Texture coordinate attribute
-        glVertexAttribPointer (1, 2, GL_FLOAT, GL_FALSE, sizeof (Vertex), (void*) offsetof (Vertex, texCoord));
-        glEnableVertexAttribArray (1);
-
-        // Unbind
-        glBindVertexArray (0);
-        glBindBuffer (GL_ARRAY_BUFFER, 0);
-    }
-
-    void cleanupBlitResources()
-    {
-        if (m_quadVAO != 0)
-        {
-            glDeleteVertexArrays (1, &m_quadVAO);
-            m_quadVAO = 0;
-        }
-
-        if (m_quadVertexBuffer != 0)
-        {
-            glDeleteBuffers (1, &m_quadVertexBuffer);
-            m_quadVertexBuffer = 0;
-        }
-
-        if (m_blitProgram != 0)
-        {
-            glDeleteProgram (m_blitProgram);
-            m_blitProgram = 0;
-        }
-
-        cleanupOffscreenResources();
-    }
-
     void createOffscreenResources()
     {
         if (m_width <= 0 || m_height <= 0)
@@ -468,7 +246,7 @@ private:
 
     void blitToMainFramebuffer()
     {
-        if (m_blitProgram == 0 || m_offscreenTexture == 0)
+        if (m_offscreenTexture == 0)
         {
             fprintf (stderr, "blitToMainFramebuffer: Invalid program or texture\n");
             return;
@@ -490,14 +268,6 @@ private:
     int m_width = 0;
     int m_height = 0;
     uint32_t m_sampleCount = 0;
-
-    // Blit resources
-    GLuint m_blitProgram = 0;
-    GLuint m_quadVertexBuffer = 0;
-    GLuint m_quadVAO = 0;
-    GLint m_textureUniformLocation = -1;
-
-    bool m_isGLES = false;
 };
 
 //==============================================================================

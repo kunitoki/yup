@@ -30,7 +30,7 @@ class SDL2ComponentNative final
     , public AsyncUpdater
 {
 #if (YUP_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    static constexpr bool renderDrivenByTimer = true;
+    static constexpr bool renderDrivenByTimer = false;
 #else
     static constexpr bool renderDrivenByTimer = true;
 #endif
