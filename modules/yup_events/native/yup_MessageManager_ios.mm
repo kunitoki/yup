@@ -105,16 +105,14 @@ void MessageManager::doPlatformSpecificInitialisation()
     if (messageQueue == nullptr)
         messageQueue.reset(new InternalMessageQueue());
 
-    MessageManager::getInstance()->registerEventLoopCallback([this]
-                                                             {
-        runNSApplication();
-
-        for (const auto& func : shutdownCallbacks)
-            func(); });
+    MessageManager::getInstance()->registerEventLoopCallback (runNSApplication);
 }
 
 void MessageManager::doPlatformSpecificShutdown()
 {
+    //for (const auto& func : shutdownCallbacks)
+    //    func();
+
     messageQueue = nullptr;
 }
 
