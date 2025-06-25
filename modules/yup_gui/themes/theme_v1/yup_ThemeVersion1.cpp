@@ -235,26 +235,28 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
 void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu& p)
 {
-    // Draw drop shadow if enabled
-    if (false) // owner->options.addAsChildToTopmost)
+    auto localBounds = p.getLocalBounds();
+
+    // TODO: Draw drop shadow if enabled
+    if (false) // (p.getOptions().parentComponent != nullptr)
     {
-        auto shadowBounds = p.getLocalBounds().to<float>();
         auto shadowRadius = static_cast<float> (8.0f);
+        localBounds = localBounds.reduced (shadowRadius);
 
         g.setFillColor (Color (0, 0, 0));
         g.setFeather (shadowRadius);
-        g.fillRoundedRect (shadowBounds.translated (0.0f, 2.0f).enlarged (2.0f), 4.0f);
+        g.fillRoundedRect (localBounds.translated (0.0f, 2.0f), 4.0f);
         g.setFeather (0.0f);
     }
 
     // Draw menu background
     g.setFillColor (p.findColor (PopupMenu::Colors::menuBackground).value_or (Color (0xff2a2a2a)));
-    g.fillRoundedRect (p.getLocalBounds().to<float>(), 4.0f);
+    g.fillRoundedRect (localBounds, 4.0f);
 
     // Draw border
     g.setStrokeColor (p.findColor (PopupMenu::Colors::menuBorder).value_or (Color (0xff555555)));
     g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (p.getLocalBounds().to<float>().reduced (0.5f), 4.0f);
+    g.strokeRoundedRect (localBounds.reduced (0.5f), 4.0f);
 
     // Draw items
     bool anyItemIsTicked = false;
