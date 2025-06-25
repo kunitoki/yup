@@ -338,7 +338,7 @@ private:
 
             case checkedItem:
                 message = "I'm checked!";
-                isChecked = !isChecked;
+                isChecked = ! isChecked;
                 break;
 
             default:
