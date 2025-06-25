@@ -623,8 +623,8 @@ void PopupMenu::showCustom (const Options& options, std::function<void (int)> ca
     else
     {
         auto nativeOptions = ComponentNative::Options {}
-            .withDecoration (false)
-            .withResizableWindow (false);
+                                 .withDecoration (false)
+                                 .withResizableWindow (false);
 
         addToDesktop (nativeOptions);
     }

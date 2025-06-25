@@ -28,7 +28,8 @@ namespace yup
 
     This class supports both native system menus and custom rendered menus.
 */
-class YUP_API PopupMenu : public Component, public ReferenceCountedObject
+class YUP_API PopupMenu : public Component
+    , public ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -213,7 +214,6 @@ public:
     void focusLost() override;
 
 private:
-
     PopupMenu (const Options& options = {});
     void showCustom (const Options& options, std::function<void (int)> callback);
 
