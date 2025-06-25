@@ -446,6 +446,14 @@ public:
         return { static_cast<T> (width), static_cast<T> (height) };
     }
 
+    /** Round the dimensions of this Size object to integers
+
+        Rounds the dimensions of this Size object to integers and returns a new Size object with the rounded dimensions.
+
+        @tparam T The type of the dimensions, constrained to floating-point types.
+
+        @return A new Size object with the rounded dimensions.
+    */
     template <class T = ValueType>
     constexpr auto roundToInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size<int>>
@@ -596,6 +604,15 @@ YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Size<ValueType>&
     return string1;
 }
 
+/** Get the coordinate at the specified index
+
+    Returns the coordinate at the specified index.
+
+    @param point The Point to get the coordinate from.
+    @param I The index of the coordinate to get.
+
+    @return The coordinate at the specified index.
+*/
 template <std::size_t I, class ValueType>
 constexpr ValueType get (const Size<ValueType>& point) noexcept
 {

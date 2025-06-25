@@ -123,7 +123,11 @@ public:
 
         @return A pointer to the popup menu.
     */
-    static Ptr create (const Options& options = {});
+    [[nodiscard]] static Ptr create (const Options& options = {});
+
+    //==============================================================================
+
+    [[nodiscard]] const Options& getOptions() const { return options; }
 
     //==============================================================================
     /** Adds a menu item.
@@ -156,10 +160,10 @@ public:
 
     //==============================================================================
     /** Returns the number of items in the menu. */
-    int getNumItems() const;
+    [[nodiscard]] int getNumItems() const;
 
     /** Returns true if the menu is empty. */
-    bool isEmpty() const { return getNumItems() == 0; }
+    [[nodiscard]] bool isEmpty() const { return getNumItems() == 0; }
 
     /** Clears all items from the menu. */
     void clear();
@@ -194,10 +198,10 @@ public:
     };
 
     /** Returns an iterator to the first item in the menu. */
-    auto begin() const { return items.begin(); }
+    [[nodiscard]] auto begin() const { return items.begin(); }
 
     /** Returns an iterator to the end of the menu. */
-    auto end() const { return items.end(); }
+    [[nodiscard]] auto end() const { return items.end(); }
 
     //==============================================================================
     /** Shows the menu asynchronously and calls the callback when an item is selected.

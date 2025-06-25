@@ -1535,7 +1535,12 @@ public:
         return contains (p.getX(), p.getY());
     }
 
-    /** TODO: doxygen */
+    /** Checks if the specified rectangle lies within the bounds of this rectangle.
+
+        @param p The rectangle to check.
+
+        @return True if the rectangle is within the bounds of this rectangle, otherwise false.
+    */
     [[nodiscard]] constexpr bool contains (const Rectangle& p) const noexcept
     {
         return p.getX() >= xy.getX()
@@ -1904,6 +1909,15 @@ YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Rectangle<ValueT
     return string1;
 }
 
+/** Get the coordinate at the specified index
+
+    Returns the coordinate at the specified index.
+
+    @param point The Point to get the coordinate from.
+    @param I The index of the coordinate to get.
+
+    @return The coordinate at the specified index.
+*/
 template <std::size_t I, class ValueType>
 constexpr ValueType get (const Rectangle<ValueType>& point) noexcept
 {

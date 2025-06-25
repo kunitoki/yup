@@ -523,7 +523,15 @@ public:
     }
 
     //==============================================================================
-    // TODO - doxygen
+    /** Transforms the line by the specified affine transform.
+
+        This function applies the given affine transform to both the start and end points of the line,
+        effectively transforming the line's geometry.
+
+        @param t The affine transform to apply.
+
+        @return A reference to this line after transformation.
+    */
     constexpr Line& transform (const AffineTransform& t) noexcept
     {
         auto x1 = static_cast<float> (p1.x);
@@ -541,7 +549,15 @@ public:
         return *this;
     }
 
-    // TODO - doxygen
+    /** Transforms the line by the specified affine transform.
+
+        This function applies the given affine transform to both the start and end points of the line,
+        effectively transforming the line's geometry.
+
+        @param t The affine transform to apply.
+
+        @return A new `Line` object representing the transformed line.
+    */
     constexpr Line transformed (const AffineTransform& t) const noexcept
     {
         Line result (*this);
@@ -565,6 +581,14 @@ public:
         return { p1.template to<T>(), p2.template to<T>() };
     }
 
+    /** Round the coordinates of this line to integers
+
+        Rounds the coordinates of this line to integers and returns a new Line object with the rounded coordinates.
+
+        @tparam T The type of the coordinates, constrained to floating-point types.
+
+        @return A new Line object with the rounded coordinates.
+    */
     template <class T = ValueType>
     constexpr auto roundToInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Line<int>>
@@ -639,6 +663,15 @@ YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Line<ValueType>&
     return string1;
 }
 
+/** Get the coordinate at the specified index
+
+    Returns the coordinate at the specified index.
+
+    @param point The Point to get the coordinate from.
+    @param I The index of the coordinate to get.
+
+    @return The coordinate at the specified index.
+*/
 template <std::size_t I, class ValueType>
 constexpr ValueType get (const Line<ValueType>& line) noexcept
 {

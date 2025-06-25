@@ -79,7 +79,7 @@ public:
 
         @return The key code.
     */
-    constexpr int getKey() const noexcept
+    [[nodiscard]] constexpr int getKey() const noexcept
     {
         return key;
     }
@@ -89,7 +89,7 @@ public:
 
         @return The modifiers.
     */
-    constexpr KeyModifiers getModifiers() const noexcept
+    [[nodiscard]] constexpr KeyModifiers getModifiers() const noexcept
     {
         return modifiers;
     }
@@ -101,7 +101,7 @@ public:
 
         @return The Unicode character code.
     */
-    constexpr char32_t getTextCharacter() const noexcept
+    [[nodiscard]] constexpr char32_t getTextCharacter() const noexcept
     {
         return scancode;
     }
@@ -115,7 +115,7 @@ public:
 
         @return True if the KeyPress objects are equal, false otherwise.
     */
-    constexpr bool operator== (const KeyPress& other) const noexcept
+    [[nodiscard]] constexpr bool operator== (const KeyPress& other) const noexcept
     {
         return key == other.key && modifiers == other.modifiers && scancode == other.scancode;
     }
@@ -126,7 +126,7 @@ public:
 
         @return True if the KeyPress objects are not equal, false otherwise.
     */
-    constexpr bool operator!= (const KeyPress& other) const noexcept
+    [[nodiscard]] constexpr bool operator!= (const KeyPress& other) const noexcept
     {
         return ! (*this == other);
     }

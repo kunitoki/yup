@@ -109,7 +109,12 @@ public:
         return x;
     }
 
-    // TODO - doxygen
+    /** Sets the x coordinate of this point.
+
+        @param newX The new x coordinate.
+
+        @return A reference to this point after setting the x coordinate.
+    */
     constexpr Point& setX (ValueType newX) noexcept
     {
         x = newX;
@@ -137,7 +142,12 @@ public:
         return y;
     }
 
-    // TODO - doxygen
+    /** Sets the y coordinate of this point.
+
+        @param newY The new y coordinate.
+
+        @return A reference to this point after setting the y coordinate.
+    */
     constexpr Point& setY (ValueType newY) noexcept
     {
         y = newY;
@@ -894,14 +904,29 @@ public:
     }
 
     //==============================================================================
-    // TODO - doxygen
+    /** Transforms this point by an AffineTransform.
+
+        This method modifies the coordinates of this point by applying an AffineTransform to them.
+        It is useful for applying geometric transformations to points.
+
+        @param t The AffineTransform to apply to this point.
+
+        @return A reference to this point after the transformation.
+    */
     constexpr Point& transform (const AffineTransform& t) noexcept
     {
         t.transformPoints (x, y);
         return *this;
     }
 
-    // TODO - doxygen
+    /** Transforms this point by an AffineTransform.
+
+        This method creates a new Point object with coordinates that are the result of applying an AffineTransform to this point's coordinates.
+        It is useful for applying geometric transformations to points without modifying the original point.
+
+        @param t The AffineTransform to apply to this point.
+        @return A new Point object representing the transformed coordinates.
+    */
     [[nodiscard]] constexpr Point transformed (const AffineTransform& t) const noexcept
     {
         Point result (*this);
@@ -925,6 +950,15 @@ public:
         return { static_cast<T> (x), static_cast<T> (y) };
     }
 
+    /** Rounds the coordinates of this point to integers.
+
+        This method creates a new Point object with coordinates that are the result of rounding this point's coordinates to integers.
+        It is useful for converting floating-point coordinates to integer coordinates.
+
+        @tparam T The numeric type of the coordinates, constrained to floating-point types.
+
+        @return A new Point object with the rounded coordinates.
+    */
     template <class T = ValueType>
     [[nodiscard]] constexpr auto roundToInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Point<int>>
@@ -1280,6 +1314,15 @@ YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Point<ValueType>
     return string1;
 }
 
+/** Get the coordinate at the specified index
+
+    Returns the coordinate at the specified index.
+
+    @param point The Point to get the coordinate from.
+    @param I The index of the coordinate to get.
+
+    @return The coordinate at the specified index.
+*/
 template <std::size_t I, class ValueType>
 [[nodiscard]] constexpr ValueType get (const Point<ValueType>& point) noexcept
 {
@@ -1292,6 +1335,11 @@ template <std::size_t I, class ValueType>
 }
 
 /** Forwarded methods implementation. */
+[[nodiscard]] constexpr Point<float> AffineTransform::getTranslation() const noexcept
+{
+    return { translateX, translateY };
+}
+
 [[nodiscard]] constexpr AffineTransform AffineTransform::translated (Point<float> p) const noexcept
 {
     return { scaleX, shearX, translateX + p.getX(), shearY, scaleY, translateY + p.getY() };

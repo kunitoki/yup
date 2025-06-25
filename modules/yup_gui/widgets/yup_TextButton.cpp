@@ -82,7 +82,7 @@ void TextButton::resized()
 
 Rectangle<float> TextButton::getTextBounds() const
 {
-    return getLocalBounds().reduced (proportionOfWidth (0.04f));
+    return getLocalBounds().reduced (proportionOfWidth (0.04f), proportionOfHeight (0.04f));
 }
 
 } // namespace yup
