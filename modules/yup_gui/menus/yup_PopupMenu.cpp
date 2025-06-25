@@ -311,7 +311,7 @@ PopupMenu::PopupMenu (const Options& options)
 PopupMenu::~PopupMenu()
 {
     if (isVisible())
-        dimiss();
+        dismiss();
 }
 
 //==============================================================================
@@ -361,33 +361,6 @@ void PopupMenu::addCustomItem (std::unique_ptr<Component> component, int itemID)
 {
     auto item = std::make_unique<Item> (std::move (component), itemID);
     items.push_back (std::move (item));
-}
-
-void PopupMenu::addItemsFromMenu (const PopupMenu& otherMenu)
-{
-    for (const auto& otherItem : otherMenu.items)
-    {
-        if (otherItem->isSeparator())
-        {
-            addSeparator();
-        }
-        else if (otherItem->isSubMenu())
-        {
-            addSubMenu (otherItem->text, otherItem->subMenu, otherItem->isEnabled);
-        }
-        else if (otherItem->isCustomComponent())
-        {
-            // Note: Custom components can't be easily copied, so we skip them
-            // In a real implementation, you might want to clone them or handle differently
-        }
-        else
-        {
-            auto item = std::make_unique<Item> (otherItem->text, otherItem->itemID, otherItem->isEnabled, otherItem->isTicked);
-            item->shortcutKeyText = otherItem->shortcutKeyText;
-            item->textColor = otherItem->textColor;
-            items.push_back (std::move (item));
-        }
-    }
 }
 
 //==============================================================================
@@ -453,6 +426,8 @@ void PopupMenu::setSelectedItemID (int itemID)
 
         if (onItemSelected != nullptr)
             onItemSelected (itemID);
+
+        isBeingDismissed = false;
     }
 }
 
@@ -647,6 +622,11 @@ void PopupMenu::dismiss()
 
 void PopupMenu::dismiss (int itemID)
 {
+    if (isBeingDismissed)
+        return;
+
+    isBeingDismissed = true;
+
     setVisible (false);
 
     setSelectedItemID (itemID);

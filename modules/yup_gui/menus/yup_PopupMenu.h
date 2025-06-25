@@ -119,9 +119,6 @@ public:
     */
     void addCustomItem (std::unique_ptr<Component> component, int itemID);
 
-    /** Adds all items from another menu. */
-    void addItemsFromMenu (const PopupMenu& otherMenu);
-
     //==============================================================================
     /** Returns the number of items in the menu. */
     int getNumItems() const;
@@ -234,6 +231,7 @@ private:
 
     Options options;
     int selectedItemID = -1;
+    bool isBeingDismissed = false;
 
     std::function<void (int)> menuCallback;
 

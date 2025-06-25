@@ -104,12 +104,6 @@ public:
     }
 
 private:
-    yup::TextButton basicMenuButton;
-    yup::TextButton subMenuButton;
-    yup::TextButton customMenuButton;
-    yup::TextButton nativeMenuButton;
-    yup::Label statusLabel;
-
     enum MenuItemIDs
     {
         newFile = 1,
@@ -119,6 +113,9 @@ private:
         recentFile1,
         recentFile2,
         exitApp,
+
+        checkedItem = 998,
+        disabledItem = 999,
 
         editUndo = 10,
         editRedo,
@@ -147,8 +144,8 @@ private:
         menu->addItem ("Save File", saveFile, true, false, "Cmd+S");
         menu->addItem ("Save As...", saveAsFile, true, false, "Shift+Cmd+S");
         menu->addSeparator();
-        menu->addItem ("Disabled Item", 999, false);
-        menu->addItem ("Checked Item", 998, true, true);
+        menu->addItem ("Disabled Item", disabledItem, false);
+        menu->addItem ("Checked Item", checkedItem, true, isChecked);
         menu->addSeparator();
         menu->addItem ("Exit", exitApp, true, false, "Cmd+Q");
 
@@ -335,10 +332,27 @@ private:
                 message = "Custom button clicked";
                 break;
 
+            case disabledItem:
+                message = "I'm disabled!";
+                break;
+
+            case checkedItem:
+                message = "I'm checked!";
+                isChecked = !isChecked;
+                break;
+
             default:
+                message = "Cancelled or unknown!";
                 break;
         }
 
-        statusLabel.setTitle (message);
+        statusLabel.setText (message);
     }
+
+    yup::TextButton basicMenuButton;
+    yup::TextButton subMenuButton;
+    yup::TextButton customMenuButton;
+    yup::TextButton nativeMenuButton;
+    yup::Label statusLabel;
+    bool isChecked = true;
 };

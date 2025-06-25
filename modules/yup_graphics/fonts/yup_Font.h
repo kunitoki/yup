@@ -208,6 +208,32 @@ public:
     Font withAxisValues (std::initializer_list<AxisOption> axisOptions) const;
 
     //==============================================================================
+    struct Feature
+    {
+        Feature (uint32_t tag, uint32_t value)
+            : tag (tag)
+            , value (value)
+        {
+        }
+
+        Feature (StringRef stringTag, uint32_t value)
+            : tag (0)
+            , value (value)
+        {
+            jassert (stringTag.length() == 4);
+            if (stringTag.length() == 4)
+                tag = (uint32_t (stringTag.text[0]) << 24) | (uint32_t (stringTag.text[1]) << 16) | (uint32_t (stringTag.text[2]) << 8) | uint32_t (stringTag.text[3]);
+        }
+
+        uint32_t tag;
+        uint32_t value;
+    };
+
+    Font withFeature (Feature feature) const;
+
+    Font withFeatures (std::initializer_list<Feature> features) const;
+
+    //==============================================================================
     /** Returns true if the fonts are equal. */
     bool operator== (const Font& other) const;
 

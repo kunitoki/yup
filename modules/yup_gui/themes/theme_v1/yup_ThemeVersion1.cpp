@@ -332,7 +332,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             // Draw shortcut text
             if (item->shortcutKeyText.isNotEmpty())
             {
-                auto shortcutRect = Rectangle<float> (rect.getRight() - 80.0f, rect.getY(), 75.0f, rect.getHeight());
+                auto shortcutRect = Rectangle<float> (rect.getRight() - 80.0f, rect.getY() + 2.0f, 75.0f, rect.getHeight() - 2.0f);
 
                 auto styledText = yup::StyledText();
                 {
