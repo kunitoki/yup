@@ -191,6 +191,14 @@ bool SDL2ComponentNative::isVisible() const
 
 //==============================================================================
 
+void SDL2ComponentNative::toFront()
+{
+    if (window != nullptr && isVisible())
+        SDL_RaiseWindow (window);
+}
+
+//==============================================================================
+
 Size<int> SDL2ComponentNative::getContentSize() const
 {
     const auto dpiScale = getScaleDpi();

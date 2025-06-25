@@ -28,7 +28,7 @@ namespace yup
 
     This class supports both native system menus and custom rendered menus.
 */
-class YUP_API PopupMenu : public ReferenceCountedObject
+class YUP_API PopupMenu : public Component, public ReferenceCountedObject
 {
 public:
     //==============================================================================
@@ -132,6 +132,41 @@ public:
     void clear();
 
     //==============================================================================
+    class Item
+    {
+    public:
+        Item() = default;
+        Item (const String& itemText, int itemID, bool isEnabled = true, bool isTicked = false);
+        Item (const String& itemText, PopupMenu::Ptr subMenu, bool isEnabled = true);
+        Item (std::unique_ptr<Component> component, int itemID);
+        ~Item();
+
+        bool isSeparator() const;
+        bool isSubMenu() const;
+        bool isCustomComponent() const;
+
+        String text;
+        int itemID = 0;
+        bool isEnabled = true;
+        bool isTicked = false;
+        bool isHovered = false;
+        PopupMenu::Ptr subMenu;
+        std::unique_ptr<Component> customComponent;
+        String shortcutKeyText;
+        std::optional<Color> textColor;
+        Rectangle<float> area;
+
+    private:
+        YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Item)
+    };
+
+    /** Returns an iterator to the first item in the menu. */
+    auto begin() const { return items.begin(); }
+
+    /** Returns an iterator to the end of the menu. */
+    auto end() const { return items.end(); }
+
+    //==============================================================================
     /** Shows the menu asynchronously and calls the callback when an item is selected.
 
         @param options      Options for showing the menu
@@ -140,28 +175,67 @@ public:
     void show (std::function<void (int)> callback = nullptr);
 
     //==============================================================================
+    /** Dismiss popup if visible. */
+    void dismiss();
+
+    //==============================================================================
     /** Callback type for menu item selection. */
     std::function<void (int selectedItemID)> onItemSelected;
+
+    //==============================================================================
+    // Color identifiers for theming
+    struct Colors
+    {
+        static inline const Identifier menuBackground { "menuBackground" };
+        static inline const Identifier menuBorder { "menuBorder" };
+        static inline const Identifier menuItemText { "menuItemText" };
+        static inline const Identifier menuItemTextDisabled { "menuItemTextDisabled" };
+        static inline const Identifier menuItemBackground { "menuItemBackground" };
+        static inline const Identifier menuItemBackgroundHighlighted { "menuItemBackgroundHighlighted" };
+    };
 
     //==============================================================================
     /** Dismisses all currently open popup menus. */
     static void dismissAllPopups();
 
     //==============================================================================
-    class MenuWindow;
+    /** @internal */
+    void paint (Graphics& g) override;
+    /** @internal */
+    void mouseDown (const MouseEvent& event) override;
+    /** @internal */
+    void mouseMove (const MouseEvent& event) override;
+    /** @internal */
+    void mouseExit (const MouseEvent& event) override;
+    /** @internal */
+    void keyDown (const KeyPress& key, const Point<float>& position) override;
+    /** @internal */
+    void focusLost() override;
 
 private:
-    //==============================================================================
-    friend class MenuWindow;
 
     PopupMenu (const Options& options = {});
     void showCustom (const Options& options, std::function<void (int)> callback);
 
+    int getHoveredItem() const;
+    void setHoveredItem (int itemIndex);
+
+    int getItemIndexAt (Point<float> position) const;
+
+    void dismiss (int itemID);
+    void setSelectedItemID (int itemID);
+
+    void setupMenuItems();
+    void positionMenu();
+
     // PopupMenuItem is now an implementation detail
     class PopupMenuItem;
-    std::vector<std::unique_ptr<PopupMenuItem>> items;
+    std::vector<std::unique_ptr<Item>> items;
 
     Options options;
+    int selectedItemID = -1;
+
+    std::function<void (int)> menuCallback;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };

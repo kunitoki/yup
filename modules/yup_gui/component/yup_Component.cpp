@@ -591,6 +591,9 @@ void Component::removeFromDesktop()
 
 void Component::toFront (bool shouldGainKeyboardFocus)
 {
+    if (options.onDesktop && native != nullptr)
+        native->toFront();
+
     if (parentComponent == nullptr)
         return;
 

@@ -212,6 +212,9 @@ public:
     virtual bool isVisible() const = 0;
 
     //==============================================================================
+    virtual void toFront() = 0;
+
+    //==============================================================================
     /** Sets the size of the window.
 
         @param newSize The new size to set.

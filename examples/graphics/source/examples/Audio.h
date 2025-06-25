@@ -245,7 +245,7 @@ public:
     void refreshDisplay (double lastFrameTimeSeconds) override
     {
         {
-            // const yup::CriticalSection::ScopedLockType sl (renderMutex);
+            const yup::CriticalSection::ScopedLockType sl (renderMutex);
             oscilloscope.setRenderData (renderData, readPos);
         }
 
@@ -282,7 +282,7 @@ public:
             readPos = readPos % inputData.size();
         }
 
-        //const yup::CriticalSection::ScopedLockType sl (renderMutex);
+        const yup::CriticalSection::ScopedLockType sl (renderMutex);
         std::swap (inputData, renderData);
     }
 

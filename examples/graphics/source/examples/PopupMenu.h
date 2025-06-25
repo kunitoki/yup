@@ -233,6 +233,7 @@ private:
         auto options = yup::PopupMenu::Options {}
                            .withNativeMenus (true)
                            .withJustification (yup::Justification::topLeft)
+                           .withMinimumWidth (500)
                            .withParentComponent (this);
 
         auto menu = yup::PopupMenu::create (options);
@@ -256,9 +257,9 @@ private:
     void showContextMenu (yup::Point<float> position)
     {
         auto options = yup::PopupMenu::Options {}
-                           // .withTargetScreenPosition(position.to<int>()) // TODO: doesn't seem to work
+                           .withTargetPosition (position.to<int>())
                            .withParentComponent (this)
-                           .withAsChildToTopmost (true);
+                           .withAsChildToTopmost (false);
 
         auto contextMenu = yup::PopupMenu::create (options);
 

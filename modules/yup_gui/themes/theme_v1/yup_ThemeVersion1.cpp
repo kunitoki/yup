@@ -233,6 +233,135 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 
 //==============================================================================
 
+void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu& p)
+{
+    // Draw drop shadow if enabled
+    if (false) // owner->options.addAsChildToTopmost)
+    {
+        auto shadowBounds = p.getLocalBounds().to<float>();
+        auto shadowRadius = static_cast<float> (8.0f);
+
+        g.setFillColor (Color (0, 0, 0));
+        g.setFeather (shadowRadius);
+        g.fillRoundedRect (shadowBounds.translated (0.0f, 2.0f).enlarged (2.0f), 4.0f);
+        g.setFeather (0.0f);
+    }
+
+    // Draw menu background
+    g.setFillColor (p.findColor (PopupMenu::Colors::menuBackground).value_or (Color (0xff2a2a2a)));
+    g.fillRoundedRect (p.getLocalBounds().to<float>(), 4.0f);
+
+    // Draw border
+    g.setStrokeColor (p.findColor (PopupMenu::Colors::menuBorder).value_or (Color (0xff555555)));
+    g.setStrokeWidth (1.0f);
+    g.strokeRoundedRect (p.getLocalBounds().to<float>().reduced (0.5f), 4.0f);
+
+    // Draw items
+    bool anyItemIsTicked = false;
+    for (const auto& item : p)
+    {
+        if (item->isTicked)
+        {
+            anyItemIsTicked = true;
+            break;
+        }
+    }
+
+    int itemIndex = -1;
+    auto itemFont = theme.getDefaultFont();
+
+    for (const auto& item : p)
+    {
+        ++itemIndex;
+        const auto rect = item->area;
+
+        // Skip custom components as they render themselves
+        if (item->isCustomComponent())
+            continue;
+
+        g.setOpacity (1.0f);
+
+        // Draw hover background
+        if (item->isHovered && ! item->isSeparator() && item->isEnabled)
+        {
+            g.setFillColor (p.findColor (PopupMenu::Colors::menuItemBackgroundHighlighted).value_or (Color (0xff404040)));
+            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
+        }
+
+        if (item->isSeparator())
+        {
+            // Draw separator line
+            auto lineY = rect.getCenterY();
+            g.setStrokeColor (p.findColor (PopupMenu::Colors::menuBorder).value_or (Color (0xff555555)));
+            g.setStrokeWidth (1.0f);
+            g.strokeLine (rect.getX() + 8.0f, lineY, rect.getRight() - 8.0f, lineY);
+        }
+        else
+        {
+            // Draw menu item text
+            auto textColor = item->textColor.value_or (p.findColor (PopupMenu::Colors::menuItemText).value_or (Color (0xffffffff)));
+            if (! item->isEnabled)
+                textColor = p.findColor (PopupMenu::Colors::menuItemTextDisabled).value_or (Color (0xff808080));
+
+            g.setFillColor (textColor);
+
+            auto textRect = rect.reduced (12.0f, 2.0f);
+            if (anyItemIsTicked)
+                textRect.setX (textRect.getX() + 8.0f);
+
+            {
+                auto styledText = yup::StyledText();
+                {
+                    auto modifier = styledText.startUpdate();
+                    modifier.appendText (item->text, itemFont, 14.0f);
+                }
+
+                g.fillFittedText (styledText, textRect);
+            }
+
+            // Draw checkmark if ticked
+            if (item->isTicked)
+            {
+                auto checkRect = Rectangle<float> (rect.getX() + 4.0f, rect.getY() + 4.0f, 12.0f, 12.0f);
+                g.setStrokeColor (textColor);
+                g.setStrokeWidth (2.0f);
+                g.strokeLine (checkRect.getX() + 2.0f, checkRect.getCenterY(), checkRect.getCenterX(), checkRect.getBottom() - 2.0f);
+                g.strokeLine (checkRect.getCenterX(), checkRect.getBottom() - 2.0f, checkRect.getRight() - 2.0f, checkRect.getY() + 2.0f);
+            }
+
+            // Draw shortcut text
+            if (item->shortcutKeyText.isNotEmpty())
+            {
+                auto shortcutRect = Rectangle<float> (rect.getRight() - 80.0f, rect.getY(), 75.0f, rect.getHeight());
+
+                auto styledText = yup::StyledText();
+                {
+                    auto modifier = styledText.startUpdate();
+                    modifier.setHorizontalAlign (yup::StyledText::right);
+                    modifier.appendText (item->shortcutKeyText, itemFont, 13.0f);
+                }
+
+                g.setOpacity (0.7f);
+                g.setFillColor (textColor);
+                g.fillFittedText (styledText, shortcutRect);
+                g.setOpacity (1.0f);
+            }
+
+            // Draw submenu arrow
+            if (item->isSubMenu())
+            {
+                auto arrowRect = Rectangle<float> (rect.getRight() - 16.0f, rect.getY() + 4.0f, 8.0f, rect.getHeight() - 8.0f);
+                g.setStrokeColor (textColor);
+                g.setStrokeWidth (1.5f);
+                g.strokeLine (arrowRect.getX() + 2.0f, arrowRect.getY() + 2.0f, arrowRect.getRight() - 2.0f, arrowRect.getCenterY());
+                g.strokeLine (arrowRect.getRight() - 2.0f, arrowRect.getCenterY(), arrowRect.getX() + 2.0f, arrowRect.getBottom() - 2.0f);
+            }
+        }
+    }
+}
+
+//==============================================================================
+
 ApplicationTheme::Ptr createThemeVersion1()
 {
     ApplicationTheme::Ptr theme (new ApplicationTheme);
@@ -252,6 +381,8 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
     theme->setColor (Label::Colors::fillColorId, Colors::white);
     theme->setColor (Label::Colors::strokeColorId, Colors::transparentBlack);
+
+    theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
 
     return theme;
 }

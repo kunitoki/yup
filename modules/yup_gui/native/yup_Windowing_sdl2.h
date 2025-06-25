@@ -55,6 +55,9 @@ public:
     bool isVisible() const override;
 
     //==============================================================================
+    void toFront() override;
+
+    //==============================================================================
     void setSize (const Size<int>& newSize) override;
     Size<int> getSize() const override;
     Size<int> getContentSize() const override;
