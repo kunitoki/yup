@@ -140,15 +140,16 @@ void MessageManager::runDispatchLoop()
     constexpr int framesPerSeconds = 0;
     constexpr int simulateInfiniteLoop = 1;
     emscripten_set_main_loop_arg (mainLoop, this, framesPerSeconds, simulateInfiniteLoop);
-
-    for (const auto& func : shutdownCallbacks)
-        func();
 }
 
 void MessageManager::stopDispatchLoop()
 {
     quitMessagePosted = true;
+
     emscripten_cancel_main_loop();
+
+    for (const auto& func : shutdownCallbacks)
+        func();
 }
 
 #if YUP_MODAL_LOOPS_PERMITTED
