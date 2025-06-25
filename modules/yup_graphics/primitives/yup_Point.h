@@ -1291,6 +1291,47 @@ template <std::size_t I, class ValueType>
         static_assert (dependentFalse<I>);
 }
 
+/** Forwarded methods implementation. */
+[[nodiscard]] constexpr AffineTransform AffineTransform::translated (Point<float> p) const noexcept
+{
+    return { scaleX, shearX, translateX + p.getX(), shearY, scaleY, translateY + p.getY() };
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::translation (Point<float> p) noexcept
+{
+    return translation (p.getX(), p.getY());
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::withAbsoluteTranslation (Point<float> p) const noexcept
+{
+    return withAbsoluteTranslation (p.getX(), p.getY());
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::rotated (float angleInRadians, Point<float> center) const noexcept
+{
+    return rotated (angleInRadians, center.getX(), center.getY());
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::rotation (float angleInRadians, Point<float> center) noexcept
+{
+    return rotation (angleInRadians, center.getX(), center.getY());
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::scaled (float factorX, float factorY, Point<float> center) const noexcept
+{
+    return scaled (factorX, factorY, center.getX(), center.getY());
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::scaling (float factorX, float factorY, Point<float> center) noexcept
+{
+    return scaling (factorX, factorY, center.getX(), center.getY());
+}
+
+[[nodiscard]] constexpr AffineTransform AffineTransform::shearing (float factorX, float factorY, Point<float> center) noexcept
+{
+    return shearing (factorX, factorY, center.getX(), center.getY());
+}
+
 } // namespace yup
 
 namespace std

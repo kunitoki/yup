@@ -22,6 +22,8 @@
 namespace yup
 {
 
+template <class> class YUP_API Point;
+
 //==============================================================================
 /** Class representing a 2D affine transformation.
 
@@ -238,6 +240,8 @@ public:
         return { scaleX, shearX, translateX + tx, shearY, scaleY, translateY + ty };
     }
 
+    [[nodiscard]] constexpr AffineTransform translated (Point<float> p) const noexcept;
+
     /** Create a translation transformation
 
         Creates an AffineTransform object representing a translation by specified amounts in the x and y directions.
@@ -252,6 +256,8 @@ public:
         return { 1.0f, 0.0f, tx, 0.0f, 1.0f, ty };
     }
 
+    [[nodiscard]] static constexpr AffineTransform translation (Point<float> p) noexcept;
+
     /** Create a translated transformation
 
         Creates a new AffineTransform object that represents this transformation translated absolutely in the x and y directions.
@@ -265,6 +271,8 @@ public:
     {
         return { scaleX, shearX, tx, shearY, scaleY, ty };
     }
+
+    [[nodiscard]] constexpr AffineTransform withAbsoluteTranslation (Point<float> p) const noexcept;
 
     //==============================================================================
     /** Create a rotated transformation
@@ -307,6 +315,8 @@ public:
     {
         return followedBy (rotation (angleInRadians, centerX, centerY));
     }
+
+    [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians, Point<float> center) const noexcept;
 
     /** Create a rotation transformation
 
@@ -354,6 +364,8 @@ public:
             -sinTheta * centerX + -cosTheta * centerY + centerY
         };
     }
+
+    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, Point<float> center) noexcept;
 
     //==============================================================================
     /** Create a scaled transformation
@@ -420,6 +432,8 @@ public:
         };
     }
 
+    [[nodiscard]] constexpr AffineTransform scaled (float factorX, float factorY, Point<float> center) const noexcept;
+
     /** Create a scaling transformation
 
         Creates an AffineTransform object representing a uniform scaling by a specified factor.
@@ -462,6 +476,8 @@ public:
     {
         return { factorX, 0.0f, centerX * (1.0f - factorX), 0.0f, factorY, centerY * (1.0f - factorY) };
     }
+
+    [[nodiscard]] static constexpr AffineTransform scaling (float factorX, float factorY, Point<float> center) noexcept;
 
     //==============================================================================
     /** Create a sheared transformation
@@ -522,6 +538,8 @@ public:
         };
     }
 
+    [[nodiscard]] static constexpr AffineTransform shearing (float factorX, float factorY, Point<float> center) noexcept;
+
     //==============================================================================
     /** Create a transformation that follows another.
 
@@ -578,7 +596,7 @@ public:
         @param y A reference to the y-coordinate of the point.
     */
     template <class T>
-    constexpr void transformPoint (T& x, T& y) const noexcept
+    constexpr auto transformPoint (T& x, T& y) const noexcept -> std::enable_if_t<std::is_scalar_v<T>>
     {
         const T originalX = x;
         x = static_cast<T> (scaleX * originalX + shearX * y + translateX);
@@ -596,7 +614,7 @@ public:
         @return A tuple representing the transformed coordinates of the last point processed.
     */
     template <class T, class... Args>
-    constexpr void transformPoints (T& x, T& y, Args&&... args) const noexcept
+    constexpr auto transformPoints (T& x, T& y, Args&&... args) const noexcept -> std::enable_if_t<std::is_scalar_v<T>>
     {
         transformPoint (x, y);
 

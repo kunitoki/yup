@@ -29,45 +29,80 @@ namespace
 
 static std::vector<PopupMenu::Ptr> activePopups;
 
-Point<int> calculatePositionWithJustification (const Rectangle<int>& targetArea,
-                                               const Size<int>& menuSize,
-                                               Justification justification)
+Point<int> calculatePositionAtPoint (Point<int> targetPoint, Size<int> menuSize, Justification alignment)
 {
-    Point<int> position;
+    Point<int> position = targetPoint;
 
-    switch (justification)
+    switch (alignment)
     {
         default:
         case Justification::topLeft:
-            position = targetArea.getTopLeft();
+            // Menu's top-left at target point (default)
             break;
 
         case Justification::centerTop:
-            position = Point<int> (targetArea.getCenterX() - menuSize.getWidth() / 2, targetArea.getTop());
+            position.setX (targetPoint.getX() - menuSize.getWidth() / 2);
             break;
 
         case Justification::topRight:
-            position = targetArea.getTopRight().translated (-menuSize.getWidth(), 0);
-            break;
-
-        case Justification::bottomLeft:
-            position = targetArea.getBottomLeft();
-            break;
-
-        case Justification::centerBottom:
-            position = Point<int> (targetArea.getCenterX() - menuSize.getWidth() / 2, targetArea.getBottom());
-            break;
-
-        case Justification::bottomRight:
-            position = targetArea.getBottomRight().translated (-menuSize.getWidth(), 0);
-            break;
-
-        case Justification::centerRight:
-            position = Point<int> (targetArea.getRight(), targetArea.getCenterY() - menuSize.getHeight() / 2);
+            position.setX (targetPoint.getX() - menuSize.getWidth());
             break;
 
         case Justification::centerLeft:
-            position = Point<int> (targetArea.getX() - menuSize.getWidth(), targetArea.getCenterY() - menuSize.getHeight() / 2);
+            position.setY (targetPoint.getY() - menuSize.getHeight() / 2);
+            break;
+
+        case Justification::center:
+            position = targetPoint - Point<int>{ menuSize.getWidth() / 2, menuSize.getHeight() / 2 };
+            break;
+
+        case Justification::centerRight:
+            position.setX (targetPoint.getX() - menuSize.getWidth());
+            position.setY (targetPoint.getY() - menuSize.getHeight() / 2);
+            break;
+
+        case Justification::bottomLeft:
+            position.setY (targetPoint.getY() - menuSize.getHeight());
+            break;
+
+        case Justification::centerBottom:
+            position.setX (targetPoint.getX() - menuSize.getWidth() / 2);
+            position.setY (targetPoint.getY() - menuSize.getHeight());
+            break;
+
+        case Justification::bottomRight:
+            position = targetPoint - Point<int>{ menuSize.getWidth(), menuSize.getHeight() };
+            break;
+    }
+
+    return position;
+}
+
+Point<int> calculatePositionRelativeToArea (Rectangle<int> targetArea, Size<int> menuSize, PopupMenu::Placement placement)
+{
+    Point<int> position;
+
+    switch (placement)
+    {
+        default:
+        case PopupMenu::Placement::below:
+            position = Point<int> (targetArea.getX(), targetArea.getBottom());
+            break;
+
+        case PopupMenu::Placement::above:
+            position = Point<int> (targetArea.getX(), targetArea.getY() - menuSize.getHeight());
+            break;
+
+        case PopupMenu::Placement::toRight:
+            position = Point<int> (targetArea.getRight(), targetArea.getY());
+            break;
+
+        case PopupMenu::Placement::toLeft:
+            position = Point<int> (targetArea.getX() - menuSize.getWidth(), targetArea.getY());
+            break;
+
+        case PopupMenu::Placement::centered:
+            position = targetArea.getCenter() - Point<int>{ menuSize.getWidth() / 2, menuSize.getHeight() / 2 };;
             break;
     }
 
@@ -247,9 +282,10 @@ void installGlobalMouseListener()
 PopupMenu::Options::Options()
     : parentComponent (nullptr)
     , dismissOnSelection (true)
-    , justification (Justification::bottomLeft)
-    , addAsChildToTopmost (false)
-    , useNativeMenus (false)
+    , alignment (Justification::topLeft)
+    , placement (Placement::below)
+    , positioningMode (PositioningMode::atPoint)
+    , targetComponent (nullptr)
 {
 }
 
@@ -259,21 +295,37 @@ PopupMenu::Options& PopupMenu::Options::withParentComponent (Component* parentCo
     return *this;
 }
 
-PopupMenu::Options& PopupMenu::Options::withTargetArea (const Rectangle<int>& targetArea)
+PopupMenu::Options& PopupMenu::Options::withPosition (Point<int> position, Justification alignment)
 {
-    this->targetArea = targetArea;
+    this->positioningMode = PositioningMode::atPoint;
+    this->targetPosition = position;
+    this->alignment = alignment;
     return *this;
 }
 
-PopupMenu::Options& PopupMenu::Options::withJustification (Justification justification)
+PopupMenu::Options& PopupMenu::Options::withPosition (Point<float> position, Justification alignment)
 {
-    this->justification = justification;
+    return withPosition (position.to<int>(), alignment);
+}
+
+PopupMenu::Options& PopupMenu::Options::withTargetArea (Rectangle<int> area, Placement placement)
+{
+    this->positioningMode = PositioningMode::relativeToArea;
+    this->targetArea = area;
+    this->placement = placement;
     return *this;
 }
 
-PopupMenu::Options& PopupMenu::Options::withTargetPosition (const Point<int>& targetPosition)
+PopupMenu::Options& PopupMenu::Options::withTargetArea (Rectangle<float> area, Placement placement)
 {
-    this->targetPosition = targetPosition;
+    return withTargetArea (area.to<int>(), placement);
+}
+
+PopupMenu::Options& PopupMenu::Options::withRelativePosition (Component* component, Placement placement)
+{
+    this->positioningMode = PositioningMode::relativeToComponent;
+    this->targetComponent = component;
+    this->placement = placement;
     return *this;
 }
 
@@ -286,18 +338,6 @@ PopupMenu::Options& PopupMenu::Options::withMinimumWidth (int minWidth)
 PopupMenu::Options& PopupMenu::Options::withMaximumWidth (int maxWidth)
 {
     this->maxWidth = maxWidth;
-    return *this;
-}
-
-PopupMenu::Options& PopupMenu::Options::withAsChildToTopmost (bool addAsChildToTopmost)
-{
-    this->addAsChildToTopmost = addAsChildToTopmost;
-    return *this;
-}
-
-PopupMenu::Options& PopupMenu::Options::withNativeMenus (bool useNativeMenus)
-{
-    this->useNativeMenus = useNativeMenus;
     return *this;
 }
 
@@ -479,72 +519,76 @@ void PopupMenu::setupMenuItems()
     setSize ({ width, y + verticalPadding }); // Bottom padding
 }
 
+//==============================================================================
+
 void PopupMenu::positionMenu()
 {
-    auto menuSize = getSize();
+    auto menuSize = getSize().to<int>();
     Rectangle<int> targetArea;
     Rectangle<int> availableArea;
 
-    // Determine target area and available area
+    // Determine coordinate system and available area
     if (options.parentComponent)
     {
-        // Get the bounds relative to the screen or topmost component
-        if (options.addAsChildToTopmost)
-        {
-            // Target area is relative to topmost component
-            targetArea = options.parentComponent->getBounds().to<int>();
-            availableArea = targetArea;
-        }
-        else
-        {
-            // Target area is in screen coordinates
-            targetArea = options.parentComponent->getScreenBounds().to<int>();
-
-            // Available area is the screen bounds
-            if (auto* desktop = Desktop::getInstance())
-            {
-                if (auto screen = desktop->getScreenContaining (targetArea.getCenter()))
-                    availableArea = screen->workArea;
-                else if (auto screen = desktop->getPrimaryScreen())
-                    availableArea = screen->workArea;
-                else
-                    availableArea = targetArea;
-            }
-        }
-
-        // Override with explicit target area if provided
-        if (! options.targetArea.isEmpty())
-        {
-            if (options.addAsChildToTopmost)
-                targetArea = options.targetArea;
-            else
-                targetArea = options.targetArea.translated (targetArea.getPosition());
-        }
+        // Working in parent component's local coordinates
+        availableArea = options.parentComponent->getLocalBounds().to<int>();
     }
     else
     {
-        if (! options.targetArea.isEmpty())
-            targetArea = options.targetArea;
-        else
-            targetArea = Rectangle<int> (options.targetPosition, options.targetArea.getSize());
-
-        // Get screen bounds for available area
+        // Working in screen coordinates
         if (auto* desktop = Desktop::getInstance())
         {
-            if (auto screen = desktop->getScreenContaining (targetArea.getCenter()))
-                availableArea = screen->workArea;
-            else if (auto screen = desktop->getPrimaryScreen())
+            if (auto screen = desktop->getPrimaryScreen())
                 availableArea = screen->workArea;
             else
-                availableArea = targetArea;
+                availableArea = Rectangle<int> (0, 0, 1920, 1080); // Fallback
+        }
+        else
+        {
+            availableArea = Rectangle<int> (0, 0, 1920, 1080); // Fallback
         }
     }
 
-    // Calculate position based on justification
-    Point<int> position = calculatePositionWithJustification (targetArea, menuSize.to<int>(), options.justification).to<int>();
+    // Calculate position based on positioning mode
+    Point<int> position;
+
+    switch (options.positioningMode)
+    {
+        case PositioningMode::atPoint:
+            position = calculatePositionAtPoint (options.targetPosition, menuSize, options.alignment);
+            break;
+
+        case PositioningMode::relativeToArea:
+            targetArea = options.targetArea;
+            position = calculatePositionRelativeToArea (targetArea, menuSize, options.placement);
+            break;
+
+        case PositioningMode::relativeToComponent:
+            if (options.targetComponent)
+            {
+                // Get target component bounds in appropriate coordinate system
+                if (options.parentComponent)
+                {
+                    // Convert to parent component's local coordinates
+                    targetArea = options.parentComponent->getLocalArea (options.targetComponent, options.targetComponent->getLocalBounds()).to<int>();
+                }
+                else
+                {
+                    // Use screen coordinates
+                    targetArea = options.targetComponent->getScreenBounds().to<int>();
+                }
+                position = calculatePositionRelativeToArea (targetArea, menuSize, options.placement);
+            }
+            else
+            {
+                // Fallback to center of available area
+                position = availableArea.getCenter() - Point<int>{ menuSize.getWidth() / 2, menuSize.getHeight() / 2 };
+            }
+            break;
+    }
 
     // Adjust position to fit within available area
-    position = constrainPositionToAvailableArea (position, menuSize.to<int>(), availableArea, targetArea).to<int>();
+    position = constrainPositionToAvailableArea (position, menuSize, availableArea, targetArea);
 
     setTopLeft (position);
 }
@@ -591,12 +635,14 @@ void PopupMenu::showCustom (const Options& options, std::function<void (int)> ca
 
     setWantsKeyboardFocus (true);
 
-    if (options.addAsChildToTopmost && options.parentComponent)
+    if (options.parentComponent)
     {
+        // When we have a parent component, add as child to work in local coordinates
         options.parentComponent->addChildComponent (this);
     }
     else
     {
+        // When we have no parent component, add to desktop to work in screen coordinates
         auto nativeOptions = ComponentNative::Options {}
                                  .withDecoration (false)
                                  .withResizableWindow (false);

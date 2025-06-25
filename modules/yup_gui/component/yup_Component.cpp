@@ -1301,30 +1301,42 @@ void Component::updateMouseCursor()
     Desktop::getInstance()->setMouseCursor (mouseCursor);
 }
 
+//==============================================================================
+
 Point<float> Component::getScreenPosition() const
 {
-    // If this component is on the desktop, its position is already in screen coordinates
-    if (options.onDesktop && native != nullptr)
-        return native->getPosition().to<float>();
+    return localToScreen (getPosition());
+}
 
-    // For child components, accumulate transformations up the hierarchy
-    auto screenPos = getPosition();
+//==============================================================================
+
+Rectangle<float> Component::getScreenBounds() const
+{
+    return localToScreen (getBounds());
+}
+
+//==============================================================================
+
+Point<float> Component::localToScreen (const Point<float>& localPoint) const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getPosition().to<float>() + localPoint;
+
+    auto screenPos = localPoint;
     auto parent = getParentComponent();
 
     while (parent != nullptr)
     {
         if (parent->options.onDesktop)
         {
-            // Found the top-level component, add its screen position
             if (parent->native != nullptr)
-                screenPos = screenPos + parent->native->getPosition().to<float>();
+                screenPos += parent->native->getPosition().to<float>();
 
             break;
         }
         else
         {
-            // Add parent's position relative to its parent
-            screenPos = screenPos + parent->getPosition();
+            screenPos += parent->getPosition();
         }
 
         parent = parent->getParentComponent();
@@ -1333,9 +1345,105 @@ Point<float> Component::getScreenPosition() const
     return screenPos;
 }
 
-Rectangle<float> Component::getScreenBounds() const
+Point<float> Component::screenToLocal (const Point<float>& screenPoint) const
 {
-    return Rectangle<float> (getScreenPosition(), getSize());
+    return screenPoint - localToScreen (getPosition());
+}
+
+Rectangle<float> Component::localToScreen (const Rectangle<float>& localRectangle) const
+{
+    return Rectangle<float> (localToScreen (localRectangle.getPosition()), localRectangle.getSize());
+}
+
+Rectangle<float> Component::screenToLocal (const Rectangle<float>& screenRectangle) const
+{
+    return Rectangle<float> (screenToLocal (screenRectangle.getPosition()), screenRectangle.getSize());
+}
+
+//==============================================================================
+
+Point<float> Component::getLocalPoint (const Component* sourceComponent, Point<float> pointInSource) const
+{
+    if (sourceComponent == nullptr || sourceComponent == this)
+        return pointInSource;
+
+    return screenToLocal (sourceComponent->localToScreen (pointInSource));
+}
+
+Rectangle<float> Component::getLocalArea (const Component* sourceComponent, Rectangle<float> rectangleInSource) const
+{
+    if (sourceComponent == nullptr || sourceComponent == this)
+        return rectangleInSource;
+
+    return screenToLocal (sourceComponent->localToScreen (rectangleInSource));
+}
+
+Point<float> Component::getRelativePoint (const Component* targetComponent, Point<float> localPoint) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return localPoint;
+
+    return targetComponent->screenToLocal (localToScreen (localPoint));
+}
+
+Rectangle<float> Component::getRelativeArea (const Component* targetComponent, Rectangle<float> localRectangle) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return localRectangle;
+
+    return targetComponent->screenToLocal (localToScreen (localRectangle));
+}
+
+AffineTransform Component::getTransformToComponent (const Component* targetComponent) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return AffineTransform();
+
+    AffineTransform transform;
+
+    auto thisToScreen = getTransformToScreen();
+    auto targetToScreen = targetComponent->getTransformToScreen();
+
+    transform = thisToScreen.followedBy (targetToScreen.inverted());
+
+    return transform;
+}
+
+AffineTransform Component::getTransformFromComponent (const Component* sourceComponent) const
+{
+    if (sourceComponent == nullptr)
+        return AffineTransform();
+
+    return sourceComponent->getTransformToComponent (this);
+}
+
+AffineTransform Component::getTransformToScreen() const
+{
+    AffineTransform transform;
+    const Component* comp = this;
+
+    while (comp != nullptr)
+    {
+        if (comp->isTransformed())
+            transform = transform.followedBy (comp->getTransform());
+
+        transform = transform.translated (comp->getPosition());
+
+        if (comp->options.onDesktop)
+        {
+            if (comp->native != nullptr)
+            {
+                auto nativePos = comp->native->getPosition().to<float>();
+                transform = transform.translated (nativePos);
+            }
+
+            break;
+        }
+
+        comp = comp->getParentComponent();
+    }
+
+    return transform;
 }
 
 } // namespace yup

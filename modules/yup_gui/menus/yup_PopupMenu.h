@@ -28,7 +28,8 @@ namespace yup
 
     This class supports both native system menus and custom rendered menus.
 */
-class YUP_API PopupMenu : public Component
+class YUP_API PopupMenu
+    : public Component
     , public ReferenceCountedObject
 {
 public:
@@ -37,22 +38,61 @@ public:
     using Ptr = ReferenceCountedObjectPtr<PopupMenu>;
 
     //==============================================================================
+    /** Menu positioning relative to rectangles/components */
+    enum class Placement
+    {
+        above,          //< Menu appears above the target
+        below,          //< Menu appears below the target (default)
+        toLeft,         //< Menu appears to the left of the target
+        toRight,        //< Menu appears to the right of the target
+        centered        //< Menu is centered on the target
+    };
+
+    enum class PositioningMode
+    {
+        atPoint,
+        relativeToArea,
+        relativeToComponent
+    };
+
+    //==============================================================================
     /** Options for showing the popup menu. */
     struct Options
     {
         Options();
 
-        /** The parent component to attach the menu to. */
+        /** Sets the parent component. When set, menu appears as child using local coordinates.
+            When not set, menu appears as desktop window using screen coordinates. */
         Options& withParentComponent (Component* parentComponent);
 
-        /** The area to position the menu relative to. */
-        Options& withTargetArea (const Rectangle<int>& targetArea);
 
-        /** How to position the menu relative to the target area. */
-        Options& withJustification (Justification justification);
+        /** Position menu at a specific point.
+            - With parent: point is relative to parent component
+            - Without parent: point is in screen coordinates
 
-        /** The position to show the menu at (relative to parent). */
-        Options& withTargetPosition (const Point<int>& targetPosition);
+            @param position     The point to show the menu at
+            @param alignment    How to align the menu relative to the point (default: top-left of menu at point)
+        */
+        Options& withPosition (Point<int> position, Justification alignment = Justification::topLeft);
+        Options& withPosition (Point<float> position, Justification alignment = Justification::topLeft);
+
+        /** Position menu relative to a rectangle (like a button).
+            - With parent: rectangle is relative to parent component
+            - Without parent: rectangle is in screen coordinates
+
+            @param area         The rectangle to position relative to
+            @param placement    Where to place menu relative to rectangle (default: below the rectangle)
+        */
+        Options& withTargetArea (Rectangle<int> area, Placement placement = Placement::below);
+        Options& withTargetArea (Rectangle<float> area, Placement placement = Placement::below);
+
+        /** Position menu relative to a component (uses the component's bounds).
+            The component must be a child of the parent component (if parent is set).
+
+            @param component    The component to position relative to
+            @param placement    Where to place menu relative to component (default: below)
+        */
+        Options& withRelativePosition (Component* component, Placement placement = Placement::below);
 
         /** Minimum width for the menu. */
         Options& withMinimumWidth (int minWidth);
@@ -60,21 +100,16 @@ public:
         /** Maximum width for the menu. */
         Options& withMaximumWidth (int maxWidth);
 
-        /** Whether to add the menu as a child to the topmost component. */
-        Options& withAsChildToTopmost (bool addAsChildToTopmost);
-
-        /** Whether to use native system menus (when available). */
-        Options& withNativeMenus (bool useNativeMenus);
-
         Component* parentComponent;
+        Component* targetComponent;
         Point<int> targetPosition;
         Rectangle<int> targetArea;
-        Justification justification;
+        Justification alignment;
+        Placement placement;
+        PositioningMode positioningMode;
         std::optional<int> minWidth;
         std::optional<int> maxWidth;
         bool dismissOnSelection;
-        bool addAsChildToTopmost;
-        bool useNativeMenus;
     };
 
     //==============================================================================

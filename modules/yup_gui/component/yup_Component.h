@@ -139,6 +139,16 @@ public:
     void setPosition (const Point<float>& newPosition);
 
     /**
+        Get the position of the component in absolute screen coordinates.
+
+        This method traverses up the parent hierarchy to calculate the component's
+        absolute position on the screen.
+
+        @return The absolute screen position of the component.
+     */
+    Point<float> getScreenPosition() const;
+
+    /**
         Get the x position of the component relative to its parent.
 
         @return The x position of the component relative to its parent.
@@ -180,25 +190,91 @@ public:
      */
     float getBottom() const;
 
+    /**
+        Get the top left position of the component relative to its parent.
+
+        @return The top left position of the component relative to its parent.
+     */
     Point<float> getTopLeft() const;
+
+    /**
+        Set the top left position of the component relative to its parent.
+
+        @param newTopLeft The new top left position of the component relative to its parent.
+     */
     void setTopLeft (const Point<float>& newTopLeft);
 
+    /**
+        Get the bottom left position of the component relative to its parent.
+
+        @return The bottom left position of the component relative to its parent.
+     */
     Point<float> getBottomLeft() const;
+
+    /**
+        Set the bottom left position of the component relative to its parent.
+
+        @param newBottomLeft The new bottom left position of the component relative to its parent.
+     */
     void setBottomLeft (const Point<float>& newBottomLeft);
 
+    /**
+        Get the top right position of the component relative to its parent.
+
+        @return The top right position of the component relative to its parent.
+     */
     Point<float> getTopRight() const;
+
+    /**
+        Set the top right position of the component relative to its parent.
+
+        @param newTopRight The new top right position of the component relative to its parent.
+     */
     void setTopRight (const Point<float>& newTopRight);
 
+    /**
+        Get the bottom right position of the component relative to its parent.
+
+        @return The bottom right position of the component relative to its parent.
+     */
     Point<float> getBottomRight() const;
+
+    /**
+        Set the bottom right position of the component relative to its parent.
+
+        @param newBottomRight The new bottom right position of the component relative to its parent.
+     */
     void setBottomRight (const Point<float>& newBottomRight);
 
     Point<float> getCenter() const;
     void setCenter (const Point<float>& newCenter);
 
+    /**
+        Get the center x position of the component relative to its parent.
+
+        @return The center x position of the component relative to its parent.
+     */
     float getCenterX() const;
+
+    /**
+        Set the center x position of the component relative to its parent.
+
+        @param newCenterX The new center x position of the component relative to its parent.
+     */
     void setCenterX (float newCenterX);
 
+    /**
+        Get the center y position of the component relative to its parent.
+
+        @return The center y position of the component relative to its parent.
+     */
     float getCenterY() const;
+
+    /**
+        Set the center y position of the component relative to its parent.
+
+        @param newCenterY The new center y position of the component relative to its parent.
+     */
     void setCenterY (float newCenterY);
 
     /**
@@ -272,13 +348,6 @@ public:
     Rectangle<float> getBounds() const;
 
     /**
-        Get the bounds of the component in screen coordinates.
-
-        @return The bounds of the component in screen coordinates.
-     */
-    Rectangle<float> getScreenBounds() const;
-
-    /**
         Get the local bounds of the component.
 
         The local bounds is the same as getBounds() but with the position set to (0, 0).
@@ -295,24 +364,151 @@ public:
     Rectangle<float> getBoundsRelativeToTopLevelComponent() const;
 
     /**
-        Get the position of the component in absolute screen coordinates.
+        Get the bounds of the component in screen coordinates.
 
-        This method traverses up the parent hierarchy to calculate the component's
-        absolute position on the screen.
-
-        @return The absolute screen position of the component.
+        @return The bounds of the component in screen coordinates.
      */
-    Point<float> getScreenPosition() const;
+    Rectangle<float> getScreenBounds() const;
 
     //==============================================================================
 
+    /**
+        Convert a point from local coordinates to screen coordinates.
+
+        @param localPoint The point to convert.
+
+        @return The point in screen coordinates.
+     */
+    Point<float> localToScreen (const Point<float>& localPoint) const;
+
+    /**
+        Convert a point from screen coordinates to local coordinates.
+
+        @param screenPoint The point to convert.
+
+        @return The point in local coordinates.
+     */
+    Point<float> screenToLocal (const Point<float>& screenPoint) const;
+
+    /**
+        Convert a rectangle from local coordinates to screen coordinates.
+
+        @param localRectangle The rectangle to convert.
+
+        @return The rectangle in screen coordinates.
+     */
+    Rectangle<float> localToScreen (const Rectangle<float>& localRectangle) const;
+
+    /**
+        Convert a rectangle from screen coordinates to local coordinates.
+
+        @param screenRectangle The rectangle to convert.
+
+        @return The rectangle in local coordinates.
+     */
+    Rectangle<float> screenToLocal (const Rectangle<float>& screenRectangle) const;
+
+    //==============================================================================
+
+    /**
+        Convert a point from another component's coordinate system to this component's local coordinates.
+        This method handles all transforms in the component hierarchy.
+
+        @param sourceComponent  The component whose coordinate system the point is in
+        @param pointInSource    The point in the source component's coordinate system
+
+        @return The point converted to this component's local coordinate system
+     */
+    Point<float> getLocalPoint (const Component* sourceComponent, Point<float> pointInSource) const;
+
+    /**
+        Convert a rectangle from another component's coordinate system to this component's local coordinates.
+        This method handles all transforms in the component hierarchy.
+
+        @param sourceComponent      The component whose coordinate system the rectangle is in
+        @param rectangleInSource    The rectangle in the source component's coordinate system
+
+        @return The rectangle converted to this component's local coordinate system
+     */
+    Rectangle<float> getLocalArea (const Component* sourceComponent, Rectangle<float> rectangleInSource) const;
+
+    /**
+        Convert a point from this component's local coordinates to another component's coordinate system.
+        This method handles all transforms in the component hierarchy.
+
+        @param targetComponent  The component whose coordinate system to convert to
+        @param localPoint       The point in this component's local coordinate system
+
+        @return The point converted to the target component's coordinate system
+     */
+    Point<float> getRelativePoint (const Component* targetComponent, Point<float> localPoint) const;
+
+    /**
+        Convert a rectangle from this component's local coordinates to another component's coordinate system.
+        This method handles all transforms in the component hierarchy.
+
+        @param targetComponent  The component whose coordinate system to convert to
+        @param localRectangle   The rectangle in this component's local coordinate system
+
+        @return The rectangle converted to the target component's coordinate system
+     */
+    Rectangle<float> getRelativeArea (const Component* targetComponent, Rectangle<float> localRectangle) const;
+
+    //==============================================================================
+    /**
+        Set the transform of the component.
+
+        @param transform The new transform of the component.
+     */
     void setTransform (const AffineTransform& transform);
 
+    /**
+        Get the transform of the component.
+
+        @return The transform of the component.
+     */
     AffineTransform getTransform() const;
 
+    /**
+        Check if the component is transformed.
+
+        @return True if the component is transformed, false otherwise.
+     */
     bool isTransformed() const;
 
+    /**
+        Called when the transform of the component changes.
+     */
     virtual void transformChanged();
+
+    //==============================================================================
+    /**
+        Get the transform from this component's coordinate system to another component's coordinate system.
+        This calculates the combined transform needed to convert coordinates from this component to the target.
+
+        @param targetComponent  The component to get the transform to
+
+        @return The combined transform from this component to the target component
+     */
+    AffineTransform getTransformToComponent (const Component* targetComponent) const;
+
+    /**
+        Get the transform from another component's coordinate system to this component's coordinate system.
+        This calculates the combined transform needed to convert coordinates from the source to this component.
+
+        @param sourceComponent  The component to get the transform from
+
+        @return The combined transform from the source component to this component
+     */
+    AffineTransform getTransformFromComponent (const Component* sourceComponent) const;
+
+    /**
+        Get the transform from this component's coordinate system to screen coordinates.
+        This calculates the combined transform needed to convert coordinates from this component to screen space.
+
+        @return The combined transform from this component to screen coordinates
+     */
+    AffineTransform getTransformToScreen() const;
 
     //==============================================================================
     /**

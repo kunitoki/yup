@@ -134,7 +134,8 @@ private:
     void showBasicMenu()
     {
         auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (&basicMenuButton);
+                           .withParentComponent (this)
+                           .withRelativePosition (&basicMenuButton, yup::PopupMenu::Placement::below);
 
         auto menu = yup::PopupMenu::create (options);
 
@@ -169,7 +170,8 @@ private:
         colorMenu->addItem ("Blue", colorBlue);
 
         auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (&subMenuButton);
+                           .withParentComponent (this)
+                           .withRelativePosition (&subMenuButton, yup::PopupMenu::Placement::toRight);
         auto menu = yup::PopupMenu::create (options);
         menu->addItem ("New", newFile);
         menu->addItem ("Open", openFile);
@@ -179,18 +181,17 @@ private:
         menu->addSeparator();
         menu->addItem ("Exit", exitApp);
 
-        menu->onItemSelected = [this] (int selectedID)
+        menu->show([this] (int selectedID)
         {
             handleMenuSelection (selectedID);
-        };
-
-        menu->show();
+        });
     }
 
     void showCustomMenu()
     {
         auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (&customMenuButton);
+                           .withParentComponent (this)
+                           .withRelativePosition (&customMenuButton, yup::PopupMenu::Placement::above);
         auto menu = yup::PopupMenu::create (options);
 
         menu->addItem ("Regular Item", 1);
@@ -228,16 +229,13 @@ private:
     void showNativeMenu()
     {
         auto options = yup::PopupMenu::Options {}
-                           .withNativeMenus (true)
-                           .withJustification (yup::Justification::topLeft)
-                           .withMinimumWidth (500)
-                           .withParentComponent (this);
+                           .withParentComponent (this)
+                           .withRelativePosition (&nativeMenuButton, yup::PopupMenu::Placement::centered);
 
         auto menu = yup::PopupMenu::create (options);
 
         menu->addItem ("Native Item 1", 1);
         menu->addItem ("Native Item 2", 2);
-        menu->addSeparator();
         menu->addItem ("Native Item 3", 3);
 
         menu->onItemSelected = [this] (int selectedID)
@@ -245,32 +243,22 @@ private:
             handleMenuSelection (selectedID);
         };
 
-        menu->show ([this] (int selectedID)
-        {
-            handleMenuSelection (selectedID);
-        });
+        menu->show();
     }
 
     void showContextMenu (yup::Point<float> position)
     {
         auto options = yup::PopupMenu::Options {}
-                           .withTargetPosition (position.to<int>())
                            .withParentComponent (this)
-                           .withAsChildToTopmost (false);
+                           .withPosition (position, yup::Justification::topLeft);
 
         auto contextMenu = yup::PopupMenu::create (options);
 
-        contextMenu->addItem ("Copy", editCopy);
-        contextMenu->addItem ("Paste", editPaste);
+        contextMenu->addItem ("Context Item 1", 1);
+        contextMenu->addItem ("Context Item 2", 2);
         contextMenu->addSeparator();
-        contextMenu->addItem ("Select All", 100);
-        contextMenu->addSeparator();
-        contextMenu->addItem ("Properties", 101);
+        contextMenu->addItem ("Context Item 3", 3);
 
-        contextMenu->onItemSelected = [this] (int selectedID)
-        {
-            handleMenuSelection (selectedID);
-        };
 
         contextMenu->show ([this] (int selectedID)
         {
