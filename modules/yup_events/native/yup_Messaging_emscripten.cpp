@@ -131,8 +131,8 @@ void MessageManager::runDispatchLoop()
 
         auto* messageManager = static_cast<MessageManager*> (arg);
         jassert (messageManager != nullptr);
-        jassert (messageManager->loopCallback != nullptr);
-        messageManager->loopCallback();
+        if (messageManager != nullptr && messageManager->loopCallback != nullptr)
+            messageManager->loopCallback();
 
         InternalMessageQueue::getInstance()->deliverNextMessages();
     };
