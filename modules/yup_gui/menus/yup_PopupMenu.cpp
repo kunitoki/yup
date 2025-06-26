@@ -808,12 +808,29 @@ void PopupMenu::mouseDown (const MouseEvent& event)
 
 void PopupMenu::mouseMove (const MouseEvent& event)
 {
+    // Cancel hide timers when mouse is actively moving in menu
+    submenuHideTimer.stopTimer();
+
     setHoveredItem (getItemIndexAt (event.getPosition()));
+}
+
+void PopupMenu::mouseEnter (const MouseEvent& event)
+{
+    // Call custom mouse enter callback for submenu coordination
+    if (onMouseEnter)
+        onMouseEnter();
+
+    // Cancel any pending hide timers when mouse enters
+    submenuHideTimer.stopTimer();
 }
 
 void PopupMenu::mouseExit (const MouseEvent& event)
 {
     setHoveredItem (-1);
+
+    // Call custom mouse exit callback for submenu coordination
+    if (onMouseExit)
+        onMouseExit();
 
     // Don't start hide timer on mouse exit - let the hover logic handle submenu visibility
     // This prevents the main menu from disappearing when moving to submenus
@@ -916,6 +933,9 @@ void PopupMenu::showSubmenu (int itemIndex)
         }
     });
 
+    // Set up submenu mouse tracking to prevent premature hiding
+    setupSubmenuMouseTracking (currentSubmenu);
+
     // Clear the flag after showing submenu
     isShowingSubmenu = false;
 }
@@ -931,6 +951,34 @@ void PopupMenu::hideSubmenus()
 
     submenuItemIndex = -1;
     isShowingSubmenu = false;
+}
+
+void PopupMenu::setupSubmenuMouseTracking (PopupMenu::Ptr submenu)
+{
+    if (! submenu)
+        return;
+
+    // Set up callbacks for coordinating mouse events between parent and submenu
+    auto parentMenu = this; // Capture parent menu reference
+
+    // When mouse enters submenu, cancel any hide timers on parent
+    submenu->onMouseEnter = [parentMenu]()
+    {
+        parentMenu->submenuHideTimer.stopTimer();
+    };
+
+    // When mouse exits submenu, start hide timer with generous delay
+    submenu->onMouseExit = [parentMenu]()
+    {
+        // Only start hide timer if we're not returning to parent menu
+        parentMenu->submenuHideTimer.onTimer = [parentMenu]
+        {
+            parentMenu->hideSubmenus();
+            parentMenu->submenuHideTimer.stopTimer();
+        };
+
+        parentMenu->submenuHideTimer.startTimer (400); // Longer delay for better UX
+    };
 }
 
 void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)

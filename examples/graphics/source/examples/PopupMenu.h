@@ -335,7 +335,10 @@ private:
                 break;
 
             default:
-                message = "No selection";
+                if (selectedID >= 400)
+                    message = yup::String::formatted ("Selected submenu item ID: %d", selectedID);
+                else
+                    message = "No selection";
                 break;
         }
 

@@ -234,6 +234,10 @@ public:
     /** Callback type for menu item selection. */
     std::function<void (int selectedItemID)> onItemSelected;
 
+    /** Mouse tracking callbacks for submenu coordination. */
+    std::function<void()> onMouseEnter;
+    std::function<void()> onMouseExit;
+
     //==============================================================================
     // Color identifiers for theming
     struct Colors
@@ -264,6 +268,8 @@ public:
     /** @internal */
     void mouseMove (const MouseEvent& event) override;
     /** @internal */
+    void mouseEnter (const MouseEvent& event) override;
+    /** @internal */
     void mouseExit (const MouseEvent& event) override;
     /** @internal */
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheel) override;
@@ -292,6 +298,7 @@ private:
     void hideSubmenus();
     void updateSubmenuVisibility (int hoveredItemIndex);
     void cleanupSubmenu (PopupMenu::Ptr submenu);
+    void setupSubmenuMouseTracking (PopupMenu::Ptr submenu);
 
     // Scrolling functionality
     void updateScrolling();
