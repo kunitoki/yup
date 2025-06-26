@@ -40,7 +40,10 @@ private:
     {
         // Text Button (uses componentID as text)
         textButton = std::make_unique<TextButton> ("Text Button");
-        textButton->onClick = [this] { updateStatus ("Text Button clicked!"); };
+        textButton->onClick = [this]
+        {
+            updateStatus ("Text Button clicked!");
+        };
         addAndMakeVisible (textButton.get());
 
         // Toggle Button
@@ -95,7 +98,10 @@ private:
         slider = std::make_unique<Slider> ("slider");
         slider->setRange (Range<float> (0.0f, 100.0f));
         slider->setValue (50.0);
-        slider->onValueChanged = [this] (float value) { updateStatus ("Slider value: " + String (value, 1)); };
+        slider->onValueChanged = [this] (float value)
+        {
+            updateStatus ("Slider value: " + String (value, 1));
+        };
         addAndMakeVisible (slider.get());
 
         // TextEditor
@@ -110,9 +116,9 @@ private:
         // Layout will be handled in resized()
     }
 
-    void updateStatus(const String& message)
+    void updateStatus (const String& message)
     {
-        statusLabel->setText(message, dontSendNotification);
+        statusLabel->setText (message, dontSendNotification);
     }
 
     void resized() override
@@ -125,16 +131,16 @@ private:
         int y = margin;
 
         // Title
-        titleLabel->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(bounds.getWidth() - 2 * margin), 40.0f));
+        titleLabel->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 40.0f));
         y += 50;
 
         // Status
-        statusLabel->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(bounds.getWidth() - 2 * margin), static_cast<float>(componentHeight)));
+        statusLabel->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (componentHeight)));
         y += componentHeight + spacing * 2;
 
         // Buttons row
         auto buttonWidth = 120;
-        textButton->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
+        textButton->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
         //toggleButton->setBounds (Rectangle<float> (static_cast<float>(margin + buttonWidth + spacing), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
         //drawableButton->setBounds (Rectangle<float> (static_cast<float>(margin + 2 * (buttonWidth + spacing)), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
         y += componentHeight + spacing * 2;
@@ -142,17 +148,17 @@ private:
         // Input widgets
         auto inputWidth = (bounds.getWidth() - 3 * margin) / 2;
 
-        comboBox->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(inputWidth), static_cast<float>(componentHeight)));
+        comboBox->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth), static_cast<float> (componentHeight)));
         y += componentHeight + spacing;
 
-        textEditor->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(bounds.getWidth() - 2 * margin), 100.0f));
+        textEditor->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 100.0f));
         y += 110;
 
         // Viewport
         //viewport->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(inputWidth), 150.0f));
 
         // Slider
-        slider->setBounds (Rectangle<float> (static_cast<float>(margin + inputWidth + spacing), static_cast<float>(y), static_cast<float>(inputWidth), static_cast<float>(componentHeight)));
+        slider->setBounds (Rectangle<float> (static_cast<float> (margin + inputWidth + spacing), static_cast<float> (y), static_cast<float> (inputWidth), static_cast<float> (componentHeight)));
     }
 
     // Custom ComboBox to handle selection changes
@@ -160,7 +166,10 @@ private:
     {
     public:
         CustomComboBox (const String& componentID, WidgetsDemo* parent)
-            : ComboBox (componentID), parentWidget (parent) {}
+            : ComboBox (componentID)
+            , parentWidget (parent)
+        {
+        }
 
         void comboBoxChanged() override
         {

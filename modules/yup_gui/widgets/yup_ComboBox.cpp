@@ -24,10 +24,10 @@ namespace yup
 
 //==============================================================================
 
-const Identifier ComboBox::Colors::backgroundColorId    = "comboBoxBackground";
-const Identifier ComboBox::Colors::textColorId          = "comboBoxText";
-const Identifier ComboBox::Colors::borderColorId        = "comboBoxBorder";
-const Identifier ComboBox::Colors::arrowColorId         = "comboBoxArrow";
+const Identifier ComboBox::Colors::backgroundColorId = "comboBoxBackground";
+const Identifier ComboBox::Colors::textColorId = "comboBoxText";
+const Identifier ComboBox::Colors::borderColorId = "comboBoxBorder";
+const Identifier ComboBox::Colors::arrowColorId = "comboBoxArrow";
 const Identifier ComboBox::Colors::focusedBorderColorId = "comboBoxFocusedBorder";
 
 //==============================================================================
@@ -166,8 +166,8 @@ void ComboBox::paint (Graphics& g)
 
     // Draw border
     auto borderColor = hasFocus
-        ? findColor (Colors::focusedBorderColorId).value_or (Color (0xff4a90e2))
-        : findColor (Colors::borderColorId).value_or (Color (0xffcccccc));
+                         ? findColor (Colors::focusedBorderColorId).value_or (Color (0xff4a90e2))
+                         : findColor (Colors::borderColorId).value_or (Color (0xffcccccc));
 
     g.setStrokeColor (borderColor);
     g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
@@ -236,10 +236,10 @@ void ComboBox::showPopup()
     // In a full implementation, you would create a popup window with the items
     isPopupShown = true;
 
-    popupMenu = PopupMenu::create (PopupMenu::Options{}
-        .withParentComponent (getTopLevelComponent())
-        .withMinimumWidth (getWidth())
-        .withRelativePosition (this));
+    popupMenu = PopupMenu::create (PopupMenu::Options {}
+                                       .withParentComponent (getTopLevelComponent())
+                                       .withMinimumWidth (getWidth())
+                                       .withRelativePosition (this));
 
     auto selectedItemID = getSelectedId();
 
@@ -315,10 +315,8 @@ void ComboBox::drawArrow (Graphics& g, Rectangle<float> arrowBounds)
     g.setStrokeWidth (2.0f);
 
     // Draw downward arrow as lines
-    g.strokeLine (center.getX() - arrowSize, center.getY() - arrowSize * 0.5f,
-                  center.getX(), center.getY() + arrowSize * 0.5f);
-    g.strokeLine (center.getX() + arrowSize, center.getY() - arrowSize * 0.5f,
-                  center.getX(), center.getY() + arrowSize * 0.5f);
+    g.strokeLine (center.getX() - arrowSize, center.getY() - arrowSize * 0.5f, center.getX(), center.getY() + arrowSize * 0.5f);
+    g.strokeLine (center.getX() + arrowSize, center.getY() - arrowSize * 0.5f, center.getX(), center.getY() + arrowSize * 0.5f);
 }
 
 } // namespace yup
