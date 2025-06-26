@@ -28,44 +28,24 @@ class PopupMenuDemo : public yup::Component
 public:
     PopupMenuDemo()
         : Component ("PopupMenuDemo")
-        , basicMenuButton ("basicMenuButton")
-        , subMenuButton ("subMenuButton")
-        , customMenuButton ("customMenuButton")
-        , nativeMenuButton ("nativeMenuButton")
+        , targetButton ("targetButton")
         , statusLabel ("statusLabel")
+        , currentPlacementIndex (0)
     {
         addAndMakeVisible (statusLabel);
-        statusLabel.setTitle ("Right-click anywhere to show context menu");
+        statusLabel.setTitle ("Click the button to test different placements");
 
-        addAndMakeVisible (basicMenuButton);
-        basicMenuButton.setButtonText ("Show Basic Menu");
-        basicMenuButton.onClick = [this]
+        addAndMakeVisible (targetButton);
+        targetButton.setButtonText ("Test Placement (Click Me!)");
+        targetButton.onClick = [this]
         {
-            showBasicMenu();
+            showPlacementTest();
         };
 
-        addAndMakeVisible (subMenuButton);
-        subMenuButton.setButtonText ("Show Sub-Menu");
-        subMenuButton.onClick = [this]
-        {
-            showSubMenu();
-        };
+        // Initialize all placement combinations
+        initializePlacements();
 
-        addAndMakeVisible (customMenuButton);
-        customMenuButton.setButtonText ("Show Custom Menu");
-        customMenuButton.onClick = [this]
-        {
-            showCustomMenu();
-        };
-
-        addAndMakeVisible (nativeMenuButton);
-        nativeMenuButton.setButtonText ("Show Native Menu");
-        nativeMenuButton.onClick = [this]
-        {
-            showNativeMenu();
-        };
-
-        setSize ({ 400, 300 });
+        setSize ({ 600, 500 });
     }
 
     void resized() override
@@ -75,10 +55,11 @@ public:
         area.removeFromTop (20);
         statusLabel.setBounds (area.removeFromTop (30));
 
-        basicMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
-        subMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
-        customMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
-        nativeMenuButton.setBounds (area.removeFromTop (40).reduced (0, 5));
+        // Center the target button in the middle of the remaining area
+        auto buttonArea = area.reduced (100);
+        auto buttonCenter = buttonArea.getCenter();
+        auto buttonBounds = yup::Rectangle<int> (buttonCenter.getX() - 100, buttonCenter.getY() - 20, 200, 40);
+        targetButton.setBounds (buttonBounds);
     }
 
     void paint (yup::Graphics& g) override
@@ -88,11 +69,46 @@ public:
         auto styledText = yup::StyledText();
         {
             auto modifier = styledText.startUpdate();
-            modifier.appendText ("PopupMenu Demo", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
+            modifier.appendText ("PopupMenu Placement Test", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
         }
 
         g.setFillColor (yup::Color (0xffffffff));
         g.fillFittedText (styledText, area.removeFromTop (20).to<float>());
+
+        // Draw grid lines to help visualize positioning
+        g.setStrokeColor (yup::Color (0x33ffffff));
+        g.setStrokeWidth (1.0f);
+
+        auto buttonBounds = targetButton.getBounds().to<float>();
+        auto bounds = getLocalBounds().to<float>();
+
+        // Horizontal lines through button center and edges
+        g.strokeLine ({ 0, buttonBounds.getCenterY() }, { bounds.getWidth(), buttonBounds.getCenterY() });
+        g.strokeLine ({ 0, buttonBounds.getY() }, { bounds.getWidth(), buttonBounds.getY() });
+        g.strokeLine ({ 0, buttonBounds.getBottom() }, { bounds.getWidth(), buttonBounds.getBottom() });
+
+        // Vertical lines through button center and edges
+        g.strokeLine ({ buttonBounds.getCenterX(), 0 }, { buttonBounds.getCenterX(), bounds.getHeight() });
+        g.strokeLine ({ buttonBounds.getX(), 0 }, { buttonBounds.getX(), bounds.getHeight() });
+        g.strokeLine ({ buttonBounds.getRight(), 0 }, { buttonBounds.getRight(), bounds.getHeight() });
+    }
+
+    void keyDown (const yup::KeyPress& key, const yup::Point<float>& position) override
+    {
+        if (key.getKey() == yup::KeyPress::spaceKey || key.getKey() == yup::KeyPress::enterKey)
+        {
+            showPlacementTest();
+        }
+        else if (key.getKey() == yup::KeyPress::rightKey)
+        {
+            currentPlacementIndex = (currentPlacementIndex + 1) % static_cast<int>(placements.size());
+            showPlacementTest();
+        }
+        else if (key.getKey() == yup::KeyPress::leftKey)
+        {
+            currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int>(placements.size())) % static_cast<int>(placements.size());
+            showPlacementTest();
+        }
     }
 
     void mouseDown (const yup::MouseEvent& event) override
@@ -104,243 +120,172 @@ public:
     }
 
 private:
-    enum MenuItemIDs
+    struct PlacementTest
     {
-        newFile = 1,
-        openFile,
-        saveFile,
-        saveAsFile,
-        recentFile1,
-        recentFile2,
-        exitApp,
+        yup::PopupMenu::Placement placement;
+        yup::String description;
 
-        checkedItem = 998,
-        disabledItem = 999,
-
-        editUndo = 10,
-        editRedo,
-        editCut,
-        editCopy,
-        editPaste,
-
-        colorRed = 20,
-        colorGreen,
-        colorBlue,
-
-        customSlider = 30,
-        customButton = 31
+        PlacementTest (yup::PopupMenu::Placement p, const yup::String& desc)
+            : placement (p), description (desc) {}
     };
 
-    void showBasicMenu()
+    void initializePlacements()
     {
-        auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (this)
-                           .withRelativePosition (&basicMenuButton, yup::PopupMenu::Placement::below);
+        using Side = yup::PopupMenu::Side;
+        using J = yup::Justification;
+        using Placement = yup::PopupMenu::Placement;
 
-        auto menu = yup::PopupMenu::create (options);
+        placements.clear();
 
-        menu->addItem ("New File", newFile, true, false, "Cmd+N");
-        menu->addItem ("Open File", openFile, true, false, "Cmd+O");
-        menu->addSeparator();
-        menu->addItem ("Save File", saveFile, true, false, "Cmd+S");
-        menu->addItem ("Save As...", saveAsFile, true, false, "Shift+Cmd+S");
-        menu->addSeparator();
-        menu->addItem ("Disabled Item", disabledItem, false);
-        menu->addItem ("Checked Item", checkedItem, true, isChecked);
-        menu->addSeparator();
-        menu->addItem ("Exit", exitApp, true, false, "Cmd+Q");
+        // Below placements
+        placements.emplace_back (Placement::below (J::topLeft), "Below - Left Aligned");
+        placements.emplace_back (Placement::below (J::centerTop), "Below - Center Aligned");
+        placements.emplace_back (Placement::below (J::topRight), "Below - Right Aligned");
 
-        menu->onItemSelected = [this] (int selectedID)
-        {
-            handleMenuSelection (selectedID);
-        };
+        // Above placements
+        placements.emplace_back (Placement::above (J::topLeft), "Above - Left Aligned");
+        placements.emplace_back (Placement::above (J::centerTop), "Above - Center Aligned");
+        placements.emplace_back (Placement::above (J::topRight), "Above - Right Aligned");
 
-        menu->show();
+        // Right placements
+        placements.emplace_back (Placement::toRight (J::topLeft), "Right - Top Aligned");
+        placements.emplace_back (Placement::toRight (J::centerLeft), "Right - Center Aligned");
+        placements.emplace_back (Placement::toRight (J::bottomLeft), "Right - Bottom Aligned");
+
+        // Left placements
+        placements.emplace_back (Placement::toLeft (J::topRight), "Left - Top Aligned");
+        placements.emplace_back (Placement::toLeft (J::centerRight), "Left - Center Aligned");
+        placements.emplace_back (Placement::toLeft (J::bottomRight), "Left - Bottom Aligned");
+
+        // Centered
+        placements.emplace_back (Placement::centered(), "Centered");
+
+        // Additional interesting combinations
+        placements.emplace_back (Placement::below (J::center), "Below - Center (any)");
+        placements.emplace_back (Placement::above (J::center), "Above - Center (any)");
+        placements.emplace_back (Placement::toRight (J::center), "Right - Center (any)");
+        placements.emplace_back (Placement::toLeft (J::center), "Left - Center (any)");
     }
 
-    void showSubMenu()
+    void showPlacementTest()
     {
-        auto recentFilesMenu = yup::PopupMenu::create();
-        recentFilesMenu->addItem ("Recent File 1.txt", recentFile1);
-        recentFilesMenu->addItem ("Recent File 2.txt", recentFile2);
+        if (placements.empty()) return;
 
-        auto colorMenu = yup::PopupMenu::create();
-        colorMenu->addItem ("Red", colorRed);
-        colorMenu->addItem ("Green", colorGreen);
-        colorMenu->addItem ("Blue", colorBlue);
+        auto& test = placements[currentPlacementIndex];
 
         auto options = yup::PopupMenu::Options {}
                            .withParentComponent (this)
-                           .withRelativePosition (&subMenuButton, yup::PopupMenu::Placement::toRight);
-        auto menu = yup::PopupMenu::create (options);
-        menu->addItem ("New", newFile);
-        menu->addItem ("Open", openFile);
-        menu->addSubMenu ("Recent Files", recentFilesMenu);
-        menu->addSeparator();
-        menu->addSubMenu ("Colors", colorMenu);
-        menu->addSeparator();
-        menu->addItem ("Exit", exitApp);
+                           .withRelativePosition (&targetButton, test.placement);
 
-        menu->show([this] (int selectedID)
+        auto menu = yup::PopupMenu::create (options);
+
+        // Add items to show menu content clearly
+        menu->addItem ("Item 1", 1);
+        menu->addItem ("Item 2", 2);
+        menu->addItem ("Item 3", 3);
+        menu->addSeparator();
+        menu->addItem ("Previous (<)", 998);
+        menu->addItem ("Next (>)", 999);
+
+        menu->show ([this, test] (int selectedID)
         {
-            handleMenuSelection (selectedID);
+            handlePlacementMenuSelection (selectedID, test);
         });
-    }
 
-    void showCustomMenu()
-    {
-        auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (this)
-                           .withRelativePosition (&customMenuButton, yup::PopupMenu::Placement::above);
-        auto menu = yup::PopupMenu::create (options);
-
-        menu->addItem ("Regular Item", 1);
-        menu->addSeparator();
-
-        // Add custom slider component
-        auto slider = std::make_unique<yup::Slider> ("CustomSlider");
-        slider->setSize ({ 250, 250 });
-        slider->setValue (0.5);
-        menu->addCustomItem (std::move (slider), customSlider);
-
-        menu->addSeparator();
-
-        // Add custom button component
-        auto button = std::make_unique<yup::TextButton> ("CustomButton");
-        button->setSize ({ 120, 30 });
-        button->setTitle ("Custom Button");
-        button->onClick = []
-        {
-            YUP_DBG ("Clicked!");
-        };
-        menu->addCustomItem (std::move (button), customButton);
-
-        menu->addSeparator();
-        menu->addItem ("Another Item", 2);
-
-        menu->onItemSelected = [this] (int selectedID)
-        {
-            handleMenuSelection (selectedID);
-        };
-
-        menu->show();
-    }
-
-    void showNativeMenu()
-    {
-        auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (this)
-                           .withRelativePosition (&nativeMenuButton, yup::PopupMenu::Placement::centered);
-
-        auto menu = yup::PopupMenu::create (options);
-
-        menu->addItem ("Native Item 1", 1);
-        menu->addItem ("Native Item 2", 2);
-        menu->addItem ("Native Item 3", 3);
-
-        menu->onItemSelected = [this] (int selectedID)
-        {
-            handleMenuSelection (selectedID);
-        };
-
-        menu->show();
+        // Update status
+        auto statusText = yup::String::formatted ("Test %d/%d: %s",
+                                                  currentPlacementIndex + 1,
+                                                  (int)placements.size(),
+                                                  test.description.toRawUTF8());
+        statusLabel.setText (statusText);
     }
 
     void showContextMenu (yup::Point<float> position)
     {
         auto options = yup::PopupMenu::Options {}
-                           .withParentComponent (this)
-                           .withPosition (position, yup::Justification::topLeft);
+                           .withPosition (localToScreen (position), yup::Justification::topLeft);
 
         auto contextMenu = yup::PopupMenu::create (options);
 
-        contextMenu->addItem ("Context Item 1", 1);
-        contextMenu->addItem ("Context Item 2", 2);
+        contextMenu->addItem ("Reset to first test", 1);
+        contextMenu->addItem ("Show all placements info", 2);
         contextMenu->addSeparator();
-        contextMenu->addItem ("Context Item 3", 3);
-
+        contextMenu->addItem ("Toggle grid lines", 3);
 
         contextMenu->show ([this] (int selectedID)
         {
-            handleMenuSelection (selectedID);
+            switch (selectedID)
+            {
+                case 1:
+                    currentPlacementIndex = 0;
+                    statusLabel.setText ("Reset to first placement test");
+                    break;
+                case 2:
+                    showPlacementInfo();
+                    break;
+                case 3:
+                    repaint(); // Grid lines are always shown in this demo
+                    break;
+            }
         });
     }
 
-    void handleMenuSelection (int selectedID)
+    void showPlacementInfo()
     {
-        yup::String message = "Selected item ID: " + yup::String (selectedID);
+        auto options = yup::PopupMenu::Options {}
+                           .withParentComponent (this)
+                           .withRelativePosition (&targetButton, yup::PopupMenu::Placement::centered());
+
+        auto infoMenu = yup::PopupMenu::create (options);
+
+        infoMenu->addItem (L"Placement System Info:", 0, false);
+        infoMenu->addSeparator();
+        infoMenu->addItem (L"• Side: Primary positioning", 0, false);
+        infoMenu->addItem (L"• Justification: Alignment", 0, false);
+        infoMenu->addSeparator();
+        infoMenu->addItem (L"Controls:", 0, false);
+        infoMenu->addItem (L"• Click button: Next test", 0, false);
+        infoMenu->addItem (L"• ← →: Navigate tests", 0, false);
+        infoMenu->addItem (L"• Right-click: Context menu", 0, false);
+
+        infoMenu->show ([this] (int selectedID) {
+            // Info only, no actions
+        });
+    }
+
+    void handlePlacementMenuSelection (int selectedID, const PlacementTest& test)
+    {
+        yup::String message;
 
         switch (selectedID)
         {
-            case newFile:
-                message = "New File selected";
-                break;
+            case 998: // Previous
+                currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int>(placements.size())) % static_cast<int>(placements.size());
+                showPlacementTest();
+                return;
 
-            case openFile:
-                message = "Open File selected";
-                break;
+            case 999: // Next
+                currentPlacementIndex = (currentPlacementIndex + 1) % static_cast<int>(placements.size());
+                showPlacementTest();
+                return;
 
-            case saveFile:
-                message = "Save File selected";
-                break;
-
-            case saveAsFile:
-                message = "Save As selected";
-                break;
-
-            case exitApp:
-                message = "Exit selected";
-                break;
-
-            case editCopy:
-                message = "Copy selected";
-                break;
-
-            case editPaste:
-                message = "Paste selected";
-                break;
-
-            case colorRed:
-                message = "Red color selected";
-                break;
-
-            case colorGreen:
-                message = "Green color selected";
-                break;
-
-            case colorBlue:
-                message = "Blue color selected";
-                break;
-
-            case customSlider:
-                message = "Custom slider interacted";
-                break;
-
-            case customButton:
-                message = "Custom button clicked";
-                break;
-
-            case disabledItem:
-                message = "I'm disabled!";
-                break;
-
-            case checkedItem:
-                message = "I'm checked!";
-                isChecked = ! isChecked;
+            case 1:
+            case 2:
+            case 3:
+                message = yup::String::formatted ("Selected Item %d from: %s", selectedID, test.description.toRawUTF8());
                 break;
 
             default:
-                message = "Cancelled or unknown!";
+                message = "No selection";
                 break;
         }
 
         statusLabel.setText (message);
     }
 
-    yup::TextButton basicMenuButton;
-    yup::TextButton subMenuButton;
-    yup::TextButton customMenuButton;
-    yup::TextButton nativeMenuButton;
+    yup::TextButton targetButton;
     yup::Label statusLabel;
-    bool isChecked = true;
+
+    std::vector<PlacementTest> placements;
+    int currentPlacementIndex;
 };

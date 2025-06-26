@@ -22,12 +22,53 @@
 namespace yup
 {
 
-//==============================================================================
-
 namespace
 {
 
+//==============================================================================
+
 static std::vector<PopupMenu::Ptr> activePopups;
+
+void installGlobalMouseListener()
+{
+    static bool mouseListenerAdded = []
+    {
+        static struct GlobalMouseListener : MouseListener
+        {
+            void mouseDown (const MouseEvent& event) override
+            {
+                Point<float> globalPos = event.getScreenPosition().to<float>();
+
+                bool clickedInsidePopup = false;
+                for (const auto& popup : activePopups)
+                {
+                    if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
+                    {
+                        if (popupMenu->getScreenBounds().contains (globalPos))
+                        {
+                            clickedInsidePopup = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (! clickedInsidePopup && ! activePopups.empty())
+                    PopupMenu::dismissAllPopups();
+            }
+        } globalMouseListener {};
+
+        Desktop::getInstance()->addGlobalMouseListener (&globalMouseListener);
+
+        MessageManager::getInstance()->registerShutdownCallback ([]
+        {
+            PopupMenu::dismissAllPopups();
+        });
+
+        return true;
+    }();
+}
+
+//==============================================================================
 
 Point<int> calculatePositionAtPoint (Point<int> targetPoint, Size<int> menuSize, Justification alignment)
 {
@@ -53,7 +94,7 @@ Point<int> calculatePositionAtPoint (Point<int> targetPoint, Size<int> menuSize,
             break;
 
         case Justification::center:
-            position = targetPoint - Point<int>{ menuSize.getWidth() / 2, menuSize.getHeight() / 2 };
+            position = targetPoint - (menuSize / 2).toPoint<int>();
             break;
 
         case Justification::centerRight:
@@ -71,43 +112,94 @@ Point<int> calculatePositionAtPoint (Point<int> targetPoint, Size<int> menuSize,
             break;
 
         case Justification::bottomRight:
-            position = targetPoint - Point<int>{ menuSize.getWidth(), menuSize.getHeight() };
+            position = targetPoint - menuSize.toPoint<int>();
             break;
     }
 
     return position;
 }
+
+//==============================================================================
 
 Point<int> calculatePositionRelativeToArea (Rectangle<int> targetArea, Size<int> menuSize, PopupMenu::Placement placement)
 {
     Point<int> position;
 
-    switch (placement)
+    // Handle special case first
+    if (placement.side == PopupMenu::Side::centered)
     {
+        return targetArea.getCenter() - (menuSize / 2).toPoint<int>();
+    }
+
+    // Set position based on side (primary axis)
+    switch (placement.side)
+    {
+        case PopupMenu::Side::below:
+            position.setY (targetArea.getBottom());
+            break;
+
+        case PopupMenu::Side::above:
+            position.setY (targetArea.getY() - menuSize.getHeight());
+            break;
+
+        case PopupMenu::Side::toRight:
+            position.setX (targetArea.getRight());
+            break;
+
+        case PopupMenu::Side::toLeft:
+            position.setX (targetArea.getX() - menuSize.getWidth());
+            break;
+
         default:
-        case PopupMenu::Placement::below:
-            position = Point<int> (targetArea.getX(), targetArea.getBottom());
             break;
+    }
 
-        case PopupMenu::Placement::above:
-            position = Point<int> (targetArea.getX(), targetArea.getY() - menuSize.getHeight());
-            break;
-
-        case PopupMenu::Placement::toRight:
-            position = Point<int> (targetArea.getRight(), targetArea.getY());
-            break;
-
-        case PopupMenu::Placement::toLeft:
-            position = Point<int> (targetArea.getX() - menuSize.getWidth(), targetArea.getY());
-            break;
-
-        case PopupMenu::Placement::centered:
-            position = targetArea.getCenter() - Point<int>{ menuSize.getWidth() / 2, menuSize.getHeight() / 2 };;
-            break;
+    // Set alignment on perpendicular axis (secondary axis)
+    if (placement.side == PopupMenu::Side::below || placement.side == PopupMenu::Side::above)
+    {
+        // For above/below: align horizontally
+        if (placement.alignment == Justification::centerTop ||
+            placement.alignment == Justification::center ||
+            placement.alignment == Justification::centerBottom)
+        {
+            position.setX (targetArea.getCenterX() - menuSize.getWidth() / 2);
+        }
+        else if (placement.alignment == Justification::topRight ||
+                 placement.alignment == Justification::centerRight ||
+                 placement.alignment == Justification::bottomRight)
+        {
+            position.setX (targetArea.getRight() - menuSize.getWidth());
+        }
+        else // Default: left-aligned
+        {
+            position.setX (targetArea.getX());
+        }
+    }
+    else if (placement.side == PopupMenu::Side::toLeft || placement.side == PopupMenu::Side::toRight)
+    {
+        // For left/right: align vertically
+        if (placement.alignment == Justification::centerLeft ||
+            placement.alignment == Justification::center ||
+            placement.alignment == Justification::centerRight)
+        {
+            position.setY (targetArea.getCenterY() - menuSize.getHeight() / 2);
+        }
+        else if (placement.alignment == Justification::bottomLeft ||
+                 placement.alignment == Justification::centerBottom ||
+                 placement.alignment == Justification::bottomRight)
+        {
+            position.setY (targetArea.getBottom() - menuSize.getHeight());
+        }
+        else // Default: top-aligned
+        {
+            position.setY (targetArea.getY());
+        }
     }
 
     return position;
 }
+
+//==============================================================================
 
 Point<int> constrainPositionToAvailableArea (Point<int> desiredPosition,
                                              const Size<int>& menuSize,
@@ -120,69 +212,32 @@ Point<int> constrainPositionToAvailableArea (Point<int> desiredPosition,
 
     Point<int> position = desiredPosition;
 
-    // Check if menu fits in desired position
+    // Only make minimal adjustments to keep menu visible
+    // Don't override the placement strategy, just nudge the menu if needed
     Rectangle<int> menuBounds (position, menuSize);
 
-    // If menu doesn't fit, try alternative positions
-    if (! constrainedArea.contains (menuBounds))
+    // Horizontal constraint - only adjust if menu goes off screen
+    if (menuBounds.getRight() > constrainedArea.getRight())
     {
-        // Try to keep menu fully visible by adjusting position
+        // Move left just enough to fit
+        position.setX (constrainedArea.getRight() - menuSize.getWidth());
+    }
+    else if (menuBounds.getX() < constrainedArea.getX())
+    {
+        // Move right just enough to fit
+        position.setX (constrainedArea.getX());
+    }
 
-        // Horizontal adjustment
-        if (menuBounds.getRight() > constrainedArea.getRight())
-        {
-            // Try moving left
-            position.setX (constrainedArea.getRight() - menuSize.getWidth());
-
-            // If that puts us over the target, try positioning on the left side
-            if (Rectangle<int> (position, menuSize).intersects (targetArea))
-            {
-                position.setX (targetArea.getX() - menuSize.getWidth());
-            }
-        }
-        else if (menuBounds.getX() < constrainedArea.getX())
-        {
-            // Try moving right
-            position.setX (constrainedArea.getX());
-
-            // If that puts us over the target, try positioning on the right side
-            if (Rectangle<int> (position, menuSize).intersects (targetArea))
-            {
-                position.setX (targetArea.getRight());
-            }
-        }
-
-        // Vertical adjustment
-        if (menuBounds.getBottom() > constrainedArea.getBottom())
-        {
-            // Try moving up
-            position.setY (constrainedArea.getBottom() - menuSize.getHeight());
-
-            // If that puts us over the target, try positioning above
-            if (Rectangle<int> (position, menuSize).intersects (targetArea))
-            {
-                position.setY (targetArea.getY() - menuSize.getHeight());
-            }
-        }
-        else if (menuBounds.getY() < constrainedArea.getY())
-        {
-            // Try moving down
-            position.setY (constrainedArea.getY());
-
-            // If that puts us over the target, try positioning below
-            if (Rectangle<int> (position, menuSize).intersects (targetArea))
-            {
-                position.setY (targetArea.getBottom());
-            }
-        }
-
-        // Final bounds check - ensure we're at least partially visible
-        position.setX (jlimit (constrainedArea.getX(),
-                               jmax (constrainedArea.getX(), constrainedArea.getRight() - menuSize.getWidth()),
-                               position.getX()));
-        position.setY (jlimit (constrainedArea.getY(),
-                               jmax (constrainedArea.getY(), constrainedArea.getBottom() - menuSize.getHeight()),
-                               position.getY()));
+    // Vertical constraint - only adjust if menu goes off screen
+    if (menuBounds.getBottom() > constrainedArea.getBottom())
+    {
+        // Move up just enough to fit
+        position.setY (constrainedArea.getBottom() - menuSize.getHeight());
+    }
+    else if (menuBounds.getY() < constrainedArea.getY())
+    {
+        // Move down just enough to fit
+        position.setY (constrainedArea.getY());
     }
 
     return position;
@@ -232,58 +287,11 @@ bool PopupMenu::Item::isCustomComponent() const
 
 //==============================================================================
 
-namespace
-{
-
-struct GlobalMouseListener : public MouseListener
-{
-    void mouseDown (const MouseEvent& event) override
-    {
-        Point<float> globalPos = event.getScreenPosition().to<float>();
-
-        bool clickedInsidePopup = false;
-        for (const auto& popup : activePopups)
-        {
-            if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
-            {
-                if (popupMenu->getScreenBounds().contains (globalPos))
-                {
-                    clickedInsidePopup = true;
-                    break;
-                }
-            }
-        }
-
-        if (! clickedInsidePopup && ! activePopups.empty())
-            PopupMenu::dismissAllPopups();
-    }
-};
-
-void installGlobalMouseListener()
-{
-    static bool mouseListenerAdded = []
-    {
-        static GlobalMouseListener globalMouseListener {};
-        Desktop::getInstance()->addGlobalMouseListener (&globalMouseListener);
-
-        MessageManager::getInstance()->registerShutdownCallback ([]
-        {
-            PopupMenu::dismissAllPopups();
-        });
-
-        return true;
-    }();
-}
-
-} // namespace
-
-//==============================================================================
-
 PopupMenu::Options::Options()
     : parentComponent (nullptr)
     , dismissOnSelection (true)
     , alignment (Justification::topLeft)
-    , placement (Placement::below)
+    , placement (Placement::below())
     , positioningMode (PositioningMode::atPoint)
     , targetComponent (nullptr)
 {
@@ -569,12 +577,21 @@ void PopupMenu::positionMenu()
                 // Get target component bounds in appropriate coordinate system
                 if (options.parentComponent)
                 {
-                    // Convert to parent component's local coordinates
-                    targetArea = options.parentComponent->getLocalArea (options.targetComponent, options.targetComponent->getLocalBounds()).to<int>();
+                    // Check if target is a direct child of parent
+                    if (options.targetComponent->getParentComponent() == options.parentComponent)
+                    {
+                        // Target is direct child - use its bounds directly
+                        targetArea = options.targetComponent->getBounds().to<int>();
+                    }
+                    else
+                    {
+                        // Target is not a direct child - need coordinate conversion
+                        targetArea = options.parentComponent->getLocalArea (options.targetComponent, options.targetComponent->getLocalBounds()).to<int>();
+                    }
                 }
                 else
                 {
-                    // Use screen coordinates
+                    // No parent component - use screen coordinates
                     targetArea = options.targetComponent->getScreenBounds().to<int>();
                 }
                 position = calculatePositionRelativeToArea (targetArea, menuSize, options.placement);
@@ -645,6 +662,7 @@ void PopupMenu::showCustom (const Options& options, std::function<void (int)> ca
         // When we have no parent component, add to desktop to work in screen coordinates
         auto nativeOptions = ComponentNative::Options {}
                                  .withDecoration (false)
+                                 .withClearColor (::yup::Colors::transparentBlack)
                                  .withResizableWindow (false);
 
         addToDesktop (nativeOptions);

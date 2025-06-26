@@ -207,6 +207,18 @@ public:
         return xy.getX();
     }
 
+    /** Sets the left-coordinate of the rectangle's top-left corner.
+
+        @param newLeft The new left-coordinate for the top-left corner.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setLeft (ValueType newLeft) noexcept
+    {
+        xy.setX (newLeft);
+        return *this;
+    }
+
     /** Returns a new rectangle with the left-coordinate of the top-left corner set to a new value.
 
         This method creates a new rectangle with the same size and y-coordinate, but with the left-coordinate of the top-left corner changed to the specified value.
@@ -215,9 +227,9 @@ public:
 
         @return A new rectangle with the updated left-coordinate.
     */
-    [[nodiscard]] constexpr Rectangle withLeft (ValueType amount) const noexcept
+    [[nodiscard]] constexpr Rectangle withLeft (ValueType newLeft) const noexcept
     {
-        return { xy.withX (amount), size };
+        return { xy.withX (newLeft), size };
     }
 
     /** Returns a new rectangle with the left-coordinate of the top-left corner trimmed by a specified amount.
@@ -243,6 +255,18 @@ public:
         return xy.getY();
     }
 
+    /** Sets the top-coordinate of the rectangle's top-left corner.
+
+        @param newTop The new top-coordinate for the top-left corner.
+
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setTop (ValueType newTop) noexcept
+    {
+        xy.setY (newTop);
+        return *this;
+    }
+
     /** Returns a new rectangle with the top-coordinate of the top-left corner set to a new value.
 
         This method creates a new rectangle with the same size and x-coordinate, but with the top-coordinate of the top-left corner changed to the specified value.
@@ -251,9 +275,9 @@ public:
 
         @return A new rectangle with the updated top-coordinate.
     */
-    [[nodiscard]] constexpr Rectangle withTop (ValueType amount) const noexcept
+    [[nodiscard]] constexpr Rectangle withTop (ValueType newTop) const noexcept
     {
-        return { xy.withY (amount), size };
+        return { xy.withY (newTop), size };
     }
 
     /** Returns a new rectangle with the top-coordinate of the top-left corner trimmed by a specified amount.
@@ -279,17 +303,42 @@ public:
         return xy.getX() + size.getWidth();
     }
 
-    /** Returns a new rectangle with the right-coordinate of the bottom-right corner trimmed by a specified amount.
+    /** Sets the right-coordinate of the rectangle's bottom-right corner.
 
-        This method creates a new rectangle with the same size and y-coordinate, but with the right-coordinate of the bottom-right corner reduced by the specified amount.
+        @param newRight The new right-coordinate for the bottom-right corner.
 
-        @param amountToTrim The amount to trim from the right-coordinate.
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setRight (ValueType newRight) noexcept
+    {
+        xy.setX (newRight - size.getWidth());
+        return *this;
+    }
+
+    /** Returns a new rectangle with the right-coordinate of the bottom-right corner set to a new value.
+
+        This method creates a new rectangle with the same height and y-coordinate, but with the right-coordinate of the bottom-right corner changed to the specified value.
+
+        @param newRight The new right-coordinate for the bottom-right corner.
 
         @return A new rectangle with the updated right-coordinate.
     */
+    [[nodiscard]] constexpr Rectangle withRight (ValueType newRight) const noexcept
+    {
+        return { xy.withX (newRight - size.getWidth()), size };
+    }
+
+    /** Returns a new rectangle with the right-coordinate of the bottom-right corner trimmed by a specified amount.
+
+        This method creates a new rectangle with the same height and y-coordinate, but with the right-coordinate of the bottom-right corner reduced by the specified amount.
+
+        @param amountToTrim The amount to trim from the right-coordinate.
+
+        @return A new rectangle with the updated right-coordinate (width).
+    */
     [[nodiscard]] constexpr Rectangle withTrimmedRight (ValueType amountToTrim) const noexcept
     {
-        return withWidth (size.getWidth() - amountToTrim);
+        return withWidth (jmax (static_cast<ValueType> (0), size.getWidth() - amountToTrim));
     }
 
     //==============================================================================
@@ -302,17 +351,42 @@ public:
         return xy.getY() + size.getHeight();
     }
 
-    /** Returns a new rectangle with the bottom-coordinate of the bottom-right corner trimmed by a specified amount.
+    /** Sets the bottom-coordinate of the rectangle's bottom-right corner.
 
-        This method creates a new rectangle with the same size and x-coordinate, but with the bottom-coordinate of the bottom-right corner reduced by the specified amount.
+        @param newBottom The new bottom-coordinate for the bottom-right corner.
 
-        @param amountToTrim The amount to trim from the bottom-coordinate.
+        @return A reference to this rectangle to allow method chaining.
+    */
+    constexpr Rectangle& setBottom (ValueType newBottom) noexcept
+    {
+        xy.setY (newBottom - size.getHeight());
+        return *this;
+    }
+
+    /** Returns a new rectangle with the bottom-coordinate of the bottom-right corner set to a new value.
+
+        This method creates a new rectangle with the same width and x-coordinate, but with the bottom-coordinate of the bottom-right corner changed to the specified value.
+
+        @param newBottom The new bottom-coordinate for the bottom-right corner.
 
         @return A new rectangle with the updated bottom-coordinate.
     */
+    [[nodiscard]] constexpr Rectangle withBottom (ValueType newBottom) const noexcept
+    {
+        return { xy.withY (newBottom - size.getHeight()), size };
+    }
+
+    /** Returns a new rectangle with the bottom-coordinate of the bottom-right corner trimmed by a specified amount.
+
+        This method creates a new rectangle with the same width and x-coordinate, but with the bottom-coordinate of the bottom-right corner reduced by the specified amount.
+
+        @param amountToTrim The amount to trim from the bottom-coordinate.
+
+        @return A new rectangle with the updated bottom-coordinate (height).
+    */
     [[nodiscard]] constexpr Rectangle withTrimmedBottom (ValueType amountToTrim) const noexcept
     {
-        return withHeight (size.getHeight() - amountToTrim);
+        return withHeight (jmax (static_cast<ValueType> (0), size.getHeight() - amountToTrim));
     }
 
     //==============================================================================
@@ -349,6 +423,21 @@ public:
     [[nodiscard]] constexpr Rectangle withWidth (ValueType newWidth) const noexcept
     {
         return { xy, size.withWidth (newWidth) };
+    }
+
+    /** Returns a new rectangle with the width set to a new value while maintaining the aspect ratio.
+
+        This method creates a new rectangle with the same position but changes the width to the specified value while keeping the aspect ratio.
+        The height is adjusted to maintain the same aspect ratio.
+
+        @param newWidth The new width for the rectangle.
+
+        @return A new rectangle with the updated width while maintaining the aspect ratio.
+    */
+    [[nodiscard]] constexpr Rectangle withWidthKeepingAspectRatio (ValueType newWidth) const noexcept
+    {
+        auto deltaRatio = heightOverWidthRatio();
+        return { xy, size.withWidth (newWidth).withHeight (newWidth * deltaRatio) };
     }
 
     /** Returns a new rectangle with the width set to a specified proportion of the original width.
@@ -399,6 +488,21 @@ public:
     [[nodiscard]] constexpr Rectangle withHeight (ValueType newHeight) const noexcept
     {
         return { xy, size.withHeight (newHeight) };
+    }
+
+    /** Returns a new rectangle with the height set to a new value while maintaining the aspect ratio.
+
+        This method creates a new rectangle with the same position but changes the height to the specified value while keeping the aspect ratio.
+        The width is adjusted to maintain the same aspect ratio.
+
+        @param newHeight The new height for the rectangle.
+
+        @return A new rectangle with the updated height while maintaining the aspect ratio.
+    */
+    [[nodiscard]] constexpr Rectangle withHeightKeepingAspectRatio (ValueType newHeight) const noexcept
+    {
+        auto deltaRatio = widthOverHeightRatio();
+        return { xy, size.withWidth (newHeight * deltaRatio).withHeight (newHeight) };
     }
 
     /** Returns a new rectangle with the height set to a specified proportion of the original height.
@@ -1535,6 +1639,17 @@ public:
         return contains (p.getX(), p.getY());
     }
 
+    /** Checks if the specified line lies within the bounds of the rectangle.
+
+        @param l The line to check.
+
+        @return True if the line is within the rectangle, otherwise false.
+    */
+    [[nodiscard]] constexpr bool contains (const Line<ValueType>& l) const noexcept
+    {
+        return contains (l.getStart()) && contains (l.getEnd());
+    }
+
     /** Checks if the specified rectangle lies within the bounds of this rectangle.
 
         @param p The rectangle to check.
@@ -1543,8 +1658,7 @@ public:
     */
     [[nodiscard]] constexpr bool contains (const Rectangle& p) const noexcept
     {
-        return p.getX() >= xy.getX()
-            && p.getY() >= xy.getY()
+        return contains (p.getTopLeft())
             && p.getRight() <= (xy.getX() + size.getWidth())
             && p.getBottom() <= (xy.getY() + size.getHeight());
     }
@@ -1557,6 +1671,38 @@ public:
     [[nodiscard]] constexpr ValueType area() const noexcept
     {
         return size.area();
+    }
+
+    //==============================================================================
+
+    /** Returns the aspect ratio of the rectangle.
+
+        @return A tuple containing the width and height of the rectangle, simplified to their greatest common factor.
+    */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto aspectRatio() const noexcept
+        -> std::enable_if_t<std::is_integral_v<T>, std::tuple<int, int>>
+    {
+        auto factor = std::gcd (size.getWidth(), size.getHeight());
+        return std::make_tuple (size.getWidth() / factor, size.getHeight() / factor);
+    }
+
+    /** Returns the ratio of the width to the height of the rectangle.
+
+        @return The ratio of the width to the height of the rectangle.
+    */
+    [[nodiscard]] constexpr float widthOverHeightRatio() const noexcept
+    {
+        return static_cast<float> (size.getWidth()) / static_cast<float> (size.getHeight());
+    }
+
+    /** Returns the ratio of the height to the width of the rectangle.
+
+        @return The ratio of the height to the width of the rectangle.
+    */
+    [[nodiscard]] constexpr float heightOverWidthRatio() const noexcept
+    {
+        return static_cast<float> (size.getHeight()) / static_cast<float> (size.getWidth());
     }
 
     //==============================================================================
@@ -1931,6 +2077,28 @@ constexpr ValueType get (const Rectangle<ValueType>& point) noexcept
         return point.getHeight();
     else
         static_assert (dependentFalse<I>);
+}
+
+/** Forwarded methods implementation. */
+template <class ValueType>
+template <class T>
+[[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle() const noexcept
+{
+    return { static_cast<T> (0), static_cast<T> (0), *this };
+}
+
+template <class ValueType>
+template <class T>
+[[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle (T x, T y) const noexcept
+{
+    return { x, y, *this };
+}
+
+template <class ValueType>
+template <class T>
+[[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle (Point<T> xy) const noexcept
+{
+    return { xy, *this };
 }
 
 } // namespace yup

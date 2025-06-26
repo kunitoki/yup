@@ -39,13 +39,28 @@ public:
 
     //==============================================================================
     /** Menu positioning relative to rectangles/components */
-    enum class Placement
+    enum class Side
     {
         above,          //< Menu appears above the target
         below,          //< Menu appears below the target (default)
         toLeft,         //< Menu appears to the left of the target
         toRight,        //< Menu appears to the right of the target
         centered        //< Menu is centered on the target
+    };
+
+    struct Placement
+    {
+        Side side = Side::below;
+        Justification alignment = Justification::topLeft;
+
+        Placement() = default;
+        Placement (Side s, Justification align = Justification::topLeft) : side (s), alignment (align) {}
+
+        static Placement below (Justification align = Justification::topLeft) { return { Side::below, align }; }
+        static Placement above (Justification align = Justification::topLeft) { return { Side::above, align }; }
+        static Placement toRight (Justification align = Justification::topLeft) { return { Side::toRight, align }; }
+        static Placement toLeft (Justification align = Justification::topLeft) { return { Side::toLeft, align }; }
+        static Placement centered() { return { Side::centered, Justification::center }; }
     };
 
     enum class PositioningMode
@@ -65,7 +80,6 @@ public:
             When not set, menu appears as desktop window using screen coordinates. */
         Options& withParentComponent (Component* parentComponent);
 
-
         /** Position menu at a specific point.
             - With parent: point is relative to parent component
             - Without parent: point is in screen coordinates
@@ -83,8 +97,8 @@ public:
             @param area         The rectangle to position relative to
             @param placement    Where to place menu relative to rectangle (default: below the rectangle)
         */
-        Options& withTargetArea (Rectangle<int> area, Placement placement = Placement::below);
-        Options& withTargetArea (Rectangle<float> area, Placement placement = Placement::below);
+        Options& withTargetArea (Rectangle<int> area, Placement placement = Placement::below());
+        Options& withTargetArea (Rectangle<float> area, Placement placement = Placement::below());
 
         /** Position menu relative to a component (uses the component's bounds).
             The component must be a child of the parent component (if parent is set).
@@ -92,7 +106,7 @@ public:
             @param component    The component to position relative to
             @param placement    Where to place menu relative to component (default: below)
         */
-        Options& withRelativePosition (Component* component, Placement placement = Placement::below);
+        Options& withRelativePosition (Component* component, Placement placement = Placement::below());
 
         /** Minimum width for the menu. */
         Options& withMinimumWidth (int minWidth);
