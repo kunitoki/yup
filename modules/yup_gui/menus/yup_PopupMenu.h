@@ -41,11 +41,11 @@ public:
     /** Menu positioning relative to rectangles/components */
     enum class Side
     {
-        above,          //< Menu appears above the target
-        below,          //< Menu appears below the target (default)
-        toLeft,         //< Menu appears to the left of the target
-        toRight,        //< Menu appears to the right of the target
-        centered        //< Menu is centered on the target
+        above,   //< Menu appears above the target
+        below,   //< Menu appears below the target (default)
+        toLeft,  //< Menu appears to the left of the target
+        toRight, //< Menu appears to the right of the target
+        centered //< Menu is centered on the target
     };
 
     struct Placement
@@ -54,12 +54,21 @@ public:
         Justification alignment = Justification::topLeft;
 
         Placement() = default;
-        Placement (Side s, Justification align = Justification::topLeft) : side (s), alignment (align) {}
+
+        Placement (Side s, Justification align = Justification::topLeft)
+            : side (s)
+            , alignment (align)
+        {
+        }
 
         static Placement below (Justification align = Justification::topLeft) { return { Side::below, align }; }
+
         static Placement above (Justification align = Justification::topLeft) { return { Side::above, align }; }
+
         static Placement toRight (Justification align = Justification::topLeft) { return { Side::toRight, align }; }
+
         static Placement toLeft (Justification align = Justification::topLeft) { return { Side::toLeft, align }; }
+
         static Placement centered() { return { Side::centered, Justification::center }; }
     };
 

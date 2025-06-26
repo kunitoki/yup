@@ -176,15 +176,11 @@ Point<int> calculatePositionRelativeToArea (Rectangle<int> targetArea, Size<int>
     if (placement.side == PopupMenu::Side::below || placement.side == PopupMenu::Side::above)
     {
         // For above/below: align horizontally
-        if (placement.alignment == Justification::centerTop ||
-            placement.alignment == Justification::center ||
-            placement.alignment == Justification::centerBottom)
+        if (placement.alignment == Justification::centerTop || placement.alignment == Justification::center || placement.alignment == Justification::centerBottom)
         {
             position.setX (targetArea.getCenterX() - menuSize.getWidth() / 2);
         }
-        else if (placement.alignment == Justification::topRight ||
-                 placement.alignment == Justification::centerRight ||
-                 placement.alignment == Justification::bottomRight)
+        else if (placement.alignment == Justification::topRight || placement.alignment == Justification::centerRight || placement.alignment == Justification::bottomRight)
         {
             position.setX (targetArea.getRight() - menuSize.getWidth());
         }
@@ -196,15 +192,11 @@ Point<int> calculatePositionRelativeToArea (Rectangle<int> targetArea, Size<int>
     else if (placement.side == PopupMenu::Side::toLeft || placement.side == PopupMenu::Side::toRight)
     {
         // For left/right: align vertically
-        if (placement.alignment == Justification::centerLeft ||
-            placement.alignment == Justification::center ||
-            placement.alignment == Justification::centerRight)
+        if (placement.alignment == Justification::centerLeft || placement.alignment == Justification::center || placement.alignment == Justification::centerRight)
         {
             position.setY (targetArea.getCenterY() - menuSize.getHeight() / 2);
         }
-        else if (placement.alignment == Justification::bottomLeft ||
-                 placement.alignment == Justification::centerBottom ||
-                 placement.alignment == Justification::bottomRight)
+        else if (placement.alignment == Justification::bottomLeft || placement.alignment == Justification::centerBottom || placement.alignment == Justification::bottomRight)
         {
             position.setY (targetArea.getBottom() - menuSize.getHeight());
         }
@@ -636,7 +628,7 @@ void PopupMenu::positionMenu()
             else
             {
                 // Fallback to center of available area
-                position = availableArea.getCenter() - Point<int>{ menuSize.getWidth() / 2, menuSize.getHeight() / 2 };
+                position = availableArea.getCenter() - Point<int> { menuSize.getWidth() / 2, menuSize.getHeight() / 2 };
             }
             break;
     }
@@ -895,7 +887,7 @@ void PopupMenu::showSubmenu (int itemIndex)
     submenuShowTimer.stopTimer();
     submenuHideTimer.stopTimer();
 
-        // Position submenu to the right of the current menu item
+    // Position submenu to the right of the current menu item
     auto itemBounds = item.area;
 
     // Account for scroll offset if menu is scrollable

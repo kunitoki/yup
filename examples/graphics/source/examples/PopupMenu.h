@@ -101,12 +101,12 @@ public:
         }
         else if (key.getKey() == yup::KeyPress::rightKey)
         {
-            currentPlacementIndex = (currentPlacementIndex + 1) % static_cast<int>(placements.size());
+            currentPlacementIndex = (currentPlacementIndex + 1) % static_cast<int> (placements.size());
             showPlacementTest();
         }
         else if (key.getKey() == yup::KeyPress::leftKey)
         {
-            currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int>(placements.size())) % static_cast<int>(placements.size());
+            currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int> (placements.size())) % static_cast<int> (placements.size());
             showPlacementTest();
         }
     }
@@ -126,7 +126,10 @@ private:
         yup::String description;
 
         PlacementTest (yup::PopupMenu::Placement p, const yup::String& desc)
-            : placement (p), description (desc) {}
+            : placement (p)
+            , description (desc)
+        {
+        }
     };
 
     void initializePlacements()
@@ -169,7 +172,8 @@ private:
 
     void showPlacementTest()
     {
-        if (placements.empty()) return;
+        if (placements.empty())
+            return;
 
         auto& test = placements[currentPlacementIndex];
 
@@ -213,7 +217,7 @@ private:
         // Update status
         auto statusText = yup::String::formatted ("Test %d/%d: %s",
                                                   currentPlacementIndex + 1,
-                                                  (int)placements.size(),
+                                                  (int) placements.size(),
                                                   test.description.toRawUTF8());
         statusLabel.setText (statusText);
     }
@@ -302,7 +306,8 @@ private:
         infoMenu->addItem (L"• ← →: Navigate tests", 0, false);
         infoMenu->addItem (L"• Right-click: Feature demo", 0, false);
 
-        infoMenu->show ([this] (int selectedID) {
+        infoMenu->show ([this] (int selectedID)
+        {
             // Info only, no actions
         });
     }
@@ -314,12 +319,12 @@ private:
         switch (selectedID)
         {
             case 998: // Previous
-                currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int>(placements.size())) % static_cast<int>(placements.size());
+                currentPlacementIndex = (currentPlacementIndex - 1 + static_cast<int> (placements.size())) % static_cast<int> (placements.size());
                 showPlacementTest();
                 return;
 
             case 999: // Next
-                currentPlacementIndex = (currentPlacementIndex + 1) % static_cast<int>(placements.size());
+                currentPlacementIndex = (currentPlacementIndex + 1) % static_cast<int> (placements.size());
                 showPlacementTest();
                 return;
 
