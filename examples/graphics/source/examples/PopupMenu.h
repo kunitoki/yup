@@ -33,7 +33,7 @@ public:
         , currentPlacementIndex (0)
     {
         addAndMakeVisible (statusLabel);
-        statusLabel.setTitle ("Click the button to test different placements");
+        statusLabel.setTitle ("Click the button to test placements. Right-click for submenus and scrollable menus.");
 
         addAndMakeVisible (targetButton);
         targetButton.setButtonText ("Test Placement (Click Me!)");
@@ -69,7 +69,7 @@ public:
         auto styledText = yup::StyledText();
         {
             auto modifier = styledText.startUpdate();
-            modifier.appendText ("PopupMenu Placement Test", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
+            modifier.appendText ("PopupMenu Features: Placement, Submenus, Scrolling", yup::ApplicationTheme::getGlobalTheme()->getDefaultFont());
         }
 
         g.setFillColor (yup::Color (0xffffffff));
@@ -184,6 +184,24 @@ private:
         menu->addItem ("Item 2", 2);
         menu->addItem ("Item 3", 3);
         menu->addSeparator();
+
+        // Add a small submenu as well
+        auto quickSubmenu = yup::PopupMenu::create();
+        quickSubmenu->addItem ("Quick Action 1", 501);
+        quickSubmenu->addItem ("Quick Action 2", 502);
+        menu->addSubMenu ("More Actions", std::move (quickSubmenu));
+
+        auto scrollableMenu = yup::PopupMenu::create();
+        for (int i = 1; i <= 25; ++i)
+        {
+            scrollableMenu->addItem (yup::String::formatted ("Scroll Item %d", i), 400 + i);
+            if (i % 5 == 0)
+                scrollableMenu->addSeparator();
+        }
+        menu->addSubMenu ("Scrollable Menu", std::move (scrollableMenu));
+
+        menu->addSeparator();
+
         menu->addItem ("Previous (<)", 998);
         menu->addItem ("Next (>)", 999);
 
@@ -210,6 +228,34 @@ private:
         contextMenu->addItem ("Reset to first test", 1);
         contextMenu->addItem ("Show all placements info", 2);
         contextMenu->addSeparator();
+
+        // Add submenu example
+        auto submenu = yup::PopupMenu::create();
+        submenu->addItem ("Submenu Item 1", 201);
+        submenu->addItem ("Submenu Item 2", 202);
+        submenu->addSeparator();
+
+        // Create nested submenu to demonstrate recursive submenus
+        auto nestedSubmenu = yup::PopupMenu::create();
+        nestedSubmenu->addItem ("Nested Item 1", 301);
+        nestedSubmenu->addItem ("Nested Item 2", 302);
+        nestedSubmenu->addItem ("Nested Item 3", 303);
+
+        submenu->addSubMenu ("Nested Menu", std::move (nestedSubmenu));
+        submenu->addItem ("Submenu Item 3", 203);
+
+        contextMenu->addSubMenu ("Submenu Example", std::move (submenu));
+
+        // Add scrollable menu example
+        auto scrollableMenu = yup::PopupMenu::create();
+        for (int i = 1; i <= 25; ++i)
+        {
+            scrollableMenu->addItem (yup::String::formatted ("Scroll Item %d", i), 400 + i);
+            if (i % 5 == 0)
+                scrollableMenu->addSeparator();
+        }
+
+        contextMenu->addSubMenu ("Scrollable Menu (25 items)", std::move (scrollableMenu));
         contextMenu->addItem ("Toggle grid lines", 3);
 
         contextMenu->show ([this] (int selectedID)
@@ -226,6 +272,13 @@ private:
                 case 3:
                     repaint(); // Grid lines are always shown in this demo
                     break;
+                default:
+                    if (selectedID >= 200)
+                    {
+                        auto text = yup::String::formatted ("Selected submenu item ID: %d", selectedID);
+                        statusLabel.setText (text);
+                    }
+                    break;
             }
         });
     }
@@ -238,15 +291,16 @@ private:
 
         auto infoMenu = yup::PopupMenu::create (options);
 
-        infoMenu->addItem (L"Placement System Info:", 0, false);
+        infoMenu->addItem (L"PopupMenu Features:", 0, false);
         infoMenu->addSeparator();
-        infoMenu->addItem (L"• Side: Primary positioning", 0, false);
-        infoMenu->addItem (L"• Justification: Alignment", 0, false);
+        infoMenu->addItem (L"• Placement: Side + Justification", 0, false);
+        infoMenu->addItem (L"• Submenus: Hover to show", 0, false);
+        infoMenu->addItem (L"• Scrolling: Mouse wheel support", 0, false);
         infoMenu->addSeparator();
         infoMenu->addItem (L"Controls:", 0, false);
         infoMenu->addItem (L"• Click button: Next test", 0, false);
         infoMenu->addItem (L"• ← →: Navigate tests", 0, false);
-        infoMenu->addItem (L"• Right-click: Context menu", 0, false);
+        infoMenu->addItem (L"• Right-click: Feature demo", 0, false);
 
         infoMenu->show ([this] (int selectedID) {
             // Info only, no actions
@@ -273,6 +327,11 @@ private:
             case 2:
             case 3:
                 message = yup::String::formatted ("Selected Item %d from: %s", selectedID, test.description.toRawUTF8());
+                break;
+
+            case 501:
+            case 502:
+                message = yup::String::formatted ("Selected submenu action %d from: %s", selectedID, test.description.toRawUTF8());
                 break;
 
             default:

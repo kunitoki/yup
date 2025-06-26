@@ -83,6 +83,9 @@ public:
         /** Destroys the SavedState, potentially restoring the Graphics state. */
         ~SavedState();
 
+        /** Restore state. */
+        void restore();
+
     private:
         Graphics* g = nullptr;
     };

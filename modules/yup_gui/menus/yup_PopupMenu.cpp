@@ -29,6 +29,17 @@ namespace
 
 static std::vector<PopupMenu::Ptr> activePopups;
 
+void removeActivePopup (PopupMenu* popupMenu)
+{
+    for (auto it = activePopups.begin(); it != activePopups.end();)
+    {
+        if (it->get() == popupMenu)
+            it = activePopups.erase (it);
+        else
+            ++it;
+    }
+}
+
 void installGlobalMouseListener()
 {
     static bool mouseListenerAdded = []
@@ -45,6 +56,13 @@ void installGlobalMouseListener()
                     if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
                     {
                         if (popupMenu->getScreenBounds().contains (globalPos))
+                        {
+                            clickedInsidePopup = true;
+                            break;
+                        }
+
+                        // Also check if clicked inside any submenu
+                        if (popupMenu->submenuContains (globalPos))
                         {
                             clickedInsidePopup = true;
                             break;
@@ -289,11 +307,12 @@ bool PopupMenu::Item::isCustomComponent() const
 
 PopupMenu::Options::Options()
     : parentComponent (nullptr)
-    , dismissOnSelection (true)
+    , targetComponent (nullptr)
     , alignment (Justification::topLeft)
     , placement (Placement::below())
     , positioningMode (PositioningMode::atPoint)
-    , targetComponent (nullptr)
+    , dismissOnSelection (true)
+    , dismissAllPopups (true)
 {
 }
 
@@ -458,7 +477,11 @@ void PopupMenu::setHoveredItem (int itemIndex)
     }
 
     if (hasChanged)
+    {
+        updateSubmenuVisibility (itemIndex);
+
         repaint();
+    }
 }
 
 //==============================================================================
@@ -524,7 +547,21 @@ void PopupMenu::setupMenuItems()
         }
     }
 
-    setSize ({ width, y + verticalPadding }); // Bottom padding
+    totalContentHeight = y + verticalPadding; // Store total content height
+
+    // Update scrolling calculations
+    updateScrolling();
+
+    // Calculate final menu size considering scrolling
+    float finalHeight = totalContentHeight;
+    if (needsScrolling())
+    {
+        finalHeight = availableContentHeight;
+        if (showScrollIndicators)
+            finalHeight += 2 * scrollIndicatorHeight;
+    }
+
+    setSize ({ width, finalHeight });
 }
 
 //==============================================================================
@@ -614,6 +651,16 @@ void PopupMenu::positionMenu()
 
 int PopupMenu::getItemIndexAt (Point<float> position) const
 {
+    // Adjust position for scrolling
+    if (needsScrolling())
+    {
+        auto contentBounds = getMenuContentBounds();
+        if (! contentBounds.contains (position))
+            return -1; // Click was outside content area (maybe on scroll indicators)
+
+        position.setY (position.getY() + scrollOffset);
+    }
+
     int itemIndex = 0;
 
     for (const auto& item : items)
@@ -638,8 +685,10 @@ void PopupMenu::show (std::function<void (int)> callback)
 
 void PopupMenu::showCustom (const Options& options, std::function<void (int)> callback)
 {
-    dismissAllPopups();
+    if (options.dismissAllPopups)
+        dismissAllPopups();
 
+    this->options = options;
     menuCallback = std::move (callback);
 
     if (isEmpty())
@@ -662,7 +711,6 @@ void PopupMenu::showCustom (const Options& options, std::function<void (int)> ca
         // When we have no parent component, add to desktop to work in screen coordinates
         auto nativeOptions = ComponentNative::Options {}
                                  .withDecoration (false)
-                                 .withClearColor (::yup::Colors::transparentBlack)
                                  .withResizableWindow (false);
 
         addToDesktop (nativeOptions);
@@ -691,25 +739,42 @@ void PopupMenu::dismiss (int itemID)
 
     isBeingDismissed = true;
 
+    // Hide any submenus first
+    hideSubmenus();
+
     setVisible (false);
 
     setSelectedItemID (itemID);
 
-    for (auto it = activePopups.begin(); it != activePopups.end();)
-    {
-        if (it->get() == this)
-            it = activePopups.erase (it);
-        else
-            ++it;
-    }
+    removeActivePopup (this);
 }
 
 //==============================================================================
 
 void PopupMenu::paint (Graphics& g)
 {
+    auto state = g.saveState();
+
+    if (needsScrolling())
+    {
+        // Create a clipping region for scrollable content
+        auto contentBounds = getMenuContentBounds();
+        g.setClipPath (contentBounds);
+
+        // Translate graphics context by scroll offset
+        g.setTransform (AffineTransform::translation (0.0f, -scrollOffset));
+    }
+
     if (auto style = ApplicationTheme::findComponentStyle (*this))
         style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+
+    if (needsScrolling())
+    {
+        state.restore();
+
+        // Paint scroll indicators
+        paintScrollIndicators (g);
+    }
 }
 
 //==============================================================================
@@ -732,7 +797,8 @@ void PopupMenu::mouseDown (const MouseEvent& event)
 
     if (item.isSubMenu())
     {
-        // TODO: Show sub-menu
+        // For submenus, we show them on hover, not on click
+        showSubmenu (itemIndex);
     }
     else
     {
@@ -748,6 +814,21 @@ void PopupMenu::mouseMove (const MouseEvent& event)
 void PopupMenu::mouseExit (const MouseEvent& event)
 {
     setHoveredItem (-1);
+
+    // Don't start hide timer on mouse exit - let the hover logic handle submenu visibility
+    // This prevents the main menu from disappearing when moving to submenus
+}
+
+void PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
+{
+    if (! needsScrolling())
+        return;
+
+    auto deltaY = wheel.getDeltaY() * scrollSpeed;
+    scrollOffset = jlimit (0.0f, getMaxScrollOffset(), scrollOffset - deltaY);
+
+    constrainScrollOffset();
+    repaint();
 }
 
 void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
@@ -760,7 +841,298 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 
 void PopupMenu::focusLost()
 {
-    dismiss();
+    // Don't dismiss if we have a visible submenu or are in the process of showing one
+    if (hasVisibleSubmenu() || isShowingSubmenu)
+        return;
+
+    //dismiss();
+}
+
+//==============================================================================
+// Submenu functionality
+
+void PopupMenu::showSubmenu (int itemIndex)
+{
+    if (! isPositiveAndBelow (itemIndex, getNumItems()))
+        return;
+
+    auto& item = *items[itemIndex];
+    if (! item.isSubMenu() || ! item.subMenu)
+        return;
+
+    // If we're already showing this submenu, no need to do anything
+    if (submenuItemIndex == itemIndex && currentSubmenu && currentSubmenu == item.subMenu && currentSubmenu->isVisible())
+        return;
+
+    // Set flag to prevent dismissal during submenu operations
+    isShowingSubmenu = true;
+
+    // Hide current submenu if different item
+    if (submenuItemIndex != itemIndex)
+        hideSubmenus();
+
+    submenuItemIndex = itemIndex;
+    currentSubmenu = item.subMenu;
+
+    // Stop any pending timers that might interfere
+    submenuShowTimer.stopTimer();
+    submenuHideTimer.stopTimer();
+
+        // Position submenu to the right of the current menu item
+    auto itemBounds = item.area;
+
+    // Account for scroll offset if menu is scrollable
+    if (needsScrolling())
+    {
+        itemBounds.setY (itemBounds.getY() - static_cast<int> (scrollOffset));
+    }
+
+    Options submenuOptions;
+    submenuOptions.parentComponent = options.parentComponent; // Respect parent component
+    submenuOptions.dismissAllPopups = false;
+
+    if (options.parentComponent)
+    {
+        // Position relative to parent component - need to transform coordinates properly
+        auto menuPosInParent = getTopLeft(); // This menu's position within parent
+        auto itemBoundsInParent = itemBounds.translated (menuPosInParent);
+
+        submenuOptions.withTargetArea (itemBoundsInParent, Placement::toRight (Justification::topRight));
+    }
+    else
+    {
+        // Use screen coordinates when no parent
+        auto itemScreenPos = getScreenBounds().getTopLeft() + itemBounds.getTopRight();
+        submenuOptions.withTargetArea (Rectangle<float> (itemScreenPos.getX(), itemScreenPos.getY(), 1, itemBounds.getHeight()),
+                                       Placement::toRight (Justification::topLeft));
+    }
+
+    // Add mouse listeners to handle submenu interaction
+    currentSubmenu->showCustom (submenuOptions, [this] (int selectedID)
+    {
+        if (selectedID != 0)
+        {
+            dismiss (selectedID);
+        }
+    });
+
+    // Clear the flag after showing submenu
+    isShowingSubmenu = false;
+}
+
+void PopupMenu::hideSubmenus()
+{
+    if (currentSubmenu)
+    {
+        // Use the cleanup method to hide without triggering callbacks
+        cleanupSubmenu (currentSubmenu);
+        currentSubmenu = nullptr;
+    }
+
+    submenuItemIndex = -1;
+    isShowingSubmenu = false;
+}
+
+void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
+{
+    if (! submenu)
+        return;
+
+    // Just hide without triggering callbacks
+    submenu->setVisible (false);
+
+    // Remove from activePopups list
+    removeActivePopup (submenu.get());
+}
+
+bool PopupMenu::hasVisibleSubmenu() const
+{
+    return currentSubmenu != nullptr && currentSubmenu->isVisible();
+}
+
+bool PopupMenu::submenuContains (const Point<float>& position) const
+{
+    if (! hasVisibleSubmenu())
+        return false;
+
+    return currentSubmenu->getScreenBounds().contains (position);
+}
+
+void PopupMenu::updateSubmenuVisibility (int hoveredItemIndex)
+{
+    // Always stop existing timers first
+    submenuShowTimer.stopTimer();
+    submenuHideTimer.stopTimer();
+
+    if (isPositiveAndBelow (hoveredItemIndex, getNumItems()))
+    {
+        auto& item = *items[hoveredItemIndex];
+        if (item.isSubMenu() && item.isEnabled)
+        {
+            // If this is the same submenu item that's already showing, do nothing
+            if (submenuItemIndex == hoveredItemIndex && hasVisibleSubmenu())
+                return;
+
+            // Show submenu immediately if we're hovering over a submenu item
+            // No timer delay to prevent the main menu from disappearing
+            showSubmenu (hoveredItemIndex);
+            return;
+        }
+    }
+
+    // If we're not hovering over a submenu item and we have a visible submenu,
+    // use a longer delay before hiding to allow mouse movement to submenu
+    if (hasVisibleSubmenu() && submenuItemIndex != hoveredItemIndex)
+    {
+        submenuHideTimer.onTimer = [this]
+        {
+            hideSubmenus();
+            submenuHideTimer.stopTimer();
+        };
+
+        submenuHideTimer.startTimer (200);
+    }
+}
+
+//==============================================================================
+// Scrolling functionality
+
+void PopupMenu::updateScrolling()
+{
+    auto bounds = getLocalBounds().to<float>();
+
+    if (options.parentComponent)
+    {
+        // Calculate available height within parent component bounds
+        auto parentBounds = options.parentComponent->getLocalBounds().to<float>();
+        auto menuScreenPos = getScreenPosition().to<float>();
+        auto parentScreenPos = options.parentComponent->getScreenPosition().to<float>();
+
+        // Calculate available space from current position to parent bottom
+        availableContentHeight = parentBounds.getBottom() - (menuScreenPos.getY() - parentScreenPos.getY());
+        availableContentHeight = jmax (100.0f, availableContentHeight); // Minimum height
+    }
+    else
+    {
+        // Use screen bounds
+        if (auto* desktop = Desktop::getInstance())
+        {
+            if (auto screen = desktop->getPrimaryScreen())
+            {
+                auto screenBounds = screen->workArea.to<float>();
+                auto menuScreenPos = getScreenPosition().to<float>();
+                availableContentHeight = screenBounds.getBottom() - menuScreenPos.getY();
+                availableContentHeight = jmax (100.0f, availableContentHeight);
+            }
+        }
+    }
+
+    totalContentHeight = 0.0f;
+    for (const auto& item : items)
+    {
+        totalContentHeight += item->area.getHeight();
+    }
+
+    // Add padding
+    totalContentHeight += 8.0f; // Top + bottom padding
+
+    showScrollIndicators = needsScrolling();
+
+    if (showScrollIndicators)
+        availableContentHeight -= 2 * scrollIndicatorHeight;
+
+    constrainScrollOffset();
+}
+
+void PopupMenu::constrainScrollOffset()
+{
+    auto maxOffset = getMaxScrollOffset();
+    scrollOffset = jlimit (0.0f, maxOffset, scrollOffset);
+}
+
+float PopupMenu::getMaxScrollOffset() const
+{
+    if (! needsScrolling())
+        return 0.0f;
+
+    return jmax (0.0f, totalContentHeight - availableContentHeight);
+}
+
+bool PopupMenu::needsScrolling() const
+{
+    return totalContentHeight > availableContentHeight;
+}
+
+Rectangle<float> PopupMenu::getMenuContentBounds() const
+{
+    auto bounds = getLocalBounds().to<float>();
+
+    if (showScrollIndicators)
+    {
+        bounds.removeFromTop (scrollIndicatorHeight);
+        bounds.removeFromBottom (scrollIndicatorHeight);
+    }
+
+    return bounds;
+}
+
+Rectangle<float> PopupMenu::getScrollUpIndicatorBounds() const
+{
+    if (! showScrollIndicators)
+        return {};
+
+    auto bounds = getLocalBounds().to<float>();
+    return bounds.removeFromTop (scrollIndicatorHeight);
+}
+
+Rectangle<float> PopupMenu::getScrollDownIndicatorBounds() const
+{
+    if (! showScrollIndicators)
+        return {};
+
+    auto bounds = getLocalBounds().to<float>();
+    return bounds.removeFromBottom (scrollIndicatorHeight);
+}
+
+void PopupMenu::paintScrollIndicators (Graphics& g)
+{
+    if (! showScrollIndicators)
+        return;
+
+    auto theme = ApplicationTheme::getGlobalTheme();
+    g.setFillColor (findColor (Colors::menuItemText).value_or (Color (0xff000000)));
+
+    // Up arrow
+    if (scrollOffset > 0.0f)
+    {
+        /*
+        auto upBounds = getScrollUpIndicatorBounds();
+        auto center = upBounds.getCenter();
+        auto arrowSize = 4.0f;
+
+        Path upArrow;
+        upArrow.addTriangle (center.getX(), center.getY() - arrowSize * 0.5f,
+                             center.getX() - arrowSize, center.getY() + arrowSize * 0.5f,
+                             center.getX() + arrowSize, center.getY() + arrowSize * 0.5f);
+        g.fillPath (upArrow);
+        */
+    }
+
+    // Down arrow
+    if (scrollOffset < getMaxScrollOffset())
+    {
+        /*
+        auto downBounds = getScrollDownIndicatorBounds();
+        auto center = downBounds.getCenter();
+        auto arrowSize = 4.0f;
+
+        Path downArrow;
+        downArrow.addTriangle (center.getX(), center.getY() + arrowSize * 0.5f,
+                               center.getX() - arrowSize, center.getY() - arrowSize * 0.5f,
+                               center.getX() + arrowSize, center.getY() - arrowSize * 0.5f);
+        g.fillPath (downArrow);
+        */
+    }
 }
 
 } // namespace yup

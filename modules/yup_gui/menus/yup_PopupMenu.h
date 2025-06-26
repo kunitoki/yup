@@ -124,6 +124,7 @@ public:
         std::optional<int> minWidth;
         std::optional<int> maxWidth;
         bool dismissOnSelection;
+        bool dismissAllPopups;
     };
 
     //==============================================================================
@@ -251,6 +252,12 @@ public:
 
     //==============================================================================
     /** @internal */
+    bool hasVisibleSubmenu() const;
+    /** @internal */
+    bool submenuContains (const Point<float>& position) const;
+
+    //==============================================================================
+    /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
     void mouseDown (const MouseEvent& event) override;
@@ -258,6 +265,8 @@ public:
     void mouseMove (const MouseEvent& event) override;
     /** @internal */
     void mouseExit (const MouseEvent& event) override;
+    /** @internal */
+    void mouseWheel (const MouseEvent& event, const MouseWheelData& wheel) override;
     /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
     /** @internal */
@@ -278,6 +287,22 @@ private:
     void setupMenuItems();
     void positionMenu();
 
+    // Submenu functionality
+    void showSubmenu (int itemIndex);
+    void hideSubmenus();
+    void updateSubmenuVisibility (int hoveredItemIndex);
+    void cleanupSubmenu (PopupMenu::Ptr submenu);
+
+    // Scrolling functionality
+    void updateScrolling();
+    void constrainScrollOffset();
+    float getMaxScrollOffset() const;
+    void paintScrollIndicators (Graphics& g);
+    Rectangle<float> getScrollUpIndicatorBounds() const;
+    Rectangle<float> getScrollDownIndicatorBounds() const;
+    bool needsScrolling() const;
+    Rectangle<float> getMenuContentBounds() const;
+
     // PopupMenuItem is now an implementation detail
     class PopupMenuItem;
     std::vector<std::unique_ptr<Item>> items;
@@ -285,6 +310,21 @@ private:
     Options options;
     int selectedItemID = -1;
     bool isBeingDismissed = false;
+
+    // Submenu support
+    PopupMenu::Ptr currentSubmenu;
+    int submenuItemIndex = -1;
+    TimedCallback submenuShowTimer;
+    TimedCallback submenuHideTimer;
+    bool isShowingSubmenu = false;
+
+    // Scrolling support
+    float scrollOffset = 0.0f;
+    float availableContentHeight = 0.0f;
+    float totalContentHeight = 0.0f;
+    bool showScrollIndicators = false;
+    static constexpr float scrollIndicatorHeight = 12.0f;
+    static constexpr float scrollSpeed = 20.0f;
 
     std::function<void (int)> menuCallback;
 

@@ -170,8 +170,13 @@ Graphics::SavedState& Graphics::SavedState::operator= (SavedState&& other)
 
 Graphics::SavedState::~SavedState()
 {
-    if (g != nullptr)
-        g->restoreState();
+    restore();
+}
+
+void Graphics::SavedState::restore()
+{
+    if (auto graphics = std::exchange (g, nullptr))
+        graphics->restoreState();
 }
 
 //==============================================================================
