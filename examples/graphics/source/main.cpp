@@ -35,6 +35,7 @@
 #include "examples/TextEditor.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
+#include "examples/Widgets.h"
 
 //==============================================================================
 
@@ -166,6 +167,19 @@ public:
             buttons.add (std::move (button));
 
             components.add (std::make_unique<FileChooserDemo>());
+            addChildComponent (components.getLast());
+        }
+
+        {
+            auto button = std::make_unique<yup::TextButton> ("Widgets");
+            button->onClick = [this, number = counter++]
+            {
+                selectComponent (number);
+            };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
+            components.add (std::make_unique<yup::WidgetsDemo>());
             addChildComponent (components.getLast());
         }
 

@@ -754,6 +754,25 @@ public:
         return ! (*this == other);
     }
 
+    /** Approximately equals operator
+
+        Compares this AffineTransform with another AffineTransform for approximate equality.
+
+        @param other A reference to the other AffineTransform to compare with.
+        @param epsilon The maximum allowed difference between corresponding matrix components.
+
+        @return True if all corresponding matrix components are approximately equal, false otherwise.
+    */
+    constexpr bool approximatelyEqualTo (const AffineTransform& other) const noexcept
+    {
+        return approximatelyEqual (m[0], other.m[0])
+            && approximatelyEqual (m[1], other.m[1])
+            && approximatelyEqual (m[2], other.m[2])
+            && approximatelyEqual (m[3], other.m[3])
+            && approximatelyEqual (m[4], other.m[4])
+            && approximatelyEqual (m[5], other.m[5]);
+    }
+
     //==============================================================================
     /** @internal Conversion to Rive Mat2D class.  */
     rive::Mat2D toMat2D() const

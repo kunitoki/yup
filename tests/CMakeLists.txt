@@ -56,13 +56,14 @@ set (target_modules
     yup_audio_devices
     yup_events
     yup_data_model
-    yup_graphics)
+    yup_graphics
+    yup_gui)
 
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
-    TARGET_CONSOLE ON
+    #TARGET_CONSOLE ON
     DEFINITIONS
         YUP_USE_CURL=0
     MODULES

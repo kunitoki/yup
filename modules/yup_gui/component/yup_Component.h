@@ -336,6 +336,16 @@ public:
     /**
         Set the bounds of the component.
 
+        @param x The new x position of the component.
+        @param y The new y position of the component.
+        @param width The new width of the component.
+        @param height The new height of the component.
+     */
+    void setBounds (float x, float y, float width, float height);
+
+    /**
+        Set the bounds of the component.
+
         @param newBounds The new bounds of the component.
      */
     void setBounds (const Rectangle<float>& newBounds);
@@ -586,6 +596,11 @@ public:
      */
     void repaint (const Rectangle<float>& rect);
 
+    /**
+        Repaint the component.
+     */
+    void repaint (float x, float y, float width, float height);
+
     //==============================================================================
     /**
         Get the native handle of the component.
@@ -733,6 +748,13 @@ public:
 
     //==============================================================================
     /**
+        Check if the component has a parent component.
+
+        @return Wheter the component has a parent.
+     */
+    bool hasParent() const;
+
+    /**
         Get the parent of the component.
 
         @return The parent of the component.
@@ -859,7 +881,7 @@ public:
 
         @param index The index of the child component to get.
      */
-    Component* getComponentAt (int index) const;
+    Component* getChildComponent (int index) const;
 
     /**
         Returns the index of a child component, or -1 if not found.
@@ -1054,6 +1076,31 @@ public:
         @return The color of the component.
      */
     std::optional<Color> findColor (const Identifier& colorId) const;
+
+    //==============================================================================
+
+    /** Set a style property for the component.
+
+        @param propertyId The identifier of the property to set.
+        @param property The property to set.
+     */
+    void setStyleProperty (const Identifier& propertyId, const std::optional<var>& property);
+
+    /** Get a style property for the component.
+
+        @param propertyId The identifier of the property to get.
+
+        @return The property of the component.
+     */
+    std::optional<var> getStyleProperty (const Identifier& propertyId) const;
+
+    /** Find a style property for the component.
+
+        @param propertyId The identifier of the property to find.
+
+        @return The property of the component.
+     */
+    std::optional<var> findStyleProperty (const Identifier& propertyId) const;
 
     //==============================================================================
     /** A bail out checker for the component. */

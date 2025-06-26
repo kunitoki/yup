@@ -374,7 +374,7 @@ public:
         @return A reference to this updated Size object.
     */
     template <class T>
-    [[nodiscard]] constexpr auto scale (T scaleFactor) noexcept
+    constexpr auto scale (T scaleFactor) noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
     {
         scale (scaleFactor, scaleFactor);

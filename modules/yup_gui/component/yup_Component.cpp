@@ -337,6 +337,11 @@ float Component::getHeight() const
 
 //==============================================================================
 
+void Component::setBounds (float x, float y, float width, float height)
+{
+    setBounds ({ x, y, width, height });
+}
+
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
     boundsInParent = newBounds;
@@ -411,7 +416,7 @@ AffineTransform Component::getTransform() const
 
 bool Component::isTransformed() const
 {
-    return transform.isIdentity();
+    return ! transform.isIdentity();
 }
 
 void Component::transformChanged()
@@ -504,6 +509,11 @@ void Component::repaint (const Rectangle<float>& rect)
 
     if (auto nativeComponent = getNativeComponent())
         nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+}
+
+void Component::repaint (float x, float y, float width, float height)
+{
+    repaint ({ x, y, width, height });
 }
 
 //==============================================================================
@@ -662,6 +672,11 @@ void Component::lowerBy (int indexToLower)
 
 //==============================================================================
 
+bool Component::hasParent() const
+{
+    return parentComponent != nullptr;
+}
+
 Component* Component::getParentComponent()
 {
     return parentComponent;
@@ -786,7 +801,7 @@ int Component::getNumChildComponents() const
     return children.size();
 }
 
-Component* Component::getComponentAt (int index) const
+Component* Component::getChildComponent (int index) const
 {
     return children.getUnchecked (index);
 }
@@ -977,6 +992,8 @@ void Component::setColor (const Identifier& colorId, const std::optional<Color>&
         properties.set (colorId, static_cast<int64> (color->getARGB()));
     else
         properties.remove (colorId);
+
+    styleChanged();
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
@@ -997,6 +1014,39 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
 
     return std::nullopt;
 }
+
+//==============================================================================
+
+void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
+{
+    if (property)
+        properties.set (propertyId, *property);
+    else
+        properties.remove (propertyId);
+
+    styleChanged();
+}
+
+std::optional<var> Component::getStyleProperty (const Identifier& propertyId) const
+{
+    if (auto property = properties.getVarPointer (propertyId); property != nullptr && ! property->isVoid())
+        return *property;
+
+    return std::nullopt;
+}
+
+std::optional<var> Component::findStyleProperty (const Identifier& propertyId) const
+{
+    if (auto property = getStyleProperty (propertyId))
+        return property;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findStyleProperty (propertyId);
+
+    return std::nullopt;
+}
+
+//==============================================================================
 
 void Component::userTriedToCloseWindow() {}
 
@@ -1322,16 +1372,14 @@ Point<float> Component::localToScreen (const Point<float>& localPoint) const
     if (options.onDesktop && native != nullptr)
         return native->getPosition().to<float>() + localPoint;
 
-    auto screenPos = localPoint;
+    auto screenPos = localPoint + getPosition();
     auto parent = getParentComponent();
 
     while (parent != nullptr)
     {
-        if (parent->options.onDesktop)
+        if (parent->options.onDesktop && parent->native != nullptr)
         {
-            if (parent->native != nullptr)
-                screenPos += parent->native->getPosition().to<float>();
-
+            screenPos += parent->native->getPosition().to<float>();
             break;
         }
         else
@@ -1347,7 +1395,7 @@ Point<float> Component::localToScreen (const Point<float>& localPoint) const
 
 Point<float> Component::screenToLocal (const Point<float>& screenPoint) const
 {
-    return screenPoint - localToScreen (getPosition());
+    return screenPoint - localToScreen (Point<float> (0.0f, 0.0f));
 }
 
 Rectangle<float> Component::localToScreen (const Rectangle<float>& localRectangle) const
@@ -1378,6 +1426,8 @@ Rectangle<float> Component::getLocalArea (const Component* sourceComponent, Rect
     return screenToLocal (sourceComponent->localToScreen (rectangleInSource));
 }
 
+//==============================================================================
+
 Point<float> Component::getRelativePoint (const Component* targetComponent, Point<float> localPoint) const
 {
     if (targetComponent == nullptr || targetComponent == this)
@@ -1393,6 +1443,8 @@ Rectangle<float> Component::getRelativeArea (const Component* targetComponent, R
 
     return targetComponent->screenToLocal (localToScreen (localRectangle));
 }
+
+//==============================================================================
 
 AffineTransform Component::getTransformToComponent (const Component* targetComponent) const
 {

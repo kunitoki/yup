@@ -138,6 +138,7 @@
 #include "widgets/yup_TextEditor.cpp"
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
+#include "widgets/yup_ComboBox.cpp"
 #include "artboard/yup_ArtboardFile.cpp"
 #include "artboard/yup_Artboard.cpp"
 #include "windowing/yup_DocumentWindow.cpp"

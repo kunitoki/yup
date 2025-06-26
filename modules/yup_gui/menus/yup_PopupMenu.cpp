@@ -615,7 +615,7 @@ void PopupMenu::positionMenu()
                     else
                     {
                         // Target is not a direct child - need coordinate conversion
-                        targetArea = options.parentComponent->getLocalArea (options.targetComponent, options.targetComponent->getLocalBounds()).to<int>();
+                        targetArea = options.parentComponent->getRelativeArea (options.targetComponent, options.targetComponent->getBounds()).to<int>();
                     }
                 }
                 else
@@ -623,6 +623,7 @@ void PopupMenu::positionMenu()
                     // No parent component - use screen coordinates
                     targetArea = options.targetComponent->getScreenBounds().to<int>();
                 }
+
                 position = calculatePositionRelativeToArea (targetArea, menuSize, options.placement);
             }
             else
