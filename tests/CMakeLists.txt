@@ -68,8 +68,8 @@ yup_standalone_app (
         YUP_USE_CURL=0
     MODULES
         ${target_modules}
-        GTest::gtest_main
-        GTest::gmock_main)
+        GTest::gtest
+        GTest::gmock)
 
 # ==== Setup sources
 file (GLOB_RECURSE sources
