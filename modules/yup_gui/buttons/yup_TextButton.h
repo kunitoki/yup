@@ -27,7 +27,7 @@ class YUP_API TextButton : public Button
 {
 public:
     //==============================================================================
-    TextButton (StringRef componentID);
+    TextButton (StringRef componentID = {});
 
     //==============================================================================
 
