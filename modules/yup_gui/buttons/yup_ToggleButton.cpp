@@ -23,12 +23,12 @@ namespace yup
 {
 
 //==============================================================================
-const Identifier ToggleButton::Colors::backgroundColorId           = "toggleButtonBackground";
-const Identifier ToggleButton::Colors::backgroundToggledColorId    = "toggleButtonBackgroundToggled";
-const Identifier ToggleButton::Colors::textColorId                 = "toggleButtonText";
-const Identifier ToggleButton::Colors::textToggledColorId          = "toggleButtonTextToggled";
-const Identifier ToggleButton::Colors::borderColorId               = "toggleButtonBorder";
-const Identifier ToggleButton::Colors::borderToggledColorId        = "toggleButtonBorderToggled";
+const Identifier ToggleButton::Colors::backgroundColorId = "toggleButtonBackground";
+const Identifier ToggleButton::Colors::backgroundToggledColorId = "toggleButtonBackgroundToggled";
+const Identifier ToggleButton::Colors::textColorId = "toggleButtonText";
+const Identifier ToggleButton::Colors::textToggledColorId = "toggleButtonTextToggled";
+const Identifier ToggleButton::Colors::borderColorId = "toggleButtonBorder";
+const Identifier ToggleButton::Colors::borderToggledColorId = "toggleButtonBorderToggled";
 
 //==============================================================================
 ToggleButton::ToggleButton (StringRef componentID)
@@ -71,16 +71,16 @@ void ToggleButton::paintButton (Graphics& g)
 
     // Get colors based on toggle state
     auto bgColor = toggleState
-        ? findColor (Colors::backgroundToggledColorId).value_or (Color (0xff4a90e2))
-        : findColor (Colors::backgroundColorId).value_or (Color (0xfff0f0f0));
+                     ? findColor (Colors::backgroundToggledColorId).value_or (Color (0xff4a90e2))
+                     : findColor (Colors::backgroundColorId).value_or (Color (0xfff0f0f0));
 
     auto textColor = toggleState
-        ? findColor (Colors::textToggledColorId).value_or (Color (0xffffffff))
-        : findColor (Colors::textColorId).value_or (Color (0xff333333));
+                       ? findColor (Colors::textToggledColorId).value_or (Color (0xffffffff))
+                       : findColor (Colors::textColorId).value_or (Color (0xff333333));
 
     auto borderColor = toggleState
-        ? findColor (Colors::borderToggledColorId).value_or (Color (0xff357abd))
-        : findColor (Colors::borderColorId).value_or (Color (0xffcccccc));
+                         ? findColor (Colors::borderToggledColorId).value_or (Color (0xff357abd))
+                         : findColor (Colors::borderColorId).value_or (Color (0xffcccccc));
 
     // Adjust colors for button state
     if (isButtonDown())
@@ -132,7 +132,7 @@ void ToggleButton::resized()
 void ToggleButton::mouseUp (const MouseEvent& event)
 {
     if (getLocalBounds().contains (event.getPosition()))
-        setToggleState (!toggleState, sendNotification);
+        setToggleState (! toggleState, sendNotification);
 
     Button::mouseUp (event);
 }

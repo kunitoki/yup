@@ -48,9 +48,9 @@ public:
         riveBasePath = yup::File ("/");
 #else
         riveBasePath = yup::File (__FILE__)
-            .getParentDirectory()
-            .getParentDirectory()
-            .getParentDirectory();
+                           .getParentDirectory()
+                           .getParentDirectory()
+                           .getParentDirectory();
 #endif
 
         auto artboardFile = yup::ArtboardFile::load (riveBasePath.getChildFile (YUP_EXAMPLE_GRAPHICS_RIVE_FILE), *factory);
