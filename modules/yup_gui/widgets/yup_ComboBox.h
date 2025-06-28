@@ -96,7 +96,7 @@ public:
 
         @returns    The index of the selected item, or -1 if nothing is selected
     */
-    int getSelectedItemIndex() const noexcept { return selectedIndex; }
+    int getSelectedItemIndex() const noexcept;
 
     /** Returns the ID of the currently selected item.
 
@@ -185,7 +185,7 @@ private:
     void drawArrow (Graphics& g, Rectangle<float> arrowBounds);
 
     Array<ComboBoxItem> items;
-    int selectedIndex = -1;
+    int selectedItemId = 0;
     String textWhenNothingSelected;
     String displayText;
     StyledText styledText;

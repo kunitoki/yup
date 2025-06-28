@@ -1418,7 +1418,7 @@ Point<float> Component::getScreenPosition() const
 
 Rectangle<float> Component::getScreenBounds() const
 {
-    return localToScreen (getBounds());
+    return localToScreen (getLocalBounds());
 }
 
 //==============================================================================

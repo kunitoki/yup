@@ -65,7 +65,7 @@ void ComboBox::clear()
 {
     items.clear();
 
-    selectedIndex = -1;
+    selectedItemId = 0;
 
     updateDisplayText();
 }
@@ -98,42 +98,69 @@ void ComboBox::changeItemText (int index, String newText)
 
 //==============================================================================
 
+int ComboBox::getSelectedItemIndex() const noexcept
+{
+    for (int i = 0; i < items.size(); ++i)
+    {
+        if (items[i].itemId == selectedItemId && ! items[i].isSeparator)
+            return i;
+    }
+    return -1;
+}
+
 int ComboBox::getSelectedId() const noexcept
 {
-    return isPositiveAndBelow (selectedIndex, items.size()) ? items[selectedIndex].itemId : 0;
+    return selectedItemId;
 }
 
 String ComboBox::getText() const noexcept
 {
-    return isPositiveAndBelow (selectedIndex, items.size()) ? items[selectedIndex].text : String();
+    for (const auto& item : items)
+    {
+        if (item.itemId == selectedItemId && ! item.isSeparator)
+            return item.text;
+    }
+    return String();
 }
 
 void ComboBox::setSelectedItemIndex (int newItemIndex, NotificationType notification)
 {
-    if (selectedIndex != newItemIndex)
-    {
-        selectedIndex = newItemIndex;
-        updateDisplayText();
+    int newItemId = 0;
+    if (isPositiveAndBelow (newItemIndex, items.size()) && ! items[newItemIndex].isSeparator)
+        newItemId = items[newItemIndex].itemId;
 
-        if (notification != dontSendNotification)
-            comboBoxChanged();
-
-        repaint();
-    }
+    setSelectedId (newItemId, notification);
 }
 
 void ComboBox::setSelectedId (int newItemId, NotificationType notification)
 {
-    for (int i = 0; i < items.size(); ++i)
+    if (selectedItemId != newItemId)
     {
-        if (items[i].itemId == newItemId && ! items[i].isSeparator)
+        // Validate that the item ID exists (unless it's 0 which means no selection)
+        bool isValidId = (newItemId == 0);
+        if (newItemId != 0)
         {
-            setSelectedItemIndex (i, notification);
-            return;
+            for (const auto& item : items)
+            {
+                if (item.itemId == newItemId && ! item.isSeparator)
+                {
+                    isValidId = true;
+                    break;
+                }
+            }
+        }
+
+        if (isValidId)
+        {
+            selectedItemId = newItemId;
+            updateDisplayText();
+
+            if (notification != dontSendNotification)
+                comboBoxChanged();
+
+            repaint();
         }
     }
-
-    setSelectedItemIndex (-1, notification);
 }
 
 void ComboBox::setTextWhenNothingSelected (String newPlaceholderText)
@@ -255,7 +282,8 @@ void ComboBox::showPopup()
 
     popupMenu->show ([this] (int selectedItemID)
     {
-        setSelectedId (selectedItemID);
+        if (selectedItemID != 0)
+            setSelectedId (selectedItemID);
 
         isPopupShown = false;
     });
@@ -277,11 +305,18 @@ void ComboBox::updateDisplayText()
     auto textBounds = bounds.reduced (8.0f, 4.0f);
     textBounds.removeFromRight (20.0f); // Arrow width
 
-    if (isPositiveAndBelow (selectedIndex, items.size()))
+    bool foundSelectedItem = false;
+    for (const auto& item : items)
     {
-        displayText = items[selectedIndex].text;
+        if (item.itemId == selectedItemId && ! item.isSeparator)
+        {
+            displayText = item.text;
+            foundSelectedItem = true;
+            break;
+        }
     }
-    else
+
+    if (! foundSelectedItem)
     {
         displayText = textWhenNothingSelected;
     }
