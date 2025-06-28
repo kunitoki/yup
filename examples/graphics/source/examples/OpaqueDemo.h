@@ -141,16 +141,14 @@ private:
                 (bounds.getWidth() - childSize) / 2,
                 (bounds.getHeight() - childSize) / 2,
                 childSize,
-                childSize
-            ));
+                childSize));
 
             // Opaque sibling covers bottom half
             opaqueSibling->setBounds (Rectangle<float> (
                 0,
                 bounds.getHeight() / 2,
                 bounds.getWidth(),
-                bounds.getHeight() / 2
-            ));
+                bounds.getHeight() / 2));
         }
 
         void triggerOpaqueRepaint()
@@ -169,7 +167,8 @@ private:
         class TransparentChildComponent : public Component
         {
         public:
-            TransparentChildComponent (const String& componentID) : Component (componentID)
+            TransparentChildComponent (const String& componentID)
+                : Component (componentID)
             {
                 setOpaque (false); // This child is transparent
             }
@@ -200,7 +199,8 @@ private:
         class OpaqueSiblingComponent : public Component
         {
         public:
-            OpaqueSiblingComponent (const String& componentID) : Component (componentID)
+            OpaqueSiblingComponent (const String& componentID)
+                : Component (componentID)
             {
                 setOpaque (true); // This component is opaque - triggers optimization!
             }

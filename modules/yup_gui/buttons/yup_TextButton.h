@@ -54,6 +54,7 @@ public:
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
+
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 

@@ -108,7 +108,7 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
         g.setStrokeColor (Colors::cornflowerblue); // TODO - findColor
         g.setStrokeWidth (2.0f);
-        g.strokePath(focusPath);
+        g.strokePath (focusPath);
     }
 }
 
@@ -226,16 +226,16 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 
     // Get colors based on toggle state
     auto bgColor = b.getToggleState()
-        ? b.findColor (ToggleButton::Style::backgroundToggledColorId).value_or (Colors::cornflowerblue)
-        : b.findColor (ToggleButton::Style::backgroundColorId).value_or (Color (0xfff0f0f0));
+                     ? b.findColor (ToggleButton::Style::backgroundToggledColorId).value_or (Colors::cornflowerblue)
+                     : b.findColor (ToggleButton::Style::backgroundColorId).value_or (Color (0xfff0f0f0));
 
     auto textColor = b.getToggleState()
-        ? b.findColor (ToggleButton::Style::textToggledColorId).value_or (Color (0xffffffff))
-        : b.findColor (ToggleButton::Style::textColorId).value_or (Color (0xff333333));
+                       ? b.findColor (ToggleButton::Style::textToggledColorId).value_or (Color (0xffffffff))
+                       : b.findColor (ToggleButton::Style::textColorId).value_or (Color (0xff333333));
 
     auto borderColor = b.getToggleState()
-        ? b.findColor (ToggleButton::Style::borderToggledColorId).value_or (Color (0xff357abd))
-        : b.findColor (ToggleButton::Style::borderColorId).value_or (Color (0xffcccccc));
+                         ? b.findColor (ToggleButton::Style::borderToggledColorId).value_or (Color (0xff357abd))
+                         : b.findColor (ToggleButton::Style::borderColorId).value_or (Color (0xffcccccc));
 
     // Adjust colors for button state
     if (b.isButtonDown())
@@ -280,8 +280,8 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
 
     // Fill background based on switch state
     auto bgColor = s.getToggleState()
-                       ? s.findColor (SwitchButton::Style::switchOnBackgroundColorId).value_or (Colors::cornflowerblue)
-                       : s.findColor (SwitchButton::Style::switchOffBackgroundColorId).value_or (Color (0xff333333));
+                     ? s.findColor (SwitchButton::Style::switchOnBackgroundColorId).value_or (Colors::cornflowerblue)
+                     : s.findColor (SwitchButton::Style::switchOffBackgroundColorId).value_or (Color (0xff333333));
 
     g.setFillColor (bgColor);
     g.fillRoundedRect (bounds, cornerSize);

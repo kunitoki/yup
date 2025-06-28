@@ -96,6 +96,7 @@ public:
     void focusGained() override;
     /** @internal */
     void focusLost() override;
+
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 

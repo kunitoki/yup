@@ -1132,7 +1132,7 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
             {
                 auto opaqueIndex = parentOfOpaque->getIndexOfChildComponent (opaqueChild);
                 for (int i = opaqueIndex; i < parentOfOpaque->children.size(); ++i)
-                    parentOfOpaque->children.getUnchecked(i)->internalPaint (g, boundsToRedraw, renderContinuous);
+                    parentOfOpaque->children.getUnchecked (i)->internalPaint (g, boundsToRedraw, renderContinuous);
             }
         }
         else
@@ -1186,10 +1186,7 @@ Component* Component::findTopmostOpaqueChild (const Rectangle<float>& area)
         }
 
         // Check if this child itself is opaque and covers the area
-        if (child->isOpaque() &&
-            child->getOpacity() >= 1.0f &&
-            ! child->isTransformed() &&
-            childBounds.contains (area))
+        if (child->isOpaque() && child->getOpacity() >= 1.0f && ! child->isTransformed() && childBounds.contains (area))
         {
             // This child covers the area
             return child;

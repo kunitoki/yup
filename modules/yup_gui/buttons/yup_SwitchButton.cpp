@@ -106,7 +106,7 @@ void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
     }
     else
     {
-        float progress = jlimit (0.0f, 1.0f, static_cast<float>(elapsedMs) / static_cast<float>(millisecondsToSpendMoving));
+        float progress = jlimit (0.0f, 1.0f, static_cast<float> (elapsedMs) / static_cast<float> (millisecondsToSpendMoving));
 
         progress = progress * progress * (3.0f - 2.0f * progress);
 
@@ -114,7 +114,7 @@ void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
         auto targetPos = animationTargetBounds.getPosition();
         auto currentPos = startPos + (targetPos - startPos) * progress;
 
-        switchCircleBounds = Rectangle<float>(currentPos, animationTargetBounds.getSize());
+        switchCircleBounds = Rectangle<float> (currentPos, animationTargetBounds.getSize());
     }
 
     repaint();
@@ -134,7 +134,7 @@ void SwitchButton::resized()
 void SwitchButton::mouseUp (const MouseEvent& event)
 {
     if (getLocalBounds().contains (event.getPosition()))
-        setToggleState (!toggleState, sendNotification);
+        setToggleState (! toggleState, sendNotification);
 
     Button::mouseUp (event);
 }
@@ -152,8 +152,7 @@ void SwitchButton::updateSwitchCirclePosition()
             bounds.getX(),
             getToggleState() ? bounds.getBottom() - bounds.getWidth() : bounds.getY(),
             bounds.getWidth(),
-            bounds.getWidth()
-        );
+            bounds.getWidth());
     }
     else
     {
@@ -161,8 +160,7 @@ void SwitchButton::updateSwitchCirclePosition()
             getToggleState() ? bounds.getRight() - bounds.getHeight() : bounds.getX(),
             bounds.getY(),
             bounds.getHeight(),
-            bounds.getHeight()
-        );
+            bounds.getHeight());
     }
 
     targetBounds = targetBounds.reduced (1).toNearestInt();

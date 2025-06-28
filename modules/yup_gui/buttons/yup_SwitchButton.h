@@ -101,6 +101,7 @@ public:
     void resized() override;
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
+
     /** @internal */
     Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
 
