@@ -160,7 +160,7 @@ private:
         //viewport->setBounds (Rectangle<float> (static_cast<float>(margin), static_cast<float>(y), static_cast<float>(inputWidth), 150.0f));
 
         // Slider
-        slider->setBounds (Rectangle<float> (static_cast<float> (margin + inputWidth + spacing), static_cast<float> (y), static_cast<float> (inputWidth), static_cast<float> (componentHeight)));
+        slider->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth / 2), static_cast<float> (inputWidth / 2)));
     }
 
     // Custom ComboBox to handle selection changes
