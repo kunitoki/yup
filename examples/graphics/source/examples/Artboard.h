@@ -30,7 +30,6 @@ public:
     ArtboardDemo()
     {
         setWantsKeyboardFocus (true);
-        setOpaque (false);
     }
 
     bool loadArtboard()
@@ -99,6 +98,12 @@ public:
                 artboards.getUnchecked (j * totalRows + i)->setBounds (col.largestFittingSquare());
             }
         }
+    }
+
+    void paint (Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
     }
 
 private:

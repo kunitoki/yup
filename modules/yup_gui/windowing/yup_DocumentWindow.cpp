@@ -24,10 +24,14 @@ namespace yup
 
 //==============================================================================
 
+const Identifier DocumentWindow::Style::backgroundColorId = "documentWindowBackground";
+
+//==============================================================================
+
 DocumentWindow::DocumentWindow (const ComponentNative::Options& options, const Color& backgroundColor)
-    : backgroundColor (backgroundColor)
 {
     addToDesktop (options, nullptr);
+    setColor (Style::backgroundColorId, backgroundColor);
 }
 
 DocumentWindow::~DocumentWindow()
@@ -56,7 +60,7 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
 void DocumentWindow::paint (Graphics& g)
 {
-    g.setFillColor (backgroundColor);
+    g.setFillColor (findColor (Style::backgroundColorId).value_or (Colors::dimgray));
     g.fillAll();
 }
 

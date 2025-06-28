@@ -23,6 +23,7 @@ namespace yup
 {
 
 //==============================================================================
+
 const Identifier ToggleButton::Style::backgroundColorId = "toggleButtonBackground";
 const Identifier ToggleButton::Style::backgroundToggledColorId = "toggleButtonBackgroundToggled";
 const Identifier ToggleButton::Style::textColorId = "toggleButtonText";

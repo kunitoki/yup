@@ -37,14 +37,18 @@ public:
     void centreWithSize (const Size<int>& size);
 
     //==============================================================================
+    struct Style
+    {
+        static const Identifier backgroundColorId;
+    };
+
+    //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
     /** @internal */
     void userTriedToCloseWindow() override;
 
 private:
-    Color backgroundColor;
-
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DocumentWindow)
 };
 

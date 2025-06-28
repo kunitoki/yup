@@ -161,8 +161,6 @@ public:
     AudioExample (const yup::Font& font)
         : Component ("AudioExample")
     {
-        setOpaque (false);
-
         // Initialize the audio device
         deviceManager.initialiseWithDefaultDevices (0, 2);
 
@@ -237,6 +235,12 @@ public:
                                 .reduced (proportionOfWidth (0.01f), proportionOfHeight (0.01f));
 
         oscilloscope.setBounds (bottomBounds);
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
     }
 
     void mouseDown (const yup::MouseEvent& event) override

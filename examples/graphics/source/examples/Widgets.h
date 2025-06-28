@@ -28,8 +28,6 @@ class WidgetsDemo : public Component
 public:
     WidgetsDemo()
     {
-        setOpaque (false);
-
         auto theme = ApplicationTheme::getGlobalTheme();
         exampleFont = theme->getDefaultFont();
 
@@ -169,6 +167,12 @@ private:
 
         // Slider
         slider->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (inputWidth / 2), static_cast<float> (inputWidth / 2)));
+    }
+
+    void paint (Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
     }
 
     // Custom ComboBox to handle selection changes

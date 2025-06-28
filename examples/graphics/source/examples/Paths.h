@@ -29,11 +29,13 @@ public:
     PathsExample()
         : Component ("PathsExample")
     {
-        setOpaque (false);
     }
 
     void paint (yup::Graphics& g) override
     {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
         // Draw title
         /*
         g.setColour (yup::Color (50, 50, 80));
