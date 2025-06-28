@@ -503,29 +503,23 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
-    jassert (! options.isRepainting); // You are likely repainting from paint !
+    repaint (getLocalBounds());
+}
 
-    if (getBounds().isEmpty())
-        return;
-
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (getBoundsRelativeToTopLevelComponent());
+void Component::repaint (float x, float y, float width, float height)
+{
+    repaint ({ x, y, width, height });
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
 
-    if (rect.isEmpty())
+    if (rect.isEmpty() || ! isShowing())
         return;
 
     if (auto nativeComponent = getNativeComponent())
         nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
-}
-
-void Component::repaint (float x, float y, float width, float height)
-{
-    repaint ({ x, y, width, height });
 }
 
 //==============================================================================
