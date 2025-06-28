@@ -121,23 +121,6 @@ jobs:
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_graphics
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_graphics
 
-  build_render:
-    runs-on: macos-latest
-    needs: [configure]
-    steps:
-    - uses: actions/checkout@v4
-    - uses: seanmiddleditch/gha-setup-ninja@master
-    - uses: actions/cache/restore@v4
-      id: cache-restore
-      with:
-        path: ${{ runner.workspace }}/build
-        key: macos-build-${{ github.sha }}
-    - name: Configure If Cache Missed
-      if: steps.cache-restore.outputs.cache-hit != 'true'
-      run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_EXAMPLES=ON
-    - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target example_render
-    - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target example_render
-
   build_plugins:
     runs-on: macos-latest
     needs: [configure]
