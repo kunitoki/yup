@@ -51,6 +51,7 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 set (target_name yup_tests)
 set (target_version "1.0.0")
 set (target_console OFF)
+set (target_gtest_modules "")
 set (target_modules
     yup_core
     yup_audio_basics
@@ -61,12 +62,13 @@ set (target_modules
 
 if (NOT YUP_PLATFORM_EMSCRIPTEN)
     list (APPEND target_modules
-        yup_gui
+        yup_gui)
+    list (APPEND target_gtest_modules
         GTest::gtest
         GTest::gmock)
 else()
     set (target_console ON)
-    list (APPEND target_modules
+    list (APPEND target_gtest_modules
         GTest::gtest_main
         GTest::gmock_main)
 endif()
@@ -80,8 +82,7 @@ yup_standalone_app (
         YUP_USE_CURL=0
     MODULES
         ${target_modules}
-        GTest::gtest
-        GTest::gmock)
+        ${target_gtest_modules})
 
 # ==== Setup sources
 set (sources "")
