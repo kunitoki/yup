@@ -28,17 +28,9 @@ class OpaqueDemo : public Component
 public:
     OpaqueDemo()
     {
-        setOpaque (false);
-
         auto theme = ApplicationTheme::getGlobalTheme();
         exampleFont = theme->getDefaultFont();
 
-        setupComponents();
-    }
-
-private:
-    void setupComponents()
-    {
         // Title label
         titleLabel = std::make_unique<Label> ("titleLabel");
         titleLabel->setText ("Opaque Optimization Demo", dontSendNotification);
@@ -67,30 +59,36 @@ private:
         addAndMakeVisible (counterLabel.get());
     }
 
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+    }
+
     void resized() override
     {
         auto bounds = getLocalBounds();
-        auto margin = 20;
-        int y = margin;
+        float margin = 20.0f;
+        float y = margin;
 
         // Title
-        titleLabel->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 30.0f));
+        titleLabel->setBounds (Rectangle<float> (margin, y, bounds.getWidth() - 2 * margin, 30.0f));
         y += 40;
 
         // Info
-        infoLabel->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), 40.0f));
+        infoLabel->setBounds (Rectangle<float> (margin, y, bounds.getWidth() - 2 * margin, 40.0f));
         y += 50;
 
         // Demo area
         auto demoHeight = bounds.getHeight() - y - 100;
-        demoRoot->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (bounds.getWidth() - 2 * margin), static_cast<float> (demoHeight)));
+        demoRoot->setBounds (Rectangle<float> (margin, y, bounds.getWidth() - 2 * margin, demoHeight));
         y += demoHeight + 20;
 
         // Button
-        repaintButton->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), 200.0f, 30.0f));
+        repaintButton->setBounds (Rectangle<float> (margin, y, 200.0f, 30.0f));
 
         // Counter
-        counterLabel->setBounds (Rectangle<float> (static_cast<float> (margin + 220), static_cast<float> (y), 200.0f, 30.0f));
+        counterLabel->setBounds (Rectangle<float> (margin + 220, y, 200.0f, 30.0f));
     }
 
     // Root component that demonstrates the optimization
@@ -112,19 +110,15 @@ private:
 
         void paint (Graphics& g) override
         {
-            Logger::outputDebugString ("DemoRootComponent::paint() called - drawing green background");
-
             // Draw green rectangle background
-            g.setFillColor (Color (0, 200, 0, 255)); // Opaque green
+            g.setFillColor (Color (255, 0, 200, 0)); // Opaque green
             g.fillAll();
         }
 
         void paintOverChildren (Graphics& g) override
         {
-            Logger::outputDebugString ("DemoRootComponent::paintOverChildren() called - drawing red diagonal");
-
             // Draw red diagonal line over children
-            g.setStrokeColor (Color (255, 0, 0, 255)); // Red
+            g.setStrokeColor (Color (255, 255, 0, 0)); // Red
             g.setStrokeWidth (3.0f);
 
             auto bounds = getLocalBounds();
@@ -175,19 +169,15 @@ private:
 
             void paint (Graphics& g) override
             {
-                Logger::outputDebugString ("TransparentChildComponent::paint() called - drawing alpha circle");
-
                 // Draw semi-transparent circle
-                g.setFillColor (Color (255, 255, 0, 128)); // Semi-transparent yellow
+                g.setFillColor (Color (128, 255, 255, 0)); // Semi-transparent yellow
                 g.fillEllipse (getLocalBounds());
             }
 
             void paintOverChildren (Graphics& g) override
             {
-                Logger::outputDebugString ("TransparentChildComponent::paintOverChildren() called - drawing blue diagonal");
-
                 // Draw blue diagonal in opposite direction
-                g.setStrokeColor (Color (0, 0, 255, 255)); // Blue
+                g.setStrokeColor (Color (255, 0, 0, 255)); // Blue
                 g.setStrokeWidth (2.0f);
 
                 auto bounds = getLocalBounds();
@@ -207,10 +197,8 @@ private:
 
             void paint (Graphics& g) override
             {
-                Logger::outputDebugString ("OpaqueSiblingComponent::paint() called - drawing blue rectangle");
-
                 // Draw opaque blue rectangle
-                g.setFillColor (Color (0, 100, 255, 255)); // Opaque blue
+                g.setFillColor (Color (255, 0, 100, 255)); // Opaque blue
                 g.fillAll();
 
                 // Add some text to show this is the opaque component
