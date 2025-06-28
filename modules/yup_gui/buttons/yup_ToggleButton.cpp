@@ -23,20 +23,22 @@ namespace yup
 {
 
 //==============================================================================
-const Identifier ToggleButton::Colors::backgroundColorId = "toggleButtonBackground";
-const Identifier ToggleButton::Colors::backgroundToggledColorId = "toggleButtonBackgroundToggled";
-const Identifier ToggleButton::Colors::textColorId = "toggleButtonText";
-const Identifier ToggleButton::Colors::textToggledColorId = "toggleButtonTextToggled";
-const Identifier ToggleButton::Colors::borderColorId = "toggleButtonBorder";
-const Identifier ToggleButton::Colors::borderToggledColorId = "toggleButtonBorderToggled";
+const Identifier ToggleButton::Style::backgroundColorId = "toggleButtonBackground";
+const Identifier ToggleButton::Style::backgroundToggledColorId = "toggleButtonBackgroundToggled";
+const Identifier ToggleButton::Style::textColorId = "toggleButtonText";
+const Identifier ToggleButton::Style::textToggledColorId = "toggleButtonTextToggled";
+const Identifier ToggleButton::Style::borderColorId = "toggleButtonBorder";
+const Identifier ToggleButton::Style::borderToggledColorId = "toggleButtonBorderToggled";
 
 //==============================================================================
+
 ToggleButton::ToggleButton (StringRef componentID)
     : Button (componentID)
 {
 }
 
 //==============================================================================
+
 void ToggleButton::setToggleState (bool shouldBeToggled, NotificationType notification)
 {
     if (toggleState != shouldBeToggled)
@@ -65,51 +67,14 @@ void ToggleButton::setButtonText (String newText)
 }
 
 //==============================================================================
+
 void ToggleButton::paintButton (Graphics& g)
 {
-    auto bounds = getLocalBounds();
-
-    // Get colors based on toggle state
-    auto bgColor = toggleState
-                     ? findColor (Colors::backgroundToggledColorId).value_or (Color (0xff4a90e2))
-                     : findColor (Colors::backgroundColorId).value_or (Color (0xfff0f0f0));
-
-    auto textColor = toggleState
-                       ? findColor (Colors::textToggledColorId).value_or (Color (0xffffffff))
-                       : findColor (Colors::textColorId).value_or (Color (0xff333333));
-
-    auto borderColor = toggleState
-                         ? findColor (Colors::borderToggledColorId).value_or (Color (0xff357abd))
-                         : findColor (Colors::borderColorId).value_or (Color (0xffcccccc));
-
-    // Adjust colors for button state
-    if (isButtonDown())
-    {
-        bgColor = bgColor.darker (0.1f);
-        borderColor = borderColor.darker (0.1f);
-    }
-    else if (isButtonOver())
-    {
-        bgColor = bgColor.brighter (0.05f);
-        borderColor = borderColor.brighter (0.05f);
-    }
-
-    // Draw background
-    g.setFillColor (bgColor);
-    g.fillRoundedRect (bounds, 4.0f);
-
-    // Draw border
-    g.setStrokeColor (borderColor);
-    g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
-
-    // Draw text
-    if (buttonText.isNotEmpty())
-    {
-        g.setFillColor (textColor);
-        g.fillFittedText (styledText, bounds);
-    }
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
+
+//==============================================================================
 
 void ToggleButton::resized()
 {
@@ -129,6 +94,8 @@ void ToggleButton::resized()
     }
 }
 
+//==============================================================================
+
 void ToggleButton::mouseUp (const MouseEvent& event)
 {
     if (getLocalBounds().contains (event.getPosition()))
@@ -136,6 +103,8 @@ void ToggleButton::mouseUp (const MouseEvent& event)
 
     Button::mouseUp (event);
 }
+
+//==============================================================================
 
 void ToggleButton::focusGained()
 {

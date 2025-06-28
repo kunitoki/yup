@@ -939,6 +939,14 @@ public:
     virtual void refreshDisplay (double lastFrameTimeSeconds);
 
     //==============================================================================
+
+    void setInterceptsMouseClicks (bool allowClicksOnItself, bool allowClicksOnChildren);
+
+    bool doesInterceptMouseClickOnSelf() const;
+
+    bool doesInterceptMouseClickOnChildren() const;
+
+    //==============================================================================
     /**
         Called when the mouse enters the component.
 
@@ -1190,11 +1198,13 @@ private:
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
         bool isRepainting : 1;
+        bool interceptsClicksOnSelf : 1;
+        bool interceptsClicksOnChildren : 1;
     };
 
     union
     {
-        uint32 optionsValue;
+        uint64 optionsValue;
         Options options;
     };
 

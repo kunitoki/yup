@@ -24,8 +24,8 @@ namespace yup
 
 //==============================================================================
 
-const Identifier Label::Colors::fillColorId { "Label_fillColorId" };
-const Identifier Label::Colors::strokeColorId { "Label_strokeColorId" };
+const Identifier Label::Style::fillColorId { "Label_fillColorId" };
+const Identifier Label::Style::strokeColorId { "Label_strokeColorId" };
 
 //==============================================================================
 

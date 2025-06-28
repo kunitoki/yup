@@ -1880,6 +1880,13 @@ public:
         return { xy.roundToInt(), size.roundToInt() };
     }
 
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto toNearestInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<ValueType>>
+    {
+        return { xy.toNearestInt(), size.toNearestInt() };
+    }
+
     //==============================================================================
     /** Multiplies the size and position of the rectangle by a scale factor.
 

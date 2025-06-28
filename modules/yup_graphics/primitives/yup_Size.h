@@ -464,6 +464,13 @@ public:
         return { yup::roundToInt (width), yup::roundToInt (height) };
     }
 
+    template <class T = ValueType>
+    [[nodiscard]] auto toNearestInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size<ValueType>>
+    {
+        return { static_cast<ValueType> (yup::roundToInt (width)), static_cast<ValueType> (yup::roundToInt (height)) };
+    }
+
     //==============================================================================
     /** Convert Size to Point
 

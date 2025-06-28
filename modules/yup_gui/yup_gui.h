@@ -85,6 +85,7 @@
 #include "buttons/yup_Button.h"
 #include "buttons/yup_TextButton.h"
 #include "buttons/yup_ToggleButton.h"
+#include "buttons/yup_SwitchButton.h"
 #include "buttons/yup_ImageButton.h"
 #include "widgets/yup_TextEditor.h"
 #include "widgets/yup_Label.h"

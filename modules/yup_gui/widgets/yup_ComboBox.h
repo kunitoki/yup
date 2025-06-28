@@ -150,7 +150,7 @@ public:
     virtual void comboBoxChanged() {}
 
     //==============================================================================
-    struct Colors
+    struct Style
     {
         static const Identifier backgroundColorId;
         static const Identifier textColorId;

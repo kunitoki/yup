@@ -37,7 +37,7 @@ public:
 
     //==============================================================================
     /** Color identifiers used by the text editor. */
-    struct Colors
+    struct Style
     {
         static const Identifier backgroundColorId;
         static const Identifier backgroundPressedColorId;
@@ -54,7 +54,6 @@ public:
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
-
     /** @internal */
     StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 

@@ -47,19 +47,20 @@ private:
         addAndMakeVisible (textButton.get());
 
         // Toggle Button
-        /*
         toggleButton = std::make_unique<ToggleButton> ("toggleButton");
         toggleButton->setButtonText ("Toggle Button");
         toggleButton->onClick = [this] { updateStatus ("Toggle Button: " + String (toggleButton->getToggleState() ? "ON" : "OFF")); };
         addAndMakeVisible (toggleButton.get());
-        */
 
-        // Drawable Button
-        /*
-        drawableButton = std::make_unique<DrawableButton> ("drawableButton");
+        // Switch Button
+        switchButton = std::make_unique<SwitchButton> ("switchButton");
+        switchButton->onClick = [this] { updateStatus ("Switch Button: " + String (switchButton->getSwitchState() ? "ON" : "OFF")); };
+        addAndMakeVisible (switchButton.get());
+
+        // Image Button
+        //imageButton = std::make_unique<ImageButton> ("imageButton");
         // Note: You would set images here with setImages()
-        addAndMakeVisible (drawableButton.get());
-        */
+        //addAndMakeVisible (imageButton.get());
 
         // Labels
         titleLabel = std::make_unique<Label> ("titleLabel");
@@ -141,8 +142,9 @@ private:
         // Buttons row
         auto buttonWidth = 120;
         textButton->setBounds (Rectangle<float> (static_cast<float> (margin), static_cast<float> (y), static_cast<float> (buttonWidth), static_cast<float> (componentHeight)));
-        //toggleButton->setBounds (Rectangle<float> (static_cast<float>(margin + buttonWidth + spacing), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
-        //drawableButton->setBounds (Rectangle<float> (static_cast<float>(margin + 2 * (buttonWidth + spacing)), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
+        toggleButton->setBounds (Rectangle<float> (static_cast<float>(margin + buttonWidth + spacing), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
+        switchButton->setBounds (Rectangle<float> (static_cast<float>(margin + 2 * (buttonWidth + spacing)), static_cast<float>(y), 80.0f, static_cast<float>(componentHeight)));
+        //imageButton->setBounds (Rectangle<float> (static_cast<float>(margin + 3 * (buttonWidth + spacing)), static_cast<float>(y), static_cast<float>(buttonWidth), static_cast<float>(componentHeight)));
         y += componentHeight + spacing * 2;
 
         // Input widgets
@@ -184,10 +186,9 @@ private:
 private:
     Font exampleFont;
     std::unique_ptr<TextButton> textButton;
-    /*
     std::unique_ptr<ToggleButton> toggleButton;
-    std::unique_ptr<DrawableButton> drawableButton;
-    */
+    std::unique_ptr<SwitchButton> switchButton;
+    //std::unique_ptr<ImageButton> imageButton;
     std::unique_ptr<Label> titleLabel;
     std::unique_ptr<Label> statusLabel;
     std::unique_ptr<CustomComboBox> comboBox;

@@ -24,11 +24,11 @@ namespace yup
 
 //==============================================================================
 
-const Identifier ComboBox::Colors::backgroundColorId = "comboBoxBackground";
-const Identifier ComboBox::Colors::textColorId = "comboBoxText";
-const Identifier ComboBox::Colors::borderColorId = "comboBoxBorder";
-const Identifier ComboBox::Colors::arrowColorId = "comboBoxArrow";
-const Identifier ComboBox::Colors::focusedBorderColorId = "comboBoxFocusedBorder";
+const Identifier ComboBox::Style::backgroundColorId = "comboBoxBackground";
+const Identifier ComboBox::Style::textColorId = "comboBoxText";
+const Identifier ComboBox::Style::borderColorId = "comboBoxBorder";
+const Identifier ComboBox::Style::arrowColorId = "comboBoxArrow";
+const Identifier ComboBox::Style::focusedBorderColorId = "comboBoxFocusedBorder";
 
 //==============================================================================
 
@@ -160,14 +160,14 @@ void ComboBox::paint (Graphics& g)
     auto bounds = getLocalBounds();
 
     // Draw background
-    auto bgColor = findColor (Colors::backgroundColorId).value_or (Color (0xffffffff));
+    auto bgColor = findColor (Style::backgroundColorId).value_or (Color (0xffffffff));
     g.setFillColor (bgColor);
     g.fillRoundedRect (bounds, 4.0f);
 
     // Draw border
     auto borderColor = hasFocus
-                         ? findColor (Colors::focusedBorderColorId).value_or (Color (0xff4a90e2))
-                         : findColor (Colors::borderColorId).value_or (Color (0xffcccccc));
+                         ? findColor (Style::focusedBorderColorId).value_or (Color (0xff4a90e2))
+                         : findColor (Style::borderColorId).value_or (Color (0xffcccccc));
 
     g.setStrokeColor (borderColor);
     g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
@@ -184,7 +184,7 @@ void ComboBox::paint (Graphics& g)
     // Draw text
     if (displayText.isNotEmpty())
     {
-        auto textColor = findColor (Colors::textColorId).value_or (Color (0xff333333));
+        auto textColor = findColor (Style::textColorId).value_or (Color (0xff333333));
         g.setFillColor (textColor);
         g.fillFittedText (styledText, textBounds);
     }

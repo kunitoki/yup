@@ -1141,7 +1141,7 @@ void PopupMenu::paintScrollIndicators (Graphics& g)
         return;
 
     auto theme = ApplicationTheme::getGlobalTheme();
-    g.setFillColor (findColor (Colors::menuItemText).value_or (Color (0xff000000)));
+    g.setFillColor (findColor (Style::menuItemText).value_or (Color (0xff000000)));
 
     // Up arrow
     if (scrollOffset > 0.0f)

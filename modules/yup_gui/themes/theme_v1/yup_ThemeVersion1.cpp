@@ -117,14 +117,14 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     constexpr auto cornerRadius = 6.0f;
 
     // Draw background
-    auto backgroundColor = t.findColor (TextEditor::Colors::backgroundColorId).value_or (Colors::white);
+    auto backgroundColor = t.findColor (TextEditor::Style::backgroundColorId).value_or (Colors::white);
     g.setFillColor (backgroundColor);
     g.fillRoundedRect (bounds.reduced (1.0f), cornerRadius);
 
     // Draw outline
     auto outlineColor = t.hasKeyboardFocus()
-                          ? t.findColor (TextEditor::Colors::focusedOutlineColorId).value_or (Colors::cornflowerblue)
-                          : t.findColor (TextEditor::Colors::outlineColorId).value_or (Colors::gray);
+                          ? t.findColor (TextEditor::Style::focusedOutlineColorId).value_or (Colors::cornflowerblue)
+                          : t.findColor (TextEditor::Style::outlineColorId).value_or (Colors::gray);
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = t.hasKeyboardFocus() ? 2.0f : 1.0f;
@@ -135,7 +135,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw selection background
     if (t.hasSelection())
     {
-        auto selectionColor = t.findColor (TextEditor::Colors::selectionColorId).value_or (Colors::cornflowerblue.withAlpha (0.5f));
+        auto selectionColor = t.findColor (TextEditor::Style::selectionColorId).value_or (Colors::cornflowerblue.withAlpha (0.5f));
         g.setFillColor (selectionColor);
 
         // Get all selection rectangles for proper multiline selection rendering
@@ -149,7 +149,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     }
 
     // Draw text with scroll offset
-    auto textColor = t.findColor (TextEditor::Colors::textColorId).value_or (Colors::gray);
+    auto textColor = t.findColor (TextEditor::Style::textColorId).value_or (Colors::gray);
     g.setFillColor (textColor);
 
     auto scrolledTextBounds = textBounds.translated (-scrollOffset.getX(), -scrollOffset.getY());
@@ -158,7 +158,7 @@ void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEdit
     // Draw caret
     if (t.hasKeyboardFocus() && t.isCaretVisible())
     {
-        auto caretColor = t.findColor (TextEditor::Colors::caretColorId).value_or (yup::Colors::black);
+        auto caretColor = t.findColor (TextEditor::Style::caretColorId).value_or (yup::Colors::black);
         g.setFillColor (caretColor);
 
         auto caretBounds = t.getCaretBounds();
@@ -177,13 +177,13 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     if (b.isButtonDown())
     {
-        backgroundColor = b.findColor (TextButton::Colors::backgroundPressedColorId).value_or (Colors::gray);
-        textColor = b.findColor (TextButton::Colors::textPressedColorId).value_or (Colors::dimgray);
+        backgroundColor = b.findColor (TextButton::Style::backgroundPressedColorId).value_or (Colors::gray);
+        textColor = b.findColor (TextButton::Style::textPressedColorId).value_or (Colors::dimgray);
     }
     else
     {
-        backgroundColor = b.findColor (TextButton::Colors::backgroundColorId).value_or (Colors::gray);
-        textColor = b.findColor (TextButton::Colors::textColorId).value_or (Colors::white);
+        backgroundColor = b.findColor (TextButton::Style::backgroundColorId).value_or (Colors::gray);
+        textColor = b.findColor (TextButton::Style::textColorId).value_or (Colors::white);
     }
 
     if (b.isButtonOver())
@@ -198,8 +198,8 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
     // Draw modern outline
     Color outlineColor = b.hasKeyboardFocus()
-                           ? b.findColor (TextButton::Colors::outlineFocusedColorId).value_or (Colors::cornflowerblue)
-                           : b.findColor (TextButton::Colors::outlineColorId).value_or (Colors::dimgray);
+                           ? b.findColor (TextButton::Style::outlineFocusedColorId).value_or (Colors::cornflowerblue)
+                           : b.findColor (TextButton::Style::outlineColorId).value_or (Colors::dimgray);
     g.setStrokeColor (outlineColor);
 
     float strokeWidth = b.hasKeyboardFocus() ? 2.0f : 1.0f;
@@ -214,19 +214,75 @@ void paintTextButton (Graphics& g, const ApplicationTheme& theme, const TextButt
 
 //==============================================================================
 
+void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const ToggleButton& b)
+{
+    auto bounds = b.getLocalBounds();
+    constexpr auto cornerRadius = 6.0f;
+
+    // Get colors based on toggle state
+    auto bgColor = b.getToggleState()
+        ? b.findColor (ToggleButton::Style::backgroundToggledColorId).value_or (Color (0xff4a90e2))
+        : b.findColor (ToggleButton::Style::backgroundColorId).value_or (Color (0xfff0f0f0));
+
+    auto textColor = b.getToggleState()
+        ? b.findColor (ToggleButton::Style::textToggledColorId).value_or (Color (0xffffffff))
+        : b.findColor (ToggleButton::Style::textColorId).value_or (Color (0xff333333));
+
+    auto borderColor = b.getToggleState()
+        ? b.findColor (ToggleButton::Style::borderToggledColorId).value_or (Color (0xff357abd))
+        : b.findColor (ToggleButton::Style::borderColorId).value_or (Color (0xffcccccc));
+
+    // Adjust colors for button state
+    if (b.isButtonDown())
+    {
+        bgColor = bgColor.darker (0.1f);
+        borderColor = borderColor.darker (0.1f);
+    }
+    else if (b.isButtonOver())
+    {
+        bgColor = bgColor.brighter (0.05f);
+        borderColor = borderColor.brighter (0.05f);
+    }
+
+    // Draw background
+    g.setFillColor (bgColor);
+    g.fillRoundedRect (bounds, cornerRadius);
+
+    // Draw border
+    g.setStrokeColor (borderColor);
+    g.setStrokeWidth (b.hasKeyboardFocus() ? 2.0f : 1.0f);
+    g.strokeRoundedRect (bounds.reduced (0.5f), cornerRadius);
+
+    // Draw text
+    if (b.getButtonText().isNotEmpty())
+    {
+        g.setFillColor (textColor);
+        g.fillFittedText (b.getStyledText(), bounds);
+    }
+}
+
+//==============================================================================
+
+void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
+{
+    // SwitchButton paints itself
+}
+
+//==============================================================================
+
 void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 {
     auto& styledText = l.getStyledText();
     const auto bounds = l.getLocalBounds();
 
-    if (const auto strokeColor = l.findColor (Label::Colors::strokeColorId); strokeColor && ! strokeColor->isTransparent())
+    if (const auto strokeColor = l.findColor (Label::Style::strokeColorId); strokeColor && ! strokeColor->isTransparent())
     {
         g.setStrokeColor (*strokeColor);
         g.setStrokeWidth (l.getStrokeWidth());
         g.strokeFittedText (styledText, bounds);
     }
 
-    const auto fillColor = l.findColor (Label::Colors::fillColorId).value_or (Colors::white);
+    const auto fillColor = l.findColor (Label::Style::fillColorId).value_or (Colors::white);
     g.setFillColor (fillColor);
     g.fillFittedText (styledText, bounds);
 }
@@ -250,11 +306,11 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
     }
 
     // Draw menu background
-    g.setFillColor (p.findColor (PopupMenu::Colors::menuBackground).value_or (Color (0xff2a2a2a)));
+    g.setFillColor (p.findColor (PopupMenu::Style::menuBackground).value_or (Color (0xff2a2a2a)));
     g.fillRoundedRect (localBounds, 4.0f);
 
     // Draw border
-    g.setStrokeColor (p.findColor (PopupMenu::Colors::menuBorder).value_or (Color (0xff555555)));
+    g.setStrokeColor (p.findColor (PopupMenu::Style::menuBorder).value_or (Color (0xff555555)));
     g.setStrokeWidth (1.0f);
     g.strokeRoundedRect (localBounds.reduced (0.5f), 4.0f);
 
@@ -286,7 +342,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         // Draw hover background
         if (item->isHovered && ! item->isSeparator() && item->isEnabled)
         {
-            g.setFillColor (p.findColor (PopupMenu::Colors::menuItemBackgroundHighlighted).value_or (Color (0xff404040)));
+            g.setFillColor (p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted).value_or (Color (0xff404040)));
             g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
         }
 
@@ -294,16 +350,16 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         {
             // Draw separator line
             auto lineY = rect.getCenterY();
-            g.setStrokeColor (p.findColor (PopupMenu::Colors::menuBorder).value_or (Color (0xff555555)));
+            g.setStrokeColor (p.findColor (PopupMenu::Style::menuBorder).value_or (Color (0xff555555)));
             g.setStrokeWidth (1.0f);
             g.strokeLine (rect.getX() + 8.0f, lineY, rect.getRight() - 8.0f, lineY);
         }
         else
         {
             // Draw menu item text
-            auto textColor = item->textColor.value_or (p.findColor (PopupMenu::Colors::menuItemText).value_or (Color (0xffffffff)));
+            auto textColor = item->textColor.value_or (p.findColor (PopupMenu::Style::menuItemText).value_or (Color (0xffffffff)));
             if (! item->isEnabled)
-                textColor = p.findColor (PopupMenu::Colors::menuItemTextDisabled).value_or (Color (0xff808080));
+                textColor = p.findColor (PopupMenu::Style::menuItemTextDisabled).value_or (Color (0xff808080));
 
             g.setFillColor (textColor);
 
@@ -378,11 +434,13 @@ ApplicationTheme::Ptr createThemeVersion1()
 
     theme->setComponentStyle<Slider> (ComponentStyle::createStyle<Slider> (paintSlider));
     theme->setComponentStyle<TextButton> (ComponentStyle::createStyle<TextButton> (paintTextButton));
+    theme->setComponentStyle<ToggleButton> (ComponentStyle::createStyle<ToggleButton> (paintToggleButton));
+    theme->setComponentStyle<SwitchButton> (ComponentStyle::createStyle<SwitchButton> (paintSwitchButton));
     theme->setComponentStyle<TextEditor> (ComponentStyle::createStyle<TextEditor> (paintTextEditor));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
-    theme->setColor (Label::Colors::fillColorId, Colors::white);
-    theme->setColor (Label::Colors::strokeColorId, Colors::transparentBlack);
+    theme->setColor (Label::Style::fillColorId, Colors::white);
+    theme->setColor (Label::Style::strokeColorId, Colors::transparentBlack);
 
     theme->setComponentStyle<PopupMenu> (ComponentStyle::createStyle<PopupMenu> (paintPopupMenu));
 

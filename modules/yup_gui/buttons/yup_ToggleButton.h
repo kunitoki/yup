@@ -75,7 +75,7 @@ public:
     virtual void toggleStateChanged() {}
 
     //==============================================================================
-    struct Colors
+    struct Style
     {
         static const Identifier backgroundColorId;
         static const Identifier backgroundToggledColorId;
@@ -96,6 +96,8 @@ public:
     void focusGained() override;
     /** @internal */
     void focusLost() override;
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     String buttonText;

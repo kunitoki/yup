@@ -255,7 +255,7 @@ public:
 
     //==============================================================================
     /** Color identifiers used by the text editor. */
-    struct Colors
+    struct Style
     {
         static const Identifier backgroundColorId;
         static const Identifier textColorId;

@@ -137,6 +137,7 @@
 #include "buttons/yup_TextButton.cpp"
 #include "buttons/yup_ToggleButton.cpp"
 #include "buttons/yup_ImageButton.cpp"
+#include "buttons/yup_SwitchButton.cpp"
 #include "widgets/yup_TextEditor.cpp"
 #include "widgets/yup_Label.cpp"
 #include "widgets/yup_Slider.cpp"
