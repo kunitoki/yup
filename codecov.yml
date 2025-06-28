@@ -114,7 +114,7 @@ ignore:
   - "cmake/**/*"
   - "docs/**/*"
   - "standalone/**/*"
-  - "**/modules/*/native/*"
+  - "modules/*/native/*"
 
 comment:
   layout: "header, reach, components, diff, flags, files, footer"

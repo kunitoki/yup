@@ -515,7 +515,7 @@ void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
 
-    if (rect.isEmpty() || ! isShowing())
+    if (rect.isEmpty() || ! isShowing())
         return;
 
     internalRepaint (rect);
