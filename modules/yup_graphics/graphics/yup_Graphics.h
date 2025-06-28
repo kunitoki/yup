@@ -393,6 +393,10 @@ public:
     void strokeRoundedRect (const Rectangle<float>& r, float radius);
 
     //==============================================================================
+
+    void fillEllipse (const Rectangle<float>& r);
+
+    //==============================================================================
     /** Draws a path with a specified thickness.
 
         @param path The path to draw.

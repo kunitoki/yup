@@ -32,6 +32,7 @@ const Identifier Label::Style::strokeColorId { "Label_strokeColorId" };
 Label::Label (StringRef componentID)
     : Component (componentID)
 {
+    setOpaque (false);
 }
 
 //==============================================================================

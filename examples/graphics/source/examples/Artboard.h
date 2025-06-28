@@ -30,6 +30,7 @@ public:
     ArtboardDemo()
     {
         setWantsKeyboardFocus (true);
+        setOpaque (false);
     }
 
     bool loadArtboard()

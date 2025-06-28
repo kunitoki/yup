@@ -161,6 +161,8 @@ public:
     AudioExample (const yup::Font& font)
         : Component ("AudioExample")
     {
+        setOpaque (false);
+
         // Initialize the audio device
         deviceManager.initialiseWithDefaultDevices (0, 2);
 

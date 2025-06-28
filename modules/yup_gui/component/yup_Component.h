@@ -571,6 +571,25 @@ public:
 
     //==============================================================================
     /**
+        Check if the component is opaque.
+
+        An opaque component fully covers its background, allowing for rendering optimizations.
+        When an area is fully covered by an opaque component (and its children), rendering
+        can start from that component instead of from the root.
+
+        @return True if the component is opaque, false otherwise.
+     */
+    bool isOpaque() const;
+
+    /**
+        Set the opaque state of the component.
+
+        @param shouldBeOpaque True if the component should be opaque, false otherwise.
+     */
+    void setOpaque (bool shouldBeOpaque);
+
+    //==============================================================================
+    /**
         Enable or disable unclipped rendering for the component.
 
         @param shouldBeEnabled True if the component should be rendered unclipped, false otherwise.
@@ -1184,6 +1203,9 @@ private:
 
     void updateMouseCursor();
 
+    // Opaque rendering optimization helper
+    Component* findTopmostOpaqueChild (const Rectangle<float>& area);
+
     friend class ComponentNative;
     friend class SDL2ComponentNative;
     friend class WeakReference<Component>;
@@ -1210,6 +1232,7 @@ private:
         bool hasFrame : 1;
         bool onDesktop : 1;
         bool isFullScreen : 1;
+        bool isTransparent : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
         bool isRepainting : 1;

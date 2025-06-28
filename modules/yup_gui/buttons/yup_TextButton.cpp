@@ -37,8 +37,7 @@ TextButton::TextButton (StringRef componentID)
     : Button (componentID)
     , buttonText (componentID)
 {
-    setWantsKeyboardFocus (true);
-    setMouseCursor (MouseCursor::Hand);
+    setOpaque (false);
 }
 
 //==============================================================================

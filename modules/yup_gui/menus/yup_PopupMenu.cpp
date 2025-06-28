@@ -53,20 +53,21 @@ void installGlobalMouseListener()
                 bool clickedInsidePopup = false;
                 for (const auto& popup : activePopups)
                 {
-                    if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
-                    {
-                        if (popupMenu->getScreenBounds().contains (globalPos))
-                        {
-                            clickedInsidePopup = true;
-                            break;
-                        }
+                    auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get());
+                    if (popupMenu == nullptr)
+                        continue;
 
-                        // Also check if clicked inside any submenu
-                        if (popupMenu->submenuContains (globalPos))
-                        {
-                            clickedInsidePopup = true;
-                            break;
-                        }
+                    if (popupMenu->getScreenBounds().contains (globalPos))
+                    {
+                        clickedInsidePopup = true;
+                        break;
+                    }
+
+                    // Also check if clicked inside any submenu
+                    if (popupMenu->submenuContains (globalPos))
+                    {
+                        clickedInsidePopup = true;
+                        break;
                     }
                 }
 

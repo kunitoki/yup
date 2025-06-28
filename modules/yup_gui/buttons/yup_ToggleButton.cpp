@@ -35,6 +35,7 @@ const Identifier ToggleButton::Style::borderToggledColorId = "toggleButtonBorder
 ToggleButton::ToggleButton (StringRef componentID)
     : Button (componentID)
 {
+    setOpaque (false);
 }
 
 //==============================================================================

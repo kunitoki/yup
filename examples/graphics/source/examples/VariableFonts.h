@@ -30,6 +30,8 @@ public:
         : Component ("VariableFontsExample")
         , font (font)
     {
+        setOpaque (false);
+
         text =
             "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non aliquam risus, eu molestie sem. "
             "Proin fringilla porttitor metus at pharetra. Nunc quis lacus gravida justo pellentesque dignissim a "

@@ -28,6 +28,8 @@ class WidgetsDemo : public Component
 public:
     WidgetsDemo()
     {
+        setOpaque (false);
+
         auto theme = ApplicationTheme::getGlobalTheme();
         exampleFont = theme->getDefaultFont();
 

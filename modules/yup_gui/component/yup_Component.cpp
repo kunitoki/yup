@@ -479,6 +479,18 @@ float Component::getOpacity() const
 
 //==============================================================================
 
+bool Component::isOpaque() const
+{
+    return ! options.isTransparent;
+}
+
+void Component::setOpaque (bool shouldBeOpaque)
+{
+    options.isTransparent = ! shouldBeOpaque;
+}
+
+//==============================================================================
+
 void Component::enableRenderingUnclipped (bool shouldBeEnabled)
 {
     options.unclippedRendering = shouldBeEnabled;
@@ -916,7 +928,10 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint (Graphics& g) {}
+void Component::paint (Graphics& g)
+{
+    jassert (! isOpaque()); // If your component is opaque, you need to paint it !
+}
 
 void Component::paintOverChildren (Graphics& g) {}
 
@@ -1111,14 +1126,26 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         g.setTransform (transform);
 
+        if (auto opaqueChild = findTopmostOpaqueChild (boundsToRedraw))
         {
-            const auto paintState = g.saveState();
-
-            paint (g);
+            if (auto parentOfOpaque = opaqueChild->getParentComponent())
+            {
+                auto opaqueIndex = parentOfOpaque->getIndexOfChildComponent (opaqueChild);
+                for (int i = opaqueIndex; i < parentOfOpaque->children.size(); ++i)
+                    parentOfOpaque->children.getUnchecked(i)->internalPaint (g, boundsToRedraw, renderContinuous);
+            }
         }
+        else
+        {
+            {
+                const auto paintState = g.saveState();
 
-        for (auto child : children)
-            child->internalPaint (g, boundsToRedraw, renderContinuous);
+                paint (g);
+            }
+
+            for (auto child : children)
+                child->internalPaint (g, boundsToRedraw, renderContinuous);
+        }
 
         paintOverChildren (g);
     }
@@ -1136,6 +1163,41 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         debugColor = Color::opaqueRandom();
     }
 #endif
+}
+
+Component* Component::findTopmostOpaqueChild (const Rectangle<float>& area)
+{
+    // Search from back to front (topmost to bottommost in z-order) for an opaque descendant
+    // that fully covers the repaint area
+    for (int i = children.size() - 1; i >= 0; --i)
+    {
+        auto child = children[i];
+        if (! child->isVisible())
+            continue;
+
+        auto childBounds = child->getBoundsRelativeToTopLevelComponent();
+
+        // First recursively check if any descendant of this child is opaque and covers the area
+        auto opaqueDescendant = child->findTopmostOpaqueChild (area);
+        if (opaqueDescendant != nullptr)
+        {
+            // Found an opaque descendant - return it (deepest first)
+            return opaqueDescendant;
+        }
+
+        // Check if this child itself is opaque and covers the area
+        if (child->isOpaque() &&
+            child->getOpacity() >= 1.0f &&
+            ! child->isTransformed() &&
+            childBounds.contains (area))
+        {
+            // This child covers the area
+            return child;
+        }
+    }
+
+    // No opaque descendant found that covers the area
+    return nullptr;
 }
 
 //==============================================================================

@@ -34,8 +34,7 @@ SwitchButton::SwitchButton (StringRef componentID, bool isVertical)
     : Button (componentID)
     , isVerticalValue (isVertical)
 {
-    setWantsKeyboardFocus (true);
-    setMouseCursor (MouseCursor::Hand);
+    setOpaque (false);
 }
 
 //==============================================================================

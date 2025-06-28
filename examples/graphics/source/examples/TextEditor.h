@@ -27,6 +27,8 @@ public:
     TextEditorDemo()
         : Component ("TextEditorDemo")
     {
+        setOpaque (false);
+
         // Create the editors
         singleLineEditor = std::make_unique<yup::TextEditor> ("singleLineEditor");
         multiLineEditor = std::make_unique<yup::TextEditor> ("multiLineEditor");

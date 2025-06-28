@@ -32,6 +32,8 @@ public:
         , statusLabel ("statusLabel")
         , currentPlacementIndex (0)
     {
+        setOpaque (false);
+
         addAndMakeVisible (statusLabel);
         statusLabel.setTitle ("Click the button to test placements. Right-click for submenus and scrollable menus.");
 

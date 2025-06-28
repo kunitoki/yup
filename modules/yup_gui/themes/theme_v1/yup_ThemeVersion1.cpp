@@ -103,11 +103,16 @@ void paintSlider (Graphics& g, const ApplicationTheme& theme, const Slider& s)
 
     if (s.hasKeyboardFocus())
     {
-        g.setStrokeColor (Color (0xffff5f2b)); // TODO - findColor
-        g.setStrokeWidth (s.proportionOfWidth (0.0175f));
-        g.strokeRect (s.getLocalBounds());
+        Path focusPath;
+        focusPath.addEllipse (s.getLocalBounds().reduced (2));
+
+        g.setStrokeColor (Colors::cornflowerblue); // TODO - findColor
+        g.setStrokeWidth (2.0f);
+        g.strokePath(focusPath);
     }
 }
+
+//==============================================================================
 
 void paintTextEditor (Graphics& g, const ApplicationTheme& theme, const TextEditor& t)
 {
@@ -221,7 +226,7 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 
     // Get colors based on toggle state
     auto bgColor = b.getToggleState()
-        ? b.findColor (ToggleButton::Style::backgroundToggledColorId).value_or (Color (0xff4a90e2))
+        ? b.findColor (ToggleButton::Style::backgroundToggledColorId).value_or (Colors::cornflowerblue)
         : b.findColor (ToggleButton::Style::backgroundColorId).value_or (Color (0xfff0f0f0));
 
     auto textColor = b.getToggleState()
@@ -275,7 +280,7 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
 
     // Fill background based on switch state
     auto bgColor = s.getToggleState()
-                       ? s.findColor (SwitchButton::Style::switchOnBackgroundColorId).value_or (Color (0xff4a90e2))
+                       ? s.findColor (SwitchButton::Style::switchOnBackgroundColorId).value_or (Colors::cornflowerblue)
                        : s.findColor (SwitchButton::Style::switchOffBackgroundColorId).value_or (Color (0xff333333));
 
     g.setFillColor (bgColor);
@@ -368,7 +373,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         // Draw hover background
         if (item->isHovered && ! item->isSeparator() && item->isEnabled)
         {
-            g.setFillColor (p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted).value_or (Color (0xff404040)));
+            g.setFillColor (p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted).value_or (Colors::cornflowerblue));
             g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
         }
 

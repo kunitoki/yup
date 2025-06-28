@@ -29,6 +29,8 @@ public:
         , openFile ("Open File")
         , openMultipleFiles ("Multiple Files")
     {
+        setOpaque (false);
+
         addAndMakeVisible (openFile);
         openFile.onClick = [this]
         {

@@ -29,6 +29,7 @@ public:
     PathsExample()
         : Component ("PathsExample")
     {
+        setOpaque (false);
     }
 
     void paint (yup::Graphics& g) override

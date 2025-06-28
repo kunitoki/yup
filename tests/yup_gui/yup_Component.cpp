@@ -763,3 +763,87 @@ TEST_F (ComponentTest, MouseCursorMethods)
     child->setMouseCursor (MouseCursor::Crosshair);
     EXPECT_EQ (child->getMouseCursor().getType(), MouseCursor::Crosshair);
 }
+
+// =============================================================================
+
+TEST_F (ComponentTest, OpaqueMethods)
+{
+    root->setVisible (true);
+    parent->setVisible (true);
+    child->setVisible (true);
+
+    // Test default opaque state (should be true by default)
+    EXPECT_TRUE (child->isOpaque());
+    EXPECT_TRUE (parent->isOpaque());
+    EXPECT_TRUE (root->isOpaque());
+
+    // Test setting opaque state
+    child->setOpaque (false);
+    EXPECT_FALSE (child->isOpaque());
+
+    child->setOpaque (true);
+    EXPECT_TRUE (child->isOpaque());
+
+    // Test that changing opaque state doesn't affect other properties
+    child->setOpaque (false);
+    EXPECT_TRUE (child->isVisible());
+    EXPECT_TRUE (child->isEnabled());
+    EXPECT_FLOAT_EQ (child->getOpacity(), 1.0f);
+}
+
+TEST_F (ComponentTest, OpaqueConstructorBehavior)
+{
+    // Test that new components are opaque by default
+    auto newComponent1 = std::make_unique<Component>();
+    EXPECT_TRUE (newComponent1->isOpaque());
+
+    auto newComponent2 = std::make_unique<Component> ("test_id");
+    EXPECT_TRUE (newComponent2->isOpaque());
+}
+
+TEST_F (ComponentTest, OpaqueStateIndependence)
+{
+    // Test that opaque state is independent for each component
+    child->setOpaque (false);
+    parent->setOpaque (true);
+    root->setOpaque (false);
+
+    EXPECT_FALSE (child->isOpaque());
+    EXPECT_TRUE (parent->isOpaque());
+    EXPECT_FALSE (root->isOpaque());
+
+    // Test that parent opaque state doesn't affect child
+    auto grandChild = std::make_unique<Component> ("grandChild");
+    child->addChildComponent (*grandChild);
+
+    EXPECT_TRUE (grandChild->isOpaque()); // Should be default true
+    child->setOpaque (false);
+    EXPECT_TRUE (grandChild->isOpaque()); // Should remain unchanged
+}
+
+TEST_F (ComponentTest, OpaqueStateWithMultipleChildren)
+{
+    // Create multiple children with different opaque states
+    auto child1 = std::make_unique<Component> ("child1");
+    auto child2 = std::make_unique<Component> ("child2");
+    auto child3 = std::make_unique<Component> ("child3");
+
+    child1->setOpaque (true);
+    child2->setOpaque (false);
+    child3->setOpaque (true);
+
+    parent->addChildComponent (*child1);
+    parent->addChildComponent (*child2);
+    parent->addChildComponent (*child3);
+
+    // Verify each child maintains its own opaque state
+    EXPECT_TRUE (child1->isOpaque());
+    EXPECT_FALSE (child2->isOpaque());
+    EXPECT_TRUE (child3->isOpaque());
+
+    // Change one and verify others are unaffected
+    child1->setOpaque (false);
+    EXPECT_FALSE (child1->isOpaque());
+    EXPECT_FALSE (child2->isOpaque());
+    EXPECT_TRUE (child3->isOpaque());
+}

@@ -36,6 +36,7 @@
 #include "examples/Audio.h"
 #include "examples/LayoutFonts.h"
 #include "examples/FileChooser.h"
+#include "examples/OpaqueDemo.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
 #include "examples/TextEditor.h"
@@ -203,6 +204,19 @@ public:
             components.add (std::move (artboard));
         }
 
+        {
+            auto button = std::make_unique<yup::TextButton> ("Opaque Demo");
+            button->onClick = [this, number = counter++]
+            {
+                selectComponent (number);
+            };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
+            components.add (std::make_unique<yup::OpaqueDemo>());
+            addChildComponent (components.getLast());
+        }
+
         selectComponent (0);
 
         startTimerHz (10);
@@ -215,21 +229,34 @@ public:
     void resized() override
     {
         constexpr auto margin = 5;
+        constexpr auto buttonsPerRow = 6;
 
         auto bounds = getLocalBounds().reduced (margin);
-        auto buttonBounds = bounds.removeFromTop (30);
+        auto initialBounds = bounds;
+        auto buttonBounds = initialBounds;
 
         const auto totalMargin = margin * (buttons.size() - 1);
-        const auto buttonWidth = (buttonBounds.getWidth() - totalMargin) / buttons.size();
+        const auto buttonWidth = (bounds.getWidth() - totalMargin) / buttonsPerRow;
+
+        int buttonsInRow = 0;
         for (auto& button : buttons)
         {
+            if (buttonsInRow == 0)
+                buttonBounds = initialBounds.removeFromTop (30);
+
             button->setBounds (buttonBounds.removeFromLeft (buttonWidth));
             buttonBounds.removeFromLeft (margin);
+
+            if (++buttonsInRow == buttonsPerRow)
+            {
+                initialBounds.removeFromTop (margin);
+                buttonsInRow = 0;
+            }
         }
 
-        bounds.removeFromTop (margin);
+        initialBounds.removeFromTop (margin);
         for (auto& component : components)
-            component->setBounds (bounds);
+            component->setBounds (initialBounds);
     }
 
     void paint (yup::Graphics& g) override

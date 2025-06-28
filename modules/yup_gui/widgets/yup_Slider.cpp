@@ -28,6 +28,8 @@ Slider::Slider (StringRef componentID)
     : Component (componentID)
 {
     setMouseCursor (MouseCursor::Hand);
+    setWantsKeyboardFocus (true);
+    setOpaque (false);
 
     setValue (defaultValue, dontSendNotification);
 }

@@ -30,6 +30,7 @@ public:
         : Component ("LayoutFontsExample")
         , font (font)
     {
+        setOpaque (false);
     }
 
     void resized() override
