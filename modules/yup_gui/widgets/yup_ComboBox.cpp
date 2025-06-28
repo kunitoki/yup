@@ -288,8 +288,8 @@ void ComboBox::updateDisplayText()
 
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
-    auto modifier = styledText.startUpdate();
     {
+        auto modifier = styledText.startUpdate();
         modifier.setMaxSize (textBounds.getSize());
         modifier.setHorizontalAlign (StyledText::left);
         modifier.setVerticalAlign (StyledText::middle);
