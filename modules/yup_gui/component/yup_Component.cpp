@@ -578,7 +578,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
-    attachedToNative();
+    internalAttachedToNative();
 
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
@@ -594,7 +594,7 @@ void Component::removeFromDesktop()
 
     native.reset();
 
-    detachedFromNative();
+    internalDetachedFromNative();
 }
 
 //==============================================================================
@@ -1342,6 +1342,44 @@ void Component::internalContentScaleChanged (float dpiScale)
 void Component::internalUserTriedToCloseWindow()
 {
     userTriedToCloseWindow();
+}
+
+//==============================================================================
+
+void Component::internalAttachedToNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    attachedToNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalAttachedToNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+void Component::internalDetachedFromNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    detachedFromNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
 }
 
 //==============================================================================

@@ -1156,6 +1156,8 @@ private:
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
+    void internalAttachedToNative();
+    void internalDetachedFromNative();
 
     void updateMouseCursor();
 

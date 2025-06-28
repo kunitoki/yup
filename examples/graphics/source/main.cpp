@@ -28,13 +28,18 @@
 #include <memory>
 #include <cmath> // For sine wave generation
 
+#if YUP_ANDROID
+#include <BinaryData.h>
+#endif
+
+#include "examples/Artboard.h"
 #include "examples/Audio.h"
 #include "examples/LayoutFonts.h"
 #include "examples/FileChooser.h"
-#include "examples/VariableFonts.h"
-#include "examples/TextEditor.h"
 #include "examples/Paths.h"
 #include "examples/PopupMenu.h"
+#include "examples/TextEditor.h"
+#include "examples/VariableFonts.h"
 #include "examples/Widgets.h"
 
 //==============================================================================
@@ -183,9 +188,23 @@ public:
             addChildComponent (components.getLast());
         }
 
+        {
+            auto button = std::make_unique<yup::TextButton> ("Artboard");
+            button->onClick = [this, number = counter++]
+            {
+                selectComponent (number);
+            };
+            addAndMakeVisible (button.get());
+            buttons.add (std::move (button));
+
+            auto artboard = std::make_unique<yup::ArtboardDemo>();
+            addChildComponent (artboard.get());
+            jassert (artboard->loadArtboard());
+            components.add (std::move (artboard));
+        }
+
         selectComponent (0);
 
-        // Timer
         startTimerHz (10);
     }
 
@@ -236,10 +255,6 @@ public:
     {
         switch (keys.getKey())
         {
-            case yup::KeyPress::textQKey:
-                std::cout << 'a';
-                break;
-
             case yup::KeyPress::escapeKey:
                 userTriedToCloseWindow();
                 break;
