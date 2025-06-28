@@ -111,9 +111,15 @@ private:
     //==============================================================================
     bool toggleState = false;
     bool isVerticalValue = false;
-    int millisecondsToSpendMoving = 250;
+    int millisecondsToSpendMoving = 50;
 
     Rectangle<float> switchCircleBounds;
+
+    // Animation state
+    Rectangle<float> animationStartBounds;
+    Rectangle<float> animationTargetBounds;
+    Time animationStartTime;
+    bool isAnimating = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwitchButton)
 };

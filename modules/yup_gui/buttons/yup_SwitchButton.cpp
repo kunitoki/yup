@@ -68,9 +68,9 @@ void SwitchButton::setVertical (bool shouldBeVertical) noexcept
     {
         isVerticalValue = shouldBeVertical;
 
-        updateSwitchCirclePosition();
+        isAnimating = false;
 
-        repaint();
+        updateSwitchCirclePosition();
     }
 }
 
@@ -93,6 +93,32 @@ void SwitchButton::paintButton (Graphics& g)
 
 void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
 {
+    if (! isAnimating)
+        return;
+
+    auto currentTime = Time::getCurrentTime();
+    auto elapsedMs = (currentTime - animationStartTime).inMilliseconds();
+
+    if (elapsedMs >= millisecondsToSpendMoving)
+    {
+        isAnimating = false;
+
+        switchCircleBounds = animationTargetBounds;
+    }
+    else
+    {
+        float progress = jlimit (0.0f, 1.0f, static_cast<float>(elapsedMs) / static_cast<float>(millisecondsToSpendMoving));
+
+        progress = progress * progress * (3.0f - 2.0f * progress);
+
+        auto startPos = animationStartBounds.getPosition();
+        auto targetPos = animationTargetBounds.getPosition();
+        auto currentPos = startPos + (targetPos - startPos) * progress;
+
+        switchCircleBounds = Rectangle<float>(currentPos, animationTargetBounds.getSize());
+    }
+
+    repaint();
 }
 
 //==============================================================================
@@ -100,6 +126,8 @@ void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
 void SwitchButton::resized()
 {
     Button::resized();
+
+    isAnimating = false;
 
     updateSwitchCirclePosition();
 }
@@ -117,29 +145,43 @@ void SwitchButton::mouseUp (const MouseEvent& event)
 void SwitchButton::updateSwitchCirclePosition()
 {
     auto bounds = getLocalBounds();
+    Rectangle<float> targetBounds;
 
-    if (!isVerticalValue)
+    if (isVerticalValue)
     {
-        switchCircleBounds = Rectangle<float> (
-            getToggleState() ? bounds.getRight() - bounds.getHeight() : bounds.getX(),
-            bounds.getY(),
-            bounds.getHeight(),
-            bounds.getHeight()
-        );
-    }
-    else
-    {
-        switchCircleBounds = Rectangle<float> (
+        targetBounds = Rectangle<float> (
             bounds.getX(),
             getToggleState() ? bounds.getBottom() - bounds.getWidth() : bounds.getY(),
             bounds.getWidth(),
             bounds.getWidth()
         );
     }
+    else
+    {
+        targetBounds = Rectangle<float> (
+            getToggleState() ? bounds.getRight() - bounds.getHeight() : bounds.getX(),
+            bounds.getY(),
+            bounds.getHeight(),
+            bounds.getHeight()
+        );
+    }
 
-    switchCircleBounds = switchCircleBounds.reduced (1).toNearestInt();
+    targetBounds = targetBounds.reduced (1).toNearestInt();
 
-    repaint();
+    if (millisecondsToSpendMoving <= 0 || switchCircleBounds.isEmpty())
+    {
+        switchCircleBounds = targetBounds;
+        isAnimating = false;
+
+        repaint();
+    }
+    else if (targetBounds != switchCircleBounds)
+    {
+        animationStartBounds = switchCircleBounds;
+        animationTargetBounds = targetBounds;
+        animationStartTime = Time::getCurrentTime();
+        isAnimating = true;
+    }
 }
 
 } // namespace yup
