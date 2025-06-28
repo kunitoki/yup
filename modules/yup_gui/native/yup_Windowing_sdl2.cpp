@@ -776,10 +776,7 @@ void SDL2ComponentNative::handleMouseDown (const Point<float>& position, MouseEv
                      .withPosition (position);
 
     if (lastComponentClicked == nullptr)
-    {
-        if (auto child = component.findComponentAt (position))
-            lastComponentClicked = child;
-    }
+        lastComponentClicked = findComponentForMouseEvent (position);
 
     if (lastComponentClicked != nullptr)
     {
@@ -1061,9 +1058,39 @@ void SDL2ComponentNative::handleUserTriedToCloseWindow()
 
 //==============================================================================
 
+Component* SDL2ComponentNative::findComponentForMouseEvent (const Point<float>& position)
+{
+    Component* child = component.findComponentAt (position);
+    if (child == nullptr)
+        return nullptr;
+
+    Component* current = child;
+    while (current != nullptr)
+    {
+        if (current->doesWantSelfMouseEvents())
+        {
+            Component* parent = current->getParentComponent();
+            while (parent != nullptr)
+            {
+                if (! parent->doesWantChildrenMouseEvents())
+                    return parent;
+
+                parent = parent->getParentComponent();
+            }
+
+            return current;
+        }
+
+        current = current->getParentComponent();
+    }
+
+    return nullptr;
+}
+
 void SDL2ComponentNative::updateComponentUnderMouse (const MouseEvent& event)
 {
-    Component* child = component.findComponentAt (event.getPosition());
+    Component* child = findComponentForMouseEvent (event.getPosition());
+
     if (child != nullptr)
     {
         if (lastComponentUnderMouse == nullptr)

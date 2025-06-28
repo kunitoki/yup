@@ -147,6 +147,7 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     void renderContext();
 

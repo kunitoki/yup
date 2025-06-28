@@ -54,7 +54,7 @@ private:
 
         // Switch Button
         switchButton = std::make_unique<SwitchButton> ("switchButton");
-        switchButton->onClick = [this] { updateStatus ("Switch Button: " + String (switchButton->getSwitchState() ? "ON" : "OFF")); };
+        switchButton->onClick = [this] { updateStatus ("Switch Button: " + String (switchButton->getToggleState() ? "ON" : "OFF")); };
         addAndMakeVisible (switchButton.get());
 
         // Image Button

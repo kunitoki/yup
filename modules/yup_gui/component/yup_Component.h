@@ -939,12 +939,27 @@ public:
     virtual void refreshDisplay (double lastFrameTimeSeconds);
 
     //==============================================================================
+    /**
+        Set if the component wants mouse events.
 
-    void setInterceptsMouseClicks (bool allowClicksOnItself, bool allowClicksOnChildren);
+        @param allowSelfMouseEvents True if the component wants mouse events on itself, false otherwise.
+        @param allowChildrenMouseEvents True if the component wants mouse events on its children, false otherwise.
+     */
+    void setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents);
 
-    bool doesInterceptMouseClickOnSelf() const;
+    /**
+        Check if the component wants mouse events on itself.
 
-    bool doesInterceptMouseClickOnChildren() const;
+        @return True if the component wants mouse events on itself, false otherwise.
+     */
+    bool doesWantSelfMouseEvents() const;
+
+    /**
+        Check if the component wants mouse events on its children.
+
+        @return True if the component wants mouse events on its children, false otherwise.
+     */
+    bool doesWantChildrenMouseEvents() const;
 
     //==============================================================================
     /**
@@ -1198,8 +1213,8 @@ private:
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
         bool isRepainting : 1;
-        bool interceptsClicksOnSelf : 1;
-        bool interceptsClicksOnChildren : 1;
+        bool blockSelfMouseEvents : 1;
+        bool blockChildrenMouseEvents : 1;
     };
 
     union

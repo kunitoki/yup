@@ -38,10 +38,9 @@ public:
     /** Creates a new SwitchButton.
 
         @param componentID    The component identifier for this button
-        @param isInverted     Whether the toggle logic should be inverted
         @param isVertical     Whether the switch should be oriented vertically
     */
-    SwitchButton (StringRef componentID = {}, bool isInverted = false, bool isVertical = false);
+    SwitchButton (StringRef componentID = {}, bool isVertical = false);
 
     //==============================================================================
     /** Returns true if the button is currently toggled on.
@@ -58,23 +57,6 @@ public:
     void setToggleState (bool shouldBeToggled, NotificationType notification = sendNotification);
 
     //==============================================================================
-    /** Returns the actual switch state, taking inversion into account.
-
-        @returns the effective switch state
-    */
-    bool getSwitchState() const noexcept;
-
-    /** Sets whether the switch logic should be inverted.
-
-        @param shouldBeInverted whether to invert the switch logic
-    */
-    void setInverted (bool shouldBeInverted) noexcept;
-
-    /** Returns whether the switch logic is inverted.
-
-        @returns true if the switch logic is inverted
-    */
-    bool isInverted() const noexcept { return isInvertedValue; }
 
     /** Sets whether the switch should be oriented vertically.
 
@@ -112,33 +94,26 @@ public:
 
     //==============================================================================
     /** @internal */
+    void refreshDisplay (double lastFrameTimeSeconds) override;
+    /** @internal */
     void paintButton (Graphics& g) override;
     /** @internal */
     void resized() override;
     /** @internal */
     void mouseUp (const MouseEvent& event) override;
+    /** @internal */
+    Rectangle<float> getSwitchCircleBounds() const { return switchCircleBounds; }
 
 private:
     //==============================================================================
-    /** Helper component for the switch circle indicator. */
-    class SwitchCircle : public Component
-    {
-    public:
-        SwitchCircle();
-        void paint (Graphics& g) override;
-    };
-
-    //==============================================================================
-    Rectangle<float> getSwitchBounds() const;
     void updateSwitchCirclePosition();
 
     //==============================================================================
     bool toggleState = false;
-    bool isInvertedValue = false;
     bool isVerticalValue = false;
     int millisecondsToSpendMoving = 250;
 
-    SwitchCircle switchCircle;
+    Rectangle<float> switchCircleBounds;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SwitchButton)
 };

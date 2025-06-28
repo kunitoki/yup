@@ -30,17 +30,12 @@ const Identifier SwitchButton::Style::switchOnBackgroundColorId = "switchButtonO
 
 //==============================================================================
 
-SwitchButton::SwitchButton (StringRef componentID, bool isInverted, bool isVertical)
+SwitchButton::SwitchButton (StringRef componentID, bool isVertical)
     : Button (componentID)
-    , isInvertedValue (isInverted)
     , isVerticalValue (isVertical)
 {
     setWantsKeyboardFocus (true);
     setMouseCursor (MouseCursor::Hand);
-
-    switchCircle.setWantsKeyboardFocus (false);
-    //switchCircle.setInterceptsMouseClicks (false, false);
-    addAndMakeVisible (switchCircle);
 }
 
 //==============================================================================
@@ -67,30 +62,19 @@ void SwitchButton::setToggleState (bool shouldBeToggled, NotificationType notifi
 
 //==============================================================================
 
-bool SwitchButton::getSwitchState() const noexcept
-{
-    return isInvertedValue ? !toggleState : toggleState;
-}
-
-void SwitchButton::setInverted (bool shouldBeInverted) noexcept
-{
-    if (isInvertedValue != shouldBeInverted)
-    {
-        isInvertedValue = shouldBeInverted;
-        updateSwitchCirclePosition();
-        repaint();
-    }
-}
-
 void SwitchButton::setVertical (bool shouldBeVertical) noexcept
 {
     if (isVerticalValue != shouldBeVertical)
     {
         isVerticalValue = shouldBeVertical;
+
         updateSwitchCirclePosition();
+
         repaint();
     }
 }
+
+//==============================================================================
 
 void SwitchButton::setMillisecondsToSpendMoving (int newValue) noexcept
 {
@@ -101,21 +85,14 @@ void SwitchButton::setMillisecondsToSpendMoving (int newValue) noexcept
 
 void SwitchButton::paintButton (Graphics& g)
 {
-    auto bounds = getSwitchBounds();
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
+}
 
-    auto cornerSize = (isVerticalValue ? bounds.getWidth() : bounds.getHeight()) * 0.5f;
+//==============================================================================
 
-    // Draw shadow/outline
-    g.setStrokeColor (Colors::black.withAlpha (0.1f));
-    g.setStrokeWidth (2.0f);
-    g.strokeRoundedRect (bounds, cornerSize);
-
-    // Fill background based on switch state
-    auto bgColor = findColor (getSwitchState() ? Style::switchOnBackgroundColorId : Style::switchOffBackgroundColorId)
-                       .value_or (getSwitchState() ? Colors::limegreen : Colors::darkgray);
-
-    g.setFillColor (bgColor);
-    g.fillRoundedRect (bounds, cornerSize);
+void SwitchButton::refreshDisplay (double lastFrameTimeSeconds)
+{
 }
 
 //==============================================================================
@@ -123,6 +100,7 @@ void SwitchButton::paintButton (Graphics& g)
 void SwitchButton::resized()
 {
     Button::resized();
+
     updateSwitchCirclePosition();
 }
 
@@ -136,20 +114,14 @@ void SwitchButton::mouseUp (const MouseEvent& event)
 
 //==============================================================================
 
-Rectangle<float> SwitchButton::getSwitchBounds() const
-{
-    return getLocalBounds().reduced (4, 4);
-}
-
 void SwitchButton::updateSwitchCirclePosition()
 {
-    auto bounds = getSwitchBounds();
+    auto bounds = getLocalBounds();
 
-    Rectangle<float> switchCircleBounds;
     if (!isVerticalValue)
     {
         switchCircleBounds = Rectangle<float> (
-            getSwitchState() ? bounds.getRight() - bounds.getHeight() : bounds.getX(),
+            getToggleState() ? bounds.getRight() - bounds.getHeight() : bounds.getX(),
             bounds.getY(),
             bounds.getHeight(),
             bounds.getHeight()
@@ -159,36 +131,15 @@ void SwitchButton::updateSwitchCirclePosition()
     {
         switchCircleBounds = Rectangle<float> (
             bounds.getX(),
-            getSwitchState() ? bounds.getBottom() - bounds.getWidth() : bounds.getY(),
+            getToggleState() ? bounds.getBottom() - bounds.getWidth() : bounds.getY(),
             bounds.getWidth(),
             bounds.getWidth()
         );
     }
 
-    switchCircle.setBounds (switchCircleBounds.reduced (1).toNearestInt());
-}
+    switchCircleBounds = switchCircleBounds.reduced (1).toNearestInt();
 
-//==============================================================================
-SwitchButton::SwitchCircle::SwitchCircle()
-    : Component ("switchCircle")
-{
-}
-
-void SwitchButton::SwitchCircle::paint (Graphics& g)
-{
-    auto bounds = getLocalBounds();
-    auto radius = bounds.getHeight() * 0.5f;
-
-    auto switchColor = findColor (SwitchButton::Style::switchColorId)
-                           .value_or (Colors::white);
-
-    g.setFillColor (switchColor);
-    g.fillRoundedRect (bounds, radius);
-
-    // Add a subtle shadow
-    g.setStrokeColor (Colors::black.withAlpha (0.2f));
-    g.setStrokeWidth (1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), radius - 0.5f);
+    repaint();
 }
 
 } // namespace yup

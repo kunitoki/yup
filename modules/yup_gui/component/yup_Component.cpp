@@ -924,20 +924,20 @@ void Component::refreshDisplay (double lastFrameTimeSeconds) {}
 
 //==============================================================================
 
-void Component::setInterceptsMouseClicks (bool allowClicksOnSelf, bool allowClicksOnChildren)
+void Component::setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents)
 {
-    options.interceptsClicksOnSelf = allowClicksOnSelf;
-    options.interceptsClicksOnChildren = allowClicksOnChildren;
+    options.blockSelfMouseEvents = ! allowSelfMouseEvents;
+    options.blockChildrenMouseEvents = ! allowChildrenMouseEvents;
 }
 
-bool Component::doesInterceptMouseClickOnSelf() const
+bool Component::doesWantSelfMouseEvents() const
 {
-    return options.interceptsClicksOnSelf;
+    return ! options.blockSelfMouseEvents;
 }
 
-bool Component::doesInterceptMouseClickOnChildren() const
+bool Component::doesWantChildrenMouseEvents() const
 {
-    return options.interceptsClicksOnChildren;
+    return ! options.blockChildrenMouseEvents;
 }
 
 //==============================================================================

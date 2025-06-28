@@ -265,7 +265,33 @@ void paintToggleButton (Graphics& g, const ApplicationTheme& theme, const Toggle
 
 void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const SwitchButton& s)
 {
-    // SwitchButton paints itself
+    auto bounds = s.getLocalBounds().reduced (4);
+    auto cornerSize = (s.isVertical() ? bounds.getWidth() : bounds.getHeight()) * 0.5f;
+
+    // Draw shadow/outline
+    g.setStrokeColor (Colors::black.withAlpha (0.1f));
+    g.setStrokeWidth (2.0f);
+    g.strokeRoundedRect (bounds, cornerSize);
+
+    // Fill background based on switch state
+    auto bgColor = s.getToggleState()
+                       ? s.findColor (SwitchButton::Style::switchOnBackgroundColorId).value_or (Color (0xff4a90e2))
+                       : s.findColor (SwitchButton::Style::switchOffBackgroundColorId).value_or (Color (0xff333333));
+
+    g.setFillColor (bgColor);
+    g.fillRoundedRect (bounds, cornerSize);
+
+    // Draw handle
+    auto circleBounds = s.getSwitchCircleBounds().reduced (4);
+    auto circleColor = s.findColor (SwitchButton::Style::switchColorId).value_or (Colors::white);
+
+    g.setFillColor (circleColor);
+    g.fillRoundedRect (circleBounds, cornerSize);
+
+    // Add a subtle shadow
+    g.setStrokeColor (Colors::black.withAlpha (0.2f));
+    g.setStrokeWidth (1.0f);
+    g.strokeRoundedRect (circleBounds.reduced (0.5f), cornerSize - 0.5f);
 }
 
 //==============================================================================
