@@ -120,7 +120,8 @@ String ComboBox::getText() const noexcept
         if (item.itemId == selectedItemId && ! item.isSeparator)
             return item.text;
     }
-    return String();
+
+    return textWhenNothingSelected;
 }
 
 void ComboBox::setSelectedItemIndex (int newItemIndex, NotificationType notification)

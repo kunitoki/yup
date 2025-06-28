@@ -74,7 +74,9 @@ void TextButton::resized()
     modifier.setWrap (StyledText::noWrap);
     modifier.setOverflow (StyledText::ellipsis);
     modifier.clear();
-    modifier.appendText (buttonText, font, getHeight() * 0.35f);
+
+    if (buttonText.isNotEmpty())
+        modifier.appendText (buttonText, font, getHeight() * 0.35f);
 }
 
 //==============================================================================
