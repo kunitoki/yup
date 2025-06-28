@@ -108,7 +108,7 @@ void Component::setVisible (bool shouldBeVisible)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    repaint();
+    internalRepaint();
 }
 
 bool Component::isShowing() const
@@ -515,11 +515,10 @@ void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
 
-    if (rect.isEmpty() || ! isShowing())
+    if (rect.isEmpty() || ! isShowing())
         return;
 
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+    internalRepaint (rect);
 }
 
 //==============================================================================
@@ -756,6 +755,10 @@ void Component::removeChildComponent (int index)
         return;
 
     auto component = children.removeAndReturn (index);
+
+    if (component->isShowing())
+        repaint (component->getBounds());
+
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -1085,7 +1088,7 @@ bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
     for (int childIndex = children.size(); --childIndex >= 0;)
     {
         auto child = children.getUnchecked (childIndex);
-        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
+        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
             continue;
 
         auto childBounds = child->getBoundsRelativeToTopLevelComponent();
@@ -1104,6 +1107,22 @@ void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 
     for (auto child : children)
         child->internalRefreshDisplay (lastFrameTimeSeconds);
+}
+
+//==============================================================================
+
+void Component::internalRepaint()
+{
+    internalRepaint (getLocalBounds());
+}
+
+void Component::internalRepaint (const Rectangle<float>& rect)
+{
+    if (rect.isEmpty())
+        return;
+
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
 }
 
 //==============================================================================

@@ -366,6 +366,7 @@ PopupMenu::Options& PopupMenu::Options::withMaximumWidth (int maxWidth)
 PopupMenu::PopupMenu (const Options& options)
     : options (options)
 {
+    setOpaque (false);
 }
 
 PopupMenu::~PopupMenu()

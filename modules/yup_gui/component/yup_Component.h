@@ -1179,6 +1179,8 @@ public:
 
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
+    void internalRepaint();
+    void internalRepaint (const Rectangle<float>& rect);
     void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
