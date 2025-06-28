@@ -65,10 +65,10 @@ jobs:
       run: cmake ${{ github.workspace }} -G "Ninja Multi-Config" -B ${{ runner.workspace }}/build -DYUP_ENABLE_TESTS=ON
     - run: cmake --build ${{ runner.workspace }}/build --config Debug --parallel 4 --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Debug
-      run: ./yup_tests
+      run: ./yup_tests.app/Contents/MacOS/yup_tests
     - run: cmake --build ${{ runner.workspace }}/build --config Release --parallel 4 --target yup_tests
     - working-directory: ${{ runner.workspace }}/build/tests/Release
-      run: ./yup_tests
+      run: ./yup_tests.app/Contents/MacOS/yup_tests
 
   build_console:
     runs-on: macos-latest
