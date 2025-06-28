@@ -1203,8 +1203,7 @@ private:
 
     void updateMouseCursor();
 
-    // Opaque rendering optimization helper
-    Component* findTopmostOpaqueChild (const Rectangle<float>& area);
+    bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
 
     friend class ComponentNative;
     friend class SDL2ComponentNative;

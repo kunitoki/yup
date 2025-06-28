@@ -1079,6 +1079,25 @@ void Component::userTriedToCloseWindow() {}
 
 //==============================================================================
 
+bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
+{
+    // Check only direct children - no recursive hierarchy traversal
+    for (int childIndex = children.size(); --childIndex >= 0;)
+    {
+        auto child = children.getUnchecked (childIndex);
+        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
+            continue;
+
+        auto childBounds = child->getBoundsRelativeToTopLevelComponent();
+        if (childBounds.contains (area))
+            return true;
+    }
+
+    return false;
+}
+
+//==============================================================================
+
 void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 {
     refreshDisplay (lastFrameTimeSeconds);
@@ -1104,7 +1123,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
+    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
+    const auto opacity = g.getOpacity() * selfOpacity;
     if (opacity <= 0.0f)
         return;
 
@@ -1120,26 +1140,19 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         g.setTransform (transform);
 
-        if (auto opaqueChild = findTopmostOpaqueChild (boundsToRedraw))
-        {
-            if (auto parentOfOpaque = opaqueChild->getParentComponent())
-            {
-                auto opaqueIndex = parentOfOpaque->getIndexOfChildComponent (opaqueChild);
-                for (int i = opaqueIndex; i < parentOfOpaque->children.size(); ++i)
-                    parentOfOpaque->children.getUnchecked (i)->internalPaint (g, boundsToRedraw, renderContinuous);
-            }
-        }
-        else
-        {
-            {
-                const auto paintState = g.saveState();
+        bool canSkipPaint = false;
+        if (! options.unclippedRendering && ! isTransformed())
+            canSkipPaint = hasOpaqueChildCoveringArea (boundsToRedraw);
 
-                paint (g);
-            }
+        if (! canSkipPaint)
+        {
+            const auto paintState = g.saveState();
 
-            for (auto child : children)
-                child->internalPaint (g, boundsToRedraw, renderContinuous);
+            paint (g);
         }
+
+        for (auto child : children)
+            child->internalPaint (g, boundsToRedraw, renderContinuous);
 
         paintOverChildren (g);
     }
@@ -1157,38 +1170,6 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
         debugColor = Color::opaqueRandom();
     }
 #endif
-}
-
-Component* Component::findTopmostOpaqueChild (const Rectangle<float>& area)
-{
-    // Search from back to front (topmost to bottommost in z-order) for an opaque descendant
-    // that fully covers the repaint area
-    for (int i = children.size() - 1; i >= 0; --i)
-    {
-        auto child = children[i];
-        if (! child->isVisible())
-            continue;
-
-        auto childBounds = child->getBoundsRelativeToTopLevelComponent();
-
-        // First recursively check if any descendant of this child is opaque and covers the area
-        auto opaqueDescendant = child->findTopmostOpaqueChild (area);
-        if (opaqueDescendant != nullptr)
-        {
-            // Found an opaque descendant - return it (deepest first)
-            return opaqueDescendant;
-        }
-
-        // Check if this child itself is opaque and covers the area
-        if (child->isOpaque() && child->getOpacity() >= 1.0f && ! child->isTransformed() && childBounds.contains (area))
-        {
-            // This child covers the area
-            return child;
-        }
-    }
-
-    // No opaque descendant found that covers the area
-    return nullptr;
 }
 
 //==============================================================================
