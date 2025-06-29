@@ -350,12 +350,12 @@ struct Application : yup::YUPApplication
 {
     Application() = default;
 
-    const yup::String getApplicationName() override
+    yup::String getApplicationName() override
     {
         return "yup! graphics";
     }
 
-    const yup::String getApplicationVersion() override
+    yup::String getApplicationVersion() override
     {
         return "1.0";
     }

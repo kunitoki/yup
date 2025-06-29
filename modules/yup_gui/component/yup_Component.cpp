@@ -75,8 +75,7 @@ void Component::setEnabled (bool shouldBeEnabled)
     //if (options.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
-    if (options.isDisabled && hasKeyboardFocus())
-        enablementChanged();
+    enablementChanged();
 }
 
 void Component::enablementChanged() {}
@@ -306,6 +305,11 @@ void Component::setCenterY (float newCenterY)
 void Component::moved() {}
 
 //==============================================================================
+
+void Component::setSize (float width, float height)
+{
+    setSize ({ width, height });
+}
 
 void Component::setSize (const Size<float>& newSize)
 {
@@ -713,12 +717,26 @@ void Component::addChildComponent (Component* component, int index)
         {
             children.move (currentIndex, index);
 
+            auto bailOutChecker = BailOutChecker (this);
+
+            component->internalHierarchyChanged();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+
             childrenChanged();
         }
     }
     else
     {
         children.insert (index, component);
+
+        auto bailOutChecker = BailOutChecker (this);
+
+        component->internalHierarchyChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
 
         childrenChanged();
     }

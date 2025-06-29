@@ -30,22 +30,24 @@ struct TestApplication : yup::YUPApplication
 {
     TestApplication() = default;
 
-    const yup::String getApplicationName() override
+    yup::String getApplicationName() override
     {
         return "yup! tests";
     }
 
-    const yup::String getApplicationVersion() override
+    yup::String getApplicationVersion() override
     {
         return "1.0";
     }
 
     void initialise (const yup::String& commandLineParameters) override
     {
-        auto commandLineArgs = yup::StringArray::fromTokens (commandLineParameters, true);
-
         yup::Array<char*> argv;
 
+        auto applicationName = yup::String ("yup_tests");
+        argv.add (const_cast<char*> (applicationName.toRawUTF8()));
+
+        auto commandLineArgs = yup::StringArray::fromTokens (commandLineParameters, true);
         for (auto& arg : commandLineArgs)
         {
             if (arg.isNotEmpty())
@@ -54,7 +56,7 @@ struct TestApplication : yup::YUPApplication
 
         argv.add (nullptr);
 
-        int argc = argv.size();
+        int argc = argv.size() - 1;
         testing::InitGoogleMock (&argc, argv.data());
 
         yup::MessageManager::callAsync ([this, commandLineParameters]

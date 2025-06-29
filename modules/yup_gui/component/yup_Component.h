@@ -291,6 +291,14 @@ public:
     /**
         Set the size of the component.
 
+        @param width The new width of the component.
+        @param height The new height of the component.
+     */
+    void setSize (float width, float height);
+
+    /**
+        Set the size of the component.
+
         @param newSize The new size of the component.
      */
     void setSize (const Size<float>& newSize);
