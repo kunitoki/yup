@@ -329,6 +329,8 @@ TEST_F (PopupMenuTest, PlacementStaticMethods)
 
 TEST_F (PopupMenuTest, ShowAndDismissBasic)
 {
+    PopupMenu::dismissAllPopups();
+
     auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
     menu->addItem (kTestText1, kTestId1);
 
@@ -341,10 +343,14 @@ TEST_F (PopupMenuTest, ShowAndDismissBasic)
 
     // Test dismiss without showing doesn't crash
     menu->dismiss();
+
+    PopupMenu::dismissAllPopups();
 }
 
 TEST_F (PopupMenuTest, ShowWithCallback)
 {
+    PopupMenu::dismissAllPopups();
+
     auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
     menu->addItem (kTestText1, kTestId1);
     menu->addItem (kTestText2, kTestId2);
@@ -358,19 +364,17 @@ TEST_F (PopupMenuTest, ShowWithCallback)
         callbackCalled = true;
     });
 
-    // Simulate item selection through onItemSelected callback
-    if (menu->onItemSelected)
-    {
-        menu->onItemSelected (kTestId2);
-    }
+    EXPECT_FALSE (callbackCalled);
+    EXPECT_EQ (selectedItemId, -1);
 
-    // Note: In a real scenario, the callback would be called when an item is selected
-    // Here we're just testing the interface doesn't crash
+    PopupMenu::dismissAllPopups();
+
+    EXPECT_TRUE (callbackCalled);
+    EXPECT_EQ (selectedItemId, 0);
 }
 
 TEST_F (PopupMenuTest, DismissAllPopupsStatic)
 {
-    // Test static method doesn't crash
     PopupMenu::dismissAllPopups();
 
     auto menu1 = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
@@ -379,8 +383,22 @@ TEST_F (PopupMenuTest, DismissAllPopupsStatic)
     menu1->addItem ("Menu 1 Item", 1);
     menu2->addItem ("Menu 2 Item", 2);
 
-    // Test dismissing with multiple menus doesn't crash
+    bool dismissedMenu1 = false;
+    bool dismissedMenu2 = false;
+
+    menu1->show ([&dismissedMenu1] (int itemId)
+    {
+        dismissedMenu1 = true;
+    });
+    menu2->show ([&dismissedMenu2] (int itemId)
+    {
+        dismissedMenu2 = true;
+    });
+
     PopupMenu::dismissAllPopups();
+
+    EXPECT_TRUE (dismissedMenu1);
+    EXPECT_TRUE (dismissedMenu2);
 }
 
 //==============================================================================
@@ -401,9 +419,7 @@ TEST_F (PopupMenuTest, OnItemSelectedCallback)
 
     // Simulate calling the callback directly
     if (menu->onItemSelected)
-    {
         menu->onItemSelected (kTestId1);
-    }
 
     EXPECT_EQ (kTestId1, selectedId);
 }

@@ -386,16 +386,13 @@ PopupMenu::Ptr PopupMenu::create (const Options& options)
 
 void PopupMenu::dismissAllPopups()
 {
-    // Make a copy to avoid issues with the vector being modified during iteration
-    auto popupsToClose = std::move (activePopups);
+    auto popupsToClose = std::exchange (activePopups, {});
 
     for (const auto& popup : popupsToClose)
     {
         if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
             popupMenu->dismiss();
     }
-
-    activePopups.clear();
 }
 
 //==============================================================================
