@@ -979,6 +979,8 @@ void SDL2ComponentNative::handleResized (int width, int height)
         setPosition (nativeWindowPos.getTopLeft());
     }
 
+    PopupMenu::dismissAllPopups();
+
     repaint();
 }
 
@@ -1015,6 +1017,8 @@ void SDL2ComponentNative::handleFocusChanged (bool gotFocus)
 
 void SDL2ComponentNative::handleMinimized()
 {
+    PopupMenu::dismissAllPopups();
+
     stopRendering();
 }
 

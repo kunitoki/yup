@@ -697,7 +697,10 @@ void PopupMenu::showCustom (const Options& options, std::function<void (int)> ca
     if (options.parentComponent)
     {
         // When we have a parent component, add as child to work in local coordinates
-        options.parentComponent->addChildComponent (this);
+        if (getParentComponent() != options.parentComponent)
+        {
+            options.parentComponent->addChildComponent (this);
+        }
     }
     else
     {
@@ -706,7 +709,8 @@ void PopupMenu::showCustom (const Options& options, std::function<void (int)> ca
                                  .withDecoration (false)
                                  .withResizableWindow (false);
 
-        addToDesktop (nativeOptions);
+        if (! isOnDesktop())
+            addToDesktop (nativeOptions);
     }
 
     activePopups.push_back (this);
@@ -795,38 +799,24 @@ void PopupMenu::mouseDown (const MouseEvent& event)
     }
     else
     {
+        // Hide any visible submenus when selecting a non-separator item
+        hideSubmenus();
         dismiss (item.itemID);
     }
 }
 
 void PopupMenu::mouseMove (const MouseEvent& event)
 {
-    // Cancel hide timers when mouse is actively moving in menu
-    submenuHideTimer.stopTimer();
-
     setHoveredItem (getItemIndexAt (event.getPosition()));
 }
 
 void PopupMenu::mouseEnter (const MouseEvent& event)
 {
-    // Call custom mouse enter callback for submenu coordination
-    if (onMouseEnter)
-        onMouseEnter();
-
-    // Cancel any pending hide timers when mouse enters
-    submenuHideTimer.stopTimer();
 }
 
 void PopupMenu::mouseExit (const MouseEvent& event)
 {
     setHoveredItem (-1);
-
-    // Call custom mouse exit callback for submenu coordination
-    if (onMouseExit)
-        onMouseExit();
-
-    // Don't start hide timer on mouse exit - let the hover logic handle submenu visibility
-    // This prevents the main menu from disappearing when moving to submenus
 }
 
 void PopupMenu::mouseWheel (const MouseEvent& event, const MouseWheelData& wheel)
@@ -852,10 +842,13 @@ void PopupMenu::keyDown (const KeyPress& key, const Point<float>& position)
 void PopupMenu::focusLost()
 {
     // Don't dismiss if we have a visible submenu or are in the process of showing one
+    // This allows proper submenu interaction without premature dismissal
     if (hasVisibleSubmenu() || isShowingSubmenu)
         return;
 
-    //dismiss();
+    // Optionally dismiss after a delay to allow user to return focus
+    // For now, don't auto-dismiss to prevent issues with submenu navigation
+    // dismiss();
 }
 
 //==============================================================================
@@ -863,115 +856,169 @@ void PopupMenu::focusLost()
 
 void PopupMenu::showSubmenu (int itemIndex)
 {
-    if (! isPositiveAndBelow (itemIndex, getNumItems()))
+    if (! canShowSubmenu (itemIndex))
         return;
 
     auto& item = *items[itemIndex];
-    if (! item.isSubMenu() || ! item.subMenu)
-        return;
 
     // If we're already showing this submenu, no need to do anything
-    if (submenuItemIndex == itemIndex && currentSubmenu && currentSubmenu == item.subMenu && currentSubmenu->isVisible())
+    if (isAlreadyShowingSubmenu (itemIndex, item))
         return;
-
-    // Set flag to prevent dismissal during submenu operations
-    isShowingSubmenu = true;
 
     // Hide current submenu if different item
     if (submenuItemIndex != itemIndex)
         hideSubmenus();
 
+    isShowingSubmenu = true;
     submenuItemIndex = itemIndex;
     currentSubmenu = item.subMenu;
 
-    // Stop any pending timers that might interfere
-    submenuShowTimer.stopTimer();
-    submenuHideTimer.stopTimer();
+    if (! currentSubmenu)
+        return;
 
-    // Position submenu to the right of the current menu item
-    auto itemBounds = item.area;
+    // IMPORTANT: Reset the submenu's state before showing to ensure clean positioning
+    resetSubmenuState (currentSubmenu);
 
-    // Account for scroll offset if menu is scrollable
-    if (needsScrolling())
+    // Configure submenu options
+    auto submenuOptions = prepareSubmenuOptions (currentSubmenu);
+
+    // Position the submenu
+    positionSubmenu (submenuOptions);
+
+    // Show the submenu with callback
+    currentSubmenu->showCustom (submenuOptions, [this] (int selectedID)
     {
-        itemBounds.setY (itemBounds.getY() - static_cast<int> (scrollOffset));
-    }
+        if (selectedID != 0)
+            dismiss (selectedID);
 
-    Options submenuOptions;
+        isShowingSubmenu = false;
+    });
+
+    // Repaint to show active submenu highlight
+    repaint();
+}
+
+bool PopupMenu::canShowSubmenu (int itemIndex) const
+{
+    if (! isPositiveAndBelow (itemIndex, getNumItems()))
+        return false;
+
+    auto& item = *items[itemIndex];
+    return item.isSubMenu() && item.subMenu != nullptr;
+}
+
+bool PopupMenu::isAlreadyShowingSubmenu (int itemIndex, const Item& item) const
+{
+    return submenuItemIndex == itemIndex &&
+           currentSubmenu &&
+           currentSubmenu == item.subMenu &&
+           currentSubmenu->isVisible();
+}
+
+void PopupMenu::positionSubmenu (Options& submenuOptions)
+{
+    if (submenuItemIndex < 0 || ! isPositiveAndBelow (submenuItemIndex, getNumItems()))
+        return;
+
+    auto& item = *items[submenuItemIndex];
+    auto itemBounds = getAdjustedItemBounds (item);
+    auto placement = calculateSubmenuPlacement (itemBounds, submenuOptions);
+
+    applySubmenuPlacement (submenuOptions, itemBounds, placement);
+}
+
+PopupMenu::Options PopupMenu::prepareSubmenuOptions (PopupMenu::Ptr submenu)
+{
+    Options submenuOptions = submenu->getOptions();
     submenuOptions.parentComponent = options.parentComponent; // Respect parent component
     submenuOptions.dismissAllPopups = false;
+    return submenuOptions;
+}
+
+Rectangle<float> PopupMenu::getAdjustedItemBounds (const Item& item)
+{
+    auto itemBounds = item.area;
+
+    if (needsScrolling())
+        itemBounds.setY (itemBounds.getY() - scrollOffset);
+
+    return itemBounds;
+}
+
+PopupMenu::Placement PopupMenu::calculateSubmenuPlacement (Rectangle<float> itemBounds, const Options& submenuOptions)
+{
+    // Calculate available space to determine best positioning
+    Rectangle<float> availableArea;
+    Rectangle<float> menuBounds;
 
     if (options.parentComponent)
     {
+        availableArea = options.parentComponent->getLocalBounds().to<float>();
+        menuBounds = getBounds().to<float>();
+    }
+    else
+    {
+        availableArea = Rectangle<float> (0, 0, 1920, 1080);
+        if (auto* desktop = Desktop::getInstance())
+        {
+            if (auto screen = desktop->getPrimaryScreen())
+                availableArea = screen->workArea.to<float>();
+        }
+        menuBounds = getScreenBounds().to<float>();
+    }
+
+    // Calculate space available on right and left sides
+    auto rightSpaceAvailable = availableArea.getRight() - menuBounds.getRight();
+    auto leftSpaceAvailable = menuBounds.getX() - availableArea.getX();
+
+    // Assume submenu needs at least 150 pixels width (reasonable minimum)
+    const int minSubmenuWidth = submenuOptions.minWidth.value_or (150);
+    bool useRightSide = rightSpaceAvailable >= minSubmenuWidth;
+
+    // If right side doesn't have enough space, try left side
+    if (! useRightSide && leftSpaceAvailable >= minSubmenuWidth)
+        useRightSide = false;
+    else if (! useRightSide)
+        useRightSide = true; // Default to right even if cramped
+
+    return useRightSide ? Placement::toRight (Justification::topLeft) : Placement::toLeft (Justification::topRight);
+}
+
+void PopupMenu::applySubmenuPlacement (Options& submenuOptions, Rectangle<float> itemBounds, Placement placement)
+{
+    if (options.parentComponent)
+    {
         // Position relative to parent component - need to transform coordinates properly
-        auto menuPosInParent = getTopLeft(); // This menu's position within parent
+        auto menuPosInParent = getTopLeft().to<float>(); // This menu's position within parent
         auto itemBoundsInParent = itemBounds.translated (menuPosInParent);
 
-        submenuOptions.withTargetArea (itemBoundsInParent, Placement::toRight (Justification::topRight));
+        submenuOptions.withTargetArea (itemBoundsInParent, placement);
     }
     else
     {
         // Use screen coordinates when no parent
-        auto itemScreenPos = getScreenBounds().getTopLeft() + itemBounds.getTopRight();
-        submenuOptions.withTargetArea (Rectangle<float> (itemScreenPos.getX(), itemScreenPos.getY(), 1, itemBounds.getHeight()),
-                                       Placement::toRight (Justification::topLeft));
+        Point<float> anchorPoint;
+        if (placement.side == Side::toRight)
+            anchorPoint = getScreenBounds().getTopLeft().to<float>() + itemBounds.getTopRight();
+        else
+            anchorPoint = getScreenBounds().getTopLeft().to<float>() + itemBounds.getTopLeft();
+
+        submenuOptions.withTargetArea (Rectangle<float> (anchorPoint.getX(), anchorPoint.getY(), 1, itemBounds.getHeight()), placement);
     }
-
-    // Add mouse listeners to handle submenu interaction
-    currentSubmenu->showCustom (submenuOptions, [this] (int selectedID)
-    {
-        if (selectedID != 0)
-        {
-            dismiss (selectedID);
-        }
-    });
-
-    // Set up submenu mouse tracking to prevent premature hiding
-    setupSubmenuMouseTracking (currentSubmenu);
-
-    // Clear the flag after showing submenu
-    isShowingSubmenu = false;
 }
 
 void PopupMenu::hideSubmenus()
 {
     if (currentSubmenu)
     {
-        // Use the cleanup method to hide without triggering callbacks
         cleanupSubmenu (currentSubmenu);
+
         currentSubmenu = nullptr;
+        submenuItemIndex = -1;
+        isShowingSubmenu = false;
     }
 
-    submenuItemIndex = -1;
-    isShowingSubmenu = false;
-}
-
-void PopupMenu::setupSubmenuMouseTracking (PopupMenu::Ptr submenu)
-{
-    if (! submenu)
-        return;
-
-    // Set up callbacks for coordinating mouse events between parent and submenu
-    auto parentMenu = this; // Capture parent menu reference
-
-    // When mouse enters submenu, cancel any hide timers on parent
-    submenu->onMouseEnter = [parentMenu]()
-    {
-        parentMenu->submenuHideTimer.stopTimer();
-    };
-
-    // When mouse exits submenu, start hide timer with generous delay
-    submenu->onMouseExit = [parentMenu]()
-    {
-        // Only start hide timer if we're not returning to parent menu
-        parentMenu->submenuHideTimer.onTimer = [parentMenu]
-        {
-            parentMenu->hideSubmenus();
-            parentMenu->submenuHideTimer.stopTimer();
-        };
-
-        parentMenu->submenuHideTimer.startTimer (400); // Longer delay for better UX
-    };
+    repaint();
 }
 
 void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
@@ -979,16 +1026,56 @@ void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
     if (! submenu)
         return;
 
-    // Just hide without triggering callbacks
     submenu->setVisible (false);
 
-    // Remove from activePopups list
     removeActivePopup (submenu.get());
+
+    if (submenu->getParentComponent())
+    {
+        submenu->getParentComponent()->removeChildComponent (submenu.get());
+    }
+    else if (submenu->isOnDesktop())
+    {
+        submenu->removeFromDesktop();
+    }
+
+    // Reset the submenu's internal state to allow it to be shown again
+    resetSubmenuState (submenu);
+}
+
+void PopupMenu::resetSubmenuState (PopupMenu::Ptr submenu)
+{
+    if (! submenu)
+        return;
+
+    // Call the public method to reset the submenu's state
+    submenu->resetInternalState();
+}
+
+void PopupMenu::resetInternalState()
+{
+    // Reset flags that might prevent re-showing
+    isBeingDismissed = false;
+    selectedItemID = -1;
+
+    // Reset scrolling state for scrollable menus
+    scrollOffset = 0.0f;
+
+    // Clear any callback that might interfere
+    menuCallback = nullptr;
+
+    // Reset hover state
+    setHoveredItem (-1);
 }
 
 bool PopupMenu::hasVisibleSubmenu() const
 {
     return currentSubmenu != nullptr && currentSubmenu->isVisible();
+}
+
+bool PopupMenu::isItemShowingSubmenu (int itemIndex) const
+{
+    return hasVisibleSubmenu() && submenuItemIndex == itemIndex;
 }
 
 bool PopupMenu::submenuContains (const Point<float>& position) const
@@ -1001,37 +1088,41 @@ bool PopupMenu::submenuContains (const Point<float>& position) const
 
 void PopupMenu::updateSubmenuVisibility (int hoveredItemIndex)
 {
-    // Always stop existing timers first
-    submenuShowTimer.stopTimer();
-    submenuHideTimer.stopTimer();
-
     if (isPositiveAndBelow (hoveredItemIndex, getNumItems()))
     {
         auto& item = *items[hoveredItemIndex];
         if (item.isSubMenu() && item.isEnabled)
         {
-            // If this is the same submenu item that's already showing, do nothing
             if (submenuItemIndex == hoveredItemIndex && hasVisibleSubmenu())
                 return;
 
-            // Show submenu immediately if we're hovering over a submenu item
-            // No timer delay to prevent the main menu from disappearing
             showSubmenu (hoveredItemIndex);
-            return;
         }
+        else
+        {
+            if (hasVisibleSubmenu())
+                hideSubmenus();
+        }
+
+        return;
     }
 
-    // If we're not hovering over a submenu item and we have a visible submenu,
-    // use a longer delay before hiding to allow mouse movement to submenu
-    if (hasVisibleSubmenu() && submenuItemIndex != hoveredItemIndex)
+    if (hasVisibleSubmenu() && hoveredItemIndex >= 0 && submenuItemIndex != hoveredItemIndex)
     {
-        submenuHideTimer.onTimer = [this]
+        if (isPositiveAndBelow (hoveredItemIndex, getNumItems()))
         {
-            hideSubmenus();
-            submenuHideTimer.stopTimer();
-        };
-
-        submenuHideTimer.startTimer (200);
+            auto& newItem = *items[hoveredItemIndex];
+            if (newItem.isSubMenu() && newItem.isEnabled)
+            {
+                showSubmenu (hoveredItemIndex);
+                return;
+            }
+            else
+            {
+                hideSubmenus();
+                return;
+            }
+        }
     }
 }
 
@@ -1046,11 +1137,12 @@ void PopupMenu::updateScrolling()
     {
         // Calculate available height within parent component bounds
         auto parentBounds = options.parentComponent->getLocalBounds().to<float>();
-        auto menuScreenPos = getScreenPosition().to<float>();
-        auto parentScreenPos = options.parentComponent->getScreenPosition().to<float>();
+
+        // Since we're a child of parentComponent, our getY() is already in parent's coordinate system
+        auto menuY = getY();
 
         // Calculate available space from current position to parent bottom
-        availableContentHeight = parentBounds.getBottom() - (menuScreenPos.getY() - parentScreenPos.getY());
+        availableContentHeight = parentBounds.getBottom() - menuY;
         availableContentHeight = jmax (100.0f, availableContentHeight); // Minimum height
     }
     else
@@ -1070,13 +1162,10 @@ void PopupMenu::updateScrolling()
 
     totalContentHeight = 0.0f;
     for (const auto& item : items)
-    {
         totalContentHeight += item->area.getHeight();
-    }
 
     // Add padding
     totalContentHeight += 8.0f; // Top + bottom padding
-
     showScrollIndicators = needsScrolling();
 
     if (showScrollIndicators)

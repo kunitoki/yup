@@ -370,10 +370,33 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
 
         g.setOpacity (1.0f);
 
-        // Draw hover background
+        // Draw hover background or active submenu background
         if (item->isHovered && ! item->isSeparator() && item->isEnabled)
         {
-            g.setFillColor (p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted).value_or (Colors::cornflowerblue));
+            Color highlightColor;
+
+            // Check if this item is currently showing its submenu (active submenu)
+            if (p.isItemShowingSubmenu (itemIndex))
+            {
+                highlightColor = p.findColor (PopupMenu::Style::menuItemBackgroundActiveSubmenu)
+                                   .value_or (Colors::darkgray.darker (0.3f));
+            }
+            else
+            {
+                highlightColor = p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted)
+                                   .value_or (Colors::cornflowerblue);
+            }
+
+            g.setFillColor (highlightColor);
+            g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
+        }
+        // Also highlight active submenu items even when not hovered
+        else if (! item->isSeparator() && item->isEnabled && p.isItemShowingSubmenu (itemIndex))
+        {
+            auto activeSubmenuColor = p.findColor (PopupMenu::Style::menuItemBackgroundActiveSubmenu)
+                                        .value_or (Colors::darkgray.darker (0.3f));
+
+            g.setFillColor (activeSubmenuColor);
             g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);
         }
 

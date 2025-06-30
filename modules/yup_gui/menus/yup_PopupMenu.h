@@ -243,10 +243,6 @@ public:
     /** Callback type for menu item selection. */
     std::function<void (int selectedItemID)> onItemSelected;
 
-    /** Mouse tracking callbacks for submenu coordination. */
-    std::function<void()> onMouseEnter;
-    std::function<void()> onMouseExit;
-
     //==============================================================================
     // Color identifiers for theming
     struct Style
@@ -257,6 +253,7 @@ public:
         static inline const Identifier menuItemTextDisabled { "menuItemTextDisabled" };
         static inline const Identifier menuItemBackground { "menuItemBackground" };
         static inline const Identifier menuItemBackgroundHighlighted { "menuItemBackgroundHighlighted" };
+        static inline const Identifier menuItemBackgroundActiveSubmenu { "menuItemBackgroundActiveSubmenu" };
     };
 
     //==============================================================================
@@ -268,6 +265,8 @@ public:
     bool hasVisibleSubmenu() const;
     /** @internal */
     bool submenuContains (const Point<float>& position) const;
+    /** @internal */
+    bool isItemShowingSubmenu (int itemIndex) const;
 
     //==============================================================================
     /** @internal */
@@ -302,12 +301,25 @@ private:
     void setupMenuItems();
     void positionMenu();
 
+    void resetInternalState();
+
     // Submenu functionality
     void showSubmenu (int itemIndex);
     void hideSubmenus();
     void updateSubmenuVisibility (int hoveredItemIndex);
     void cleanupSubmenu (PopupMenu::Ptr submenu);
-    void setupSubmenuMouseTracking (PopupMenu::Ptr submenu);
+    void resetSubmenuState (PopupMenu::Ptr submenu);
+
+    // Submenu positioning helpers
+    Options prepareSubmenuOptions (PopupMenu::Ptr submenu);
+    Rectangle<float> getAdjustedItemBounds (const Item& item);
+    Placement calculateSubmenuPlacement (Rectangle<float> itemBounds, const Options& submenuOptions);
+    void applySubmenuPlacement (Options& submenuOptions, Rectangle<float> itemBounds, Placement placement);
+
+    // Submenu display helpers
+    bool canShowSubmenu (int itemIndex) const;
+    bool isAlreadyShowingSubmenu (int itemIndex, const Item& item) const;
+    void positionSubmenu (Options& submenuOptions);
 
     // Scrolling functionality
     void updateScrolling();
@@ -330,8 +342,6 @@ private:
     // Submenu support
     PopupMenu::Ptr currentSubmenu;
     int submenuItemIndex = -1;
-    TimedCallback submenuShowTimer;
-    TimedCallback submenuHideTimer;
     bool isShowingSubmenu = false;
 
     // Scrolling support
