@@ -329,7 +329,7 @@ TEST_F (PopupMenuTest, PlacementStaticMethods)
 
 TEST_F (PopupMenuTest, ShowAndDismissBasic)
 {
-    auto menu = PopupMenu::create();
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
     menu->addItem (kTestText1, kTestId1);
 
     EXPECT_FALSE (menu->isVisible());
@@ -345,7 +345,7 @@ TEST_F (PopupMenuTest, ShowAndDismissBasic)
 
 TEST_F (PopupMenuTest, ShowWithCallback)
 {
-    auto menu = PopupMenu::create();
+    auto menu = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
     menu->addItem (kTestText1, kTestId1);
     menu->addItem (kTestText2, kTestId2);
 
@@ -373,8 +373,8 @@ TEST_F (PopupMenuTest, DismissAllPopupsStatic)
     // Test static method doesn't crash
     PopupMenu::dismissAllPopups();
 
-    auto menu1 = PopupMenu::create();
-    auto menu2 = PopupMenu::create();
+    auto menu1 = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
+    auto menu2 = PopupMenu::create (PopupMenu::Options().withParentComponent (targetComponent.get()));
 
     menu1->addItem ("Menu 1 Item", 1);
     menu2->addItem ("Menu 2 Item", 2);
