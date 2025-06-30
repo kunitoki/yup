@@ -2091,21 +2091,21 @@ template <class ValueType>
 template <class T>
 [[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle() const noexcept
 {
-    return { static_cast<T> (0), static_cast<T> (0), *this };
+    return { static_cast<T> (0), static_cast<T> (0), static_cast<T> (width), static_cast<T> (height) };
 }
 
 template <class ValueType>
 template <class T>
 [[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle (T x, T y) const noexcept
 {
-    return { x, y, *this };
+    return { x, y, static_cast<T> (width), static_cast<T> (height) };
 }
 
 template <class ValueType>
 template <class T>
 [[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle (Point<T> xy) const noexcept
 {
-    return { xy, *this };
+    return { xy, static_cast<T> (width), static_cast<T> (height) };
 }
 
 } // namespace yup
