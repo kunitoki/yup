@@ -379,12 +379,12 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             if (p.isItemShowingSubmenu (itemIndex))
             {
                 highlightColor = p.findColor (PopupMenu::Style::menuItemBackgroundActiveSubmenu)
-                                   .value_or (Colors::darkgray.darker (0.3f));
+                                     .value_or (Colors::darkgray.darker (0.3f));
             }
             else
             {
                 highlightColor = p.findColor (PopupMenu::Style::menuItemBackgroundHighlighted)
-                                   .value_or (Colors::cornflowerblue);
+                                     .value_or (Colors::cornflowerblue);
             }
 
             g.setFillColor (highlightColor);
@@ -394,7 +394,7 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
         else if (! item->isSeparator() && item->isEnabled && p.isItemShowingSubmenu (itemIndex))
         {
             auto activeSubmenuColor = p.findColor (PopupMenu::Style::menuItemBackgroundActiveSubmenu)
-                                        .value_or (Colors::darkgray.darker (0.3f));
+                                          .value_or (Colors::darkgray.darker (0.3f));
 
             g.setFillColor (activeSubmenuColor);
             g.fillRoundedRect (rect.reduced (2.0f, 1.0f), 2.0f);

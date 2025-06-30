@@ -495,7 +495,7 @@ void PopupMenu::setupMenuItems()
     constexpr float separatorHeight = 8.0f; // TODO: move to Options
     constexpr float verticalPadding = 4.0f; // TODO: move to Style ?
 
-    float itemHeight = static_cast<float> (22); // TODO: move to Options
+    float itemHeight = static_cast<float> (22);    // TODO: move to Options
     float width = options.minWidth.value_or (200); // TODO: move to magic
 
     // First pass: calculate total content height and determine width
@@ -1170,7 +1170,7 @@ void PopupMenu::layoutVisibleItems (float width)
 {
     constexpr float separatorHeight = 8.0f; // TODO: move to Options
     constexpr float verticalPadding = 4.0f; // TODO: move to Style
-    const float itemHeight = 22.0f; // TODO: move to Options
+    const float itemHeight = 22.0f;         // TODO: move to Options
 
     // Clear all item areas first to prevent rendering artifacts
     for (auto& item : items)
@@ -1225,7 +1225,7 @@ void PopupMenu::updateVisibleItemRange()
     // Calculate how many items can fit in the available space
     constexpr float separatorHeight = 8.0f; // TODO: move to Options
     constexpr float verticalPadding = 4.0f; // TODO: move to Style
-    const float itemHeight = 22.0f; // TODO: move to Options
+    const float itemHeight = 22.0f;         // TODO: move to Options
 
     float availableHeight = availableContentHeight;
     if (showScrollIndicators)
@@ -1492,12 +1492,12 @@ void PopupMenu::selectCurrentItem()
     {
         auto& item = *items[currentIndex];
 
-        if (item.isEnabled && !item.isSeparator())
+        if (item.isEnabled && ! item.isSeparator())
         {
             if (item.isSubMenu())
             {
                 // For submenus, open them if not already open
-                if (!isItemShowingSubmenu (currentIndex))
+                if (! isItemShowingSubmenu (currentIndex))
                 {
                     showSubmenu (currentIndex);
                     if (currentSubmenu)
@@ -1544,7 +1544,7 @@ bool PopupMenu::isItemSelectable (int index) const
         return false;
 
     const auto& item = *items[index];
-    return item.isEnabled && !item.isSeparator();
+    return item.isEnabled && ! item.isSeparator();
 }
 
 int PopupMenu::getSelectedItemIndex() const
