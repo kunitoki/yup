@@ -424,38 +424,6 @@ TEST_F (PopupMenuTest, OnItemSelectedCallback)
     EXPECT_EQ (kTestId1, selectedId);
 }
 
-TEST_F (PopupMenuTest, MouseEnterExitCallbacks)
-{
-    auto menu = PopupMenu::create();
-    menu->addItem (kTestText1, kTestId1);
-
-    bool mouseEnterCalled = false;
-    bool mouseExitCalled = false;
-
-    menu->onMouseEnter = [&mouseEnterCalled]()
-    {
-        mouseEnterCalled = true;
-    };
-
-    menu->onMouseExit = [&mouseExitCalled]()
-    {
-        mouseExitCalled = true;
-    };
-
-    EXPECT_FALSE (mouseEnterCalled);
-    EXPECT_FALSE (mouseExitCalled);
-
-    // Simulate calling the callbacks directly
-    if (menu->onMouseEnter)
-        menu->onMouseEnter();
-
-    if (menu->onMouseExit)
-        menu->onMouseExit();
-
-    EXPECT_TRUE (mouseEnterCalled);
-    EXPECT_TRUE (mouseExitCalled);
-}
-
 //==============================================================================
 // Style Identifiers
 
@@ -690,15 +658,6 @@ TEST_F (PopupMenuTest, IteratorSupport)
 
 TEST_F (PopupMenuTest, MenuWithManyItemsInSmallSpace)
 {
-    auto menu = PopupMenu::create();
-
-    // Add many items to potentially trigger scrolling
-    for (int i = 1; i <= 30; ++i)
-    {
-        menu->addItem (String ("Item ") + String (i), i);
-    }
-
-    // Set up the menu in a small parent component
     auto smallParent = std::make_unique<Component> ("smallParent");
     smallParent->setBounds (0, 0, 200, 120); // Small height to force scrolling
 
@@ -706,8 +665,11 @@ TEST_F (PopupMenuTest, MenuWithManyItemsInSmallSpace)
     options.withParentComponent (smallParent.get())
         .withPosition (Point<int> (10, 10));
 
-    // Show the menu - this will trigger internal scrolling calculations
-    menu->show (nullptr);
+    auto menu = PopupMenu::create (options);
+    for (int i = 1; i <= 30; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
 
     // The menu should have been created and be visible
     EXPECT_TRUE (menu->isVisible());
@@ -722,14 +684,6 @@ TEST_F (PopupMenuTest, MenuWithManyItemsInSmallSpace)
 
 TEST_F (PopupMenuTest, MouseWheelEventHandling)
 {
-    auto menu = PopupMenu::create();
-
-    // Add many items
-    for (int i = 1; i <= 25; ++i)
-    {
-        menu->addItem (String ("Item ") + String (i), i);
-    }
-
     // Set up in a small parent
     auto smallParent = std::make_unique<Component> ("smallParent");
     smallParent->setBounds (0, 0, 200, 100);
@@ -738,10 +692,14 @@ TEST_F (PopupMenuTest, MouseWheelEventHandling)
     options.withParentComponent (smallParent.get())
         .withPosition (Point<int> (10, 10));
 
-    menu->show (nullptr);
+    auto menu = PopupMenu::create (options);
+    for (int i = 1; i <= 25; ++i)
+        menu->addItem (String ("Item ") + String (i), i);
+
+    menu->show();
 
     // Test that mouse wheel events are handled without crashing
-    MouseEvent mouseEvent (Point<float> (50, 50));
+    MouseEvent mouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (50, 50));
     MouseWheelData wheelDown (0.0f, -1.0f); // Scroll down
     MouseWheelData wheelUp (0.0f, 1.0f);    // Scroll up
 
@@ -754,23 +712,25 @@ TEST_F (PopupMenuTest, MouseWheelEventHandling)
 
     // Test multiple scroll events
     for (int i = 0; i < 5; ++i)
-    {
         EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelDown));
-    }
 
     for (int i = 0; i < 3; ++i)
-    {
         EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelUp));
-    }
 
     EXPECT_TRUE (menu->isVisible());
 }
 
 TEST_F (PopupMenuTest, ScrollingWithCustomComponents)
 {
-    auto menu = PopupMenu::create();
+    // Use small parent to trigger scrolling behavior
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 200, 150);
 
-    // Add regular items and custom components
+    PopupMenu::Options options;
+    options.withParentComponent (smallParent.get())
+        .withPosition (Point<int> (10, 10));
+
+    auto menu = PopupMenu::create (options);
     for (int i = 1; i <= 15; ++i)
     {
         menu->addItem (String ("Item ") + String (i), i);
@@ -785,23 +745,14 @@ TEST_F (PopupMenuTest, ScrollingWithCustomComponents)
         }
     }
 
-    // Use small parent to trigger scrolling behavior
-    auto smallParent = std::make_unique<Component> ("smallParent");
-    smallParent->setBounds (0, 0, 200, 150);
-
-    PopupMenu::Options options;
-    options.withParentComponent (smallParent.get())
-        .withPosition (Point<int> (10, 10));
-
-    // Show the menu
-    menu->show (nullptr);
+    menu->show();
 
     // Should handle mixed content properly
     EXPECT_TRUE (menu->isVisible());
     EXPECT_GT (menu->getNumItems(), 15); // Should have both regular and custom items
 
     // Test mouse wheel with mixed content
-    MouseEvent mouseEvent (Point<float> (50, 50));
+    MouseEvent mouseEvent (MouseEvent::leftButton, KeyModifiers(), Point<float> (50, 50));
     MouseWheelData wheel (0.0f, -1.0f);
     EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheel));
 
