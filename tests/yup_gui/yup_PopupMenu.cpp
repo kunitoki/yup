@@ -49,7 +49,8 @@ protected:
 
         targetComponent = std::make_unique<Component> ("testTarget");
         targetComponent->setBounds (100, 100, 200, 30);
-        parentComponent->addChildComponent (*targetComponent);
+
+        parentComponent->addAndMakeVisible (*targetComponent);
     }
 
     std::unique_ptr<Component> parentComponent;
