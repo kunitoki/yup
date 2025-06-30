@@ -76,9 +76,27 @@ public:
 
     /** Retries a pointer to the screen containing an absolute location.
 
+        @param location The point to check
+
         @return A pointer to the `Screen` object which contains the location.
     */
     Screen::Ptr getScreenContaining (const Point<float>& location) const;
+
+    /** Retries a pointer to the screen containing a rectangle.
+
+        @param location The rectangle to check
+
+        @return A pointer to the `Screen` object which contains the rectangle
+    */
+    Screen::Ptr getScreenContaining (const Rectangle<float>& area) const;
+
+    /** Retries a pointer to the screen containing a component.
+
+        @param component The component to check
+
+        @return A pointer to the `Screen` object which contains the component
+    */
+    Screen::Ptr getScreenContaining (Component* component) const;
 
     //==============================================================================
     /** Sets the mouse cursor to the specified cursor.

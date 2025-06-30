@@ -684,3 +684,127 @@ TEST_F (PopupMenuTest, IteratorSupport)
     ++it;
     EXPECT_EQ (it, menu->end());
 }
+
+//==============================================================================
+// Scrolling Tests
+
+TEST_F (PopupMenuTest, MenuWithManyItemsInSmallSpace)
+{
+    auto menu = PopupMenu::create();
+
+    // Add many items to potentially trigger scrolling
+    for (int i = 1; i <= 30; ++i)
+    {
+        menu->addItem (String ("Item ") + String (i), i);
+    }
+
+    // Set up the menu in a small parent component
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 200, 120); // Small height to force scrolling
+
+    PopupMenu::Options options;
+    options.withParentComponent (smallParent.get())
+        .withPosition (Point<int> (10, 10));
+
+    // Show the menu - this will trigger internal scrolling calculations
+    menu->show (nullptr);
+
+    // The menu should have been created and be visible
+    EXPECT_TRUE (menu->isVisible());
+    EXPECT_EQ (30, menu->getNumItems());
+
+    // The menu height should be constrained by the parent
+    EXPECT_LE (menu->getHeight(), smallParent->getHeight());
+
+    // With the new approach, the menu should show even with limited space
+    EXPECT_TRUE (menu->isVisible());
+}
+
+TEST_F (PopupMenuTest, MouseWheelEventHandling)
+{
+    auto menu = PopupMenu::create();
+
+    // Add many items
+    for (int i = 1; i <= 25; ++i)
+    {
+        menu->addItem (String ("Item ") + String (i), i);
+    }
+
+    // Set up in a small parent
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 200, 100);
+
+    PopupMenu::Options options;
+    options.withParentComponent (smallParent.get())
+        .withPosition (Point<int> (10, 10));
+
+    menu->show (nullptr);
+
+    // Test that mouse wheel events are handled without crashing
+    MouseEvent mouseEvent (Point<float> (50, 50));
+    MouseWheelData wheelDown (0.0f, -1.0f); // Scroll down
+    MouseWheelData wheelUp (0.0f, 1.0f);    // Scroll up
+
+    // These should not throw or crash
+    EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelDown));
+    EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelUp));
+
+    // Menu should still be responsive
+    EXPECT_TRUE (menu->isVisible());
+
+    // Test multiple scroll events
+    for (int i = 0; i < 5; ++i)
+    {
+        EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelDown));
+    }
+
+    for (int i = 0; i < 3; ++i)
+    {
+        EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheelUp));
+    }
+
+    EXPECT_TRUE (menu->isVisible());
+}
+
+TEST_F (PopupMenuTest, ScrollingWithCustomComponents)
+{
+    auto menu = PopupMenu::create();
+
+    // Add regular items and custom components
+    for (int i = 1; i <= 15; ++i)
+    {
+        menu->addItem (String ("Item ") + String (i), i);
+
+        // Add custom component every few items
+        if (i % 3 == 0)
+        {
+            auto customComponent = std::make_unique<Label> ("customLabel" + String (i));
+            customComponent->setText ("Custom " + String (i));
+            customComponent->setSize (150, 30);
+            menu->addCustomItem (std::move (customComponent), 1000 + i);
+        }
+    }
+
+    // Use small parent to trigger scrolling behavior
+    auto smallParent = std::make_unique<Component> ("smallParent");
+    smallParent->setBounds (0, 0, 200, 150);
+
+    PopupMenu::Options options;
+    options.withParentComponent (smallParent.get())
+        .withPosition (Point<int> (10, 10));
+
+    // Show the menu
+    menu->show (nullptr);
+
+    // Should handle mixed content properly
+    EXPECT_TRUE (menu->isVisible());
+    EXPECT_GT (menu->getNumItems(), 15); // Should have both regular and custom items
+
+    // Test mouse wheel with mixed content
+    MouseEvent mouseEvent (Point<float> (50, 50));
+    MouseWheelData wheel (0.0f, -1.0f);
+    EXPECT_NO_THROW (menu->mouseWheel (mouseEvent, wheel));
+
+    // Menu should still be functional after scrolling with custom components
+    EXPECT_TRUE (menu->isVisible());
+}

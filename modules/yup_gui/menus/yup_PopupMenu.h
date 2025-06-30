@@ -48,30 +48,39 @@ public:
         centered //< Menu is centered on the target
     };
 
+    /** Placement of the menu relative to the target. */
     struct Placement
     {
         Side side = Side::below;
         Justification alignment = Justification::topLeft;
 
+        /** Constructor. */
         Placement() = default;
 
+        /** Constructor. */
         Placement (Side s, Justification align = Justification::topLeft)
             : side (s)
             , alignment (align)
         {
         }
 
+        /** Returns a placement below the target. */
         static Placement below (Justification align = Justification::topLeft) { return { Side::below, align }; }
 
+        /** Returns a placement above the target. */
         static Placement above (Justification align = Justification::topLeft) { return { Side::above, align }; }
 
+        /** Returns a placement to the right of the target. */
         static Placement toRight (Justification align = Justification::topLeft) { return { Side::toRight, align }; }
 
+        /** Returns a placement to the left of the target. */
         static Placement toLeft (Justification align = Justification::topLeft) { return { Side::toLeft, align }; }
 
+        /** Returns a centered placement. */
         static Placement centered() { return { Side::centered, Justification::center }; }
     };
 
+    /** Positioning mode for the menu. */
     enum class PositioningMode
     {
         atPoint,
@@ -150,7 +159,7 @@ public:
     [[nodiscard]] static Ptr create (const Options& options = {});
 
     //==============================================================================
-
+    /** Returns the options for the popup menu. */
     [[nodiscard]] const Options& getOptions() const { return options; }
 
     //==============================================================================
@@ -193,17 +202,26 @@ public:
     void clear();
 
     //==============================================================================
+    /** Represents a menu item. */
     class Item
     {
     public:
+        /** Constructors. */
         Item() = default;
         Item (const String& itemText, int itemID, bool isEnabled = true, bool isTicked = false);
         Item (const String& itemText, PopupMenu::Ptr subMenu, bool isEnabled = true);
         Item (std::unique_ptr<Component> component, int itemID);
+
+        /** Destructor. */
         ~Item();
 
+        /** Returns true if the item is a separator. */
         bool isSeparator() const;
+
+        /** Returns true if the item is a sub-menu. */
         bool isSubMenu() const;
+
+        /** Returns true if the item is a custom component. */
         bool isCustomComponent() const;
 
         String text;
@@ -235,9 +253,14 @@ public:
     */
     void show (std::function<void (int)> callback = nullptr);
 
-    //==============================================================================
     /** Dismiss popup if visible. */
     void dismiss();
+
+    /** Returns true if the menu is currently being shown. */
+    bool isBeingShown() const;
+
+    /** Returns true if a submenu is currently visible. */
+    bool hasVisibleSubmenu() const;
 
     //==============================================================================
     /** Callback type for menu item selection. */
@@ -257,16 +280,41 @@ public:
     };
 
     //==============================================================================
-    /** Dismisses all currently open popup menus. */
-    static void dismissAllPopups();
+    /** Returns true if the submenu contains the given position.
+
+        @param position The position to check
+
+        @return True if the submenu contains the position
+    */
+    bool submenuContains (const Point<float>& position) const;
+
+    /** Returns true if the item at the given index is showing a submenu.
+
+        @param itemIndex The index of the item to check
+
+        @return True if the item is showing a submenu
+    */
+    bool isItemShowingSubmenu (int itemIndex) const;
 
     //==============================================================================
-    /** @internal */
-    bool hasVisibleSubmenu() const;
-    /** @internal */
-    bool submenuContains (const Point<float>& position) const;
-    /** @internal */
-    bool isItemShowingSubmenu (int itemIndex) const;
+    /** Returns true if the menu needs scrolling. */
+    bool needsScrolling() const;
+
+    /** Returns true if the menu can scroll up. */
+    bool canScrollUp() const;
+
+    /** Returns true if the menu can scroll down. */
+    bool canScrollDown() const;
+
+    /** Returns the bounds of the scroll up indicator. */
+    Rectangle<float> getScrollUpIndicatorBounds() const;
+
+    /** Returns the bounds of the scroll down indicator. */
+    Rectangle<float> getScrollDownIndicatorBounds() const;
+
+    //==============================================================================
+    /** Dismisses all currently open popup menus. */
+    static void dismissAllPopups();
 
     //==============================================================================
     /** @internal */
@@ -283,24 +331,18 @@ public:
     void mouseWheel (const MouseEvent& event, const MouseWheelData& wheel) override;
     /** @internal */
     void keyDown (const KeyPress& key, const Point<float>& position) override;
-    /** @internal */
-    void focusLost() override;
 
 private:
     PopupMenu (const Options& options = {});
-    void showCustom (const Options& options, std::function<void (int)> callback);
 
+    void showCustom (const Options& options, bool isSubmenu, std::function<void (int)> callback);
     int getHoveredItem() const;
     void setHoveredItem (int itemIndex);
-
     int getItemIndexAt (Point<float> position) const;
-
     void dismiss (int itemID);
     void setSelectedItemID (int itemID);
-
     void setupMenuItems();
     void positionMenu();
-
     void resetInternalState();
 
     // Submenu functionality
@@ -312,7 +354,6 @@ private:
 
     // Submenu positioning helpers
     Options prepareSubmenuOptions (PopupMenu::Ptr submenu);
-    Rectangle<float> getAdjustedItemBounds (const Item& item);
     Placement calculateSubmenuPlacement (Rectangle<float> itemBounds, const Options& submenuOptions);
     void applySubmenuPlacement (Options& submenuOptions, Rectangle<float> itemBounds, Placement placement);
 
@@ -323,13 +364,26 @@ private:
 
     // Scrolling functionality
     void updateScrolling();
-    void constrainScrollOffset();
-    float getMaxScrollOffset() const;
-    void paintScrollIndicators (Graphics& g);
-    Rectangle<float> getScrollUpIndicatorBounds() const;
-    Rectangle<float> getScrollDownIndicatorBounds() const;
-    bool needsScrolling() const;
+    void calculateAvailableHeight();
+    void layoutVisibleItems (float width);
     Rectangle<float> getMenuContentBounds() const;
+    void updateVisibleItemRange();
+    void scrollUp();
+    void scrollDown();
+    int getVisibleItemCount() const;
+
+    // Keyboard navigation
+    void navigateUp();
+    void navigateDown();
+    void navigateLeft();
+    void navigateRight();
+    void selectCurrentItem();
+    void setSelectedItemIndex (int index);
+    int getSelectedItemIndex() const;
+    int getFirstSelectableItemIndex() const;
+    int getLastSelectableItemIndex() const;
+    int getNextSelectableItemIndex (int currentIndex, bool forward) const;
+    bool isItemSelectable (int index) const;
 
     // PopupMenuItem is now an implementation detail
     class PopupMenuItem;
@@ -337,22 +391,24 @@ private:
 
     Options options;
     int selectedItemID = -1;
+    int selectedItemIndex = -1; // For keyboard navigation
     bool isBeingDismissed = false;
 
+    std::function<void (int)> menuCallback;
+
     // Submenu support
+    WeakReference<Component> parentMenu;
     PopupMenu::Ptr currentSubmenu;
     int submenuItemIndex = -1;
     bool isShowingSubmenu = false;
 
     // Scrolling support
-    float scrollOffset = 0.0f;
+    Range<int> visibleItemRange;
     float availableContentHeight = 0.0f;
     float totalContentHeight = 0.0f;
     bool showScrollIndicators = false;
     static constexpr float scrollIndicatorHeight = 12.0f;
-    static constexpr float scrollSpeed = 20.0f;
-
-    std::function<void (int)> menuCallback;
+    static constexpr int scrollSpeed = 1; // Number of items to scroll per wheel event
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (PopupMenu)
 };

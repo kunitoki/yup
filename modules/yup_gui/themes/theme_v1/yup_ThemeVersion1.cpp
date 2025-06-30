@@ -470,6 +470,44 @@ void paintPopupMenu (Graphics& g, const ApplicationTheme& theme, const PopupMenu
             }
         }
     }
+
+    // Paint scroll indicators if needed
+    if (p.needsScrolling())
+    {
+        g.setFillColor (p.findColor (PopupMenu::Style::menuItemText).value_or (Colors::white));
+
+        // Up arrow
+        if (p.canScrollUp())
+        {
+            auto upBounds = p.getScrollUpIndicatorBounds();
+            auto center = upBounds.getCenter();
+            auto arrowSize = 4.0f;
+
+            Path upArrow;
+            upArrow.moveTo (center.getX(), center.getY() - arrowSize * 0.5f);
+            upArrow.lineTo (center.getX() - arrowSize, center.getY() + arrowSize * 0.5f);
+            upArrow.lineTo (center.getX() + arrowSize, center.getY() + arrowSize * 0.5f);
+            upArrow.close();
+
+            g.fillPath (upArrow);
+        }
+
+        // Down arrow
+        if (p.canScrollDown())
+        {
+            auto downBounds = p.getScrollDownIndicatorBounds();
+            auto center = downBounds.getCenter();
+            auto arrowSize = 4.0f;
+
+            Path downArrow;
+            downArrow.moveTo (center.getX(), center.getY() + arrowSize * 0.5f);
+            downArrow.lineTo (center.getX() - arrowSize, center.getY() - arrowSize * 0.5f);
+            downArrow.lineTo (center.getX() + arrowSize, center.getY() - arrowSize * 0.5f);
+            downArrow.close();
+
+            g.fillPath (downArrow);
+        }
+    }
 }
 
 //==============================================================================

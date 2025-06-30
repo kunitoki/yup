@@ -174,8 +174,6 @@ public:
             sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), true);
         }
 
-        deviceManager.addAudioCallback (this);
-
         // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
@@ -301,6 +299,14 @@ public:
 
     void audioDeviceStopped() override
     {
+    }
+
+    void visibilityChanged() override
+    {
+        if (! isVisible())
+            deviceManager.removeAudioCallback (this);
+        else
+            deviceManager.addAudioCallback (this);
     }
 
 private:

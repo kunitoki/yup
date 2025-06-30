@@ -313,12 +313,16 @@ void Component::setSize (float width, float height)
 
 void Component::setSize (const Size<float>& newSize)
 {
+    auto areaToRepaint = boundsInParent;
     boundsInParent = boundsInParent.withSize (newSize);
+    areaToRepaint = areaToRepaint.unionWith (boundsInParent);
 
     if (options.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
     resized();
+
+    repaint (areaToRepaint);
 }
 
 Size<float> Component::getSize() const

@@ -88,6 +88,33 @@ Screen::Ptr Desktop::getScreenContaining (const Point<float>& location) const
     return ! screens.isEmpty() ? getScreen (0) : nullptr;
 }
 
+Screen::Ptr Desktop::getScreenContaining (const Rectangle<float>& bounds) const
+{
+    Screen::Ptr foundScreen;
+    float maxArea = 0.0f;
+    auto intBounds = bounds.to<int>();
+
+    for (auto& screen : screens)
+    {
+        auto intersection = screen->workArea.intersection (intBounds);
+        if (auto computedArea = intersection.area(); computedArea > maxArea)
+        {
+            maxArea = computedArea;
+            foundScreen = screen;
+        }
+    }
+
+    if (foundScreen == nullptr)
+        return ! screens.isEmpty() ? getScreen (0) : nullptr;
+
+    return foundScreen;
+}
+
+Screen::Ptr Desktop::getScreenContaining (Component* component) const
+{
+    return getScreenContaining (component->getScreenBounds());
+}
+
 //==============================================================================
 
 MouseCursor Desktop::getMouseCursor() const
