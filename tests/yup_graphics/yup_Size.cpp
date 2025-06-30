@@ -143,6 +143,33 @@ TEST (SizeTests, ConvertAndRound)
     EXPECT_EQ (rounded.getHeight(), 4);
 }
 
+TEST (SizeTests, PrimitiveConversions)
+{
+    Size<float> s (3.7f, 4.2f);
+
+    auto toPoint = s.toPoint();
+    EXPECT_FLOAT_EQ (toPoint.getX(), 3.7f);
+    EXPECT_FLOAT_EQ (toPoint.getY(), 4.2f);
+
+    auto toRectangle1 = s.toRectangle();
+    EXPECT_FLOAT_EQ (toRectangle1.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (toRectangle1.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (toRectangle1.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle1.getHeight(), 4.2f);
+
+    auto toRectangle2 = s.toRectangle (1.2f, 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle2.getX(), 1.2f);
+    EXPECT_FLOAT_EQ (toRectangle2.getY(), 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle2.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle2.getHeight(), 4.2f);
+
+    auto toRectangle3 = s.toRectangle (Point<float> { 1.2f, 2.9f });
+    EXPECT_FLOAT_EQ (toRectangle3.getX(), 1.2f);
+    EXPECT_FLOAT_EQ (toRectangle3.getY(), 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle3.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle3.getHeight(), 4.2f);
+}
+
 TEST (SizeTests, ArithmeticOperators)
 {
     Size<float> s (2.0f, 3.0f);
