@@ -76,12 +76,12 @@ namespace yup
                 myMainWindow = nullptr;
             }
 
-            const String getApplicationName() override
+            String getApplicationName() override
             {
                 return "Super YUP-o-matic";
             }
 
-            const String getApplicationVersion() override
+            String getApplicationVersion() override
             {
                 return "1.0";
             }
@@ -114,10 +114,10 @@ public:
 
     //==============================================================================
     /** Returns the application's name. */
-    virtual const String getApplicationName() = 0;
+    virtual String getApplicationName() = 0;
 
     /** Returns the application's version number. */
-    virtual const String getApplicationVersion() = 0;
+    virtual String getApplicationVersion() = 0;
 
     /** Checks whether multiple instances of the app are allowed.
 

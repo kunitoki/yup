@@ -75,8 +75,7 @@ void Component::setEnabled (bool shouldBeEnabled)
     //if (options.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
-    if (options.isDisabled && hasKeyboardFocus())
-        enablementChanged();
+    enablementChanged();
 }
 
 void Component::enablementChanged() {}
@@ -108,7 +107,7 @@ void Component::setVisible (bool shouldBeVisible)
     if (bailOutChecker.shouldBailOut())
         return;
 
-    repaint();
+    internalRepaint();
 }
 
 bool Component::isShowing() const
@@ -307,6 +306,11 @@ void Component::moved() {}
 
 //==============================================================================
 
+void Component::setSize (float width, float height)
+{
+    setSize ({ width, height });
+}
+
 void Component::setSize (const Size<float>& newSize)
 {
     boundsInParent = boundsInParent.withSize (newSize);
@@ -336,6 +340,11 @@ float Component::getHeight() const
 }
 
 //==============================================================================
+
+void Component::setBounds (float x, float y, float width, float height)
+{
+    setBounds ({ x, y, width, height });
+}
 
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
@@ -411,7 +420,7 @@ AffineTransform Component::getTransform() const
 
 bool Component::isTransformed() const
 {
-    return transform.isIdentity();
+    return ! transform.isIdentity();
 }
 
 void Component::transformChanged()
@@ -474,6 +483,18 @@ float Component::getOpacity() const
 
 //==============================================================================
 
+bool Component::isOpaque() const
+{
+    return ! options.isTransparent;
+}
+
+void Component::setOpaque (bool shouldBeOpaque)
+{
+    options.isTransparent = ! shouldBeOpaque;
+}
+
+//==============================================================================
+
 void Component::enableRenderingUnclipped (bool shouldBeEnabled)
 {
     options.unclippedRendering = shouldBeEnabled;
@@ -486,24 +507,22 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
-    jassert (! options.isRepainting); // You are likely repainting from paint !
+    repaint (getLocalBounds());
+}
 
-    if (getBounds().isEmpty())
-        return;
-
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (getBoundsRelativeToTopLevelComponent());
+void Component::repaint (float x, float y, float width, float height)
+{
+    repaint ({ x, y, width, height });
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
 
-    if (rect.isEmpty())
+    if (rect.isEmpty() || ! isShowing())
         return;
 
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+    internalRepaint (rect);
 }
 
 //==============================================================================
@@ -568,7 +587,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
-    attachedToNative();
+    internalAttachedToNative();
 
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
@@ -584,7 +603,7 @@ void Component::removeFromDesktop()
 
     native.reset();
 
-    detachedFromNative();
+    internalDetachedFromNative();
 }
 
 //==============================================================================
@@ -662,6 +681,11 @@ void Component::lowerBy (int indexToLower)
 
 //==============================================================================
 
+bool Component::hasParent() const
+{
+    return parentComponent != nullptr;
+}
+
 Component* Component::getParentComponent()
 {
     return parentComponent;
@@ -693,12 +717,26 @@ void Component::addChildComponent (Component* component, int index)
         {
             children.move (currentIndex, index);
 
+            auto bailOutChecker = BailOutChecker (this);
+
+            component->internalHierarchyChanged();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+
             childrenChanged();
         }
     }
     else
     {
         children.insert (index, component);
+
+        auto bailOutChecker = BailOutChecker (this);
+
+        component->internalHierarchyChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
 
         childrenChanged();
     }
@@ -735,6 +773,10 @@ void Component::removeChildComponent (int index)
         return;
 
     auto component = children.removeAndReturn (index);
+
+    if (component->isShowing())
+        repaint (component->getBounds());
+
     component->parentComponent = nullptr;
 
     auto bailOutChecker = BailOutChecker (this);
@@ -786,7 +828,7 @@ int Component::getNumChildComponents() const
     return children.size();
 }
 
-Component* Component::getComponentAt (int index) const
+Component* Component::getChildComponent (int index) const
 {
     return children.getUnchecked (index);
 }
@@ -901,11 +943,32 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint (Graphics& g) {}
+void Component::paint (Graphics& g)
+{
+    jassert (! isOpaque()); // If your component is opaque, you need to paint it !
+}
 
 void Component::paintOverChildren (Graphics& g) {}
 
 void Component::refreshDisplay (double lastFrameTimeSeconds) {}
+
+//==============================================================================
+
+void Component::setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents)
+{
+    options.blockSelfMouseEvents = ! allowSelfMouseEvents;
+    options.blockChildrenMouseEvents = ! allowChildrenMouseEvents;
+}
+
+bool Component::doesWantSelfMouseEvents() const
+{
+    return ! options.blockSelfMouseEvents;
+}
+
+bool Component::doesWantChildrenMouseEvents() const
+{
+    return ! options.blockChildrenMouseEvents;
+}
 
 //==============================================================================
 
@@ -977,6 +1040,8 @@ void Component::setColor (const Identifier& colorId, const std::optional<Color>&
         properties.set (colorId, static_cast<int64> (color->getARGB()));
     else
         properties.remove (colorId);
+
+    styleChanged();
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
@@ -998,7 +1063,59 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
     return std::nullopt;
 }
 
+//==============================================================================
+
+void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
+{
+    if (property)
+        properties.set (propertyId, *property);
+    else
+        properties.remove (propertyId);
+
+    styleChanged();
+}
+
+std::optional<var> Component::getStyleProperty (const Identifier& propertyId) const
+{
+    if (auto property = properties.getVarPointer (propertyId); property != nullptr && ! property->isVoid())
+        return *property;
+
+    return std::nullopt;
+}
+
+std::optional<var> Component::findStyleProperty (const Identifier& propertyId) const
+{
+    if (auto property = getStyleProperty (propertyId))
+        return property;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findStyleProperty (propertyId);
+
+    return std::nullopt;
+}
+
+//==============================================================================
+
 void Component::userTriedToCloseWindow() {}
+
+//==============================================================================
+
+bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
+{
+    // Check only direct children - no recursive hierarchy traversal
+    for (int childIndex = children.size(); --childIndex >= 0;)
+    {
+        auto child = children.getUnchecked (childIndex);
+        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
+            continue;
+
+        auto childBounds = child->getBoundsRelativeToTopLevelComponent();
+        if (childBounds.contains (area))
+            return true;
+    }
+
+    return false;
+}
 
 //==============================================================================
 
@@ -1008,6 +1125,22 @@ void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 
     for (auto child : children)
         child->internalRefreshDisplay (lastFrameTimeSeconds);
+}
+
+//==============================================================================
+
+void Component::internalRepaint()
+{
+    internalRepaint (getLocalBounds());
+}
+
+void Component::internalRepaint (const Rectangle<float>& rect)
+{
+    if (rect.isEmpty())
+        return;
+
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
 }
 
 //==============================================================================
@@ -1027,7 +1160,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
+    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
+    const auto opacity = g.getOpacity() * selfOpacity;
     if (opacity <= 0.0f)
         return;
 
@@ -1043,6 +1177,11 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         g.setTransform (transform);
 
+        bool canSkipPaint = false;
+        if (! options.unclippedRendering && ! isTransformed())
+            canSkipPaint = hasOpaqueChildCoveringArea (boundsToRedraw);
+
+        if (! canSkipPaint)
         {
             const auto paintState = g.saveState();
 
@@ -1296,6 +1435,44 @@ void Component::internalUserTriedToCloseWindow()
 
 //==============================================================================
 
+void Component::internalAttachedToNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    attachedToNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalAttachedToNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+void Component::internalDetachedFromNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    detachedFromNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+//==============================================================================
+
 void Component::updateMouseCursor()
 {
     Desktop::getInstance()->setMouseCursor (mouseCursor);
@@ -1312,7 +1489,7 @@ Point<float> Component::getScreenPosition() const
 
 Rectangle<float> Component::getScreenBounds() const
 {
-    return localToScreen (getBounds());
+    return localToScreen (getLocalBounds());
 }
 
 //==============================================================================
@@ -1322,16 +1499,14 @@ Point<float> Component::localToScreen (const Point<float>& localPoint) const
     if (options.onDesktop && native != nullptr)
         return native->getPosition().to<float>() + localPoint;
 
-    auto screenPos = localPoint;
+    auto screenPos = localPoint + getPosition();
     auto parent = getParentComponent();
 
     while (parent != nullptr)
     {
-        if (parent->options.onDesktop)
+        if (parent->options.onDesktop && parent->native != nullptr)
         {
-            if (parent->native != nullptr)
-                screenPos += parent->native->getPosition().to<float>();
-
+            screenPos += parent->native->getPosition().to<float>();
             break;
         }
         else
@@ -1347,7 +1522,7 @@ Point<float> Component::localToScreen (const Point<float>& localPoint) const
 
 Point<float> Component::screenToLocal (const Point<float>& screenPoint) const
 {
-    return screenPoint - localToScreen (getPosition());
+    return screenPoint - localToScreen (Point<float> (0.0f, 0.0f));
 }
 
 Rectangle<float> Component::localToScreen (const Rectangle<float>& localRectangle) const
@@ -1378,6 +1553,8 @@ Rectangle<float> Component::getLocalArea (const Component* sourceComponent, Rect
     return screenToLocal (sourceComponent->localToScreen (rectangleInSource));
 }
 
+//==============================================================================
+
 Point<float> Component::getRelativePoint (const Component* targetComponent, Point<float> localPoint) const
 {
     if (targetComponent == nullptr || targetComponent == this)
@@ -1393,6 +1570,8 @@ Rectangle<float> Component::getRelativeArea (const Component* targetComponent, R
 
     return targetComponent->screenToLocal (localToScreen (localRectangle));
 }
+
+//==============================================================================
 
 AffineTransform Component::getTransformToComponent (const Component* targetComponent) const
 {

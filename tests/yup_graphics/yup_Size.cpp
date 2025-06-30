@@ -143,21 +143,76 @@ TEST (SizeTests, ConvertAndRound)
     EXPECT_EQ (rounded.getHeight(), 4);
 }
 
+TEST (SizeTests, PrimitiveConversions)
+{
+    Size<float> s (3.7f, 4.2f);
+
+    auto toPoint = s.toPoint();
+    EXPECT_FLOAT_EQ (toPoint.getX(), 3.7f);
+    EXPECT_FLOAT_EQ (toPoint.getY(), 4.2f);
+
+    auto toPointInt = s.toPoint<int>();
+    EXPECT_EQ (toPointInt.getX(), 3);
+    EXPECT_EQ (toPointInt.getY(), 4);
+
+    auto toRectangle1 = s.toRectangle();
+    EXPECT_FLOAT_EQ (toRectangle1.getX(), 0.0f);
+    EXPECT_FLOAT_EQ (toRectangle1.getY(), 0.0f);
+    EXPECT_FLOAT_EQ (toRectangle1.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle1.getHeight(), 4.2f);
+
+    auto toRectangle2 = s.toRectangle (1.2f, 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle2.getX(), 1.2f);
+    EXPECT_FLOAT_EQ (toRectangle2.getY(), 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle2.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle2.getHeight(), 4.2f);
+
+    auto toRectangle3 = s.toRectangle (Point<float> { 1.2f, 2.9f });
+    EXPECT_FLOAT_EQ (toRectangle3.getX(), 1.2f);
+    EXPECT_FLOAT_EQ (toRectangle3.getY(), 2.9f);
+    EXPECT_FLOAT_EQ (toRectangle3.getWidth(), 3.7f);
+    EXPECT_FLOAT_EQ (toRectangle3.getHeight(), 4.2f);
+
+    auto toRectangleInt = s.toRectangle<int>();
+    EXPECT_EQ (toRectangleInt.getX(), 0);
+    EXPECT_EQ (toRectangleInt.getY(), 0);
+    EXPECT_EQ (toRectangleInt.getWidth(), 3);
+    EXPECT_EQ (toRectangleInt.getHeight(), 4);
+}
+
 TEST (SizeTests, ArithmeticOperators)
 {
-    Size<float> s (2.0f, 3.0f);
-    auto mul = s * 2.0f;
-    EXPECT_FLOAT_EQ (mul.getWidth(), 4.0f);
-    EXPECT_FLOAT_EQ (mul.getHeight(), 6.0f);
-    s *= 0.5f;
-    EXPECT_FLOAT_EQ (s.getWidth(), 1.0f);
-    EXPECT_FLOAT_EQ (s.getHeight(), 1.5f);
-    auto div = mul / 2.0f;
-    EXPECT_FLOAT_EQ (div.getWidth(), 2.0f);
-    EXPECT_FLOAT_EQ (div.getHeight(), 3.0f);
-    mul /= 2.0f;
-    EXPECT_FLOAT_EQ (mul.getWidth(), 2.0f);
-    EXPECT_FLOAT_EQ (mul.getHeight(), 3.0f);
+    {
+        Size<int> s (2, 4);
+        auto mul = s * 2;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 4);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 8);
+        s *= 2;
+        EXPECT_FLOAT_EQ (s.getWidth(), 4);
+        EXPECT_FLOAT_EQ (s.getHeight(), 8);
+        auto div = mul / 2;
+        EXPECT_FLOAT_EQ (div.getWidth(), 2);
+        EXPECT_FLOAT_EQ (div.getHeight(), 4);
+        mul /= 2;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 2);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 4);
+    }
+
+    {
+        Size<float> s (2.0f, 3.0f);
+        auto mul = s * 2.0f;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 4.0f);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 6.0f);
+        s *= 0.5f;
+        EXPECT_FLOAT_EQ (s.getWidth(), 1.0f);
+        EXPECT_FLOAT_EQ (s.getHeight(), 1.5f);
+        auto div = mul / 2.0f;
+        EXPECT_FLOAT_EQ (div.getWidth(), 2.0f);
+        EXPECT_FLOAT_EQ (div.getHeight(), 3.0f);
+        mul /= 2.0f;
+        EXPECT_FLOAT_EQ (mul.getWidth(), 2.0f);
+        EXPECT_FLOAT_EQ (mul.getHeight(), 3.0f);
+    }
 }
 
 TEST (SizeTests, EqualityAndApproxEqual)

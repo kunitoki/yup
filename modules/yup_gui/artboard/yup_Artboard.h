@@ -65,6 +65,16 @@ public:
     */
     void setPaused (bool shouldPause);
 
+    /** Returns true if the Rive artboard is pausing when hidden. */
+    bool isPausingWhenHidden() const;
+
+    /** Sets the Rive artboard to pause when hidden.
+
+        @param shouldPause True to pause the Rive artboard when hidden, false to not pause.
+    */
+    void shouldPauseWhenHidden (bool shouldPause);
+
+    //==============================================================================
     /** Advances the Rive artboard by a given number of seconds.
 
         @param elapsedSeconds The number of seconds to advance the Rive artboard by.
@@ -175,6 +185,7 @@ private:
     rive::Mat2D viewTransform;
 
     bool paused = false;
+    bool pauseWhenHidden = true;
 };
 
 } // namespace yup

@@ -66,6 +66,9 @@ public:
     {
         auto area = getLocalBounds().reduced (5);
 
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
         auto styledText = yup::StyledText();
         {
             auto modifier = styledText.startUpdate();

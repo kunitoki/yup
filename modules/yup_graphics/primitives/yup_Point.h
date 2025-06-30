@@ -966,6 +966,13 @@ public:
         return { yup::roundToInt (x), yup::roundToInt (y) };
     }
 
+    template <class T = ValueType>
+    [[nodiscard]] auto toNearestInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Point<ValueType>>
+    {
+        return { static_cast<ValueType> (yup::roundToInt (x)), static_cast<ValueType> (yup::roundToInt (y)) };
+    }
+
     //==============================================================================
     /** Adds the coordinates of another point to this point and returns the result.
 

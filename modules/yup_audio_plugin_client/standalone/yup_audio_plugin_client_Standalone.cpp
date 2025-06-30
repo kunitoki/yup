@@ -75,12 +75,12 @@ public:
     {
     }
 
-    const String getApplicationName() override
+    String getApplicationName() override
     {
         return processor->getName();
     }
 
-    const String getApplicationVersion() override
+    String getApplicationVersion() override
     {
         return "1.0"; // processor->getVersion();
     }

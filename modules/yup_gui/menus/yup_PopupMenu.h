@@ -249,7 +249,7 @@ public:
 
     //==============================================================================
     // Color identifiers for theming
-    struct Colors
+    struct Style
     {
         static inline const Identifier menuBackground { "menuBackground" };
         static inline const Identifier menuBorder { "menuBorder" };

@@ -74,6 +74,20 @@ void Artboard::setPaused (bool shouldPause)
     repaint();
 }
 
+//==============================================================================
+
+bool Artboard::isPausingWhenHidden() const
+{
+    return pauseWhenHidden;
+}
+
+void Artboard::shouldPauseWhenHidden (bool shouldPause)
+{
+    pauseWhenHidden = shouldPause;
+}
+
+//==============================================================================
+
 void Artboard::advanceAndApply (float elapsedSeconds)
 {
     if (scene == nullptr)
@@ -235,8 +249,10 @@ void Artboard::setInput (const String& inputName, const var& value)
 
 void Artboard::refreshDisplay (double lastFrameTimeSeconds)
 {
-    if (! paused)
-        advanceAndApply (static_cast<float> (lastFrameTimeSeconds));
+    if (paused || (pauseWhenHidden && ! isShowing()))
+        return;
+
+    advanceAndApply (static_cast<float> (lastFrameTimeSeconds));
 }
 
 //==============================================================================

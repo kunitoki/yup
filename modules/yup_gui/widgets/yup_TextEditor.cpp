@@ -24,12 +24,12 @@ namespace yup
 
 //==============================================================================
 
-const Identifier TextEditor::Colors::backgroundColorId = "textEditorBackground";
-const Identifier TextEditor::Colors::textColorId = "textEditorText";
-const Identifier TextEditor::Colors::caretColorId = "textEditorCaret";
-const Identifier TextEditor::Colors::selectionColorId = "textEditorSelection";
-const Identifier TextEditor::Colors::outlineColorId = "textEditorOutline";
-const Identifier TextEditor::Colors::focusedOutlineColorId = "textEditorFocusedOutline";
+const Identifier TextEditor::Style::backgroundColorId = "textEditorBackground";
+const Identifier TextEditor::Style::textColorId = "textEditorText";
+const Identifier TextEditor::Style::caretColorId = "textEditorCaret";
+const Identifier TextEditor::Style::selectionColorId = "textEditorSelection";
+const Identifier TextEditor::Style::outlineColorId = "textEditorOutline";
+const Identifier TextEditor::Style::focusedOutlineColorId = "textEditorFocusedOutline";
 
 //==============================================================================
 
@@ -498,7 +498,7 @@ void TextEditor::updateStyledTextIfNeeded()
 
     if (text.isNotEmpty())
     {
-        auto textColor = findColor (Colors::textColorId).value_or (yup::Colors::black);
+        auto textColor = findColor (Style::textColorId).value_or (Colors::black);
         auto currentFont = font.value_or (ApplicationTheme::getGlobalTheme()->getDefaultFont());
 
         modifier.setMaxSize (getTextBounds().getSize());

@@ -522,6 +522,15 @@ void Graphics::strokeRoundedRect (const Rectangle<float>& r, float radius)
 }
 
 //==============================================================================
+void Graphics::fillEllipse (const Rectangle<float>& r)
+{
+    Path path;
+    path.addEllipse (r);
+
+    fillPath (path);
+}
+
+//==============================================================================
 void Graphics::strokePath (const Path& path)
 {
     const auto& options = currentRenderOptions();

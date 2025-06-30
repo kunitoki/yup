@@ -497,6 +497,13 @@ TEST (RectangleTests, Contains)
     // Test contains with point
     EXPECT_TRUE (r.contains (Point<float> (2.0f, 3.0f)));
     EXPECT_FALSE (r.contains (Point<float> (0.0f, 0.0f)));
+
+    // Test contains with rect
+    EXPECT_TRUE (r.contains (r));
+    EXPECT_TRUE (r.contains (r.reduced (0.5f)));
+    EXPECT_FALSE (r.contains (Rectangle<float> (2.0f, 2.0f, 3.0f, 4.0f)));
+    EXPECT_FALSE (r.contains (r.enlarged (0.5f)));
+    EXPECT_FALSE (r.contains (Rectangle<float> (10.0f, 20.0f, 30.0f, 40.0f)));
 }
 
 TEST (RectangleTests, Area)

@@ -29,6 +29,8 @@ public:
         , openFile ("Open File")
         , openMultipleFiles ("Multiple Files")
     {
+        setOpaque (false);
+
         addAndMakeVisible (openFile);
         openFile.onClick = [this]
         {
@@ -78,6 +80,12 @@ public:
         openFile.setBounds (buttons1.removeFromLeft (buttonWidth));
         buttons1.removeFromLeft (margin);
         openMultipleFiles.setBounds (buttons1.removeFromLeft (buttonWidth));
+    }
+
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
     }
 
 private:

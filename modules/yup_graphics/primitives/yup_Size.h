@@ -374,7 +374,7 @@ public:
         @return A reference to this updated Size object.
     */
     template <class T>
-    [[nodiscard]] constexpr auto scale (T scaleFactor) noexcept
+    constexpr auto scale (T scaleFactor) noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size&>
     {
         scale (scaleFactor, scaleFactor);
@@ -464,6 +464,13 @@ public:
         return { yup::roundToInt (width), yup::roundToInt (height) };
     }
 
+    template <class T = ValueType>
+    [[nodiscard]] auto toNearestInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size<ValueType>>
+    {
+        return { static_cast<ValueType> (yup::roundToInt (width)), static_cast<ValueType> (yup::roundToInt (height)) };
+    }
+
     //==============================================================================
     /** Convert Size to Point
 
@@ -473,7 +480,7 @@ public:
 
         @return A new Point object with the converted dimensions.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Point<T> toPoint() const noexcept
     {
         return { static_cast<T> (width), static_cast<T> (height) };
@@ -487,7 +494,7 @@ public:
 
         @return A new Rectangle object with the converted dimensions.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle<T> toRectangle() const noexcept;
 
     /** Convert Size to Rectangle with specified coordinates
@@ -501,7 +508,7 @@ public:
 
         @return A new Rectangle object with the converted dimensions.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle<T> toRectangle (T x, T y) const noexcept;
 
     /** Convert Size to Rectangle with specified coordinates
@@ -514,7 +521,7 @@ public:
 
         @return A new Rectangle object with the converted dimensions.
     */
-    template <class T>
+    template <class T = ValueType>
     [[nodiscard]] constexpr Rectangle<T> toRectangle (Point<T> xy) const noexcept;
 
     //==============================================================================

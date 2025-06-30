@@ -27,7 +27,7 @@ class YUP_API TextButton : public Button
 {
 public:
     //==============================================================================
-    TextButton (StringRef componentID);
+    TextButton (StringRef componentID = {});
 
     //==============================================================================
 
@@ -37,7 +37,7 @@ public:
 
     //==============================================================================
     /** Color identifiers used by the text editor. */
-    struct Colors
+    struct Style
     {
         static const Identifier backgroundColorId;
         static const Identifier backgroundPressedColorId;

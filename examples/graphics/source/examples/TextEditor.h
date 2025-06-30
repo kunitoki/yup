@@ -104,6 +104,9 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
         // Header separator
         g.setStrokeColor (yup::Colors::darkgray);
         g.setStrokeWidth (2.0f);

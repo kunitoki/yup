@@ -53,20 +53,21 @@ void installGlobalMouseListener()
                 bool clickedInsidePopup = false;
                 for (const auto& popup : activePopups)
                 {
-                    if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
-                    {
-                        if (popupMenu->getScreenBounds().contains (globalPos))
-                        {
-                            clickedInsidePopup = true;
-                            break;
-                        }
+                    auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get());
+                    if (popupMenu == nullptr)
+                        continue;
 
-                        // Also check if clicked inside any submenu
-                        if (popupMenu->submenuContains (globalPos))
-                        {
-                            clickedInsidePopup = true;
-                            break;
-                        }
+                    if (popupMenu->getScreenBounds().contains (globalPos))
+                    {
+                        clickedInsidePopup = true;
+                        break;
+                    }
+
+                    // Also check if clicked inside any submenu
+                    if (popupMenu->submenuContains (globalPos))
+                    {
+                        clickedInsidePopup = true;
+                        break;
                     }
                 }
 
@@ -365,6 +366,7 @@ PopupMenu::Options& PopupMenu::Options::withMaximumWidth (int maxWidth)
 PopupMenu::PopupMenu (const Options& options)
     : options (options)
 {
+    setOpaque (false);
 }
 
 PopupMenu::~PopupMenu()
@@ -384,16 +386,13 @@ PopupMenu::Ptr PopupMenu::create (const Options& options)
 
 void PopupMenu::dismissAllPopups()
 {
-    // Make a copy to avoid issues with the vector being modified during iteration
-    auto popupsToClose = std::move (activePopups);
+    auto popupsToClose = std::exchange (activePopups, {});
 
     for (const auto& popup : popupsToClose)
     {
         if (auto* popupMenu = dynamic_cast<PopupMenu*> (popup.get()))
             popupMenu->dismiss();
     }
-
-    activePopups.clear();
 }
 
 //==============================================================================
@@ -615,6 +614,7 @@ void PopupMenu::positionMenu()
                     else
                     {
                         // Target is not a direct child - need coordinate conversion
+                        // Transform target component's local bounds to parent component's coordinate space
                         targetArea = options.parentComponent->getLocalArea (options.targetComponent, options.targetComponent->getLocalBounds()).to<int>();
                     }
                 }
@@ -623,6 +623,7 @@ void PopupMenu::positionMenu()
                     // No parent component - use screen coordinates
                     targetArea = options.targetComponent->getScreenBounds().to<int>();
                 }
+
                 position = calculatePositionRelativeToArea (targetArea, menuSize, options.placement);
             }
             else
@@ -1140,7 +1141,7 @@ void PopupMenu::paintScrollIndicators (Graphics& g)
         return;
 
     auto theme = ApplicationTheme::getGlobalTheme();
-    g.setFillColor (findColor (Colors::menuItemText).value_or (Color (0xff000000)));
+    g.setFillColor (findColor (Style::menuItemText).value_or (Color (0xff000000)));
 
     // Up arrow
     if (scrollOffset > 0.0f)

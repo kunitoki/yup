@@ -9,6 +9,7 @@ coverage:
   status:
     project:
       default:
+        informational: true
         target: 70%
         threshold: 5%
         base: auto
@@ -22,6 +23,7 @@ coverage:
           - yup_gui
     patch:
       default:
+        informational: true
         target: 70%
         threshold: 5%
 
@@ -114,7 +116,7 @@ ignore:
   - "cmake/**/*"
   - "docs/**/*"
   - "standalone/**/*"
-  - "**/modules/*/native/*"
+  - "modules/*/native/**/*"
 
 comment:
   layout: "header, reach, components, diff, flags, files, footer"

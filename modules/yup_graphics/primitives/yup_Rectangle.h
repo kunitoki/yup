@@ -1880,6 +1880,13 @@ public:
         return { xy.roundToInt(), size.roundToInt() };
     }
 
+    template <class T = ValueType>
+    [[nodiscard]] constexpr auto toNearestInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Rectangle<ValueType>>
+    {
+        return { xy.toNearestInt(), size.toNearestInt() };
+    }
+
     //==============================================================================
     /** Multiplies the size and position of the rectangle by a scale factor.
 
@@ -2084,21 +2091,21 @@ template <class ValueType>
 template <class T>
 [[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle() const noexcept
 {
-    return { static_cast<T> (0), static_cast<T> (0), *this };
+    return { static_cast<T> (0), static_cast<T> (0), static_cast<T> (width), static_cast<T> (height) };
 }
 
 template <class ValueType>
 template <class T>
 [[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle (T x, T y) const noexcept
 {
-    return { x, y, *this };
+    return { x, y, static_cast<T> (width), static_cast<T> (height) };
 }
 
 template <class ValueType>
 template <class T>
 [[nodiscard]] constexpr Rectangle<T> Size<ValueType>::toRectangle (Point<T> xy) const noexcept
 {
-    return { xy, *this };
+    return { xy, static_cast<T> (width), static_cast<T> (height) };
 }
 
 } // namespace yup

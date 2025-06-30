@@ -233,16 +233,6 @@ public:
 class AudioDeviceManagerTests : public ::testing::Test
 {
 public:
-    void SetUp() override
-    {
-        MessageManager::getInstance()->setCurrentThreadAsMessageThread();
-    }
-
-    void TearDown() override
-    {
-        MessageManager::deleteInstance();
-    }
-
     void initialiseWithDefaultDevices (AudioDeviceManager& manager)
     {
         manager.initialiseWithDefaultDevices (2, 2);

@@ -24,12 +24,12 @@ namespace yup
 
 //==============================================================================
 
-const Identifier TextButton::Colors::backgroundColorId = "textButtonBackground";
-const Identifier TextButton::Colors::backgroundPressedColorId = "textButtonBackgroundPressed";
-const Identifier TextButton::Colors::textColorId = "textButtonText";
-const Identifier TextButton::Colors::textPressedColorId = "textButtonTextPressed";
-const Identifier TextButton::Colors::outlineColorId = "textButtonOutline";
-const Identifier TextButton::Colors::outlineFocusedColorId = "textButtonOutlineFocused";
+const Identifier TextButton::Style::backgroundColorId = "textButtonBackground";
+const Identifier TextButton::Style::backgroundPressedColorId = "textButtonBackgroundPressed";
+const Identifier TextButton::Style::textColorId = "textButtonText";
+const Identifier TextButton::Style::textPressedColorId = "textButtonTextPressed";
+const Identifier TextButton::Style::outlineColorId = "textButtonOutline";
+const Identifier TextButton::Style::outlineFocusedColorId = "textButtonOutlineFocused";
 
 //==============================================================================
 
@@ -37,8 +37,7 @@ TextButton::TextButton (StringRef componentID)
     : Button (componentID)
     , buttonText (componentID)
 {
-    setWantsKeyboardFocus (true);
-    setMouseCursor (MouseCursor::Hand);
+    setOpaque (false);
 }
 
 //==============================================================================
@@ -75,7 +74,9 @@ void TextButton::resized()
     modifier.setWrap (StyledText::noWrap);
     modifier.setOverflow (StyledText::ellipsis);
     modifier.clear();
-    modifier.appendText (buttonText, font, getHeight() * 0.35f);
+
+    if (buttonText.isNotEmpty())
+        modifier.appendText (buttonText, font, getHeight() * 0.35f);
 }
 
 //==============================================================================

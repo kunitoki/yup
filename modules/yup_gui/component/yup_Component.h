@@ -291,6 +291,14 @@ public:
     /**
         Set the size of the component.
 
+        @param width The new width of the component.
+        @param height The new height of the component.
+     */
+    void setSize (float width, float height);
+
+    /**
+        Set the size of the component.
+
         @param newSize The new size of the component.
      */
     void setSize (const Size<float>& newSize);
@@ -333,6 +341,16 @@ public:
     virtual void resized();
 
     //==============================================================================
+    /**
+        Set the bounds of the component.
+
+        @param x The new x position of the component.
+        @param y The new y position of the component.
+        @param width The new width of the component.
+        @param height The new height of the component.
+     */
+    void setBounds (float x, float y, float width, float height);
+
     /**
         Set the bounds of the component.
 
@@ -561,6 +579,25 @@ public:
 
     //==============================================================================
     /**
+        Check if the component is opaque.
+
+        An opaque component fully covers its background, allowing for rendering optimizations.
+        When an area is fully covered by an opaque component (and its children), rendering
+        can start from that component instead of from the root.
+
+        @return True if the component is opaque, false otherwise.
+     */
+    bool isOpaque() const;
+
+    /**
+        Set the opaque state of the component.
+
+        @param shouldBeOpaque True if the component should be opaque, false otherwise.
+     */
+    void setOpaque (bool shouldBeOpaque);
+
+    //==============================================================================
+    /**
         Enable or disable unclipped rendering for the component.
 
         @param shouldBeEnabled True if the component should be rendered unclipped, false otherwise.
@@ -585,6 +622,11 @@ public:
         @param rect The rectangle to repaint.
      */
     void repaint (const Rectangle<float>& rect);
+
+    /**
+        Repaint the component.
+     */
+    void repaint (float x, float y, float width, float height);
 
     //==============================================================================
     /**
@@ -733,6 +775,13 @@ public:
 
     //==============================================================================
     /**
+        Check if the component has a parent component.
+
+        @return Wheter the component has a parent.
+     */
+    bool hasParent() const;
+
+    /**
         Get the parent of the component.
 
         @return The parent of the component.
@@ -859,7 +908,7 @@ public:
 
         @param index The index of the child component to get.
      */
-    Component* getComponentAt (int index) const;
+    Component* getChildComponent (int index) const;
 
     /**
         Returns the index of a child component, or -1 if not found.
@@ -915,6 +964,29 @@ public:
         @param lastFrameTimeSeconds The time since the last frame.
      */
     virtual void refreshDisplay (double lastFrameTimeSeconds);
+
+    //==============================================================================
+    /**
+        Set if the component wants mouse events.
+
+        @param allowSelfMouseEvents True if the component wants mouse events on itself, false otherwise.
+        @param allowChildrenMouseEvents True if the component wants mouse events on its children, false otherwise.
+     */
+    void setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents);
+
+    /**
+        Check if the component wants mouse events on itself.
+
+        @return True if the component wants mouse events on itself, false otherwise.
+     */
+    bool doesWantSelfMouseEvents() const;
+
+    /**
+        Check if the component wants mouse events on its children.
+
+        @return True if the component wants mouse events on its children, false otherwise.
+     */
+    bool doesWantChildrenMouseEvents() const;
 
     //==============================================================================
     /**
@@ -1056,6 +1128,31 @@ public:
     std::optional<Color> findColor (const Identifier& colorId) const;
 
     //==============================================================================
+
+    /** Set a style property for the component.
+
+        @param propertyId The identifier of the property to set.
+        @param property The property to set.
+     */
+    void setStyleProperty (const Identifier& propertyId, const std::optional<var>& property);
+
+    /** Get a style property for the component.
+
+        @param propertyId The identifier of the property to get.
+
+        @return The property of the component.
+     */
+    std::optional<var> getStyleProperty (const Identifier& propertyId) const;
+
+    /** Find a style property for the component.
+
+        @param propertyId The identifier of the property to find.
+
+        @return The property of the component.
+     */
+    std::optional<var> findStyleProperty (const Identifier& propertyId) const;
+
+    //==============================================================================
     /** A bail out checker for the component. */
     class BailOutChecker
     {
@@ -1090,6 +1187,8 @@ public:
 
 private:
     void internalRefreshDisplay (double lastFrameTimeSeconds);
+    void internalRepaint();
+    void internalRepaint (const Rectangle<float>& rect);
     void internalPaint (Graphics& g, const Rectangle<float>& repaintArea, bool renderContinuous);
     void internalMouseEnter (const MouseEvent& event);
     void internalMouseExit (const MouseEvent& event);
@@ -1109,8 +1208,12 @@ private:
     void internalContentScaleChanged (float dpiScale);
     void internalUserTriedToCloseWindow();
     void internalHierarchyChanged();
+    void internalAttachedToNative();
+    void internalDetachedFromNative();
 
     void updateMouseCursor();
+
+    bool hasOpaqueChildCoveringArea (const Rectangle<float>& area);
 
     friend class ComponentNative;
     friend class SDL2ComponentNative;
@@ -1138,14 +1241,17 @@ private:
         bool hasFrame : 1;
         bool onDesktop : 1;
         bool isFullScreen : 1;
+        bool isTransparent : 1;
         bool unclippedRendering : 1;
         bool wantsKeyboardFocus : 1;
         bool isRepainting : 1;
+        bool blockSelfMouseEvents : 1;
+        bool blockChildrenMouseEvents : 1;
     };
 
     union
     {
-        uint32 optionsValue;
+        uint64 optionsValue;
         Options options;
     };
 
