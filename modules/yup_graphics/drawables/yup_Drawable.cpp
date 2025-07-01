@@ -36,7 +36,7 @@ bool Drawable::parseSVG (const File& svgFile)
     XmlDocument svgDoc (svgFile);
     std::unique_ptr<XmlElement> svgRoot (svgDoc.getDocumentElement());
 
-    if (svgRoot == nullptr || !svgRoot->hasTagName ("svg"))
+    if (svgRoot == nullptr || ! svgRoot->hasTagName ("svg"))
         return false;
 
     if (auto view = svgRoot->getStringAttribute ("viewBox"); view.isNotEmpty())
@@ -375,9 +375,8 @@ AffineTransform Drawable::parseTransform (const XmlElement& element, const Affin
             }
             else if (type == "matrix" && params.size() == 6)
             {
-                result = result.followedBy (AffineTransform(
-                    params[0], params[1], params[2],
-                    params[3], params[4], params[5]));
+                result = result.followedBy (AffineTransform (
+                    params[0], params[1], params[2], params[3], params[4], params[5]));
             }
         }
 
