@@ -55,7 +55,7 @@ bool Drawable::parseSVG (const File& svgFile)
     size.setWidth (width == 0.0 ? viewBox.getWidth() : width);
 
     auto height = svgRoot->getDoubleAttribute ("height");
-    size.setWidth (height == 0.0 ? viewBox.getHeight() : height);
+    size.setHeight (height == 0.0 ? viewBox.getHeight() : height);
 
     //AffineTransform currentTransform;
     //if (! viewBox.getTopLeft().isOrigin())
