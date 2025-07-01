@@ -159,6 +159,9 @@ public:
         static const Identifier focusedBorderColorId;
     };
 
+    /** */
+    bool isPopupShown() const;
+
     //==============================================================================
     /** @internal */
     void paint (Graphics& g) override;
@@ -170,6 +173,8 @@ public:
     void focusGained() override;
     /** @internal */
     void focusLost() override;
+    /** @internal */
+    StyledText& getStyledText() const noexcept { return const_cast<StyledText&> (styledText); }
 
 private:
     struct ComboBoxItem
@@ -182,7 +187,6 @@ private:
     void showPopup();
     void hidePopup();
     void updateDisplayText();
-    void drawArrow (Graphics& g, Rectangle<float> arrowBounds);
 
     Array<ComboBoxItem> items;
     int selectedItemId = 0;
@@ -191,8 +195,6 @@ private:
     StyledText styledText;
     PopupMenu::Ptr popupMenu;
     bool textIsEditable = false;
-    bool hasFocus = false;
-    bool isPopupShown = false;
 
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (ComboBox)
 };

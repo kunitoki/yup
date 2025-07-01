@@ -348,7 +348,6 @@ private:
     void hideSubmenus();
     void updateSubmenuVisibility (int hoveredItemIndex);
     void cleanupSubmenu (PopupMenu::Ptr submenu);
-    void resetSubmenuState (PopupMenu::Ptr submenu);
 
     // Submenu positioning helpers
     Options prepareSubmenuOptions (PopupMenu::Ptr submenu);

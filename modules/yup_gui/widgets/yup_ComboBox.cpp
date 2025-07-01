@@ -185,40 +185,8 @@ void ComboBox::setEditableText (bool isEditable)
 
 void ComboBox::paint (Graphics& g)
 {
-    auto bounds = getLocalBounds();
-
-    // Draw background
-    auto bgColor = findColor (Style::backgroundColorId).value_or (Color (0xffffffff));
-    g.setFillColor (bgColor);
-    g.fillRoundedRect (bounds, 4.0f);
-
-    // Draw border
-    auto borderColor = hasFocus
-                         ? findColor (Style::focusedBorderColorId).value_or (Color (0xff4a90e2))
-                         : findColor (Style::borderColorId).value_or (Color (0xffcccccc));
-
-    g.setStrokeColor (borderColor);
-    g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
-    g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
-
-    // Calculate text and arrow areas
-    auto arrowWidth = 20.0f;
-    auto textBounds = bounds.reduced (8.0f, 4.0f);
-    textBounds.removeFromRight (arrowWidth);
-
-    auto arrowBounds = bounds.reduced (4.0f);
-    arrowBounds.removeFromLeft (bounds.getWidth() - arrowWidth);
-
-    // Draw text
-    if (displayText.isNotEmpty())
-    {
-        auto textColor = findColor (Style::textColorId).value_or (Color (0xff333333));
-        g.setFillColor (textColor);
-        g.fillFittedText (styledText, textBounds);
-    }
-
-    // Draw arrow
-    drawArrow (g, arrowBounds);
+    if (auto style = ApplicationTheme::findComponentStyle (*this))
+        style->paint (g, *ApplicationTheme::getGlobalTheme(), *this);
 }
 
 //==============================================================================
@@ -232,27 +200,25 @@ void ComboBox::resized()
 
 void ComboBox::mouseDown (const MouseEvent& event)
 {
-    if (! isPopupShown)
-    {
+    takeKeyboardFocus();
+
+    if (popupMenu == nullptr || ! popupMenu->isBeingShown())
         showPopup();
-    }
+    else
+        hidePopup();
+
+    repaint();
 }
 
 //==============================================================================
 
 void ComboBox::focusGained()
 {
-    hasFocus = true;
-
     repaint();
 }
 
 void ComboBox::focusLost()
 {
-    hasFocus = false;
-
-    hidePopup();
-
     repaint();
 }
 
@@ -260,10 +226,6 @@ void ComboBox::focusLost()
 
 void ComboBox::showPopup()
 {
-    // This is a simplified popup implementation
-    // In a full implementation, you would create a popup window with the items
-    isPopupShown = true;
-
     popupMenu = PopupMenu::create (PopupMenu::Options {}
                                        .withParentComponent (getTopLevelComponent())
                                        .withMinimumWidth (getWidth())
@@ -286,16 +248,19 @@ void ComboBox::showPopup()
         if (selectedItemID != 0)
             setSelectedId (selectedItemID);
 
-        isPopupShown = false;
+         takeKeyboardFocus();
     });
 }
 
 void ComboBox::hidePopup()
 {
-    isPopupShown = false;
-
-    if (popupMenu != nullptr)
+    if (isPopupShown())
         popupMenu->dismiss();
+}
+
+bool ComboBox::isPopupShown() const
+{
+    return popupMenu != nullptr && popupMenu->isBeingShown();
 }
 
 //==============================================================================
@@ -318,9 +283,7 @@ void ComboBox::updateDisplayText()
     }
 
     if (! foundSelectedItem)
-    {
         displayText = textWhenNothingSelected;
-    }
 
     auto font = ApplicationTheme::getGlobalTheme()->getDefaultFont();
 
@@ -336,23 +299,6 @@ void ComboBox::updateDisplayText()
     }
 
     repaint();
-}
-
-void ComboBox::drawArrow (Graphics& g, Rectangle<float> arrowBounds)
-{
-    auto arrowColor = Color (0xff666666);
-    g.setFillColor (arrowColor);
-
-    auto center = arrowBounds.getCenter();
-    auto arrowSize = 4.0f;
-
-    // Draw simple triangle using lines instead of Path
-    g.setStrokeColor (arrowColor);
-    g.setStrokeWidth (2.0f);
-
-    // Draw downward arrow as lines
-    g.strokeLine (center.getX() - arrowSize, center.getY() - arrowSize * 0.5f, center.getX(), center.getY() + arrowSize * 0.5f);
-    g.strokeLine (center.getX() + arrowSize, center.getY() - arrowSize * 0.5f, center.getX(), center.getY() + arrowSize * 0.5f);
 }
 
 } // namespace yup

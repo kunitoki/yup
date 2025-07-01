@@ -301,6 +301,60 @@ void paintSwitchButton (Graphics& g, const ApplicationTheme& theme, const Switch
 
 //==============================================================================
 
+void paintComboBox (Graphics& g, const ApplicationTheme& theme, const ComboBox& c)
+{
+    auto& styledText = c.getStyledText();
+    const auto bounds = c.getLocalBounds();
+
+    // Draw background
+    auto bgColor = c.findColor (ComboBox::Style::backgroundColorId).value_or (Color (0xffffffff));
+    g.setFillColor (bgColor);
+    g.fillRoundedRect (bounds, 4.0f);
+
+    // Draw border
+    const bool hasFocus = c.hasKeyboardFocus() || c.isPopupShown();
+    auto outlineColor = hasFocus
+                         ? c.findColor (ComboBox::Style::focusedBorderColorId).value_or (Colors::cornflowerblue)
+                         : c.findColor (ComboBox::Style::borderColorId).value_or (Colors::dimgray);
+
+    g.setStrokeColor (outlineColor);
+    g.setStrokeWidth (hasFocus ? 2.0f : 1.0f);
+    g.strokeRoundedRect (bounds.reduced (0.5f), 4.0f);
+
+    // Calculate text and arrow areas
+    auto arrowWidth = 20.0f;
+    auto arrowSize = 4.0f;
+    auto textBounds = bounds.reduced (8.0f, 4.0f);
+    textBounds.removeFromRight (arrowWidth);
+
+    auto arrowBounds = bounds.reduced (4.0f);
+    arrowBounds.removeFromLeft (bounds.getWidth() - arrowWidth);
+
+    // Draw text
+    if (! styledText.isEmpty())
+    {
+        auto textColor = c.findColor (ComboBox::Style::textColorId).value_or (Color (0xff333333));
+        g.setFillColor (textColor);
+        g.fillFittedText (styledText, textBounds);
+    }
+
+    // Draw arrow
+    auto arrowColor = c.findColor (ComboBox::Style::arrowColorId).value_or (Color (0xff666666));
+    g.setFillColor (arrowColor);
+
+    auto center = arrowBounds.getCenter();
+
+    // Draw simple triangle using lines instead of Path
+    g.setStrokeColor (arrowColor);
+    g.setStrokeWidth (2.0f);
+
+    // Draw downward arrow as lines
+    g.strokeLine (center.getX() - arrowSize, center.getY() - arrowSize * 0.5f, center.getX(), center.getY() + arrowSize * 0.5f);
+    g.strokeLine (center.getX() + arrowSize, center.getY() - arrowSize * 0.5f, center.getX(), center.getY() + arrowSize * 0.5f);
+}
+
+//==============================================================================
+
 void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
 {
     auto& styledText = l.getStyledText();
@@ -313,9 +367,12 @@ void paintLabel (Graphics& g, const ApplicationTheme& theme, const Label& l)
         g.strokeFittedText (styledText, bounds);
     }
 
-    const auto fillColor = l.findColor (Label::Style::fillColorId).value_or (Colors::white);
-    g.setFillColor (fillColor);
-    g.fillFittedText (styledText, bounds);
+    if (! styledText.isEmpty())
+    {
+        const auto fillColor = l.findColor (Label::Style::fillColorId).value_or (Colors::white);
+        g.setFillColor (fillColor);
+        g.fillFittedText (styledText, bounds);
+    }
 }
 
 //==============================================================================
@@ -529,6 +586,7 @@ ApplicationTheme::Ptr createThemeVersion1()
     theme->setComponentStyle<ToggleButton> (ComponentStyle::createStyle<ToggleButton> (paintToggleButton));
     theme->setComponentStyle<SwitchButton> (ComponentStyle::createStyle<SwitchButton> (paintSwitchButton));
     theme->setComponentStyle<TextEditor> (ComponentStyle::createStyle<TextEditor> (paintTextEditor));
+    theme->setComponentStyle<ComboBox> (ComponentStyle::createStyle<ComboBox> (paintComboBox));
 
     theme->setComponentStyle<Label> (ComponentStyle::createStyle<Label> (paintLabel));
     theme->setColor (Label::Style::fillColorId, Colors::white);

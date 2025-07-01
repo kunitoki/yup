@@ -30,7 +30,7 @@ public:
     //==============================================================================
     DocumentWindow (
         const ComponentNative::Options& options = {},
-        const Color& backgroundColor = {});
+        const std::optional<Color>& backgroundColor = {});
     ~DocumentWindow() override;
 
     //==============================================================================

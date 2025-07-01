@@ -673,6 +673,13 @@ void PopupMenu::dismiss (int itemID)
 
 //==============================================================================
 
+bool PopupMenu::isBeingShown() const
+{
+    return isVisible() && ! isBeingDismissed;
+}
+
+//==============================================================================
+
 void PopupMenu::paint (Graphics& g)
 {
     if (auto style = ApplicationTheme::findComponentStyle (*this))
@@ -815,7 +822,7 @@ void PopupMenu::showSubmenu (int itemIndex)
         return;
 
     // Reset the submenu's state before showing to ensure clean positioning
-    resetSubmenuState (currentSubmenu);
+    currentSubmenu->resetInternalState();
 
     // Configure submenu options
     auto submenuOptions = prepareSubmenuOptions (currentSubmenu);
@@ -968,16 +975,6 @@ void PopupMenu::cleanupSubmenu (PopupMenu::Ptr submenu)
         submenu->removeFromDesktop();
     }
 
-    // Reset the submenu's internal state to allow it to be shown again
-    resetSubmenuState (submenu);
-}
-
-void PopupMenu::resetSubmenuState (PopupMenu::Ptr submenu)
-{
-    if (! submenu)
-        return;
-
-    // Call the public method to reset the submenu's state
     submenu->resetInternalState();
 }
 
@@ -1053,7 +1050,156 @@ void PopupMenu::updateSubmenuVisibility (int hoveredItemIndex)
 }
 
 //==============================================================================
-// Scrolling functionality
+
+void PopupMenu::selectCurrentItem()
+{
+    int currentIndex = getSelectedItemIndex();
+    if (currentIndex < 0 || currentIndex >= static_cast<int> (items.size()))
+        return;
+
+    auto& item = *items[currentIndex];
+
+    if (item.isEnabled && ! item.isSeparator())
+    {
+        if (item.isSubMenu())
+        {
+            if (! isItemShowingSubmenu (currentIndex))
+            {
+                showSubmenu (currentIndex);
+                if (currentSubmenu)
+                    currentSubmenu->parentMenu = this;
+            }
+        }
+        else
+        {
+            dismiss (item.itemID);
+        }
+    }
+}
+
+void PopupMenu::setSelectedItemIndex (int index, bool fromMouse)
+{
+    if (selectedItemIndex == index)
+        return;
+
+    if (selectedItemIndex >= 0 && selectedItemIndex < static_cast<int> (items.size()))
+        items[selectedItemIndex]->isHovered = false;
+
+    selectedItemIndex = index;
+
+    if (selectedItemIndex >= 0 && selectedItemIndex < static_cast<int> (items.size()))
+        items[selectedItemIndex]->isHovered = true;
+
+    if (fromMouse)
+        updateSubmenuVisibility (index);
+
+    repaint();
+}
+
+bool PopupMenu::isItemSelectable (int index) const
+{
+    if (index < 0 || index >= static_cast<int> (items.size()))
+        return false;
+
+    const auto& item = *items[index];
+    return item.isEnabled && ! item.isSeparator();
+}
+
+int PopupMenu::getSelectedItemIndex() const
+{
+    return selectedItemIndex;
+}
+
+int PopupMenu::getFirstSelectableItemIndex() const
+{
+    for (int i = 0; i < static_cast<int> (items.size()); ++i)
+    {
+        if (isItemSelectable (i))
+            return i;
+    }
+
+    return -1;
+}
+
+int PopupMenu::getLastSelectableItemIndex() const
+{
+    for (int i = static_cast<int> (items.size()) - 1; i >= 0; --i)
+    {
+        if (isItemSelectable (i))
+            return i;
+    }
+
+    return -1;
+}
+
+int PopupMenu::getNextSelectableItemIndex (int currentIndex, bool forward) const
+{
+    if (items.empty())
+        return -1;
+
+    int itemCount = static_cast<int> (items.size());
+
+    if (currentIndex < 0)
+        return forward ? getFirstSelectableItemIndex() : getLastSelectableItemIndex();
+
+    const int step = forward ? 1 : -1;
+    int nextIndex = currentIndex + step;
+
+    // Wrap around
+    if (nextIndex >= itemCount)
+        nextIndex = 0;
+    else if (nextIndex < 0)
+        nextIndex = itemCount - 1;
+
+    // Find the next selectable item
+    const int startIndex = nextIndex;
+
+    do
+    {
+        if (isItemSelectable (nextIndex))
+            return nextIndex;
+
+        nextIndex += step;
+        if (nextIndex >= itemCount)
+            nextIndex = 0;
+        else if (nextIndex < 0)
+            nextIndex = itemCount - 1;
+
+    } while (nextIndex != startIndex);
+
+    return -1; // No selectable items found
+}
+
+int PopupMenu::getNextSelectableItemIndex (int currentIndex) const
+{
+    return getNextSelectableItemIndex (currentIndex, true);
+}
+
+int PopupMenu::getPreviousSelectableItemIndex (int currentIndex) const
+{
+    if (items.empty() || currentIndex < 0)
+        return -1;
+
+    int itemCount = static_cast<int> (items.size());
+
+    // Start from the previous item
+    for (int i = currentIndex - 1; i >= 0; --i)
+    {
+        if (isItemSelectable (i))
+            return i;
+    }
+
+    // Wrap around to the end
+    for (int i = itemCount - 1; i > currentIndex; --i)
+    {
+        if (isItemSelectable (i))
+            return i;
+    }
+
+    return -1; // No selectable items found
+}
+
+//==============================================================================
 
 void PopupMenu::calculateAvailableHeight()
 {
@@ -1328,37 +1474,36 @@ Rectangle<float> PopupMenu::getScrollDownIndicatorBounds() const
 void PopupMenu::navigateUp()
 {
     int currentIndex = getSelectedItemIndex();
-
     if (currentIndex == -1)
     {
         // No current selection, select the last selectable item
         int lastIndex = getLastSelectableItemIndex();
-        if (lastIndex >= 0)
-        {
-            setSelectedItemIndex (lastIndex, false);
+        if (lastIndex < 0)
+            return;
 
-            // Ensure the selected item is visible by scrolling if needed
-            if (needsScrolling() && lastIndex < visibleItemRange.getStart())
-            {
-                while (lastIndex < visibleItemRange.getStart() && canScrollUp())
-                    scrollUp();
-            }
+        setSelectedItemIndex (lastIndex, false);
+
+        // Ensure the selected item is visible by scrolling if needed
+        if (needsScrolling() && lastIndex < visibleItemRange.getStart())
+        {
+            while (lastIndex < visibleItemRange.getStart() && canScrollUp())
+                scrollUp();
         }
     }
     else
     {
         // Move to previous selectable item
         int newIndex = getPreviousSelectableItemIndex (currentIndex);
-        if (newIndex >= 0)
-        {
-            setSelectedItemIndex (newIndex, false);
+        if (newIndex < 0)
+            return;
 
-            // Ensure the selected item is visible by scrolling if needed
-            if (needsScrolling() && newIndex < visibleItemRange.getStart())
-            {
-                while (newIndex < visibleItemRange.getStart() && canScrollUp())
-                    scrollUp();
-            }
+        setSelectedItemIndex (newIndex, false);
+
+        // Ensure the selected item is visible by scrolling if needed
+        if (needsScrolling() && newIndex < visibleItemRange.getStart())
+        {
+            while (newIndex < visibleItemRange.getStart() && canScrollUp())
+                scrollUp();
         }
     }
 }
@@ -1366,37 +1511,36 @@ void PopupMenu::navigateUp()
 void PopupMenu::navigateDown()
 {
     int currentIndex = getSelectedItemIndex();
-
     if (currentIndex == -1)
     {
         // No current selection, select the first selectable item
         int firstIndex = getFirstSelectableItemIndex();
-        if (firstIndex >= 0)
-        {
-            setSelectedItemIndex (firstIndex, false);
+        if (firstIndex < 0)
+            return;
 
-            // Ensure the selected item is visible by scrolling if needed
-            if (needsScrolling() && firstIndex >= visibleItemRange.getEnd())
-            {
-                while (firstIndex >= visibleItemRange.getEnd() && canScrollDown())
-                    scrollDown();
-            }
+        setSelectedItemIndex (firstIndex, false);
+
+        // Ensure the selected item is visible by scrolling if needed
+        if (needsScrolling() && firstIndex >= visibleItemRange.getEnd())
+        {
+            while (firstIndex >= visibleItemRange.getEnd() && canScrollDown())
+                scrollDown();
         }
     }
     else
     {
         // Move to next selectable item
         int newIndex = getNextSelectableItemIndex (currentIndex);
-        if (newIndex >= 0)
-        {
-            setSelectedItemIndex (newIndex, false);
+        if (newIndex < 0)
+            return;
 
-            // Ensure the selected item is visible by scrolling if needed
-            if (needsScrolling() && newIndex >= visibleItemRange.getEnd())
-            {
-                while (newIndex >= visibleItemRange.getEnd() && canScrollDown())
-                    scrollDown();
-            }
+        setSelectedItemIndex (newIndex, false);
+
+        // Ensure the selected item is visible by scrolling if needed
+        if (needsScrolling() && newIndex >= visibleItemRange.getEnd())
+        {
+            while (newIndex >= visibleItemRange.getEnd() && canScrollDown())
+                scrollDown();
         }
     }
 }
@@ -1462,199 +1606,43 @@ void PopupMenu::navigateRight()
 
     auto& item = *items[currentIndex];
 
-    if (item.isSubMenu() && item.isEnabled)
-    {
-        if (isItemShowingSubmenu (currentIndex))
-        {
-            // Determine submenu placement to decide if right arrow should enter or close it
-            auto itemBounds = item.area;
-            auto submenuOptions = prepareSubmenuOptions (item.subMenu);
-            auto placement = calculateSubmenuPlacement (itemBounds, submenuOptions);
-
-            if (placement.side == Side::toLeft)
-            {
-                // Submenu is on the left, right arrow closes it
-                hideSubmenus();
-                return;
-            }
-            else if (placement.side == Side::toRight)
-            {
-                // Submenu is on the right and already open, enter it and select first item
-                enterSubmenuViaKeyboard (currentIndex);
-                return;
-            }
-        }
-        else
-        {
-            // Determine if we should open the submenu
-            auto itemBounds = item.area;
-            auto submenuOptions = prepareSubmenuOptions (item.subMenu);
-            auto placement = calculateSubmenuPlacement (itemBounds, submenuOptions);
-
-            if (placement.side == Side::toRight)
-            {
-                // Submenu would be on the right, open it and select first item
-                enterSubmenuViaKeyboard (currentIndex);
-                return;
-            }
-        }
-    }
-}
-
-void PopupMenu::selectCurrentItem()
-{
-    int currentIndex = getSelectedItemIndex();
-
-    if (currentIndex >= 0 && currentIndex < static_cast<int> (items.size()))
-    {
-        auto& item = *items[currentIndex];
-
-        if (item.isEnabled && ! item.isSeparator())
-        {
-            if (item.isSubMenu())
-            {
-                // For submenus, open them if not already open (with no initial selection)
-                if (! isItemShowingSubmenu (currentIndex))
-                {
-                    showSubmenu (currentIndex);
-                    if (currentSubmenu)
-                    {
-                        currentSubmenu->parentMenu = this;
-                        // Don't set any initial selection on the submenu when opened via Enter
-                    }
-                }
-            }
-            else
-            {
-                // For regular items, dismiss with their ID
-                dismiss (item.itemID);
-            }
-        }
-    }
-}
-
-void PopupMenu::setSelectedItemIndex (int index, bool fromMouse)
-{
-    if (selectedItemIndex == index)
+    if (! item.isSubMenu() || ! item.isEnabled)
         return;
 
-    if (selectedItemIndex >= 0 && selectedItemIndex < static_cast<int> (items.size()))
-        items[selectedItemIndex]->isHovered = false;
-
-    selectedItemIndex = index;
-
-    if (selectedItemIndex >= 0 && selectedItemIndex < static_cast<int> (items.size()))
-        items[selectedItemIndex]->isHovered = true;
-
-    if (fromMouse)
-        updateSubmenuVisibility (index);
-
-    repaint();
-}
-
-bool PopupMenu::isItemSelectable (int index) const
-{
-    if (index < 0 || index >= static_cast<int> (items.size()))
-        return false;
-
-    const auto& item = *items[index];
-    return item.isEnabled && ! item.isSeparator();
-}
-
-int PopupMenu::getSelectedItemIndex() const
-{
-    return selectedItemIndex;
-}
-
-int PopupMenu::getFirstSelectableItemIndex() const
-{
-    for (int i = 0; i < static_cast<int> (items.size()); ++i)
+    if (isItemShowingSubmenu (currentIndex))
     {
-        if (isItemSelectable (i))
-            return i;
+        // Determine submenu placement to decide if right arrow should enter or close it
+        auto itemBounds = item.area;
+        auto submenuOptions = prepareSubmenuOptions (item.subMenu);
+        auto placement = calculateSubmenuPlacement (itemBounds, submenuOptions);
+
+        if (placement.side == Side::toLeft)
+        {
+            // Submenu is on the left, right arrow closes it
+            hideSubmenus();
+            return;
+        }
+        else if (placement.side == Side::toRight)
+        {
+            // Submenu is on the right and already open, enter it and select first item
+            enterSubmenuViaKeyboard (currentIndex);
+            return;
+        }
     }
-
-    return -1;
-}
-
-int PopupMenu::getLastSelectableItemIndex() const
-{
-    for (int i = static_cast<int> (items.size()) - 1; i >= 0; --i)
+    else
     {
-        if (isItemSelectable (i))
-            return i;
+        // Determine if we should open the submenu
+        auto itemBounds = item.area;
+        auto submenuOptions = prepareSubmenuOptions (item.subMenu);
+        auto placement = calculateSubmenuPlacement (itemBounds, submenuOptions);
+
+        if (placement.side == Side::toRight)
+        {
+            // Submenu would be on the right, open it and select first item
+            enterSubmenuViaKeyboard (currentIndex);
+            return;
+        }
     }
-
-    return -1;
-}
-
-int PopupMenu::getNextSelectableItemIndex (int currentIndex, bool forward) const
-{
-    if (items.empty())
-        return -1;
-
-    int itemCount = static_cast<int> (items.size());
-
-    if (currentIndex < 0)
-    {
-        // No current selection, return first or last depending on direction
-        return forward ? getFirstSelectableItemIndex() : getLastSelectableItemIndex();
-    }
-
-    int step = forward ? 1 : -1;
-    int nextIndex = currentIndex + step;
-
-    // Wrap around
-    if (nextIndex >= itemCount)
-        nextIndex = 0;
-    else if (nextIndex < 0)
-        nextIndex = itemCount - 1;
-
-    // Find the next selectable item
-    int startIndex = nextIndex;
-    do
-    {
-        if (isItemSelectable (nextIndex))
-            return nextIndex;
-
-        nextIndex += step;
-        if (nextIndex >= itemCount)
-            nextIndex = 0;
-        else if (nextIndex < 0)
-            nextIndex = itemCount - 1;
-
-    } while (nextIndex != startIndex);
-
-    return -1; // No selectable items found
-}
-
-int PopupMenu::getNextSelectableItemIndex (int currentIndex) const
-{
-    return getNextSelectableItemIndex (currentIndex, true);
-}
-
-int PopupMenu::getPreviousSelectableItemIndex (int currentIndex) const
-{
-    if (items.empty() || currentIndex < 0)
-        return -1;
-
-    int itemCount = static_cast<int> (items.size());
-
-    // Start from the previous item
-    for (int i = currentIndex - 1; i >= 0; --i)
-    {
-        if (isItemSelectable (i))
-            return i;
-    }
-
-    // Wrap around to the end
-    for (int i = itemCount - 1; i > currentIndex; --i)
-    {
-        if (isItemSelectable (i))
-            return i;
-    }
-
-    return -1; // No selectable items found
 }
 
 void PopupMenu::enterSubmenuViaKeyboard (int itemIndex)
@@ -1663,21 +1651,20 @@ void PopupMenu::enterSubmenuViaKeyboard (int itemIndex)
         return;
 
     auto& item = *items[itemIndex];
-    if (item.isSubMenu() && item.isEnabled)
-    {
-        if (! isItemShowingSubmenu (itemIndex))
-            showSubmenu (itemIndex);
+    if (! item.isSubMenu() || ! item.isEnabled)
+        return;
 
-        if (currentSubmenu)
-        {
-            currentSubmenu->parentMenu = this;
+    if (! isItemShowingSubmenu (itemIndex))
+        showSubmenu (itemIndex);
 
-            // When entering submenu via keyboard, select the first selectable item
-            int firstIndex = currentSubmenu->getFirstSelectableItemIndex();
-            if (firstIndex >= 0)
-                currentSubmenu->setSelectedItemIndex (firstIndex, false);
-        }
-    }
+    if (currentSubmenu == nullptr)
+        return;
+
+    currentSubmenu->parentMenu = this;
+
+    const int firstIndex = currentSubmenu->getFirstSelectableItemIndex();
+    if (firstIndex >= 0)
+        currentSubmenu->setSelectedItemIndex (firstIndex, false);
 }
 
 } // namespace yup

@@ -28,10 +28,12 @@ const Identifier DocumentWindow::Style::backgroundColorId = "documentWindowBackg
 
 //==============================================================================
 
-DocumentWindow::DocumentWindow (const ComponentNative::Options& options, const Color& backgroundColor)
+DocumentWindow::DocumentWindow (const ComponentNative::Options& options, const std::optional<Color>& backgroundColor)
 {
     addToDesktop (options, nullptr);
-    setColor (Style::backgroundColorId, backgroundColor);
+
+    if (backgroundColor)
+        setColor (Style::backgroundColorId, *backgroundColor);
 }
 
 DocumentWindow::~DocumentWindow()
