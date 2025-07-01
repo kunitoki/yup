@@ -5,13 +5,19 @@ on:
     paths:
       - "**/modules/**"
       - "!**/native/**/*"
+      - "**/workflows/doxygen.yml"
+      - "Doxyfile"
+      - "README.md"
     branches:
       - "**"
       - "!main"
   pull_request:
     paths:
-    - "**/modules/**"
-    - "!**/native/**/*"
+      - "**/modules/**"
+      - "!**/native/**/*"
+      - "**/workflows/doxygen.yml"
+      - "Doxyfile"
+      - "README.md"
     branches:
       - "dev/**"
   workflow_dispatch:
@@ -19,7 +25,6 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
 
 jobs:
   deploy:
@@ -31,6 +36,6 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: gh-pages
-          folder: docs/html
+          folder: docs/doxygen
           config_file: Doxyfile
           doxygen_version: 1.14.0
