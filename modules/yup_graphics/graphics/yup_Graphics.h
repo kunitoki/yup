@@ -421,19 +421,6 @@ public:
     void strokeFittedText (const StyledText& text, const Rectangle<float>& rect);
 
     //==============================================================================
-    /** Clips the drawing area to the specified rectangle.
-
-        @param r The rectangle to clip to.
-    */
-    void clipPath (const Rectangle<float>& r);
-
-    /** Clips the drawing area to the specified path.
-
-        @param path The path to clip to.
-    */
-    void clipPath (const Path& path);
-
-    //==============================================================================
     /** Retrieves the global context scale, the one used to construct the graphics instance. */
     float getContextScale() const;
 
