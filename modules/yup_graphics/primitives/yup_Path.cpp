@@ -163,7 +163,7 @@ PathSegment PathIterator::createCurrentSegment() const
             if (pointIndex < points.size())
             {
                 return PathSegment (PathVerb::MoveTo,
-                    Point<float> (points[pointIndex].x, points[pointIndex].y));
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y));
             }
             break;
 
@@ -171,7 +171,7 @@ PathSegment PathIterator::createCurrentSegment() const
             if (pointIndex < points.size())
             {
                 return PathSegment (PathVerb::LineTo,
-                    Point<float> (points[pointIndex].x, points[pointIndex].y));
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y));
             }
             break;
 
@@ -179,8 +179,8 @@ PathSegment PathIterator::createCurrentSegment() const
             if (pointIndex + 1 < points.size())
             {
                 return PathSegment (PathVerb::QuadTo,
-                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y), // end point
-                    Point<float> (points[pointIndex].x, points[pointIndex].y));       // control point
+                                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y), // end point
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y));        // control point
             }
             break;
 
@@ -188,9 +188,9 @@ PathSegment PathIterator::createCurrentSegment() const
             if (pointIndex + 2 < points.size())
             {
                 return PathSegment (PathVerb::CubicTo,
-                    Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y), // end point
-                    Point<float> (points[pointIndex].x, points[pointIndex].y),         // control point 1
-                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y)); // control point 2
+                                    Point<float> (points[pointIndex + 2].x, points[pointIndex + 2].y),  // end point
+                                    Point<float> (points[pointIndex].x, points[pointIndex].y),          // control point 1
+                                    Point<float> (points[pointIndex + 1].x, points[pointIndex + 1].y)); // control point 2
             }
             break;
 

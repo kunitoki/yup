@@ -26,11 +26,11 @@ namespace yup
 /** Represents the type of operation in a path segment. */
 enum class PathVerb
 {
-    MoveTo,     /**< Move to a point without drawing. */
-    LineTo,     /**< Draw a line to a point. */
-    QuadTo,     /**< Draw a quadratic Bezier curve. */
-    CubicTo,    /**< Draw a cubic Bezier curve. */
-    Close       /**< Close the current sub-path. */
+    MoveTo,  /**< Move to a point without drawing. */
+    LineTo,  /**< Draw a line to a point. */
+    QuadTo,  /**< Draw a quadratic Bezier curve. */
+    CubicTo, /**< Draw a cubic Bezier curve. */
+    Close    /**< Close the current sub-path. */
 };
 
 //==============================================================================
@@ -44,19 +44,28 @@ struct PathSegment
 
     /** Creates a MoveTo or LineTo segment. */
     PathSegment (PathVerb v, Point<float> p)
-        : verb (v), point (p), controlPoint1 (0.0f, 0.0f), controlPoint2 (0.0f, 0.0f)
+        : verb (v)
+        , point (p)
+        , controlPoint1 (0.0f, 0.0f)
+        , controlPoint2 (0.0f, 0.0f)
     {
     }
 
     /** Creates a QuadTo segment. */
     PathSegment (PathVerb v, Point<float> p, Point<float> c1)
-        : verb (v), point (p), controlPoint1 (c1), controlPoint2 (0.0f, 0.0f)
+        : verb (v)
+        , point (p)
+        , controlPoint1 (c1)
+        , controlPoint2 (0.0f, 0.0f)
     {
     }
 
     /** Creates a CubicTo segment. */
     PathSegment (PathVerb v, Point<float> p, Point<float> c1, Point<float> c2)
-        : verb (v), point (p), controlPoint1 (c1), controlPoint2 (c2)
+        : verb (v)
+        , point (p)
+        , controlPoint1 (c1)
+        , controlPoint2 (c2)
     {
     }
 
