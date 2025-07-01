@@ -1528,10 +1528,12 @@ YUP_API OutputStream& YUP_CALLTYPE operator<< (OutputStream& stream, StringRef s
 #ifndef DOXYGEN
 namespace std
 {
+
 template <>
 struct hash<yup::String>
 {
     size_t operator() (const yup::String& s) const noexcept { return s.hash(); }
 };
+
 } // namespace std
 #endif

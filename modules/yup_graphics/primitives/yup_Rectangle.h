@@ -2110,6 +2110,7 @@ template <class T>
 
 } // namespace yup
 
+#ifndef DOXYGEN
 namespace std
 {
 
@@ -2126,3 +2127,4 @@ struct tuple_element<I, yup::Rectangle<ValueType>>
 };
 
 } // namespace std
+#endif

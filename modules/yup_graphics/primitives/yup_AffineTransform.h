@@ -835,6 +835,7 @@ constexpr float get (const AffineTransform& transform) noexcept
 
 } // namespace yup
 
+#ifndef DOXYGEN
 namespace std
 {
 
@@ -851,3 +852,4 @@ struct tuple_element<I, yup::AffineTransform>
 };
 
 } // namespace std
+#endif

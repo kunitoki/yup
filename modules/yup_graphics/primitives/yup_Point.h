@@ -1389,6 +1389,7 @@ template <std::size_t I, class ValueType>
 
 } // namespace yup
 
+#ifndef DOXYGEN
 namespace std
 {
 
@@ -1405,3 +1406,4 @@ struct tuple_element<I, yup::Point<ValueType>>
 };
 
 } // namespace std
+#endif

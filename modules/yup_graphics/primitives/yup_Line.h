@@ -689,6 +689,7 @@ constexpr ValueType get (const Line<ValueType>& line) noexcept
 
 } // namespace yup
 
+#ifndef DOXYGEN
 namespace std
 {
 
@@ -705,3 +706,4 @@ struct tuple_element<I, yup::Line<ValueType>>
 };
 
 } // namespace std
+#endif

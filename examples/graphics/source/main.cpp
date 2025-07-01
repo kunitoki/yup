@@ -98,6 +98,11 @@ public:
             addChildComponent (components.getLast());
         }
 
+#if JUCE_WASM
+        yup::File dataPath = yup::File ("/data");
+#else
+        yup::File dataPath = yup::File (__FILE__).getParentDirectory().getSiblingFile ("data");
+#endif
         {
             auto button = std::make_unique<yup::TextButton> ("Layout Fonts");
             button->onClick = [this, number = counter++]

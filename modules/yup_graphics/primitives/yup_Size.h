@@ -723,6 +723,7 @@ constexpr ValueType get (const Size<ValueType>& point) noexcept
 
 } // namespace yup
 
+#ifndef DOXYGEN
 namespace std
 {
 
@@ -739,3 +740,4 @@ struct tuple_element<I, yup::Size<ValueType>>
 };
 
 } // namespace std
+#endif

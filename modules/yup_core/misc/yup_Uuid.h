@@ -232,10 +232,12 @@ private:
 #ifndef DOXYGEN
 namespace std
 {
+
 template <>
 struct hash<yup::Uuid>
 {
     size_t operator() (const yup::Uuid& u) const noexcept { return (size_t) u.hash(); }
 };
+
 } // namespace std
 #endif
