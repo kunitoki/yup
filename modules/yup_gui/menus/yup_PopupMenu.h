@@ -336,11 +336,9 @@ private:
     PopupMenu (const Options& options = {});
 
     void showCustom (const Options& options, bool isSubmenu, std::function<void (int)> callback);
-    int getHoveredItem() const;
-    void setHoveredItem (int itemIndex);
     int getItemIndexAt (Point<float> position) const;
     void dismiss (int itemID);
-    void setSelectedItemID (int itemID);
+    void setSelectedItemIndex (int index, bool fromMouse);
     void setupMenuItems();
     void positionMenu();
     void resetInternalState();
@@ -378,19 +376,20 @@ private:
     void navigateLeft();
     void navigateRight();
     void selectCurrentItem();
-    void setSelectedItemIndex (int index);
     int getSelectedItemIndex() const;
     int getFirstSelectableItemIndex() const;
     int getLastSelectableItemIndex() const;
     int getNextSelectableItemIndex (int currentIndex, bool forward) const;
+    int getNextSelectableItemIndex (int currentIndex) const;
+    int getPreviousSelectableItemIndex (int currentIndex) const;
     bool isItemSelectable (int index) const;
+    void enterSubmenuViaKeyboard (int itemIndex);
 
     // PopupMenuItem is now an implementation detail
     class PopupMenuItem;
     std::vector<std::unique_ptr<Item>> items;
 
     Options options;
-    int selectedItemID = -1;
     int selectedItemIndex = -1; // For keyboard navigation
     bool isBeingDismissed = false;
 
@@ -407,6 +406,7 @@ private:
     float availableContentHeight = 0.0f;
     float totalContentHeight = 0.0f;
     bool showScrollIndicators = false;
+
     static constexpr float scrollIndicatorHeight = 12.0f;
     static constexpr int scrollSpeed = 1; // Number of items to scroll per wheel event
 
