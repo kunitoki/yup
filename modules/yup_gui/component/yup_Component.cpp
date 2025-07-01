@@ -75,9 +75,7 @@ void Component::setEnabled (bool shouldBeEnabled)
     //if (options.onDesktop && native != nullptr)
     //    native->setEnabled (shouldBeEnabled);
 
-    if (options.isDisabled && hasKeyboardFocus())
-
-        enablementChanged();
+    enablementChanged();
 }
 
 void Component::enablementChanged() {}
@@ -96,12 +94,20 @@ void Component::setVisible (bool shouldBeVisible)
 
     options.isVisible = shouldBeVisible;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     if (options.onDesktop && native != nullptr)
         native->setVisible (shouldBeVisible);
 
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     visibilityChanged();
 
-    repaint();
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    internalRepaint();
 }
 
 bool Component::isShowing() const
@@ -134,7 +140,7 @@ void Component::setTitle (const String& title)
 {
     componentTitle = title;
 
-    if (options.onDesktop)
+    if (options.onDesktop && native != nullptr)
         native->setTitle (title);
 }
 
@@ -300,14 +306,23 @@ void Component::moved() {}
 
 //==============================================================================
 
+void Component::setSize (float width, float height)
+{
+    setSize ({ width, height });
+}
+
 void Component::setSize (const Size<float>& newSize)
 {
+    auto areaToRepaint = boundsInParent;
     boundsInParent = boundsInParent.withSize (newSize);
+    areaToRepaint = areaToRepaint.unionWith (boundsInParent);
 
     if (options.onDesktop && native != nullptr)
         native->setSize (newSize.to<int>());
 
     resized();
+
+    repaint (areaToRepaint);
 }
 
 Size<float> Component::getSize() const
@@ -330,6 +345,11 @@ float Component::getHeight() const
 
 //==============================================================================
 
+void Component::setBounds (float x, float y, float width, float height)
+{
+    setBounds ({ x, y, width, height });
+}
+
 void Component::setBounds (const Rectangle<float>& newBounds)
 {
     boundsInParent = newBounds;
@@ -337,7 +357,13 @@ void Component::setBounds (const Rectangle<float>& newBounds)
     if (options.onDesktop && native != nullptr)
         native->setBounds (newBounds.to<int>());
 
+    auto bailOutChecker = BailOutChecker (this);
+
     resized();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
     moved();
 }
 
@@ -398,7 +424,7 @@ AffineTransform Component::getTransform() const
 
 bool Component::isTransformed() const
 {
-    return transform.isIdentity();
+    return ! transform.isIdentity();
 }
 
 void Component::transformChanged()
@@ -431,7 +457,7 @@ void Component::displayChanged() {}
 
 float Component::getScaleDpi() const
 {
-    if (native != nullptr)
+    if (options.onDesktop && native != nullptr)
         return native->getScaleDpi();
 
     if (parentComponent == nullptr)
@@ -450,13 +476,25 @@ void Component::setOpacity (float newOpacity)
 
     opacity = static_cast<uint8> (newOpacity * 255);
 
-    if (native != nullptr)
+    if (options.onDesktop && native != nullptr)
         native->setOpacity (newOpacity);
 }
 
 float Component::getOpacity() const
 {
     return opacity / 255.0f;
+}
+
+//==============================================================================
+
+bool Component::isOpaque() const
+{
+    return ! options.isTransparent;
+}
+
+void Component::setOpaque (bool shouldBeOpaque)
+{
+    options.isTransparent = ! shouldBeOpaque;
 }
 
 //==============================================================================
@@ -473,24 +511,22 @@ bool Component::isRenderingUnclipped() const
 
 void Component::repaint()
 {
-    jassert (! options.isRepainting); // You are likely repainting from paint !
+    repaint (getLocalBounds());
+}
 
-    if (getBounds().isEmpty())
-        return;
-
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (getBoundsRelativeToTopLevelComponent());
+void Component::repaint (float x, float y, float width, float height)
+{
+    repaint ({ x, y, width, height });
 }
 
 void Component::repaint (const Rectangle<float>& rect)
 {
     jassert (! options.isRepainting); // You are likely repainting from paint !
 
-    if (rect.isEmpty())
+    if (rect.isEmpty() || ! isShowing())
         return;
 
-    if (auto nativeComponent = getNativeComponent())
-        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
+    internalRepaint (rect);
 }
 
 //==============================================================================
@@ -555,7 +591,7 @@ void Component::addToDesktop (const ComponentNative::Options& nativeOptions, voi
 
     native = ComponentNative::createFor (*this, nativeOptions, parent);
 
-    attachedToNative();
+    internalAttachedToNative();
 
     setBounds (getBounds()); // This is needed to update based on scaleDpi
 }
@@ -571,13 +607,16 @@ void Component::removeFromDesktop()
 
     native.reset();
 
-    detachedFromNative();
+    internalDetachedFromNative();
 }
 
 //==============================================================================
 
 void Component::toFront (bool shouldGainKeyboardFocus)
 {
+    if (options.onDesktop && native != nullptr)
+        native->toFront();
+
     if (parentComponent == nullptr)
         return;
 
@@ -646,6 +685,11 @@ void Component::lowerBy (int indexToLower)
 
 //==============================================================================
 
+bool Component::hasParent() const
+{
+    return parentComponent != nullptr;
+}
+
 Component* Component::getParentComponent()
 {
     return parentComponent;
@@ -677,12 +721,26 @@ void Component::addChildComponent (Component* component, int index)
         {
             children.move (currentIndex, index);
 
+            auto bailOutChecker = BailOutChecker (this);
+
+            component->internalHierarchyChanged();
+
+            if (bailOutChecker.shouldBailOut())
+                return;
+
             childrenChanged();
         }
     }
     else
     {
         children.insert (index, component);
+
+        auto bailOutChecker = BailOutChecker (this);
+
+        component->internalHierarchyChanged();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
 
         childrenChanged();
     }
@@ -719,9 +777,18 @@ void Component::removeChildComponent (int index)
         return;
 
     auto component = children.removeAndReturn (index);
+
+    if (component->isShowing())
+        repaint (component->getBounds());
+
     component->parentComponent = nullptr;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     component->internalHierarchyChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     childrenChanged();
 }
@@ -736,13 +803,13 @@ void Component::internalHierarchyChanged()
 {
     parentHierarchyChanged();
 
-    auto checker = BailOutChecker (this);
+    auto bailOutChecker = BailOutChecker (this);
 
     for (int index = children.size(); --index >= 0;)
     {
         auto child = children.getUnchecked (index);
 
-        if (checker.shouldBailOut())
+        if (bailOutChecker.shouldBailOut())
         {
             jassertfalse; // Deleting a parent component when notifying its children!
             return;
@@ -765,7 +832,7 @@ int Component::getNumChildComponents() const
     return children.size();
 }
 
-Component* Component::getComponentAt (int index) const
+Component* Component::getChildComponent (int index) const
 {
     return children.getUnchecked (index);
 }
@@ -880,11 +947,32 @@ const NamedValueSet& Component::getProperties() const
 
 //==============================================================================
 
-void Component::paint (Graphics& g) {}
+void Component::paint (Graphics& g)
+{
+    jassert (! isOpaque()); // If your component is opaque, you need to paint it !
+}
 
 void Component::paintOverChildren (Graphics& g) {}
 
 void Component::refreshDisplay (double lastFrameTimeSeconds) {}
+
+//==============================================================================
+
+void Component::setWantsMouseEvents (bool allowSelfMouseEvents, bool allowChildrenMouseEvents)
+{
+    options.blockSelfMouseEvents = ! allowSelfMouseEvents;
+    options.blockChildrenMouseEvents = ! allowChildrenMouseEvents;
+}
+
+bool Component::doesWantSelfMouseEvents() const
+{
+    return ! options.blockSelfMouseEvents;
+}
+
+bool Component::doesWantChildrenMouseEvents() const
+{
+    return ! options.blockChildrenMouseEvents;
+}
 
 //==============================================================================
 
@@ -931,7 +1019,12 @@ void Component::setStyle (ComponentStyle::Ptr newStyle)
 
     style = std::move (newStyle);
 
+    auto bailOutChecker = BailOutChecker (this);
+
     styleChanged();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
 
     repaint();
 }
@@ -951,6 +1044,8 @@ void Component::setColor (const Identifier& colorId, const std::optional<Color>&
         properties.set (colorId, static_cast<int64> (color->getARGB()));
     else
         properties.remove (colorId);
+
+    styleChanged();
 }
 
 std::optional<Color> Component::getColor (const Identifier& colorId) const
@@ -972,7 +1067,59 @@ std::optional<Color> Component::findColor (const Identifier& colorId) const
     return std::nullopt;
 }
 
+//==============================================================================
+
+void Component::setStyleProperty (const Identifier& propertyId, const std::optional<var>& property)
+{
+    if (property)
+        properties.set (propertyId, *property);
+    else
+        properties.remove (propertyId);
+
+    styleChanged();
+}
+
+std::optional<var> Component::getStyleProperty (const Identifier& propertyId) const
+{
+    if (auto property = properties.getVarPointer (propertyId); property != nullptr && ! property->isVoid())
+        return *property;
+
+    return std::nullopt;
+}
+
+std::optional<var> Component::findStyleProperty (const Identifier& propertyId) const
+{
+    if (auto property = getStyleProperty (propertyId))
+        return property;
+
+    if (parentComponent != nullptr)
+        return parentComponent->findStyleProperty (propertyId);
+
+    return std::nullopt;
+}
+
+//==============================================================================
+
 void Component::userTriedToCloseWindow() {}
+
+//==============================================================================
+
+bool Component::hasOpaqueChildCoveringArea (const Rectangle<float>& area)
+{
+    // Check only direct children - no recursive hierarchy traversal
+    for (int childIndex = children.size(); --childIndex >= 0;)
+    {
+        auto child = children.getUnchecked (childIndex);
+        if (! child->isVisible() || ! child->isOpaque() || child->options.unclippedRendering || child->isTransformed())
+            continue;
+
+        auto childBounds = child->getBoundsRelativeToTopLevelComponent();
+        if (childBounds.contains (area))
+            return true;
+    }
+
+    return false;
+}
 
 //==============================================================================
 
@@ -982,6 +1129,22 @@ void Component::internalRefreshDisplay (double lastFrameTimeSeconds)
 
     for (auto child : children)
         child->internalRefreshDisplay (lastFrameTimeSeconds);
+}
+
+//==============================================================================
+
+void Component::internalRepaint()
+{
+    internalRepaint (getLocalBounds());
+}
+
+void Component::internalRepaint (const Rectangle<float>& rect)
+{
+    if (rect.isEmpty())
+        return;
+
+    if (auto nativeComponent = getNativeComponent())
+        nativeComponent->repaint (rect.translated (getBoundsRelativeToTopLevelComponent().getTopLeft()));
 }
 
 //==============================================================================
@@ -1001,7 +1164,8 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
     if (! renderContinuous && boundsToRedraw.isEmpty())
         return;
 
-    const auto opacity = g.getOpacity() * ((! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f);
+    const auto selfOpacity = (! options.onDesktop && native == nullptr) ? getOpacity() : 1.0f;
+    const auto opacity = g.getOpacity() * selfOpacity;
     if (opacity <= 0.0f)
         return;
 
@@ -1017,6 +1181,11 @@ void Component::internalPaint (Graphics& g, const Rectangle<float>& repaintArea,
 
         g.setTransform (transform);
 
+        bool canSkipPaint = false;
+        if (! options.unclippedRendering && ! isTransformed())
+            canSkipPaint = hasOpaqueChildCoveringArea (boundsToRedraw);
+
+        if (! canSkipPaint)
         {
             const auto paintState = g.saveState();
 
@@ -1053,9 +1222,14 @@ void Component::internalMouseEnter (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseEnter (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseEnter, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseEnter, event);
 }
 
 //==============================================================================
@@ -1067,9 +1241,14 @@ void Component::internalMouseExit (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseExit (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseExit, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseExit, event);
 }
 
 //==============================================================================
@@ -1081,9 +1260,14 @@ void Component::internalMouseDown (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDown (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDown, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDown, event);
 }
 
 //==============================================================================
@@ -1095,9 +1279,14 @@ void Component::internalMouseMove (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseMove (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseMove, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseMove, event);
 }
 
 //==============================================================================
@@ -1109,9 +1298,14 @@ void Component::internalMouseDrag (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDrag (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDrag, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDrag, event);
 }
 
 //==============================================================================
@@ -1123,9 +1317,14 @@ void Component::internalMouseUp (const MouseEvent& event)
 
     updateMouseCursor();
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseUp (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseUp, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseUp, event);
 }
 
 //==============================================================================
@@ -1135,9 +1334,14 @@ void Component::internalMouseDoubleClick (const MouseEvent& event)
     if (! isVisible())
         return;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseDoubleClick (event);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseDoubleClick, event);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseDoubleClick, event);
 }
 
 //==============================================================================
@@ -1147,9 +1351,14 @@ void Component::internalMouseWheel (const MouseEvent& event, const MouseWheelDat
     if (! isVisible())
         return;
 
+    auto bailOutChecker = BailOutChecker (this);
+
     mouseWheel (event, wheelData);
 
-    mouseListeners.callChecked (BailOutChecker (this), &MouseListener::mouseWheel, event, wheelData);
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    mouseListeners.callChecked (bailOutChecker, &MouseListener::mouseWheel, event, wheelData);
 }
 
 //==============================================================================
@@ -1202,6 +1411,16 @@ void Component::internalMoved (int xpos, int ypos)
 
 //==============================================================================
 
+void Component::internalFocusChanged (bool gotFocus)
+{
+    if (gotFocus)
+        focusGained();
+    else
+        focusLost();
+}
+
+//==============================================================================
+
 void Component::internalDisplayChanged() {}
 
 //==============================================================================
@@ -1220,9 +1439,194 @@ void Component::internalUserTriedToCloseWindow()
 
 //==============================================================================
 
+void Component::internalAttachedToNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    attachedToNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalAttachedToNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+void Component::internalDetachedFromNative()
+{
+    auto bailOutChecker = BailOutChecker (this);
+
+    detachedFromNative();
+
+    if (bailOutChecker.shouldBailOut())
+        return;
+
+    for (auto child : children)
+    {
+        child->internalDetachedFromNative();
+
+        if (bailOutChecker.shouldBailOut())
+            return;
+    }
+}
+
+//==============================================================================
+
 void Component::updateMouseCursor()
 {
     Desktop::getInstance()->setMouseCursor (mouseCursor);
+}
+
+//==============================================================================
+
+Point<float> Component::getScreenPosition() const
+{
+    return localToScreen (getPosition());
+}
+
+//==============================================================================
+
+Rectangle<float> Component::getScreenBounds() const
+{
+    return localToScreen (getLocalBounds());
+}
+
+//==============================================================================
+
+Point<float> Component::localToScreen (const Point<float>& localPoint) const
+{
+    if (options.onDesktop && native != nullptr)
+        return native->getPosition().to<float>() + localPoint;
+
+    auto screenPos = localPoint + getPosition();
+    auto parent = getParentComponent();
+
+    while (parent != nullptr)
+    {
+        if (parent->options.onDesktop && parent->native != nullptr)
+        {
+            screenPos += parent->native->getPosition().to<float>();
+            break;
+        }
+        else
+        {
+            screenPos += parent->getPosition();
+        }
+
+        parent = parent->getParentComponent();
+    }
+
+    return screenPos;
+}
+
+Point<float> Component::screenToLocal (const Point<float>& screenPoint) const
+{
+    return screenPoint - localToScreen (Point<float> (0.0f, 0.0f));
+}
+
+Rectangle<float> Component::localToScreen (const Rectangle<float>& localRectangle) const
+{
+    return Rectangle<float> (localToScreen (localRectangle.getPosition()), localRectangle.getSize());
+}
+
+Rectangle<float> Component::screenToLocal (const Rectangle<float>& screenRectangle) const
+{
+    return Rectangle<float> (screenToLocal (screenRectangle.getPosition()), screenRectangle.getSize());
+}
+
+//==============================================================================
+
+Point<float> Component::getLocalPoint (const Component* sourceComponent, Point<float> pointInSource) const
+{
+    if (sourceComponent == nullptr || sourceComponent == this)
+        return pointInSource;
+
+    return screenToLocal (sourceComponent->localToScreen (pointInSource));
+}
+
+Rectangle<float> Component::getLocalArea (const Component* sourceComponent, Rectangle<float> rectangleInSource) const
+{
+    if (sourceComponent == nullptr || sourceComponent == this)
+        return rectangleInSource;
+
+    return screenToLocal (sourceComponent->localToScreen (rectangleInSource));
+}
+
+//==============================================================================
+
+Point<float> Component::getRelativePoint (const Component* targetComponent, Point<float> localPoint) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return localPoint;
+
+    return targetComponent->screenToLocal (localToScreen (localPoint));
+}
+
+Rectangle<float> Component::getRelativeArea (const Component* targetComponent, Rectangle<float> localRectangle) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return localRectangle;
+
+    return targetComponent->screenToLocal (localToScreen (localRectangle));
+}
+
+//==============================================================================
+
+AffineTransform Component::getTransformToComponent (const Component* targetComponent) const
+{
+    if (targetComponent == nullptr || targetComponent == this)
+        return AffineTransform();
+
+    AffineTransform transform;
+
+    auto thisToScreen = getTransformToScreen();
+    auto targetToScreen = targetComponent->getTransformToScreen();
+
+    transform = thisToScreen.followedBy (targetToScreen.inverted());
+
+    return transform;
+}
+
+AffineTransform Component::getTransformFromComponent (const Component* sourceComponent) const
+{
+    if (sourceComponent == nullptr)
+        return AffineTransform();
+
+    return sourceComponent->getTransformToComponent (this);
+}
+
+AffineTransform Component::getTransformToScreen() const
+{
+    AffineTransform transform;
+    const Component* comp = this;
+
+    while (comp != nullptr)
+    {
+        if (comp->isTransformed())
+            transform = transform.followedBy (comp->getTransform());
+
+        transform = transform.translated (comp->getPosition());
+
+        if (comp->options.onDesktop)
+        {
+            if (comp->native != nullptr)
+            {
+                auto nativePos = comp->native->getPosition().to<float>();
+                transform = transform.translated (nativePos);
+            }
+
+            break;
+        }
+
+        comp = comp->getParentComponent();
+    }
+
+    return transform;
 }
 
 } // namespace yup

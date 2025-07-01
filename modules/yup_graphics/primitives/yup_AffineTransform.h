@@ -22,6 +22,9 @@
 namespace yup
 {
 
+template <class ValueType>
+class YUP_API Point;
+
 //==============================================================================
 /** Class representing a 2D affine transformation.
 
@@ -148,6 +151,16 @@ public:
     }
 
     //==============================================================================
+
+    /** Get translation
+
+        Returns the translation components of the AffineTransform object.
+
+        @return The translation components of this AffineTransform.
+    */
+    [[nodiscard]] constexpr Point<float> getTranslation() const noexcept;
+
+    //==============================================================================
     /** Get span of matrix array
 
         Returns a span of constant values of the underlying array representing the matrix components of the AffineTransform.
@@ -238,6 +251,16 @@ public:
         return { scaleX, shearX, translateX + tx, shearY, scaleY, translateY + ty };
     }
 
+    /** Create a translated transformation
+
+        Creates a new AffineTransform object that represents this transformation translated by specified amounts in the x and y directions.
+
+        @param p The point to translate.
+
+        @return A new AffineTransform object representing the translated transformation.
+    */
+    [[nodiscard]] constexpr AffineTransform translated (Point<float> p) const noexcept;
+
     /** Create a translation transformation
 
         Creates an AffineTransform object representing a translation by specified amounts in the x and y directions.
@@ -252,6 +275,16 @@ public:
         return { 1.0f, 0.0f, tx, 0.0f, 1.0f, ty };
     }
 
+    /** Create a translation transformation
+
+        Creates an AffineTransform object representing a translation by specified amounts in the x and y directions.
+
+        @param p The point to translate.
+
+        @return An AffineTransform object representing the specified translation.
+    */
+    [[nodiscard]] static constexpr AffineTransform translation (Point<float> p) noexcept;
+
     /** Create a translated transformation
 
         Creates a new AffineTransform object that represents this transformation translated absolutely in the x and y directions.
@@ -265,6 +298,16 @@ public:
     {
         return { scaleX, shearX, tx, shearY, scaleY, ty };
     }
+
+    /** Create a translated transformation
+
+        Creates a new AffineTransform object that represents this transformation translated absolutely in the x and y directions.
+
+        @param p The point to translate.
+
+        @return A new AffineTransform object representing the translated transformation.
+    */
+    [[nodiscard]] constexpr AffineTransform withAbsoluteTranslation (Point<float> p) const noexcept;
 
     //==============================================================================
     /** Create a rotated transformation
@@ -307,6 +350,17 @@ public:
     {
         return followedBy (rotation (angleInRadians, centerX, centerY));
     }
+
+    /** Create a rotated transformation around a point
+
+        Creates a new AffineTransform object that represents this transformation rotated by a specified angle around a specified point.
+
+        @param angleInRadians The angle in radians by which to rotate.
+        @param center The point around which to rotate.
+
+        @return A new AffineTransform object representing the rotated transformation.
+    */
+    [[nodiscard]] constexpr AffineTransform rotated (float angleInRadians, Point<float> center) const noexcept;
 
     /** Create a rotation transformation
 
@@ -354,6 +408,17 @@ public:
             -sinTheta * centerX + -cosTheta * centerY + centerY
         };
     }
+
+    /** Create a rotation transformation around a point
+
+        Creates an AffineTransform object representing a rotation by a specified angle around a specified point.
+
+        @param angleInRadians The angle in radians by which to rotate.
+        @param center The point around which to rotate.
+
+        @return An AffineTransform object representing the specified rotation around the point.
+    */
+    [[nodiscard]] static constexpr AffineTransform rotation (float angleInRadians, Point<float> center) noexcept;
 
     //==============================================================================
     /** Create a scaled transformation
@@ -420,6 +485,18 @@ public:
         };
     }
 
+    /** Create a scaled transformation non-uniformly around a point
+
+        Creates a new AffineTransform object that represents this transformation scaled by specified factors along the x and y axes around a specified point.
+
+        @param factorX The scale factor to apply to the x-axis.
+        @param factorY The scale factor to apply to the y-axis.
+        @param center The point around which to scale.
+
+        @return A new AffineTransform object representing the non-uniformly scaled transformation around the point.
+    */
+    [[nodiscard]] constexpr AffineTransform scaled (float factorX, float factorY, Point<float> center) const noexcept;
+
     /** Create a scaling transformation
 
         Creates an AffineTransform object representing a uniform scaling by a specified factor.
@@ -462,6 +539,18 @@ public:
     {
         return { factorX, 0.0f, centerX * (1.0f - factorX), 0.0f, factorY, centerY * (1.0f - factorY) };
     }
+
+    /** Create a scaling transformation non-uniformly around a point
+
+        Creates an AffineTransform object representing a non-uniform scaling by specified factors along the x and y axes around a specified point.
+
+        @param factorX The scale factor to apply to the x-axis.
+        @param factorY The scale factor to apply to the y-axis.
+        @param center The point around which to scale.
+
+        @return An AffineTransform object representing the specified non-uniform scaling around the point.
+    */
+    [[nodiscard]] static constexpr AffineTransform scaling (float factorX, float factorY, Point<float> center) noexcept;
 
     //==============================================================================
     /** Create a sheared transformation
@@ -522,6 +611,18 @@ public:
         };
     }
 
+    /** Create a shearing transformation around a point
+
+        Creates an AffineTransform object representing a shearing by specified factors along the x and y axes around a specified point.
+
+        @param factorX The shear factor to apply to the x-axis.
+        @param factorY The shear factor to apply to the y-axis.
+        @param center The point around which to shear.
+
+        @return An AffineTransform object representing the specified shearing around the point.
+    */
+    [[nodiscard]] static constexpr AffineTransform shearing (float factorX, float factorY, Point<float> center) noexcept;
+
     //==============================================================================
     /** Create a transformation that follows another.
 
@@ -543,7 +644,14 @@ public:
         };
     }
 
-    // TODO - doxygen
+    /** Create a transformation that precedes another.
+
+        Creates a new AffineTransform object that represents this transformation preceded by another specified AffineTransform.
+
+        @param other The AffineTransform to precede this one.
+
+        @return A new AffineTransform object representing the combined transformation.
+    */
     [[nodiscard]] constexpr AffineTransform prependedBy (const AffineTransform& other) const noexcept
     {
         return {
@@ -557,13 +665,23 @@ public:
     }
 
     //==============================================================================
-    // TODO - doxygen
+    /** Get the determinant of the transformation
+
+        Calculates the determinant of the transformation matrix, which is a measure of the scaling factor.
+
+        @return The determinant of the transformation.
+    */
     [[nodiscard]] constexpr float getDeterminant() const noexcept
     {
         return (scaleX * scaleY) - (shearX * shearY);
     }
 
-    // TODO - doxygen
+    /** Get the scale factor of the transformation
+
+        Calculates the average of the absolute values of the scale factors along the x and y axes.
+
+        @return The scale factor of the transformation.
+    */
     [[nodiscard]] constexpr float getScaleFactor() const noexcept
     {
         return (yup_abs (scaleX) + yup_abs (scaleY)) / 2.0f;
@@ -578,7 +696,7 @@ public:
         @param y A reference to the y-coordinate of the point.
     */
     template <class T>
-    constexpr void transformPoint (T& x, T& y) const noexcept
+    constexpr auto transformPoint (T& x, T& y) const noexcept -> std::enable_if_t<std::is_scalar_v<T>>
     {
         const T originalX = x;
         x = static_cast<T> (scaleX * originalX + shearX * y + translateX);
@@ -596,7 +714,7 @@ public:
         @return A tuple representing the transformed coordinates of the last point processed.
     */
     template <class T, class... Args>
-    constexpr void transformPoints (T& x, T& y, Args&&... args) const noexcept
+    constexpr auto transformPoints (T& x, T& y, Args&&... args) const noexcept -> std::enable_if_t<std::is_scalar_v<T>>
     {
         transformPoint (x, y);
 
@@ -636,6 +754,25 @@ public:
         return ! (*this == other);
     }
 
+    /** Approximately equals operator
+
+        Compares this AffineTransform with another AffineTransform for approximate equality.
+
+        @param other A reference to the other AffineTransform to compare with.
+        @param epsilon The maximum allowed difference between corresponding matrix components.
+
+        @return True if all corresponding matrix components are approximately equal, false otherwise.
+    */
+    constexpr bool approximatelyEqualTo (const AffineTransform& other) const noexcept
+    {
+        return approximatelyEqual (m[0], other.m[0])
+            && approximatelyEqual (m[1], other.m[1])
+            && approximatelyEqual (m[2], other.m[2])
+            && approximatelyEqual (m[3], other.m[3])
+            && approximatelyEqual (m[4], other.m[4])
+            && approximatelyEqual (m[5], other.m[5]);
+    }
+
     //==============================================================================
     /** @internal Conversion to Rive Mat2D class.  */
     rive::Mat2D toMat2D() const
@@ -667,6 +804,16 @@ private:
     };
 };
 
+//==============================================================================
+/** Get the matrix component at the specified index
+
+    Returns the matrix component at the specified index.
+
+    @param transform The AffineTransform to get the component from.
+    @param I The index of the component to get.
+
+    @return The matrix component at the specified index.
+*/
 template <std::size_t I>
 constexpr float get (const AffineTransform& transform) noexcept
 {

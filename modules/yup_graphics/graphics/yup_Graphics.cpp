@@ -170,8 +170,13 @@ Graphics::SavedState& Graphics::SavedState::operator= (SavedState&& other)
 
 Graphics::SavedState::~SavedState()
 {
-    if (g != nullptr)
-        g->restoreState();
+    restore();
+}
+
+void Graphics::SavedState::restore()
+{
+    if (auto graphics = std::exchange (g, nullptr))
+        graphics->restoreState();
 }
 
 //==============================================================================
@@ -514,6 +519,15 @@ void Graphics::strokeRoundedRect (const Rectangle<float>& r, float radiusTopLeft
 void Graphics::strokeRoundedRect (const Rectangle<float>& r, float radius)
 {
     strokeRoundedRect (r.getX(), r.getY(), r.getWidth(), r.getHeight(), radius, radius, radius, radius);
+}
+
+//==============================================================================
+void Graphics::fillEllipse (const Rectangle<float>& r)
+{
+    Path path;
+    path.addEllipse (r);
+
+    fillPath (path);
 }
 
 //==============================================================================

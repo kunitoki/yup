@@ -24,17 +24,16 @@ namespace yup
 
 //==============================================================================
 
-DocumentWindow::DocumentWindow (const ComponentNative::Options& options, const Color& backgroundColor)
-    : backgroundColor (backgroundColor)
+const Identifier DocumentWindow::Style::backgroundColorId = "documentWindowBackground";
+
+//==============================================================================
+
+DocumentWindow::DocumentWindow (const ComponentNative::Options& options, const std::optional<Color>& backgroundColor)
 {
-    auto finalOptions = options;
+    addToDesktop (options, nullptr);
 
-#if YUP_EMSCRIPTEN
-    // This is enforced for now until we have a better way to handle dirty regions on emscripten
-    finalOptions = finalOptions.withRenderContinuous (true);
-#endif
-
-    addToDesktop (finalOptions, nullptr);
+    if (backgroundColor)
+        setColor (Style::backgroundColorId, *backgroundColor);
 }
 
 DocumentWindow::~DocumentWindow()
@@ -63,7 +62,7 @@ void DocumentWindow::centreWithSize (const Size<int>& size)
 
 void DocumentWindow::paint (Graphics& g)
 {
-    g.setFillColor (backgroundColor);
+    g.setFillColor (findColor (Style::backgroundColorId).value_or (Colors::dimgray));
     g.fillAll();
 }
 

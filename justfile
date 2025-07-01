@@ -76,6 +76,6 @@ emscripten_test CONFIG="Debug":
   node build/tests/{{CONFIG}}/yup_tests.js --gtest_filter={{gtest_filter}}
 
 [doc("serve project for WASM")]
-emscripten_serve CONFIG="Debug":
+emscripten_serve:
   python3 -m http.server -d .
   #python3 tools/serve.py -p 8000 -d .

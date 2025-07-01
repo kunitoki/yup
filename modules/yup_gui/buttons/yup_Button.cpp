@@ -27,6 +27,8 @@ namespace yup
 Button::Button (StringRef componentID)
     : Component (componentID)
 {
+    setMouseCursor (MouseCursor::Hand);
+    setWantsKeyboardFocus (true);
 }
 
 //==============================================================================

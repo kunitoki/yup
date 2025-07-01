@@ -30,11 +30,17 @@ public:
     //==============================================================================
     DocumentWindow (
         const ComponentNative::Options& options = {},
-        const Color& backgroundColor = {});
+        const std::optional<Color>& backgroundColor = {});
     ~DocumentWindow() override;
 
     //==============================================================================
     void centreWithSize (const Size<int>& size);
+
+    //==============================================================================
+    struct Style
+    {
+        static const Identifier backgroundColorId;
+    };
 
     //==============================================================================
     /** @internal */
@@ -43,8 +49,6 @@ public:
     void userTriedToCloseWindow() override;
 
 private:
-    Color backgroundColor;
-
     YUP_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DocumentWindow)
 };
 

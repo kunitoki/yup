@@ -85,7 +85,7 @@ public:
 
     //==============================================================================
 
-    struct Colors
+    struct Style
     {
         static const Identifier fillColorId;
         static const Identifier strokeColorId;

@@ -88,11 +88,155 @@ Screen::Ptr Desktop::getScreenContaining (const Point<float>& location) const
     return ! screens.isEmpty() ? getScreen (0) : nullptr;
 }
 
+Screen::Ptr Desktop::getScreenContaining (const Rectangle<float>& bounds) const
+{
+    Screen::Ptr foundScreen;
+    float maxArea = 0.0f;
+    auto intBounds = bounds.to<int>();
+
+    for (auto& screen : screens)
+    {
+        auto intersection = screen->workArea.intersection (intBounds);
+        if (auto computedArea = intersection.area(); computedArea > maxArea)
+        {
+            maxArea = computedArea;
+            foundScreen = screen;
+        }
+    }
+
+    if (foundScreen == nullptr)
+        return ! screens.isEmpty() ? getScreen (0) : nullptr;
+
+    return foundScreen;
+}
+
+Screen::Ptr Desktop::getScreenContaining (Component* component) const
+{
+    return getScreenContaining (component->getScreenBounds());
+}
+
 //==============================================================================
 
 MouseCursor Desktop::getMouseCursor() const
 {
     return currentMouseCursor.value_or (MouseCursor (MouseCursor::Default));
+}
+
+//==============================================================================
+
+void Desktop::addGlobalMouseListener (MouseListener* listener)
+{
+    if (listener == nullptr)
+        return;
+
+    // Remove any existing weak reference to this listener first
+    removeGlobalMouseListener (listener);
+
+    // Add the new weak reference
+    globalMouseListeners.push_back (WeakReference<MouseListener> (listener));
+}
+
+void Desktop::removeGlobalMouseListener (MouseListener* listener)
+{
+    if (listener == nullptr)
+        return;
+
+    globalMouseListeners.erase (
+        std::remove_if (globalMouseListeners.begin(), globalMouseListeners.end(), [listener] (const WeakReference<MouseListener>& ref)
+    {
+        return ref.get() == listener || ref.get() == nullptr;
+    }),
+        globalMouseListeners.end());
+}
+
+void Desktop::handleGlobalMouseDown (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseDown (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseUp (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseUp (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseMove (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseMove (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseDrag (const MouseEvent& event)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseDrag (event);
+            ++it;
+        }
+    }
+}
+
+void Desktop::handleGlobalMouseWheel (const MouseEvent& event, const MouseWheelData& wheelData)
+{
+    auto it = globalMouseListeners.begin();
+    while (it != globalMouseListeners.end())
+    {
+        auto* listener = it->get();
+        if (listener == nullptr)
+        {
+            it = globalMouseListeners.erase (it);
+        }
+        else
+        {
+            listener->mouseWheel (event, wheelData);
+            ++it;
+        }
+    }
 }
 
 //==============================================================================
@@ -115,6 +259,32 @@ void Desktop::handleScreenMoved (int screenIndex)
 void Desktop::handleScreenOrientationChanged (int screenIndex)
 {
     updateScreens();
+}
+
+//==============================================================================
+
+void Desktop::registerNativeComponent (ComponentNative* nativeComponent)
+{
+    if (nativeComponent != nullptr)
+        nativeComponents[nativeComponent] = nativeComponent;
+}
+
+void Desktop::unregisterNativeComponent (ComponentNative* nativeComponent)
+{
+    if (nativeComponent != nullptr)
+        nativeComponents.erase (nativeComponent);
+}
+
+ComponentNative::Ptr Desktop::getNativeComponent (void* userdata) const
+{
+    if (userdata == nullptr)
+        return nullptr;
+
+    auto it = nativeComponents.find (userdata);
+    if (it != nativeComponents.end())
+        return ComponentNative::Ptr { it->second };
+
+    return nullptr;
 }
 
 } // namespace yup

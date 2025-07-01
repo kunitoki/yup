@@ -734,6 +734,79 @@ rive::RiveRenderPath* Path::getRenderPath() const
 }
 
 //==============================================================================
+String Path::toString() const
+{
+    const auto& rawPath = path->getRawPath();
+    const auto& points = rawPath.points();
+    const auto& verbs = rawPath.verbs();
+
+    if (points.empty() || verbs.empty())
+        return String();
+
+    String result;
+    result.preallocateBytes (points.size() * 20); // Rough estimate for performance
+
+    size_t pointIndex = 0;
+
+    for (size_t i = 0; i < verbs.size(); ++i)
+    {
+        auto verb = verbs[i];
+
+        switch (verb)
+        {
+            case rive::PathVerb::move:
+                if (pointIndex < points.size())
+                {
+                    result << "M " << points[pointIndex].x << " " << points[pointIndex].y << " ";
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::line:
+                if (pointIndex < points.size())
+                {
+                    result << "L " << points[pointIndex].x << " " << points[pointIndex].y << " ";
+                    pointIndex++;
+                }
+                break;
+
+            case rive::PathVerb::quad:
+                // Rive doesn't seem to use quad verbs based on the existing code
+                // But if it does, we'll handle it
+                if (pointIndex + 1 < points.size())
+                {
+                    result << "Q "
+                           << points[pointIndex].x << " " << points[pointIndex].y << " "
+                           << points[pointIndex + 1].x << " " << points[pointIndex + 1].y << " ";
+                    pointIndex += 2;
+                }
+                break;
+
+            case rive::PathVerb::cubic:
+                if (pointIndex + 2 < points.size())
+                {
+                    result << "C "
+                           << points[pointIndex].x << " " << points[pointIndex].y << " "
+                           << points[pointIndex + 1].x << " " << points[pointIndex + 1].y << " "
+                           << points[pointIndex + 2].x << " " << points[pointIndex + 2].y << " ";
+                    pointIndex += 3;
+                }
+                break;
+
+            case rive::PathVerb::close:
+                result << "Z ";
+                break;
+        }
+    }
+
+    // Remove trailing space if present
+    if (result.endsWithChar (' '))
+        result = result.trimEnd();
+
+    return result;
+}
+
+//==============================================================================
 namespace
 {
 bool isControlMarker (String::CharPointerType data)
@@ -1181,7 +1254,7 @@ void handleEllipticalArc (String::CharPointerType& data, Path& path, float& curr
 
 } // namespace
 
-bool Path::parsePathData (const String& pathData)
+bool Path::fromString (const String& pathData)
 {
     // https://dev.w3.org/SVG/tools/svgweb/samples/svg-files/
 

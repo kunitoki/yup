@@ -83,6 +83,9 @@ public:
         /** Destroys the SavedState, potentially restoring the Graphics state. */
         ~SavedState();
 
+        /** Restore state. */
+        void restore();
+
     private:
         Graphics* g = nullptr;
     };
@@ -388,6 +391,10 @@ public:
         @param thickness The thickness of the line used to draw the rounded rectangle.
     */
     void strokeRoundedRect (const Rectangle<float>& r, float radius);
+
+    //==============================================================================
+
+    void fillEllipse (const Rectangle<float>& r);
 
     //==============================================================================
     /** Draws a path with a specified thickness.

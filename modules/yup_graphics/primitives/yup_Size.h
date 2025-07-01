@@ -22,6 +22,9 @@
 namespace yup
 {
 
+template <class ValueType>
+class YUP_API Rectangle;
+
 //==============================================================================
 /** Represents a 2D size with width and height.
 
@@ -68,7 +71,7 @@ public:
 
         @return The current width.
     */
-    constexpr ValueType getWidth() const noexcept
+    [[nodiscard]] constexpr ValueType getWidth() const noexcept
     {
         return width;
     }
@@ -95,7 +98,7 @@ public:
 
         @return A new size object with the specified width and current height.
     */
-    constexpr Size withWidth (ValueType newWidth) const noexcept
+    [[nodiscard]] constexpr Size withWidth (ValueType newWidth) const noexcept
     {
         return { newWidth, height };
     }
@@ -107,7 +110,7 @@ public:
 
         @return The current height.
     */
-    constexpr ValueType getHeight() const noexcept
+    [[nodiscard]] constexpr ValueType getHeight() const noexcept
     {
         return height;
     }
@@ -134,7 +137,7 @@ public:
 
         @return A new size object with the current width and specified height.
     */
-    constexpr Size withHeight (ValueType newHeight) const noexcept
+    [[nodiscard]] constexpr Size withHeight (ValueType newHeight) const noexcept
     {
         return { width, newHeight };
     }
@@ -146,7 +149,7 @@ public:
 
         @return True if both width and height are zero, false otherwise.
     */
-    constexpr bool isZero() const noexcept
+    [[nodiscard]] constexpr bool isZero() const noexcept
     {
         return width == ValueType (0) && height == ValueType (0);
     }
@@ -157,7 +160,7 @@ public:
 
         @return True if either width or height is zero, false otherwise.
     */
-    constexpr bool isEmpty() const noexcept
+    [[nodiscard]] constexpr bool isEmpty() const noexcept
     {
         return width == ValueType (0) || height == ValueType (0);
     }
@@ -168,7 +171,7 @@ public:
 
         @return True if height is zero and width is not, false otherwise.
     */
-    constexpr bool isVerticallyEmpty() const noexcept
+    [[nodiscard]] constexpr bool isVerticallyEmpty() const noexcept
     {
         return width != ValueType (0) && height == ValueType (0);
     }
@@ -179,7 +182,7 @@ public:
 
         @return True if width is zero and height is not, false otherwise.
     */
-    constexpr bool isHorizontallyEmpty() const noexcept
+    [[nodiscard]] constexpr bool isHorizontallyEmpty() const noexcept
     {
         return width == ValueType (0) && height != ValueType (0);
     }
@@ -191,7 +194,7 @@ public:
 
         @return True if the size is a square, false otherwise.
     */
-    constexpr bool isSquare() const noexcept
+    [[nodiscard]] constexpr bool isSquare() const noexcept
     {
         return width == height;
     }
@@ -203,7 +206,7 @@ public:
 
         @return The area calculated as width multiplied by height.
     */
-    constexpr ValueType area() const noexcept
+    [[nodiscard]] constexpr ValueType area() const noexcept
     {
         return width * height;
     }
@@ -230,7 +233,7 @@ public:
 
         @return A new Size object with reversed dimensions.
     */
-    constexpr Size reversed() const noexcept
+    [[nodiscard]] constexpr Size reversed() const noexcept
     {
         Size result (*this);
         result.reverse();
@@ -275,7 +278,7 @@ public:
 
         @return A new Size object with enlarged dimensions.
     */
-    constexpr Size enlarged (ValueType amount) const noexcept
+    [[nodiscard]] constexpr Size enlarged (ValueType amount) const noexcept
     {
         Size result (*this);
         result.enlarge (amount);
@@ -291,7 +294,7 @@ public:
 
         @return A new Size object with enlarged dimensions.
     */
-    constexpr Size enlarged (ValueType widthAmount, ValueType heightAmount) const noexcept
+    [[nodiscard]] constexpr Size enlarged (ValueType widthAmount, ValueType heightAmount) const noexcept
     {
         Size result (*this);
         result.enlarge (widthAmount, heightAmount);
@@ -338,7 +341,7 @@ public:
 
         @return A new Size object with reduced dimensions.
     */
-    constexpr Size reduced (ValueType amount) const noexcept
+    [[nodiscard]] constexpr Size reduced (ValueType amount) const noexcept
     {
         Size result (*this);
         result.reduce (amount);
@@ -354,7 +357,7 @@ public:
 
         @return A new Size object with reduced dimensions.
     */
-    constexpr Size reduced (ValueType widthAmount, ValueType heightAmount) const noexcept
+    [[nodiscard]] constexpr Size reduced (ValueType widthAmount, ValueType heightAmount) const noexcept
     {
         Size result (*this);
         result.reduce (widthAmount, heightAmount);
@@ -405,7 +408,7 @@ public:
         @return A new Size object with scaled dimensions.
     */
     template <class T>
-    constexpr auto scaled (T scaleFactor) const noexcept
+    [[nodiscard]] constexpr auto scaled (T scaleFactor) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size>
     {
         Size result (*this);
@@ -423,7 +426,7 @@ public:
         @return A new Size object with scaled dimensions.
     */
     template <class T>
-    constexpr auto scaled (T scaleFactorX, T scaleFactorY) const noexcept
+    [[nodiscard]] constexpr auto scaled (T scaleFactorX, T scaleFactorY) const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size>
     {
         Size result (*this);
@@ -441,17 +444,85 @@ public:
         @return A new Size object with dimensions converted to type T.
     */
     template <class T>
-    constexpr Size<T> to() const noexcept
+    [[nodiscard]] constexpr Size<T> to() const noexcept
     {
         return { static_cast<T> (width), static_cast<T> (height) };
     }
 
+    /** Round the dimensions of this Size object to integers
+
+        Rounds the dimensions of this Size object to integers and returns a new Size object with the rounded dimensions.
+
+        @tparam T The type of the dimensions, constrained to floating-point types.
+
+        @return A new Size object with the rounded dimensions.
+    */
     template <class T = ValueType>
-    constexpr auto roundToInt() const noexcept
+    [[nodiscard]] auto roundToInt() const noexcept
         -> std::enable_if_t<std::is_floating_point_v<T>, Size<int>>
     {
         return { yup::roundToInt (width), yup::roundToInt (height) };
     }
+
+    template <class T = ValueType>
+    [[nodiscard]] auto toNearestInt() const noexcept
+        -> std::enable_if_t<std::is_floating_point_v<T>, Size<ValueType>>
+    {
+        return { static_cast<ValueType> (yup::roundToInt (width)), static_cast<ValueType> (yup::roundToInt (height)) };
+    }
+
+    //==============================================================================
+    /** Convert Size to Point
+
+        Converts the dimensions of this Size object to a Point object and returns a new Point object with the converted dimensions.
+
+        @tparam T The type of the dimensions, constrained to numeric types.
+
+        @return A new Point object with the converted dimensions.
+    */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr Point<T> toPoint() const noexcept
+    {
+        return { static_cast<T> (width), static_cast<T> (height) };
+    }
+
+    /** Convert Size to Rectangle
+
+        Converts the dimensions of this Size object to a Rectangle object and returns a new Rectangle object with the converted dimensions.
+
+        @tparam T The type of the dimensions, constrained to numeric types.
+
+        @return A new Rectangle object with the converted dimensions.
+    */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr Rectangle<T> toRectangle() const noexcept;
+
+    /** Convert Size to Rectangle with specified coordinates
+
+        Converts the dimensions of this Size object to a Rectangle object with specified coordinates and returns a new Rectangle object with the converted dimensions.
+
+        @tparam T The type of the dimensions, constrained to numeric types.
+
+        @param x The x-coordinate of the top-left corner of the Rectangle.
+        @param y The y-coordinate of the top-left corner of the Rectangle.
+
+        @return A new Rectangle object with the converted dimensions.
+    */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr Rectangle<T> toRectangle (T x, T y) const noexcept;
+
+    /** Convert Size to Rectangle with specified coordinates
+
+        Converts the dimensions of this Size object to a Rectangle object with specified coordinates and returns a new Rectangle object with the converted dimensions.
+
+        @tparam T The type of the dimensions, constrained to numeric types.
+
+        @param xy The Point object containing the x and y coordinates of the top-left corner of the Rectangle.
+
+        @return A new Rectangle object with the converted dimensions.
+    */
+    template <class T = ValueType>
+    [[nodiscard]] constexpr Rectangle<T> toRectangle (Point<T> xy) const noexcept;
 
     //==============================================================================
     /** Multiplication operator
@@ -465,8 +536,7 @@ public:
         @return A new Size object with dimensions scaled by the given factor.
     */
     template <class T>
-    constexpr auto operator* (T scaleFactor) const noexcept
-        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    [[nodiscard]] constexpr Size operator* (T scaleFactor) const noexcept
     {
         Size result (*this);
         result *= scaleFactor;
@@ -492,6 +562,25 @@ public:
         return *this;
     }
 
+    /** Multiplication assignment operator
+
+        Multiplies the dimensions of this Size object by a scale factor and updates this Size object.
+
+        @tparam T The type of the scale factor.
+
+        @param scaleFactor The scale factor to multiply the dimensions by.
+
+        @return A reference to this updated Size object.
+    */
+    template <class T>
+    constexpr auto operator*= (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_integral_v<T>, Size&>
+    {
+        width = static_cast<ValueType> (width * static_cast<ValueType> (scaleFactor));
+        height = static_cast<ValueType> (height * static_cast<ValueType> (scaleFactor));
+        return *this;
+    }
+
     /** Division operator
 
         Divides the dimensions of this Size object by a scale factor and returns a new Size object with the scaled dimensions.
@@ -503,8 +592,7 @@ public:
         @return A new Size object with dimensions scaled down by the given factor.
     */
     template <class T>
-    constexpr auto operator/ (T scaleFactor) const noexcept
-        -> std::enable_if_t<std::is_floating_point_v<T>, Size>
+    [[nodiscard]] constexpr Size operator/ (T scaleFactor) const noexcept
     {
         Size result (*this);
         result /= scaleFactor;
@@ -527,6 +615,23 @@ public:
     {
         width = static_cast<ValueType> (width / scaleFactor);
         height = static_cast<ValueType> (height / scaleFactor);
+        return *this;
+    }
+
+    /** Division assignment operator
+
+        Divides the dimensions of this Size object by a scale factor and updates this Size object.
+
+        @tparam T The type of the scale factor.
+
+        @param scaleFactor The scale factor to divide the dimensions by.
+    */
+    template <class T>
+    constexpr auto operator/= (T scaleFactor) noexcept
+        -> std::enable_if_t<std::is_integral_v<T>, Size&>
+    {
+        width = static_cast<ValueType> (width / static_cast<float> (scaleFactor));
+        height = static_cast<ValueType> (height / static_cast<float> (scaleFactor));
         return *this;
     }
 
@@ -596,6 +701,15 @@ YUP_API String& YUP_CALLTYPE operator<< (String& string1, const Size<ValueType>&
     return string1;
 }
 
+/** Get the coordinate at the specified index
+
+    Returns the coordinate at the specified index.
+
+    @param point The Point to get the coordinate from.
+    @param I The index of the coordinate to get.
+
+    @return The coordinate at the specified index.
+*/
 template <std::size_t I, class ValueType>
 constexpr ValueType get (const Size<ValueType>& point) noexcept
 {

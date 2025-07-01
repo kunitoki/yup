@@ -50,6 +50,8 @@ set_target_properties (gmock_main PROPERTIES FOLDER "Tests")
 # ==== Create executable
 set (target_name yup_tests)
 set (target_version "1.0.0")
+set (target_console OFF)
+set (target_gtest_modules "")
 set (target_modules
     yup_core
     yup_audio_basics
@@ -58,27 +60,47 @@ set (target_modules
     yup_data_model
     yup_graphics)
 
+if (NOT YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND target_modules
+        yup_gui)
+    list (APPEND target_gtest_modules
+        GTest::gtest
+        GTest::gmock)
+else()
+    set (target_console ON)
+    list (APPEND target_gtest_modules
+        GTest::gtest_main
+        GTest::gmock_main)
+endif()
+
 yup_standalone_app (
     TARGET_NAME ${target_name}
     TARGET_VERSION ${target_version}
     TARGET_IDE_GROUP "Tests"
-    TARGET_CONSOLE ON
+    TARGET_CONSOLE ${target_console}
     DEFINITIONS
         YUP_USE_CURL=0
     MODULES
         ${target_modules}
-        GTest::gtest_main
-        GTest::gmock_main)
+        ${target_gtest_modules})
 
 # ==== Setup sources
-file (GLOB_RECURSE sources
-      "${CMAKE_CURRENT_LIST_DIR}/*.hpp"
-      "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
+set (sources "")
+foreach (module ${target_modules})
+    file (GLOB_RECURSE module_sources
+        "${CMAKE_CURRENT_LIST_DIR}/${module}/*.hpp"
+        "${CMAKE_CURRENT_LIST_DIR}/${module}/*.cpp")
+    list (APPEND sources ${module_sources})
 
-if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
-    file (GLOB_RECURSE apple_sources
-        "${CMAKE_CURRENT_LIST_DIR}/*.mm")
-    list (APPEND sources ${apple_sources})
+    if (YUP_PLATFORM_OSX OR YUP_PLATFORM_IOS)
+        file (GLOB_RECURSE apple_sources
+            "${CMAKE_CURRENT_LIST_DIR}/${module}/*.mm")
+        list (APPEND sources ${apple_sources})
+    endif()
+endforeach()
+
+if (NOT YUP_PLATFORM_EMSCRIPTEN)
+    list (APPEND sources "${CMAKE_CURRENT_LIST_DIR}/main.cpp")
 endif()
 
 source_group (TREE ${CMAKE_CURRENT_LIST_DIR}/ FILES ${sources})

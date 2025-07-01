@@ -64,6 +64,7 @@
 //==============================================================================
 
 #include <tuple>
+#include <unordered_map>
 
 //==============================================================================
 
@@ -80,11 +81,16 @@
 #include "component/yup_ComponentNative.h"
 #include "component/yup_ComponentStyle.h"
 #include "component/yup_Component.h"
-#include "widgets/yup_Button.h"
-#include "widgets/yup_TextButton.h"
+#include "menus/yup_PopupMenu.h"
+#include "buttons/yup_Button.h"
+#include "buttons/yup_TextButton.h"
+#include "buttons/yup_ToggleButton.h"
+#include "buttons/yup_SwitchButton.h"
+#include "buttons/yup_ImageButton.h"
+#include "widgets/yup_TextEditor.h"
 #include "widgets/yup_Label.h"
 #include "widgets/yup_Slider.h"
-#include "widgets/yup_TextEditor.h"
+#include "widgets/yup_ComboBox.h"
 #include "artboard/yup_ArtboardFile.h"
 #include "artboard/yup_Artboard.h"
 #include "windowing/yup_DocumentWindow.h"

@@ -83,7 +83,10 @@ void YUPApplicationBase::appWillTerminateByForce()
 
 void YUPApplicationBase::quit()
 {
-    MessageManager::getInstance()->stopDispatchLoop();
+    MessageManager::callAsync ([]
+    {
+        MessageManager::getInstance()->stopDispatchLoop();
+    });
 }
 
 void YUPApplicationBase::sendUnhandledException (const std::exception* const e,

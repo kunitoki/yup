@@ -46,7 +46,8 @@
 #endif
 
 #if YUP_RIVE_USE_OPENGL
-#include "native/yup_GraphicsContext_gl.cpp"
+//#include "native/yup_GraphicsContext_gl.cpp"
+#include "native/yup_GraphicsContext_opengl.cpp"
 #endif
 
 //==============================================================================
@@ -67,7 +68,8 @@
 #endif
 
 #if YUP_RIVE_USE_OPENGL
-#include "native/yup_GraphicsContext_gl.cpp"
+//#include "native/yup_GraphicsContext_gl.cpp"
+#include "native/yup_GraphicsContext_opengl.cpp"
 #endif
 
 //==============================================================================
@@ -79,7 +81,8 @@
 #include <emscripten/html5.h>
 #endif
 
-#include "native/yup_GraphicsContext_gl.cpp"
+//#include "native/yup_GraphicsContext_gl.cpp"
+#include "native/yup_GraphicsContext_opengl.cpp"
 
 #endif
 

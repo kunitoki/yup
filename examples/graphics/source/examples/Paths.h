@@ -33,6 +33,9 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
         // Draw title
         /*
         g.setColour (yup::Color (50, 50, 80));
@@ -400,7 +403,7 @@ private:
 
         // Parse SVG path data examples - smaller scale
         yup::Path svgHeart;
-        svgHeart.parsePathData ("M12,21.35l-1.45-1.32C5.4,15.36,2,12.28,2,8.5 C2,5.42,4.42,3,7.5,3c1.74,0,3.41,0.81,4.5,2.09C13.09,3.81,14.76,3,16.5,3 C19.58,3,22,5.42,22,8.5c0,3.78-3.4,6.86-8.55,11.54L12,21.35z");
+        svgHeart.fromString ("M12,21.35l-1.45-1.32C5.4,15.36,2,12.28,2,8.5 C2,5.42,4.42,3,7.5,3c1.74,0,3.41,0.81,4.5,2.09C13.09,3.81,14.76,3,16.5,3 C19.58,3,22,5.42,22,8.5c0,3.78-3.4,6.86-8.55,11.54L12,21.35z");
 
         // Scale and position the heart - smaller
         yup::Rectangle<float> heartBounds = svgHeart.getBounds();
@@ -416,7 +419,7 @@ private:
 
         // Simple SVG path - smaller
         yup::Path svgTriangle;
-        svgTriangle.parsePathData ("M100,20 L180,160 L20,160 Z");
+        svgTriangle.fromString ("M100,20 L180,160 L20,160 Z");
         svgTriangle.scaleToFit (x + 60, y, 50, 50, true);
 
         g.setFillColor (yup::Color (150, 255, 150));

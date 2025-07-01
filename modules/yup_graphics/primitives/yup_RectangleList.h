@@ -328,21 +328,25 @@ public:
     }
 
     //==============================================================================
+    /** Returns a pointer to the first rectangle in the list. */
     const Rectangle<ValueType>* begin() const
     {
         return rectangles.begin();
     }
 
+    /** Returns a pointer to the end of the list. */
     const Rectangle<ValueType>* end() const
     {
         return rectangles.end();
     }
 
+    /** Returns a pointer to the first rectangle in the list. */
     Rectangle<ValueType>* begin()
     {
         return rectangles.begin();
     }
 
+    /** Returns a pointer to the end of the list. */
     Rectangle<ValueType>* end()
     {
         return rectangles.end();

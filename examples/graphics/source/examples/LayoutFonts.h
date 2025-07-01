@@ -50,6 +50,9 @@ public:
 
     void paint (yup::Graphics& g) override
     {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+
         const int numTexts = yup::numElementsInArray (text);
         for (int i = 0; i < numTexts; ++i)
         {

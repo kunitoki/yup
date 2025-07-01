@@ -64,6 +64,9 @@ void MessageManager::runDispatchLoop()
 
 void MessageManager::stopDispatchLoop()
 {
+    for (const auto& func : shutdownCallbacks)
+        func();
+
     if (!SystemStats::isRunningInAppExtensionSandbox())
         [[[UIApplication sharedApplication] delegate] applicationWillTerminate:[UIApplication sharedApplication]];
 

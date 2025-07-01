@@ -9,6 +9,7 @@ coverage:
   status:
     project:
       default:
+        informational: true
         target: 70%
         threshold: 5%
         base: auto
@@ -22,8 +23,60 @@ coverage:
           - yup_gui
     patch:
       default:
+        informational: true
         target: 70%
         threshold: 5%
+
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        branches:
+          - "!main"
+
+  individual_components:
+    - component_id: yup_core
+      name: "YUP Core"
+      description: "Core functionality of the YUP framework."
+      paths:
+        - modules/yup_core/**
+
+    - component_id: yup_events
+      name: "YUP Events"
+      description: "Event handling system for the YUP framework."
+      paths:
+        - modules/yup_events/**
+
+    - component_id: yup_audio_basics
+      name: "YUP Audio Basics"
+      description: "Basic audio functionalities in the YUP framework."
+      paths:
+        - modules/yup_audio_basics/**
+
+    - component_id: yup_audio_devices
+      name: "YUP Audio Devices"
+      description: "Audio device management in the YUP framework."
+      paths:
+        - modules/yup_audio_devices/**
+
+    - component_id: yup_audio_processors
+      name: "YUP Audio Processors"
+      description: "Audio processing capabilities in the YUP framework."
+      paths:
+        - modules/yup_audio_processors/**
+
+    - component_id: yup_graphics
+      name: "YUP Graphics"
+      description: "Graphics rendering and management in the YUP framework."
+      paths:
+        - modules/yup_graphics/**
+
+    - component_id: yup_gui
+      name: "YUP GUI"
+      description: "Graphical User Interface components of the YUP framework."
+      paths:
+        - modules/yup_gui/**
 
 flags:
   yup_core:
@@ -63,16 +116,9 @@ ignore:
   - "cmake/**/*"
   - "docs/**/*"
   - "standalone/**/*"
-  - "**/*.mm"
-  - "**/*_android.*"
-  - "**/*_windows.*"
-  - "**/*_ios.*"
-  - "**/*_mac.*"
-  - "**/*_apple.*"
-  - "**/*_emscripten.*"
-  - "**/*_wasm.*"
+  - "modules/*/native/**/*"
 
 comment:
-  layout: "reach,diff,flags,files,footer"
+  layout: "header, reach, components, diff, flags, files, footer"
   behavior: default
   require_changes: false

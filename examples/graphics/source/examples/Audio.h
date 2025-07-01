@@ -174,8 +174,6 @@ public:
             sineWaveGenerators[i]->setFrequency (440.0 * std::pow (1.1, i), true);
         }
 
-        deviceManager.addAudioCallback (this);
-
         // Add sliders
         for (int i = 0; i < totalRows * totalColumns; ++i)
         {
@@ -237,6 +235,12 @@ public:
         oscilloscope.setBounds (bottomBounds);
     }
 
+    void paint (yup::Graphics& g) override
+    {
+        g.setFillColor (findColor (yup::DocumentWindow::Style::backgroundColorId).value_or (yup::Colors::dimgray));
+        g.fillAll();
+    }
+
     void mouseDown (const yup::MouseEvent& event) override
     {
         takeKeyboardFocus();
@@ -249,7 +253,8 @@ public:
             oscilloscope.setRenderData (renderData, readPos);
         }
 
-        oscilloscope.repaint();
+        if (oscilloscope.isVisible())
+            oscilloscope.repaint();
     }
 
     void audioDeviceIOCallbackWithContext (const float* const* inputChannelData,
@@ -287,8 +292,6 @@ public:
 
     void audioDeviceAboutToStart (yup::AudioIODevice* device) override
     {
-        const yup::CriticalSection::ScopedLockType sl (renderMutex);
-
         inputData.resize (device->getDefaultBufferSize());
         renderData.resize (device->getDefaultBufferSize());
         readPos = 0;
@@ -296,6 +299,14 @@ public:
 
     void audioDeviceStopped() override
     {
+    }
+
+    void visibilityChanged() override
+    {
+        if (! isVisible())
+            deviceManager.removeAudioCallback (this);
+        else
+            deviceManager.addAudioCallback (this);
     }
 
 private:

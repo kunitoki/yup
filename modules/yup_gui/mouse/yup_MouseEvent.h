@@ -164,6 +164,15 @@ public:
     */
     Point<float> getPosition() const noexcept;
 
+    /** Returns the mouse position in absolute screen coordinates.
+
+        This method converts the mouse position from component-relative coordinates
+        to absolute screen coordinates by taking into account the component hierarchy.
+
+        @returns    the mouse position in absolute screen coordinates
+    */
+    Point<float> getScreenPosition() const noexcept;
+
     /** Creates a copy of this event with a different position.
 
         @param newPosition the new position to use

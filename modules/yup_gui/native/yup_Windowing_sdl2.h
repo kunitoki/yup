@@ -30,12 +30,15 @@ class SDL2ComponentNative final
     , public AsyncUpdater
 {
 #if (YUP_EMSCRIPTEN && RIVE_WEBGL) && ! defined(__EMSCRIPTEN_PTHREADS__)
-    static constexpr bool renderDrivenByTimer = true;
-#else
     static constexpr bool renderDrivenByTimer = false;
+#else
+    static constexpr bool renderDrivenByTimer = true;
 #endif
 
 public:
+    //==============================================================================
+    using Ptr = ReferenceCountedObjectPtr<SDL2ComponentNative>;
+
     //==============================================================================
     SDL2ComponentNative (Component& component,
                          const Options& options,
@@ -50,6 +53,9 @@ public:
     //==============================================================================
     void setVisible (bool shouldBeVisible) override;
     bool isVisible() const override;
+
+    //==============================================================================
+    void toFront() override;
 
     //==============================================================================
     void setSize (const Size<int>& newSize) override;
@@ -141,6 +147,7 @@ public:
     static std::atomic_flag isInitialised;
 
 private:
+    Component* findComponentForMouseEvent (const Point<float>& position);
     void updateComponentUnderMouse (const MouseEvent& event);
     void renderContext();
 
@@ -166,6 +173,7 @@ private:
     Point<float> lastMouseMovePosition = { -1.0f, -1.0f };
     std::optional<Point<float>> lastMouseDownPosition;
     std::optional<yup::Time> lastMouseDownTime;
+    std::optional<yup::Time> lastMouseUpTime;
 
     WeakReference<Component> lastComponentClicked;
     WeakReference<Component> lastComponentFocused;

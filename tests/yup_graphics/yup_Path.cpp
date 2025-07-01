@@ -276,16 +276,18 @@ TEST (PathTests, WithRoundedCorners)
     EXPECT_FALSE (same.getBounds().isEmpty());
 }
 
-TEST (PathTests, ParsePathData)
+TEST (PathTests, FromString)
 {
     Path p;
     // Simple SVG path: M10 10 H 90 V 90 H 10 Z
-    bool ok = p.parsePathData ("M10 10 H 90 V 90 H 10 Z");
+    bool ok = p.fromString ("M 10 10 H 90 V 90 H 10 Z");
     EXPECT_TRUE (ok);
     EXPECT_FALSE (p.getBounds().isEmpty());
+    EXPECT_EQ (p.toString(), "M 10 10 L 90 10 L 90 90 L 10 90 Z");
+
     // Edge: malformed path
     Path p2;
-    ok = p2.parsePathData ("M10 10 Q");
+    ok = p2.fromString ("M 10 10 Q");
     EXPECT_TRUE (ok); // Should not throw, but result is empty
 }
 
@@ -455,7 +457,7 @@ TEST (PathTests, AllPublicApiErrorCases)
     p.getPointAlongPath (0.0f);
     p.createStrokePolygon (0.0f);
     p.withRoundedCorners (0.0f);
-    p.parsePathData ("");
+    p.fromString ("");
     SUCCEED();
 }
 

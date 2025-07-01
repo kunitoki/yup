@@ -120,7 +120,7 @@
 #include "native/yup_EventLoopInternal_linux.h"
 #include "native/yup_Messaging_linux.cpp"
 
-#elif YUP_WASM && YUP_EMSCRIPTEN
+#elif YUP_EMSCRIPTEN
 #include "native/yup_Messaging_emscripten.cpp"
 
 #elif YUP_ANDROID

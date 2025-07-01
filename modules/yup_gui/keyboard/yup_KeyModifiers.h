@@ -55,7 +55,7 @@ public:
 
         @return True if Shift is active, false otherwise.
     */
-    constexpr bool isShiftDown() const noexcept
+    [[nodiscard]] constexpr bool isShiftDown() const noexcept
     {
         return modifiers & shiftMask;
     }
@@ -64,7 +64,7 @@ public:
 
         @return True if Control is active, false otherwise.
     */
-    constexpr bool isControlDown() const noexcept
+    [[nodiscard]] constexpr bool isControlDown() const noexcept
     {
         return modifiers & controlMask;
     }
@@ -73,7 +73,7 @@ public:
 
         @return True if Command is active, false otherwise.
     */
-    constexpr bool isCommandDown() const noexcept
+    [[nodiscard]] constexpr bool isCommandDown() const noexcept
     {
         return modifiers & commandMask;
     }
@@ -82,7 +82,7 @@ public:
 
         @return True if Alt is active, false otherwise.
     */
-    constexpr bool isAltDown() const noexcept
+    [[nodiscard]] constexpr bool isAltDown() const noexcept
     {
         return modifiers & altMask;
     }
@@ -91,7 +91,7 @@ public:
 
         @return True if Super is active, false otherwise.
     */
-    constexpr bool isSuperDown() const noexcept
+    [[nodiscard]] constexpr bool isSuperDown() const noexcept
     {
         return modifiers & superMask;
     }
@@ -100,7 +100,7 @@ public:
 
         @return True if Caps Lock is active, false otherwise.
     */
-    constexpr bool isCapsLockDown() const noexcept
+    [[nodiscard]] constexpr bool isCapsLockDown() const noexcept
     {
         return modifiers & capsLockMask;
     }
@@ -109,7 +109,7 @@ public:
 
         @return True if Num Lock is active, false otherwise.
     */
-    constexpr bool isNumLockDown() const noexcept
+    [[nodiscard]] constexpr bool isNumLockDown() const noexcept
     {
         return modifiers & numLockMask;
     }
@@ -119,7 +119,7 @@ public:
 
         @return The bitmask of active modifiers.
     */
-    constexpr int getFlags() const noexcept
+    [[nodiscard]] constexpr int getFlags() const noexcept
     {
         return modifiers;
     }
@@ -131,7 +131,7 @@ public:
 
         @return A new KeyModifiers object with the added flags.
     */
-    constexpr KeyModifiers withFlags (int modifiersToAdd) const noexcept
+    [[nodiscard]] constexpr KeyModifiers withFlags (int modifiersToAdd) const noexcept
     {
         return { modifiers | modifiersToAdd };
     }
@@ -142,7 +142,7 @@ public:
 
         @return A new KeyModifiers object with the removed flags.
     */
-    constexpr KeyModifiers withoutFlags (int modifiersToRemove) const noexcept
+    [[nodiscard]] constexpr KeyModifiers withoutFlags (int modifiersToRemove) const noexcept
     {
         return { modifiers & ~modifiersToRemove };
     }
@@ -154,7 +154,7 @@ public:
 
         @return True if all specified flags are active, false otherwise.
     */
-    constexpr bool testFlags (int modifiersToTest) const noexcept
+    [[nodiscard]] constexpr bool testFlags (int modifiersToTest) const noexcept
     {
         return modifiers & modifiersToTest;
     }
@@ -166,7 +166,7 @@ public:
 
         @return True if the modifiers are the same, false otherwise.
     */
-    constexpr bool operator== (const KeyModifiers& other) const noexcept
+    [[nodiscard]] constexpr bool operator== (const KeyModifiers& other) const noexcept
     {
         return modifiers == other.modifiers;
     }
@@ -177,7 +177,7 @@ public:
 
         @return True if the modifiers are not the same, false otherwise.
     */
-    constexpr bool operator!= (const KeyModifiers& other) const noexcept
+    [[nodiscard]] constexpr bool operator!= (const KeyModifiers& other) const noexcept
     {
         return ! (*this == other);
     }

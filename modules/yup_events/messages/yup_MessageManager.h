@@ -104,10 +104,6 @@ public:
 #endif
 
     //==============================================================================
-    /** Register an event loop callback that will be processed as the event dispatch loop. */
-    void registerEventLoopCallback (std::function<void()> loopCallbackToSet);
-
-    //==============================================================================
     /** Asynchronously invokes a function or C++11 lambda on the message thread.
 
         @returns  true if the message was successfully posted to the message queue,
@@ -336,6 +332,17 @@ public:
     };
 
     //==============================================================================
+    /** @internal Register an event loop callback that will be processed as the event dispatch loop.
+
+        Only one event loop callback can be registered at any time.
+    */
+    void registerEventLoopCallback (std::function<void()> loopCallbackToSet);
+
+    //==============================================================================
+    /** @internal Register a shutdown callback. */
+    void registerShutdownCallback (std::function<void()> shutdownCallbackToAdd);
+
+    //==============================================================================
 #ifndef DOXYGEN
     // Internal methods - do not use!
     void deliverBroadcastMessage (const String&);
@@ -358,6 +365,7 @@ private:
     Atomic<Thread::ThreadID> messageThreadId;
     Atomic<Thread::ThreadID> threadWithLock;
     std::function<void()> loopCallback = [] {};
+    std::vector<std::function<void()>> shutdownCallbacks;
 
     static bool postMessageToSystemQueue (MessageBase*);
     static void* exitModalLoopCallback (void*);
