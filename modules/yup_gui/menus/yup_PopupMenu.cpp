@@ -1665,7 +1665,7 @@ void PopupMenu::enterSubmenuViaKeyboard (int itemIndex)
     auto& item = *items[itemIndex];
     if (item.isSubMenu() && item.isEnabled)
     {
-        if (!isItemShowingSubmenu (itemIndex))
+        if (! isItemShowingSubmenu (itemIndex))
             showSubmenu (itemIndex);
 
         if (currentSubmenu)
