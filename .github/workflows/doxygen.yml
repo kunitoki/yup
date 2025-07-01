@@ -6,20 +6,11 @@ on:
       - "**/modules/**"
       - "!**/native/**/*"
       - "**/workflows/doxygen.yml"
-      - "Doxyfile"
+      - "docs/**/*.md"
       - "README.md"
-    branches:
-      - "**"
-      - "!main"
-  pull_request:
-    paths:
-      - "**/modules/**"
-      - "!**/native/**/*"
-      - "**/workflows/doxygen.yml"
       - "Doxyfile"
-      - "README.md"
     branches:
-      - "dev/**"
+      - "main"
   workflow_dispatch:
 
 concurrency:
