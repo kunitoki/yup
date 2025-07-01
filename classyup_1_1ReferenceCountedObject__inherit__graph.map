@@ -1,0 +1,31 @@
+<map id="yup::ReferenceCountedObject" name="yup::ReferenceCountedObject">
+<area shape="rect" id="Node000001" title="A base class which provides methods for reference&#45;counting." alt="" coords="5,293,221,319"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1ApplicationTheme.html" title="Manages the application&#45;wide theme settings." alt="" coords="280,5,452,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="120,279,139,229,169,164,212,98,238,68,268,41,291,28,293,33,271,46,242,71,216,101,174,167,143,231,125,281"/>
+<area shape="rect" id="Node000003" href="$structyup_1_1AudioDeviceManager_1_1LevelMeter.html" title="A simple reference&#45;counted struct that holds a level&#45;meter value that can be read using getCurrentLev..." alt="" coords="269,55,463,95"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="125,280,148,242,180,195,220,147,268,105,289,93,292,98,271,110,224,151,184,198,152,245,130,283"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1AudioParameter.html" title="A flexible, thread&#45;safe parameter class with support for custom mapping, string conversion,..." alt="" coords="287,120,445,145"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="130,281,187,217,225,183,268,154,295,143,297,148,271,159,229,187,191,221,134,284"/>
+<area shape="rect" id="Node000005" href="$classyup_1_1BitmapData.html" title="Represents bitmap pixel data with accessors." alt="" coords="300,169,432,195"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="139,283,197,243,268,204,301,192,303,197,270,208,200,247,143,287"/>
+<area shape="rect" id="Node000006" href="$classyup_1_1ComponentStyle.html" title="The ComponentStyle class is the base class for all components styles." alt="" coords="285,219,447,244"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="163,286,269,253,311,241,312,247,270,258,165,291"/>
+<area shape="rect" id="Node000007" href="$classyup_1_1DynamicObject.html" title="Represents a dynamically implemented object." alt="" coords="289,268,443,293"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="234,291,288,286,289,291,235,296"/>
+<area shape="rect" id="Node000008" href="$classyup_1_1FileChooser.html" title="A cross&#45;platform file chooser dialog that allows users to select files or directories." alt="" coords="301,317,431,343"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="235,315,301,321,300,326,234,320"/>
+<area shape="rect" id="Node000009" href="$classyup_1_1MessageManager_1_1MessageBase.html" title="Internal class used as the base class for all message objects." alt="" coords="281,367,451,407"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="167,320,304,365,302,370,166,325"/>
+<area shape="rect" id="Node000012" href="$classyup_1_1Screen.html" title="Represents a screen device." alt="" coords="317,432,415,457"/>
+<area shape="poly" id="edge11_Node000001_Node000012" title=" " alt="" coords="140,326,197,372,233,396,270,417,317,433,316,438,268,422,230,401,194,376,137,330"/>
+<area shape="rect" id="Node000013" href="$classyup_1_1SynthesiserSound.html" title="Describes one of the sounds that a Synthesiser can play." alt="" coords="281,481,451,507"/>
+<area shape="poly" id="edge12_Node000001_Node000013" title=" " alt="" coords="133,329,188,398,227,436,271,468,296,479,294,484,268,472,224,440,185,402,129,332"/>
+<area shape="rect" id="Node000014" href="$classyup_1_1UndoManager.html" title="Manages undo and redo functionality for a set of actions." alt="" coords="293,531,439,556"/>
+<area shape="poly" id="edge13_Node000001_Node000014" title=" " alt="" coords="128,330,149,372,181,422,221,474,245,497,271,517,294,529,292,534,268,522,242,501,217,477,176,425,145,374,123,333"/>
+<area shape="rect" id="Node000015" href="$classyup_1_1UndoableAction.html" title="The base class for all actions in the timeline." alt="" coords="287,580,445,605"/>
+<area shape="poly" id="edge14_Node000001_Node000015" title=" " alt="" coords="125,331,143,381,173,445,216,511,242,541,271,566,290,577,288,582,268,571,238,545,212,514,169,448,138,384,120,333"/>
+<area shape="rect" id="Node000010" href="$classyup_1_1CallbackMessage.html" title="A message that invokes a callback method when it gets delivered." alt="" coords="511,351,679,376"/>
+<area shape="poly" id="edge9_Node000009_Node000010" title=" " alt="" coords="464,374,510,369,511,375,465,380"/>
+<area shape="rect" id="Node000011" href="$classyup_1_1Message.html" title="The base class for objects that can be sent to a MessageListener." alt="" coords="539,400,651,425"/>
+<area shape="poly" id="edge10_Node000009_Node000011" title=" " alt="" coords="465,396,539,404,538,409,464,401"/>
+</map>

@@ -1,0 +1,7 @@
+<map id="yup::MidiMessageCollector" name="yup::MidiMessageCollector">
+<area shape="rect" id="Node000001" title="Collects incoming realtime MIDI messages and turns them into blocks suitable for processing by a bloc..." alt="" coords="93,93,292,119"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1MidiKeyboardState_1_1Listener.html" title="Receives events from a MidiKeyboardState object." alt="" coords="5,5,183,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="130,52,180,91,176,95,127,56"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1MidiInputCallback.html" title="Receives incoming messages from a physical MIDI input device." alt="" coords="207,13,378,38"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="269,49,209,95,206,91,265,45"/>
+</map>

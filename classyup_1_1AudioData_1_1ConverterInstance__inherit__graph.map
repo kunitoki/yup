@@ -1,0 +1,5 @@
+<map id="yup::AudioData::ConverterInstance&lt; SourceSampleType, DestSampleType &gt;" name="yup::AudioData::ConverterInstance&lt; SourceSampleType, DestSampleType &gt;">
+<area shape="rect" id="Node000001" title="A class that converts between two templated AudioData::Pointer types, and which implements the AudioD..." alt="" coords="5,79,224,133"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1AudioData_1_1Converter.html" title="A base class for objects that are used to convert between two different sample formats." alt="" coords="17,5,212,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="117,44,117,79,112,79,112,44"/>
+</map>

@@ -1,0 +1,5 @@
+<map id="yup::MidiKeyboardState::Listener" name="yup::MidiKeyboardState::Listener">
+<area shape="rect" id="Node000001" title="Receives events from a MidiKeyboardState object." alt="" coords="16,5,193,45"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1MidiMessageCollector.html" title="Collects incoming realtime MIDI messages and turns them into blocks suitable for processing by a bloc..." alt="" coords="5,93,204,119"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="107,59,107,93,102,93,102,59"/>
+</map>

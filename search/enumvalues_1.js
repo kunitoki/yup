@@ -1,0 +1,24 @@
+var searchData=
+[
+  ['background_0',['background',['../classyup_1_1Thread.html#ae82d50b90c7017388e898f3a40a0a140ad229bbf31eaeebc7c88897732d8b932d',1,'yup::Thread']]],
+  ['baseline_1',['baseline',['../classyup_1_1StyledText.html#a6d1c8d1c5e426874b6e6df7426f799c2aaae8a378fbfbbe5e8fa2cbbc747e8fef',1,'yup::StyledText']]],
+  ['bevel_2',['Bevel',['../namespaceyup.html#a5fe9837237d5235edaa058dc13d1ce46a1b9ae4ca6d43fc984af318046e1e7bb5',1,'yup']]],
+  ['bluetoothmidi_3',['bluetoothMidi',['../classyup_1_1RuntimePermissions.html#ad1e2651b80db8b91af5cf1019983e280ae984b1410d2fc98bba15204bd1fe41f7',1,'yup::RuntimePermissions']]],
+  ['bottom_4',['bottom',['../classyup_1_1StyledText.html#a9d79f3d97226ac08afa5ebe1b118d5fca7e2bfa735e26a6fc2386897fad8843c9',1,'yup::StyledText']]],
+  ['bottomfrontcentre_5',['bottomFrontCentre',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477a23d1bba7e50e4f016b5c8b439fabb41e',1,'yup::AudioChannelSet']]],
+  ['bottomfrontleft_6',['bottomFrontLeft',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477a1785bb74d8269316281277344fe0a32e',1,'yup::AudioChannelSet']]],
+  ['bottomfrontright_7',['bottomFrontRight',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477afed512d41c57258795af5f3db1b0754c',1,'yup::AudioChannelSet']]],
+  ['bottomrearcentre_8',['bottomRearCentre',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477add8dcc73be3a3264aa0e30ba02288a8f',1,'yup::AudioChannelSet']]],
+  ['bottomrearleft_9',['bottomRearLeft',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477af5f8f06e63e7f1d312b94e74d0ea0a0b',1,'yup::AudioChannelSet']]],
+  ['bottomrearright_10',['bottomRearRight',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477a1fbfe1ac1b49510b34415db1f2190e74',1,'yup::AudioChannelSet']]],
+  ['bottomsideleft_11',['bottomSideLeft',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477af7c19c1f3fecee168c443303a4300ac9',1,'yup::AudioChannelSet']]],
+  ['bottomsideright_12',['bottomSideRight',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477ab5f2a7e05e2beca04a31de969460a7d0',1,'yup::AudioChannelSet']]],
+  ['butt_13',['Butt',['../namespaceyup.html#a16cc6ed4db3309e14d8229dc69428974ab2635ed1075287dea1eb1598a90df1fe',1,'yup']]],
+  ['byteordermark1_14',['byteOrderMark1',['../classyup_1_1CharPointer__UTF8.html#a3af2fc0a9c9cb7af50ebe22da97faa0ca5e134b5c199024febbcdbc8f20ba819c',1,'yup::CharPointer_UTF8']]],
+  ['byteordermark2_15',['byteOrderMark2',['../classyup_1_1CharPointer__UTF8.html#a3af2fc0a9c9cb7af50ebe22da97faa0ca22e1fbdc8fdbd215e90d654c5e4b98e3',1,'yup::CharPointer_UTF8']]],
+  ['byteordermark3_16',['byteOrderMark3',['../classyup_1_1CharPointer__UTF8.html#a3af2fc0a9c9cb7af50ebe22da97faa0ca20fdcb70b2fa8dccb0a9e4c05e1bda84',1,'yup::CharPointer_UTF8']]],
+  ['byteordermarkbe1_17',['byteOrderMarkBE1',['../classyup_1_1CharPointer__UTF16.html#a6627201688bbd269a2ab3700c9a3c87dad2f78a8597ada40d4a0b34a8b4bf6a86',1,'yup::CharPointer_UTF16']]],
+  ['byteordermarkbe2_18',['byteOrderMarkBE2',['../classyup_1_1CharPointer__UTF16.html#a6627201688bbd269a2ab3700c9a3c87dacad3196202e19e26c33fb25794703aed',1,'yup::CharPointer_UTF16']]],
+  ['byteordermarkle1_19',['byteOrderMarkLE1',['../classyup_1_1CharPointer__UTF16.html#a6627201688bbd269a2ab3700c9a3c87da6bddefca8169b2192437775f6c57235c',1,'yup::CharPointer_UTF16']]],
+  ['byteordermarkle2_20',['byteOrderMarkLE2',['../classyup_1_1CharPointer__UTF16.html#a6627201688bbd269a2ab3700c9a3c87da03e2d937ddeea152f290b5961460ea7b',1,'yup::CharPointer_UTF16']]]
+];

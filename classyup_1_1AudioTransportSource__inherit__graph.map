@@ -1,0 +1,9 @@
+<map id="yup::AudioTransportSource" name="yup::AudioTransportSource">
+<area shape="rect" id="Node000001" title="An AudioSource that takes a PositionableAudioSource and allows it to be played, stopped,..." alt="" coords="126,152,321,177"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1PositionableAudioSource.html" title="A type of AudioSource which can be repositioned." alt="" coords="5,79,220,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="143,109,207,150,204,154,141,114"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1AudioSource.html" title="Base class for objects that can produce a continuous stream of audio." alt="" coords="45,5,180,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="115,44,115,79,110,79,110,44"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1ChangeBroadcaster.html" title="Holds a list of ChangeListeners, and sends messages to them when instructed." alt="" coords="245,79,426,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="307,114,243,154,240,150,304,109"/>
+</map>

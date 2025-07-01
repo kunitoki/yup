@@ -1,0 +1,5 @@
+<map id="yup::URLInputSource" name="yup::URLInputSource">
+<area shape="rect" id="Node000001" title="A type of InputSource that represents a URL." alt="" coords="5,79,163,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1InputSource.html" title="A lightweight object that can create a stream to read some kind of resource." alt="" coords="19,5,149,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="87,44,87,79,81,79,81,44"/>
+</map>

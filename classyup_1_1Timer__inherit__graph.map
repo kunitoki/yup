@@ -1,0 +1,7 @@
+<map id="yup::Timer" name="yup::Timer">
+<area shape="rect" id="Node000001" title="Makes repeated callbacks to a virtual method at a specified time interval." alt="" coords="120,5,212,31"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1TimedCallback.html" title="Utility class wrapping a single non&#45;null callback called by a Timer." alt="" coords="5,79,156,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="144,41,96,80,93,76,140,37"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1UndoManager.html" title="Manages undo and redo functionality for a set of actions." alt="" coords="180,79,325,104"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="192,37,240,76,237,81,189,41"/>
+</map>

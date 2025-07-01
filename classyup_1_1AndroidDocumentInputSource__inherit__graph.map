@@ -1,0 +1,5 @@
+<map id="yup::AndroidDocumentInputSource" name="yup::AndroidDocumentInputSource">
+<area shape="rect" id="Node000001" title="An InputSource backed by an AndroidDocument." alt="" coords="5,79,209,119"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1InputSource.html" title="A lightweight object that can create a stream to read some kind of resource." alt="" coords="42,5,173,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="110,44,110,79,105,79,105,44"/>
+</map>

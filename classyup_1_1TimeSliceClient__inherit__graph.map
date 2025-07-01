@@ -1,0 +1,5 @@
+<map id="yup::TimeSliceClient" name="yup::TimeSliceClient">
+<area shape="rect" id="Node000001" title="Used by the TimeSliceThread class." alt="" coords="25,5,181,31"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1BufferingAudioSource.html" title="An AudioSource which takes another source as input, and buffers it using a thread." alt="" coords="5,79,200,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="105,44,105,79,100,79,100,44"/>
+</map>

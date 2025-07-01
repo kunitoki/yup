@@ -1,0 +1,5 @@
+<map id="yup::MemoryOutputStream" name="yup::MemoryOutputStream">
+<area shape="rect" id="Node000001" title="Writes data to an internal memory buffer, which grows as required." alt="" coords="5,79,204,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1OutputStream.html" title="The base class for streams that write data to some kind of destination." alt="" coords="32,5,177,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="107,44,107,79,102,79,102,44"/>
+</map>

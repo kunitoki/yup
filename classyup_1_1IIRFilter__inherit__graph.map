@@ -1,0 +1,5 @@
+<map id="yup::IIRFilter" name="yup::IIRFilter">
+<area shape="rect" id="Node000001" title="An IIR filter that can perform low, high, or band&#45;pass filtering on an audio signal,..." alt="" coords="21,93,125,119"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1IIRFilterBase.html" title=" " alt="" coords="5,5,141,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="76,59,76,93,71,93,71,59"/>
+</map>

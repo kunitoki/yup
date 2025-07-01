@@ -1,0 +1,9 @@
+<map id="yup::MessageManager::MessageBase" name="yup::MessageManager::MessageBase">
+<area shape="rect" id="Node000001" title="Internal class used as the base class for all message objects." alt="" coords="86,79,255,119"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1CallbackMessage.html" title="A message that invokes a callback method when it gets delivered." alt="" coords="5,167,173,192"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="143,130,103,168,100,164,139,127"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1Message.html" title="The base class for objects that can be sent to a MessageListener." alt="" coords="197,167,309,192"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="202,126,243,164,239,168,199,130"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1ReferenceCountedObject.html" title="A base class which provides methods for reference&#45;counting." alt="" coords="63,5,279,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="173,44,173,79,168,79,168,44"/>
+</map>

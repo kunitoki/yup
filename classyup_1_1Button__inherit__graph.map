@@ -1,0 +1,7 @@
+<map id="yup::Button" name="yup::Button">
+<area shape="rect" id="Node000001" title=" " alt="" coords="21,79,119,104"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1TextButton.html" title=" " alt="" coords="8,152,132,177"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="73,118,73,152,67,152,67,118"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1Component.html" title="The Component class is the base class for all GUI components." alt="" coords="5,5,135,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="73,44,73,79,67,79,67,44"/>
+</map>

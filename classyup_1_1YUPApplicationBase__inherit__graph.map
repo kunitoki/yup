@@ -1,0 +1,5 @@
+<map id="yup::YUPApplicationBase" name="yup::YUPApplicationBase">
+<area shape="rect" id="Node000001" title="Abstract base class for application classes." alt="" coords="5,5,189,31"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1YUPApplication.html" title="Main application class for the YUPApplication, extending YUP application functionality." alt="" coords="21,79,173,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="100,44,100,79,95,79,95,44"/>
+</map>

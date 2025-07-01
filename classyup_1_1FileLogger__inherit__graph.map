@@ -1,0 +1,5 @@
+<map id="yup::FileLogger" name="yup::FileLogger">
+<area shape="rect" id="Node000001" title="A simple implementation of a Logger that writes to a file." alt="" coords="5,79,127,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1Logger.html" title="Acts as an application&#45;wide logging class." alt="" coords="17,5,115,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="69,44,69,79,63,79,63,44"/>
+</map>

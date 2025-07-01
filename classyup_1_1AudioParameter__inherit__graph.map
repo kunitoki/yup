@@ -1,0 +1,5 @@
+<map id="yup::AudioParameter" name="yup::AudioParameter">
+<area shape="rect" id="Node000001" title="A flexible, thread&#45;safe parameter class with support for custom mapping, string conversion,..." alt="" coords="34,79,193,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1ReferenceCountedObject.html" title="A base class which provides methods for reference&#45;counting." alt="" coords="5,5,221,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="116,44,116,79,111,79,111,44"/>
+</map>

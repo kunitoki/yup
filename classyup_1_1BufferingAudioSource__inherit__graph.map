@@ -1,0 +1,9 @@
+<map id="yup::BufferingAudioSource" name="yup::BufferingAudioSource">
+<area shape="rect" id="Node000001" title="An AudioSource which takes another source as input, and buffers it using a thread." alt="" coords="119,152,314,177"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1PositionableAudioSource.html" title="A type of AudioSource which can be repositioned." alt="" coords="5,79,220,104"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="142,110,201,150,198,154,139,114"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1AudioSource.html" title="Base class for objects that can produce a continuous stream of audio." alt="" coords="45,5,180,31"/>
+<area shape="poly" id="edge2_Node000002_Node000003" title=" " alt="" coords="115,44,115,79,110,79,110,44"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1TimeSliceClient.html" title="Used by the TimeSliceThread class." alt="" coords="244,79,400,104"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="295,114,235,154,232,150,292,110"/>
+</map>

@@ -1,0 +1,5 @@
+<map id="yup::DynamicObject" name="yup::DynamicObject">
+<area shape="rect" id="Node000001" title="Represents a dynamically implemented object." alt="" coords="36,79,191,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1ReferenceCountedObject.html" title="A base class which provides methods for reference&#45;counting." alt="" coords="5,5,221,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="116,44,116,79,111,79,111,44"/>
+</map>

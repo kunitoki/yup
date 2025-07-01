@@ -1,0 +1,28 @@
+var searchData=
+[
+  ['unalignedpointercast_0',['unalignedPointerCast',['../namespaceyup.html#ad96819c9e8602fa00bc610157ce0b707',1,'yup::unalignedPointerCast(void *ptr) noexcept'],['../namespaceyup.html#a31478542efae566a501b0aef75b2276d',1,'yup::unalignedPointerCast(const void *ptr) noexcept']]],
+  ['uncompressentry_1',['uncompressEntry',['../classyup_1_1ZipFile.html#a1e912e25175250f619b7aa184cea924d',1,'yup::ZipFile::uncompressEntry(int index, const File &amp;targetDirectory, bool shouldOverwriteFiles=true)'],['../classyup_1_1ZipFile.html#acccb808b5ef5012edb3bdf873e738185',1,'yup::ZipFile::uncompressEntry(int index, const File &amp;targetDirectory, OverwriteFiles overwriteFiles, FollowSymlinks followSymlinks)']]],
+  ['uncompressto_2',['uncompressTo',['../classyup_1_1ZipFile.html#ac2d2d71a840f0be359687a2db5af42c4',1,'yup::ZipFile']]],
+  ['undefined_3',['undefined',['../classyup_1_1var.html#a0dc582cb96783850befbb2166026e389',1,'yup::var']]],
+  ['undo_4',['undo',['../classyup_1_1UndoManager.html#ac97756a4b52028810274ce6f052afc9a',1,'yup::UndoManager']]],
+  ['undomanager_5',['UndoManager',['../classyup_1_1UndoManager.html#aea02c4aaba322627cfe4c24dcbc20b35',1,'yup::UndoManager::UndoManager()'],['../classyup_1_1UndoManager.html#a0a3e63a5632867dbe6c399987cfeec85',1,'yup::UndoManager::UndoManager(int maxHistorySize)'],['../classyup_1_1UndoManager.html#ac9fa408aa41e503f3faefeff131beb7b',1,'yup::UndoManager::UndoManager(RelativeTime actionGroupThreshold)'],['../classyup_1_1UndoManager.html#a3be01e256560f14cc4847965a702e60b',1,'yup::UndoManager::UndoManager(int maxHistorySize, RelativeTime actionGroupThreshold)']]],
+  ['unhandledexception_6',['unhandledException',['../classyup_1_1YUPApplicationBase.html#ab72d00036694571729d9e1942b013d3e',1,'yup::YUPApplicationBase::unhandledException()'],['../classyup_1_1YUPApplication.html#afc5819087c1e3352ac7f5eece8149f71',1,'yup::YUPApplication::unhandledException()']]],
+  ['unionwith_7',['unionWith',['../classyup_1_1Rectangle.html#a1801e07fb9469570a9db8cb857f1f420',1,'yup::Rectangle']]],
+  ['unittest_8',['UnitTest',['../classyup_1_1UnitTest.html#ad51f265611aa4347ff730a691867a946',1,'yup::UnitTest']]],
+  ['unittestrunner_9',['UnitTestRunner',['../classyup_1_1UnitTestRunner.html#ad06b57325757ac93dfa4b2f001bdce32',1,'yup::UnitTestRunner']]],
+  ['unquoted_10',['unquoted',['../classyup_1_1String.html#a9bcef99cfdaa3a5ef5da9d8d5c49fe42',1,'yup::String']]],
+  ['unset_11',['unset',['../classyup_1_1FlagSet.html#a84ccf7c3bddb386dbb34c3944bf1bdae',1,'yup::FlagSet']]],
+  ['unwatchallfolders_12',['unwatchAllFolders',['../classyup_1_1Watchdog.html#a2386f757d1ab36d916d74f05418e4817',1,'yup::Watchdog']]],
+  ['unwatchfolder_13',['unwatchFolder',['../classyup_1_1Watchdog.html#ac8547bd238ce5f9c733b2b92f728f4df',1,'yup::Watchdog']]],
+  ['updatematchedpairs_14',['updateMatchedPairs',['../classyup_1_1MidiMessageSequence.html#aaf7fc4b84dd69884519eb1f4e19b2f33',1,'yup::MidiMessageSequence']]],
+  ['updatenextaudioblock_15',['updateNextAudioBlock',['../classyup_1_1AudioParameterHandle.html#adb99bf3ee9fc510da593b6e2a51d8cf6',1,'yup::AudioParameterHandle']]],
+  ['updatescreens_16',['updateScreens',['../classyup_1_1Desktop.html#af249e65b586411153d4a0b810cf2fb78',1,'yup::Desktop']]],
+  ['uptofirstoccurrenceof_17',['upToFirstOccurrenceOf',['../classyup_1_1String.html#af9f5866e471f4ea4ea3f116ec4f4497a',1,'yup::String']]],
+  ['uptolastoccurrenceof_18',['upToLastOccurrenceOf',['../classyup_1_1String.html#a332802a54b56dcdfc8939a07ea43610d',1,'yup::String']]],
+  ['url_19',['URL',['../classyup_1_1URL.html#ad2a0567a4755aca717ebadbdeace43b0',1,'yup::URL::URL()'],['../classyup_1_1URL.html#a8c3c8322cafa7262bbfe423ca754aa77',1,'yup::URL::URL(const String &amp;url)'],['../classyup_1_1URL.html#a1768005036f1dbd463aff1dc25a49a49',1,'yup::URL::URL(File localFile)'],['../classyup_1_1URL.html#a9fc8e7c4680e754a256ffb698c6f9ae0',1,'yup::URL::URL(const URL &amp;other)'],['../classyup_1_1URL.html#ae56af2c01e56d9a189140b26c45bfb20',1,'yup::URL::URL(URL &amp;&amp;other)']]],
+  ['urlinputsource_20',['URLInputSource',['../classyup_1_1URLInputSource.html#ad759b4b8ba047f096ccbc0669f7830df',1,'yup::URLInputSource::URLInputSource(const URL &amp;url)'],['../classyup_1_1URLInputSource.html#adccb097ec30dd31849692ffaa1ff240e',1,'yup::URLInputSource::URLInputSource(URL &amp;&amp;url)']]],
+  ['usertriedtoclosewindow_21',['userTriedToCloseWindow',['../classyup_1_1Component.html#a392a26133a43a3010a557b4c5d3fcd21',1,'yup::Component::userTriedToCloseWindow()'],['../classyup_1_1DocumentWindow.html#a40c809d0d8262fea4ec6af138c775030',1,'yup::DocumentWindow::userTriedToCloseWindow()']]],
+  ['usesanysymbols_22',['usesAnySymbols',['../classyup_1_1Expression.html#a400f404750633b27b842e1f1c5b4c672',1,'yup::Expression']]],
+  ['usetimeslice_23',['useTimeSlice',['../classyup_1_1TimeSliceClient.html#a32da9f40a75d035c97ee09be12bae3b6',1,'yup::TimeSliceClient']]],
+  ['uuid_24',['Uuid',['../classyup_1_1Uuid.html#a23a713426a75cac99fdcb27974d4a536',1,'yup::Uuid::Uuid()'],['../classyup_1_1Uuid.html#acd96513b60feb1fef2ad824dfd1300ac',1,'yup::Uuid::Uuid(const Uuid &amp;) noexcept'],['../classyup_1_1Uuid.html#ae1ae5c533bd6c4d6455ffb0f3203cfde',1,'yup::Uuid::Uuid(const String &amp;uuidString)'],['../classyup_1_1Uuid.html#a9e27a8272f1a02ffa79dfacf67aebf34',1,'yup::Uuid::Uuid(const uint8 *rawData) noexcept']]]
+];

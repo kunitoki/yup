@@ -1,0 +1,5 @@
+<map id="yup::GZIPCompressorOutputStream" name="yup::GZIPCompressorOutputStream">
+<area shape="rect" id="Node000001" title="A stream which uses zlib to compress the data written into it." alt="" coords="5,79,212,119"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1OutputStream.html" title="The base class for streams that write data to some kind of destination." alt="" coords="36,5,181,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="111,44,111,79,106,79,106,44"/>
+</map>

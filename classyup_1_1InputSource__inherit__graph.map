@@ -1,0 +1,9 @@
+<map id="yup::InputSource" name="yup::InputSource">
+<area shape="rect" id="Node000001" title="A lightweight object that can create a stream to read some kind of resource." alt="" coords="246,5,377,31"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1AndroidDocumentInputSource.html" title="An InputSource backed by an AndroidDocument." alt="" coords="5,79,209,119"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="270,38,157,81,155,76,268,33"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1FileInputSource.html" title="A type of InputSource that represents a normal file." alt="" coords="234,86,389,111"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="314,44,314,86,309,86,309,44"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1URLInputSource.html" title="A type of InputSource that represents a URL." alt="" coords="413,86,570,111"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="351,34,466,84,464,88,349,39"/>
+</map>

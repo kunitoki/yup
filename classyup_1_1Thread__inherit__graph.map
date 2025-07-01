@@ -1,0 +1,13 @@
+<map id="yup::Thread" name="yup::Thread">
+<area shape="rect" id="Node000001" title="Encapsulates a thread." alt="" coords="5,127,104,153"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1InterprocessConnectionServer.html" title="An object that waits for client sockets to connect to a port on this host, and creates InterprocessCo..." alt="" coords="160,5,367,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="75,115,109,84,151,55,178,43,180,48,153,60,112,88,79,119"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1MidiOutput.html" title="Represents a midi output device." alt="" coords="200,70,327,95"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="103,120,151,105,201,93,202,98,153,111,105,125"/>
+<area shape="rect" id="Node000004" href="$structyup_1_1NetworkServiceDiscovery_1_1Advertiser.html" title="An object which runs a thread to repeatedly broadcast the existence of a discoverable service." alt="" coords="152,120,375,160"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="118,137,152,137,152,143,118,143"/>
+<area shape="rect" id="Node000005" href="$structyup_1_1NetworkServiceDiscovery_1_1AvailableServiceList.html" title="Watches the network for broadcasts from Advertiser objects, and keeps a list of all the currently act..." alt="" coords="152,184,375,224"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="107,155,153,169,192,181,191,186,151,175,105,160"/>
+<area shape="rect" id="Node000006" href="$classyup_1_1TimeSliceThread.html" title="A thread that keeps a list of clients, and calls each one in turn, giving them all a chance to run so..." alt="" coords="182,249,345,274"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="75,162,109,200,130,218,153,234,184,246,181,251,151,238,127,222,105,203,71,166"/>
+</map>

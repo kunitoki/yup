@@ -1,0 +1,19 @@
+<map id="yup::Component" name="yup::Component">
+<area shape="rect" id="Node000001" title="The Component class is the base class for all GUI components." alt="" coords="5,153,135,179"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1Artboard.html" title="Represents a Rive artboard." alt="" coords="223,5,334,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="84,140,124,89,151,62,181,40,222,23,224,28,184,44,154,66,128,93,88,144"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1AudioProcessorEditor.html" title=" " alt="" coords="183,55,375,80"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="96,143,135,115,182,89,213,78,215,83,184,94,138,119,99,147"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1Button.html" title=" " alt="" coords="230,104,327,129"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="137,148,229,125,230,131,138,153"/>
+<area shape="rect" id="Node000006" href="$classyup_1_1DocumentWindow.html" title=" " alt="" coords="192,153,365,179"/>
+<area shape="poly" id="edge5_Node000001_Node000006" title=" " alt="" coords="148,163,192,163,192,169,148,169"/>
+<area shape="rect" id="Node000007" href="$classyup_1_1Label.html" title="A component that displays text." alt="" coords="234,203,323,228"/>
+<area shape="poly" id="edge6_Node000001_Node000007" title=" " alt="" coords="138,179,234,202,233,208,137,184"/>
+<area shape="rect" id="Node000008" href="$classyup_1_1Slider.html" title=" " alt="" coords="233,252,324,277"/>
+<area shape="poly" id="edge7_Node000001_Node000008" title=" " alt="" coords="99,185,138,212,184,237,234,253,232,258,182,242,135,216,96,189"/>
+<area shape="rect" id="Node000009" href="$classyup_1_1TextEditor.html" title="A component that allows editing text with cursor movement and selection." alt="" coords="219,301,338,327"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="89,188,128,239,155,264,184,286,220,302,218,306,181,291,151,269,124,242,85,192"/>
+<area shape="rect" id="Node000005" href="$classyup_1_1TextButton.html" title=" " alt="" coords="423,104,547,129"/>
+<area shape="poly" id="edge4_Node000004_Node000005" title=" " alt="" coords="341,114,422,114,422,119,341,119"/>
+</map>

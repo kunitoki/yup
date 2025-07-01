@@ -1,0 +1,5 @@
+<map id="yup::ApplicationTheme" name="yup::ApplicationTheme">
+<area shape="rect" id="Node000001" title="Manages the application&#45;wide theme settings." alt="" coords="27,79,199,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1ReferenceCountedObject.html" title="A base class which provides methods for reference&#45;counting." alt="" coords="5,5,221,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="116,44,116,79,111,79,111,44"/>
+</map>

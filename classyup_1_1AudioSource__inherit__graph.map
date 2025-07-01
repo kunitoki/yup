@@ -1,0 +1,23 @@
+<map id="yup::AudioSource" name="yup::AudioSource">
+<area shape="rect" id="Node000001" title="Base class for objects that can produce a continuous stream of audio." alt="" coords="5,169,140,194"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1ChannelRemappingAudioSource.html" title="An AudioSource that takes the audio from another source, and re&#45;maps its input and output channels to..." alt="" coords="194,5,413,45"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="88,156,128,105,156,78,187,55,210,43,213,48,189,60,159,82,132,108,92,159"/>
+<area shape="rect" id="Node000003" href="$classyup_1_1IIRFilterAudioSource.html" title="An AudioSource that performs an IIR filter on another source." alt="" coords="211,70,396,95"/>
+<area shape="poly" id="edge2_Node000001_Node000003" title=" " alt="" coords="99,158,139,130,187,104,222,93,223,98,189,109,142,134,102,162"/>
+<area shape="rect" id="Node000004" href="$classyup_1_1MixerAudioSource.html" title="An AudioSource that mixes together the output of a set of other AudioSources." alt="" coords="218,119,389,145"/>
+<area shape="poly" id="edge3_Node000001_Node000004" title=" " alt="" coords="143,163,187,153,240,142,242,147,189,159,144,168"/>
+<area shape="rect" id="Node000005" href="$classyup_1_1PositionableAudioSource.html" title="A type of AudioSource which can be repositioned." alt="" coords="196,169,411,194"/>
+<area shape="poly" id="edge4_Node000001_Node000005" title=" " alt="" coords="154,179,196,179,196,184,154,184"/>
+<area shape="rect" id="Node000009" href="$classyup_1_1ResamplingAudioSource.html" title="A type of AudioSource that takes an input source and changes its sample rate." alt="" coords="197,218,409,243"/>
+<area shape="poly" id="edge8_Node000001_Node000009" title=" " alt="" coords="144,194,189,204,242,215,240,221,187,209,143,200"/>
+<area shape="rect" id="Node000010" href="$classyup_1_1ReverbAudioSource.html" title="An AudioSource that uses the Reverb class to apply a reverb to another AudioSource." alt="" coords="213,267,394,293"/>
+<area shape="poly" id="edge9_Node000001_Node000010" title=" " alt="" coords="102,201,142,228,189,254,223,265,222,270,187,258,139,233,99,205"/>
+<area shape="rect" id="Node000011" href="$classyup_1_1ToneGeneratorAudioSource.html" title="A simple AudioSource that generates a sine wave." alt="" coords="188,317,419,342"/>
+<area shape="poly" id="edge10_Node000001_Node000011" title=" " alt="" coords="91,204,132,255,159,281,189,303,215,314,212,319,187,308,155,285,128,259,87,207"/>
+<area shape="rect" id="Node000006" href="$classyup_1_1AudioTransportSource.html" title="An AudioSource that takes a PositionableAudioSource and allows it to be played, stopped,..." alt="" coords="467,119,661,145"/>
+<area shape="poly" id="edge5_Node000005_Node000006" title=" " alt="" coords="384,163,496,142,497,147,385,169"/>
+<area shape="rect" id="Node000007" href="$classyup_1_1BufferingAudioSource.html" title="An AudioSource which takes another source as input, and buffers it using a thread." alt="" coords="467,169,661,194"/>
+<area shape="poly" id="edge6_Node000005_Node000007" title=" " alt="" coords="424,179,467,179,467,184,424,184"/>
+<area shape="rect" id="Node000008" href="$classyup_1_1MemoryAudioSource.html" title="An AudioSource which takes some float audio data as an input." alt="" coords="469,218,659,243"/>
+<area shape="poly" id="edge7_Node000005_Node000008" title=" " alt="" coords="385,194,497,215,496,221,384,199"/>
+</map>

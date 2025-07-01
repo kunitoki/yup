@@ -1,0 +1,5 @@
+<map id="yup::FileOutputStream" name="yup::FileOutputStream">
+<area shape="rect" id="Node000001" title="An output stream that writes into a local file." alt="" coords="5,79,173,104"/>
+<area shape="rect" id="Node000002" href="$classyup_1_1OutputStream.html" title="The base class for streams that write data to some kind of destination." alt="" coords="17,5,162,31"/>
+<area shape="poly" id="edge1_Node000001_Node000002" title=" " alt="" coords="92,44,92,79,87,79,87,44"/>
+</map>

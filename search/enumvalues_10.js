@@ -1,0 +1,27 @@
+var searchData=
+[
+  ['radial_0',['Radial',['../classyup_1_1ColorGradient.html#a605934285a559a75238642a3fd8a9f60ae22ee4893295549af04c7c707c100ab6',1,'yup::ColorGradient']]],
+  ['readexternalstorage_1',['readExternalStorage',['../classyup_1_1RuntimePermissions.html#ad1e2651b80db8b91af5cf1019983e280a38f407b485b73d6186eb1705a3c93bf0',1,'yup::RuntimePermissions']]],
+  ['readmediaaudio_2',['readMediaAudio',['../classyup_1_1RuntimePermissions.html#ad1e2651b80db8b91af5cf1019983e280a134dca56fd4df21bcb6b4fd627726b43',1,'yup::RuntimePermissions']]],
+  ['readmediaimages_3',['readMediaImages',['../classyup_1_1RuntimePermissions.html#ad1e2651b80db8b91af5cf1019983e280a8edd859626860ae4ab4049ada99ae0ef',1,'yup::RuntimePermissions']]],
+  ['readmediavideo_4',['readMediaVideo',['../classyup_1_1RuntimePermissions.html#ad1e2651b80db8b91af5cf1019983e280a6793743382d39c8a9a388c458f0aa853',1,'yup::RuntimePermissions']]],
+  ['readonly_5',['readOnly',['../classyup_1_1MemoryMappedFile.html#a18a8a7050682f2fc558a8c299847128ea9899555bdd2ae6731881f9e96ef4de8f',1,'yup::MemoryMappedFile']]],
+  ['readwrite_6',['readWrite',['../classyup_1_1MemoryMappedFile.html#a18a8a7050682f2fc558a8c299847128ea99b48a4b53cdeff5de12e08a73e1b93b',1,'yup::MemoryMappedFile']]],
+  ['realtimepriority_7',['RealtimePriority',['../classyup_1_1Process.html#ad72149514e77ab585809cfecca32c69caf7037a659ae08a6bfbb3064ed2362d10',1,'yup::Process']]],
+  ['recordaudio_8',['recordAudio',['../classyup_1_1RuntimePermissions.html#ad1e2651b80db8b91af5cf1019983e280a8613fd4850178f5c65d45a98d13951d9',1,'yup::RuntimePermissions']]],
+  ['redo_9',['Redo',['../namespaceyup.html#a09c39eb18af494f7f0fc823856fb2c2ca5afeaba074ef570dc720caaa855d49f6',1,'yup']]],
+  ['resizeall_10',['ResizeAll',['../classyup_1_1MouseCursor.html#a9f67b7d4f59e2977a031897b146ed342a457837ca6f8c0f6b868a2ffc03675a83',1,'yup::MouseCursor']]],
+  ['resizebottomleftrighttop_11',['ResizeBottomLeftRightTop',['../classyup_1_1MouseCursor.html#a9f67b7d4f59e2977a031897b146ed342ab3d8010237de6091b26e613d0c5821ba',1,'yup::MouseCursor']]],
+  ['resizeleftright_12',['ResizeLeftRight',['../classyup_1_1MouseCursor.html#a9f67b7d4f59e2977a031897b146ed342a5ab6b9a052ef77514051f94ec8961cae',1,'yup::MouseCursor']]],
+  ['resizetopleftrightbottom_13',['ResizeTopLeftRightBottom',['../classyup_1_1MouseCursor.html#a9f67b7d4f59e2977a031897b146ed342a5816ad9081a52c94b6157a77d846eead',1,'yup::MouseCursor']]],
+  ['resizeupdown_14',['ResizeUpDown',['../classyup_1_1MouseCursor.html#a9f67b7d4f59e2977a031897b146ed342a14ac490b043c01d18063a993f6a2ccad',1,'yup::MouseCursor']]],
+  ['rgb_15',['RGB',['../namespaceyup.html#ad3ec205abbd78cecb3763ed3a7c227dda889574aebacda6bfd3e534e2b49b8028',1,'yup']]],
+  ['rgba_16',['RGBA',['../namespaceyup.html#ad3ec205abbd78cecb3763ed3a7c227ddaea3495a278957dc58165e48a8945469f',1,'yup']]],
+  ['right_17',['right',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477ab27d11a8ce04e491a5ca35fa90cc1732',1,'yup::AudioChannelSet::right'],['../classyup_1_1StyledText.html#a996d58f663dcf533fae599fd079709c2ae50112bf5c71cd744a3678e9787e87ec',1,'yup::StyledText::right']]],
+  ['rightbutton_18',['rightButton',['../classyup_1_1MouseEvent.html#a6b7b87cb342c5f89d9f4c31d9b2aa3a0a61255344ee9a9c46817206d6aaf1bfc0',1,'yup::MouseEvent']]],
+  ['rightcentre_19',['rightCentre',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477a8b79ff54ca13fd9af3e1505c33856681',1,'yup::AudioChannelSet']]],
+  ['rightsurround_20',['rightSurround',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477ad6e90e45f9301d73c0cc96cca00e6a40',1,'yup::AudioChannelSet']]],
+  ['rightsurroundrear_21',['rightSurroundRear',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477a5204b40ddc702e58320dc2e7be4080bd',1,'yup::AudioChannelSet']]],
+  ['rightsurroundside_22',['rightSurroundSide',['../classyup_1_1AudioChannelSet.html#a1fd3ef8ffa200b3a8282f42c628fa477affed0c470f56161328ba32de0de3854b',1,'yup::AudioChannelSet']]],
+  ['round_23',['Round',['../namespaceyup.html#a16cc6ed4db3309e14d8229dc69428974ab7f41fc1412ad2ee75e9b2635d3b9d5c',1,'yup::Round'],['../namespaceyup.html#a5fe9837237d5235edaa058dc13d1ce46ab7f41fc1412ad2ee75e9b2635d3b9d5c',1,'yup::Round']]]
+];
